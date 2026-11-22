@@ -106,22 +106,9 @@ pub(crate) trait Backend: Routes {
     /// A list page's items, and whether another page follows.
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)>;
 
-    /// Whether `account` may push branches to the repository.
-    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool>;
-
-    /// `owner/repository` of `account`'s fork of the repository, which the
-    /// forge creates when the account has none.
-    async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String>;
-
     /// The login `account` signs in to the forge as; none when it reads
     /// anonymously.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>>;
-
-    /// The default branch a read of the repository's own endpoint returned
-    /// as `value`.
-    fn default_branch<'a>(&self, value: &'a Value) -> Option<&'a str> {
-        value["default_branch"].as_str()
-    }
 
     /// The repository's numeric ID, where the forge's uploads name it.
     async fn repository_id(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<u64>> {

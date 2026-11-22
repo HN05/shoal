@@ -1,7 +1,4 @@
-use serde_json::json;
-
 use super::*;
-use shoal_forge_types::backends::ForgeKind;
 
 fn parsed(url: &str) -> Result<(&str, String, Option<String>)> {
     let (repository, link) = WorkflowLink::parse(url)?;
@@ -87,12 +84,4 @@ fn a_run_refuses_a_link_that_names_no_workflow_before_any_lookup() {
 
 fn validate_run_link(url: &str) -> Result<()> {
     crate::ci::run::validate_run(Some(url), None)
-}
-
-#[test]
-fn each_forge_reports_its_default_branch_its_own_way() {
-    let repository = json!({"default_branch": "main", "mainbranch": {"name": "trunk"}});
-    for (kind, branch) in [(ForgeKind::GitHub, "main"), (ForgeKind::Bitbucket, "trunk")] {
-        assert_eq!(kind.default_branch(&repository), Some(branch), "{kind}");
-    }
 }

@@ -5,7 +5,7 @@
 use anyhow::{Context, Result, ensure};
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
-    ci::workflow::{WorkflowRequests, is_workflow_url},
+    ci::workflow::is_workflow_url, repo::default_branch::DefaultBranchRequests,
     transport::account::Account,
 };
 use shoal_forge_types::{

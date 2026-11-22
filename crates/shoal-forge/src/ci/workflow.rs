@@ -2,10 +2,7 @@
 //! branch, which a run then starts on by default.
 use anyhow::{Context, Result, ensure};
 
-use crate::{
-    RepoRequests, backends::Backend, ci::run::workflow_segment, hosts::HostTypes,
-    transport::account::Account, transport::api::TransportRequests,
-};
+use crate::{RepoRequests, ci::run::workflow_segment, hosts::HostTypes};
 use shoal_forge_types::{ForgeRepo, IssueInput, items::link::decode_branch};
 
 const WORKFLOW_URL: &str = "expected a workflow URL ending in /actions/workflows/<file> or \
@@ -100,15 +97,6 @@ impl ForgeRepo {
     ) -> Result<(Self, WorkflowLink)> {
         let (repository, link) = WorkflowLink::parse(url)?;
         Ok((Self::resolve(repository, hosts).await?, link))
-    }
-
-    /// The repository's default branch.
-    pub async fn default_branch(&self, account: &Account) -> Result<String> {
-        let value = self.read_repository(account).await?;
-        let branch = self.kind().default_branch(&value);
-        branch
-            .map(Into::into)
-            .with_context(|| format!("{} reports no default branch", self.repository_url()))
     }
 }
 

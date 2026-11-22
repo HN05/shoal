@@ -13,7 +13,7 @@ use crate::{
     hosts::Hosting,
     transport::account::Account,
     transport::{
-        api::{Request, TransportRequests, encode},
+        api::{Request, TransportRequests},
         response::Response,
     },
 };
@@ -27,6 +27,7 @@ mod conventions;
 mod items;
 mod merging;
 mod reactions;
+mod repository;
 mod reviews;
 mod runs;
 mod support;
@@ -113,28 +114,8 @@ impl Backend for Bitbucket {
         Some((response["values"].as_array()?, !response["next"].is_null()))
     }
 
-    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
-        let query = encode(
-            &format!("repository.full_name={}", literal(&repo.path)),
-            false,
-        );
-        let endpoint = format!("user/permissions/repositories?q={query}");
-        let grants = repo.pages(account, &endpoint).await?;
-        Ok(grants
-            .iter()
-            .any(|grant| matches!(grant["permission"].as_str(), Some("write" | "admin"))))
-    }
-
-    async fn fork(&self, _repo: &ForgeRepo, _account: &Account) -> Result<String> {
-        Err(capability::unsupported(self, Capability::Forks))
-    }
-
     async fn own_login(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<String>> {
         Err(capability::unsupported(self, Capability::Reactions))
-    }
-
-    fn default_branch<'a>(&self, value: &'a Value) -> Option<&'a str> {
-        value["mainbranch"]["name"].as_str()
     }
 }
 

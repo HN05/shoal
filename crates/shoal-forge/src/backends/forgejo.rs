@@ -14,6 +14,7 @@ mod items;
 mod merging;
 mod organization;
 mod reactions;
+mod repository;
 mod reviews;
 mod runners;
 mod runs;
@@ -107,18 +108,6 @@ impl Backend for Forgejo {
         full_page(response, size)
     }
 
-    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
-        github_rest::pushable(repo, account).await
-    }
-
-    /// Forgejo refuses a second fork, so an existing one is looked up first.
-    async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
-        match owned_fork(repo, account).await? {
-            Some(fork) => Ok(fork),
-            None => github_rest::create_fork(repo, account).await,
-        }
-    }
-
     /// Public repositories are readable without a login, which has none.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
         if account.authorization(repo).await?.is_none() {
@@ -129,21 +118,6 @@ impl Backend for Forgejo {
             .map(Some)
             .hint_login(self)
     }
-}
-
-/// `owner/repository` of the account's existing fork of the repository.
-async fn owned_fork(repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
-    let login = github_rest::own_login(repo, account).await?;
-    let forks = repo.pages(account, &repo.repo_endpoint("forks")).await?;
-    forks
-        .iter()
-        .find(|fork| {
-            fork["owner"]["login"]
-                .as_str()
-                .is_some_and(|owner| owner.eq_ignore_ascii_case(&login))
-        })
-        .map(github_rest::full_name)
-        .transpose()
 }
 
 /// `endpoint` with `page=1` added when its query sets `limit` without a

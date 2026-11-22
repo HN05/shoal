@@ -5,7 +5,6 @@ use serde_json::Value;
 
 use crate::{
     backends::Runners,
-    capability,
     hosts::Hosting,
     transport::account::Account,
     transport::{
@@ -13,9 +12,7 @@ use crate::{
         response::Response,
     },
 };
-use shoal_forge_types::{
-    ForgeRepo, backends::gitlab::GitLab, capability::Capability, ci::check_state::CheckState,
-};
+use shoal_forge_types::{ForgeRepo, backends::gitlab::GitLab, ci::check_state::CheckState};
 
 mod activity;
 mod attachments;
@@ -25,6 +22,7 @@ mod conventions;
 mod items;
 mod merging;
 mod reactions;
+mod repository;
 mod reviews;
 mod runs;
 mod support;
@@ -86,26 +84,6 @@ impl Backend for GitLab {
 
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
         full_page(response, size)
-    }
-
-    /// Developers and above may push.
-    async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
-        let project = repo
-            .send(
-                account,
-                &Request::get(format!("projects/{}", encode(&repo.path, false))),
-            )
-            .await
-            .hint_login(self)?;
-        let access = ["project_access", "group_access"]
-            .iter()
-            .filter_map(|scope| project["permissions"][scope]["access_level"].as_u64())
-            .max();
-        Ok(access.is_some_and(|level| level >= 30))
-    }
-
-    async fn fork(&self, _repo: &ForgeRepo, _account: &Account) -> Result<String> {
-        Err(capability::unsupported(self, Capability::Forks))
     }
 
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {

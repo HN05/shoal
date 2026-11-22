@@ -6,9 +6,10 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::{
-    ci::{run_view::RunViewRequests, workflow::WorkflowRequests},
+    ci::run_view::RunViewRequests,
     hosts::HostTypes,
     items::{action::ActionRequests, reference::ReferenceRequests},
+    repo::default_branch::DefaultBranchRequests,
     transport::account::Account,
 };
 use shoal_forge_types::{
