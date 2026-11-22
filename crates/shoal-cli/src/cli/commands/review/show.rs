@@ -1,5 +1,6 @@
 //! Showing reviews: `review ls`, `view review`, `watch review`, and the
 //! latest review `shoal view` adds after a workspace's linked items.
+use crate::cli::ui::Acting;
 use anyhow::Result;
 
 use crate::client::reviews;
@@ -39,7 +40,9 @@ pub(in crate::cli::commands) async fn list(
         Some(repository) => Some(ui::repository_selector(repository)?),
         None => None,
     };
-    let reviews = reviews::list(&ctx.paths, workspace, repository).await?;
+    let reviews = reviews::list(workspace, repository)
+        .send(&ctx.paths)
+        .await?;
     ctx.show(&reviews, |reviews| render_list(reviews, ctx.json))?;
     Ok(0)
 }
@@ -52,7 +55,7 @@ pub(in crate::cli::commands) async fn view(
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
-    let review = reviews::show(&ctx.paths, workspace, id).await?;
+    let review = reviews::show(workspace, id).send(&ctx.paths).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -71,7 +74,7 @@ pub(in crate::cli::commands) async fn watch(
     let id = reviews::await_ended(&ctx.paths, workspace, id)
         .await
         .map_err(|error| executable.resume_or(error, arguments))?;
-    let review = reviews::show(&ctx.paths, None, Some(id)).await?;
+    let review = reviews::show(None, Some(id)).send(&ctx.paths).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -82,7 +85,10 @@ pub(in crate::cli::commands) async fn latest(
     ctx: &Context,
     workspace: SpaceSelector,
 ) -> Option<Review> {
-    reviews::show(&ctx.paths, Some(workspace), None).await.ok()
+    reviews::show(Some(workspace), None)
+        .send(&ctx.paths)
+        .await
+        .ok()
 }
 
 /// The workspace a request without a review ID names.
@@ -97,7 +103,9 @@ async fn selected(
             ui::select_workspace(
                 ctx,
                 workspace,
-                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+                Fallback::CurrentDirectory(&Acting::request(|space| {
+                    crate::client::reviews::show(Some(space), None)
+                })),
             )
             .await?,
         ),

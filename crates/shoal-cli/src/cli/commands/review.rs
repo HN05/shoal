@@ -1,5 +1,6 @@
 //! `shoal review`: run local reviews of workspaces and PRs, list and cancel
 //! them; their findings are threads, which `shoal thread` resolves.
+use crate::cli::ui::Acting;
 use anyhow::Result;
 
 use crate::{
@@ -53,7 +54,9 @@ async fn select(ctx: &Context, space: Option<SpaceSelector>) -> Result<Space> {
     let selected = ui::select_space(
         ctx,
         space,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(|space| {
+            crate::client::reviews::show(Some(space), None)
+        })),
     )
     .await?;
     let found = crate::client::spaces::present_space(&ctx.paths, &selected).await?;
@@ -69,12 +72,7 @@ async fn chat(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<Cha
     let named = match space {
         Some(space) => space.clone(),
         None if ui::current_chat(&None).is_some() => {
-            ui::select_space(
-                ctx,
-                None,
-                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-            )
-            .await?
+            ui::select_space(ctx, None, Fallback::CurrentDirectoryOnly).await?
         }
         None => return Ok(None),
     };
@@ -86,7 +84,9 @@ async fn chat(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<Cha
 /// that own their head branches, newest first.
 async fn chat_reviews(ctx: &Context, chat: &Chat) -> Result<Vec<Review>> {
     let repository = chat.repository_id.clone().map(Into::into);
-    let reviews = crate::client::reviews::list(&ctx.paths, None, repository).await?;
+    let reviews = crate::client::reviews::list(None, repository)
+        .send(&ctx.paths)
+        .await?;
     Ok(reviews
         .into_iter()
         .filter(|review| match &review.target {

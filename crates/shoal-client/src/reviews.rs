@@ -4,7 +4,7 @@ use shoal_protocol::reviews::{Review, ReviewId, ReviewTarget};
 
 use anyhow::{Context, Result};
 
-use crate::connection::{Daemon, await_reply, pages, request};
+use crate::connection::{Daemon, Sendable, await_reply, pages, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     agent::{Agent, ModelChoice},
@@ -13,51 +13,39 @@ use shoal_protocol::{
 };
 
 /// Queue a review of `target` in `workspace` by `agent` with `model`.
-pub async fn run(
-    daemon: &impl Daemon,
+pub fn run(
     workspace: SpaceSelector,
     target: ReviewTarget,
     agent: Agent,
     model: ModelChoice,
-) -> Result<Review> {
-    let method = ReviewMethod::RunReview {
+) -> PreparedReview<Review> {
+    PreparedReview::new(ReviewMethod::RunReview {
         workspace,
         target,
         agent: Some(agent),
         model,
-    };
-    reassembled(daemon, method).await
+    })
 }
 
 /// Cancel the review `id`, or `workspace`'s queued or running one.
-pub async fn cancel(
-    daemon: &impl Daemon,
-    workspace: Option<SpaceSelector>,
-    id: Option<ReviewId>,
-) -> Result<Review> {
-    reassembled(daemon, ReviewMethod::CancelReview { workspace, id }).await
+pub fn cancel(workspace: Option<SpaceSelector>, id: Option<ReviewId>) -> PreparedReview<Review> {
+    PreparedReview::new(ReviewMethod::CancelReview { workspace, id })
 }
 
 /// The reviews of `workspace` or `repository`, or every review, newest first.
-pub async fn list(
-    daemon: &impl Daemon,
+pub fn list(
     workspace: Option<SpaceSelector>,
     repository: Option<Selector>,
-) -> Result<Vec<Review>> {
-    let method = ReviewMethod::ListReviews {
+) -> PreparedReview<Vec<Review>> {
+    PreparedReview::new(ReviewMethod::ListReviews {
         workspace,
         repository,
-    };
-    reassembled(daemon, method).await
+    })
 }
 
 /// The review `id`, or `workspace`'s latest.
-pub async fn show(
-    daemon: &impl Daemon,
-    workspace: Option<SpaceSelector>,
-    id: Option<ReviewId>,
-) -> Result<Review> {
-    reassembled(daemon, ReviewMethod::ShowReview { workspace, id }).await
+pub fn show(workspace: Option<SpaceSelector>, id: Option<ReviewId>) -> PreparedReview<Review> {
+    PreparedReview::new(ReviewMethod::ShowReview { workspace, id })
 }
 
 /// The ID of the review `id`, or of `workspace`'s latest, once it has
@@ -82,6 +70,34 @@ pub async fn check_pr_gate(daemon: &impl Daemon, workspace: SpaceSelector) -> Re
 
 /// What a review request returns, a review or a listing of them,
 /// reassembled from the pieces of JSON the daemon sends it in.
+/// A review request built before it is sent, whose answer comes in pieces.
+pub struct PreparedReview<T> {
+    method: ReviewMethod,
+    answer: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T> PreparedReview<T> {
+    fn new(method: ReviewMethod) -> Self {
+        Self {
+            method,
+            answer: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: serde::de::DeserializeOwned> PreparedReview<T> {
+    /// Send it, with its answer.
+    pub async fn send(self, daemon: &impl Daemon) -> Result<T> {
+        reassembled(daemon, self.method).await
+    }
+}
+
+impl<T> Sendable for PreparedReview<T> {
+    fn into_operation(self) -> shoal_protocol::protocol::Operation {
+        self.method.into()
+    }
+}
+
 async fn reassembled<T: serde::de::DeserializeOwned>(
     daemon: &impl Daemon,
     method: ReviewMethod,

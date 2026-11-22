@@ -1,5 +1,6 @@
 //! `shoal review run`: queue a review of a workspace's changes or a PR, or
 //! run the configured `review` command.
+use crate::cli::ui::Acting;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::{ffi::OsString, path::Path};
@@ -396,7 +397,9 @@ async fn run(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(|space| {
+            crate::client::reviews::show(Some(space), None)
+        })),
     )
     .await?;
     let settings =
@@ -489,8 +492,9 @@ async fn queue(
     // Refused here, before the daemon queues a review it could not run.
     super::super::start::check_model(settings, &agent, &model)?;
     crate::cli::agents::ensure_reviewer_available(&agent, settings)?;
-    let review =
-        crate::client::reviews::run(&ctx.paths, workspace.clone(), target, agent, model).await?;
+    let review = crate::client::reviews::run(workspace.clone(), target, agent, model)
+        .send(&ctx.paths)
+        .await?;
     let message = format!(
         "Review {id} of {} is queued for {}; its findings arrive as a message. Wait for it with \
          shoal watch review {id}.",

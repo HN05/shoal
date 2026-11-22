@@ -16,7 +16,7 @@ pub(super) async fn cancel(
         Some(id) => (None, Some(id)),
         None => cancelled(ctx, space).await?,
     };
-    let review = reviews::cancel(&ctx.paths, workspace, id).await?;
+    let review = reviews::cancel(workspace, id).send(&ctx.paths).await?;
     ctx.emit(&format!("Review {} cancelled.", review.id), &review)?;
     Ok(0)
 }
