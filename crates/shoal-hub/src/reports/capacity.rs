@@ -1,17 +1,19 @@
 //! What a machine's reports carry of its capacity, which the hub places
 //! new spaces by: the origins of its repositories and its queue's room,
-//! which the machine measures every [`MEASURE_EVERY`] beside its reports,
-//! so a report never waits for a measurement, and a change enough to place
-//! by sends one.
+//! and of how it is powered, which the hub reads a drop by. The machine
+//! measures both every [`MEASURE_EVERY`] beside its reports, so a report
+//! never waits for a measurement, and a change enough to place by, or any
+//! change of its power, sends one.
 use std::{convert::Infallible, time::Duration};
 
 use anyhow::Result;
 
+use shoal_protocol::hub::sleep::Power;
 use shoal_schedule::placement::snapshot::Capacity;
 use tokio::sync::watch;
 
 use super::summaries::Origins;
-use crate::{Hub, daemon::Daemon, log};
+use crate::{Hub, battery, daemon::Daemon, log};
 
 /// How often a machine measures its capacity.
 const MEASURE_EVERY: Duration = Duration::from_secs(15);
@@ -19,32 +21,43 @@ const MEASURE_EVERY: Duration = Duration::from_secs(15);
 /// How far the memory new work may use moves before a report goes.
 const MEMORY_STEP: u64 = 1 << 30;
 
+/// What a machine last measured of itself: its capacity, none before it
+/// measured it, and how it is powered, none without a battery.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(super) struct Measured {
+    pub capacity: Option<Capacity>,
+    pub power: Option<Power>,
+}
+
 impl Hub {
-    /// Measure this machine's capacity every [`MEASURE_EVERY`] into
-    /// `measured`, whose receivers hear of it once it moved enough to place
-    /// by, first once it is measured at all. A failed measurement keeps
-    /// the one before.
+    /// Measure this machine's capacity and power every [`MEASURE_EVERY`]
+    /// into `measured`, whose receivers hear of it once its capacity moved
+    /// enough to place by or its power changed, first once it is measured
+    /// at all. A failed measurement of its capacity keeps the one before.
     pub(super) async fn keep_measuring(
         &self,
         daemon: &dyn Daemon,
-        measured: watch::Sender<Option<Capacity>>,
+        measured: watch::Sender<Measured>,
     ) -> Infallible {
         let mut origins = Origins::default();
         loop {
-            match self.measure_capacity(daemon, &mut origins).await {
-                Ok(capacity) => {
-                    measured.send_if_modified(|current| {
-                        let moved = current
-                            .as_ref()
-                            .is_none_or(|current| moved(current, &capacity));
-                        *current = Some(capacity);
-                        moved
-                    });
-                }
+            let capacity = match self.measure_capacity(daemon, &mut origins).await {
+                Ok(capacity) => Some(capacity),
                 Err(error) => {
                     log!("hub: could not measure this machine's queue for placement: {error:#}");
+                    None
                 }
-            }
+            };
+            let power = off_runtime(battery::power).await;
+            measured.send_if_modified(|current| {
+                let moved = capacity.as_ref().is_some_and(|capacity| {
+                    (current.capacity.as_ref()).is_none_or(|current| moved(current, capacity))
+                });
+                let changed = moved || current.power != power;
+                current.capacity = capacity.or(current.capacity.take());
+                current.power = power;
+                changed
+            });
             tokio::time::sleep(MEASURE_EVERY).await;
         }
     }
@@ -68,6 +81,11 @@ impl Hub {
             ..room
         })
     }
+}
+
+/// `read`, run off the runtime, none when it could not run.
+async fn off_runtime<T: Send + 'static>(read: fn() -> Option<T>) -> Option<T> {
+    tokio::task::spawn_blocking(read).await.ok().flatten()
 }
 
 /// Whether `after` differs from `before` enough to place by: in anything

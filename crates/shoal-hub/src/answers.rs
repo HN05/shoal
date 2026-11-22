@@ -102,6 +102,7 @@ impl Hub {
                 kept_files,
                 capacity,
                 repositories,
+                power: _,
             } => {
                 ensure_machine(member)?;
                 self.capacities.keep(&member.id, &report, capacity);

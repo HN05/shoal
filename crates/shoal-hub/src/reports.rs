@@ -1,8 +1,9 @@
 //! A machine's reports of its spaces to the hub: every space once its link
 //! opens, which replaces what the hub had for it, then what changed, once a
 //! burst of changes settles, each with what the machine holds of the
-//! spaces it has not and its capacity, which the hub places new spaces by,
-//! and with every repository it registers, once and whenever they change.
+//! spaces it has not, its capacity, which the hub places new spaces by, and
+//! how it is powered, which the hub reads a drop by, and with every
+//! repository it registers, once and whenever they change.
 //! The hub's own machine reports to its own directory the same way, for as
 //! long as it takes the hub role.
 use std::{
@@ -16,7 +17,6 @@ use shoal_protocol::hub::{
     directory::{RegisteredRepository, Report, SpaceSummary},
     link::{Call, Reply},
 };
-use shoal_schedule::placement::snapshot::Capacity;
 use tokio::{sync::watch, time::Instant};
 
 use super::session::Calls;
@@ -24,6 +24,8 @@ use crate::{Hub, daemon::Daemon, directory::Held, log};
 
 mod capacity;
 mod summaries;
+
+use capacity::Measured;
 
 /// Lets a burst of changes settle into one report.
 const SETTLE: Duration = Duration::from_millis(500);
@@ -59,9 +61,9 @@ type Sent = HashMap<SpaceId, (SpaceSummary, String)>;
 impl Hub {
     /// Report this machine's spaces to `sink` until a report fails: all of
     /// them, then each change, and at least every [`QUIET`], each with the
-    /// capacity this machine measures meanwhile.
+    /// capacity and power this machine measures meanwhile.
     async fn report_spaces(&self, daemon: &dyn Daemon, sink: Sink<'_>) -> Result<()> {
-        let (measuring, measured) = watch::channel(None);
+        let (measuring, measured) = watch::channel(Measured::default());
         tokio::select! {
             reported = self.report_changes(daemon, sink, measured) => reported,
             never = self.keep_measuring(daemon, measuring) => match never {},
@@ -69,13 +71,13 @@ impl Hub {
     }
 
     /// Report this machine's spaces to `sink` as [`Self::report_spaces`]
-    /// does, with the latest capacity `measured` holds, and again whenever
-    /// it changes.
+    /// does, with the latest capacity and power `measured` holds, and again
+    /// whenever they change.
     async fn report_changes(
         &self,
         daemon: &dyn Daemon,
         sink: Sink<'_>,
-        mut measured: watch::Receiver<Option<Capacity>>,
+        mut measured: watch::Receiver<Measured>,
     ) -> Result<()> {
         // Watch before reading, so a change in between still reports.
         let mut stored = self.store.watch_changes();
@@ -213,17 +215,18 @@ impl Hub {
             .await
     }
 
-    /// Send `report` to `sink`, with this machine's capacity, none before
-    /// it measured it, what it `held` of the spaces it has not, and its
+    /// Send `report` to `sink`, with what this machine `measured` of its
+    /// capacity and power, what it `held` of the spaces it has not, and its
     /// `repositories`, none when they are as it last sent them, and number
     /// this machine's spaces from what the hub answers.
     async fn report(
         &self,
         daemon: &dyn Daemon,
         sink: &Sink<'_>,
-        (report, capacity): (Report, Option<Capacity>),
+        (report, measured): (Report, Measured),
         (held, repositories): (Held, Option<Vec<RegisteredRepository>>),
     ) -> Result<()> {
+        let Measured { capacity, power } = measured;
         let numbering = match sink {
             Sink::Hub(own) => {
                 self.capacities.keep(own, &report, capacity);
@@ -237,6 +240,7 @@ impl Hub {
                     kept_files: held.kept_files,
                     capacity,
                     repositories,
+                    power,
                 };
                 match calls.call(call).await? {
                     Reply::Reported(numbering) => numbering,

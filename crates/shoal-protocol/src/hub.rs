@@ -26,6 +26,7 @@ pub mod routing;
 pub mod shared_config;
 pub mod shared_repositories;
 pub mod sharing;
+pub mod sleep;
 
 states! {
     /// What a credential belongs to, which the joiner states and the hub
