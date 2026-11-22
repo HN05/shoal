@@ -396,15 +396,18 @@ impl Hub {
     }
 }
 
-/// The body of the last answer of `frames`, what another machine's daemon
-/// wrote, after any it sent while it still prepared it, its refusal as an
-/// error.
+/// The answer `frames` carry, what another machine's daemon wrote after any
+/// it sent while it still prepared it: one body, or a list's pages joined,
+/// which a closing `Ok` ends; its refusal as an error.
 fn answered_body(frames: Vec<serde_json::Value>) -> Result<Body> {
-    let mut answered = None;
+    let mut answered: Option<Body> = None;
     for frame in frames {
         let response: Response = serde_json::from_value(frame)?;
-        if !matches!(response.body, Body::Keepalive) {
-            answered = Some(response.body);
+        match (&mut answered, response.body) {
+            (_, Body::Keepalive) => {}
+            (None, body) => answered = Some(body),
+            (Some(_), Body::Ok) => break,
+            (Some(answered), page) => answered.extend(page)?,
         }
     }
     answered

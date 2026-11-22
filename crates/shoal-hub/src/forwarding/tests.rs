@@ -44,3 +44,34 @@ fn binding_a_space_leaves_what_a_request_carries_alone() {
     assert_eq!(space, SpaceSelector::id(&id));
     assert_eq!(inputs["space"], "7");
 }
+
+/// The frame a response with `body` travels in.
+fn frame(body: Body) -> serde_json::Value {
+    serde_json::to_value(Response::new(1, body)).unwrap()
+}
+
+#[test]
+fn a_paged_answer_from_another_machine_arrives_whole() {
+    let hold = |name: &str| -> shoal_protocol::model::SpaceHold {
+        serde_json::from_value(json!({
+            "space_id": "w1", "name": name, "reason": null, "created_at": 0, "placed_by": "user",
+        }))
+        .unwrap()
+    };
+    let frames = vec![
+        frame(Body::Holds(vec![hold("first")])),
+        frame(Body::Keepalive),
+        frame(Body::Holds(vec![hold("second")])),
+        frame(Body::Ok),
+    ];
+    let Body::Holds(holds) = answered_body(frames).unwrap() else {
+        panic!("the pages are not joined");
+    };
+    let names: Vec<_> = holds.iter().map(|hold| hold.name.as_str()).collect();
+    assert_eq!(names, ["first", "second"]);
+}
+
+#[test]
+fn a_single_answer_from_another_machine_stays_as_sent() {
+    assert!(matches!(answered_body(vec![frame(Body::Ok)]), Ok(Body::Ok)));
+}
