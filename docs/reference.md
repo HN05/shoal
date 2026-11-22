@@ -1213,7 +1213,8 @@ is created. `shoal start` names the machine with the policy's reason, and
 each connected machine it skipped for lacking the repository or the agent
 tool, which `--json` gives as `placement` in a chat's start and as a last
 document after a workspace's; a hub that cannot be asked leaves the start on
-your machine. Under `placement = "external"`, an
+your machine, as does a machine the start never reached, such as one that went
+offline since its last report, with a warning. Under `placement = "external"`, an
 unscoped client on the hub's machine, such as an app's server, registers as
 the placer with `shoal-client`'s `hub::Placing` and answers each snapshot the
 hub sends it, the start and every connected machine, with the machines in

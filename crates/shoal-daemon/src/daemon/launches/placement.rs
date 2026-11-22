@@ -8,7 +8,7 @@
 //! has not registered or that has no origin, since placement never clones
 //! one. A hub that cannot be asked leaves it here too.
 use anyhow::Result;
-use shoal_hub::session::Unanswered;
+use shoal_hub::session::Unsent;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::placement::Decision;
 use shoal_protocol::launches::Launch;
@@ -38,12 +38,12 @@ pub(super) struct PlacedHere {
 
 impl PlacedHere {
     /// What a launch reports that starts here instead of on the machine
-    /// `decision` placed it on, which could not take it for `error`, as
+    /// `decision` placed it on, which it never reached, as `why` says, and
     /// the daemon's log records.
-    fn instead(decision: Option<Decision>, error: &anyhow::Error) -> Self {
+    fn instead(decision: Option<Decision>, why: &str) -> Self {
         let name = (decision.as_ref()).map_or_else(String::new, |decision| decision.name.clone());
         let warning = format!(
-            "machine {name}, where the hub placed it, could not take the start, so it starts on this machine: {error:#}"
+            "the start never reached machine {name}, where the hub placed it, so it starts on this machine: {why}"
         );
         log!("{warning}");
         Self {
@@ -63,11 +63,11 @@ impl PlacedHere {
 impl Manager {
     /// Start `launch` for `caller` on the other machine it names, or the
     /// hub places it on, with the hub's decision; else what it reports of
-    /// its placement as it starts here. Where the machine the hub placed it
-    /// on cannot take it, as when it went offline since its last report,
-    /// `launch` is as before its placement and starts here, saying why;
-    /// one whose answer was lost there fails, since that machine may have
-    /// started it.
+    /// its placement as it starts here. A launch placed on a machine that
+    /// is no longer connected, or whose call this machine never sent,
+    /// never reached that machine, so `launch` is as before its placement
+    /// and starts here, saying why; any other failure there fails it,
+    /// since that machine may have started it.
     pub(super) async fn launch_where_placed(
         &self,
         launch: &mut Launch,
@@ -78,6 +78,11 @@ impl Manager {
         let placed_elsewhere = unplaced.machine.is_none() && launch.machine.is_some();
         match self.launch_on_machine(launch, caller).await {
             Ok(Some(mut launched)) => {
+        if placed_elsewhere && !self.reaches_named_machine(launch).await? {
+            *launch = unplaced;
+            let why = "it is no longer connected";
+            return Ok(Placed::Here(PlacedHere::instead(decision, why)));
+        }
                 launched.placement = decision;
                 Ok(Placed::Elsewhere(launched))
             }
@@ -85,9 +90,10 @@ impl Manager {
                 decision,
                 warning: None,
             })),
-            Err(error) if placed_elsewhere && !error.is::<Unanswered>() => {
+            Err(error) if placed_elsewhere && error.is::<Unsent>() => {
                 *launch = unplaced;
-                Ok(Placed::Here(PlacedHere::instead(decision, &error)))
+                let why = format!("{error:#}");
+                Ok(Placed::Here(PlacedHere::instead(decision, &why)))
             }
             Err(error) => Err(error),
         }
@@ -95,6 +101,12 @@ impl Manager {
 
     /// Name in `launch` for `caller` the machine the hub places it on, and
     /// return the hub's decision; none for a launch that is not placed.
+    /// Whether the other machine `launch` names is connected now.
+    async fn reaches_named_machine(&self, launch: &Launch) -> Result<bool> {
+        let machine = self.machine_elsewhere(launch).await?;
+        Ok(machine.is_some_and(|machine| machine.connected))
+    }
+
     async fn place_launch(
         &self,
         launch: &mut Launch,
