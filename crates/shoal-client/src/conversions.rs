@@ -3,9 +3,7 @@
 //! [`ConversionMethod`].
 use std::collections::BTreeMap;
 
-use anyhow::Result;
-
-use crate::connection::{self, Daemon};
+use crate::connection::Prepared;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::modes::ModeName,
@@ -30,11 +28,10 @@ pub struct NewWorkspace {
 
 /// Turn a chat into the workspace `new` describes and start preparing it
 /// with `env`.
-pub async fn to_workspace(
-    daemon: &impl Daemon,
+pub fn to_workspace(
     new: NewWorkspace,
     env: BTreeMap<String, String>,
-) -> Result<StartedWorkspace> {
+) -> Prepared<StartedWorkspace> {
     let NewWorkspace {
         chat,
         branch,
@@ -52,15 +49,11 @@ pub async fn to_workspace(
         mode,
         env: Some(env),
     };
-    connection::request(daemon, method).await
+    Prepared::new(method)
 }
 
 /// Make `workspace` a chat in `mode`, `chat` without one, once its agent's
 /// turn ends.
-pub async fn to_chat(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    mode: Option<ModeName>,
-) -> Result<Workspace> {
-    connection::request(daemon, ConversionMethod::ConvertToChat { workspace, mode }).await
+pub fn to_chat(workspace: SpaceSelector, mode: Option<ModeName>) -> Prepared<Workspace> {
+    Prepared::new(ConversionMethod::ConvertToChat { workspace, mode })
 }

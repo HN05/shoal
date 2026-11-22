@@ -3,7 +3,7 @@
 //! offers beside this machine's.
 use shoal_protocol::{protocol::Operation, space_names::SpaceSelector};
 
-use crate::client::connection::Prepared;
+use crate::client::connection::Sendable;
 
 /// What a picker's command does with the space it picks.
 pub enum Acting {
@@ -16,8 +16,8 @@ pub enum Acting {
 
 impl Acting {
     /// The command sends what `request` builds for the picked space.
-    pub fn request<T: 'static>(
-        request: impl Fn(SpaceSelector) -> Prepared<T> + Send + Sync + 'static,
+    pub fn request<R: Sendable>(
+        request: impl Fn(SpaceSelector) -> R + Send + Sync + 'static,
     ) -> Self {
         let picking = move || request(crate::client::spaces::picking()).into_operation();
         Self::Request(Box::new(picking))

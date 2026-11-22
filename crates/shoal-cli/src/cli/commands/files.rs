@@ -1,6 +1,7 @@
 //! `shoal files` lists the files attached to a workspace or chat, or on a
 //! terminal opens a picker over them; `add` attaches more without a message
 //! and `rm` deletes them. Under a chat's agent they act on its chat.
+use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 use shoal_protocol::model::ByKind;
 
@@ -32,13 +33,11 @@ pub(super) async fn list(
     space: Option<SpaceSelector>,
     listing: Listing,
 ) -> Result<i32> {
-    let space = ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
-    let files = crate::client::files::list(&ctx.paths, space.clone()).await?;
+    let listing_files = Acting::request(crate::client::files::list);
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&listing_files)).await?;
+    let files = crate::client::files::list(space.clone())
+        .send(&ctx.paths)
+        .await?;
     if listing == Listing::Menu && ctx.interactive_output() {
         return menu::choose(ctx, space.clone(), &files).await;
     }
@@ -70,13 +69,14 @@ pub(super) async fn add(
     files: Vec<String>,
 ) -> Result<i32> {
     let files = super::send::attachments(&files)?;
-    let space = ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
-    let added = crate::client::files::add(&ctx.paths, space.clone(), files).await?;
+    let adding = {
+        let files = files.clone();
+        Acting::request(move |space| crate::client::files::add(space, files.clone()))
+    };
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&adding)).await?;
+    let added = crate::client::files::add(space.clone(), files)
+        .send(&ctx.paths)
+        .await?;
     ctx.show(&added, |added| {
         let now = crate::time::UnixTime::now();
         let rows = added.iter().map(|file| cells(file, now)).collect();
@@ -100,17 +100,17 @@ pub(super) async fn remove(
 ) -> Result<i32> {
     // Names and records belong to one workspace or chat, so they offer no
     // choice of every workspace.
+    let removing = {
+        let (names, ids) = (names.clone(), ids.clone());
+        Acting::request(move |space| {
+            crate::client::files::remove(Some(space), names.clone(), ids.clone())
+        })
+    };
     let space = if names.is_empty() && ids.is_empty() {
-        ui::select_space_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?
+        ui::select_space_filter(ctx, filter, &removing).await?
     } else {
-        Some(
-            ui::select_space(
-                ctx,
-                filter.space,
-                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-            )
-            .await?,
-        )
+        let fallback = Fallback::CurrentDirectory(&removing);
+        Some(ui::select_space(ctx, filter.space, fallback).await?)
     };
     if let Some(space) = &space {
         check_selected(ctx, space, &names, &ids).await?;
@@ -118,7 +118,9 @@ pub(super) async fn remove(
     if !yes && let Some(action) = confirmation(ctx, space.as_ref()).await? {
         ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
     }
-    let deleted = crate::client::files::remove(&ctx.paths, space, names, ids).await?;
+    let deleted = crate::client::files::remove(space, names, ids)
+        .send(&ctx.paths)
+        .await?;
     let text = match deleted.len() {
         0 => "No files deleted".to_owned(),
         1 => "Deleted 1 file".to_owned(),
@@ -139,7 +141,9 @@ async fn check_selected(
     if names.is_empty() && ids.is_empty() {
         return Ok(());
     }
-    let files = crate::client::files::list(&ctx.paths, space.clone()).await?;
+    let files = crate::client::files::list(space.clone())
+        .send(&ctx.paths)
+        .await?;
     let missing = shoal_protocol::files::missing_selection(&files, names, ids);
     ensure!(
         missing.is_empty(),

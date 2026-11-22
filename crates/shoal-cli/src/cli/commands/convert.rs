@@ -33,8 +33,23 @@ pub(super) async fn to_workspace(
     if let Some(branch) = &branch.branch {
         shoal_core::git::check_branch_name(branch)?;
     }
-    let chat =
-        ui::select_space(ctx, space, own_space(&crate::cli::ui::Acting::Unconverted)).await?;
+    // The branch, which may still come from the chat's issue, decides
+    // nothing of which spaces the conversion reaches.
+    let converting = {
+        let mode = mode.clone();
+        Acting::request(move |chat| {
+            let new = crate::client::conversions::NewWorkspace {
+                chat,
+                branch: "branch".into(),
+                issue: None,
+                base: None,
+                options: CreationOptions::default(),
+                mode: mode.clone(),
+            };
+            crate::client::conversions::to_workspace(new, Default::default())
+        })
+    };
+    let chat = ui::select_space(ctx, space, own_space(&converting)).await?;
     let issue = match &branch.issue {
         Some(input) => Some(load_issue(ctx, &chat, input).await?),
         None => None,
@@ -58,7 +73,9 @@ pub(super) async fn to_workspace(
         mode,
     };
     let env = crate::env::without_secrets();
-    let started = crate::client::conversions::to_workspace(&ctx.paths, new, env).await?;
+    let started = (crate::client::conversions::to_workspace(new, env))
+        .send(&ctx.paths)
+        .await?;
     let preparing = Preparing::follow(&ctx.paths, started).await?;
     let Some(workspace) = super::create::set_up(ctx, preparing).await? else {
         return Ok(1);
@@ -78,9 +95,14 @@ pub(super) async fn to_chat(
     space: Option<SpaceSelector>,
     mode: Option<ModeName>,
 ) -> Result<i32> {
-    let workspace =
-        ui::select_space(ctx, space, own_space(&crate::cli::ui::Acting::Unconverted)).await?;
-    let workspace = crate::client::conversions::to_chat(&ctx.paths, workspace, mode).await?;
+    let converting = {
+        let mode = mode.clone();
+        Acting::request(move |space| crate::client::conversions::to_chat(space, mode.clone()))
+    };
+    let workspace = ui::select_space(ctx, space, own_space(&converting)).await?;
+    let workspace = (crate::client::conversions::to_chat(workspace, mode))
+        .send(&ctx.paths)
+        .await?;
     let text = format!(
         "{} becomes a chat in the repository's checkout once its agent's turn ends; its branch {} stays",
         Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),

@@ -449,16 +449,55 @@ impl<T> Prepared<T> {
     pub fn operation(&self) -> &Operation {
         &self.operation
     }
-
-    pub fn into_operation(self) -> Operation {
-        self.operation
-    }
 }
 
 impl<T: TryFrom<Body, Error = anyhow::Error>> Prepared<T> {
     /// Send it, with its answer.
     pub async fn send(self, daemon: &impl Daemon) -> Result<T> {
         request(daemon, self.operation).await
+    }
+}
+
+/// [`Prepared`] for a request answered in pages of `T`.
+pub struct PreparedPages<T> {
+    operation: Operation,
+    items: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T> PreparedPages<T> {
+    pub fn new(method: impl Into<Operation>) -> Self {
+        Self {
+            operation: method.into(),
+            items: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T> PreparedPages<T>
+where
+    Vec<T>: TryFrom<Body, Error = anyhow::Error>,
+{
+    /// Send it, with the items of every page of its answer.
+    pub async fn send(self, daemon: &impl Daemon) -> Result<Vec<T>> {
+        pages(daemon, self.operation).await
+    }
+}
+
+/// A request built before it is sent, as either kind of prepared request.
+pub trait Sendable {
+    /// The request it sends.
+    fn into_operation(self) -> Operation;
+}
+
+impl<T> Sendable for Prepared<T> {
+    fn into_operation(self) -> Operation {
+        self.operation
+    }
+}
+
+impl<T> Sendable for PreparedPages<T> {
+    fn into_operation(self) -> Operation {
+        self.operation
     }
 }
 

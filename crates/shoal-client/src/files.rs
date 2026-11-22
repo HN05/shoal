@@ -1,34 +1,26 @@
 //! Files attached to a workspace or chat: Shoal's copies and how they came.
 use shoal_protocol::files::{AttachedFile, NewFile};
 
-use anyhow::Result;
-
-use crate::connection::{Daemon, pages};
+use crate::connection::PreparedPages;
 use shoal_protocol::protocol::FileMethod;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The files attached to `space`.
-pub async fn list(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<AttachedFile>> {
-    pages(daemon, FileMethod::ListFiles { space }).await
+pub fn list(space: SpaceSelector) -> PreparedPages<AttachedFile> {
+    PreparedPages::new(FileMethod::ListFiles { space })
 }
 
 /// Attach copies of `files` to `space`.
-pub async fn add(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    files: Vec<NewFile>,
-) -> Result<Vec<AttachedFile>> {
-    let method = FileMethod::AddFiles { space, files };
-    pages(daemon, method).await
+pub fn add(space: SpaceSelector, files: Vec<NewFile>) -> PreparedPages<AttachedFile> {
+    PreparedPages::new(FileMethod::AddFiles { space, files })
 }
 
 /// Delete the files of `space`, or of every space the caller reaches, that
 /// `names` and `ids` select.
-pub async fn remove(
-    daemon: &impl Daemon,
+pub fn remove(
     space: Option<SpaceSelector>,
     names: Vec<String>,
     ids: Vec<i64>,
-) -> Result<Vec<AttachedFile>> {
-    pages(daemon, FileMethod::RemoveFiles { space, names, ids }).await
+) -> PreparedPages<AttachedFile> {
+    PreparedPages::new(FileMethod::RemoveFiles { space, names, ids })
 }
