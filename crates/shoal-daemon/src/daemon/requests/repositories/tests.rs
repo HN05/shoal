@@ -23,3 +23,32 @@ async fn a_scoped_process_here_carries_no_commits() {
     assert!(method.scope(&manager, &caller).await.is_err());
     assert!(manager.repositories.list().await.unwrap().is_empty());
 }
+
+/// A process whose `admin` permission is not `direct` reads nothing of
+/// what removing its own repository would take: every space of it.
+#[tokio::test]
+async fn a_scoped_process_without_admin_previews_no_removal() {
+    let (root, manager) = manager().await;
+    let path = crate::daemon::test_support::repository(root.path(), "repo");
+    let repo = (manager.repositories)
+        .register(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "own".into(), None, None, None)
+        .await
+        .unwrap();
+    let caller = Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
+    };
+    let mut method = RepositoryMethod::PreviewRepositoryRemoval {
+        repository: (&repo.id).into(),
+        machine: None,
+    };
+    let refused = method.scope(&manager, &caller).await.unwrap_err();
+    assert!(format!("{refused:#}").contains("admin"), "{refused:#}");
+}

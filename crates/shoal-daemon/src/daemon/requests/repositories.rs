@@ -287,12 +287,17 @@ impl Scoped for RepositoryMethod {
             }
             // It only reads what a removal of the caller's own repository
             // would remove.
+            // It reads every space of the repository, as removing it takes
+            // them all, so only a caller that removes its repository without
+            // approval reads it; nothing binds an approval to a preview.
             RepositoryMethod::PreviewRepositoryRemoval {
                 repository,
                 machine,
             } => {
                 ensure_own_machine(manager, machine).await?;
                 *repository = manager.own_repository(caller, repository, OWN).await?;
+                let id = manager.repositories.repository(&*repository).await?.id;
+                (manager.refuse_undirected(caller, PermissionKey::Admin, Some(&id))).await?;
                 return Ok(None);
             }
             RepositoryMethod::RemoveRepository { machine, .. } => {
