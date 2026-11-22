@@ -249,6 +249,7 @@ response_bodies! {
     Branches(Vec<crate::model::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),
+    CopyOrigin(super::CopyOrigin),
     Item(crate::forge::items::item::Item),
     Items(Vec<crate::forge::items::item::Item>),
     ApiResponse(Vec<String>),

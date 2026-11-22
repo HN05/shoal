@@ -52,6 +52,7 @@ const REQUESTS: &[&str] = &[
     r#"{"space_places":{"space":"fix"}}"#,
     r#"{"set_base_workspace":{"workspace":"part","base":"fix"}}"#,
     r#"{"inspect_workspace":{"workspace":"fix"}}"#,
+    r#"{"copy_origin":{"source":{"workspace":"fix","checkpoint":2}}}"#,
     r#"{"enter_space":{"space":"fix"}}"#,
     r#"{"verify_workspace":{"workspace":"fix","on_branch":true}}"#,
     r#"{"fast_forward_workspace":{"workspace":"fix","branch":"main"}}"#,

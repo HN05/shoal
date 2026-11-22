@@ -6,7 +6,10 @@ use crate::{
         scope::Caller,
         test_support::{git, global_config, manager, repository},
     },
+    protocol::{Operation, WorkspaceMethod},
+    refusal::Reason,
     removal::{InspectionPolicy, UnsavedWork},
+    state::WorkspaceState,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -684,4 +687,47 @@ async fn a_copy_of_a_renamed_workspace_at_a_commit_branches_from_its_commit() {
         copy.branch().cloned(),
         (Some(format!("{}-copy", head.trim()))).map(BranchName::from)
     );
+}
+
+#[tokio::test]
+async fn a_copy_takes_a_ready_workspace_s_files_or_any_one_s_checkpoint_even_removed() {
+    let f = Fixture::new().await;
+    let source = |checkpoint| CopySource {
+        workspace: SpaceSelector::id(&f.source.id),
+        checkpoint,
+    };
+    let copying = |checkpoint| {
+        Operation::Workspace(WorkspaceMethod::CopyOrigin {
+            source: source(checkpoint),
+        })
+    };
+    let checkpoint = f
+        .manager
+        .take_checkpoint(&f.manager.named("topic").await, None)
+        .await
+        .unwrap()
+        .number;
+    let live = f.manager.copy_origin(&source(None)).await.unwrap();
+    assert_eq!(live.workspace, f.source.id);
+    assert_eq!(&live.repository, f.source.repository());
+    f.manager
+        .set_state(&f.source.id, WorkspaceState::Failed, None)
+        .await
+        .unwrap();
+    let files = f.manager.check_target(&copying(None), None).await;
+    assert_eq!(Reason::of(&files.unwrap_err()), Some(Reason::NotReady));
+    let kept = copying(Some(checkpoint));
+    f.manager.check_target(&kept, None).await.unwrap();
+
+    f.manager
+        .remove_selected(
+            &SpaceSelector::id(&f.source.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let removed = f.manager.copy_origin(&source(Some(checkpoint))).await;
+    assert_eq!(removed.unwrap(), live);
+    assert!(f.manager.copy_origin(&source(None)).await.is_err());
 }

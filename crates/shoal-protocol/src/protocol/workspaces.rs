@@ -91,6 +91,12 @@ pub enum WorkspaceMethod {
     InspectWorkspace {
         workspace: SpaceSelector,
     },
+    /// The workspace a copy takes its files from, as `source` names it: a
+    /// ready one for its current files, or with a checkpoint any one, or a
+    /// removed one, with its repository.
+    CopyOrigin {
+        source: CopySource,
+    },
     /// The workspace record once its worktree identity is verified, and with
     /// `on_branch` that it is on its recorded branch, before the CLI changes Git
     /// state through it.
@@ -181,6 +187,14 @@ pub struct CopySource {
     pub checkpoint: Option<CheckpointNumber>,
 }
 
+/// The workspace a copy takes its files from, live or removed, and its
+/// repository.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CopyOrigin {
+    pub workspace: shoal_ids::space_ids::SpaceId,
+    pub repository: shoal_ids::repository_ids::RepositoryId,
+}
+
 /// PR `number`'s head, which `origin` serves under `reference`, expected at
 /// `commit`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -213,6 +227,7 @@ impl WorkspaceMethod {
             | Self::OpenPullHead { .. }
             | Self::AdoptWorkspace { .. }
             | Self::UntrackedWorktrees
+            | Self::CopyOrigin { .. }
             | Self::VerifyWorkspace { .. }
             | Self::KeepAgentEnvironment { .. }
             | Self::CreatePendingWorktree { .. }
@@ -226,6 +241,9 @@ impl WorkspaceMethod {
             | Self::RenameBranch { workspace, .. }
             | Self::SetBaseWorkspace { workspace, .. }
             | Self::InspectWorkspace { workspace }
+            | Self::CopyOrigin {
+                source: CopySource { workspace, .. },
+            }
             | Self::VerifyWorkspace { workspace, .. }
             | Self::FastForwardWorkspace { workspace, .. }
             | Self::RefreshWorkspace { workspace }

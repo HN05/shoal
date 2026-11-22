@@ -105,7 +105,9 @@ impl Operation {
                         | SimulatorMethod::SimHistory { .. }
                 )
                 | Self::Workspace(
-                    WorkspaceMethod::UntrackedWorktrees | WorkspaceMethod::InspectWorkspace { .. }
+                    WorkspaceMethod::UntrackedWorktrees
+                        | WorkspaceMethod::InspectWorkspace { .. }
+                        | WorkspaceMethod::CopyOrigin { .. }
                 )
                 | Self::Space(
                     SpaceMethod::ListSpaces

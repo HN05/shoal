@@ -1,8 +1,8 @@
 //! The workspace `--copy` and `--checkpoint` start a new one from.
 use crate::cli::ui::Acting;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
+use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     cli::{
@@ -45,38 +45,38 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     if !args.is_set() {
         return Ok(None);
     }
+    let checkpoint = args.checkpoint;
     let selector = ui::select_workspace(
         ctx,
         args.copy.flatten(),
-        // The new space copies the worktree on this machine.
-        Fallback::CurrentDirectory(&Acting::here(crate::client::workspaces::inspect)),
+        Fallback::CurrentDirectory(&copying(checkpoint)),
     )
     .await?;
-    let workspaces = crate::client::spaces::list(&ctx.paths)
-        .await?
-        .into_workspaces();
-    let live = (workspaces.into_iter())
-        .find(|workspace| selector.selects(&workspace.id, workspace.number));
-    let (workspace, repository) = match live {
-        Some(workspace) => (workspace.id.clone(), workspace.repository().clone()),
-        None if args.checkpoint.is_some() => removed(ctx, selector).await?,
-        None => anyhow::bail!("no workspace {selector}"),
-    };
     let source = CopySource {
-        workspace: SpaceSelector::id(&workspace),
-        checkpoint: args.checkpoint,
+        workspace: selector,
+        checkpoint,
     };
-    Ok(Some(Copied { source, repository }))
+    let origin = crate::client::workspaces::copy_origin(source)
+        .send(&ctx.paths)
+        .await?;
+    let source = CopySource {
+        workspace: SpaceSelector::id(&origin.workspace),
+        checkpoint,
+    };
+    Ok(Some(Copied {
+        source,
+        repository: origin.repository,
+    }))
 }
 
-/// The ID of the removed workspace `selector` selects by ID, and of its
-/// repository.
-async fn removed(ctx: &Context, selector: SpaceSelector) -> Result<(SpaceId, RepositoryId)> {
-    let removed = crate::client::removal::removed(&ctx.paths).await?;
-    let removed = removed
-        .into_iter()
-        .find(|removed| selector.given_id() == Some(&removed.space_id))
-        .with_context(|| format!("no workspace or removed workspace {selector}"))?;
-    let repository = removed.repository()?.clone();
-    Ok((removed.space_id, repository))
+/// What copying a workspace, or with `checkpoint` one of its checkpoints,
+/// sends for the workspace a picker picks; the new space copies it on this
+/// machine.
+fn copying(checkpoint: Option<CheckpointNumber>) -> Acting {
+    Acting::here(move |workspace| {
+        crate::client::workspaces::copy_origin(CopySource {
+            workspace,
+            checkpoint,
+        })
+    })
 }

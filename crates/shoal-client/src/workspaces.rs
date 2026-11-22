@@ -12,13 +12,18 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::hooks::HookKind,
     model::{Refreshed, UntrackedWorktree, Workspace},
-    protocol::{CommitStart, CreationOptions, WorkspaceMethod},
+    protocol::{CommitStart, CopyOrigin, CopySource, CreationOptions, WorkspaceMethod},
     repository::Selector,
 };
 
 /// `workspace` with its links, completion, executions, places and leases.
 pub fn inspect(workspace: SpaceSelector) -> Prepared<Inspection> {
     Prepared::new(WorkspaceMethod::InspectWorkspace { workspace })
+}
+
+/// The workspace `source` copies, live or removed, and its repository.
+pub fn copy_origin(source: CopySource) -> Prepared<CopyOrigin> {
+    Prepared::new(WorkspaceMethod::CopyOrigin { source })
 }
 
 /// Create a workspace of `repository` at a commit `start` names, in the chat

@@ -23,7 +23,7 @@ use crate::{
         Base, Checkout, Checkpoint, CheckpointCause, CopiedFrom, Head, Repository, StartingCommit,
         Workspace, WorkspaceRef,
     },
-    protocol::CopySource,
+    protocol::{CopyOrigin, CopySource},
     state::WorkspaceState,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
@@ -166,6 +166,25 @@ impl Manager {
                     .optional()?)
             })
             .await
+    }
+
+    /// The workspace `source` copies and its repository: a live one, or
+    /// with a checkpoint a removed one.
+    pub(crate) async fn copy_origin(&self, source: &CopySource) -> Result<CopyOrigin> {
+        // Only a checkpoint is copied from a workspace no space here is.
+        if source.checkpoint.is_some() && !self.holds_space(&source.workspace).await? {
+            let removed = self.removed_space(&source.workspace).await?;
+            let repository = removed.repository()?.clone();
+            return Ok(CopyOrigin {
+                workspace: removed.space_id,
+                repository,
+            });
+        }
+        let workspace = self.workspace(&source.workspace).await?;
+        Ok(CopyOrigin {
+            repository: workspace.repository().clone(),
+            workspace: workspace.id,
+        })
     }
 
     /// Create a copy of `source` in `repository` where `place` says, below

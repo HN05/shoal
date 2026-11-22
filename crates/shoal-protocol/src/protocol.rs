@@ -96,7 +96,9 @@ pub use subscriptions::SubscriptionMethod;
 pub use threads::ThreadMethod;
 pub use triggers::TriggerMethod;
 pub use version::VERSION;
-pub use workspaces::{CommitStart, CopySource, CreationOptions, PullHead, WorkspaceMethod};
+pub use workspaces::{
+    CommitStart, CopyOrigin, CopySource, CreationOptions, PullHead, WorkspaceMethod,
+};
 pub use wrapper::{
     Control, ExecutionEvent, RESTORE_WAITS, RESUME_NARROWING, Reattach, ScopeMemory,
     default_resumes_when,

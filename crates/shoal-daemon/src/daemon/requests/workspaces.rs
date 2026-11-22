@@ -152,6 +152,9 @@ pub(super) async fn handle(
         WorkspaceMethod::InspectWorkspace { workspace } => {
             Body::Inspection(manager.inspect_workspace(&workspace).await?)
         }
+        WorkspaceMethod::CopyOrigin { source } => {
+            Body::CopyOrigin(manager.copy_origin(&source).await?)
+        }
         WorkspaceMethod::KeepAgentEnvironment {
             workspace,
             environment,
@@ -180,6 +183,11 @@ impl Checked for WorkspaceMethod {
             | Self::FastForwardWorkspace { .. }
             | Self::RefreshWorkspace { .. } => Some(TargetCheck::ReadyWorkspace),
             Self::RenameBranch { .. } => Some(TargetCheck::SettledWorkspace),
+            // Only a ready workspace's current files are copied.
+            Self::CopyOrigin { source } => Some(match source.checkpoint {
+                None => TargetCheck::ReadyWorkspace,
+                Some(_) => TargetCheck::Workspace,
+            }),
             Self::InspectWorkspace { .. }
             | Self::VerifyWorkspace { .. }
             | Self::KeepAgentEnvironment { .. }
@@ -210,6 +218,12 @@ impl Scoped for WorkspaceMethod {
             manager.copy_within(caller, source).await?;
         }
         Ok(match self {
+            // A copy's source is confined as a copy that starts a space is,
+            // which tells a scoped caller what to do about a removed one.
+            WorkspaceMethod::CopyOrigin { source } => {
+                manager.copy_within(caller, source).await?;
+                None
+            }
             // A scoped caller opens workspaces only below its own space,
             // which must be in their repository.
             WorkspaceMethod::OpenBranch { parent, .. }
