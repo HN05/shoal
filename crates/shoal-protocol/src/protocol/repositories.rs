@@ -55,6 +55,13 @@ pub enum RepositoryMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         machine: Option<String>,
     },
+    /// What removing the repository would remove, on the joined machine
+    /// `machine` names, or on this one.
+    PreviewRepositoryRemoval {
+        repository: crate::repository::Selector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        machine: Option<String>,
+    },
     /// The repositories `MoveRepositories` would move into `root`, or the
     /// configured `root_dir`, after the checks it runs before moving any.
     PlanRepositoryMoves {
@@ -124,12 +131,14 @@ impl RepositoryMethod {
 impl RepositoryMethod {
     /// Each is about the caller's machine's registrations, except commits
     /// another machine carries, which the hub sends to the machine that
-    /// takes them, and a removal, which the daemon sends to the machine it
-    /// names.
+    /// takes them, and a removal and its preview, which the daemon sends to
+    /// the machine they name.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ReceiveCommits { .. } => Forwarding::Duplex,
-            Self::RemoveRepository { .. } => Forwarding::Online,
+            Self::RemoveRepository { .. } | Self::PreviewRepositoryRemoval { .. } => {
+                Forwarding::Online
+            }
             Self::ListRepositories
             | Self::RepositoriesElsewhere
             | Self::RegisterRepository { .. }
@@ -163,6 +172,7 @@ impl RepositoryMethod {
             | Self::LocalConfigPath { .. }
             | Self::EditLocalConfig { .. }
             | Self::RemoveRepository { .. }
+            | Self::PreviewRepositoryRemoval { .. }
             | Self::PlanRepositoryMoves { .. }
             | Self::MoveRepositories { .. }
             | Self::SyncRepository { .. }

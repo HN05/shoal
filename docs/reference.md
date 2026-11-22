@@ -4019,6 +4019,8 @@ space's [`admin` permission](#permitted-actions) allows.
 
 ```sh
 shoal repo rm my-project -y
+shoal repo rm my-project --machine desk   # On the joined machine desk
+shoal repo rm my-project --all            # On every machine that registers it
 ```
 
 Permanently deletes the checkout (including in-place local repositories with
@@ -4029,9 +4031,23 @@ still being prepared goes too, once the creation of its worktree under way ends,
 refuses the removal until setup ends. Shoal attempts to
 delete workspace branches; a branch whose recorded worktree directory is already
 missing is retained because its contents cannot be inspected.
-Interactive calls identify the resolved repository, source, and checkout path before asking
-`Are you sure? [y/N]`; `-y`/`--yes` skips the prompt and is required for scripts
-and `--json`.
+A named repository is found wherever it is registered, as a named space is:
+one registered here is removed here, and one registered only on one other
+joined machine is removed there. One registered on several other machines but
+not here opens a picker on a terminal, and is otherwise refused asking for
+`--machine` or `--all`; without a name, outside a checkout, the picker lists
+the other machines' repositories after this machine's. `--machine NAME|ID`,
+repeatable, removes it on the named machines, this one included, and `-A`/`--all`
+on every machine that registers it, each machine by its registration of the
+name, else of the same origin. A machine it would act on that is offline
+refuses the removal at once, naming it, before anything is removed; the hub
+never holds a removal for later. Interactive calls list, for each machine,
+the resolved repository, its source and checkout path, and the spaces removal
+deletes there with each workspace's uncommitted files and unpushed commits,
+before asking `Are you sure? [y/N]`; `-y`/`--yes` skips the prompt and is
+required for scripts and `--json`, which prints one entry per machine, naming
+each other machine as `machine`. Removing a shared repository anywhere stops
+sharing it, so every other machine keeps its registration, no longer shared.
 Linked worktrees outside Shoal must be removed first; prunable stale records do
 not block, locked worktrees do. Shoal refuses redirected paths, a checkout whose
 Git config sets `core.bare` although it has a working tree, and deletions

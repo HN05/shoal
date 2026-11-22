@@ -200,6 +200,7 @@ response_bodies! {
     ChatRoot(chats::ChatRoot),
     LocalConfigEdit(crate::model::LocalConfigEdit),
     RepositoryRemoved(RepositoryRemoval),
+    RepositoryRemovalPreview(crate::model::RepositoryRemovalPreview),
     RepositoryMoves(crate::model::RepositoryMoves),
     MovedRepositories(Vec<crate::model::MovedRepository>),
     Workspace(Workspace),

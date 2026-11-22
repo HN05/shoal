@@ -98,6 +98,14 @@ pub(super) async fn handle(
                 .remove_repository(repository, machine.as_deref(), caller)
                 .await?,
         ),
+        RepositoryMethod::PreviewRepositoryRemoval {
+            repository,
+            machine,
+        } => Body::RepositoryRemovalPreview(
+            manager
+                .preview_repository_removal(repository, machine.as_deref(), caller)
+                .await?,
+        ),
         RepositoryMethod::PlanRepositoryMoves { root, regular_dir } => Body::RepositoryMoves(
             manager
                 .repositories
@@ -225,6 +233,7 @@ impl Checked for RepositoryMethod {
             | Self::LocalConfigPath { .. }
             | Self::EditLocalConfig { .. }
             | Self::RemoveRepository { .. }
+            | Self::PreviewRepositoryRemoval { .. }
             | Self::PlanRepositoryMoves { .. }
             | Self::MoveRepositories { .. }
             | Self::SyncRepository { .. }
@@ -274,6 +283,16 @@ impl Scoped for RepositoryMethod {
             RepositoryMethod::FailingSyncs => {
                 let action = Action::new(PermissionKey::Notifications, "the failing syncs");
                 manager.authorize_action(Some(caller), action).await?;
+                return Ok(None);
+            }
+            // It only reads what a removal of the caller's own repository
+            // would remove.
+            RepositoryMethod::PreviewRepositoryRemoval {
+                repository,
+                machine,
+            } => {
+                ensure_own_machine(manager, machine).await?;
+                *repository = manager.own_repository(caller, repository, OWN).await?;
                 return Ok(None);
             }
             RepositoryMethod::RemoveRepository { machine, .. } => {

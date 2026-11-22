@@ -13,7 +13,7 @@ use shoal_protocol::{
     hub::directory::HubView,
     model::{
         Branch, BranchTarget, CheckoutSync, KeptBranch, LocalConfigEdit, MovedRepository,
-        Repository, RepositoryMoves, RepositoryRemoval, SyncedRepository,
+        Repository, RepositoryMoves, RepositoryRemoval, RepositoryRemovalPreview, SyncedRepository,
     },
     protocol::RepositoryMethod,
     repository::Selector,
@@ -124,6 +124,20 @@ pub async fn remove(
     machine: Option<String>,
 ) -> Result<RepositoryRemoval> {
     let method = RepositoryMethod::RemoveRepository {
+        repository,
+        machine,
+    };
+    request(daemon, method).await
+}
+
+/// What removing `repository` would remove on the joined machine `machine`
+/// names, or on this one.
+pub async fn preview_removal(
+    daemon: &impl Daemon,
+    repository: Selector,
+    machine: Option<String>,
+) -> Result<RepositoryRemovalPreview> {
+    let method = RepositoryMethod::PreviewRepositoryRemoval {
         repository,
         machine,
     };

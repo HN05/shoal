@@ -1310,8 +1310,9 @@ display name. Repository selectors preserve the caller's argument alongside its
 canonical path. IDs and sources win before path lookup; a registered name survives
 unrelated path collisions, while a name and path matching different registrations
 require disambiguation.
-`repo rm` binds confirmation to the resolved registration and shows
-its source and checkout path. After verifying the checkout's identity and
+`repo rm` binds confirmation to each machine's resolved registration, by
+the ID that machine gives it, and shows its source, checkout path and the
+spaces it deletes there with the work they lose. After verifying the checkout's identity and
 boundaries, it deletes the checkout recursively, then removes the repository
 directory only when that directory is empty.
 Each workspace and chat gets its own temporary directory as `TMPDIR`, in the
@@ -3902,7 +3903,15 @@ when the link next opens, or on the hub's own machine when its daemon
 restarts, rather than every round, which would alert every ten seconds. A copy
 without a value, from `repo unshare` or a removal anywhere, leaves every
 registration, no longer shared. Machines clone from the origin; the hub
-carries no Git data. A shared repository's local config syncs the same way,
+carries no Git data. Each machine's report to the hub also carries every
+registration it has, with its ID there, whenever they change, and the hub
+view serves the other machines', so `repo ls` lists them and `repo rm` finds
+a repository registered only elsewhere, without spaces. `repo rm` resolves
+where it acts from that view in the CLI, as a named space resolves; each
+daemon answers a removal and its preview for its own registrations and
+forwards one that names another machine there, which fails at once while
+that machine is offline, since a removal the hub held would delete work
+nobody confirmed then. A shared repository's local config syncs the same way,
 keyed by its origin, under the shared files' rules: its text is checked as key
 edits check it, file by file, so one invalid file holds back no other, and a
 replaced edit stays as `config.toml.backup` with one alert. A machine agrees on

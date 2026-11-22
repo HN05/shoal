@@ -1,11 +1,14 @@
 //! Removing a registered repository on this machine or on another joined
-//! machine, where the hub carries the request.
+//! machine, where the hub carries the request, and what that removal would
+//! remove there.
 use anyhow::{Context as _, Result};
+use shoal_core::removal::InspectionPolicy;
 use shoal_protocol::{
     hub::Member,
-    model::RepositoryRemoval,
+    model::{RepositoryRemoval, RepositoryRemovalPreview, Space, SpaceWork, WorktreeWork},
     protocol::{Body, Operation, RepositoryMethod},
     repository::Selector,
+    space_names::SpaceSelector,
 };
 
 use super::{hub::Named, manager::Manager, scope::Caller};
@@ -39,6 +42,32 @@ impl Manager {
         Ok(removal)
     }
 
+    /// What removing the repository `selector` names would remove, for
+    /// `caller`, on the joined machine `machine` names, or on this one.
+    pub(super) async fn preview_repository_removal(
+        &self,
+        selector: Selector,
+        machine: Option<&str>,
+        caller: Option<&Caller>,
+    ) -> Result<RepositoryRemovalPreview> {
+        if let Some(machine) = self.other_machine(machine).await? {
+            let method = RepositoryMethod::PreviewRepositoryRemoval {
+                repository: selector,
+                machine: None,
+            };
+            let body = self.ask_other_machine(&machine, method, caller).await?;
+            return RepositoryRemovalPreview::try_from(body);
+        }
+        let repository = self.repositories.repository(selector).await?;
+        let mut spaces = Vec::new();
+        for space in self.present_spaces().await? {
+            if space.repository_id.as_ref() == Some(&repository.id) {
+                spaces.push(self.space_work(space).await);
+            }
+        }
+        Ok(RepositoryRemovalPreview { repository, spaces })
+    }
+
     /// The other joined machine `named` names; none when it names none, or
     /// this one.
     async fn other_machine(&self, named: Option<&str>) -> Result<Option<Member>> {
@@ -60,4 +89,28 @@ impl Manager {
         let operation = Operation::Repository(method);
         (self.hub.ask_machine(self, machine, operation, caller)).await
     }
+
+    /// `space` with what of its own its removal would lose: none for a
+    /// chat, or a worktree that cannot be read now.
+    async fn space_work(&self, space: Space) -> SpaceWork {
+        let work = match space.kind().has_worktree() {
+            true => {
+                let selector = SpaceSelector::id(&space.id);
+                let inspected = self.check_removal(&selector, InspectionPolicy::GitOnly);
+                (inspected.await.ok()).map(|inspection| WorktreeWork {
+                    dirty: inspection.check.dirty,
+                    unpushed_commits: inspection.check.unpushed_commits,
+                })
+            }
+            false => None,
+        };
+        SpaceWork {
+            space: space.space_ref(),
+            number: space.number,
+            work,
+        }
+    }
 }
+
+#[cfg(test)]
+mod tests;

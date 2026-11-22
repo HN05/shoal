@@ -11,6 +11,7 @@ use crate::{
     repository::{self, Selector},
 };
 
+mod confirmation;
 mod targets;
 
 pub(super) use targets::Machines;
@@ -23,7 +24,7 @@ pub(super) async fn remove(
     confirmed: bool,
 ) -> Result<i32> {
     let targets = targets(ctx, repository, &machines).await?;
-    confirm(ctx, &targets, confirmed)?;
+    confirm(ctx, &targets, confirmed).await?;
     let removed = remove_each(ctx, targets).await?;
     ctx.show(&removed, |_| {})?;
     Ok(0)
@@ -159,38 +160,19 @@ async fn origin_key(local: &Repository) -> Option<String> {
 
 /// Have the user confirm removing `targets`, unless `confirmed`; refused
 /// without asking where nobody can answer.
-fn confirm(ctx: &Context, targets: &[Target], confirmed: bool) -> Result<()> {
+async fn confirm(ctx: &Context, targets: &[Target], confirmed: bool) -> Result<()> {
     if confirmed {
         return Ok(());
     }
-    let mut blocks: Vec<String> = targets.iter().map(block).collect();
-    blocks.push(
-        "Deletes: checkout, all Shoal workspaces and their resources\nWork:    uncommitted and unpushed changes are permanently lost"
-            .to_owned(),
-    );
+    let action = match ctx.interactive() {
+        true => confirmation::describe(ctx, targets).await?,
+        false => confirmation::briefly(targets),
+    };
     ensure!(
-        ui::confirm(ctx, &blocks.join("\n\n"), "--yes")?,
+        ui::confirm(ctx, &action, "--yes")?,
         "repository removal canceled"
     );
     Ok(())
-}
-
-/// What removing `target` deletes.
-fn block(target: &Target) -> String {
-    match target {
-        Target::Here(local) => format!(
-            "Delete repository: {}\nSource: {}\nCheckout: {}",
-            local.display_name(),
-            local.source,
-            local.path.display()
-        ),
-        Target::Elsewhere(other) => format!(
-            "Delete repository: {} on {}\nSource: {}",
-            other.name(),
-            other.machine,
-            other.source()
-        ),
-    }
 }
 
 /// Remove each of `targets` in turn; one that fails names those removed

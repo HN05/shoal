@@ -47,6 +47,7 @@ pub use removal::{
 };
 pub use repositories::{
     LocalConfigEdit, MovedRepository, Repository, RepositoryMoves, RepositoryRemoval,
+    RepositoryRemovalPreview, SpaceWork, WorktreeWork,
 };
 pub use restarts::{AgentRestart, RestartOutcome, RestartWait};
 pub use spaces::{

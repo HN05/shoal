@@ -53,6 +53,42 @@ pub struct RepositoryRemoval {
     pub workspace_paths: Vec<PathBuf>,
 }
 
+/// What removing a repository would remove on its machine: its spaces,
+/// each after those below it, with the work of their own it would lose.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepositoryRemovalPreview {
+    pub repository: Repository,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spaces: Vec<SpaceWork>,
+}
+
+/// A space a repository's removal removes.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpaceWork {
+    #[serde(flatten)]
+    pub space: super::SpaceRef,
+    pub number: shoal_ids::space_ids::SpaceNumber,
+    /// What its worktree holds that neither a branch nor a remote keeps;
+    /// none for a chat, or a worktree that could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work: Option<WorktreeWork>,
+}
+
+/// What a worktree holds that neither a branch nor a remote keeps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorktreeWork {
+    /// It has uncommitted or untracked files.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dirty: bool,
+    /// Commits no remote or default branch has.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub unpushed_commits: u64,
+}
+
+fn is_zero(count: &u64) -> bool {
+    *count == 0
+}
+
 /// The repository directories a move would take into `directory`, the
 /// canonical directory that holds `root_dir`'s repositories.
 #[derive(Debug, Serialize, Deserialize)]
