@@ -201,6 +201,44 @@ pub(super) async fn answer_wait(
     protocol::write(&mut stream, &Response::new(request_id, body)).await
 }
 
+/// The most bytes one frame carries in base64, with room for the rest of
+/// the frame.
+pub(crate) const CHUNK: usize = (protocol::MAX_FRAME - (8 << 10)) / 4 * 3;
+
+/// Where an answer that goes on writes its frames: its client's
+/// connection.
+pub(crate) struct Frames<'a> {
+    manager: &'a Manager,
+    writer: tokio::net::unix::OwnedWriteHalf,
+    id: u64,
+}
+
+impl<'a> Frames<'a> {
+    /// The frames answering the request `id` on `writer`.
+    pub(crate) fn new(
+        manager: &'a Manager,
+        writer: tokio::net::unix::OwnedWriteHalf,
+        id: u64,
+    ) -> Self {
+        Self {
+            manager,
+            writer,
+            id,
+        }
+    }
+
+    /// Send `body` under a daemon operation of its own, so the answer holds
+    /// off a restart only while it writes; `false` once a restart holds
+    /// operations off, which closes the answer.
+    pub(crate) async fn send(&mut self, body: Body) -> Result<bool> {
+        let Some(_operation) = self.manager.gates.try_operation() else {
+            return Ok(false);
+        };
+        protocol::write(&mut self.writer, &Response::new(self.id, body)).await?;
+        Ok(true)
+    }
+}
+
 /// Wait until the client hangs up. A client sends nothing after its request,
 /// so anything readable means it closed the connection.
 pub(crate) async fn hangup(stream: &mut (impl tokio::io::AsyncRead + Unpin)) {

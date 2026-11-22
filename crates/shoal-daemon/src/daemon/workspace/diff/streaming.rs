@@ -6,12 +6,12 @@ use std::{process::Stdio, sync::Arc};
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
     diffs::{DiffDisplay, DiffOutput},
-    protocol::{self, Body, Response},
+    protocol::Body,
     space_names::SpaceSelector,
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt as _},
-    net::{UnixStream, unix::OwnedWriteHalf},
+    net::UnixStream,
     process::Child,
 };
 
@@ -22,10 +22,6 @@ use crate::{
     },
     git,
 };
-
-/// The most bytes of Git's output one frame carries: what fits in a frame
-/// in base64, with room for the rest of the frame.
-const CHUNK: usize = (protocol::MAX_FRAME - (8 << 10)) / 4 * 3;
 
 /// Git writing a workspace's diff, which a client reads.
 pub(crate) struct RunningDiff(Child);
@@ -61,16 +57,12 @@ impl Manager {
         startup: OperationGuard,
     ) -> Result<()> {
         let (mut reader, writer) = stream.into_split();
-        let mut client = Client {
-            manager: &self,
-            writer,
-            id,
-        };
+        let mut client = answer::Frames::new(&self, writer, id);
         drop(startup);
         let mut stdout = git.stdout.take().context("git diff's output")?;
         let mut stderr = git.stderr.take().context("git diff's errors")?;
         let (mut out_open, mut err_open) = (true, true);
-        let (mut out, mut err) = (vec![0; CHUNK], vec![0; CHUNK]);
+        let (mut out, mut err) = (vec![0; answer::CHUNK], vec![0; answer::CHUNK]);
         while out_open || err_open {
             let frame = tokio::select! {
                 read = read_some(&mut stdout, &mut out), if out_open => match read? {
@@ -89,36 +81,13 @@ impl Manager {
                 },
                 () = answer::hangup(&mut reader) => return Ok(()),
             };
-            if !client.send(frame).await? {
+            if !client.send(Body::Diff(frame)).await? {
                 return Ok(());
             }
         }
         let status = git.wait().await.context("wait for git diff")?;
-        client
-            .send(DiffOutput::Exited(crate::execution::exit_code(status)))
-            .await
-            .map(drop)
-    }
-}
-
-/// Where a diff writes: its client's connection.
-struct Client<'a> {
-    manager: &'a Manager,
-    writer: OwnedWriteHalf,
-    id: u64,
-}
-
-impl Client<'_> {
-    /// Send `output` under a daemon operation of its own, so a diff holds
-    /// off a restart only while it writes; `false` once a restart holds
-    /// operations off, which closes the answer.
-    async fn send(&mut self, output: DiffOutput) -> Result<bool> {
-        let Some(_operation) = self.manager.gates.try_operation() else {
-            return Ok(false);
-        };
-        let response = Response::new(self.id, Body::Diff(output));
-        protocol::write(&mut self.writer, &response).await?;
-        Ok(true)
+        let exited = DiffOutput::Exited(crate::execution::exit_code(status));
+        client.send(Body::Diff(exited)).await.map(drop)
     }
 }
 
