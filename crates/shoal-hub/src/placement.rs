@@ -82,10 +82,21 @@ impl Hub {
         daemon: &dyn Daemon,
         request: Request,
     ) -> Result<Option<Decision>> {
+        self.place_among(daemon, request, |_| true).await
+    }
+
+    /// As the hub: where a start of `request` goes among the connected
+    /// machines that are `eligible`, by the configured policy.
+    pub(super) async fn place_among(
+        &self,
+        daemon: &dyn Daemon,
+        request: Request,
+        eligible: impl Fn(&Member) -> bool,
+    ) -> Result<Option<Decision>> {
         let members = self.local_hub_overview(daemon).await?.members;
         let snapshot = Snapshot {
             request,
-            machines: placed_machines(&members),
+            machines: placed_machines(members.iter().filter(|member| eligible(member))),
         };
         let (placement, decided) = self.rank(&snapshot).await;
         Ok(decision(placement, decided, &members))
@@ -171,8 +182,8 @@ fn among(placement: Placement, snapshot: &Snapshot) -> Result<Placement, Unanswe
 }
 
 /// The connected machines among `members`, as placement reads them.
-fn placed_machines(members: &[Member]) -> Vec<Machine> {
-    (members.iter())
+fn placed_machines<'a>(members: impl Iterator<Item = &'a Member>) -> Vec<Machine> {
+    members
         .filter(|member| member.kind == MemberKind::Machine && member.connected)
         .map(|member| Machine {
             id: member.id.clone(),

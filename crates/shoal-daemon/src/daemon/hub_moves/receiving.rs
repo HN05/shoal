@@ -9,7 +9,7 @@ use std::{process::Stdio, sync::Arc};
 use anyhow::{Context as _, Result, bail};
 use shoal_ids::move_tickets::MoveTicket;
 use shoal_protocol::protocol::{self, Body, Response};
-use tokio::{io::AsyncRead, net::UnixStream};
+use tokio::net::UnixStream;
 
 use crate::{
     daemon::{
@@ -63,7 +63,7 @@ impl Manager {
             None => Claim::Plain,
         };
         let body = match self
-            .import_moved(&mut stream, &claim, receiving.resume)
+            .import_moved(Package::Stream(&mut stream), &claim, receiving.resume)
             .await
         {
             Ok(imported) => {
@@ -132,38 +132,52 @@ impl Manager {
     }
 
     /// How `shoal internal import-moved` continued the package `input`
-    /// carries until it ends, its spaces claimed at the hub as `claim`
-    /// says, as the user, in this daemon's environment.
+    /// holds, its spaces claimed at the hub as `claim` says, as the user,
+    /// in this daemon's environment.
     pub(super) async fn import_moved(
         &self,
-        input: &mut (impl AsyncRead + Unpin),
+        input: Package<'_>,
         claim: &Claim,
         resume: bool,
     ) -> Result<ImportedMove> {
         let argv = internal_command(&self.paths, true, Worker::ImportMoved { claim, resume })?;
         let mut command = detached_command(&argv);
+        let stdin = match &input {
+            Package::Stream(_) => Stdio::piped(),
+            Package::File(file) => Stdio::from(file.try_clone()?),
+        };
         command
             .current_dir(&self.paths.home)
-            .stdin(Stdio::piped())
+            .stdin(stdin)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env_remove(crate::env::EXECUTION_ID)
             .env_remove(crate::env::SCOPE_TOKEN);
         let mut child = command.spawn().context("start the import")?;
-        let mut stdin = child.stdin.take().context("the import takes no input")?;
+        let stdin = child.stdin.take();
         // An import that refuses the package stops reading it, and says why.
         let feeding = async move {
-            let _ = tokio::io::copy(input, &mut stdin).await;
+            if let (Package::Stream(stream), Some(mut stdin)) = (input, stdin) {
+                let _ = tokio::io::copy(stream, &mut stdin).await;
+            }
         };
         let (_, output) = tokio::join!(feeding, child.wait_with_output());
         reported(&output.context("run the import")?)
     }
 }
 
+/// Where `shoal internal import-moved` reads a package from.
+pub(super) enum Package<'a> {
+    /// A request's stream, until the caller ends its side.
+    Stream(&'a mut UnixStream),
+    /// A file, whole.
+    File(std::fs::File),
+}
+
 impl Manager {
     /// Tell the agents of the `arrived` spaces, which moved here from the
     /// machine named `from`, where they are now.
-    async fn tell_arrived(&self, arrived: impl Iterator<Item = &SpaceId>, from: &str) {
+    pub(super) async fn tell_arrived(&self, arrived: impl Iterator<Item = &SpaceId>, from: &str) {
         for id in arrived {
             let told = async {
                 let space = self.space(&SpaceSelector::id(id)).await?;

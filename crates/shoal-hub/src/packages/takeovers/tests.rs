@@ -56,10 +56,29 @@ async fn a_takeover_is_refused_once_the_space_s_machine_is_connected_again() {
             SpaceId::from("plan".to_owned()),
             MemberId::from("desk".to_owned()),
         );
-        record_takeover(tx, &plan, &desk, &connected)
+        record_takeover(tx, &plan, &desk, (&connected, false))
     });
     assert!(taken.await.is_err());
     assert!(takeovers(&hub).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_space_handed_over_is_taken_over_while_its_machine_is_still_connected() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = hub(&root, "", &["laptop", "desk"]).await;
+    report(&hub, "laptop", &["plan"]).await;
+    send(&hub, "laptop", "plan", b"plan").await.unwrap();
+    let laptop = MemberId::from("laptop".to_owned());
+    let connected = HashSet::from([laptop]);
+    let taken = hub.store.write(move |tx| {
+        let (plan, desk) = (
+            SpaceId::from("plan".to_owned()),
+            MemberId::from("desk".to_owned()),
+        );
+        record_takeover(tx, &plan, &desk, (&connected, true))
+    });
+    taken.await.unwrap();
+    assert_eq!(takeovers(&hub).await, [("plan".into(), "laptop".into())]);
 }
 
 #[tokio::test]
@@ -72,7 +91,8 @@ async fn the_hub_writes_an_offline_machine_s_package_to_the_machine_that_takes_i
     let mut incoming = link.opener.streams().open();
     let space = SpaceId::from("plan".to_owned());
     let streams = (link.writer.streams(), incoming.number());
-    hub.serve_fetch(&space, streams).await.unwrap();
+    let desk = MemberId::from("desk".to_owned());
+    hub.serve_fetch(&desk, &space, streams).await.unwrap();
     let mut fetched = Vec::new();
     while let Some(bytes) = incoming.next().await.unwrap() {
         fetched.extend(bytes);
@@ -80,5 +100,5 @@ async fn the_hub_writes_an_offline_machine_s_package_to_the_machine_that_takes_i
     assert_eq!(fetched, b"the package");
     let none = SpaceId::from("fix".to_owned());
     let (_, streams) = (link.opener.streams().open(), link.writer.streams());
-    assert!(hub.serve_fetch(&none, (streams, 99)).await.is_err());
+    assert!(hub.serve_fetch(&desk, &none, (streams, 99)).await.is_err());
 }

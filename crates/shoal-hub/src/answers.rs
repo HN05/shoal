@@ -182,13 +182,29 @@ impl Hub {
                 self.keep_package(&**daemon, sent, streams).await?;
                 Reply::Streaming
             }
+            Call::HandOver {
+                space,
+                built_at,
+                stream,
+                start,
+            } => {
+                ensure_machine(member)?;
+                let sent = Sent {
+                    member: member.id.clone(),
+                    space,
+                    built_at,
+                };
+                let streams = (calls.streams(), stream);
+                self.take_handover(daemon, sent, start, streams).await?;
+                Reply::Streaming
+            }
             Call::Kept { space } => {
                 ensure_machine(member)?;
                 Reply::Kept(self.local_kept_package(&space).await?.map(Box::new))
             }
             Call::Fetch { space, stream } => {
                 ensure_machine(member)?;
-                self.serve_fetch(&space, (calls.streams(), stream)).await?;
+                (self.serve_fetch(&member.id, &space, (calls.streams(), stream))).await?;
                 Reply::Streaming
             }
             Call::Share { edits } => {
@@ -200,9 +216,10 @@ impl Hub {
             | Call::Expired { .. }
             | Call::Availability { .. }
             | Call::Retire { .. }
+            | Call::Continue { .. }
             | Call::Shared { .. } => {
                 anyhow::bail!(
-                    "only the hub passes requests, expiries, availability, retirements and shared items to machines"
+                    "only the hub passes requests, expiries, availability, retirements, hand-overs and shared items to machines"
                 )
             }
         })

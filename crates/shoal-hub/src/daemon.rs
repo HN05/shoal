@@ -212,7 +212,7 @@ pub trait Apps: Send + Sync {
 }
 
 /// The packages of this machine's spaces that an intermittent machine
-/// keeps on the hub.
+/// keeps on the hub, and those a machine shutting down hands over.
 pub trait Packages: Send + Sync {
     /// What a package of `space` taken now would hold, as a digest that
     /// changes with it.
@@ -227,6 +227,15 @@ pub trait Packages: Send + Sync {
     /// removal record and its branch, and leaving the spaces below it;
     /// what then opens that work, for the user to read.
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>>;
+
+    /// Continue here the space `id`, which the machine named `from` handed
+    /// over as it shut down, from the package the hub keeps of it: import
+    /// it under its ID, taking it over, and queue its agents' restores.
+    fn continue_handed_over<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        from: &'a str,
+    ) -> BoxFuture<'a, Result<()>>;
 }
 
 /// The global config the daemon runs under.

@@ -360,6 +360,27 @@ pub enum Call {
     /// other machines took over from it meanwhile, which it ends here.
     /// Answered with [`Reply::Retired`].
     Retire { spaces: Vec<SpaceId> },
+    /// The final package of the space `space`, which a machine shutting
+    /// down built at `built_at` once its work stopped and writes up the
+    /// duplex stream `stream` it opened, for the hub to keep and continue
+    /// where its placement puts `start`, the space's agent as a start
+    /// would place it, among the other connected machines, the hub's own
+    /// as the caller's. The hub writes that placement on its side, as an
+    /// optional [`Decision`](super::placement::Decision) in JSON, none
+    /// where no machine can take the space, then ends it, with an error
+    /// once it did not keep the package whole. Answered with
+    /// [`Reply::Streaming`].
+    HandOver {
+        space: SpaceId,
+        built_at: UnixTime,
+        stream: u64,
+        start: shoal_schedule::placement::snapshot::Request,
+    },
+    /// The hub's call to the machine its placement chose for the space
+    /// `space`, which the machine named `from` handed over as it shut
+    /// down: it continues the space from the package the hub keeps of it.
+    /// Answered with [`Reply::Delivered`] once the space continues there.
+    Continue { space: SpaceId, from: String },
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,

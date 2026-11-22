@@ -85,13 +85,14 @@ impl Hub {
     ) -> Result<Option<SpaceNumber>> {
         let (member, id, ticket) = (member.clone(), id.clone(), ticket.cloned());
         let connected = self.links.connected();
+        let handed = self.handovers.handed_to(&id, &member);
         self.store
             .write(move |tx| {
                 if let Some(ticket) = &ticket {
                     fences::ensure_unsettled(tx, ticket)?;
                 }
                 if takeover {
-                    takeovers::record_takeover(tx, &id, &member, &connected)?;
+                    takeovers::record_takeover(tx, &id, &member, (&connected, handed))?;
                 }
                 records::claim(tx, &member, &id)?;
                 numbers::keep_for_claim(tx, &member, &id)

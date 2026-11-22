@@ -2,7 +2,9 @@
 //! machine is offline: the hub says what it keeps of the space and writes
 //! the package to the machine that takes it over, and records the takeover
 //! once that machine claims the space, for the space's own machine to
-//! retire its copy once it returns.
+//! retire its copy once it returns. A space its machine handed over as it
+//! shut down is taken over the same way by the machine the hub chose,
+//! while its own may still be connected.
 use std::{
     collections::HashSet,
     io::BufReader,
@@ -55,7 +57,8 @@ impl Hub {
         file: &Path,
     ) -> Result<()> {
         if self.is_hub(daemon) {
-            let kept = self.offline_package_file(id).await?;
+            let own = self.own_member().await?;
+            let kept = self.takeable_package_file(id, &own).await?;
             let file = file.to_owned();
             return off_runtime::run(move || Ok(std::fs::copy(kept, file).map(drop)?)).await;
         }
@@ -76,7 +79,7 @@ impl Hub {
     /// As the hub: what it keeps of the space `id`, whose machine is
     /// offline, with the space as its package records it.
     pub(crate) async fn local_kept_package(&self, id: &SpaceId) -> Result<Option<KeptPackage>> {
-        let Some((_, built_at)) = self.offline_package(id).await? else {
+        let Some((_, built_at)) = self.takeable_package(id, None).await? else {
             return Ok(None);
         };
         let path = self.package_path(id);
@@ -93,14 +96,15 @@ impl Hub {
     }
 
     /// As the hub: write the package it keeps of the space `id`, whose
-    /// machine is offline, on the stream `stream` of `streams`, in the
-    /// background.
+    /// machine is offline or handed it over to `taker`, on the stream
+    /// `stream` of `streams`, in the background.
     pub(crate) async fn serve_fetch(
         self: &Arc<Self>,
+        taker: &MemberId,
         id: &SpaceId,
         (streams, stream): (&Streams, u64),
     ) -> Result<()> {
-        let path = self.offline_package_file(id).await?;
+        let path = self.takeable_package_file(id, taker).await?;
         let (mut out, _) = streams.answering(stream, false);
         tokio::spawn(async move {
             let written = out.write_file(&path).await;
@@ -110,10 +114,11 @@ impl Hub {
         Ok(())
     }
 
-    /// The file of the package the hub keeps of the space `id`, refused
-    /// without one or while its machine is connected.
-    async fn offline_package_file(&self, id: &SpaceId) -> Result<PathBuf> {
-        match self.offline_package(id).await? {
+    /// The file of the package the hub keeps of the space `id` for
+    /// `taker`, refused without one or while its machine is connected,
+    /// unless it handed the space over to `taker`.
+    async fn takeable_package_file(&self, id: &SpaceId, taker: &MemberId) -> Result<PathBuf> {
+        match self.takeable_package(id, Some(taker)).await? {
             Some(_) => Ok(self.package_path(id)),
             None => bail!(
                 "the hub keeps no package of space {id} whose machine is offline; while its machine is connected, shoal move {id} --machine moves it"
@@ -123,12 +128,20 @@ impl Hub {
 
     /// The machine the directory lists the space `id` under and when it
     /// built the package the hub keeps of it, while that machine is
-    /// offline.
-    async fn offline_package(&self, id: &SpaceId) -> Result<Option<(MemberId, UnixTime)>> {
+    /// offline or handed the space over to `taker`.
+    async fn takeable_package(
+        &self,
+        id: &SpaceId,
+        taker: Option<&MemberId>,
+    ) -> Result<Option<(MemberId, UnixTime)>> {
         let connected = self.links.connected();
-        let id = id.clone();
-        let kept = self.store.read(move |tx| owners_package(tx, &id)).await?;
-        Ok(kept.filter(|(member, _)| !connected.contains(member)))
+        let handed = taker.is_some_and(|taker| self.handovers.handed_to(id, taker));
+        let space = id.clone();
+        let kept = self
+            .store
+            .read(move |tx| owners_package(tx, &space))
+            .await?;
+        Ok(kept.filter(|(member, _)| handed || !connected.contains(member)))
     }
 }
 
@@ -151,19 +164,19 @@ fn owners_package(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<(MemberId
 /// Record that `claimer`'s claim of the space `id` takes it over from the
 /// package the hub keeps of it, refused unless the machine the directory
 /// lists it under, which sent that package, is another than `claimer` and
-/// not among the `connected` ones.
+/// not among the `connected` ones, or `handed` the space over to it.
 pub(crate) fn record_takeover(
     tx: &Transaction<'_>,
     id: &SpaceId,
     claimer: &MemberId,
-    connected: &HashSet<MemberId>,
+    (connected, handed): (&HashSet<MemberId>, bool),
 ) -> Result<()> {
     let Some((owner, _)) = owners_package(tx, id)? else {
         bail!("the hub keeps no package of space {id} to take it over from");
     };
     ensure!(&owner != claimer, "space {id} is already this machine's");
     ensure!(
-        !connected.contains(&owner),
+        handed || !connected.contains(&owner),
         "the machine of space {id} is connected again, so the space stays there; shoal move {id} --machine moves it"
     );
     tx.execute(

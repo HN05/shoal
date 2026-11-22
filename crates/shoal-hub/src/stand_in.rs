@@ -368,6 +368,10 @@ impl Packages for StandIn {
     fn retire_space<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<String>> {
         Box::pin(async { bail!("the stand-in daemon has no spaces to retire") })
     }
+
+    fn continue_handed_over<'a>(&'a self, _: &'a SpaceId, _: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { bail!("the stand-in daemon continues no spaces") })
+    }
 }
 
 impl Queue for StandIn {

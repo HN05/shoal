@@ -264,6 +264,14 @@ impl Packages for Manager {
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>> {
         Box::pin(Manager::retire_space(self, space))
     }
+
+    fn continue_handed_over<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        from: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(Manager::continue_handed_over(self, id, from))
+    }
 }
 
 impl shoal_hub::daemon::Queue for Manager {

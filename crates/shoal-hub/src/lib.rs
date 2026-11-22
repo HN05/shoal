@@ -113,6 +113,9 @@ pub struct Hub {
     deliveries: queue::Deliveries,
     /// As the hub: the packages of intermittent machines' spaces it keeps.
     packages: packages::Kept,
+    /// As the hub: the spaces handed over that their new machine has not
+    /// claimed yet.
+    handovers: packages::Handovers,
     /// As a member: the tree across machines it last learned, as its store
     /// keeps it.
     known_tree: std::sync::Mutex<Option<known_tree::Known>>,
@@ -162,6 +165,7 @@ impl Hub {
             outbox: Default::default(),
             deliveries: Default::default(),
             packages: Default::default(),
+            handovers: Default::default(),
             known_tree: Default::default(),
             parent_permissions: Default::default(),
             reported: Default::default(),

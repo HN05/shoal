@@ -15,6 +15,7 @@ use std::{
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Transaction, params};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+use tokio::sync::OwnedRwLockReadGuard;
 
 use shoal_core::fsutil::off_runtime;
 use shoal_daemon_base::notifications::About;
@@ -24,7 +25,7 @@ use crate::{
     Hub,
     daemon::Daemon,
     directory, log,
-    streams::{Incoming, Streams},
+    streams::{Incoming, Outgoing, Streams},
     time::UnixTime,
 };
 
@@ -58,8 +59,28 @@ impl Hub {
         self: &Arc<Self>,
         daemon: &dyn Daemon,
         sent: Sent,
-        (streams, stream): (&Streams, u64),
+        streams: (&Streams, u64),
     ) -> Result<()> {
+        let (out, up) = self.accept_package(daemon, &sent, streams).await?;
+        let hub = self.clone();
+        tokio::spawn(async move {
+            let (kept, operation) = hub.take_package(sent, up).await;
+            out.end(kept.err().map(|error| format!("{error:#}"))).await;
+            drop(operation);
+        });
+        Ok(())
+    }
+
+    /// This side of the duplex stream `stream` of `streams` that the
+    /// package `sent` comes up, and what comes up it; refused at once
+    /// while the hub's disk is low or the directory lists the space under
+    /// another machine or none.
+    pub(super) async fn accept_package(
+        &self,
+        daemon: &dyn Daemon,
+        sent: &Sent,
+        (streams, stream): (&Streams, u64),
+    ) -> Result<(Outgoing, Incoming)> {
         self.ensure_package_room(daemon).await?;
         let (member, space) = (sent.member.clone(), sent.space.clone());
         let listed = (self.store).read(move |tx| lists_under(tx, &space, &member));
@@ -69,28 +90,32 @@ impl Hub {
             sent.space
         );
         let (out, up) = streams.answering(stream, true);
-        let up = up.context("a package comes up a duplex stream")?;
-        let hub = self.clone();
-        tokio::spawn(async move {
-            let space = sent.space.clone();
-            let received = hub.receive_package(up).await;
-            // Kept and answered within one operation, so an update never
-            // exits between the two.
-            let operation = hub.gates.operation_unless_exiting().await;
-            let kept = match (received, &operation) {
-                (Ok((incoming, size)), Some(_)) => hub.place_package(sent, size, incoming).await,
-                (Ok(_), None) => Err(anyhow::anyhow!(
-                    "the hub's daemon is restarting; send it again once it is back"
-                )),
-                (Err(error), _) => Err(error),
-            };
-            if let Err(error) = &kept {
-                log!("hub: could not keep the package of space {space}: {error:#}");
-            }
-            out.end(kept.err().map(|error| format!("{error:#}"))).await;
-            drop(operation);
-        });
-        Ok(())
+        Ok((out, up.context("a package comes up a duplex stream")?))
+    }
+
+    /// Read the package `sent` from `up` to its end and keep it, and how
+    /// that went, with the daemon operation it was kept in, which the
+    /// caller holds until it answered, so an update never exits between
+    /// the two; none once the daemon is exiting, which keeps nothing.
+    pub(super) async fn take_package(
+        &self,
+        sent: Sent,
+        up: Incoming,
+    ) -> (Result<()>, Option<OwnedRwLockReadGuard<()>>) {
+        let space = sent.space.clone();
+        let received = self.receive_package(up).await;
+        let operation = self.gates.operation_unless_exiting().await;
+        let kept = match (received, &operation) {
+            (Ok((incoming, size)), Some(_)) => self.place_package(sent, size, incoming).await,
+            (Ok(_), None) => Err(anyhow::anyhow!(
+                "the hub's daemon is restarting; send it again once it is back"
+            )),
+            (Err(error), _) => Err(error),
+        };
+        if let Err(error) = &kept {
+            log!("hub: could not keep the package of space {space}: {error:#}");
+        }
+        (kept, operation)
     }
 
     /// The package its machine writes up `up`, read to its end into a new
