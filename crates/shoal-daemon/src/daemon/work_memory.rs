@@ -90,7 +90,7 @@ pub(crate) fn limit(config: &Config) -> Option<u64> {
 #[cfg(target_os = "linux")]
 pub(super) async fn run(manager: std::sync::Arc<Manager>) {
     use crate::service::work::{self, Cap};
-    if !crate::build::changes_user_files() {
+    if !shoal_core::build::changes_user_files() {
         return;
     }
     let mut config = manager.config_state.watch();
