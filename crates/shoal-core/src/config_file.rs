@@ -19,7 +19,7 @@ use crate::config::{
 };
 use crate::paths::Paths;
 
-pub mod shared_files;
+pub mod copies;
 mod user_config;
 
 pub use user_config::refuse_user_config;

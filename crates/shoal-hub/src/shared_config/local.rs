@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use shoal_core::{config::Shared, config_file::shared_files};
+use shoal_core::{config::Shared, config_file::copies};
 use shoal_protocol::paths::Paths;
 
 use super::SharedFiles;
@@ -31,7 +31,7 @@ pub(super) fn take(
     agreed: &Agreed<SharedFiles>,
     sent: &[Edit<SharedFiles>],
 ) -> Result<Taken> {
-    let held = shared_files::hold(paths)?;
+    let held = copies::hold(&Shared::path(paths))?;
     let on_disk = Shared::files(paths)?;
     let mut taken = Taken::default();
     for copy in copies {
@@ -42,7 +42,8 @@ pub(super) fn take(
             Taking::Agree => {}
             Taking::Write { keep } => {
                 let text = copy.value.as_deref();
-                taken.kept.extend(held.write(paths, &copy.key, text, keep)?);
+                let path = Shared::file(paths, &copy.key);
+                taken.kept.extend(held.write(&path, text, keep)?);
                 taken.wrote = true;
             }
         }
