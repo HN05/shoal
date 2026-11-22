@@ -37,6 +37,21 @@ pub(super) struct PlacedHere {
 
 impl PlacedHere {
     /// Give `launched`, which started here, what it reports of its
+    /// What a launch reports that starts here instead of on the machine
+    /// `decision` placed it on, which could not take it for `error`, as
+    /// the daemon's log records.
+    fn instead(decision: Option<Decision>, error: &anyhow::Error) -> Self {
+        let name = (decision.as_ref()).map_or_else(String::new, |decision| decision.name.clone());
+        let warning = format!(
+            "machine {name}, where the hub placed it, could not take the start, so it starts on this machine: {error:#}"
+        );
+        log!("{warning}");
+        Self {
+            decision,
+            warning: Some(warning),
+        }
+    }
+
     /// placement.
     pub(super) fn report(self, launched: &mut Launched) {
         launched.placement = self.decision;
@@ -71,16 +86,7 @@ impl Manager {
             })),
             Err(error) if placed_elsewhere && !error.is::<Unanswered>() => {
                 *launch = unplaced;
-                let name =
-                    (decision.as_ref()).map_or_else(String::new, |decision| decision.name.clone());
-                let warning = format!(
-                    "machine {name}, where the hub placed it, could not take the start, so it starts on this machine: {error:#}"
-                );
-                log!("{warning}");
-                Ok(Placed::Here(PlacedHere {
-                    decision,
-                    warning: Some(warning),
-                }))
+                Ok(Placed::Here(PlacedHere::instead(decision, &error)))
             }
             Err(error) => Err(error),
         }
