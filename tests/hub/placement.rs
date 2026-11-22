@@ -7,7 +7,7 @@ use shoal_client::{
     hub::{Placing, answer_placement},
 };
 use shoal_protocol::paths::Paths;
-use shoal_schedule::placement::{Placed, Placement, Reason};
+use shoal_schedule::placement::Placement;
 
 use super::{
     directory::{give_origin, hub_machine, join, workspace},
@@ -18,9 +18,6 @@ use super::{
         wait::wait_for,
     },
 };
-
-/// The external policy, with a wait for the placer no runner outlasts.
-const EXTERNAL: &str = "placement = \"external\"\nplacer_wait_seconds = 300\n";
 
 /// An agent that runs until its space stops it.
 const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'exec sleep 600']\n";
@@ -150,63 +147,25 @@ fn app(machines: &Machines) -> Connector {
 }
 
 #[test]
-fn an_external_placer_places_a_start_and_balanced_does_without_one() {
-    let machines = machines_with(EXTERNAL, "");
+fn without_an_answer_from_the_placer_balanced_places_the_start() {
+    let machines = machines_with("placement = \"external\"\n", "");
     let unplaced = placed(&machines, &["--branch", "first"]);
     assert_eq!(unplaced["policy"], "balanced", "{unplaced}");
     assert_eq!(unplaced["unanswered"], "no_placer", "{unplaced}");
-    // An app on the hub's machine registers and keeps the next start there.
+    // A placer that is asked but never answers is late, whatever the
+    // runner's speed, and its answer comes too late to count.
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let app = app(&machines);
     let mut placing = runtime.block_on(Placing::serve(&app)).unwrap();
-    let hub_id = hub_machine(&machines.hub);
-    let answered = runtime.spawn({
-        let hub_id = hub_id.clone();
-        async move {
-            let asked = placing.next().await?;
-            let placement = Placement {
-                ranked: vec![Placed {
-                    machine: hub_id.as_str().into(),
-                    reason: Reason::Local,
-                }],
-                skipped: Vec::new(),
-            };
-            answer_placement(&app, asked.number, placement).await?;
-            anyhow::Ok(asked.snapshot)
-        }
-    });
-    let placement = placed(&machines, &["--branch", "second"]);
-    assert_eq!(placement["policy"], "external", "{placement}");
-    assert_eq!(placement["machine"], hub_id.as_str(), "{placement}");
-    let snapshot = runtime.block_on(answered).unwrap().unwrap();
-    assert!(snapshot.request.heavy);
-    assert_eq!(snapshot.machines.len(), 2);
-}
-
-#[test]
-fn a_placer_that_chooses_no_connected_machine_leaves_the_start_to_balanced() {
-    let machines = machines_with(EXTERNAL, "");
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let app = app(&machines);
-    let mut placing = runtime.block_on(Placing::serve(&app)).unwrap();
-    let answered = runtime.spawn(async move {
-        let asked = placing.next().await?;
-        let placement = Placement {
-            ranked: vec![Placed {
-                machine: "gone".into(),
-                reason: Reason::Local,
-            }],
-            skipped: Vec::new(),
-        };
-        answer_placement(&app, asked.number, placement).await
-    });
-    let placement = placed(&machines, &["--branch", "child"]);
-    runtime.block_on(answered).unwrap().unwrap();
-    assert_eq!(placement["policy"], "balanced", "{placement}");
-    assert_eq!(placement["unanswered"], "failed", "{placement}");
-    assert_eq!(
-        placement["machine"],
-        machines.server_id.as_str(),
-        "{placement}"
-    );
+    // It keeps its registration, which a placer that hangs up would end.
+    let asked = runtime.spawn(async move { (placing.next().await, placing) });
+    let late = placed(&machines, &["--branch", "second"]);
+    assert_eq!(late["policy"], "balanced", "{late}");
+    assert_eq!(late["unanswered"], "late", "{late}");
+    let (asked, _placing) = runtime.block_on(asked).unwrap();
+    let asked = asked.unwrap();
+    assert!(asked.snapshot.request.heavy);
+    assert_eq!(asked.snapshot.machines.len(), 2);
+    let refused = runtime.block_on(answer_placement(&app, asked.number, Placement::default()));
+    assert!(refused.is_err(), "{refused:?}");
 }

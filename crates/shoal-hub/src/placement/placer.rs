@@ -2,8 +2,8 @@
 //! unscoped client of the hub's machine registers over a connection it
 //! keeps open, the latest registration taking over from the one before,
 //! and answers each snapshot the hub sends it by the number it came with.
-//! The hub waits `[machine.hub] placer_wait_seconds` for an answer, so a
-//! start never waits long on an app.
+//! The hub waits [`WAIT`] for an answer, so a start never waits long on an
+//! app.
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -13,6 +13,9 @@ use std::{
 use shoal_protocol::hub::placement::{Asked, Unanswered};
 use shoal_schedule::placement::{Placement, snapshot::Snapshot};
 use tokio::sync::{mpsc, oneshot};
+
+/// How long the hub waits for the placer's answer.
+pub(crate) const WAIT: Duration = Duration::from_secs(2);
 
 /// The registered placer, if any, and the answers the hub waits for.
 #[derive(Default)]

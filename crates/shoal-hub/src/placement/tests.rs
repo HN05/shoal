@@ -52,3 +52,28 @@ fn a_placer_chooses_only_a_connected_machine_the_start_can_go_to() {
         Err(Unanswered::Failed)
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn the_registered_placer_decides_under_the_external_policy() {
+    use shoal_core::config::Config;
+    use shoal_schedule::placement::Policy;
+
+    use crate::stand_in::{self, StandIn};
+
+    let root = tempfile::tempdir().unwrap();
+    let config = Config::from_toml("[machine.hub]\nplacement = \"external\"\n").unwrap();
+    let hub = stand_in::hub(&root, config).await;
+    let own = hub.own_member().await.unwrap();
+    let mut request = snapshot().request;
+    request.caller = own.clone();
+    let mut registration = hub.placers.register();
+    let answering = async {
+        let asked = registration.asked.recv().await.unwrap();
+        assert!(hub.placers.answer(asked.number, on(own.as_str())));
+    };
+    let (decision, ()) = tokio::join!(hub.place_for(&StandIn, request), answering);
+    let decision = decision.unwrap().unwrap();
+    assert_eq!(decision.machine, own);
+    assert_eq!(decision.policy, Policy::External);
+    assert_eq!(decision.unanswered, None);
+}

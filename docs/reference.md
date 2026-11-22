@@ -1218,8 +1218,8 @@ unscoped client on the hub's machine, such as an app's server, registers as
 the placer with `shoal-client`'s `hub::Placing` and answers each snapshot the
 hub sends it, the start and every connected machine, with the machines in
 order of preference; the latest registration takes over from the one before.
-A start the placer does not answer within `placer_wait_seconds`, or answers
-with a machine that is not connected or lacks the start's repository or agent tool,
+A start the placer does not answer within two seconds, or answers with a
+machine that is not connected or lacks the start's repository or agent tool,
 since placement never clones a repository, and one without a placer, is
 placed by `balanced`, which the start names.
 

@@ -157,9 +157,6 @@ pub struct Hub {
     pub default_machine: Option<String>,
     /// The policy that places a start which names no machine, on the hub.
     pub placement: shoal_schedule::placement::Policy,
-    /// How long the hub waits for the external placer's answer before it
-    /// places by `balanced`.
-    pub placer_wait_seconds: u64,
     /// The local address the hub forwards the requests of paired members
     /// under each path prefix to, such as an app's own server.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -180,7 +177,6 @@ impl Default for Hub {
             escalate_after_minutes: 30,
             default_machine: None,
             placement: Default::default(),
-            placer_wait_seconds: 2,
             forward: Default::default(),
         }
     }
@@ -200,11 +196,6 @@ impl Hub {
             .filter(|(prefix, _)| prefix.covers(path))
             .max_by_key(|(prefix, _)| prefix.as_str().len())
             .map(|(prefix, address)| (prefix, *address))
-    }
-
-    /// How long the hub waits for the external placer's answer.
-    pub fn placer_wait(&self) -> std::time::Duration {
-        std::time::Duration::from_secs(self.placer_wait_seconds)
     }
 
     /// The URL the hub advertises for a listener bound to `bound`.

@@ -4,12 +4,7 @@ use shoal_schedule::placement::{
     snapshot::{Request, Snapshot},
 };
 
-use std::time::Duration;
-
-use super::Placers;
-
-/// How long the hub waits for the placer.
-const WAIT: Duration = Duration::from_secs(2);
+use super::{Placers, WAIT};
 
 fn snapshot() -> Snapshot {
     Snapshot {
