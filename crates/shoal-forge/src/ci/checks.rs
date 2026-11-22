@@ -1,28 +1,113 @@
-//! Failed CI job logs resolved from a PR's current check, using its agent account.
+//! CI checks on a commit as each forge reads them, acts on their jobs and
+//! serves their logs, and failed job logs resolved from a PR's current
+//! check, using its agent account.
 pub(crate) mod plain;
 
 use anyhow::{Context, Result, ensure};
-use shoal_forge_types::items::{link::LinkKind, reference::ItemRef};
+use shoal_forge_types::{
+    ForgeRepo,
+    backends::ForgeKind,
+    capability::Capability,
+    ci::{CiAction, JobState, checks::CheckLog},
+    items::{
+        link::{ItemKind, LinkKind},
+        reference::ItemRef,
+    },
+    numbers::{JobId, PullNumber},
+    review::view::ItemView,
+};
 use shoal_refs::CommitId;
 
 use crate::{
-    backends::Checks,
-    capability::CapabilityRequests,
-    ci::{CiCheck, CiSteps, Location},
+    capability::{self, CapabilityRequests, Supports},
+    ci::{CiCheck, CiSteps, Job, Location, Operation},
     items::action::ActionRequests,
     transport::{
         account::Account,
         api::{Request, TransportRequests},
     },
 };
-use shoal_forge_types::{
-    ForgeRepo,
-    capability::Capability,
-    ci::{JobState, checks::CheckLog},
-    items::link::ItemKind,
-    numbers::PullNumber,
-    review::view::ItemView,
-};
+
+/// How the forge reads a commit's CI checks, acts on their jobs and
+/// serves their logs.
+#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
+pub(crate) trait Checks: Supports {
+    /// Each check's latest attempt on `head`.
+    async fn ci_checks(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        head: &str,
+    ) -> Result<Vec<CiCheck>>;
+
+    /// The CI job a check's web URL links in the repository, if any.
+    fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location>;
+
+    /// The operation that applies `action` to `job`, one of `selected` among
+    /// the head's `jobs`, and the checks it reaches.
+    fn ci_operation(
+        &self,
+        jobs: &[Job],
+        selected: &[Job],
+        job: &Job,
+        action: CiAction,
+    ) -> Result<(Operation, Vec<String>)>;
+
+    /// The endpoint under the repository that carries out `operation`.
+    async fn ci_endpoint(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _head: &str,
+        operation: Operation,
+    ) -> Result<String> {
+        match operation {
+            Operation::Post(endpoint) => Ok(endpoint),
+            Operation::ForgejoRun { .. } | Operation::RerunForgejoJob { .. } => {
+                anyhow::bail!("not a Forgejo repository")
+            }
+        }
+    }
+
+    /// The log of the failed check `name` on the current head of PR `pull`.
+    async fn failed_check_log(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        pull: &shoal_forge_types::items::reference::ItemRef,
+        name: &str,
+    ) -> Result<CheckLog> {
+        repo.failed_job_log(account, pull, name).await
+    }
+
+    /// `log`, a job log as the forge serves it, as plain text.
+    fn plain_log(&self, log: &str) -> String {
+        plain::readable(log)
+    }
+
+    /// The step the plain job log `log` names as failed, where the forge's
+    /// runner marks its steps.
+    fn failed_step(&self, _log: &str) -> Option<String> {
+        None
+    }
+
+    /// The step that failed in the job with API ID `job`, where the forge
+    /// lists a job's steps with their states.
+    async fn listed_failed_step(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _job: JobId,
+    ) -> Option<String> {
+        None
+    }
+
+    /// The endpoint under the repository that serves the plain-text log of
+    /// the job at `location`.
+    fn job_log_endpoint(&self, _location: Location) -> Result<String> {
+        Err(capability::unsupported(self, Capability::ReadJobLogs))
+    }
+}
 
 /// The most of a job log Shoal downloads, in bytes.
 pub(crate) const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;

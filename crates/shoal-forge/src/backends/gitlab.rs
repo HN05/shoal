@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 use crate::{
-    backends::Runners,
+    ci::runner::Runners,
     hosts::Hosting,
     transport::{
         account::Account,

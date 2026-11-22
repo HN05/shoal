@@ -5,9 +5,8 @@ use serde_json::{Value, json};
 
 use super::Bitbucket;
 use crate::{
-    backends::Runs,
     capability,
-    ci::{run::NewRun, run_action::RunOperation},
+    ci::{run::NewRun, run_action::RunOperation, runs::Runs},
     transport::{
         account::Account,
         api::{Request, TransportRequests},

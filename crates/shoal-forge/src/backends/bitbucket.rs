@@ -8,8 +8,8 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde_json::Value;
 
 use crate::{
-    backends::Runners,
     capability,
+    ci::runner::Runners,
     hosts::Hosting,
     transport::{
         account::Account,

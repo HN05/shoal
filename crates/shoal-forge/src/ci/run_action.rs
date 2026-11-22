@@ -5,9 +5,8 @@ use anyhow::{Context, Result, ensure};
 
 use crate::{
     RepoRequests,
-    backends::Runs,
     capability::CapabilityRequests,
-    ci::run_view::RunViewSteps,
+    ci::{run_view::RunViewSteps, runs::Runs},
     transport::{
         account::Account,
         api::{Request, TransportRequests},

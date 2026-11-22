@@ -6,8 +6,7 @@ use shoal_refs::CommitId;
 
 use super::{Forgejo, actions};
 use crate::{
-    backends::{Checks, Runs},
-    ci::{approval::RUNS_PAGE, run::NewRun, run_action::RunOperation},
+    ci::{approval::RUNS_PAGE, checks::Checks, run::NewRun, run_action::RunOperation, runs::Runs},
     items::item::text,
     transport::{
         account::Account,

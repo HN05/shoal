@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::backends::Runs;
+use crate::ci::runs::Runs;
 
 #[test]
 fn each_forge_lists_the_runs_that_may_wait_its_own_way() -> Result<()> {

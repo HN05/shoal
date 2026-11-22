@@ -3,8 +3,7 @@ use anyhow::{Result, bail};
 
 use super::Bitbucket;
 use crate::{
-    backends::Checks,
-    ci::{CiCheck, Job, Location, Operation},
+    ci::{CiCheck, Job, Location, Operation, checks::Checks},
     transport::account::Account,
 };
 use shoal_forge_types::{ForgeRepo, ci::CiAction};

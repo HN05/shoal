@@ -6,7 +6,6 @@ use shoal_refs::CommitId;
 
 use super::{GitHub, actions};
 use crate::{
-    backends::Runs,
     ci::{
         Location,
         approval::RUNS_PAGE,
@@ -14,6 +13,7 @@ use crate::{
         run::{NewRun, workflow_segment},
         run_action::RunOperation,
         run_view::JOBS_PAGE,
+        runs::Runs,
     },
     items::item::text,
     transport::{

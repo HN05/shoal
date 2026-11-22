@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::backends::Runs;
+use crate::ci::runs::Runs;
 use shoal_forge_types::raw::HttpMethod;
 
 fn run(workflow: Option<&str>) -> NewRun {

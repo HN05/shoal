@@ -1,5 +1,5 @@
 use super::*;
-use crate::backends::Checks;
+use crate::ci::checks::Checks;
 use shoal_forge_types::backends::ForgeKind;
 
 #[test]

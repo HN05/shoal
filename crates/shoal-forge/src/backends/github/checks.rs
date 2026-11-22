@@ -3,8 +3,11 @@ use anyhow::Result;
 
 use super::{GitHub, actions, activity};
 use crate::{
-    backends::{Checks, github_rest},
-    ci::{CiCheck, Job, Location, Operation, checks::plain},
+    backends::github_rest,
+    ci::{
+        CiCheck, Job, Location, Operation,
+        checks::{Checks, plain},
+    },
     transport::account::Account,
 };
 use shoal_forge_types::{ForgeRepo, ci::CiAction};

@@ -5,10 +5,9 @@ use serde_json::Value;
 use tokio::process::Command;
 
 use crate::{
-    backends::Checks,
     ci::{
         Job, Location, Operation,
-        checks::{MAX_LOG_BYTES, NoJobLog},
+        checks::{Checks, MAX_LOG_BYTES, NoJobLog},
     },
     items::action::ActionSteps,
     transport::{

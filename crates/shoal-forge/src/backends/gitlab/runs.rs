@@ -6,9 +6,9 @@ use shoal_refs::CommitId;
 
 use super::{GitLab, status_state};
 use crate::{
-    backends::Runs,
     ci::{
         Location, checks::CheckSteps, run::NewRun, run_action::RunOperation, run_view::JOBS_PAGE,
+        runs::Runs,
     },
     items::item::text,
     transport::{

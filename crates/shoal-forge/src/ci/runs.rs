@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::{
     capability::{self, Supports},
     ci::{run::NewRun, run_action::RunOperation},
-    transport::{account::Account, api::Request, backend::Backend},
+    transport::{account::Account, api::Request},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -23,7 +23,7 @@ use shoal_forge_types::{
 /// How the forge starts, lists and reads workflow runs and their jobs,
 /// and reruns, cancels and approves them.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Runs: Backend + Supports {
+pub(crate) trait Runs: Supports {
     /// The request that starts `run`, or why the forge cannot start it.
     fn start_run(&self, repo: &ForgeRepo, run: &NewRun) -> Result<Request>;
 

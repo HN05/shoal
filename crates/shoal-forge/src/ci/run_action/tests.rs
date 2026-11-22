@@ -1,13 +1,11 @@
 use serde_json::{Value, json};
 
 use super::*;
-use crate::CommitId;
-use crate::backends::Runs;
-use shoal_forge_types::ci::JobState;
-use shoal_forge_types::ci::check_state::CheckState;
-use shoal_forge_types::numbers::PullNumber;
-use shoal_forge_types::numbers::RunId;
-use shoal_forge_types::numbers::RunNumber;
+use crate::{CommitId, ci::runs::Runs};
+use shoal_forge_types::{
+    ci::{JobState, check_state::CheckState},
+    numbers::{PullNumber, RunId, RunNumber},
+};
 
 fn run(id: u64) -> Run {
     Run {

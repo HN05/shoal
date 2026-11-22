@@ -5,16 +5,14 @@ use futures_util::StreamExt;
 use shoal_refs::CommitId;
 
 use crate::{
-    backends::{Checks, Runs},
     capability::CapabilityRequests,
-    ci::run_action::RunActionSteps,
+    ci::{checks::Checks, run_action::RunActionSteps, runs::Runs},
     transport::{
         account::Account,
         api::{Request, TransportRequests},
     },
     updates::{FailedJob, MAX_LISTED_JOBS, Snapshot},
 };
-use shoal_forge_types::updates::{SnapshotKind, SnapshotState};
 use shoal_forge_types::{
     ForgeRepo,
     capability::Capability,
@@ -24,6 +22,7 @@ use shoal_forge_types::{
         run_action::Run,
         run_view::{JobRef, RunFilter, RunJob, RunView, stopped_run_state},
     },
+    updates::{SnapshotKind, SnapshotState},
 };
 
 /// The most runs one list returns.
