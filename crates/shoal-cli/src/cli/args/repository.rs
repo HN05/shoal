@@ -154,12 +154,20 @@ pub enum RepoCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Delete a repository checkout and all its Shoal workspaces and resources.
+    /// Delete a repository checkout and all its Shoal workspaces and resources, on this or other
+    /// joined machines.
     ///
     /// Uncommitted and unpushed work is permanently lost.
     Rm {
-        /// Registered repository; defaults to the current checkout or workspace, else a picker.
+        /// Registered repository, here or on another joined machine; defaults to the current
+        /// checkout or workspace, else a picker.
         repository: Option<String>,
+        /// Remove it on this joined machine, by its name or the ID shoal hub ls shows; repeatable.
+        #[arg(long, value_name = "MACHINE", conflicts_with = "all")]
+        machine: Vec<String>,
+        /// Remove it on every joined machine that registers it.
+        #[arg(short = 'A', long)]
+        all: bool,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },

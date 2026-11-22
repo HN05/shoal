@@ -51,8 +51,13 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         }
         RepoCommand::Rm {
             repository,
+            machine,
+            all,
             confirmation,
-        } => removal::remove(ctx, repository, confirmation.yes).await,
+        } => {
+            let machines = removal::Machines::of(machine, all);
+            removal::remove(ctx, repository, machines, confirmation.yes).await
+        }
         RepoCommand::Move(args) => {
             moving::run(ctx, args).await?;
             Ok(0)

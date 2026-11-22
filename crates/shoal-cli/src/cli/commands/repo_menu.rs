@@ -71,6 +71,8 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         }),
         RepoMenuAction::Delete => repo(RepoCommand::Rm {
             repository: Some(picked.id),
+            machine: Vec::new(),
+            all: false,
             confirmation: ConfirmationArgs::default(),
         }),
     })

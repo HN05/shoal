@@ -869,7 +869,8 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
             .unwrap()
             .is_empty()
     });
-    let result = fixture.ok(&["repo", "rm", "doomed", "-y"]);
+    let result = fixture.ok(&["repo", "rm", "doomed", "-y"])[0].clone();
+    assert!(result["machine"].is_null(), "{result}");
     assert_eq!(result["removed"], true);
     assert_eq!(result["repository_id"], repo["id"]);
     assert_eq!(result["workspaces_removed"], 2);

@@ -1,5 +1,6 @@
 //! Repositories across the hub: each machine lists the other machines'
-//! registrations after its own.
+//! registrations after its own, and removes one on the machine that
+//! registers it.
 use serde_json::Value;
 
 use super::{
@@ -30,4 +31,20 @@ fn a_machine_lists_the_other_machines_repositories_after_its_own() {
     assert!(listed[0]["machine"].is_null(), "{listed:?}");
     assert_eq!(listed[1]["id"], desks["id"]);
     assert_eq!(listed[1]["name"], "web");
+}
+
+#[test]
+fn a_repository_registered_only_on_another_machine_is_removed_there() {
+    let hub = machine(true, "app");
+    let desk = machine(false, "web");
+    join(&desk, &hub, "desk");
+    let desks = desk.ok(&["repo", "ls"])[0].clone();
+    listed_on(&hub, "desk");
+    let removed = hub.ok(&["repo", "rm", "web", "--yes"]);
+    assert_eq!(removed[0]["machine"], "desk");
+    assert_eq!(removed[0]["repository_id"], desks["id"]);
+    assert_eq!(desk.ok(&["repo", "ls"]), serde_json::json!([]));
+    assert!(!desk.repo.exists());
+    // The hub's own repository stays.
+    assert!(hub.repo.exists());
 }

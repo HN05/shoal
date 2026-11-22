@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use std::path::PathBuf;
 
-use shoal_protocol::{hub::directory::RegisteredRepository, model::Repository};
+use shoal_protocol::{
+    hub::directory::RegisteredRepository,
+    model::{Repository, RepositoryRemoval},
+};
 
 use crate::output::outputs;
 
@@ -47,4 +50,19 @@ impl RepositoryElsewhere {
     }
 }
 
-outputs!(LocalConfig, ListedRepository, RepositoryElsewhere);
+/// A repository `shoal repo rm` removed, on the machine it names, none
+/// for this one.
+#[derive(Serialize, Deserialize)]
+pub struct RemovedRepository {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
+    #[serde(flatten)]
+    pub removal: RepositoryRemoval,
+}
+
+outputs!(
+    LocalConfig,
+    ListedRepository,
+    RepositoryElsewhere,
+    RemovedRepository
+);
