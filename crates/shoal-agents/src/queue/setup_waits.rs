@@ -13,7 +13,7 @@ use super::blockers;
 use super::store::{ENTRY_COLUMNS, copy_launch_waiting, entry};
 use crate::Agents;
 use crate::config::permissions::PermissionsConfig;
-use crate::daemon::Daemon;
+use crate::daemon::{Daemon, Records};
 use crate::log;
 use crate::model::QueueEntry;
 use crate::state::QueueKind;
@@ -68,10 +68,10 @@ impl Agents {
     /// agent waiting in its place, such as when the preparation's worker
     /// ended without doing so. Requires the queue gate.
     pub async fn return_failed_starts(&self, daemon: &dyn Daemon) -> Result<()> {
-        let preparing = daemon.operations_work_in();
+        let (preparing, records) = (daemon.operations_work_in(), self.records.clone());
         let returned = self
             .store
-            .write(move |tx| return_failed_starts(tx, &preparing))
+            .write(move |tx| return_failed_starts(tx, &*records, &preparing))
             .await?;
         for (entry, workspace) in returned {
             log!("returned {entry} to the agent queue to wait for the setup of {workspace}");
@@ -154,10 +154,11 @@ fn released_at_once(db: &rusqlite::Connection, workspace: &SpaceId) -> Result<Ve
 /// setup failed to the queue, returning each new entry with its workspace.
 fn return_failed_starts(
     tx: &Transaction<'_>,
+    records: &dyn Records,
     preparing: &HashSet<SpaceId>,
 ) -> Result<Vec<(QueueEntryId, SpaceId)>> {
     let mut returned = Vec::new();
-    for start in failed_starts(tx)? {
+    for start in failed_starts(tx, records)? {
         if !preparing.contains(&start.workspace) {
             returned.push(return_start(tx, start)?);
         }
@@ -166,25 +167,26 @@ fn return_failed_starts(
 }
 
 /// The starting launches in workspaces whose setup failed.
-fn failed_starts(tx: &Transaction<'_>) -> Result<Vec<FailedStart>> {
-    let selection = params![
-        QueueKind::Launch,
-        QueueState::Starting,
-        WorkspaceState::Failed
-    ];
-    Ok(tx
+fn failed_starts(tx: &Transaction<'_>, records: &dyn Records) -> Result<Vec<FailedStart>> {
+    let failed: HashSet<SpaceId> = (records.spaces(tx)?.into_iter())
+        .filter(|space| space.state == Some(WorkspaceState::Failed) && !space.setup_finished)
+        .map(|space| space.id)
+        .collect();
+    let starting = tx
         .prepare(
-            "SELECT q.id,w.id FROM agent_queue q
-             JOIN workspaces w ON w.id=COALESCE(q.space_id,q.opens_workspace_id)
-             WHERE q.kind=?1 AND q.state=?2 AND w.state=?3 AND NOT w.setup_finished",
+            "SELECT id,COALESCE(space_id,opens_workspace_id) FROM agent_queue
+             WHERE kind=?1 AND state=?2",
         )?
-        .query_map(selection, |row| {
-            Ok(FailedStart {
-                id: row.get(0)?,
-                workspace: row.get(1)?,
-            })
+        .query_map(params![QueueKind::Launch, QueueState::Starting], |row| {
+            Ok((row.get(0)?, row.get::<_, Option<SpaceId>>(1)?))
         })?
-        .collect::<rusqlite::Result<_>>()?)
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok((starting.into_iter())
+        .filter_map(|(id, workspace)| {
+            let workspace = workspace.filter(|workspace| failed.contains(workspace))?;
+            Some(FailedStart { id, workspace })
+        })
+        .collect())
 }
 
 /// Replace `start` with a new entry, which no hold on the old one keeps

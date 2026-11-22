@@ -172,35 +172,21 @@ fn keep_wrapper_restore(db: &Connection, restore: &Restore) -> Result<bool> {
 
 /// The ready workspaces and the chats whose assignment is not done, where
 /// stopped agents restore on their own.
-fn open_spaces(db: &Connection) -> Result<Vec<Target>> {
-    Ok(db
-        .prepare(
-            "SELECT id,repository_id,name FROM spaces s LEFT JOIN workspaces w USING(id)
-             WHERE (s.kind='chat' OR w.state='ready') AND NOT EXISTS
-                (SELECT 1 FROM space_completion c WHERE c.space_id=s.id)",
-        )?
-        .query_map([], |row| {
-            Ok(Target {
-                id: row.get(0)?,
-                repository: row.get(1)?,
-                name: row.get(2)?,
-            })
-        })?
-        .collect::<rusqlite::Result<_>>()?)
+fn open_spaces(db: &Connection, records: &dyn Records) -> Result<Vec<Target>> {
+    Ok((records.spaces(db)?.into_iter())
+        .filter(|space| space.open() && !space.done)
+        .map(|space| Target {
+            id: space.id,
+            repository: space.repository,
+            name: space.name,
+        })
+        .collect())
 }
 
 /// The recorded executions, which have not ended.
 fn recorded_executions(db: &Connection) -> Result<HashSet<ExecutionId>> {
     Ok(db
         .prepare("SELECT id FROM executions")?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
-}
-
-/// Every space's ID.
-fn all_spaces(db: &Connection) -> Result<Vec<SpaceId>> {
-    Ok(db
-        .prepare("SELECT id FROM spaces")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -571,9 +557,10 @@ impl Agents {
     /// has ended. A done space's agent waits until `shoal resume` names its
     /// space.
     pub async fn queue_requested_restores(&self) -> Result<()> {
+        let records = self.records.clone();
         let (spaces, recorded) = self
             .store
-            .run(|db| Ok((open_spaces(db)?, recorded_executions(db)?)))
+            .run(move |db| Ok((open_spaces(db, &*records)?, recorded_executions(db)?)))
             .await?;
         for space in spaces {
             for (execution, env) in recovery::restore_requests(&self.paths, &space.id)? {
@@ -736,9 +723,13 @@ impl Agents {
     /// queue gate, which keeps restores in the queue, and a restart from
     /// recording its own, until it is released.
     pub async fn pending_restore_workspaces(&self) -> Result<HashSet<SpaceId>> {
+        let records = self.records.clone();
         let (spaces, queued) = self
             .store
-            .run(|db| Ok((all_spaces(db)?, restoring_workspaces(db)?)))
+            .run(move |db| {
+                let spaces = records.spaces(db)?.into_iter().map(|space| space.id);
+                Ok((spaces.collect::<Vec<_>>(), restoring_workspaces(db)?))
+            })
             .await?;
         let mut pending = queued;
         pending.extend(self.renewing_workspaces().await);

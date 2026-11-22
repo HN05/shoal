@@ -1,10 +1,14 @@
-//! The daemon's agents: the turn state their hooks report, the subagents
-//! they run, retries of the turns API errors end, the alerts queued for
-//! them, the user's engagement with them, idle wakes, sleep and wake
-//! timers, the trust their tools give repositories' paths, and keeping the
-//! machine awake while they have work. [`Agents`] holds what they keep in memory and offers their
-//! operations; what they need of the rest of the daemon is the interface in
-//! [`daemon`].
+//! The daemon's agents: the executions their wrappers register and relay,
+//! the agent queue that admits, starts and restores them, their stops,
+//! restarts and interrupts, the protection that stops them for overload,
+//! disk space and shutdowns, recovery after a daemon restart, their
+//! sessions, places and stopped work, the turn state their hooks report,
+//! the subagents they run, retries of the turns API errors end, the alerts
+//! queued for them, the user's engagement with them, idle wakes, sleep and
+//! wake timers, the trust their tools give repositories' paths, and keeping
+//! the machine awake while they have work. [`Agents`] holds what they keep
+//! in memory and offers their operations; what they need of the rest of the
+//! daemon is the interface in [`daemon`].
 use std::{collections::HashMap, sync::Arc};
 
 use shoal_ids::execution_ids::ExecutionId;

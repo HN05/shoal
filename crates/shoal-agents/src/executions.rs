@@ -176,6 +176,7 @@ pub trait ExecutionKindExt {
     fn reserve(
         self,
         tx: &Transaction<'_>,
+        records: &dyn crate::daemon::Records,
         workspace_id: &SpaceId,
         parent_execution: Option<&ExecutionId>,
     ) -> Result<()>;
@@ -185,6 +186,7 @@ impl ExecutionKindExt for ExecutionKind {
     fn reserve(
         self,
         tx: &Transaction<'_>,
+        records: &dyn crate::daemon::Records,
         workspace_id: &SpaceId,
         parent_execution: Option<&ExecutionId>,
     ) -> Result<()> {
@@ -203,16 +205,10 @@ impl ExecutionKindExt for ExecutionKind {
                         "workspace has active or unknown execution {blocking}; setup is unavailable until it finishes or is cleared"
                     );
                 }
-                let reserved = tx.execute(
-                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=0,setup_skipped=0 WHERE id=?1 AND state IN (?3,?4,?2)",
-                    params![
-                        workspace_id,
-                        WorkspaceState::Preparing,
-                        WorkspaceState::Ready,
-                        WorkspaceState::Failed
-                    ],
-                )?;
-                ensure!(reserved == 1, "workspace is busy");
+                ensure!(
+                    records.reserve_setup(tx, workspace_id)?,
+                    "workspace is busy"
+                );
             }
         }
         Ok(())
@@ -568,7 +564,7 @@ impl Agents {
         self.store
             .write(move |tx| {
                 let space_id = home.id();
-                home.reserve(tx, kind, agent, parent_execution.as_ref())?;
+                home.reserve(tx, &*records, kind, agent, parent_execution.as_ref())?;
                 // Under the write lock emptying caches takes, and undone with
                 // the execution's row when the directories cannot be prepared.
                 let provisions = home.provide(tx, &caches)?;

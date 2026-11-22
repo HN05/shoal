@@ -563,11 +563,12 @@ impl Agents {
     /// space's.
     async fn record_execution_agent(&self, id: &ExecutionId, agent: &TrackedAgent) {
         let (execution, agent) = (id.to_owned(), agent.clone());
+        let records = self.records.clone();
         let recorded = self
             .store
-            .run(move |db| {
+            .write(move |tx| {
                 let narrowing = shoal_store::narrowing_column(&agent.narrowing)?;
-                db.execute(
+                tx.execute(
                     "UPDATE executions SET agent=?2,model=?3,effort=?4,mode=?5,narrowing=?6
                      WHERE id=?1",
                     rusqlite::params![
@@ -579,11 +580,16 @@ impl Agents {
                         narrowing
                     ],
                 )?;
-                db.execute(
-                    "UPDATE spaces SET mode=?2,narrowing=?3
-                     WHERE id=(SELECT space_id FROM executions WHERE id=?1)",
-                    rusqlite::params![execution, agent.mode, narrowing],
-                )?;
+                let space: Option<SpaceId> = tx
+                    .query_row(
+                        "SELECT space_id FROM executions WHERE id=?1",
+                        [&execution],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                if let Some(space) = space {
+                    records.record_space_mode(tx, &space, &agent.mode, &agent.narrowing)?;
+                }
                 Ok(())
             })
             .await;

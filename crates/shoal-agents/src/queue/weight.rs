@@ -64,8 +64,18 @@ impl Agents {
     /// a repository has one, and the agents of every space in a light one,
     /// whether they run or, stopped, wait for their restore.
     pub async fn light(&self, daemon: &dyn Daemon) -> Result<Light> {
+        let records = self.records.clone();
         let (mut executions, spaces, mut repositories) = (self.store)
-            .read(|tx| Ok((execution_modes(tx)?, spaces(tx)?, queue_repositories(tx)?)))
+            .read(move |tx| {
+                let spaces: Vec<_> = (records.spaces(tx)?.into_iter())
+                    .map(|space| (space.id, space.repository))
+                    .collect();
+                Ok((
+                    execution_modes(tx, &spaces)?,
+                    spaces,
+                    queue_repositories(tx)?,
+                ))
+            })
             .await?;
         executions.extend(self.stopped_modes(&spaces, &executions)?);
         repositories.extend(
@@ -138,23 +148,29 @@ impl Agents {
     }
 }
 
-/// Each space's agent's execution, with its repository and mode.
-fn execution_modes(db: &Connection) -> Result<Vec<ExecutionMode>> {
-    Ok(db
-        .prepare(
-            "SELECT e.id,s.repository_id,e.mode FROM executions e
-             JOIN spaces s ON s.id=e.space_id WHERE e.agent IS NOT NULL",
-        )?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .collect::<rusqlite::Result<_>>()?)
-}
-
-/// Each space with its repository.
-fn spaces(db: &Connection) -> Result<Vec<(SpaceId, Option<RepositoryId>)>> {
-    Ok(db
-        .prepare("SELECT id,repository_id FROM spaces")?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<_>>()?)
+/// The agent's execution of each of `spaces`, given with their
+/// repositories, with its space's repository and mode.
+fn execution_modes(
+    db: &Connection,
+    spaces: &[(SpaceId, Option<RepositoryId>)],
+) -> Result<Vec<ExecutionMode>> {
+    let repositories: HashMap<_, _> = spaces.iter().cloned().collect();
+    let executions = db
+        .prepare("SELECT id,space_id,mode FROM executions WHERE agent IS NOT NULL")?
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, ExecutionId>(0)?,
+                row.get::<_, SpaceId>(1)?,
+                row.get(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok((executions.into_iter())
+        .filter_map(|(execution, space, mode)| {
+            let repository = repositories.get(&space)?.clone();
+            Some((execution, repository, mode))
+        })
+        .collect())
 }
 
 /// The repositories with a queue entry, `None` for an entry of a chat

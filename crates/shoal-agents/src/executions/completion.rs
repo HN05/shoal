@@ -8,7 +8,6 @@ use super::ExecutionKind;
 use crate::Agents;
 use crate::daemon::{Daemon, Records};
 use crate::state::ExecutionState;
-use crate::state::WorkspaceState;
 use shoal_protocol::approvals::ApprovalRequest;
 
 /// What a verified completion recorded: the demo the execution ran, the
@@ -34,7 +33,7 @@ impl Agents {
         self.store
             .write(move |tx| {
                 if kind == ExecutionKind::Setup {
-                    record_setup_result(tx, &record_id, exit_code, issue.as_deref())?;
+                    record_setup_result(tx, &*records, &record_id, exit_code, issue.as_deref())?;
                 }
                 let (demo, released, agent_space) = if complete {
                     let demo =
@@ -59,11 +58,11 @@ impl Agents {
     /// failed with that, rather than with a setup failure.
     pub async fn cancel_execution(&self, id: &ExecutionId, kind: ExecutionKind) -> Result<()> {
         let connections = self.executions.connections().await;
-        let record_id = id.to_owned();
+        let (record_id, records) = (id.to_owned(), self.records.clone());
         self.store
             .write(move |tx| {
                 if kind == ExecutionKind::Setup {
-                    record_setup_not_started(tx, &record_id)?;
+                    record_setup_not_started(tx, &*records, &record_id)?;
                 }
                 record_execution_end(tx, &record_id, true)
             })
@@ -104,6 +103,7 @@ impl Agents {
 /// that owns this execution; verification failure never readies it.
 fn record_setup_result(
     tx: &Transaction<'_>,
+    records: &dyn Records,
     id: &ExecutionId,
     exit_code: Option<i32>,
     issue: Option<&str>,
@@ -118,25 +118,31 @@ fn record_setup_result(
             format!("setup failed (exit {code}, processes stopped: {complete}){reason}; retry with shoal setup")
         }
     });
-    let state = if error.is_none() {
-        WorkspaceState::Ready
-    } else {
-        WorkspaceState::Failed
-    };
-    tx.execute(
-        "UPDATE workspaces SET state=?2,error=?3,setup_finished=?4 WHERE id=(SELECT space_id FROM executions WHERE id=?1) AND state=?5",
-        params![id, state, error, error.is_none(), WorkspaceState::Preparing],
-    )?;
-    Ok(())
+    match execution_space(tx, id)? {
+        Some(workspace) => records.end_setup(tx, &workspace, error.as_deref()),
+        None => Ok(()),
+    }
 }
 
 /// Fail the preparing workspace of setup execution `id`, which never ran.
-fn record_setup_not_started(tx: &Transaction<'_>, id: &ExecutionId) -> Result<()> {
-    tx.execute(
-        "UPDATE workspaces SET state=?2,error=?3,setup_finished=0 WHERE id=(SELECT space_id FROM executions WHERE id=?1) AND state=?4",
-        params![id, WorkspaceState::Failed, SETUP_NOT_STARTED, WorkspaceState::Preparing],
-    )?;
-    Ok(())
+fn record_setup_not_started(
+    tx: &Transaction<'_>,
+    records: &dyn Records,
+    id: &ExecutionId,
+) -> Result<()> {
+    match execution_space(tx, id)? {
+        Some(workspace) => records.end_setup(tx, &workspace, Some(SETUP_NOT_STARTED)),
+        None => Ok(()),
+    }
+}
+
+/// The space execution `id` runs in, while it is recorded.
+fn execution_space(tx: &Transaction<'_>, id: &ExecutionId) -> Result<Option<SpaceId>> {
+    Ok(tx
+        .query_row("SELECT space_id FROM executions WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?)
 }
 
 /// Why a workspace whose setup never ran is failed.

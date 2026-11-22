@@ -245,8 +245,9 @@ impl Agents {
     /// those waiting.
     async fn ranked_entries(&self, daemon: &dyn Daemon) -> Result<Vec<QueueEntry>> {
         let ranked = self.ranked_queue(daemon).await?;
+        let records = self.records.clone();
         let (entries, failed) = (self.store)
-            .run(|db| Ok((all_entries(db)?, super::failures::entries(db)?)))
+            .run(move |db| Ok((all_entries(db)?, super::failures::entries(db, &*records)?)))
             .await?;
         let mut entries = in_rank_order(entries, ranked);
         entries.extend(failed);
@@ -465,9 +466,9 @@ impl Agents {
         id: &QueueEntryId,
         error: &str,
     ) -> Result<()> {
-        let (entry, text) = (id.to_owned(), error.to_owned());
+        let (entry, text, records) = (id.to_owned(), error.to_owned(), self.records.clone());
         let failed = (self.store)
-            .write(move |tx| super::failures::end_start(tx, &entry, &text))
+            .write(move |tx| super::failures::end_start(tx, &*records, &entry, &text))
             .await?;
         let Some(failed) = failed else {
             return Ok(());

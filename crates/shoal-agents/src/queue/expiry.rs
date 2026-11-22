@@ -28,6 +28,7 @@ pub enum FailedStart {
 /// commits.
 pub fn expire_starts(
     tx: &rusqlite::Transaction<'_>,
+    records: &dyn crate::daemon::Records,
     held: &HashSet<QueueEntryId>,
     cutoff: crate::time::UnixTime,
 ) -> Result<Vec<FailedStart>> {
@@ -47,7 +48,7 @@ pub fn expire_starts(
             continue;
         }
         let failure = match (kind, space) {
-            (QueueKind::Launch, _) => expire_launch(tx, &id)?,
+            (QueueKind::Launch, _) => expire_launch(tx, records, &id)?,
             (QueueKind::Restore, Some(space)) => Some(FailedStart::UnstartedRestore(name, space)),
             // Jobs carry no start environment, and a restore is always of a
             // space's agent.
@@ -60,8 +61,12 @@ pub fn expire_starts(
 }
 
 /// End the expired launch `id`, which its recorded space keeps as failed.
-fn expire_launch(tx: &rusqlite::Transaction<'_>, id: &QueueEntryId) -> Result<Option<FailedStart>> {
-    let failed = super::failures::end_start(tx, id, ENDED)?;
+fn expire_launch(
+    tx: &rusqlite::Transaction<'_>,
+    records: &dyn crate::daemon::Records,
+    id: &QueueEntryId,
+) -> Result<Option<FailedStart>> {
+    let failed = super::failures::end_start(tx, records, id, ENDED)?;
     Ok(failed.map(|failed| match (failed.space, failed.kept) {
         (Some(space), true) => FailedStart::KeptLaunch(space),
         _ => FailedStart::UnopenedLaunch(failed.name),

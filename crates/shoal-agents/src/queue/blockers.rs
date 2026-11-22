@@ -24,8 +24,6 @@ use crate::model::Workspace;
 use crate::state::BlockerKind;
 use crate::state::QueueKind;
 use crate::state::QueueState;
-use shoal_store;
-use shoal_store::WORKSPACE_COLUMNS;
 
 /// What Shoal tells an agent it stops because its space is blocked, which
 /// waits for the agent's restore and so starts its turn there.
@@ -137,7 +135,7 @@ fn space(
         Err(_) => None,
     };
     if let Some((kind, id)) = selected
-        && space_of(db, kind, &id, repository)?
+        && space_of(db, records, kind, &id, repository)?
     {
         return Ok((BlockerKind::Space, id.into()));
     }
@@ -159,15 +157,14 @@ fn space(
 /// Whether the `kind` space `id` belongs to `repository`.
 fn space_of(
     db: &Connection,
+    records: &dyn Records,
     kind: SpaceKind,
     id: &SpaceId,
     repository: &RepositoryId,
 ) -> Result<bool> {
-    shoal_store::exists(
-        db,
-        "SELECT 1 FROM spaces WHERE id=?1 AND repository_id=?2 AND kind=?3",
-        params![id, repository, kind],
-    )
+    Ok(records
+        .space_facts(db, id)?
+        .is_some_and(|space| space.kind == kind && space.repository.as_ref() == Some(repository)))
 }
 
 /// Hold back `entry` until a preparation of `workspace`, the one it opens,
@@ -301,10 +298,10 @@ impl Agents {
             }
             BlockerKind::Space => {
                 let id = SpaceId::from(target);
-                let query = id.clone();
+                let (query, records) = (id.clone(), self.records.clone());
                 match self
                     .store
-                    .run(move |db| workspace_by_id(db, &query))
+                    .run(move |db| records.workspace(db, &query))
                     .await?
                 {
                     Some(workspace) => self.workspace_progress(daemon, workspace).await,
@@ -313,10 +310,10 @@ impl Agents {
             }
             // The row goes once the setup is done.
             BlockerKind::Setup => {
-                let workspace = SpaceId::from(target);
+                let (workspace, records) = (SpaceId::from(target), self.records.clone());
                 let name = self
                     .store
-                    .run(move |db| workspace_by_id(db, &workspace))
+                    .run(move |db| records.workspace(db, &workspace))
                     .await?
                     .map(|workspace| workspace.name);
                 Ok(name.map_or(Progress::Complete, |name| {
@@ -324,11 +321,11 @@ impl Agents {
                 }))
             }
             BlockerKind::Issue => {
-                let url = target.clone();
+                let (url, records) = (target.clone(), self.records.clone());
                 let linked = match repository {
                     Some(repository) => {
                         (self.store)
-                            .run(move |db| issue_workspaces(db, &repository, &url))
+                            .run(move |db| records.issue_workspaces(db, &repository, &url))
                             .await?
                     }
                     None => Vec::new(),
@@ -497,41 +494,6 @@ fn launch_name(db: &Connection, id: &str) -> Result<Option<String>> {
         .query_row("SELECT name FROM agent_queue WHERE id=?1", [id], |row| {
             row.get(0)
         })
-        .optional()?)
-}
-
-fn workspace_by_id(db: &Connection, id: &SpaceId) -> Result<Option<Workspace>> {
-    recorded_workspace(db, "id=?1", [id])
-}
-
-/// The workspaces of `repository` that link the issue at `url`, by name.
-fn issue_workspaces(
-    db: &Connection,
-    repository: &RepositoryId,
-    url: &str,
-) -> Result<Vec<Workspace>> {
-    Ok(db
-        .prepare(&format!(
-            "SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id) WHERE repository_id=?1
-             AND id IN (SELECT space_id FROM space_issue WHERE url=?2) ORDER BY name"
-        ))?
-        .query_map(params![repository, url], shoal_store::workspace)?
-        .collect::<rusqlite::Result<Vec<_>>>()?)
-}
-
-fn recorded_workspace<P: rusqlite::Params>(
-    db: &Connection,
-    condition: &str,
-    params: P,
-) -> Result<Option<Workspace>> {
-    Ok(db
-        .query_row(
-            &format!(
-                "SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id) WHERE {condition}"
-            ),
-            params,
-            shoal_store::workspace,
-        )
         .optional()?)
 }
 

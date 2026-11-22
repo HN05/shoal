@@ -58,18 +58,6 @@ fn awaits_preparation(space: &Space) -> bool {
         .is_some_and(|waits| *waits != PreparationWait::Stopped)
 }
 
-/// The workspaces in which a chat's agent has yet to restart after a
-/// conversion, which runs where the chat was whatever the workspace's state.
-fn converting_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
-    Ok(db
-        .prepare(
-            "SELECT space_id FROM space_conversions
-                WHERE json_extract(record,'$.to')='workspace'",
-        )?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
-}
-
 /// The proof required after stopping a disconnected execution. Both policies
 /// signal only native identity-verified processes and reject owned survivors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -287,7 +275,10 @@ impl Agents {
     ) -> Result<Vec<Space>> {
         let _gate = self.agent_queue.lock_admission().await;
         let mut targets = self.store.run(|db| running_workspaces(db)).await?;
-        let converting = self.store.run(|db| converting_workspaces(db)).await?;
+        let records = self.records.clone();
+        let converting = (self.store)
+            .run(move |db| records.converting_to_workspaces(db))
+            .await?;
         targets.extend(converting.iter().cloned());
         targets.extend(self.pending_restore_workspaces().await?);
         if launches == QueuedLaunches::Cancel {

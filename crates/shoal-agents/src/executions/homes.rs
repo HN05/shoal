@@ -201,25 +201,21 @@ impl Home {
     pub fn reserve(
         &self,
         tx: &Transaction<'_>,
+        records: &dyn crate::daemon::Records,
         kind: ExecutionKind,
         agent: bool,
         parent_execution: Option<&ExecutionId>,
     ) -> Result<()> {
         match self {
-            Self::Workspace { workspace, .. } => kind.reserve(tx, &workspace.id, parent_execution),
+            Self::Workspace { workspace, .. } => {
+                kind.reserve(tx, records, &workspace.id, parent_execution)
+            }
             Self::Chat { chat, removals, .. } => {
                 ensure!(
                     kind == ExecutionKind::Command && agent,
                     "a chat runs only its agent; run commands in a workspace"
                 );
-                ensure!(
-                    shoal_store::exists(
-                        tx,
-                        "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'",
-                        [&chat.id]
-                    )?,
-                    "the chat was removed"
-                );
+                ensure!(records.space_is_chat(tx, &chat.id)?, "the chat was removed");
                 ensure!(
                     !removals.being_removed(&chat.id),
                     "the chat is being removed"

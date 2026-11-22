@@ -3,6 +3,8 @@
 //! space from cleanup, listed with its error until `shoal resume` queues
 //! it again as it was, a new launch in the space replaces it, or the space
 //! goes with it.
+use std::collections::HashMap;
+
 use anyhow::{Context as _, Result};
 use rusqlite::{OptionalExtension, Transaction, params};
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -33,7 +35,12 @@ pub struct Failed {
 /// End the starting entry `id`, which failed with `error`: a launch in a
 /// recorded space stays as that space's failed launch, and anything else
 /// goes. `None` once the entry is gone, as with its removed space.
-pub fn end_start(tx: &Transaction<'_>, id: &QueueEntryId, error: &str) -> Result<Option<Failed>> {
+pub fn end_start(
+    tx: &Transaction<'_>,
+    records: &dyn Records,
+    id: &QueueEntryId,
+    error: &str,
+) -> Result<Option<Failed>> {
     let found: Option<(SpaceName, QueueState, Option<SpaceId>)> = tx
         .query_row(
             "SELECT name,state,COALESCE(space_id,opens_workspace_id) FROM agent_queue WHERE id=?1",
@@ -48,24 +55,35 @@ pub fn end_start(tx: &Transaction<'_>, id: &QueueEntryId, error: &str) -> Result
         state == QueueState::Starting,
         "queue entry is no longer starting"
     );
-    let kept = keep(tx, id, error)?;
+    let kept = match &space {
+        Some(space) => keep(tx, records, id, space, error)?,
+        None => false,
+    };
     tx.execute("DELETE FROM agent_queue WHERE id=?1", [id])?;
     Ok(Some(Failed { name, space, kept }))
 }
 
-/// Keep the launch `id` as the failed launch, with `error`, of the
-/// recorded space it starts its agent in, replacing the one it had,
-/// returning whether it names such a space.
-fn keep(tx: &Transaction<'_>, id: &QueueEntryId, error: &str) -> Result<bool> {
+/// Keep the launch `id` as the failed launch, with `error`, of `space`,
+/// the space it starts its agent in, replacing the one it had, returning
+/// whether that space is recorded.
+fn keep(
+    tx: &Transaction<'_>,
+    records: &dyn Records,
+    id: &QueueEntryId,
+    space: &SpaceId,
+    error: &str,
+) -> Result<bool> {
+    if records.space_facts(tx, space)?.is_none() {
+        return Ok(false);
+    }
     let kept = tx.execute(
         "INSERT OR REPLACE INTO failed_launches(id,space_id,repository_id,name,agent,issue_title,
             issue_labels,plan,env,created_at,mode,narrowing,scope_space_id,priority,source,error,
             failed_at)
-         SELECT q.id,s.id,q.repository_id,q.name,q.agent,q.issue_title,q.issue_labels,q.plan,q.env,
+         SELECT q.id,?5,q.repository_id,q.name,q.agent,q.issue_title,q.issue_labels,q.plan,q.env,
             q.created_at,q.mode,q.narrowing,q.scope_space_id,q.priority,q.source,?3,?4
-         FROM agent_queue q JOIN spaces s ON s.id=COALESCE(q.space_id,q.opens_workspace_id)
-         WHERE q.id=?1 AND q.kind=?2",
-        params![id, QueueKind::Launch, error, UnixTime::now()],
+         FROM agent_queue q WHERE q.id=?1 AND q.kind=?2",
+        params![id, QueueKind::Launch, error, UnixTime::now(), space],
     )?;
     Ok(kept == 1)
 }
@@ -93,21 +111,25 @@ pub fn replace(tx: &Transaction<'_>, space: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// The columns of a failed launch as [`entry`] reads an entry's: a
-/// workspace's names it as the workspace it opens, a chat's as its space.
+/// The columns of a failed launch as [`entry`] reads an entry's, naming
+/// its space as the entry's own, which [`entries`] makes a workspace's
+/// the workspace it opens.
 const FAILED_COLUMNS: &str = "f.id,'launch' AS kind,f.repository_id,f.name,f.agent,f.mode,
     f.narrowing,f.issue_title,'failed' AS state,f.created_at,
-    CASE WHEN s.kind='chat' THEN f.space_id END AS space_id,NULL AS execution_id,
-    CASE WHEN s.kind='workspace' THEN f.space_id END AS opens_workspace_id,NULL AS base_branch,
+    f.space_id AS space_id,NULL AS execution_id,
+    NULL AS opens_workspace_id,NULL AS base_branch,
     NULL AS job,f.scope_space_id,f.error";
 
-/// Every failed launch as a failed entry with its error, the oldest
-/// failure first.
-pub fn entries(db: &rusqlite::Connection) -> Result<Vec<QueueEntry>> {
-    Ok(db
+/// Every failed launch of a recorded space as a failed entry with its
+/// error, the oldest failure first: a workspace's opens it, a chat's
+/// names it as its space.
+pub fn entries(db: &rusqlite::Connection, records: &dyn Records) -> Result<Vec<QueueEntry>> {
+    let kinds: HashMap<SpaceId, SpaceKind> = (records.spaces(db)?.into_iter())
+        .map(|space| (space.id, space.kind))
+        .collect();
+    let failed = db
         .prepare(&format!(
-            "SELECT {FAILED_COLUMNS} FROM failed_launches f JOIN spaces s ON s.id=f.space_id
-             ORDER BY f.failed_at,f.id"
+            "SELECT {FAILED_COLUMNS} FROM failed_launches f ORDER BY f.failed_at,f.id"
         ))?
         .query_map([], |row| {
             Ok(QueueEntry {
@@ -115,7 +137,16 @@ pub fn entries(db: &rusqlite::Connection) -> Result<Vec<QueueEntry>> {
                 ..entry(row)?
             })
         })?
-        .collect::<rusqlite::Result<_>>()?)
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok((failed.into_iter())
+        .filter_map(|mut entry| {
+            let kind = kinds.get(entry.space_id.as_ref()?)?;
+            if *kind == SpaceKind::Workspace {
+                entry.opens = entry.space_id.take();
+            }
+            Some(entry)
+        })
+        .collect())
 }
 
 /// Queue the failed launch `id` again as it was, behind the work already
@@ -126,23 +157,28 @@ fn requeue(
     records: &dyn Records,
     removals: &dyn Removals,
 ) -> Result<SpaceId> {
-    let (launch, space) = tx
+    let space: SpaceId = tx
         .query_row(
-            "SELECT f.*,s.kind AS space_kind FROM failed_launches f
-             JOIN spaces s ON s.id=f.space_id WHERE f.id=?1",
+            "SELECT space_id FROM failed_launches WHERE id=?1",
             [id],
-            |row| Ok((failed_launch(row)?, row.get::<_, SpaceId>("space_id")?)),
+            |row| row.get(0),
         )
         .optional()?
         .context("the launch no longer waits to be restored")?;
+    let kind = (records.space_facts(tx, &space)?)
+        .context("the launch no longer waits to be restored")?
+        .kind;
+    let launch = tx.query_row("SELECT * FROM failed_launches WHERE id=?1", [id], |row| {
+        failed_launch(row, kind)
+    })?;
     insert_launch(tx, records, removals, &launch)?;
     Ok(space)
 }
 
 /// The launch the failed launch `row` keeps, waiting in the queue again.
-fn failed_launch(row: &rusqlite::Row<'_>) -> rusqlite::Result<Launch> {
+fn failed_launch(row: &rusqlite::Row<'_>, kind: SpaceKind) -> rusqlite::Result<Launch> {
     let space: SpaceId = row.get("space_id")?;
-    let (workspace, chat) = match row.get::<_, SpaceKind>("space_kind")? {
+    let (workspace, chat) = match kind {
         SpaceKind::Workspace => (Some(space), None),
         SpaceKind::Chat => (None, Some(space)),
     };
@@ -206,7 +242,8 @@ impl Agents {
 
     /// The failed launch of the space `space`, if it has one.
     pub async fn failed_launch_of(&self, space: &SpaceId) -> Result<Option<QueueEntry>> {
-        let entries = self.store.run(|db| entries(db)).await?;
+        let records = self.records.clone();
+        let entries = self.store.run(move |db| entries(db, &*records)).await?;
         Ok((entries.into_iter()).find(|entry| entry.space() == Some(space)))
     }
 

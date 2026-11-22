@@ -1,3 +1,4 @@
+use crate::daemon::agent_service::AgentRecords;
 use crate::daemon::agents::ProtectionExt;
 use crate::daemon::executions::stopping::StopPolicy;
 use crate::daemon::executions::*;
@@ -868,7 +869,7 @@ async fn command_reservation(
     let id = workspace.id.clone();
     manager
         .store
-        .write(move |tx| ExecutionKind::Command.reserve(tx, &id, None))
+        .write(move |tx| ExecutionKind::Command.reserve(tx, &AgentRecords, &id, None))
         .await
 }
 

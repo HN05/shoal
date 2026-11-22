@@ -28,7 +28,6 @@ shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-store.workspace = true
 shoal-subprocess.workspace = true
 tokio = { workspace = true, features = ["process", "rt", "sync", "time"] }
-tempfile.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]

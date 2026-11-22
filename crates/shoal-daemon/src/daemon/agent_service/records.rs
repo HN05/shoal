@@ -2,15 +2,17 @@
 //! transactions.
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use shoal_agents::daemon::{Records, Removals, SpaceStatus, Steps, Waiting};
+use shoal_agents::daemon::{Records, Removals, SpaceFacts, SpaceStatus, Steps, Waiting};
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{demos::Launch, scope_tokens::ScopeToken, space_names::SpaceSelector};
 
 use shoal_links::wait::followed::watches_open_pr;
+use shoal_store::WORKSPACE_COLUMNS;
 
 use crate::{
+    config::{modes::ModeName, permissions::PermissionsConfig},
     daemon::{
         agent_queue, agents,
         approvals::{self, ApprovalRequest},
@@ -21,7 +23,7 @@ use crate::{
         store, threads,
         tree::{self, TrackedAgents},
     },
-    model::{PreparationWait, SpaceKind},
+    model::{PreparationWait, SpaceKind, Workspace},
     state::WorkspaceState,
 };
 
@@ -145,6 +147,108 @@ impl Records for AgentRecords {
         demos::execution_launch(db, id)
     }
 
+    fn spaces(&self, db: &Connection) -> Result<Vec<SpaceFacts>> {
+        Ok(db
+            .prepare(&format!("{SPACE_FACTS} ORDER BY s.rowid"))?
+            .query_map([], space_facts)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn space_facts(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceFacts>> {
+        Ok(db
+            .query_row(&format!("{SPACE_FACTS} WHERE s.id=?1"), [id], space_facts)
+            .optional()?)
+    }
+
+    fn workspace(&self, db: &Connection, id: &SpaceId) -> Result<Option<Workspace>> {
+        Ok(db
+            .query_row(
+                &format!(
+                    "SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id) WHERE id=?1"
+                ),
+                [id],
+                shoal_store::workspace,
+            )
+            .optional()?)
+    }
+
+    fn issue_workspaces(
+        &self,
+        db: &Connection,
+        repository: &RepositoryId,
+        url: &str,
+    ) -> Result<Vec<Workspace>> {
+        Ok(db
+            .prepare(&format!(
+                "SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id)
+                 WHERE repository_id=?1
+                 AND id IN (SELECT space_id FROM space_issue WHERE url=?2) ORDER BY name"
+            ))?
+            .query_map(params![repository, url], shoal_store::workspace)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn converting_to_workspaces(&self, db: &Connection) -> Result<HashSet<SpaceId>> {
+        Ok(db
+            .prepare(
+                "SELECT space_id FROM space_conversions
+                 WHERE json_extract(record,'$.to')='workspace'",
+            )?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn recorded_job_workspaces(&self, db: &Connection) -> Result<HashSet<SpaceId>> {
+        Ok(db
+            .prepare("SELECT workspace_id FROM ci_jobs")?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn runners_registered(&self, db: &Connection) -> Result<bool> {
+        store::exists(db, "SELECT 1 FROM runners", [])
+    }
+
+    fn record_space_mode(
+        &self,
+        db: &Connection,
+        id: &SpaceId,
+        mode: &ModeName,
+        narrowing: &PermissionsConfig,
+    ) -> Result<()> {
+        db.execute(
+            "UPDATE spaces SET mode=?2,narrowing=?3 WHERE id=?1",
+            params![id, mode, shoal_store::narrowing_column(narrowing)?],
+        )?;
+        Ok(())
+    }
+
+    fn reserve_setup(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<bool> {
+        let reserved = tx.execute(
+            "UPDATE workspaces SET state=?2,error=NULL,setup_finished=0,setup_skipped=0
+             WHERE id=?1 AND state IN (?3,?4,?2)",
+            params![
+                id,
+                WorkspaceState::Preparing,
+                WorkspaceState::Ready,
+                WorkspaceState::Failed
+            ],
+        )?;
+        Ok(reserved == 1)
+    }
+
+    fn end_setup(&self, tx: &Transaction<'_>, id: &SpaceId, error: Option<&str>) -> Result<()> {
+        let state = match error {
+            None => WorkspaceState::Ready,
+            Some(_) => WorkspaceState::Failed,
+        };
+        tx.execute(
+            "UPDATE workspaces SET state=?2,error=?3,setup_finished=?4 WHERE id=?1 AND state=?5",
+            params![id, state, error, error.is_none(), WorkspaceState::Preparing],
+        )?;
+        Ok(())
+    }
+
     fn space_status(
         &self,
         db: &Connection,
@@ -188,6 +292,24 @@ impl Removals for Removing {
     fn being_removed(&self, id: &SpaceId) -> bool {
         self.reserved(id)
     }
+}
+
+/// What [`space_facts`] reads of a space, before its condition.
+const SPACE_FACTS: &str = "SELECT s.id,s.kind,s.repository_id,s.name,w.state,
+    COALESCE(w.setup_finished,0),
+    EXISTS (SELECT 1 FROM space_completion c WHERE c.space_id=s.id)
+    FROM spaces s LEFT JOIN workspaces w USING(id)";
+
+fn space_facts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceFacts> {
+    Ok(SpaceFacts {
+        id: row.get(0)?,
+        kind: row.get(1)?,
+        repository: row.get(2)?,
+        name: row.get(3)?,
+        state: row.get(4)?,
+        setup_finished: row.get(5)?,
+        done: row.get(6)?,
+    })
 }
 
 fn space_name(db: &Connection, id: &SpaceId) -> Result<Option<String>> {

@@ -862,6 +862,24 @@ impl Ranking for StandIn {
     }
 }
 
+/// What [`space_facts`] reads of a space, before its condition.
+const SPACE_FACTS: &str = "SELECT s.id,s.kind,s.repository_id,s.name,w.state,
+    COALESCE(w.setup_finished,0),
+    EXISTS (SELECT 1 FROM space_completion c WHERE c.space_id=s.id)
+    FROM spaces s LEFT JOIN workspaces w USING(id)";
+
+fn space_facts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceFacts> {
+    Ok(SpaceFacts {
+        id: row.get(0)?,
+        kind: row.get(1)?,
+        repository: row.get(2)?,
+        name: row.get(3)?,
+        state: row.get(4)?,
+        setup_finished: row.get(5)?,
+        done: row.get(6)?,
+    })
+}
+
 /// No removals: the stand-in removes no space.
 pub(crate) struct StandInRemovals;
 
@@ -994,6 +1012,71 @@ impl Records for StandInRecords {
 
     fn demo_launch(&self, _: &Connection, _: &ExecutionId) -> Result<Option<Launch>> {
         Ok(None)
+    }
+
+    fn spaces(&self, db: &Connection) -> Result<Vec<SpaceFacts>> {
+        Ok(db
+            .prepare(&format!("{SPACE_FACTS} ORDER BY s.rowid"))?
+            .query_map([], space_facts)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn space_facts(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceFacts>> {
+        Ok(db
+            .query_row(&format!("{SPACE_FACTS} WHERE s.id=?1"), [id], space_facts)
+            .optional()?)
+    }
+
+    fn workspace(&self, db: &Connection, id: &SpaceId) -> Result<Option<Workspace>> {
+        Ok(db
+            .query_row(
+                &format!(
+                    "SELECT {} FROM spaces JOIN workspaces USING(id) WHERE id=?1",
+                    shoal_store::WORKSPACE_COLUMNS
+                ),
+                [id],
+                shoal_store::workspace,
+            )
+            .optional()?)
+    }
+
+    fn issue_workspaces(
+        &self,
+        _: &Connection,
+        _: &RepositoryId,
+        _: &str,
+    ) -> Result<Vec<Workspace>> {
+        Ok(Vec::new())
+    }
+
+    fn converting_to_workspaces(&self, _: &Connection) -> Result<HashSet<SpaceId>> {
+        Ok(HashSet::new())
+    }
+
+    fn recorded_job_workspaces(&self, _: &Connection) -> Result<HashSet<SpaceId>> {
+        Ok(HashSet::new())
+    }
+
+    fn runners_registered(&self, _: &Connection) -> Result<bool> {
+        Ok(false)
+    }
+
+    fn record_space_mode(
+        &self,
+        _: &Connection,
+        _: &SpaceId,
+        _: &ModeName,
+        _: &PermissionsConfig,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn reserve_setup(&self, _: &Transaction<'_>, _: &SpaceId) -> Result<bool> {
+        Ok(true)
+    }
+
+    fn end_setup(&self, _: &Transaction<'_>, _: &SpaceId, _: Option<&str>) -> Result<()> {
+        Ok(())
     }
 
     fn space_status(

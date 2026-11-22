@@ -438,9 +438,9 @@ impl Agents {
     /// Whether some CI job could start now beside the agents and jobs in
     /// use; the forge's waiting jobs are read only then.
     pub async fn job_could_start(&self, daemon: &dyn Daemon) -> Result<bool> {
-        let any_runner = self
-            .store
-            .run(|db| shoal_store::exists(db, "SELECT 1 FROM runners", []))
+        let records = self.records.clone();
+        let any_runner = (self.store)
+            .run(move |db| records.runners_registered(db))
             .await?;
         if !any_runner {
             return Ok(false);

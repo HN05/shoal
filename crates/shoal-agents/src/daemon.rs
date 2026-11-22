@@ -760,6 +760,51 @@ pub trait Records: Send + Sync {
         id: &ExecutionId,
     ) -> Result<Option<shoal_protocol::demos::Launch>>;
 
+    /// What each space records that the agents read, in the order the
+    /// spaces were recorded.
+    fn spaces(&self, db: &Connection) -> Result<Vec<SpaceFacts>>;
+
+    /// What the space `id` records that the agents read, while it exists.
+    fn space_facts(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceFacts>>;
+
+    /// The workspace `id`, while it exists.
+    fn workspace(&self, db: &Connection, id: &SpaceId) -> Result<Option<Workspace>>;
+
+    /// The workspaces of `repository` that link the issue at `url`, by name.
+    fn issue_workspaces(
+        &self,
+        db: &Connection,
+        repository: &RepositoryId,
+        url: &str,
+    ) -> Result<Vec<Workspace>>;
+
+    /// The workspaces in which a chat's agent has yet to restart after a
+    /// conversion into them.
+    fn converting_to_workspaces(&self, db: &Connection) -> Result<HashSet<SpaceId>>;
+
+    /// The workspaces a recorded CI job runs in.
+    fn recorded_job_workspaces(&self, db: &Connection) -> Result<HashSet<SpaceId>>;
+
+    /// Whether this machine registered any CI runner.
+    fn runners_registered(&self, db: &Connection) -> Result<bool>;
+
+    /// Record `mode` and `narrowing` as the space `id`'s agent's.
+    fn record_space_mode(
+        &self,
+        db: &Connection,
+        id: &SpaceId,
+        mode: &ModeName,
+        narrowing: &PermissionsConfig,
+    ) -> Result<()>;
+
+    /// Reserve the workspace `id`, ready, failed or preparing, for its
+    /// setup, clearing what an earlier one recorded; whether it was.
+    fn reserve_setup(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<bool>;
+
+    /// End the setup of the workspace `id` while it prepares: ready
+    /// without an `error`, failed with one.
+    fn end_setup(&self, tx: &Transaction<'_>, id: &SpaceId, error: Option<&str>) -> Result<()>;
+
     /// What the space `id` records that its agent's terminal shows, with
     /// `pushing` telling which operations still push what the user
     /// approved; none once the space is gone.
@@ -780,6 +825,29 @@ pub trait Removals: Send + Sync {
 
     /// Whether a removal holds the space `id`.
     fn being_removed(&self, id: &SpaceId) -> bool;
+}
+
+/// What a space records that the agents read.
+#[derive(Clone, Debug)]
+pub struct SpaceFacts {
+    pub id: SpaceId,
+    pub kind: SpaceKind,
+    pub repository: Option<RepositoryId>,
+    pub name: String,
+    /// A workspace's lifecycle state; none for a chat.
+    pub state: Option<WorkspaceState>,
+    /// Whether a workspace's setup finished.
+    pub setup_finished: bool,
+    /// Whether the space's work is done.
+    pub done: bool,
+}
+
+impl SpaceFacts {
+    /// Whether agents work there now: a chat, or a ready workspace.
+    pub fn open(&self) -> bool {
+        self.state
+            .is_none_or(|state| state == WorkspaceState::Ready)
+    }
 }
 
 /// What a space records that its agent's terminal shows.

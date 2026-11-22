@@ -147,7 +147,11 @@ fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Res
 /// left waiting for that setup takes their place, and any other is refused
 /// until the workspace is ready. Nor does an asleep agent's restore while it
 /// waits, which counts as its stopped agent.
-pub fn queues_agent_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
+pub fn queues_agent_in(
+    tx: &rusqlite::Transaction<'_>,
+    records: &dyn Records,
+    workspace: &SpaceId,
+) -> Result<bool> {
     shoal_store::exists(
         tx,
         "SELECT 1 FROM agent_queue WHERE ?1 IN (space_id,opens_workspace_id)
@@ -158,7 +162,7 @@ pub fn queues_agent_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> R
             QueueKind::Launch,
             QueueKind::Restore,
             QueueState::Starting,
-            setup_failed(tx, workspace)?,
+            setup_failed(tx, records, workspace)?,
             QueueState::Queued
         ],
     )
@@ -194,17 +198,24 @@ pub fn queues_launch_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> 
 /// Whether `workspace`'s setup failed, or never started and runs in no
 /// execution, as when the daemon refused it, either of which a retried
 /// setup can ready.
-fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
-    shoal_store::exists(
-        tx,
-        "SELECT 1 FROM workspaces w WHERE id=?1 AND (state=?2 OR state=?3
-            AND NOT EXISTS (SELECT 1 FROM executions e WHERE e.space_id=w.id))",
-        params![
-            workspace,
-            crate::state::WorkspaceState::Failed,
-            crate::state::WorkspaceState::Preparing
-        ],
-    )
+fn setup_failed(
+    tx: &rusqlite::Transaction<'_>,
+    records: &dyn Records,
+    workspace: &SpaceId,
+) -> Result<bool> {
+    use crate::state::WorkspaceState;
+    let state = records
+        .space_facts(tx, workspace)?
+        .and_then(|space| space.state);
+    Ok(match state {
+        Some(WorkspaceState::Failed) => true,
+        Some(WorkspaceState::Preparing) => !shoal_store::exists(
+            tx,
+            "SELECT 1 FROM executions WHERE space_id=?1",
+            [workspace],
+        )?,
+        _ => false,
+    })
 }
 
 /// Record `launch` once [`ensure_recordable`] lets it: it takes the place
@@ -276,7 +287,7 @@ pub fn insert_launch(
 /// whether it waits for the workspace's setup.
 pub fn ensure_recordable(
     tx: &rusqlite::Transaction<'_>,
-    _records: &dyn Records,
+    records: &dyn Records,
     removals: &dyn Removals,
     launch: &Launch,
 ) -> Result<bool> {
@@ -289,7 +300,7 @@ pub fn ensure_recordable(
     let waits_for_setup = match (&launch.opens, launch.awaits) {
         (Some(_), Awaits::Preparation { .. }) => true,
         (Some(workspace), Awaits::FailedSetup) => {
-            !launch.request.now && setup_failed(tx, workspace)?
+            !launch.request.now && setup_failed(tx, records, workspace)?
         }
         (None, _) => false,
     };

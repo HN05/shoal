@@ -1,4 +1,5 @@
 use super::*;
+use crate::stand_in::StandInRecords;
 use crate::time::UnixTime;
 use rusqlite::Connection;
 use shoal_store::Store;
@@ -50,7 +51,7 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
                  ('wrapper','restore','repo','wrapper','codex',NULL,NULL,'wrapper','starting',0,99,'workspace');",
             )?;
             let held = HashSet::from(["held".into()]);
-            let failures = expire_starts(tx, &held, UnixTime::from_seconds(100))?;
+            let failures = expire_starts(tx, &StandInRecords::default(), &held, UnixTime::from_seconds(100))?;
             assert_eq!(failures.len(), 3);
             assert!(failures.contains(&FailedStart::UnopenedLaunch("launch".into())));
             // A launch in a recorded space stays there as failed.
@@ -66,7 +67,7 @@ async fn expiry_commits_deletions_and_returns_only_reportable_failures() -> Resu
                 remaining(tx)?,
                 ["boundary", "held", "queued", "recent", "unseen", "wrapper"]
             );
-            assert!(expire_starts(tx, &held, UnixTime::from_seconds(100))?.is_empty());
+            assert!(expire_starts(tx, &StandInRecords::default(), &held, UnixTime::from_seconds(100))?.is_empty());
             Ok(())
         })
         .await
@@ -86,7 +87,14 @@ async fn a_failed_deletion_rolls_back_the_whole_expiry() -> Result<()> {
         })
         .await?;
     store
-        .write(|tx| expire_starts(tx, &HashSet::new(), UnixTime::from_seconds(100)))
+        .write(|tx| {
+            expire_starts(
+                tx,
+                &StandInRecords::default(),
+                &HashSet::new(),
+                UnixTime::from_seconds(100),
+            )
+        })
         .await
         .expect_err("expiry must fail on the second deletion");
     store
@@ -96,7 +104,14 @@ async fn a_failed_deletion_rolls_back_the_whole_expiry() -> Result<()> {
         })
         .await?;
     let failures = store
-        .write(|tx| expire_starts(tx, &HashSet::new(), UnixTime::from_seconds(100)))
+        .write(|tx| {
+            expire_starts(
+                tx,
+                &StandInRecords::default(),
+                &HashSet::new(),
+                UnixTime::from_seconds(100),
+            )
+        })
         .await?;
     assert_eq!(failures.len(), 3);
     store

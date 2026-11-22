@@ -12,6 +12,7 @@ use crate::Agents;
 use crate::capacity::Activity;
 use crate::config::modes::ModeName;
 use crate::daemon::Daemon;
+use crate::daemon::Records;
 use crate::state::ExecutionState;
 use crate::state::QueueKind;
 use crate::state::QueueState;
@@ -59,19 +60,14 @@ struct StartingEntry {
 }
 
 /// Read the spaces, executions and queue entries that slots are counted from.
-fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
-    let open = db
-        .prepare(
-            "SELECT id,repository_id FROM spaces s WHERE NOT EXISTS
-                (SELECT 1 FROM space_completion c WHERE c.space_id=s.id)",
-        )?
-        .query_map([], |row| Ok((row.get("id")?, row.get("repository_id")?)))?
-        .collect::<rusqlite::Result<_>>()?;
-    let unknown = db
-        .prepare(
-            "SELECT id,space_id FROM executions e WHERE state=?1
-             AND NOT EXISTS (SELECT 1 FROM ci_jobs j WHERE j.workspace_id=e.space_id)",
-        )?
+fn persisted_slots(db: &rusqlite::Connection, records: &dyn Records) -> Result<PersistedSlots> {
+    let open = (records.spaces(db)?.into_iter())
+        .filter(|space| !space.done)
+        .map(|space| (space.id, space.repository))
+        .collect();
+    let jobs = records.recorded_job_workspaces(db)?;
+    let mut unknown: Vec<UnknownExecution> = db
+        .prepare("SELECT id,space_id FROM executions WHERE state=?1")?
         .query_map([ExecutionState::Unknown], |row| {
             Ok(UnknownExecution {
                 id: row.get("id")?,
@@ -79,6 +75,8 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
+    // A CI job's runner holds no agent's slot.
+    unknown.retain(|execution| !jobs.contains(&execution.space));
     let starting = db
         .prepare(
             "SELECT repository_id,space_id,seen_at,execution_id,mode FROM agent_queue
@@ -120,7 +118,12 @@ impl Agents {
             open,
             unknown,
             starting,
-        } = self.store.run(|db| persisted_slots(db)).await?;
+        } = {
+            let records = self.records.clone();
+            (self.store)
+                .run(move |db| persisted_slots(db, &*records))
+                .await?
+        };
         let now = UnixTime::now();
         let starting_since = |seen_at: Option<UnixTime>| {
             Activity::Starting(now.duration_since(seen_at.unwrap_or(now)))
