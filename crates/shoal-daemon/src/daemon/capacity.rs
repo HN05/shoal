@@ -260,13 +260,28 @@ pub(crate) fn sample(
     }
 }
 
+/// Whether admission reads no memory of the machine it runs on, as in the
+/// daemon's unit tests, which admit agents whatever the memory of the
+/// machine running them; those of memory admission test its readings
+/// through the functions that turn them into room.
+const READS_NO_HOST_MEMORY: bool = cfg!(test);
+
 /// The memory state and room of one reading: healthy and unlimited with
-/// memory protection off, unavailable without room after a failed reading.
+/// memory protection off.
 fn sample_memory(settings: &Overload, work: Option<load::WorkLimit>) -> (MemoryState, Option<u64>) {
-    if !settings.memory.enabled {
+    if !settings.memory.enabled || READS_NO_HOST_MEMORY {
         return (MemoryState::Healthy, Some(u64::MAX));
     }
-    match load::memory(&settings.memory_levels(), work) {
+    reading_memory(load::memory(&settings.memory_levels(), work), settings)
+}
+
+/// The memory state and room of `reading`: unavailable without room after
+/// a failed reading.
+fn reading_memory(
+    reading: anyhow::Result<load::MemoryReading>,
+    settings: &Overload,
+) -> (MemoryState, Option<u64>) {
+    match reading {
         // Work that could not be read admits nothing, as a failed probe.
         Ok(reading) if reading.work == Some(load::WorkMemory::Unread) => {
             (MemoryState::Unavailable, None)

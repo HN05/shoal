@@ -361,14 +361,23 @@ fn work_under_a_limit_has_the_room_its_limit_leaves() {
 
 #[test]
 fn unread_work_admits_nothing() {
-    let settings = Overload::default();
-    // A test build reads no slice, so without a sample the work is unread.
-    let unsampled = load::WorkLimit {
-        limit: 1 << 30,
-        sampled: None,
+    let machine = load::Memory {
+        total: 100 << 30,
+        available: 90 << 30,
+    };
+    let pressure = load::MemoryPressure {
+        critical: false,
+        stalled: false,
+        warning: false,
+        safe: true,
+    };
+    let reading = load::MemoryReading {
+        memory: machine,
+        work: Some(load::WorkMemory::Unread),
+        pressure,
     };
     assert_eq!(
-        sample_memory(&settings, Some(unsampled)),
+        reading_memory(Ok(reading), &Overload::default()),
         (MemoryState::Unavailable, None)
     );
 }
