@@ -1,8 +1,8 @@
 //! How long fetched copies stay: `cleanup.restore.retention_days` after
 //! their fetch, the longest their source stays once its space is removed,
-//! or, when nobody changed them, until disk space cleanup needs their
-//! space, since the machine that keeps the source keeps them too; and every one goes with the repository
-//! it is kept beside.
+//! or after their last change; or, when nobody changed them, until disk
+//! space cleanup needs their space, since the machine that keeps the source
+//! keeps them too; and every one goes with the repository it is kept beside.
 use std::{path::Path, time::SystemTime};
 
 use anyhow::{Result, ensure};
@@ -17,9 +17,9 @@ use crate::{
 };
 
 impl Manager {
-    /// Delete the fetched copies fetched longer ago than the retention of
-    /// the repository they are kept beside, or the global one in
-    /// `root_dir`. A directory that fails keeps neither the others nor its
+    /// Delete the fetched copies fetched, or last changed, longer ago than
+    /// the retention of the repository they are kept beside, or the global
+    /// one in `root_dir`. A directory that fails keeps neither the others nor its
     /// copies for the next pass.
     pub(crate) async fn expire_fetched(&self) -> Result<()> {
         let mut failed = Vec::new();
@@ -33,7 +33,8 @@ impl Manager {
         Ok(())
     }
 
-    /// Delete the copies in `home` fetched longer ago than its retention.
+    /// Delete the copies in `home` fetched, or last changed, longer ago than
+    /// its retention.
     async fn expire_fetched_in(&self, home: Fetched) -> Result<()> {
         let retention = match &home.repository {
             Some(id) => self.repositories.repository_settings(id).await?,

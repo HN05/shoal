@@ -4418,10 +4418,11 @@ attached file by one rule, whatever its kind: they stay for the same retention
 as its checkpoints, since an agent's restored session may refer to any of them
 and a chat has no worktree to clean up, so its files are what remain of it.
 A copy another machine's file fetched here goes the same retention after its
-fetch, by its age alone: this machine cannot always learn when the source's
-space goes, and a fetch happens only while it exists, so the copy never
-outlives the source's retention, while a later fetch of a living space's file
-makes it again. Disk space cleanup deletes such copies first, since their
+fetch or last change, by its age alone: this machine cannot always learn when
+the source's space goes, and a fetch happens only while it exists, so an
+unchanged copy never outlives the source's retention, while a later fetch of
+a living space's file makes it again; an edit keeps the copy that long again,
+since its changes exist nowhere else. Disk space cleanup deletes such copies first, since their
 source machine keeps them, except one the user changed since its fetch,
 whose changes exist nowhere else, and one a fetch is still writing.
 Files are keyed by their owner's ID, which a workspace and a
