@@ -110,12 +110,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         selected.input.is_some() || ctx.interactive(),
         "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
-    // The item, which the space's context classifies once it is picked,
-    // decides nothing of which spaces the link reaches.
-    let linking = Acting::request(move |space| {
-        let item = ItemInput::Number(1);
-        crate::client::items::link(space, relation, LinkKind::Issue, item, None)
-    });
+    let linking = linking(relation);
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory(&linking));
     let space = space.await?;
     let context = ItemContext::space(space.clone());
@@ -192,9 +187,7 @@ async fn pick_open_item(
 
 pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (items, relation) = items.split()?;
-    let unlinking =
-        Acting::request(move |space| crate::client::items::unlink(space, relation, None, None));
-    let (space, selected) = select(ctx, items, &unlinking).await?;
+    let (space, selected) = select(ctx, items, &unlinking(relation)).await?;
     let unlinked =
         crate::client::items::unlink(space.clone(), relation, selected.kind, selected.input);
     let unlinked = unlinked.send(&ctx.paths).await?;
@@ -225,12 +218,7 @@ pub(super) async fn watch(
     resumed: bool,
 ) -> Result<i32> {
     let selection = items.selection()?;
-    let watching = {
-        let selection = selection.clone();
-        Acting::request(move |space| {
-            crate::client::items::watch(space, selection.clone(), None, None)
-        })
-    };
+    let watching = watching();
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory(&watching));
     let space = space.await?;
     let (context, repository) = watch_context(ctx, &space, repo.as_deref()).await?;
@@ -257,8 +245,7 @@ async fn watch_context(
 }
 
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
-    let marking = Acting::request(|space| assignments::mark_ready(space, Selection::default()));
-    let (space, selection) = select(ctx, items, &marking).await?;
+    let (space, selection) = select(ctx, items, &marking()).await?;
     let itself = space_kind(ctx, &space).await?;
     let outcomes = (assignments::mark_ready(space.clone(), selection))
         .send(&ctx.paths)
@@ -279,9 +266,7 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
 
 /// `draft` overrides `[pr] draft_on_unready` when given.
 pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
-    let clearing =
-        Acting::request(move |space| assignments::clear_ready(space, Selection::default(), draft));
-    let (space, selection) = select(ctx, items, &clearing).await?;
+    let (space, selection) = select(ctx, items, &clearing()).await?;
     let itself = space_kind(ctx, &space).await?;
     let marks = (assignments::clear_ready(space.clone(), selection, draft))
         .send(&ctx.paths)
@@ -314,4 +299,37 @@ pub(super) fn review_lines(marks: &[ReviewMark], itself: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// What linking an item as `relation` sends for the space a picker picks;
+/// the item, which the space's context classifies once it is picked,
+/// decides nothing of which spaces the link reaches.
+pub(super) fn linking(relation: Relation) -> Acting {
+    Acting::request(move |space| {
+        let item = ItemInput::Number(1);
+        crate::client::items::link(space, relation, LinkKind::Issue, item, None)
+    })
+}
+
+/// What unlinking items of `relation` sends for the space a picker picks.
+pub(super) fn unlinking(relation: Relation) -> Acting {
+    Acting::request(move |space| crate::client::items::unlink(space, relation, None, None))
+}
+
+/// What watching items sends for the space a picker picks; the items
+/// decide nothing of which spaces it reaches.
+pub(super) fn watching() -> Acting {
+    Acting::request(|space| crate::client::items::watch(space, Selection::default(), None, None))
+}
+
+/// What marking a space's work ready for review sends for the space a
+/// picker picks.
+pub(super) fn marking() -> Acting {
+    Acting::request(|space| assignments::mark_ready(space, Selection::default()))
+}
+
+/// What clearing a space's ready-for-review marks sends for the space a
+/// picker picks.
+pub(super) fn clearing() -> Acting {
+    Acting::request(|space| assignments::clear_ready(space, Selection::default(), None))
 }

@@ -218,10 +218,7 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
     Ok(match repository {
         Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
         None => {
-            let reading = Acting::request(|space| {
-                crate::client::config::layered_config(ConfigTarget::Space(space))
-            });
-            let picked = ui::pick_workspace(ctx, workspaces, "workspace", &reading).await?;
+            let picked = ui::pick_workspace(ctx, workspaces, "workspace", &reading()).await?;
             ConfigTarget::Space(SpaceSelector::id(&picked))
         }
     })
@@ -239,4 +236,10 @@ async fn report(paths: &CommandPaths, target: ConfigTarget) -> Result<(Vec<Entry
             .map(|error| format!("the worktree's config file is ignored: {error}")),
     );
     Ok((stack.report()?, warnings))
+}
+
+/// What reading a workspace's configuration sends for the workspace a
+/// picker picks.
+pub(super) fn reading() -> Acting {
+    Acting::request(|space| crate::client::config::layered_config(ConfigTarget::Space(space)))
 }

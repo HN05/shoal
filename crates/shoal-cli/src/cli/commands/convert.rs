@@ -33,22 +33,7 @@ pub(super) async fn to_workspace(
     if let Some(branch) = &branch.branch {
         shoal_core::git::check_branch_name(branch)?;
     }
-    // The branch, which may still come from the chat's issue, decides
-    // nothing of which spaces the conversion reaches.
-    let converting = {
-        let mode = mode.clone();
-        Acting::request(move |chat| {
-            let new = crate::client::conversions::NewWorkspace {
-                chat,
-                branch: "branch".into(),
-                issue: None,
-                base: None,
-                options: CreationOptions::default(),
-                mode: mode.clone(),
-            };
-            crate::client::conversions::to_workspace(new, Default::default())
-        })
-    };
+    let converting = to_workspace_request(mode.clone());
     let chat = ui::select_space(ctx, space, own_space(&converting)).await?;
     let issue = match &branch.issue {
         Some(input) => Some(load_issue(ctx, &chat, input).await?),
@@ -95,10 +80,7 @@ pub(super) async fn to_chat(
     space: Option<SpaceSelector>,
     mode: Option<ModeName>,
 ) -> Result<i32> {
-    let converting = {
-        let mode = mode.clone();
-        Acting::request(move |space| crate::client::conversions::to_chat(space, mode.clone()))
-    };
+    let converting = to_chat_request(mode.clone());
     let workspace = ui::select_space(ctx, space, own_space(&converting)).await?;
     let workspace = (crate::client::conversions::to_chat(workspace, mode))
         .send(&ctx.paths)
@@ -143,4 +125,27 @@ async fn linked_issue_branch(ctx: &Context, chat: &SpaceSelector) -> Result<Stri
 fn report(ctx: &Context, text: &str, kind: SpaceKind, workspace: Workspace) -> Result<i32> {
     ctx.emit(text, Converted { kind, workspace })?;
     Ok(0)
+}
+
+/// What converting a chat into a workspace with `mode` sends for the chat
+/// a picker picks; the branch, which may still come from the chat's issue,
+/// decides nothing of which spaces the conversion reaches.
+pub(super) fn to_workspace_request(mode: Option<ModeName>) -> Acting {
+    Acting::request(move |chat| {
+        let new = crate::client::conversions::NewWorkspace {
+            chat,
+            branch: "branch".into(),
+            issue: None,
+            base: None,
+            options: CreationOptions::default(),
+            mode: mode.clone(),
+        };
+        crate::client::conversions::to_workspace(new, Default::default())
+    })
+}
+
+/// What converting a workspace into a chat with `mode` sends for the
+/// workspace a picker picks.
+pub(super) fn to_chat_request(mode: Option<ModeName>) -> Acting {
+    Acting::request(move |space| crate::client::conversions::to_chat(space, mode.clone()))
 }

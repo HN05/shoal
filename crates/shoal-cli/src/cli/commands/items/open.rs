@@ -26,17 +26,7 @@ pub(super) async fn open_pr(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        // It pushes from the worktree in an operation on this machine.
-        ui::Fallback::CurrentDirectory(&Acting::request({
-            let options = options.clone();
-            move |workspace| {
-                let spec = OperationSpec::OpenPull {
-                    workspace,
-                    options: options.clone(),
-                };
-                crate::client::operations::start_request(spec, Default::default())
-            }
-        })),
+        ui::Fallback::CurrentDirectory(&opening_pull()),
     )
     .await?;
     let opened = match publish(ctx, workspace, options).await? {
@@ -85,13 +75,7 @@ pub(super) async fn open_issue(
     repository: Option<String>,
     link: bool,
 ) -> Result<i32> {
-    let opening = {
-        let issue = issue.clone();
-        super::in_context(move |target| {
-            crate::client::items::open_issue(target, issue.clone(), link)
-        })
-    };
-    let target = select_open_context(ctx, space, repository, &opening).await?;
+    let target = select_open_context(ctx, space, repository, &opening_issue()).await?;
     let outcome = (crate::client::items::open_issue(target, issue, link))
         .send(&ctx.paths)
         .await?;
@@ -147,4 +131,23 @@ pub(super) fn pull_options(pull: OpenPullArgs) -> Result<PullOptions> {
         milestone: pull.milestone,
         attachments,
     })
+}
+
+/// What opening a PR sends for the workspace a picker picks: an operation
+/// that pushes from its worktree on this machine; how the PR opens decides
+/// nothing of which workspaces it reaches.
+pub(in crate::cli::commands) fn opening_pull() -> Acting {
+    Acting::request(|workspace| {
+        let spec = OperationSpec::OpenPull {
+            workspace,
+            options: Default::default(),
+        };
+        crate::client::operations::start_request(spec, Default::default())
+    })
+}
+
+/// What opening an issue sends in the context of the space a picker
+/// picks; the issue decides nothing of which spaces it reaches.
+pub(in crate::cli::commands) fn opening_issue() -> Acting {
+    super::in_context(|target| crate::client::items::open_issue(target, NewIssue::default(), false))
 }

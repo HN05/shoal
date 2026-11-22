@@ -72,7 +72,7 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
 /// What copying a workspace, or with `checkpoint` one of its checkpoints,
 /// sends for the workspace a picker picks; the new space copies it on this
 /// machine.
-fn copying(checkpoint: Option<CheckpointNumber>) -> Acting {
+pub(super) fn copying(checkpoint: Option<CheckpointNumber>) -> Acting {
     Acting::here(move |workspace| {
         crate::client::workspaces::copy_origin(CopySource {
             workspace,

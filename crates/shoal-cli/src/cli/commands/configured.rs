@@ -197,8 +197,7 @@ async fn run_defined(
     definition: Definition,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    // The configured command runs in the picked workspace.
-    let running = Acting::here(crate::client::executions::command_run);
+    let running = super::exec::running();
     let workspace = match definition {
         Definition::Global(named) => {
             ui::select_workspace(ctx, named, Fallback::CurrentDirectory(&running)).await?

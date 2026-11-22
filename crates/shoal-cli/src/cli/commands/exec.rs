@@ -14,11 +14,13 @@ pub(in crate::cli::commands) async fn exec(
     workspace: Option<SpaceSelector>,
     command: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&Acting::here(crate::client::executions::command_run)),
-    )
-    .await?;
+    let workspace =
+        ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&running())).await?;
     shoal_workers::execution::run_command(&ctx.paths, workspace, command).await
+}
+
+/// What running a command sends for the workspace a picker picks: its run
+/// there, on this machine.
+pub(in crate::cli::commands) fn running() -> Acting {
+    Acting::here(crate::client::executions::command_run)
 }

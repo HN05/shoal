@@ -15,12 +15,7 @@ pub(super) async fn run(
     space: Option<SpaceSelector>,
     revoke: Option<ScopeToken>,
 ) -> Result<i32> {
-    let acting = match revoke.clone() {
-        Some(token) => {
-            Acting::request(move |space| crate::client::spaces::revoke_scope(space, token.clone()))
-        }
-        None => Acting::request(crate::client::spaces::issue_scope),
-    };
+    let acting = exporting(revoke.clone());
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&acting)).await?;
     match revoke {
         Some(token) => revoke_scope(ctx, space, token).await,
@@ -55,4 +50,15 @@ async fn export(ctx: &Context, space: SpaceSelector) -> Result<()> {
             outln!("{name}={value}");
         }
     })
+}
+
+/// What exporting a space's environment sends for the space a picker
+/// picks, or revoking the scope token `revoke` an export issued.
+pub(super) fn exporting(revoke: Option<ScopeToken>) -> Acting {
+    match revoke {
+        Some(token) => {
+            Acting::request(move |space| crate::client::spaces::revoke_scope(space, token.clone()))
+        }
+        None => Acting::request(crate::client::spaces::issue_scope),
+    }
 }

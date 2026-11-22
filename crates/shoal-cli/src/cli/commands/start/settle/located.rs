@@ -31,16 +31,7 @@ pub(super) async fn launch(ctx: &Context, args: &StartArgs) -> Result<Launch> {
         launch.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
     }
     if let Some(workspace) = args.in_workspace.clone() {
-        let starting = {
-            let launch = launch.clone();
-            Acting::request(move |space| {
-                let launch = shoal_protocol::launches::Launch {
-                    in_workspace: Some(Some(space).into()),
-                    ..launch.clone()
-                };
-                crate::client::launches::launch_request(launch)
-            })
-        };
+        let starting = starting();
         let selected = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&starting));
         let selected = selected.await?;
         launch.in_workspace = Some(Some(selected).into());
@@ -136,4 +127,16 @@ async fn forked(
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     crate::agents::ensure_forks(&settings, &agent)?;
     Ok((space, agent, session))
+}
+
+/// What starting an agent in an existing workspace sends for the workspace
+/// a picker picks; what the agent starts with decides nothing of which
+/// workspaces it reaches.
+pub(in crate::cli::commands) fn starting() -> Acting {
+    Acting::request(|space| {
+        crate::client::launches::launch_request(shoal_protocol::launches::Launch {
+            in_workspace: Some(Some(space).into()),
+            ..Default::default()
+        })
+    })
 }
