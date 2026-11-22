@@ -216,7 +216,7 @@ async fn import_over_ssh(
 }
 
 /// Whether the daemon refused `error`'s request with `code`.
-fn refused_as(error: &anyhow::Error, code: ErrorCode) -> bool {
+pub(super) fn refused_as(error: &anyhow::Error, code: ErrorCode) -> bool {
     error
         .downcast_ref::<RemoteError>()
         .is_some_and(|refusal| refusal.code == code)

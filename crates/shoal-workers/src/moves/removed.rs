@@ -3,7 +3,8 @@
 //! delivers it, the destination records it as removed under its ID,
 //! claiming it at the hub, and this machine forgets it once that claim
 //! stands. When the destination cannot say whether it claimed it, the move
-//! asks the hub, and the record stays here until the hub answers.
+//! asks the hub, and the record stays here until the hub answers, its move
+//! lock refusing its restore meanwhile.
 use anyhow::{Result, anyhow, bail};
 
 use super::{Steps, joined};
@@ -60,7 +61,10 @@ async fn deliver(
             bail!("machine {machine} took none of it, so its record stays here: {error}")
         }
         RecordArrival::Unknown { error } => {
-            let records = (&selector, carried_ids(&exported.manifest));
+            let carried = carried_ids(&exported.manifest);
+            // Each record's lock keeps its restore here off until it settles.
+            let _locks = lock_each(paths, &carried).await?;
+            let records = (&selector, carried);
             settle(paths, records, (machine, &ticket), anyhow!(error), steps).await?
         }
     }
@@ -73,6 +77,15 @@ async fn deliver(
         arrived: None,
         warnings: exported.warnings,
     })
+}
+
+/// Take the move lock of each space `ids` names.
+async fn lock_each(paths: &CommandPaths, ids: &[SpaceId]) -> Result<Vec<MoveLock>> {
+    let mut locks = Vec::new();
+    for id in ids {
+        locks.push(MoveLock::take(paths, id).await?);
+    }
+    Ok(locks)
 }
 
 /// The IDs of the spaces whose records the package `manifest` carries.

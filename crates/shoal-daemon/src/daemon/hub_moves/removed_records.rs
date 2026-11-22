@@ -13,6 +13,7 @@ use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     daemon::{hub::Named, manager::Manager},
+    refusal::{Reason, Refusal},
     transfer::{
         Carrying, ImportedMove, MachineDestination, Manifest, MoveSettled, RecordArrival,
         RemovedDelivery,
@@ -64,7 +65,10 @@ impl Manager {
         for record in carried {
             held.push(self.gates.lock_removal_record(record).await);
         }
-        self.removed_space(selector).await?;
+        // Nothing to settle is left of a record that went meanwhile.
+        if let Err(gone) = self.removed_space(selector).await {
+            return Err(Refusal::new(Reason::NotFound, format!("{gone:#}")).into());
+        }
         let Named { machine, .. } = self.hub.named_machine(self, machine).await?;
         let mut claimed = Vec::new();
         for record in std::iter::once(&id).chain(carried) {

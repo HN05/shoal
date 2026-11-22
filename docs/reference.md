@@ -5079,8 +5079,9 @@ not claim the space no longer can. `--keep` copies the spaces there as new
 spaces, without a claim. A removed space's record moves there too: that
 machine records it as removed under its ID, claiming it at the hub, so
 `shoal restore <id>` opens it there, and this one forgets it once that claim
-stands, keeping it when the claim is refused; an agent moves the record
-of a space it may restore. A space's agent moves every space its scope reaches there, chats included,
+stands, keeping it when the claim is refused and refusing its restore here
+until the hub settles an arrival that machine could not report; an agent
+moves the record of a space it may restore. A space's agent moves every space its scope reaches there, chats included,
 with no permission key, also from another joined machine, and ends one the
 user holds as its `user_holds` permission allows; a copy of its own space,
 which would open beside it, takes its `admin` permission. A move that would stop its

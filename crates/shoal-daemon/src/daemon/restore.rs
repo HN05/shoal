@@ -13,6 +13,8 @@ use anyhow::{Context, Result, bail};
 use super::manager::Manager;
 use crate::daemon::scope::Caller;
 use crate::model::{OpenedWorkspace, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace};
+use crate::refusal::{Reason, Refusal};
+use crate::transfer::MoveLock;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::CloseCause;
@@ -28,6 +30,7 @@ impl Manager {
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<RestoredSpace> {
+        let _moving = self.ensure_not_moving(selector)?;
         if let Some(takeover) = self.takeover(selector).await? {
             self.ensure_takeover_allowed(caller, selector).await?;
             return self.take_over_from_package(takeover, caller).await;
@@ -36,6 +39,24 @@ impl Manager {
             self.hub.refuse_live_elsewhere(self, id).await?;
         }
         self.reopen_space(selector, caller).await
+    }
+
+    /// Refuse the restore of the space `selector` names while a move of its
+    /// record to another machine holds the space's move lock, as until the
+    /// hub settles an arrival that machine could not report; the lock,
+    /// held for the restore, keeps such a move from starting meanwhile.
+    fn ensure_not_moving(&self, selector: &SpaceSelector) -> Result<Option<MoveLock>> {
+        let Some(id) = selector.given_id() else {
+            return Ok(None);
+        };
+        match MoveLock::try_take(&self.paths, id)? {
+            Some(lock) => Ok(Some(lock)),
+            None => Err(Refusal::new(
+                Reason::MoveInProgress,
+                format!("a move of space {id} to another machine is in progress; shoal restore {id} works once it ends here"),
+            )
+            .into()),
+        }
     }
 
     /// Open the removed space `selector` names again in its place, below

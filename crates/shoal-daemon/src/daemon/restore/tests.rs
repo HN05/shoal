@@ -1324,3 +1324,34 @@ async fn a_restore_whose_worktree_fails_finishes_and_retries_it_with_its_unsaved
     );
     manager.store.shutdown().await;
 }
+
+#[tokio::test]
+async fn restore_refuses_a_record_while_its_move_to_another_machine_runs() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    let removal = UnsavedWork::All;
+    let inspection = InspectionPolicy::IncludeDirectoryProcesses;
+    (manager.remove_selected(&selector, removal, inspection))
+        .await
+        .unwrap();
+    let moving = MoveLock::try_take(&manager.paths, &workspace.id)
+        .unwrap()
+        .unwrap();
+
+    let refused = manager.restore_space(&selector, None).await.unwrap_err();
+
+    assert_eq!(Reason::of(&refused), Some(Reason::MoveInProgress));
+    assert!(record(&manager, workspace.id.as_str()).await.is_some());
+    moving.release();
+    manager.restore_space(&selector, None).await.unwrap();
+}

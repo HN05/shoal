@@ -10,6 +10,7 @@ use anyhow::{Result, anyhow};
 
 use super::{Steps, moving};
 use crate::client::connection::CommandPaths;
+use crate::protocol::ErrorCode;
 use shoal_core::transfer::{Arrived, ImportedMove, MachineDestination, MoveSettled};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -73,7 +74,7 @@ pub(super) async fn settle(
 /// How the hub, which `ask` asks, settled a move whose arrival `error` left
 /// unknown, asking again every [`ASK_AGAIN`] while it cannot be asked,
 /// saying `meanwhile` what stays as it is until it answers, until `steps`
-/// says the move was cancelled.
+/// says the move was cancelled or the daemon finds nothing to settle.
 pub(super) async fn ask_hub<Asked>(
     ask: impl Fn() -> Asked,
     error: &anyhow::Error,
@@ -86,6 +87,7 @@ where
     loop {
         match ask().await {
             Ok(settled) => return Ok(settled),
+            Err(gone) if moving::refused_as(&gone, ErrorCode::NotFound) => return Err(gone),
             Err(asking) => super::warn(&format!(
                 "warning: {error:#}, and the hub cannot say whether it did, so {meanwhile}; asking again in {} seconds: {asking:#}",
                 ASK_AGAIN.as_secs()
