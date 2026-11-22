@@ -321,12 +321,14 @@ pub enum Call {
     Update,
     /// A machine's report of its spaces, with every number it holds
     /// without a space, as for a removed space's issue proposals, which no
-    /// other space may take. Answered with [`Reply::Reported`] and the
-    /// numbers the hub keeps for the machine.
+    /// other space may take, and its capacity, which the hub places new
+    /// spaces by. Answered with [`Reply::Reported`] and the numbers the hub
+    /// keeps for the machine.
     Report {
         report: Report,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         reserved: Vec<SpaceNumber>,
+        capacity: shoal_schedule::placement::snapshot::Capacity,
     },
     /// What a machine says of itself, when its link opens and when its
     /// setting changes. Answered with [`Reply::Availability`].

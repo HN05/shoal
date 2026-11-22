@@ -85,6 +85,7 @@ impl Known {
                 hub: false,
                 availability: None,
                 agents: Vec::new(),
+                capacity: None,
             })
             .collect();
         let spaces = (self.spaces.into_iter()).map(listed).collect();

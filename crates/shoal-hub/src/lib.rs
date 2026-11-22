@@ -51,6 +51,7 @@ mod owners;
 mod packages;
 mod pairing;
 pub mod pieces;
+mod placement;
 pub mod presence;
 mod queue;
 
@@ -120,6 +121,8 @@ pub struct Hub {
     reported: reports::Reported,
     /// This machine's side of the shared config.
     sharing: shared_config::Sharing,
+    /// As the hub: the capacity each machine last reported.
+    capacities: placement::Capacities,
 }
 
 impl Hub {
@@ -153,6 +156,7 @@ impl Hub {
             parent_permissions: Default::default(),
             reported: Default::default(),
             sharing: Default::default(),
+            capacities: Default::default(),
         }
     }
 }

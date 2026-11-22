@@ -249,6 +249,11 @@ pub struct Member {
     /// there can run, as it last described itself.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<crate::agent::Agent>,
+    /// What a connected machine last reported of its repositories and its
+    /// queue's room, which the hub places new spaces by; none before it
+    /// reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capacity: Option<shoal_schedule::placement::snapshot::Capacity>,
 }
 
 impl Member {
@@ -266,6 +271,7 @@ impl Member {
             hub: false,
             availability: None,
             agents: Vec::new(),
+            capacity: None,
         }
     }
 

@@ -263,6 +263,12 @@ impl Packages for Manager {
     }
 }
 
+impl shoal_hub::daemon::Queue for Manager {
+    fn queue_room(&self) -> BoxFuture<'_, Result<shoal_schedule::placement::snapshot::Capacity>> {
+        Box::pin(Manager::queue_room(self))
+    }
+}
+
 impl GlobalConfig for Manager {
     fn reload_config(&self) -> BoxFuture<'_, Result<()>> {
         Box::pin(self.reload_config_and_recheck())

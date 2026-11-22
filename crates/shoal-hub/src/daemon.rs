@@ -1,9 +1,9 @@
 //! What the hub needs of the rest of the daemon, which implements it: the
 //! spaces it reports, routes to and tells about, their permissions, the
 //! messages that reach their agents, the approvals and threads that pass
-//! between machines, the app store a member asks of the hub, and the
-//! packages of an intermittent machine's spaces, and the global config the
-//! hub's copies of the shared files change.
+//! between machines, the app store a member asks of the hub, the
+//! packages of an intermittent machine's spaces, the room its queue has,
+//! and the global config the hub's copies of the shared files change.
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -25,7 +25,7 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
     threads::Thread,
 };
-use shoal_schedule::priority::Priority;
+use shoal_schedule::{placement::snapshot::Capacity, priority::Priority};
 
 use crate::streams::{Incoming, Outgoing};
 
@@ -235,10 +235,18 @@ pub trait GlobalConfig: Send + Sync {
     fn reload_config(&self) -> BoxFuture<'_, Result<()>>;
 }
 
+/// This machine's agent queue, whose room its reports carry.
+pub trait Queue: Send + Sync {
+    /// What the queue has room for now, without the machine's
+    /// repositories.
+    fn queue_room(&self) -> BoxFuture<'_, Result<Capacity>>;
+}
+
 /// Everything the hub needs of the daemon, which each of its operations
 /// that reaches beyond it takes.
 pub trait Daemon:
     Spaces
+    + Queue
     + SpacePermissions
     + Messages
     + Approvals
@@ -252,6 +260,7 @@ pub trait Daemon:
 
 impl<T> Daemon for T where
     T: Spaces
+        + Queue
         + SpacePermissions
         + Messages
         + Approvals

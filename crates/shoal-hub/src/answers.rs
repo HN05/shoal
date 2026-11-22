@@ -96,8 +96,13 @@ impl Hub {
                 Reply::Left
             }
             Call::Update => Reply::Updated(self.update_own_installation().await?),
-            Call::Report { report, reserved } => {
+            Call::Report {
+                report,
+                reserved,
+                capacity,
+            } => {
                 ensure_machine(member)?;
+                self.capacities.keep(&member.id, capacity);
                 Reply::Reported(
                     self.record_report(&**daemon, &member.id, report, reserved)
                         .await?,
@@ -234,6 +239,7 @@ impl Hub {
         }
         self.with_availability(&mut members).await?;
         self.with_agent_tools(&mut members).await?;
+        self.with_capacity(&mut members);
         Ok(Overview {
             listener: self.hub_listener(daemon),
             members,

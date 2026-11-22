@@ -16,6 +16,7 @@ mod limits;
 mod openings;
 mod ranking;
 mod restores;
+mod room;
 mod setup_waits;
 mod slots;
 mod state;

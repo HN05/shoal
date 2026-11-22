@@ -35,7 +35,7 @@ impl Origins {
     /// `repository` as other machines tell it: its origin, by the key
     /// repositories match by and the URL it is cloned from, read again once
     /// [`ORIGIN_FRESH`] passed, and the name it has now.
-    async fn of(&mut self, repository: &Repository) -> RepositoryOrigin {
+    pub(super) async fn of(&mut self, repository: &Repository) -> RepositoryOrigin {
         let url = match self.0.get(&repository.id) {
             Some((url, read)) if read.elapsed() < ORIGIN_FRESH => url.clone(),
             _ => {

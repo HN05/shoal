@@ -396,20 +396,9 @@ impl Manager {
         let overload = &config.machine.overload;
         let global = config.machine.max_heavy_agents;
         let max_jobs = config.machine.max_jobs;
-        // A one-shot run holds no slot, but uses the machine's memory.
-        let admitted = self.agent_queue.admitted_oneshots();
-        let oneshots = admitted.len();
-        let activities: Vec<Activity> = slots
-            .iter()
-            .map(|slot| slot.activity)
-            .chain(jobs.iter().copied())
-            .chain(admitted.into_iter().map(|(_, held)| Activity::Running {
-                age: held,
-                memory: None,
-            }))
-            .collect();
+        let (activities, oneshots) = self.activities(slots, jobs);
         let measured = match [global, max_jobs].contains(&MachineLimit::Dynamic) {
-            true => Some(self.measure(overload, &activities).await?),
+            true => Some(self.measure(overload, &activities).await?.1),
             false => None,
         };
         let mut limits = Limits {
@@ -466,20 +455,35 @@ impl Manager {
         Ok(room_for_a_job(&occupied, &limits))
     }
 
-    /// What the machine's memory and disk leave beside the slots
-    /// `activities` use.
-    async fn measure(
+    /// What the agents' `slots`, the `jobs` and the admitted one-shot runs
+    /// do to measured memory, with how many one-shot runs are admitted.
+    pub(super) fn activities(&self, slots: &[Slot], jobs: &[Activity]) -> (Vec<Activity>, usize) {
+        // A one-shot run holds no slot, but uses the machine's memory.
+        let admitted = self.agent_queue.admitted_oneshots();
+        let oneshots = admitted.len();
+        let activities = (slots.iter())
+            .map(|slot| slot.activity)
+            .chain(jobs.iter().copied())
+            .chain(admitted.into_iter().map(|(_, held)| Activity::Running {
+                age: held,
+                memory: None,
+            }))
+            .collect();
+        (activities, oneshots)
+    }
+
+    /// A reading of the machine's memory and disk, and what it leaves
+    /// beside the slots `activities` use.
+    pub(super) async fn measure(
         &self,
         overload: &Overload,
         activities: &[Activity],
-    ) -> Result<capacity::Room> {
+    ) -> Result<(capacity::HostSample, capacity::Room)> {
         let paths = self.admission_paths().await?;
         let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
-        Ok(capacity::room(
-            capacity::sample(&paths, overload, self.work_limit()),
-            Agents::count(activities.iter().copied()),
-            overload,
-        ))
+        let sample = capacity::sample(&paths, overload, self.work_limit());
+        let agents = Agents::count(activities.iter().copied());
+        Ok((sample, capacity::room(sample, agents, overload)))
     }
 
     /// The machine's busy CPU over the CPU warning's window, against the

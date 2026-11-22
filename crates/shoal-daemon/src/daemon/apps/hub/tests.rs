@@ -26,6 +26,7 @@ fn device(name: &str) -> Member {
         hub: false,
         availability: None,
         agents: Vec::new(),
+        capacity: None,
     }
 }
 
