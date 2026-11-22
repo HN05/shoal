@@ -1,5 +1,6 @@
 //! What each forge does its own way with merges and reverts of PRs.
 use anyhow::{Context, Result};
+use serde_json::Value;
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{
@@ -117,3 +118,20 @@ pub(crate) fn subject_and_body(message: &str) -> (&str, &str) {
     let (subject, body) = message.split_once('\n').unwrap_or((message, ""));
     (subject.trim_end(), body.trim())
 }
+
+/// Full commit IDs, refusing anything else so cleanup never matches a prefix.
+pub(crate) fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<CommitId>> {
+    commits
+        .iter()
+        .map(|commit| {
+            commit[field]
+                .as_str()
+                .filter(|sha| sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit()))
+                .map(CommitId::from)
+                .context("PR commit has no full commit ID")
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests;

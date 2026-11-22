@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use super::{Forgejo, actions};
 use crate::{
-    backends::rest::{self, RestCheck, RestReads, fingerprints},
+    backends::rest::{self, RestReads, fingerprints},
     review::{
         status::{Statuses, Verdict, forgejo_reviews},
         view::{Views, login},
@@ -14,7 +14,7 @@ use crate::{
         api::{Request, TransportRequests},
         backend::LoginHint,
     },
-    updates::{Activity, Entry, Snapshot},
+    updates::{Activity, Entry, HeadCheck, Snapshot},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -133,7 +133,7 @@ impl RestReads for Forgejo {
         repo: &ForgeRepo,
         account: &Account,
         pull: &Current,
-    ) -> Result<Vec<RestCheck>> {
+    ) -> Result<Vec<HeadCheck>> {
         let head = pull
             .head_sha
             .as_ref()
@@ -162,7 +162,7 @@ fn submitted(review: &Value) -> bool {
 }
 
 /// Forgejo's combined status; a commit without statuses has `"statuses": null`.
-fn statuses(combined: &Value) -> Result<Vec<RestCheck>> {
+fn statuses(combined: &Value) -> Result<Vec<HeadCheck>> {
     let statuses = match &combined["statuses"] {
         Value::Null => &[][..],
         statuses => statuses.as_array().context("invalid Forgejo CI statuses")?,
@@ -187,7 +187,7 @@ fn statuses(combined: &Value) -> Result<Vec<RestCheck>> {
                 Some("error") => CheckState::Error,
                 _ => anyhow::bail!("unknown Forgejo CI state"),
             };
-            Ok(RestCheck {
+            Ok(HeadCheck {
                 name: name.into(),
                 state,
             })

@@ -8,18 +8,17 @@ use serde_json::Value;
 use shoal_refs::CommitId;
 
 use crate::{
-    items::{Items, action::ActionRequests, item::ItemRequests},
+    items::{Items, action::ActionRequests, item::ItemRequests, merging::commit_shas},
     review::status::{StatusRecords, Verdict},
     transport::{
         account::Account,
         api::TransportRequests,
         backend::{Backend, LoginHint},
     },
-    updates::{DISCUSSION, Entry, Snapshot, verdict_entries},
+    updates::{DISCUSSION, Entry, HeadCheck, Snapshot, verdict_entries},
 };
 use shoal_forge_types::{
     ForgeRepo,
-    ci::check_state::CheckState,
     items::{
         item::{Current, Item, ItemState},
         link::ItemKind,
@@ -28,13 +27,6 @@ use shoal_forge_types::{
     numbers::{IssueNumber, PullNumber},
     review::status::{PrState, PrStatus},
 };
-
-/// A CI check, by its name.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RestCheck {
-    pub name: String,
-    pub state: CheckState,
-}
 
 /// What the forges reached through their REST APIs each read their own way,
 /// for the activity and status they otherwise read alike.
@@ -72,7 +64,7 @@ pub(crate) trait RestReads: Backend {
         repo: &ForgeRepo,
         account: &Account,
         pull: &Current,
-    ) -> Result<Vec<RestCheck>>;
+    ) -> Result<Vec<HeadCheck>>;
 
     /// Each submitted review's reviewer and verdict.
     async fn verdicts(
@@ -173,7 +165,7 @@ async fn open_checks(
     repo: &ForgeRepo,
     account: &Account,
     pull: &Current,
-) -> Option<Result<Vec<RestCheck>>> {
+) -> Option<Result<Vec<HeadCheck>>> {
     if pull.item.state != ItemState::Open {
         return None;
     }
@@ -309,20 +301,6 @@ pub(crate) async fn issue_details(
     repo.read(account, ItemKind::Issue, number.get())
         .await
         .hint_login(&repo.kind())
-}
-
-/// Full commit IDs, refusing anything else so cleanup never matches a prefix.
-pub(crate) fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<CommitId>> {
-    commits
-        .iter()
-        .map(|commit| {
-            commit[field]
-                .as_str()
-                .filter(|sha| sha.len() == 40 && sha.bytes().all(|byte| byte.is_ascii_hexdigit()))
-                .map(CommitId::from)
-                .context("PR commit has no full commit ID")
-        })
-        .collect()
 }
 
 /// Each item's ID with the fields of it that matter for activity and its

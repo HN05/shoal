@@ -3,16 +3,7 @@ use crate::updates::UpdateRequests;
 use serde_json::json;
 
 #[test]
-fn merged_commits_need_full_ids_and_lists_need_numbers() {
-    let sha = "a".repeat(40);
-    assert_eq!(commit_shas(&[json!({"id": sha})], "id").unwrap(), [sha]);
-    for commit in [
-        json!({"sha": "abc"}),
-        json!({}),
-        json!({"sha": "g".repeat(40)}),
-    ] {
-        assert!(commit_shas(&[commit], "sha").is_err());
-    }
+fn lists_need_numbers() {
     let forge = ForgeRepo::parse("https://gitlab.com/team/repo").unwrap();
     assert_eq!(
         listed_number(&forge, &json!({"iid": 3, "id": 9})).unwrap(),

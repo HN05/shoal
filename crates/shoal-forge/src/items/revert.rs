@@ -4,7 +4,6 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    backends::rest::commit_shas,
     capability::CapabilityRequests,
     items::{
         Items,
@@ -12,7 +11,7 @@ use crate::{
         attach::{AttachRequests, AttachSteps},
         create::{CreateSteps, Created, pending_edit},
         item::ItemRequests,
-        merging::Merging,
+        merging::{Merging, commit_shas},
     },
     transport::{account::Account, api::TransportRequests},
 };

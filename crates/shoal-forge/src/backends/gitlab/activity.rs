@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use super::{GitLab, latest_statuses, notes, status_state, username};
 use crate::{
-    backends::rest::{self, RestCheck, RestReads, fingerprints},
+    backends::rest::{self, RestReads, fingerprints},
     items::{
         action::ActionSteps,
         item::{ItemRequests, text},
@@ -18,7 +18,7 @@ use crate::{
         api::{Request, TransportRequests},
         backend::LoginHint,
     },
-    updates::{Activity, Entry, Snapshot},
+    updates::{Activity, Entry, HeadCheck, Snapshot},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -115,7 +115,7 @@ impl RestReads for GitLab {
         repo: &ForgeRepo,
         account: &Account,
         pull: &Current,
-    ) -> Result<Vec<RestCheck>> {
+    ) -> Result<Vec<HeadCheck>> {
         let head = pull
             .head_sha
             .as_ref()
@@ -315,7 +315,7 @@ fn review_comment(note: &Value, thread: CommentId) -> ReviewComment {
 
 /// The newest status of each name, with a failure the job is allowed as a
 /// warning, which does not fail the PR's checks.
-fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
+fn statuses(statuses: &[Value]) -> Result<Vec<HeadCheck>> {
     latest_statuses(statuses)?
         .into_iter()
         .map(|(name, status)| {
@@ -323,7 +323,7 @@ fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
                 CheckState::Failure if status["allow_failure"] == true => CheckState::Warning,
                 state => state,
             };
-            Ok(RestCheck {
+            Ok(HeadCheck {
                 name: name.into(),
                 state,
             })

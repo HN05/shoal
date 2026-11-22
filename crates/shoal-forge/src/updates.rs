@@ -11,7 +11,6 @@ use shoal_refs::CommitId;
 use shoal_time::UnixTime;
 
 use crate::{
-    backends::rest::RestCheck,
     ci::run_view::RunViewRequests,
     transport::{
         account::Account,
@@ -167,6 +166,14 @@ pub(crate) struct Check {
     #[serde(deserialize_with = "check_state::saved")]
     pub(crate) state: CheckState,
     pub(crate) revision: String,
+}
+
+/// A CI check on a PR's head, by its name, as a forge lists it; [`Check`]
+/// adds the revision it ran at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HeadCheck {
+    pub name: String,
+    pub state: CheckState,
 }
 
 /// A local merge of `head` into `base`; `conflict` reports its conflicts
@@ -698,7 +705,7 @@ impl Snapshot {
 
     /// An open PR's mergeability and the CI checks on its head commit, each
     /// under its name. A failed check lookup keeps the previous checks.
-    pub(crate) fn record_checks(&mut self, pull: &Current, checks: Result<Vec<RestCheck>>) {
+    pub(crate) fn record_checks(&mut self, pull: &Current, checks: Result<Vec<HeadCheck>>) {
         let head = (pull.head_sha.as_ref()).map_or_else(String::new, CommitId::to_string);
         let checks = checks.map(|checks| {
             checks

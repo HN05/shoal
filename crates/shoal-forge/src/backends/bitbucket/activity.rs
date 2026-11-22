@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use super::{Bitbucket, listed, roots};
 use crate::{
-    backends::rest::{self, RestCheck, RestReads, fingerprints},
+    backends::rest::{self, RestReads, fingerprints},
     items::{
         action::ActionSteps,
         item::{ItemRequests, text},
@@ -14,7 +14,7 @@ use crate::{
         view::Views,
     },
     transport::{account::Account, api::TransportRequests, backend::LoginHint},
-    updates::{Activity, Entry, Snapshot},
+    updates::{Activity, Entry, HeadCheck, Snapshot},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -110,7 +110,7 @@ impl RestReads for Bitbucket {
         repo: &ForgeRepo,
         account: &Account,
         pull: &Current,
-    ) -> Result<Vec<RestCheck>> {
+    ) -> Result<Vec<HeadCheck>> {
         let pr = repo.item_endpoint(ItemKind::Pr, pull.item.number);
         statuses(&repo.pages(account, &format!("{pr}/statuses")).await?)
     }
@@ -195,7 +195,7 @@ async fn view_discussion(
 }
 
 /// The newest status of each build, by its key.
-fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
+fn statuses(statuses: &[Value]) -> Result<Vec<HeadCheck>> {
     let keyed = statuses
         .iter()
         .map(|status| {
@@ -214,7 +214,7 @@ fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
                 Some("STOPPED") => CheckState::Cancelled,
                 state => bail!("unknown Bitbucket build state {state:?}"),
             };
-            let check = RestCheck {
+            let check = HeadCheck {
                 name: name.into(),
                 state,
             };

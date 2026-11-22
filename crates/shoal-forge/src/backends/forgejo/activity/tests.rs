@@ -12,15 +12,15 @@ fn forgejo_statuses_need_every_status_and_known_states() {
     assert_eq!(
         statuses(&combined).unwrap(),
         [
-            RestCheck {
+            HeadCheck {
                 name: "ci / rust".into(),
                 state: CheckState::Success
             },
-            RestCheck {
+            HeadCheck {
                 name: "review".into(),
                 state: CheckState::Pending
             },
-            RestCheck {
+            HeadCheck {
                 name: "ci / docs".into(),
                 state: CheckState::Waiting
             },

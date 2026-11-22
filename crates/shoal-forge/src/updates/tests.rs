@@ -476,7 +476,7 @@ fn rest_snapshot(head: &str, conflict: bool, checks: &[(&str, CheckState)]) -> S
     let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
     let checks = checks
         .iter()
-        .map(|&(name, state)| RestCheck {
+        .map(|&(name, state)| HeadCheck {
             name: name.into(),
             state,
         })
