@@ -19,8 +19,8 @@ use crate::{
 impl Manager {
     /// Delete the fetched copies fetched, or last changed, longer ago than
     /// the retention of the repository they are kept beside, or the global
-    /// one in `root_dir`. A directory that fails keeps neither the others nor its
-    /// copies for the next pass.
+    /// one in `root_dir`. A directory that fails keeps neither the others
+    /// nor its copies for the next pass.
     pub(crate) async fn expire_fetched(&self) -> Result<()> {
         let mut failed = Vec::new();
         for home in self.fetched_homes().await? {
@@ -53,8 +53,8 @@ impl Manager {
 
     /// Delete every fetched copy where `on` selects that loses nothing, as
     /// on a filesystem low on space, returning whether any went: one a fetch
-    /// is writing, or the user changed since, stays for its expiry. A failure is logged and keeps
-    /// the rest of that directory.
+    /// is writing, or the user changed since, stays for its expiry. A
+    /// failure is logged and keeps the rest of that directory.
     pub(crate) async fn delete_fetched_in(&self, on: impl Fn(&Path) -> bool) -> bool {
         let homes = match self.fetched_homes().await {
             Ok(homes) => homes,
