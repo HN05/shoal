@@ -8,6 +8,7 @@ use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::hub::directory::{Conflict, Listed, Report, SpaceSummary};
 
 use super::{super::members, numbers};
+use crate::packages::takeovers;
 use crate::time::UnixTime;
 
 /// Apply `member`'s `report`, and the conflicts it newly raised: the space
@@ -97,7 +98,7 @@ fn held(tx: &Transaction<'_>, member: &MemberId) -> Result<Vec<SpaceId>> {
 
 /// Record `member`'s `space`: as the owner's when no other machine owns
 /// its ID or `member` claimed it, else as a copy, with the conflict a new
-/// copy raises.
+/// copy raises unless another machine took the space over from `member`.
 fn record(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -112,7 +113,10 @@ fn record(
             Ok(None)
         }
         Some(owner) if &owner != member => {
-            let new = !has_copy(tx, &space.id, member)?;
+            // A copy taken over from the machine conflicts with nothing,
+            // as that machine retires it.
+            let new =
+                !has_copy(tx, &space.id, member)? && !takeovers::taken_from(tx, &space.id, member)?;
             keep_copy(tx, member, &space.id, &summary, now)?;
             Ok(new.then(|| Conflict {
                 space: space.id.clone(),

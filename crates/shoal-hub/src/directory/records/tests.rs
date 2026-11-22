@@ -199,3 +199,17 @@ fn a_revoked_machine_records_nothing() {
     drop(tx);
     assert!(listed(&mut db).is_empty());
 }
+
+#[test]
+fn a_returning_machine_s_copy_of_a_space_taken_from_it_raises_no_conflict() {
+    let mut db = database();
+    report(&mut db, "desk", Report::Whole(vec![space("a", "taken")]));
+    db.execute(
+        "INSERT INTO hub_takeovers(space_id, member_id, taken_at) VALUES ('a','laptop',0)",
+        [],
+    )
+    .unwrap();
+    let conflicts = report(&mut db, "laptop", Report::Whole(vec![space("a", "taken")]));
+    assert!(conflicts.is_empty());
+    assert_eq!(listed(&mut db), [("a".into(), "desk".into())]);
+}

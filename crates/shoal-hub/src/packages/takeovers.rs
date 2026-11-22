@@ -188,6 +188,19 @@ pub(crate) fn record_takeover(
     Ok(())
 }
 
+/// Whether another machine took the space `id` over from `member`, which
+/// has yet to retire its copy.
+pub(crate) fn taken_from(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<bool> {
+    let taken = tx
+        .query_row(
+            "SELECT 1 FROM hub_takeovers WHERE space_id=?1 AND member_id=?2",
+            params![id, member],
+            |_| Ok(()),
+        )
+        .optional()?;
+    Ok(taken.is_some())
+}
+
 /// Forget the takeovers of spaces taken from `member`, as once the hub
 /// revoked it.
 pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
