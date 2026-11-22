@@ -92,7 +92,7 @@ impl Known {
         let directory = Directory {
             machines,
             spaces,
-            conflicts: Vec::new(),
+            ..Directory::default()
         };
         (self.machine, directory)
     }

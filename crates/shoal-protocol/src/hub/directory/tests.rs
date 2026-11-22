@@ -30,6 +30,13 @@ fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
             machines: Vec::new(),
             spaces,
             conflicts: Vec::new(),
+            repositories: vec![
+                serde_json::from_value(json!({
+                    "machine": "laptop", "id": "repository-1", "name": "app",
+                    "origin": "forge.example/team/app", "shared": true,
+                }))
+                .unwrap(),
+            ],
         },
         below_elsewhere: vec![(
             shoal_ids::space_ids::SpaceId::from("here".to_owned()),
@@ -54,6 +61,10 @@ fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
     assert_eq!(view.directory.spaces.len(), 2_000);
     assert_eq!(view.directory.spaces[1_999].space.id.as_str(), "space-1999");
     assert_eq!(view.below_elsewhere[0].1.as_str(), "space-1");
+    let repository = &view.directory.repositories[0];
+    assert_eq!(repository.machine.as_str(), "laptop");
+    assert_eq!(repository.repository.repository.name, "app");
+    assert!(repository.repository.shared);
 }
 
 #[test]
@@ -82,6 +93,7 @@ fn a_space_whose_threads_fill_more_than_a_frame_arrives_whole() {
             machines: Vec::new(),
             spaces: vec![listed],
             conflicts: Vec::new(),
+            repositories: Vec::new(),
         },
         below_elsewhere: Vec::new(),
     };

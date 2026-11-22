@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 use shoal_ids::{
     member_ids::MemberId,
+    repository_ids::RepositoryId,
     space_ids::{SpaceId, SpaceNumber},
 };
 
@@ -86,6 +87,27 @@ pub struct RepositoryOrigin {
     pub name: String,
 }
 
+/// A repository a machine registers, as it reports it to the hub.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegisteredRepository {
+    /// The ID its machine gives it, which a request there names it by.
+    pub id: RepositoryId,
+    #[serde(flatten)]
+    pub repository: RepositoryOrigin,
+    /// Whether it is shared with the hub's other machines.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub shared: bool,
+}
+
+/// A repository in the hub's directory, as its machine last reported it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListedRepository {
+    /// The machine that registers it.
+    pub machine: MemberId,
+    #[serde(flatten)]
+    pub repository: RegisteredRepository,
+}
+
 /// What a machine reports of its spaces.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -123,8 +145,8 @@ pub struct Conflict {
     pub since: UnixTime,
 }
 
-/// The hub's directory: its machines, every space they reported, and the
-/// space IDs two of them report.
+/// The hub's directory: its machines, every space and repository they
+/// reported, and the space IDs two of them report.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Directory {
     /// The joined machines, the hub's own among them, with when each was
@@ -133,6 +155,8 @@ pub struct Directory {
     pub spaces: Vec<Listed>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conflicts: Vec<Conflict>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repositories: Vec<ListedRepository>,
 }
 
 impl Listed {
@@ -224,6 +248,7 @@ pub enum ViewPart {
     Conflict(Conflict),
     /// One of this machine's spaces and its parent on another machine.
     BelowElsewhere(SpaceId, SpaceId),
+    Repository(ListedRepository),
 }
 
 impl HubView {
@@ -233,6 +258,7 @@ impl HubView {
             machines,
             spaces,
             conflicts,
+            repositories,
         } = self.directory;
         let below = self.below_elsewhere.into_iter();
         (std::iter::once(ViewPart::Here(self.machine)))
@@ -240,6 +266,7 @@ impl HubView {
             .chain(spaces.into_iter().flat_map(space_parts))
             .chain(conflicts.into_iter().map(ViewPart::Conflict))
             .chain(below.map(|(space, parent)| ViewPart::BelowElsewhere(space, parent)))
+            .chain(repositories.into_iter().map(ViewPart::Repository))
             .collect()
     }
 
@@ -267,6 +294,7 @@ impl HubView {
                     .push(request),
                 ViewPart::Conflict(conflict) => directory.conflicts.push(conflict),
                 ViewPart::BelowElsewhere(space, parent) => below_elsewhere.push((space, parent)),
+                ViewPart::Repository(listed) => directory.repositories.push(listed),
             }
         }
         Ok(Some(Self {

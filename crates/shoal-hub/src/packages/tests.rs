@@ -56,7 +56,7 @@ pub(crate) async fn report(hub: &Hub, member: &str, ids: &[&str]) {
         &StandIn::default(),
         &member,
         Report::Whole(spaces),
-        Vec::new(),
+        (Vec::new(), None),
     ))
     .await
     .unwrap();

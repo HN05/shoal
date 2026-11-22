@@ -319,8 +319,8 @@ pub enum Call {
     /// Install the latest release on the hub. Answered with
     /// [`Reply::Updated`].
     Update,
-    /// A machine's report of its spaces, with every number it holds
-    /// without a space, as for a removed space's issue proposals, which no
+    /// A machine's report of its spaces and repositories, with every
+    /// number it holds without a space, as for a removed space's issue proposals, which no
     /// other space may take, and its capacity, which the hub places new
     /// spaces by, once it measured it. Answered with [`Reply::Reported`]
     /// and the numbers the hub keeps for the machine.
@@ -330,6 +330,10 @@ pub enum Call {
         reserved: Vec<SpaceNumber>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         capacity: Option<shoal_schedule::placement::snapshot::Capacity>,
+        /// Every repository it registers, which replaces what the hub had
+        /// for it; none when they are as it last reported them.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repositories: Option<Vec<super::directory::RegisteredRepository>>,
     },
     /// What a machine says of itself, when its link opens and when its
     /// setting changes. Answered with [`Reply::Availability`].

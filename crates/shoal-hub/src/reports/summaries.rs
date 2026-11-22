@@ -13,7 +13,7 @@ use shoal_protocol::{
     agent::Agent,
     approvals::{ApprovalRequest, DecisionStatus},
     config::permissions::Permissions,
-    hub::directory::{RepositoryOrigin, SpaceSummary},
+    hub::directory::{RegisteredRepository, RepositoryOrigin, SpaceSummary},
     list_status::ListStatus,
     model::{ByKind, QueueEntry, Repository, RunningAgent, Space},
     threads::Thread,
@@ -110,6 +110,23 @@ impl Hub {
 }
 
 impl Hub {
+    /// Each repository this machine registers, as other machines tell it.
+    pub(super) async fn registrations(
+        &self,
+        daemon: &dyn Daemon,
+        origins: &mut Origins,
+    ) -> Result<Vec<RegisteredRepository>> {
+        let mut registered = Vec::new();
+        for repository in daemon.repositories().await? {
+            registered.push(RegisteredRepository {
+                repository: origins.of(&repository).await,
+                shared: repository.shared_url.is_some(),
+                id: repository.id,
+            });
+        }
+        Ok(registered)
+    }
+
     /// The effective permissions of `space`, which narrow those of the
     /// spaces below it on other machines; none while they cannot be read.
     async fn reported_permissions(

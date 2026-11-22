@@ -11,7 +11,7 @@ use shoal_ids::{
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::hub::{
     Member, MemberKind,
-    directory::{Conflict, Directory, Report},
+    directory::{Conflict, Directory, RegisteredRepository, Report},
     numbering::Numbering,
 };
 
@@ -20,27 +20,32 @@ use crate::{Hub, daemon::Daemon, packages::takeovers};
 mod fences;
 mod numbers;
 mod records;
+mod repositories;
 
 pub(super) use records::{forget, owner};
 
 impl Hub {
-    /// Record the machine `member`'s `report` of its spaces, and the
-    /// numbers it holds without a space, `reserved`, alerting the user to
-    /// each space ID it reported that another machine owns, deleting the
-    /// packages of the spaces that ended there, and return the numbers the
-    /// hub keeps for the machine.
+    /// Record the machine `member`'s `report` of its spaces, the numbers
+    /// it holds without a space, `reserved`, and its `repositories`, none
+    /// when they did not change, alerting the user to each space ID it
+    /// reported that another machine owns, deleting the packages of the
+    /// spaces that ended there, and return the numbers the hub keeps for
+    /// the machine.
     pub(super) async fn record_report(
         &self,
         daemon: &dyn Daemon,
         member: &MemberId,
         report: Report,
-        reserved: Vec<SpaceNumber>,
+        (reserved, repositories): (Vec<SpaceNumber>, Option<Vec<RegisteredRepository>>),
     ) -> Result<Numbering> {
         let member = member.clone();
         let (conflicts, numbering) = (self.store)
             .write(move |tx| {
                 numbers::reserve_held(tx, &member, &reserved)?;
                 let conflicts = records::apply(tx, &member, report)?;
+                if let Some(repositories) = &repositories {
+                    repositories::replace(tx, &member, repositories)?;
+                }
                 numbers::replace_held(tx, &member)?;
                 Ok((conflicts, numbers::kept_for(tx, &member)?))
             })
@@ -117,10 +122,12 @@ impl Hub {
 
     /// The directory this daemon keeps as the hub: its machines, with
     /// whether each is connected and when it was last seen, and their
-    /// spaces.
+    /// spaces and repositories.
     pub(super) async fn local_directory(&self, daemon: &dyn Daemon) -> Result<Directory> {
         let members = self.local_hub_overview(daemon).await?.members;
-        let (spaces, conflicts) = self.store.read(records::read).await?;
+        let ((spaces, conflicts), repositories) = (self.store)
+            .read(|tx| Ok((records::read(tx)?, repositories::read(tx)?)))
+            .await?;
         let machines = (members.into_iter())
             .filter(|member| member.kind == MemberKind::Machine)
             .collect();
@@ -128,6 +135,7 @@ impl Hub {
             machines,
             spaces,
             conflicts,
+            repositories,
         })
     }
 

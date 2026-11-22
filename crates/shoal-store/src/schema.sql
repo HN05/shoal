@@ -953,23 +953,6 @@ CREATE TABLE hub_takeovers (
     taken_at INTEGER NOT NULL
 );
 
-CREATE TABLE hub_shared_items (
-    kind TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value TEXT,
-    revision INTEGER NOT NULL,
-    PRIMARY KEY(kind, key)
-);
-
-CREATE TABLE shared_items (
-    kind TEXT NOT NULL,
-    key TEXT NOT NULL,
-    hub_key TEXT NOT NULL,
-    value TEXT,
-    revision INTEGER NOT NULL,
-    PRIMARY KEY(kind, key)
-);
-
 CREATE TABLE space_changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     space_id TEXT NOT NULL,
@@ -1052,6 +1035,30 @@ CREATE TABLE review_reopens (
     review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
     thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
     PRIMARY KEY(review_id, thread_id)
+);
+
+CREATE TABLE hub_shared_items (
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    revision INTEGER NOT NULL,
+    PRIMARY KEY(kind, key)
+);
+
+CREATE TABLE shared_items (
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    hub_key TEXT NOT NULL,
+    value TEXT,
+    revision INTEGER NOT NULL,
+    PRIMARY KEY(kind, key)
+);
+
+CREATE TABLE hub_repositories (
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    repository_id TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    PRIMARY KEY(member_id, repository_id)
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;

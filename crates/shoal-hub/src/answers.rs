@@ -100,11 +100,13 @@ impl Hub {
                 report,
                 reserved,
                 capacity,
+                repositories,
             } => {
                 ensure_machine(member)?;
                 self.capacities.keep(&member.id, &report, capacity);
+                let held = (reserved, repositories);
                 Reply::Reported(
-                    self.record_report(&**daemon, &member.id, report, reserved)
+                    self.record_report(&**daemon, &member.id, report, held)
                         .await?,
                 )
             }

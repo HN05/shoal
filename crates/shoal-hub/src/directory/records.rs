@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::hub::directory::{Conflict, Listed, Report, SpaceSummary};
 
-use super::{super::members, numbers};
+use super::{super::members, numbers, repositories};
 use crate::packages::takeovers;
 use crate::time::UnixTime;
 
@@ -41,11 +41,12 @@ pub(super) fn apply(
     Ok(conflicts)
 }
 
-/// Forget every space of `member`, as once the hub revoked it; another
-/// machine's copy takes the place of each it owned.
+/// Forget every space and repository of `member`, as once the hub revoked
+/// it; another machine's copy takes the place of each space it owned.
 pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute("DELETE FROM hub_space_claims WHERE member_id=?1", [member])?;
     numbers::forget(tx, member)?;
+    repositories::forget(tx, member)?;
     for space in held(tx, member)? {
         release(tx, member, &space)?;
     }
