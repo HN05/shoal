@@ -4,8 +4,7 @@
 //! refused, never carried over. The daemon also refreshes the branch of a
 //! workspace whose queued agent it admits, so the agent starts on what the
 //! branch builds on now.
-use anyhow::{Context, Result, bail, ensure};
-use shoal_protocol::model::ByKind;
+use anyhow::{Context, Result, ensure};
 
 use super::super::{manager::Manager, workspace::copies::Source};
 use crate::{
@@ -32,10 +31,7 @@ impl Manager {
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<Refreshed> {
-        let workspace = match self.space(selector).await?.by_kind() {
-            ByKind::Workspace(workspace) => workspace,
-            ByKind::Chat(_) => bail!("a chat has no worktree to refresh"),
-        };
+        let workspace = self.workspace(selector).await?;
         let target = self.refresh_target(&workspace, caller).await?;
         if matches!(target, Target::DefaultBranch) {
             self.sync_default_branch(&workspace).await;

@@ -87,14 +87,22 @@ async fn a_workspace_without_a_running_agent_has_none_to_carry_on() {
 }
 
 #[tokio::test]
-async fn a_chat_is_a_chat_already() {
+async fn converting_a_chat_refuses_it_as_no_workspace() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
     let talk = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
 
-    let refused = refusal(&manager, &talk.id).await;
+    let refused = manager
+        .convert_to_chat(&SpaceSelector::id(&talk.id), crate::model::chat_mode())
+        .await
+        .unwrap_err();
 
-    assert!(refused.contains("is a chat already"), "{refused}");
+    let reason = crate::refusal::Reason::of(&refused);
+    assert_eq!(
+        reason,
+        Some(crate::refusal::Reason::NotFound),
+        "{refused:#}"
+    );
 }
 
 #[tokio::test]
