@@ -102,6 +102,7 @@ const REQUESTS: &[&str] = &[
     r#"{"deliver_move":{"space":"fix"}}"#,
     r#"{"deliver_copy":{"space":"fix","destination":{"machine":"desk","resume":true}}}"#,
     r#"{"settle_move":{"space":"fix"}}"#,
+    r#"{"taken_records":{"space":"fix","carrying":"subtree"}}"#,
     r#"{"deliver_removed_space":{"space":"fix","destination":{"machine":"desk","resume":true},"carrying":"subtree","ticket":"t1"}}"#,
     r#"{"settle_removed_move":{"space":"fix","carried":["split"],"machine":"desk","ticket":"t1"}}"#,
     r#"{"read_held_package":{"space":"fix"}}"#,

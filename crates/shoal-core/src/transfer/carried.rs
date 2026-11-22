@@ -1,7 +1,7 @@
 //! The spaces a package carries with its space: those below it that its
 //! export carries and those in the worktree of a workspace among them or of
 //! its own, which go where it goes and open again after it, parents first.
-use crate::model::{EventCause, RemovedSpace, Space};
+use crate::model::{RemovedSpace, Space};
 use shoal_ids::space_ids::SpaceId;
 
 use super::{CarriedSpace, Carrying, PackagedSpace};
@@ -93,28 +93,6 @@ impl CarriedSpaceExt for CarriedSpace {
             space: <PackagedSpace as super::PackagedSpaceExt>::of(removed),
         }
     }
-}
-
-/// The records among `records` of the spaces the removal of the space `id`
-/// took, each after the records it waits for, when `carrying` carries the
-/// spaces below it; a selection leaves them here, below the space's record.
-pub fn taken_by_removal(
-    records: &[RemovedSpace],
-    id: &SpaceId,
-    carrying: &Carrying,
-) -> Vec<RemovedSpace> {
-    if let Carrying::Selected(_) = carrying {
-        return Vec::new();
-    }
-    let taken: Vec<&RemovedSpace> = (records.iter())
-        .filter(|record| record.cause == EventCause::Parent)
-        .collect();
-    let placed: Vec<Placed<'_>> = taken.iter().map(|record| Placed::removed(record)).collect();
-    let carried = carried_spaces(&placed, id, carrying);
-    (carried.iter())
-        .filter_map(|id| taken.iter().find(|record| &record.space_id == id))
-        .map(|record| (*record).clone())
-        .collect()
 }
 
 #[cfg(test)]

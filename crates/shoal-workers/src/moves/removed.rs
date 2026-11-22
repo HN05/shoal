@@ -28,29 +28,25 @@ pub(super) async fn move_to_machine(
     carrying: &Carrying,
     steps: &impl Steps,
 ) -> Result<SpaceMoved> {
-    let lock = MoveLock::take(paths, &space.space_id).await?;
-    let records = crate::client::removal::removed(paths).await?;
-    let carried = shoal_core::transfer::taken_by_removal(&records, &space.space_id, carrying);
-    let carried: Vec<SpaceId> = carried.into_iter().map(|record| record.space_id).collect();
-    let locks = lock_each(paths, &carried).await?;
-    let moved = deliver(paths, space, (destination, carrying), (&carried, steps)).await;
-    locks.into_iter().for_each(MoveLock::release);
-    lock.release();
+    let mut held = HeldLocks::default();
+    let moved = deliver(paths, space, (destination, carrying), (&mut held, steps)).await;
+    held.release();
     moved
 }
 
 /// Have the daemon pack the record of `space` with those `carrying`
 /// carries and deliver it to the joined machine `destination` names,
-/// settling at the hub an arrival that machine could not report, while it
-/// holds the move locks of the carried records `locked`.
+/// settling at the hub an arrival that machine could not report, taking
+/// each record's move lock into `held` first.
 async fn deliver(
     paths: &CommandPaths,
     space: &RemovedSpace,
     (destination, carrying): (&MachineDestination, &Carrying),
-    (locked, steps): (&[SpaceId], &impl Steps),
+    (held, steps): (&mut HeldLocks, &impl Steps),
 ) -> Result<SpaceMoved> {
-    steps.reached(Step::MoveDelivering).await;
     let selector = SpaceSelector::id(&space.space_id);
+    held.take_moving(paths, &space.space_id, carrying).await?;
+    steps.reached(Step::MoveDelivering).await;
     let ticket = MoveTicket::generate();
     let delivering = crate::client::transfer::deliver_removed(
         paths,
@@ -69,7 +65,7 @@ async fn deliver(
         RecordArrival::Unknown { error } => {
             let carried = carried_ids(&exported.manifest);
             // Each record's lock keeps its restore here off until it settles.
-            let _locks = lock_others(paths, &carried, locked).await?;
+            held.take_each(paths, &carried).await?;
             let records = (&selector, carried);
             settle(paths, records, (machine, &ticket), anyhow!(error), steps).await?
         }
@@ -85,27 +81,47 @@ async fn deliver(
     })
 }
 
-/// Take the move lock of each space `ids` names.
-async fn lock_each(paths: &CommandPaths, ids: &[SpaceId]) -> Result<Vec<MoveLock>> {
-    let mut locks = Vec::new();
-    for id in ids {
-        locks.push(MoveLock::take(paths, id).await?);
-    }
-    Ok(locks)
+/// The move locks a move of removed records holds, by the IDs of their
+/// spaces, until it releases them all, whichever way it ends.
+#[derive(Default)]
+struct HeldLocks {
+    ids: Vec<SpaceId>,
+    locks: Vec<MoveLock>,
 }
 
-/// Take the move lock of each space `ids` names that `locked` does not,
-/// whose lock is held already.
-async fn lock_others(
-    paths: &CommandPaths,
-    ids: &[SpaceId],
-    locked: &[SpaceId],
-) -> Result<Vec<MoveLock>> {
-    let others: Vec<SpaceId> = (ids.iter())
-        .filter(|id| !locked.contains(id))
-        .cloned()
-        .collect();
-    lock_each(paths, &others).await
+impl HeldLocks {
+    /// Take the move locks of the removed space `id` and of the spaces its
+    /// removal took that `carrying` carries, which its move takes along.
+    async fn take_moving(
+        &mut self,
+        paths: &CommandPaths,
+        id: &SpaceId,
+        carrying: &Carrying,
+    ) -> Result<()> {
+        self.take_each(paths, std::slice::from_ref(id)).await?;
+        let selector = SpaceSelector::id(id);
+        let taken = crate::client::removal::taken_records(paths, selector, carrying.clone());
+        let taken: Vec<SpaceId> = (taken.await?.into_iter())
+            .map(|record| record.space_id)
+            .collect();
+        self.take_each(paths, &taken).await
+    }
+
+    /// Take the move lock of each space `ids` names that is not held yet.
+    async fn take_each(&mut self, paths: &CommandPaths, ids: &[SpaceId]) -> Result<()> {
+        for id in ids {
+            if !self.ids.contains(id) {
+                self.locks.push(MoveLock::take(paths, id).await?);
+                self.ids.push(id.clone());
+            }
+        }
+        Ok(())
+    }
+
+    /// Release every lock held.
+    fn release(self) {
+        self.locks.into_iter().for_each(MoveLock::release);
+    }
 }
 
 /// The IDs of the spaces whose records the package `manifest` carries.

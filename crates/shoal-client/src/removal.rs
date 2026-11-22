@@ -10,6 +10,7 @@ use shoal_protocol::{
     cleanup::{ManualCleanup, Selection},
     model::{RemovedSpace, RestoredSpace},
     protocol::RemovalMethod,
+    transfer::Carrying,
 };
 
 /// What removing the workspace or chat `space` would do, with its
@@ -73,6 +74,16 @@ pub async fn removed(daemon: &impl Daemon) -> Result<Vec<RemovedSpace>> {
 pub async fn removed_space(daemon: &impl Daemon, space: SpaceSelector) -> Result<RemovedSpace> {
     let removed: Vec<RemovedSpace> = request(daemon, RemovalMethod::RemovedSpace { space }).await?;
     removed.into_iter().next().context("no such removed space")
+}
+
+/// The removal records of the spaces the removal of `space` took that
+/// `carrying` carries, whatever the caller may restore of them.
+pub async fn taken_records(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    carrying: Carrying,
+) -> Result<Vec<RemovedSpace>> {
+    request(daemon, RemovalMethod::TakenRecords { space, carrying }).await
 }
 
 /// Open the removed `space` again from its record.

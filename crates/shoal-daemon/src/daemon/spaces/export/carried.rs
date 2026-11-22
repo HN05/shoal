@@ -89,3 +89,25 @@ pub(super) fn ensure_packable(space: &Space, carried: &[Space]) -> Result<()> {
         .chain(carried)
         .try_for_each(super::worktree::ensure_packable)
 }
+
+/// The records among `records` of the spaces the removal of the space `id`
+/// took, each after the records it waits for, when `carrying` carries the
+/// spaces below it; a selection leaves them here, below the space's record.
+pub(super) fn taken_by_removal(
+    records: &[RemovedSpace],
+    id: &SpaceId,
+    carrying: &Carrying,
+) -> Vec<RemovedSpace> {
+    if let Carrying::Selected(_) = carrying {
+        return Vec::new();
+    }
+    let taken: Vec<&RemovedSpace> = (records.iter())
+        .filter(|record| record.cause == EventCause::Parent)
+        .collect();
+    let placed: Vec<Placed<'_>> = taken.iter().map(|record| Placed::removed(record)).collect();
+    let carried = crate::transfer::carried_spaces(&placed, id, carrying);
+    (carried.iter())
+        .filter_map(|id| taken.iter().find(|record| &record.space_id == id))
+        .map(|record| (*record).clone())
+        .collect()
+}

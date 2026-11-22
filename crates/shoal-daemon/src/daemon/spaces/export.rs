@@ -123,12 +123,7 @@ impl Manager {
         selector: &SpaceSelector,
         carrying: &Carrying,
     ) -> Result<Prepared> {
-        let records = self.removed_spaces().await?;
-        let removed = (records.iter())
-            .find(|removed| selector.given_id() == Some(&removed.space_id))
-            .with_context(|| format!("no space or restorable space {selector}"))?
-            .clone();
-        let carried = crate::transfer::taken_by_removal(&records, &removed.space_id, carrying);
+        let (removed, carried) = self.record_with_taken(selector, carrying).await?;
         let mut settings = Vec::new();
         for record in std::iter::once(&removed).chain(&carried) {
             settings.push(
@@ -138,6 +133,33 @@ impl Manager {
             );
         }
         self.prepare_removed(removed, carried, settings).await
+    }
+
+    /// The removal records of the spaces the removal of the space
+    /// `selector` names by ID took that `carrying` carries, which its
+    /// record's package carries.
+    pub(crate) async fn taken_records(
+        &self,
+        selector: &SpaceSelector,
+        carrying: &Carrying,
+    ) -> Result<Vec<RemovedSpace>> {
+        Ok(self.record_with_taken(selector, carrying).await?.1)
+    }
+
+    /// The removal record of the space `selector` names by ID, with those of
+    /// the spaces its removal took that `carrying` carries.
+    async fn record_with_taken(
+        &self,
+        selector: &SpaceSelector,
+        carrying: &Carrying,
+    ) -> Result<(RemovedSpace, Vec<RemovedSpace>)> {
+        let records = self.removed_spaces().await?;
+        let removed = (records.iter())
+            .find(|removed| selector.given_id() == Some(&removed.space_id))
+            .with_context(|| format!("no space or restorable space {selector}"))?
+            .clone();
+        let carried = carried::taken_by_removal(&records, &removed.space_id, carrying);
+        Ok((removed, carried))
     }
 
     /// Prepare the package of the space `removed` records with the spaces

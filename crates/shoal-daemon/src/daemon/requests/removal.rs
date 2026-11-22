@@ -58,6 +58,7 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::DeliverMove { .. }
         | RemovalMethod::DeliverCopy { .. }
         | RemovalMethod::SettleMove { .. }
+        | RemovalMethod::TakenRecords { .. }
         | RemovalMethod::DeliverRemovedSpace { .. }
         | RemovalMethod::SettleRemovedMove { .. } => false,
     }
@@ -203,6 +204,9 @@ pub(super) async fn handle(
         }
         RemovalMethod::SettleMove { space } => {
             Body::MoveSettled(manager.settle_move(&space).await?)
+        }
+        RemovalMethod::TakenRecords { space, carrying } => {
+            Body::RemovedSpaces(manager.taken_records(&space, &carrying).await?)
         }
         RemovalMethod::DeliverRemovedSpace {
             space,
@@ -383,6 +387,7 @@ impl Checked for RemovalMethod {
             | Self::RestoreSpace { .. }
             | Self::DropRestoredSessions { .. }
             | Self::ExportRemovedSpace { .. }
+            | Self::TakenRecords { .. }
             | Self::DeliverRemovedSpace { .. }
             | Self::SettleRemovedMove { .. }
             | Self::ImportPackage(..)
@@ -447,6 +452,7 @@ impl Scoped for RemovalMethod {
             // permission key, as a live space does.
             RemovalMethod::RestoreSpace { space }
             | RemovalMethod::RemovedSpace { space }
+            | RemovalMethod::TakenRecords { space, .. }
             | RemovalMethod::DeliverRemovedSpace { space, .. }
             | RemovalMethod::SettleRemovedMove { space, .. } => {
                 manager.ensure_restorable_by(space, caller).await?;

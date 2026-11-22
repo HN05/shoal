@@ -184,6 +184,13 @@ pub enum RemovalMethod {
     /// goes to claimed the space, which then no longer can when it did
     /// not; answered with how the hub settled it.
     SettleMove { space: SpaceSelector },
+    /// The removal records of the spaces the removal of `space` took that
+    /// `carrying` carries, which its record carries on a move.
+    TakenRecords {
+        space: SpaceSelector,
+        #[serde(default)]
+        carrying: crate::transfer::Carrying,
+    },
     /// Deliver the removal record of `space`, with those of the spaces its
     /// removal took that `carrying` carries, to the joined machine
     /// `destination` names, which records them as removed there, their
@@ -260,6 +267,7 @@ impl RemovalMethod {
             | Self::DeliverMove { .. }
             | Self::DeliverCopy { .. }
             | Self::SettleMove { .. }
+            | Self::TakenRecords { .. }
             | Self::DeliverRemovedSpace { .. }
             | Self::SettleRemovedMove { .. } => Forwarding::Never,
         }
@@ -289,6 +297,7 @@ impl RemovalMethod {
             | Self::RestoreSpace { .. }
             | Self::DropRestoredSessions { .. }
             | Self::ExportRemovedSpace { .. }
+            | Self::TakenRecords { .. }
             | Self::DeliverRemovedSpace { .. }
             | Self::SettleRemovedMove { .. } => None,
             // The hub sends it to the machine a move goes to.

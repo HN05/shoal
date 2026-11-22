@@ -19,7 +19,7 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 
-pub use carried::{CarriedSpaceExt, Placed, carried_spaces, taken_by_removal};
+pub use carried::{CarriedSpaceExt, Placed, carried_spaces};
 pub use shoal_protocol::transfer::{
     Arrived, CarriedRecord, CarriedSpace, Carrying, Consent, DeferredMove, ExportedSpace,
     ImportedMove, ImportedPackage, MachineDestination, Manifest, MoveDestination, MoveFailure,
