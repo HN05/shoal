@@ -575,3 +575,37 @@ async fn found_spaces_too_large_for_a_frame_arrive_in_pages() {
     };
     assert_eq!(ids(&joined), ids(&spaces));
 }
+
+#[test]
+fn an_answer_for_another_machine_names_the_machine_that_keeps_its_files() {
+    let alert: Alert = serde_json::from_value(json!({
+        "id": 1, "created_at": 0, "kind": "message", "sender": "user", "message": "See",
+        "read": false,
+        "files": [{"id": 3, "space": "w", "name": "chart.png", "path": "/repo/.attachments/chart.png"}],
+    }))
+    .unwrap();
+    let updates = crate::links::Updates {
+        alerts: vec![alert.clone()],
+        ..serde_json::from_value(json!({"updates": [], "timed_out": false})).unwrap()
+    };
+    let logged: crate::log::LogEntry = serde_json::from_value(json!({
+        "type": "file", "id": 4, "created_at": 0, "kind": "file_added", "repository_id": null,
+        "file": {
+            "id": 3, "space": {"id": "w", "name": "charts", "kind": "workspace"},
+            "source": "added", "name": "chart.png", "path": "/repo/.attachments/chart.png",
+            "bytes": 3, "created_at": 0, "attached_by": {"kind": "user"},
+        },
+    }))
+    .unwrap();
+    for mut body in [
+        Body::Alert(alert.clone()),
+        Body::Alerts(vec![alert]),
+        Body::PrUpdates(updates),
+        Body::LogEntries(vec![logged]),
+    ] {
+        body.files_kept_on("laptop");
+        let answered = serde_json::to_value(&body).unwrap().to_string();
+        assert!(answered.contains(r#""machine":"laptop""#), "{answered}");
+        assert!(!answered.contains("/repo/"), "{answered}");
+    }
+}

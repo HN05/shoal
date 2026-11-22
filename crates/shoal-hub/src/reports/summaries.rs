@@ -68,7 +68,10 @@ impl Hub {
             .filter(|saved| saved.unfinished)
             .map(|saved| saved.space)
             .collect();
-        let threads = daemon.open_threads().await?;
+        let mut threads = daemon.open_threads().await?;
+        // Other machines read them, where their files' paths name nothing.
+        let machine = self.machine_name(daemon).await;
+        (threads.iter_mut()).for_each(|thread| thread.files_kept_on(&machine));
         let mut approvals = daemon.approval_requests(None).await?;
         approvals.retain(|request| request.status == DecisionStatus::Pending);
         let running = running_agents(daemon.running_agents().await?);

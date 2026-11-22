@@ -26,6 +26,7 @@ impl Repositories {
         delete_shoal_dir(repo, Contents::ReviewRuns).await?;
         delete_shoal_dir(repo, Contents::GateRuns).await?;
         delete_shoal_dir(repo, Contents::Imports).await?;
+        delete_shoal_dir(repo, Contents::Fetched).await?;
         daemon.delete_kept_files(repo).await?;
         delete_checkout(repo.path.clone()).await?;
         delete_local_config(repo.workspaces_dir.clone()).await?;

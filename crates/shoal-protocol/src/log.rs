@@ -44,6 +44,14 @@ pub enum LogEntry {
 }
 
 impl LogEntry {
+    /// The entry as a machine other than `machine`, which keeps the file
+    /// it records, reads it.
+    pub fn files_kept_on(&mut self, machine: &str) {
+        if let Self::File(event) = self {
+            event.details.file.copy.kept_on(machine);
+        }
+    }
+
     /// The journal ID, which orders a log's entries.
     pub fn id(&self) -> EventCursor {
         match self {

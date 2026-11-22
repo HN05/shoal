@@ -504,7 +504,11 @@ impl Body {
             Self::AttachedFiles(files) => {
                 (files.iter_mut()).for_each(|file| file.copy.kept_on(machine));
             }
-            Self::Alerts(alerts) => {
+            Self::LogEntries(entries) => {
+                (entries.iter_mut()).for_each(|entry| entry.files_kept_on(machine));
+            }
+            Self::Alert(alert) => alert.files_kept_on(machine),
+            Self::Alerts(alerts) | Self::PrUpdates(crate::links::Updates { alerts, .. }) => {
                 (alerts.iter_mut()).for_each(|alert| alert.files_kept_on(machine));
             }
             Self::SpaceThread(thread) | Self::CurrentThread(Some(thread)) => {
