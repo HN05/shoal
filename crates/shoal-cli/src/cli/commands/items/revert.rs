@@ -1,6 +1,7 @@
 //! `shoal pr revert`: open a PR that undoes a merged one for a workspace or
 //! chat, through the forge where it reverts PRs, and otherwise from a new
 //! workspace whose branch reverts the merge with `git revert`.
+use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -38,22 +39,22 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;
+    let reverting = {
+        let (item, options) = (selector.item.clone(), options.clone());
+        Acting::request(move |space| items::revert_pull(space, item.clone(), options.clone()))
+    };
     let space = ui::select_space(
         ctx,
         selector.space,
-        ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
+        ui::Fallback::CurrentDirectory(&reverting),
+    );
+    let space = space.await?;
     let from = Reverting::of(ctx, space).await?;
     if from.forge_reverts(ctx).await? {
         let space = from.id().to_owned();
-        let outcome = items::revert_pull(
-            &ctx.paths,
-            SpaceSelector::id(&space),
-            selector.item,
-            options,
-        )
-        .await?;
+        let outcome = items::revert_pull(SpaceSelector::id(&space), selector.item, options)
+            .send(&ctx.paths)
+            .await?;
         return report(ctx, outcome, None);
     }
     let merged =

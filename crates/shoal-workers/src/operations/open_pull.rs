@@ -31,7 +31,9 @@ pub(super) async fn push_and_open(
         push(paths, &workspace).await?;
         reporter.step(Step::Pushed).await?;
     }
-    crate::client::items::open_pull(paths, SpaceSelector::id(&workspace.id), options, held).await
+    crate::client::items::open_pull(SpaceSelector::id(&workspace.id), options, held)
+        .send(paths)
+        .await
 }
 
 /// Push to the branch's push remote as a tracked command under the agent

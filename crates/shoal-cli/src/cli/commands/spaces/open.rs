@@ -1,4 +1,5 @@
 //! `shoal open`: handing a space to a desktop app.
+use crate::cli::ui::Acting;
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result, ensure};
@@ -31,7 +32,8 @@ pub(in crate::cli::commands) async fn open(
     let selector = ui::select_space(
         ctx,
         space,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        // The app the space opens in runs on this machine.
+        Fallback::CurrentDirectory(&Acting::request(shoal_workers::execution::running_command)),
     )
     .await?;
     let space = read(ctx, &selector).await?;

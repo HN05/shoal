@@ -109,18 +109,16 @@ pub fn seconds_left(deadline: Option<Instant>) -> Option<u64> {
 
 /// Open the PR of `workspace`'s branch with `options`; `push_held` says
 /// the `push` permission held the branch's push back for approval.
-pub async fn open_pull(
-    daemon: &impl Daemon,
+pub fn open_pull(
     workspace: SpaceSelector,
     options: PullOptions,
     push_held: bool,
-) -> Result<OpenOutcome> {
-    let method = ItemMethod::OpenPull {
+) -> Prepared<OpenOutcome> {
+    Prepared::new(ItemMethod::OpenPull {
         workspace,
         options,
         push_held,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Open `issue` in the `target` repository, linking it to the space when
@@ -141,18 +139,16 @@ pub async fn open_issue(
 
 /// Have the forge open a PR that reverts the merged PR `item`, by default
 /// `space`'s linked one.
-pub async fn revert_pull(
-    daemon: &impl Daemon,
+pub fn revert_pull(
     space: SpaceSelector,
     item: Option<ItemInput>,
     options: PullOptions,
-) -> Result<OpenOutcome> {
-    let method = ItemMethod::RevertPull {
+) -> Prepared<OpenOutcome> {
+    Prepared::new(ItemMethod::RevertPull {
         space,
         item,
         options,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Carry out `action` on `item` in the `target` repository, or on the

@@ -1,5 +1,6 @@
 //! `shoal pr open` and `shoal issue open`: push and open or find a PR, or open
 //! an issue, and report what the repository's approval rules made of it.
+use crate::cli::ui::Acting;
 use anyhow::Result;
 
 use super::{content::read_content, context::select_open_context};
@@ -25,7 +26,10 @@ pub(super) async fn open_pr(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        ui::Fallback::CurrentDirectory(&Acting::request({
+            let options = options.clone();
+            move |workspace| crate::client::items::open_pull(workspace, options.clone(), false)
+        })),
     )
     .await?;
     let opened = match publish(ctx, workspace, options).await? {
