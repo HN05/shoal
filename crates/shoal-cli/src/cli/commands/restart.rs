@@ -21,7 +21,7 @@ mod progress;
 mod selection;
 mod target;
 
-pub(super) use cancel::cancel;
+pub(super) use cancel::{cancel, cancelling};
 use progress::Progress;
 
 /// How many restarts the command asks for at once, each holding one of the
@@ -35,10 +35,7 @@ pub(super) async fn run(
     agent: Option<Agent>,
     restart: AgentRestart,
 ) -> Result<i32> {
-    let restarting = {
-        let restart = restart.clone();
-        Acting::request(move |space| crate::client::agents::restart(space, restart.clone()))
-    };
+    let restarting = restarting();
     let selection = selection::load(ctx, (targets, machines), agent.as_ref(), &restarting);
     let selection = selection.await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
@@ -156,4 +153,10 @@ async fn with_restore(ctx: &Context, space: &Target, error: anyhow::Error) -> an
         )),
         false => error,
     }
+}
+
+/// What restarting a space's agents sends for each space a picker picks;
+/// how they restart decides nothing of which spaces it reaches.
+pub(super) fn restarting() -> Acting {
+    Acting::request(|space| crate::client::agents::restart(space, AgentRestart::default()))
 }

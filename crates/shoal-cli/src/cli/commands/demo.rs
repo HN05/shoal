@@ -11,7 +11,7 @@ mod stop;
 
 use anyhow::{Result, ensure};
 
-use crate::cli::{args::sessions::DemoCommand, context::Context};
+use crate::cli::{args::sessions::DemoCommand, context::Context, ui::Acting};
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn run(
@@ -61,6 +61,17 @@ pub(super) async fn run(
             keys,
             workspace,
         }) => screen::send(ctx, workspace, &name, &keys).await,
+    }
+}
+
+/// What the demo `command` sends for the workspace a picker picks; opening
+/// and listing demos pick none.
+pub(super) fn acting(command: Option<&DemoCommand>) -> Option<Acting> {
+    match command {
+        Some(DemoCommand::Start { .. }) => Some(start::starting()),
+        Some(DemoCommand::Stop { .. }) => Some(stop::stopping()),
+        Some(DemoCommand::Screen { .. } | DemoCommand::Send { .. }) => Some(lookup::looking()),
+        Some(DemoCommand::Ls { .. }) | None => None,
     }
 }
 

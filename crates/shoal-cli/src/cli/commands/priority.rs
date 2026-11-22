@@ -18,11 +18,17 @@ pub(super) async fn run(
     space: Option<SpaceSelector>,
     value: Priority,
 ) -> Result<i32> {
-    let setting = Acting::request(move |space| priority::set(space, value));
+    let setting = setting(value);
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&setting)).await?;
     let set = priority::set(space, value).send(&ctx.paths).await?;
     ctx.show(&set, |set| {
         outln!("{}: priority {}.", set.space, set.priority)
     })?;
     Ok(0)
+}
+
+/// What setting `value` as a space's priority sends for the space a
+/// picker picks.
+pub(super) fn setting(value: Priority) -> Acting {
+    Acting::request(move |space| priority::set(space, value))
 }

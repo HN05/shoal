@@ -21,9 +21,7 @@ pub(super) async fn named(
     let id = ui::select_workspace(
         ctx,
         workspace,
-        // A demo's screen is read, and its keys typed, through this
-        // machine's terminal host.
-        Fallback::CurrentDirectory(&Acting::here(crate::client::workspaces::inspect)),
+        Fallback::CurrentDirectory(&looking()),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(id.clone())
@@ -92,4 +90,11 @@ pub(super) async fn running(ctx: &Context, workspace: Option<&Workspace>) -> Res
         workspace.map(|workspace| SpaceSelector::id(&workspace.id)),
     )
     .await
+}
+
+/// What finding a running demo reads of the workspace a picker picks; a
+/// demo's screen is read, and its keys typed, through this machine's
+/// terminal host.
+pub(super) fn looking() -> Acting {
+    Acting::here(crate::client::workspaces::inspect)
 }

@@ -70,12 +70,7 @@ pub(super) async fn open(
     let to = match space {
         None if from.is_some() => None,
         space => {
-            let opening = {
-                let (name, from) = (name.clone(), from.clone());
-                Acting::request(move |to| {
-                    threads::open(name.clone(), kind, Some(to), from.clone(), Vec::new())
-                })
-            };
+            let opening = opening(kind);
             Some(ui::select_space(ctx, space, Fallback::CurrentDirectory(&opening)).await?)
         }
     };
@@ -203,6 +198,13 @@ fn linked_thread(args: &[String], linked: bool) -> Result<ItemNumber> {
         ensure!(related, "a thread is linked as related (got {relation})");
     }
     number.parse()
+}
+
+/// What opening a thread of `kind` sends for the space a picker picks as
+/// its holder; its name and opener decide nothing of which spaces it
+/// reaches.
+pub(super) fn opening(kind: ThreadKind) -> Acting {
+    Acting::request(move |to| threads::open(String::new(), kind, Some(to), None, Vec::new()))
 }
 
 #[cfg(test)]

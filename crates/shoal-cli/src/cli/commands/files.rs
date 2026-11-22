@@ -34,11 +34,7 @@ pub(super) async fn list(
     listing: Listing,
 ) -> Result<i32> {
     let menu = listing == Listing::Menu && ctx.interactive_output();
-    // The menu prints and opens the kept copies from this machine's disk.
-    let listing_files = match menu {
-        true => Acting::here(crate::client::files::list),
-        false => Acting::request(crate::client::files::list),
-    };
+    let listing_files = showing(menu);
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&listing_files)).await?;
     let files = crate::client::files::list(space.clone())
         .send(&ctx.paths)
@@ -74,10 +70,7 @@ pub(super) async fn add(
     files: Vec<String>,
 ) -> Result<i32> {
     let files = super::send::attachments(&files)?;
-    let adding = {
-        let files = files.clone();
-        Acting::request(move |space| crate::client::files::add(space, files.clone()))
-    };
+    let adding = adding();
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&adding)).await?;
     let added = crate::client::files::add(space.clone(), files)
         .send(&ctx.paths)
@@ -105,12 +98,7 @@ pub(super) async fn remove(
 ) -> Result<i32> {
     // Names and records belong to one workspace or chat, so they offer no
     // choice of every workspace.
-    let removing = {
-        let (names, ids) = (names.clone(), ids.clone());
-        Acting::request(move |space| {
-            crate::client::files::remove(Some(space), names.clone(), ids.clone())
-        })
-    };
+    let removing = removing();
     let space = if names.is_empty() && ids.is_empty() {
         ui::select_space_filter(ctx, filter, &removing).await?
     } else {
@@ -213,4 +201,24 @@ fn source_label(source: FileSource) -> &'static str {
         FileSource::Alert => "alert",
         FileSource::Thread => "thread",
     }
+}
+
+/// What listing a space's files sends for the space a picker picks; the
+/// `menu` prints and opens the kept copies from this machine's disk.
+pub(super) fn showing(menu: bool) -> Acting {
+    match menu {
+        true => Acting::here(crate::client::files::list),
+        false => Acting::request(crate::client::files::list),
+    }
+}
+
+/// What adding files sends for the space a picker picks; the files decide
+/// nothing of which spaces it reaches.
+pub(super) fn adding() -> Acting {
+    Acting::request(|space| crate::client::files::add(space, Vec::new()))
+}
+
+/// What removing files sends for the space a picker picks.
+pub(super) fn removing() -> Acting {
+    Acting::request(|space| crate::client::files::remove(Some(space), Vec::new(), Vec::new()))
 }

@@ -267,9 +267,7 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
         &chats,
         Offered::Spaces,
         "workspace",
-        &Acting::request(|space| {
-            crate::client::attaching::attach_request(space, Default::default())
-        }),
+        &attaching(),
     )
     .await?;
     match crate::client::spaces::locate(&ctx.paths, SpaceSelector::id(&id)).await? {
@@ -314,4 +312,10 @@ pub(in crate::cli::commands) async fn checkout_chat(
         (Some(only), None) => Some(only.clone()),
         _ => None,
     })
+}
+
+/// What attaching to a space's agent session sends for the space a picker
+/// picks.
+pub(super) fn attaching() -> Acting {
+    Acting::request(|space| crate::client::attaching::attach_request(space, Default::default()))
 }

@@ -78,7 +78,7 @@ pub(super) async fn start(
     let id = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&Acting::here(crate::client::executions::command_run)),
+        Fallback::CurrentDirectory(&starting()),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(id.clone())
@@ -288,6 +288,12 @@ async fn not_started(launch: &Launch) -> anyhow::Error {
             .map(|lines| format!(":\n{lines}"))
             .unwrap_or_default()
     )
+}
+
+/// What starting a demo sends for the workspace a picker picks: its
+/// command's run there, on this machine.
+pub(super) fn starting() -> Acting {
+    Acting::here(crate::client::executions::command_run)
 }
 
 #[cfg(test)]

@@ -27,10 +27,7 @@ pub(super) async fn run(
     sleep: Option<Sleep>,
     timer: Option<WakeTimer>,
 ) -> Result<i32> {
-    let sleeping = {
-        let timer = timer.clone();
-        Acting::request(move |space| sleep::set(space, sleep, timer.clone()))
-    };
+    let sleeping = sleeping();
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&sleeping)).await?;
     let slept = sleep::set(space, sleep, timer).send(&ctx.paths).await?;
     ctx.show(&slept, |slept| outln!("{}", summary(slept)))?;
@@ -71,6 +68,13 @@ fn summary(slept: &Slept) -> String {
         Some(at) => format!("{sleep} Its timer wakes it at {}.", at.local_minutes()),
         None => sleep,
     }
+}
+
+/// What putting a space's agent to sleep, or waking it, sends for the
+/// space a picker picks; how it sleeps decides nothing of which spaces it
+/// reaches.
+pub(super) fn sleeping() -> Acting {
+    Acting::request(|space| sleep::set(space, None, None))
 }
 
 #[cfg(test)]

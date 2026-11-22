@@ -21,7 +21,7 @@ pub(super) async fn stop(
     let id = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&Acting::request(crate::client::workspaces::inspect)),
+        Fallback::CurrentDirectory(&stopping()),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(id.clone())
@@ -50,4 +50,9 @@ pub(super) async fn stop_named(
     name: Option<String>,
 ) -> Result<()> {
     demos::stop(&ctx.paths, SpaceSelector::id(&workspace.id), name).await
+}
+
+/// What stopping a demo reads of the workspace a picker picks.
+pub(super) fn stopping() -> Acting {
+    Acting::request(crate::client::workspaces::inspect)
 }

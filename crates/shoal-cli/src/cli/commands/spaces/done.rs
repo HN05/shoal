@@ -13,11 +13,8 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// The space `space` names, else the current chat or workspace, else a
 /// picked one: a running chat's ID, or else a workspace.
-async fn selected(ctx: &Context, space: Option<SpaceSelector>, done: &Done) -> Result<Selected> {
-    let marking = {
-        let done = done.clone();
-        Acting::request(move |space| assignments::mark_done(space, done.clone()))
-    };
+async fn selected(ctx: &Context, space: Option<SpaceSelector>) -> Result<Selected> {
+    let marking = marking();
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&marking)).await?;
     Ok(
         match crate::client::spaces::present_space(&ctx.paths, &space)
@@ -39,7 +36,7 @@ pub(in crate::cli::commands) async fn undone(
     ctx: &Context,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let undoing = Acting::request(assignments::undo_done);
+    let undoing = undoing();
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&undoing)).await?;
     let withdrawn = assignments::undo_done(space.clone())
         .send(&ctx.paths)
@@ -57,7 +54,7 @@ pub(in crate::cli::commands) async fn done(
     space: Option<SpaceSelector>,
     done: Done,
 ) -> Result<i32> {
-    let selected = selected(ctx, space, &done).await?;
+    let selected = selected(ctx, space).await?;
     let space = match &selected {
         Selected::Chat(chat) => SpaceSelector::id(chat),
         Selected::Workspace(workspace) => workspace.clone(),
@@ -73,4 +70,16 @@ pub(in crate::cli::commands) async fn done(
     };
     ctx.emit(&message, &completion)?;
     Ok(0)
+}
+
+/// What recording a space's completion sends for the space a picker picks;
+/// how it completes decides nothing of which spaces it reaches.
+pub(in crate::cli::commands) fn marking() -> Acting {
+    Acting::request(|space| assignments::mark_done(space, Done::default()))
+}
+
+/// What withdrawing a space's completion sends for the space a picker
+/// picks.
+pub(in crate::cli::commands) fn undoing() -> Acting {
+    Acting::request(assignments::undo_done)
 }

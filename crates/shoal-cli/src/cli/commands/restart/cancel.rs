@@ -20,8 +20,7 @@ pub(in crate::cli::commands) async fn cancel(
     machines: &[String],
 ) -> Result<i32> {
     let selector = targets.all || !machines.is_empty();
-    let cancelling = Acting::request(crate::client::agents::cancel_restart);
-    let spaces = selection::spaces(ctx, targets, machines, &cancelling).await?;
+    let spaces = selection::spaces(ctx, targets, machines, &cancelling()).await?;
     let spaces = spaces.into_targets();
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         selection::ensure_below(&spaces)?;
@@ -78,4 +77,10 @@ fn summary(cancelled: &CancelledRestarts) -> String {
         true => "No restarts to cancel".into(),
         false => lines.join("\n"),
     }
+}
+
+/// What cancelling a space's recorded restart sends for each space a
+/// picker picks.
+pub(in crate::cli::commands) fn cancelling() -> Acting {
+    Acting::request(crate::client::agents::cancel_restart)
 }

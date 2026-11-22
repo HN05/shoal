@@ -117,14 +117,7 @@ pub(super) async fn send(
     let message = message_text(message, body_file, !attach.is_empty())?;
     let attachments = attachments(&attach)?;
     let from = super::alerts::sending_space(ctx).await?;
-    let sending = {
-        let (from, message, attachments) = (from.clone(), message.clone(), attachments.clone());
-        Acting::request(move |space| {
-            let to = AlertTarget::Space { space };
-            alerts::send(to, from.clone(), message.clone(), attachments.clone())
-        })
-    };
-    let to = target(ctx, recipients, &sending).await?;
+    let to = target(ctx, recipients, &alerting()).await?;
     let sent = (alerts::send(to, from, message, attachments))
         .send(&ctx.paths)
         .await?;
@@ -148,13 +141,7 @@ pub(super) async fn send_in_chat(
     );
     let attachments = attachments(&attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
-    let marking = {
-        let attachments = attachments.clone();
-        Acting::request(move |space| {
-            alerts::send_in_chat(AlertTarget::Space { space }, attachments.clone())
-        })
-    };
-    let to = target(ctx, recipients, &marking).await?;
+    let to = target(ctx, recipients, &marking()).await?;
     let marked = (alerts::send_in_chat(to, attachments))
         .send(&ctx.paths)
         .await?;
@@ -287,6 +274,20 @@ fn message_text(
 }
 
 pub(in crate::cli) mod in_chat;
+
+/// What sending an alert sends for the space a picker picks; its sender
+/// and text decide nothing of which spaces it reaches.
+pub(super) fn alerting() -> Acting {
+    Acting::request(|space| {
+        alerts::send(AlertTarget::Space { space }, None, String::new(), Vec::new())
+    })
+}
+
+/// What marking a turn's final message as an alert sends for the space a
+/// picker picks.
+pub(super) fn marking() -> Acting {
+    Acting::request(|space| alerts::send_in_chat(AlertTarget::Space { space }, Vec::new()))
+}
 
 #[cfg(test)]
 mod tests;
