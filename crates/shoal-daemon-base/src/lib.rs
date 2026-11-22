@@ -20,6 +20,8 @@ pub mod events;
 pub mod failures;
 pub mod file_access;
 pub mod file_copies;
+#[cfg(target_os = "macos")]
+pub mod frameworks;
 pub mod gates;
 pub mod item_numbers;
 pub mod jobs;

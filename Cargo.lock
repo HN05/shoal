@@ -2669,7 +2669,6 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "libc",
  "ring",
  "rusqlite",
  "rustls",

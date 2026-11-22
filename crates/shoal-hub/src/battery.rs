@@ -99,11 +99,12 @@ fn system_battery_power(class: &std::path::Path) -> Option<Power> {
 }
 
 /// IOKit's power-source query, with IOKit and Core Foundation loaded at run
-/// time, so that the binary links only libSystem: the release cross-builds
-/// macOS against an SDK without Apple frameworks.
+/// time.
 #[cfg(target_os = "macos")]
 mod iokit {
     use std::ffi::{CStr, c_char, c_void};
+
+    use shoal_daemon_base::frameworks::Library;
 
     type CFTypeRef = *const c_void;
     type CFIndex = isize;
@@ -174,34 +175,6 @@ mod iokit {
                     release: core_foundation.function(c"CFRelease")?,
                 })
             }
-        }
-    }
-
-    /// A framework `dlopen` loaded, never closed, so that the functions read
-    /// from it stay valid.
-    struct Library(*mut c_void);
-
-    impl Library {
-        fn open(path: &CStr) -> Option<Self> {
-            // SAFETY: `path` is NUL-terminated.
-            let handle = unsafe { libc::dlopen(path.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL) };
-            (!handle.is_null()).then_some(Self(handle))
-        }
-
-        /// The function `name` names, none when the library lacks it.
-        ///
-        /// # Safety
-        ///
-        /// `F` is a function pointer type matching the symbol's signature.
-        unsafe fn function<F: Copy>(&self, name: &CStr) -> Option<F> {
-            const {
-                assert!(size_of::<F>() == size_of::<*mut c_void>());
-            }
-            // SAFETY: the handle came from `dlopen`; `name` is NUL-terminated.
-            let symbol = unsafe { libc::dlsym(self.0, name.as_ptr()) };
-            // SAFETY: the caller guarantees `F` is the symbol's function type,
-            // which has a pointer's size.
-            (!symbol.is_null()).then(|| unsafe { std::mem::transmute_copy(&symbol) })
         }
     }
 
