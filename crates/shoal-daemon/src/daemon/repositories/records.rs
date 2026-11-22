@@ -101,20 +101,12 @@ impl Records for RepositoryRecords {
         destination: &Path,
     ) -> Result<()> {
         let (from, to) = (source.to_string_lossy(), destination.to_string_lossy());
-        let inside =
-            |column: &str| format!("({column}=?2 OR substr({column},1,length(?2)+1)=?2||'/')");
-        let rebased = |column: &str| {
-            format!(
-                "CASE WHEN {} THEN ?3||substr({column},length(?2)+1) ELSE {column} END",
-                inside(column)
-            )
-        };
         tx.execute(
             &format!(
                 "UPDATE workspaces SET path={}, git_dir={}
                     WHERE id IN (SELECT id FROM spaces WHERE repository_id=?1)",
-                rebased("path"),
-                rebased("git_dir")
+                store::path_rebased("path"),
+                store::path_rebased("git_dir")
             ),
             params![id, from, to],
         )?;

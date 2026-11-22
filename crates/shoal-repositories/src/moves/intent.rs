@@ -117,15 +117,6 @@ impl Repositories {
         let (from, to) = (utf8(&source)?, utf8(&destination)?);
         self.store
             .write(move |tx| {
-                let inside = |column: &str| {
-                    format!("({column}=?2 OR substr({column},1,length(?2)+1)=?2||'/')")
-                };
-                let rebased = |column: &str| {
-                    format!(
-                        "CASE WHEN {} THEN ?3||substr({column},length(?2)+1) ELSE {column} END",
-                        inside(column)
-                    )
-                };
                 // A local registration's source names its checkout, perhaps
                 // spelled differently; a URL source stays.
                 tx.execute(
@@ -133,10 +124,10 @@ impl Repositories {
                         "UPDATE repositories SET path={}, workspaces_dir={},
                             source=CASE WHEN substr(source,1,1)='/' AND {} THEN {} ELSE source END
                             WHERE id=?1",
-                        rebased("path"),
-                        rebased("workspaces_dir"),
-                        inside("path"),
-                        rebased("path")
+                        store::path_rebased("path"),
+                        store::path_rebased("workspaces_dir"),
+                        store::path_inside("path"),
+                        store::path_rebased("path")
                     ),
                     params![id, from, to],
                 )?;

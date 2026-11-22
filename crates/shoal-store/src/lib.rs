@@ -154,6 +154,21 @@ pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)
 }
 
+/// SQL that holds when the path in `column` is the directory `?2` or lies
+/// inside it.
+pub fn path_inside(column: &str) -> String {
+    format!("({column}=?2 OR substr({column},1,length(?2)+1)=?2||'/')")
+}
+
+/// SQL for the path in `column` with the directory `?2` it is or lies in
+/// replaced by `?3`, and for any other path unchanged.
+pub fn path_rebased(column: &str) -> String {
+    format!(
+        "CASE WHEN {} THEN ?3||substr({column},length(?2)+1) ELSE {column} END",
+        path_inside(column)
+    )
+}
+
 /// Refuse a new workspace path that contains or lies inside a recorded
 /// workspace's path, whether or not that directory still exists.
 pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result<()> {
