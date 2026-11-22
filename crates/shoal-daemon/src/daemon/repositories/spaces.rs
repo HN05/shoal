@@ -100,11 +100,6 @@ impl Spaces for Manager {
     ) -> BoxFuture<'a, Result<Option<RepositoryRemoval>>> {
         Box::pin(self.conversion_handovers.hold(work))
     }
-
-    fn local_config_changed(&self) {
-        // The runner follows `runner.enabled` as soon as it changes.
-        self.runner.jobs().settings_changed();
-    }
 }
 
 /// Refuse a workspace the repository's removal cannot take: one an

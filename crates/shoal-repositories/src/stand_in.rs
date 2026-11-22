@@ -30,7 +30,7 @@ use shoal_protocol::{
 
 use crate::{
     Repositories,
-    daemon::{Activity, Agents, Forges, Occupants, Records, Spaces},
+    daemon::{Activity, Agents, Followers, Forges, Occupants, Records, Spaces},
     moves::{Running, chats::OutsideChat},
 };
 
@@ -129,7 +129,9 @@ impl Spaces for StandIn {
     ) -> BoxFuture<'a, Result<Option<RepositoryRemoval>>> {
         work
     }
+}
 
+impl Followers for StandIn {
     fn local_config_changed(&self) {}
 }
 

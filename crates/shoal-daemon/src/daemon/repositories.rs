@@ -1,9 +1,11 @@
 //! What the daemon gives the repositories' service: the spaces whose
-//! settings it reads and that a removal takes, the subsystems that work and
+//! settings it reads and that a removal takes, those who follow a local
+//! config, the subsystems that work and
 //! keep files in a repository's directories, the agents that trust its
 //! paths, the forges a contribution forks on, and the records of other
 //! subsystems it reads and writes.
 mod agents;
+mod followers;
 mod forges;
 mod occupants;
 mod records;

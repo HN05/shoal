@@ -1,5 +1,6 @@
 //! What the repositories need of the rest of the daemon, which implements
-//! it: the spaces whose settings they read and that a removal takes, the
+//! it: the spaces whose settings they read and that a removal takes, those
+//! who follow a repository's local config, the
 //! subsystems that work and keep files in a repository's directories, the
 //! agents that trust its paths, the coordinators alerts about a space
 //! reach, the forge a contribution forks on, and the records of other
@@ -85,9 +86,11 @@ pub trait Spaces: Send + Sync {
         &'a self,
         work: BoxFuture<'a, Result<Option<RepositoryRemoval>>>,
     ) -> BoxFuture<'a, Result<Option<RepositoryRemoval>>>;
+}
 
-    /// Tell those that follow a repository's local config, such as the
-    /// runner, that it changed.
+/// Those who follow a repository's local config, such as the runner.
+pub trait Followers: Send + Sync {
+    /// Tell them that a local config changed.
     fn local_config_changed(&self);
 }
 
@@ -153,9 +156,9 @@ pub trait Forges: Send + Sync {
 }
 
 /// Everything the repositories need of the daemon.
-pub trait Daemon: Spaces + Occupants + Agents + Forges + Coordinators {}
+pub trait Daemon: Spaces + Followers + Occupants + Agents + Forges + Coordinators {}
 
-impl<T> Daemon for T where T: Spaces + Occupants + Agents + Forges + Coordinators {}
+impl<T> Daemon for T where T: Spaces + Followers + Occupants + Agents + Forges + Coordinators {}
 
 /// The records of other subsystems the repositories read and write in
 /// their own transactions.
