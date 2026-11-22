@@ -49,7 +49,7 @@ use crate::{
     forge::{ForgeRepo, items::reference::ItemRef, items::review::NewReview},
     git,
     model::{Repository, Space, Workspace},
-    shoal_dirs::{Contents, ShoalDir},
+    shoal_dirs::{self, Contents, ShoalDir},
     test_support,
 };
 
@@ -64,6 +64,14 @@ pub(crate) struct Fixture {
     pub(crate) repository: Repository,
     /// The repository's directory of review runs.
     pub(crate) runs: ShoalDir,
+}
+
+impl Drop for Fixture {
+    /// Delete the root with the read-only checkouts of the reviews still
+    /// running, which the temporary directory cannot delete on its own.
+    fn drop(&mut self) {
+        let _ = shoal_dirs::remove_dir_opening(self.root.path());
+    }
 }
 
 impl Fixture {
