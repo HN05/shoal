@@ -1,0 +1,38 @@
+//! systemd-logind's manager over the system bus, whose delay locks and
+//! announcements hold off a shutdown until the daemon is ready.
+use std::time::Duration;
+
+use zbus::OwnedFd;
+
+use super::log;
+
+#[zbus::proxy(
+    interface = "org.freedesktop.login1.Manager",
+    default_service = "org.freedesktop.login1",
+    default_path = "/org/freedesktop/login1"
+)]
+pub(super) trait Login {
+    fn inhibit(&self, what: &str, who: &str, why: &str, mode: &str) -> zbus::Result<OwnedFd>;
+
+    #[zbus(property, name = "InhibitDelayMaxUSec")]
+    fn inhibit_delay_max_usec(&self) -> zbus::Result<u64>;
+
+    #[zbus(signal)]
+    fn prepare_for_shutdown(&self, start: bool) -> zbus::Result<()>;
+}
+
+/// logind's own default for how long a delay lock holds a shutdown off,
+/// for when it does not say.
+const DEFAULT_DELAY_LIMIT: Duration = Duration::from_secs(5);
+
+/// How long logind holds a shutdown off for a delay lock, as `proxy`
+/// reads it, logging under `lock` when it cannot.
+pub(super) async fn delay_limit(proxy: &LoginProxy<'_>, lock: &str) -> Duration {
+    match proxy.inhibit_delay_max_usec().await {
+        Ok(limit) => Duration::from_micros(limit),
+        Err(error) => {
+            log!("{lock}: logind's delay limit unreadable: {error:#}");
+            DEFAULT_DELAY_LIMIT
+        }
+    }
+}

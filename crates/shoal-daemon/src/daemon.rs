@@ -52,6 +52,8 @@ mod leases;
 pub mod leftovers;
 mod lifecycle;
 pub mod links;
+#[cfg(target_os = "linux")]
+mod logind;
 mod logs;
 pub mod manager;
 mod moves;

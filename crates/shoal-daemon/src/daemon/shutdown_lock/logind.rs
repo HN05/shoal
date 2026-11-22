@@ -6,26 +6,10 @@ use futures_util::StreamExt;
 use zbus::OwnedFd;
 
 use super::LoginManager;
-use crate::daemon::log;
-
-#[zbus::proxy(
-    interface = "org.freedesktop.login1.Manager",
-    default_service = "org.freedesktop.login1",
-    default_path = "/org/freedesktop/login1"
-)]
-trait Login {
-    fn inhibit(&self, what: &str, who: &str, why: &str, mode: &str) -> zbus::Result<OwnedFd>;
-
-    #[zbus(property, name = "InhibitDelayMaxUSec")]
-    fn inhibit_delay_max_usec(&self) -> zbus::Result<u64>;
-
-    #[zbus(signal)]
-    fn prepare_for_shutdown(&self, start: bool) -> zbus::Result<()>;
-}
-
-/// logind's own default for how long a delay lock holds a shutdown off,
-/// for when it does not say.
-const DEFAULT_DELAY_LIMIT: Duration = Duration::from_secs(5);
+use crate::daemon::{
+    log,
+    logind::{LoginProxy, PrepareForShutdownStream, delay_limit},
+};
 
 pub(super) struct Logind {
     proxy: LoginProxy<'static>,
@@ -76,13 +60,7 @@ impl LoginManager for Logind {
     }
 
     async fn delay_limit(&self) -> Duration {
-        match self.proxy.inhibit_delay_max_usec().await {
-            Ok(limit) => Duration::from_micros(limit),
-            Err(error) => {
-                log!("shutdown lock: logind's delay limit unreadable: {error:#}");
-                DEFAULT_DELAY_LIMIT
-            }
-        }
+        delay_limit(&self.proxy, "shutdown lock").await
     }
 
     async fn announcement(&mut self) -> Option<bool> {
