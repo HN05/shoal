@@ -8,7 +8,7 @@ use shoal_protocol::hub::{
 };
 
 use super::*;
-use crate::packages::tests::{hub, report, send};
+use crate::packages::tests::{hub, report, send_built};
 
 fn id(id: &str) -> SpaceId {
     SpaceId::from(id.to_owned())
@@ -36,7 +36,7 @@ async fn recorded(hub: &Hub, member: &str) -> (Option<UnixTime>, Vec<(String, Op
 }
 
 #[tokio::test]
-async fn a_package_built_after_the_notice_catches_its_space_up_until_the_link_opens() {
+async fn a_package_sent_after_the_notice_catches_its_space_up_until_the_link_opens() {
     let root = tempfile::tempdir().unwrap();
     let hub = hub(&root, "", &["laptop"]).await;
     report(&hub, "laptop", &["plan", "fix"]).await;
@@ -59,7 +59,10 @@ async fn a_package_built_after_the_notice_catches_its_space_up_until_the_link_op
         lags,
         [("fix".to_owned(), Some(behind)), ("plan".to_owned(), None)]
     );
-    send(&hub, "laptop", "plan", b"package").await.unwrap();
+    // Its machine's clock runs behind the hub's.
+    let built_at = asleep.unwrap() - Duration::from_secs(5);
+    let sent = send_built(&hub, ("laptop", "plan"), b"package", built_at);
+    sent.await.unwrap();
     let (_, lags) = recorded(&hub, "laptop").await;
     assert_eq!(lags, [("fix".to_owned(), Some(behind))]);
     hub.hear_awake(&laptop).await;

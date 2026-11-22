@@ -23,6 +23,7 @@ use crate::{
     Hub,
     daemon::Daemon,
     refusal::{Reason, Refusal},
+    time::UnixTime,
 };
 
 /// What an answer holds until its reply is written: the daemon operation,
@@ -189,6 +190,7 @@ impl Hub {
                     member: member.id.clone(),
                     space,
                     built_at,
+                    arrived_at: UnixTime::now(),
                     continuation: Continuation { start, within },
                 };
                 let streams = (calls.streams(), stream);
@@ -207,6 +209,7 @@ impl Hub {
                     member: member.id.clone(),
                     space,
                     built_at,
+                    arrived_at: UnixTime::now(),
                     continuation: Continuation {
                         start: Some(start),
                         within,

@@ -66,12 +66,25 @@ pub(crate) async fn report(hub: &Hub, member: &str, ids: &[&str]) {
 /// What the hub answers `member` sending `bytes` as its package of `space`,
 /// once the hub ends the stream.
 pub(crate) async fn send(hub: &Arc<Hub>, member: &str, space: &str, bytes: &[u8]) -> Result<()> {
+    send_built(hub, (member, space), bytes, UnixTime::now()).await
+}
+
+/// What the hub answers `member` sending `bytes` as its package of `space`,
+/// which it built at `built_at` by its own clock, once the hub ends the
+/// stream.
+pub(crate) async fn send_built(
+    hub: &Arc<Hub>,
+    (member, space): (&str, &str),
+    bytes: &[u8],
+    built_at: UnixTime,
+) -> Result<()> {
     let link = linked();
     let (mut answer, mut package): (Incoming, Outgoing) = link.opener.streams().open_duplex();
     let sent = Sent {
         member: MemberId::from(member.to_owned()),
         space: SpaceId::from(space.to_owned()),
-        built_at: UnixTime::now(),
+        built_at,
+        arrived_at: UnixTime::now(),
         continuation: Default::default(),
     };
     let streams = (link.writer.streams(), answer.number());

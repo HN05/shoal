@@ -44,12 +44,14 @@ pub(crate) struct Kept {
     refusal_alerted: AtomicBool,
 }
 
-/// A package `member` sends of `space`, which it built at `built_at`, with
+/// A package `member` sends of `space`, which it built at `built_at` by its
+/// own clock, and which began to arrive at `arrived_at` by the hub's, with
 /// what continues the space from it elsewhere.
 pub(crate) struct Sent {
     pub member: MemberId,
     pub space: SpaceId,
     pub built_at: UnixTime,
+    pub arrived_at: UnixTime,
     pub continuation: Continuation,
 }
 
@@ -164,13 +166,17 @@ impl Hub {
             member,
             space,
             built_at,
+            arrived_at,
             continuation,
         } = sent;
         (incoming.persist(&path))
             .map_err(|error| error.error)
             .with_context(|| format!("write {}", path.display()))?;
         let recorded = (self.store)
-            .write(move |tx| record(tx, (&member, &space), (built_at, size), &continuation))
+            .write(move |tx| {
+                record(tx, (&member, &space), (built_at, size), &continuation)?;
+                super::sleeps::caught_up(tx, &member, &space, arrived_at)
+            })
             .await;
         if recorded.is_err() {
             let _ = off_runtime::run(move || Ok(std::fs::remove_file(path)?)).await;
@@ -267,7 +273,7 @@ fn record(
             continuation.within,
         ],
     )?;
-    super::sleeps::caught_up(tx, member, id, built_at)
+    Ok(())
 }
 
 /// Forget every package `member` sent, as once the hub revoked it.

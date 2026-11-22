@@ -4,7 +4,7 @@
 //! machine whose link drops while its last report said its battery was
 //! nearly empty counts as one that announced its sleep at that report,
 //! with what that report said its packages lacked. A package its machine
-//! built after the notice makes its space's current. The hub forgets the
+//! sends after the notice makes its space's current. The hub forgets the
 //! sleep once the machine's link opens again, and meanwhile takes the
 //! machine's spaces with work over once it has stayed away long enough, in
 //! [`taking_over`]. The hub keeps a sleep in its store, so a restart of
@@ -186,18 +186,20 @@ fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     Ok(())
 }
 
-/// Count the package of the space `id` that `member` built at `built_at`
-/// current, once `member` built it after the notice of its sleep.
+/// Count the package of the space `id` that `member` sent current, once it
+/// began to arrive at `arrived_at` no earlier than the notice of its sleep,
+/// both by the hub's clock, so a machine whose clock differs still catches
+/// up: one it sends for its sleep it builds after the notice.
 pub(super) fn caught_up(
     tx: &Transaction<'_>,
     member: &MemberId,
     id: &SpaceId,
-    built_at: UnixTime,
+    arrived_at: UnixTime,
 ) -> Result<()> {
     tx.execute(
         "DELETE FROM hub_sleep_lags WHERE space_id=?1 AND member_id=?2
             AND ?3 >= (SELECT asleep_at FROM hub_members WHERE id=?2)",
-        params![id, member, built_at],
+        params![id, member, arrived_at],
     )?;
     Ok(())
 }

@@ -36,6 +36,7 @@ async fn hand_over(
         member: MemberId::from("laptop".to_owned()),
         space: SpaceId::from(space.to_owned()),
         built_at: UnixTime::now(),
+        arrived_at: UnixTime::now(),
         continuation: Continuation {
             start: Some(start()),
             within: within.map(|id| SpaceId::from(id.to_owned())),
