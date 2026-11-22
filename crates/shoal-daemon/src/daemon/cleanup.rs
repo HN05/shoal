@@ -234,6 +234,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     );
     step("checkpoint expiry", manager.expire_checkpoints().await);
     step("result expiry", manager.expire_results().await);
+    step("fetched copies", manager.expire_fetched().await);
     step("event expiry", manager.expire_events().await);
     step(
         "notification expiry",

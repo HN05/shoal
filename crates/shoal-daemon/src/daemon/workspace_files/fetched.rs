@@ -43,6 +43,12 @@ impl Manager {
                 Err(error) => return Err(error),
             }
         }
+        self.fetched_outside_repositories()
+    }
+
+    /// The directory of fetched copies of the spaces of no repository this
+    /// machine registered, in `root_dir`.
+    fn fetched_outside_repositories(&self) -> Result<ShoalDir> {
         let root_dir = self.config().root_dir(&self.paths)?;
         let owner = self.root_dir_owner();
         Ok(ShoalDir::outside_repositories(
@@ -65,6 +71,9 @@ fn repository_of(located: &Located) -> Result<Option<Selector>> {
             .transpose(),
     }
 }
+
+mod copies;
+mod expiry;
 
 #[cfg(test)]
 mod tests;

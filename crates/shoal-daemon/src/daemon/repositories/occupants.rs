@@ -36,6 +36,7 @@ impl Occupants for Manager {
         Box::pin(async move {
             self.links.delete_proposal_files(repo).await?;
             super::super::imported_sessions::remove_imported_sessions(repo).await?;
+            self.delete_repository_fetched(repo).await?;
             self.delete_repository_files(repo).await
         })
     }

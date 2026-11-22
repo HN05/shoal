@@ -1203,7 +1203,8 @@ archive_max_mb = 50  # Unsaved files an agent's exit or stop checkpoint keeps
 ```
 
 `retention_days` is how long a removed space stays restorable and keeps its
-log and files, how long a checkpoint stays, and how long an alert for the user
+log and files, how long a checkpoint stays, how long a copy `shoal files`
+fetched from another machine stays, and how long an alert for the user
 stays, read or not, by the setting of the repository of the space it is about.
 An alert about no space or a chat without a repository takes the global setting.
 

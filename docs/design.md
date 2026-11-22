@@ -4417,6 +4417,11 @@ agent hands the user reports and pages too. A removed space keeps every
 attached file by one rule, whatever its kind: they stay for the same retention
 as its checkpoints, since an agent's restored session may refer to any of them
 and a chat has no worktree to clean up, so its files are what remain of it.
+A copy another machine's file fetched here goes the same retention after its
+fetch, by its age alone: this machine cannot always learn when the source's
+space goes, and a fetch happens only while it exists, so the copy never
+outlives the source's retention, while a later fetch of a living space's file
+makes it again.
 Files are keyed by their owner's ID, which a workspace and a
 chat never share, so no kind tells them apart: an owner is gone when neither
 has the ID, and a record of its own says how long its files stay, apart from

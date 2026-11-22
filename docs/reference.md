@@ -7135,7 +7135,10 @@ its path, Ctrl-D deletes that copy as `rm` does, and Ctrl-A, or Enter on the
 add row, asks for a file to add. Ctrl-O first fetches a file another machine
 keeps into `.fetched` beside the workspaces of its repository, where this
 machine has the repository, else in `root_dir`, replacing the copy an earlier
-Ctrl-O fetched. Workspace processes cannot open files.
+Ctrl-O fetched. A fetched copy stays for `cleanup.restore.retention_days`
+after its fetch or last change, the repository's or else the global
+setting, and goes with its repository. Workspace processes cannot open
+files.
 `-p`/`--print`, like `--json`, `--path` or output that is not a
 terminal, lists them: each one's name, title, size,
 how it came (`message` for a file sent down with `shoal send --attach`,
