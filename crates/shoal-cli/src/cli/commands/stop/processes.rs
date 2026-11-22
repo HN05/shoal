@@ -1,5 +1,6 @@
 //! Stopping the processes Shoal does not track, which are not saved for
 //! `shoal resume`.
+use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 
 use crate::cli::{context::Context, ui};
@@ -17,18 +18,15 @@ pub(in crate::cli::commands) async fn processes(
 ) -> Result<i32> {
     // Unlike what ends a space, a stop of its processes may take the chat it
     // runs in.
+    let stopping = Acting::request(move |space| {
+        crate::client::stopping::stop_processes(space, selection, None)
+    });
     let selectors = match ui::current_chat(&None) {
         Some(_) if selectors.is_empty() => {
-            vec![
-                ui::select_space(
-                    ctx,
-                    None,
-                    ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-                )
-                .await?,
-            ]
+            let fallback = ui::Fallback::CurrentDirectory(&stopping);
+            vec![ui::select_space(ctx, None, fallback).await?]
         }
-        _ => ui::select_spaces(ctx, selectors, false, &crate::cli::ui::Acting::Unconverted).await?,
+        _ => ui::select_spaces(ctx, selectors, false, &stopping).await?,
     };
     if selectors.len() > 1 {
         ensure_spaces(ctx, &selectors).await?;
@@ -76,7 +74,9 @@ async fn stop_untracked(
     selection: Selection,
 ) -> Result<Stopped> {
     let requester = Some(std::process::id());
-    crate::client::stopping::stop_processes(&ctx.paths, space.clone(), selection, requester).await
+    (crate::client::stopping::stop_processes(space.clone(), selection, requester))
+        .send(&ctx.paths)
+        .await
 }
 
 /// What a stop of `selection` reports for `stopped`.

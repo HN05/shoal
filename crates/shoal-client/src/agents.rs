@@ -85,12 +85,8 @@ pub async fn report_wake_end(
 
 /// Record that the interrupt key typed into `execution` of `space` ended
 /// its agent's turn.
-pub async fn interrupt_turn(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    execution: ExecutionId,
-) -> Result<AgentStatus> {
-    request(daemon, AgentMethod::InterruptTurn { space, execution }).await
+pub fn interrupt_turn(space: SpaceSelector, execution: ExecutionId) -> Prepared<AgentStatus> {
+    Prepared::new(AgentMethod::InterruptTurn { space, execution })
 }
 
 /// Tell the daemon that Shoal types into the terminal of `execution` of

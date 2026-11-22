@@ -43,16 +43,14 @@ pub async fn stop_space(
 
 /// Stop the untracked processes of `space` that `selection` selects, other
 /// than the process `requester` and those that started it.
-pub async fn stop_processes(
-    daemon: &impl Daemon,
+pub fn stop_processes(
     space: SpaceSelector,
     selection: Selection,
     requester: Option<u32>,
-) -> Result<Stopped> {
-    let method = RemovalMethod::StopProcesses {
+) -> Prepared<Stopped> {
+    Prepared::new(RemovalMethod::StopProcesses {
         space,
         selection,
         requester,
-    };
-    request(daemon, method).await
+    })
 }
