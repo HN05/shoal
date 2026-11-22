@@ -407,7 +407,7 @@ async fn inspect(
             protocol::write(stream.get_mut(), &response).await.unwrap();
         }
     });
-    let lifecycle = workspace_lifecycle(&Context::new(paths, true), &SpaceId::from("workspace"))
+    let lifecycle = workspace_lifecycle(&CommandPaths::from(paths), &SpaceId::from("workspace"))
         .await
         .unwrap();
     // Only a kept workspace's lifecycle reads what it saved.

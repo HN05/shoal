@@ -6,10 +6,7 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result};
 
-use super::{
-    closing,
-    here::{created_here, label_current, place_here, record_owned},
-};
+use super::here::{created_here, label_current, place_here, record_owned};
 use crate::{
     cli::{args::internal::PlaceWorkerArgs, commands::execute_place, context::Context, recent},
     env,
@@ -77,7 +74,11 @@ pub(in crate::cli) async fn host_space(
             if place.closes_when_done
                 && let Owner::Workspace(workspace) = owner
             {
-                closing::start_watcher(ctx, place.host, &place.id, workspace).await?;
+                let (paths, json) = (&ctx.paths, ctx.json);
+                shoal_workers::watchers::start_watcher(
+                    paths, json, place.host, &place.id, workspace,
+                )
+                .await?;
             }
             if place.focused {
                 recent::record_attach(ctx, &SpaceSelector::id(owner.id())).await;

@@ -73,7 +73,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 workspace,
                 instance,
             };
-            terminal::watch_place(&ctx, host, place, kept_at).await
+            shoal_workers::watchers::watch(&ctx.paths, host, place, kept_at).await
         }
         InternalCommand::HerdrWatch { workspace, tab } => {
             let place = crate::terminal::Watched {
@@ -81,7 +81,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 workspace,
                 instance: None,
             };
-            terminal::watch_place(&ctx, HostName::Herdr, place, None).await
+            shoal_workers::watchers::watch(&ctx.paths, HostName::Herdr, place, None).await
         }
         InternalCommand::Merge { result, plan } => {
             crate::operations::merge_worker(&ctx.paths, plan, result).await

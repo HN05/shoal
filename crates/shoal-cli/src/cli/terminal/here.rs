@@ -4,7 +4,6 @@ use anyhow::{Context as _, Result};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-use super::closing;
 use crate::{
     cli::context::Context,
     sessions::{HostName, Origin},
@@ -20,7 +19,7 @@ pub(in crate::cli) async fn closes_with(
     paths: &crate::client::connection::CommandPaths,
     space: &SpaceId,
 ) -> Result<bool> {
-    if closing::closes_with(paths, space).await {
+    if shoal_workers::watchers::closes_with(paths, space).await {
         return Ok(true);
     }
     let Some(place) = current_place().await else {
@@ -111,7 +110,7 @@ async fn watch_here(ctx: &Context, host: HostName, workspace: &SpaceId, label: b
             .label_current(&ctx.paths.state, Owner::Workspace(workspace))
             .await?;
     }
-    closing::start_watcher(ctx, host, &place, workspace).await
+    shoal_workers::watchers::start_watcher(&ctx.paths, ctx.json, host, &place, workspace).await
 }
 
 /// The ID of the place of `host` this process runs in, from its origin record.

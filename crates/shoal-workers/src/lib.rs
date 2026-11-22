@@ -21,6 +21,7 @@ pub mod queued_starts;
 pub mod resume;
 pub mod secrets;
 pub mod settings;
+pub mod watchers;
 
 use shoal_client as client;
 use shoal_core::{

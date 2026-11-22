@@ -3,14 +3,12 @@
 //! background, and the [`Host`](crate::terminal::Host) that carries that out
 //! with its own primitives.
 mod add_place;
-mod closing;
 mod demos;
 mod here;
 mod launch;
 mod naming;
 
 pub(in crate::cli) use add_place::{Place, follows_caller, host_space, open_shell, place_worker};
-pub(in crate::cli) use closing::watch as watch_place;
 pub(in crate::cli) use demos::{demo_screen, open_demo, send_demo_keys, start_demo};
 pub(in crate::cli) use here::{
     close_background_place_when_done, close_here_when_done, closes_with, label_current,

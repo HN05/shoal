@@ -20,8 +20,8 @@ use std::{
 use anyhow::{Context as _, Result};
 
 use crate::{
-    cli::context::Context,
-    daemon_owner, env, installed,
+    client::connection::CommandPaths,
+    env, installed,
     paths::Paths,
     sessions::{HostName, Origin, PlaceClose, PlaceOwnership},
     state::AgentState,
@@ -45,8 +45,9 @@ enum AtRemoval {
 /// completion, if any, that the agent starts under, so a restart of the
 /// watcher keeps both. It inherits the place's shell directive to remove it
 /// with the place, whose shell may close before a prompt consumes it.
-pub(super) async fn start_watcher(
-    ctx: &Context,
+pub async fn start_watcher(
+    paths: &CommandPaths,
+    json: bool,
     host: &dyn Host,
     place: &str,
     workspace: &SpaceId,
@@ -55,10 +56,10 @@ pub(super) async fn start_watcher(
         Some(watches) => watches.place_instance(place).await?,
         None => None,
     };
-    let kept_at = kept_completion(ctx, workspace).await?;
+    let kept_at = kept_completion(paths, workspace).await?;
     let argv = workers::internal_command(
-        &ctx.paths,
-        ctx.json,
+        paths,
+        json,
         workers::Worker::PlaceWatch {
             host: host.name(),
             workspace,
@@ -67,14 +68,14 @@ pub(super) async fn start_watcher(
             kept_at: kept_at.as_deref(),
         },
     )?;
-    spawn_detached(ctx, &argv)
+    spawn_detached(paths, &argv)
         .with_context(|| format!("watch the workspace to close its {} place", host.name()))
 }
 
 /// Start `argv` in its own session, apart from this process and its terminal.
-fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result<()> {
+fn spawn_detached(paths: &CommandPaths, argv: &[std::ffi::OsString]) -> std::io::Result<()> {
     workers::detached_command(argv)
-        .current_dir(&ctx.paths.home)
+        .current_dir(&paths.home)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -83,9 +84,9 @@ fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result
 }
 
 /// The HEAD of `workspace`'s kept completion, if it has one.
-async fn kept_completion(ctx: &Context, workspace: &SpaceId) -> Result<Option<String>> {
+async fn kept_completion(paths: &CommandPaths, workspace: &SpaceId) -> Result<Option<String>> {
     let inspection = crate::client::workspaces::inspect(SpaceSelector::id(workspace))
-        .send(&ctx.paths)
+        .send(paths)
         .await?;
     Ok((inspection
         .completion
@@ -99,7 +100,7 @@ async fn kept_completion(ctx: &Context, workspace: &SpaceId) -> Result<Option<St
 /// refused for a daemon protocol change continues from the installed binary
 /// once an upgrade replaced this one.
 pub async fn watch(
-    ctx: &Context,
+    paths: &CommandPaths,
     host: HostName,
     place: Watched,
     kept_at: Option<String>,
@@ -114,7 +115,7 @@ pub async fn watch(
         .unwrap_or_else(|| Origin::created(host.name(), place.id.clone()));
     let executable = crate::installed::Executable::current();
     let lifecycle = || async {
-        match workspace_lifecycle(ctx, &place.workspace).await {
+        match workspace_lifecycle(paths, &place.workspace).await {
             Ok(lifecycle) => Ok(Some(lifecycle)),
             Err(error) if error.is::<shoal_protocol::connection::ProtocolMismatch>() => {
                 match executable.take_over(installed::arguments::arguments) {
@@ -132,10 +133,10 @@ pub async fn watch(
     let closing = RefCell::new(None);
     let at_removal = || async {
         if known.get().is_none() {
-            known.set(at_removal(ctx, &place.workspace, &record).await);
+            known.set(at_removal(paths, &place.workspace, &record).await);
             if known.get() == Some(AtRemoval::Watcher) {
                 *closing.borrow_mut() = Some(Marker::record(
-                    &ctx.paths,
+                    paths,
                     host.name().as_str(),
                     &place.workspace,
                     &place.id,
@@ -144,8 +145,8 @@ pub async fn watch(
         }
         known.get()
     };
-    let close = async || close_place(ctx, host, &place, &record, known.get()).await;
-    let mut daemon = DaemonPresence::new(|| daemon_owner::owner(&ctx.paths).is_some());
+    let close = async || close_place(paths, host, &place, &record, known.get()).await;
+    let mut daemon = DaemonPresence::new(|| shoal_core::daemon_owner::owner(paths).is_some());
     close_when_due(
         watches,
         &place,
@@ -153,7 +154,7 @@ pub async fn watch(
         at_removal,
         lifecycle,
         close,
-        || ctx.paths.state.exists() && daemon.seen_recently(),
+        || paths.state.exists() && daemon.seen_recently(),
     )
     .await?;
     discard_inherited_directive();
@@ -164,8 +165,12 @@ pub async fn watch(
 /// removed, as the daemon says; `None` while it cannot say. A place another
 /// workspace or a chat took over is the daemon's to keep: only one it does
 /// not know is the watcher's.
-async fn at_removal(ctx: &Context, workspace: &SpaceId, record: &Origin) -> Option<AtRemoval> {
-    match crate::client::places::place_ownership(&ctx.paths, workspace, record).await {
+async fn at_removal(
+    paths: &CommandPaths,
+    workspace: &SpaceId,
+    record: &Origin,
+) -> Option<AtRemoval> {
+    match crate::client::places::place_ownership(paths, workspace, record).await {
         Ok(PlaceOwnership::Space | PlaceOwnership::Elsewhere) => Some(AtRemoval::Daemon),
         Ok(PlaceOwnership::Unknown) => Some(AtRemoval::Watcher),
         Err(_) => None,
@@ -177,14 +182,13 @@ async fn at_removal(ctx: &Context, workspace: &SpaceId, record: &Origin) -> Opti
 /// host as `at_removal` allows. A place another workspace's agent took over
 /// since stays open.
 async fn close_place(
-    ctx: &Context,
+    paths: &CommandPaths,
     host: &dyn Host,
     place: &Watched,
     record: &Origin,
     at_removal: Option<AtRemoval>,
 ) -> Result<()> {
-    let closed =
-        crate::client::places::close_owned_place(&ctx.paths, &place.workspace, record).await?;
+    let closed = crate::client::places::close_owned_place(paths, &place.workspace, record).await?;
     close_left_to_host(host, place, closed, at_removal).await
 }
 
@@ -370,9 +374,12 @@ impl Drop for Marker {
 
 /// Whether this process runs in a place that closes once `workspace` is
 /// removed: one a watcher closes, or that closing a watched place ends.
-pub(super) async fn closes_with(paths: &Paths, workspace: &SpaceId) -> bool {
+pub async fn closes_with(paths: &Paths, workspace: &SpaceId) -> bool {
     for host in hosts() {
-        let (Some(here), Some(watches)) = (super::here::place_here(host), host.watches()) else {
+        let (Some(here), Some(watches)) = (
+            origin_here(host).and_then(|origin| origin.place),
+            host.watches(),
+        ) else {
             continue;
         };
         for place in Marker::watched(paths, host.name().as_str(), workspace) {
@@ -415,9 +422,9 @@ impl Lifecycle {
     }
 }
 
-async fn workspace_lifecycle(ctx: &Context, workspace: &SpaceId) -> Result<Lifecycle> {
+async fn workspace_lifecycle(paths: &CommandPaths, workspace: &SpaceId) -> Result<Lifecycle> {
     match crate::client::workspaces::inspect(SpaceSelector::id(workspace))
-        .send(&ctx.paths)
+        .send(paths)
         .await
     {
         // Completion cleanup keeps the place until removal, after its grace period.
@@ -429,13 +436,13 @@ async fn workspace_lifecycle(ctx: &Context, workspace: &SpaceId) -> Result<Lifec
         }) if !completion.cleanup => Ok(Lifecycle::Kept {
             head: completion.head.into(),
             running: !executions.is_empty(),
-            stopped: (crate::client::saved::read(&ctx.paths, SpaceSelector::id(workspace)).await?)
+            stopped: (crate::client::saved::read(paths, SpaceSelector::id(workspace)).await?)
                 .is_unfinished(),
             turn: record.agent_state.map(|status| status.state),
         }),
         Ok(_) => Ok(Lifecycle::Active),
         Err(error) => {
-            if crate::client::spaces::list(&ctx.paths)
+            if crate::client::spaces::list(paths)
                 .await?
                 .into_workspaces()
                 .iter()
