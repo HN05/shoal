@@ -105,7 +105,8 @@ fn placed(machines: &Machines, args: &[&str]) -> Value {
 
 #[test]
 fn a_heavy_start_goes_to_an_always_on_machine_with_a_free_heavy_slot() {
-    let machines = machines("");
+    // A fixed limit leaves the slot free whatever memory the runner has.
+    let machines = machines("machine.max_heavy_agents = 2\n");
     let placement = placed(&machines, &["--branch", "child"]);
     assert_eq!(
         placement["machine"],
