@@ -71,8 +71,18 @@ impl Kind for SharedFiles {
         async move { tokio::task::spawn_blocking(move || Shared::files(&paths)).await? }.boxed()
     }
 
-    fn sendable<'a>(hub: &'a Hub, daemon: &'a dyn Daemon, edited: bool) -> BoxFuture<'a, bool> {
-        hub.shared_files_valid(daemon, edited).boxed()
+    fn sendable<'a>(
+        hub: &'a Hub,
+        daemon: &'a dyn Daemon,
+        edits: Vec<Edit<Self>>,
+    ) -> BoxFuture<'a, Vec<Edit<Self>>> {
+        async move {
+            match hub.shared_files_valid(daemon, !edits.is_empty()).await {
+                true => edits,
+                false => Vec::new(),
+            }
+        }
+        .boxed()
     }
 
     fn take<'a>(

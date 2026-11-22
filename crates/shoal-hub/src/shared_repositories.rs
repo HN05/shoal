@@ -78,8 +78,12 @@ impl Kind for SharedRepositories {
         async move { Ok(shared(&daemon.repositories().await?, agreed)) }.boxed()
     }
 
-    fn sendable<'a>(_: &'a Hub, _: &'a dyn Daemon, _: bool) -> BoxFuture<'a, bool> {
-        std::future::ready(true).boxed()
+    fn sendable<'a>(
+        _: &'a Hub,
+        _: &'a dyn Daemon,
+        edits: Vec<Edit<Self>>,
+    ) -> BoxFuture<'a, Vec<Edit<Self>>> {
+        std::future::ready(edits).boxed()
     }
 
     fn take<'a>(

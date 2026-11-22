@@ -66,9 +66,12 @@ pub(crate) trait Kind: Sized + Send + Sync + 'static {
         agreed: &'a Agreed<Self>,
     ) -> BoxFuture<'a, Result<Items<Self>>>;
 
-    /// Whether this machine's items may go to the hub, once it `edited`
-    /// them.
-    fn sendable<'a>(hub: &'a Hub, daemon: &'a dyn Daemon, edited: bool) -> BoxFuture<'a, bool>;
+    /// The `edits` of this machine's items that may go to the hub.
+    fn sendable<'a>(
+        hub: &'a Hub,
+        daemon: &'a dyn Daemon,
+        edits: Vec<Edit<Self>>,
+    ) -> BoxFuture<'a, Vec<Edit<Self>>>;
 
     /// Take the copies of the hub whose key is `key` into this machine's
     /// items, given the copies it `agreed` on before and the edits it
@@ -239,10 +242,8 @@ impl Hub {
         let key = self.shared_hub_key(hub.own()).await?;
         let agreed = self.agreed_copies::<S>(&key).await?;
         let items = S::items(self, &**daemon, &agreed).await?;
-        let mut edits = items::edits::<S>(&items, &agreed, knows);
-        if !S::sendable(self, &**daemon, !edits.is_empty()).await {
-            edits.clear();
-        }
+        let edits = items::edits::<S>(&items, &agreed, knows);
+        let edits = S::sendable(self, &**daemon, edits).await;
         let missed = sharing.missed.load(Ordering::SeqCst);
         if edits.is_empty() && knows && !missed {
             return Ok(());
