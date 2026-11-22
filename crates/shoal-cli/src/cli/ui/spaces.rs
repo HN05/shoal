@@ -220,21 +220,6 @@ pub async fn select_space(
     }
 }
 
-/// [`select_space`] for a command that shows where it runs: in a chat, any
-/// workspace containing the current directory comes before the chat, so a
-/// chat in a workspace's worktree, which reads that workspace without
-/// changing it, gets the workspace.
-pub async fn select_space_here(
-    ctx: &Context,
-    explicit: Option<SpaceSelector>,
-    acting: &Acting,
-) -> Result<SpaceSelector> {
-    match current_chat(&explicit) {
-        Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Any).await,
-        None => select_other_space(ctx, explicit, Fallback::CurrentDirectory(acting)).await,
-    }
-}
-
 /// The space this runs in, never offering a picker: in a chat, the
 /// workspace of `which` containing the current directory, else the chat;
 /// otherwise the current workspace; none outside every space.

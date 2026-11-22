@@ -74,13 +74,9 @@ async fn known_item_context(
     {
         return Ok(Some(checkout));
     }
+    // A named space, or the chat this runs in, needs no picker.
     if space.is_some() || ui::current_chat(&space).is_some() {
-        let space = ui::select_space(
-            ctx,
-            space,
-            ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-        )
-        .await?;
+        let space = ui::select_space(ctx, space, ui::Fallback::CurrentDirectoryOnly).await?;
         return Ok(Some(ItemContext::space(space)));
     }
     if let Some(context) = current_context(ctx).await? {
