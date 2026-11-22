@@ -285,8 +285,6 @@ impl Scoped for RepositoryMethod {
                 manager.authorize_action(Some(caller), action).await?;
                 return Ok(None);
             }
-            // It only reads what a removal of the caller's own repository
-            // would remove.
             // It reads every space of the repository, as removing it takes
             // them all, so only a caller that removes its repository without
             // approval reads it; nothing binds an approval to a preview.
