@@ -12,7 +12,7 @@ mod session;
 use std::io::IsTerminal;
 
 pub use add_place::{Place, follows_caller, host_space, open_shell};
-pub use demos::{demo_screen, open_demo, send_demo_keys, start_demo};
+pub use demos::{demo_screen, open_demo, send_demo_keys, show_for_viewer, start_demo};
 pub use here::{
     close_background_place_when_done, close_here_when_done, closes_with, label_current,
     record_owned_here,

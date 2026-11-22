@@ -6,7 +6,7 @@ use shoal_workers::hosting;
 use crate::{
     cli::{
         args::internal::InternalCommand,
-        commands::{approvals, demo, environment, events, menu, sessions},
+        commands::{approvals, environment, events, menu, sessions},
         context::Context,
     },
     sessions::HostName,
@@ -190,7 +190,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             place,
             machine,
             app,
-        } => demo::show_for_viewer(&name, &place, &machine, app.as_deref()).await,
+        } => hosting::show_for_viewer(&name, &place, &machine, app.as_deref()).await,
         InternalCommand::Session {
             space,
             agent,

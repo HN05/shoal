@@ -8,7 +8,7 @@ use crate::{
     config::Effective,
     model::Workspace,
     sessions::Origin,
-    terminal::{Demo, DemoWorker, Host, current_origin, named, names_places, place_env},
+    terminal::{Demo, DemoWorker, Elsewhere, Host, current_origin, named, names_places, place_env},
 };
 use shoal_protocol::demos::Launch;
 
@@ -94,4 +94,21 @@ pub async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
         .with_context(|| format!("{} cannot type into demos", place.host))?
         .send_keys(place, keys)
         .await
+}
+
+/// `shoal internal show-demo`, the demo's machine's side of opening a
+/// terminal demo from another machine, run by the daemon on a terminal it
+/// made for that user here: show the demo `name`, which runs in `place`, on
+/// this terminal, as the place's host shows a place there; `machine` names
+/// this one, and `app` is the label that user's app for the host reports,
+/// if any.
+pub async fn show_for_viewer(
+    name: &str,
+    place: &Origin,
+    machine: &str,
+    app: Option<&str>,
+) -> Result<i32> {
+    let viewer = Elsewhere { machine, app };
+    crate::terminal::show_place_elsewhere(place, &format!("demo {name}"), &viewer).await?;
+    Ok(0)
 }
