@@ -206,3 +206,13 @@ fn entering_leaves_out_a_space_whose_directory_is_missing() {
         Verdict::Accepted
     ));
 }
+
+#[test]
+fn stopping_processes_takes_a_failed_workspace_or_a_chat_but_not_a_stopping_one() {
+    let stop = TargetCheck::SettledSpace;
+    let failed = workspace(WorkspaceState::Failed);
+    assert!(matches!(stop.judge_alone(&failed), Verdict::Accepted));
+    assert!(matches!(stop.judge_alone(&chat()), Verdict::Accepted));
+    let stopping = workspace(WorkspaceState::Stopping);
+    assert_eq!(refused(stop.judge_alone(&stopping)), Some(Reason::NotReady));
+}

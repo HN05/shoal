@@ -370,7 +370,6 @@ impl Checked for RemovalMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
             Self::CheckStop { .. }
-            | Self::StopProcesses { .. }
             | Self::CheckRemoval { .. }
             | Self::RemoveSpace { .. }
             | Self::StartRemoval { .. }
@@ -385,6 +384,7 @@ impl Checked for RemovalMethod {
             | Self::ReleaseHeldMove { .. }
             | Self::SettleMove { .. } => Some(TargetCheck::Space),
             Self::StopSpace { .. } => Some(TargetCheck::RunningSpace),
+            Self::StopProcesses { .. } => Some(TargetCheck::SettledSpace),
             Self::StopTargets
             | Self::Cleanup { .. }
             | Self::RemovedSpaces

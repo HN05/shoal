@@ -37,6 +37,9 @@ pub(crate) enum TargetCheck {
     /// A ready workspace, or a failed one an interrupted operation left
     /// for the request to finish.
     SettledWorkspace,
+    /// A ready or failed workspace, one whose preparation waits with
+    /// nothing started in it, or a chat.
+    SettledSpace,
     /// A workspace that takes link changes, or a chat.
     LinkingSpace,
     /// A workspace that takes link changes.
@@ -176,6 +179,7 @@ impl TargetCheck {
             | Self::AwaitedReadySpace
             | Self::SetupWorkspace
             | Self::SettledWorkspace
+            | Self::SettledSpace
             | Self::LinkingSpace
             | Self::LinkingWorkspace
             | Self::CheckpointedWorkspace
@@ -193,6 +197,7 @@ impl TargetCheck {
             Self::AwaitedReadySpace => awaited_ready(space),
             Self::SetupWorkspace => setup(space, facts.busy.contains(&space.id)),
             Self::SettledWorkspace => workspace(space, |w| settled(space, w.state)),
+            Self::SettledSpace => settled_space(space),
             Self::LinkingSpace => linking_space(space),
             Self::LinkingWorkspace => workspace(space, |w| linking(w.state)),
             Self::CheckpointedWorkspace => workspace(space, |w| checkpointed(w.state)),
@@ -239,6 +244,16 @@ pub(crate) fn settled<P>(workspace: &Space<P>, state: WorkspaceState) -> Verdict
 /// ready, as the store's recheck in a transaction words it.
 fn not_ready<P>(workspace: &Space<P>, state: WorkspaceState) -> anyhow::Error {
     shoal_store::not_ready(workspace.number, &workspace.id, &workspace.name, state)
+}
+
+/// A ready or failed workspace, or one whose preparation waits with
+/// nothing started in it; or any chat.
+fn settled_space(space: &Space) -> Verdict {
+    match &space.part {
+        SpacePart::Workspace(worktree) if worktree.preparation_waits.is_some() => Verdict::Accepted,
+        SpacePart::Workspace(worktree) => settled(space, worktree.state),
+        SpacePart::Chat(_) => Verdict::Accepted,
+    }
 }
 
 /// A ready workspace, or any chat.
