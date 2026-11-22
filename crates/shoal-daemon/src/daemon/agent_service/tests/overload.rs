@@ -151,8 +151,6 @@ async fn job_admission_reads_the_cpu_only_while_it_applies() {
     );
 }
 
-mod stops;
-
 /// Publish a calm config, then `tighten` it once recovery is ready: the
 /// reload withdraws readiness until a new window has passed.
 async fn a_reload_withdraws_readiness(tighten: fn(&mut crate::config::Config)) {

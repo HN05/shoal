@@ -1,6 +1,12 @@
 use super::*;
+use crate::execution::recovery::RecordExt;
 use crate::stand_in::Fixture;
+use crate::state::AgentState;
+use crate::state::TurnFailure;
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::agent::Agent;
+use shoal_protocol::space_names::SpaceSelector;
+use std::sync::Arc;
 
 /// The turn generation the space `id` records.
 async fn turn(fixture: &Fixture, id: &SpaceId) -> i64 {
@@ -275,4 +281,74 @@ async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
             .unwrap();
         assert_eq!(saved, (None, None), "{ended}");
     }
+}
+
+async fn workspace(fixture: &Arc<Fixture>) -> crate::model::Workspace {
+    fixture.workspace("agent").await
+}
+
+#[tokio::test]
+async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
+    use crate::execution::recovery::{Record, record_path, save_record};
+    let fixture = Arc::new(Fixture::new().await);
+    let workspace = workspace(&fixture).await;
+    let id = workspace.id.clone();
+    fixture
+        .agents
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,space_id,state) VALUES
+                    ('stopped',?1,'unknown'),('exited',?1,'unknown')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    save_record(
+        &fixture.agents.paths,
+        &workspace.id,
+        &ExecutionId::from("stopped"),
+        &shoal_protocol::executions::TrackedAgent::named("claude"),
+        None,
+        None,
+    )
+    .unwrap();
+    for execution in [ExecutionId::from("stopped"), ExecutionId::from("exited")] {
+        fixture
+            .agents
+            .set_agent_state(
+                &*fixture.daemon,
+                &SpaceSelector::id(&workspace.id),
+                AgentState::Idle,
+                Some(execution.clone()),
+                None,
+            )
+            .await
+            .unwrap();
+        fixture
+            .agents
+            .forget_execution(&*fixture.daemon, &execution)
+            .await
+            .unwrap();
+    }
+
+    let path = record_path(
+        &fixture.agents.paths,
+        &workspace.id,
+        &ExecutionId::from("stopped"),
+    );
+    let record = Record::load(&path).unwrap().unwrap();
+    assert_eq!(record.turn, Some(AgentState::Idle));
+    // An execution that saved no record stopped nothing to keep a turn for.
+    assert!(
+        !record_path(
+            &fixture.agents.paths,
+            &workspace.id,
+            &ExecutionId::from("exited")
+        )
+        .exists(),
+        "a turn alone must not make a recovery record"
+    );
 }

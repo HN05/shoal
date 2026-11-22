@@ -1,4 +1,3 @@
-use crate::execution::recovery::RecordExt;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
@@ -258,61 +257,5 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
     assert_eq!(
         delegated.iter().map(|w| &w.name).collect::<Vec<_>>(),
         [&child.name]
-    );
-}
-
-#[tokio::test]
-async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
-    use crate::execution::recovery::{Record, record_path, save_record};
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&manager, &temp).await;
-    let id = workspace.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES
-                    ('stopped',?1,'unknown'),('exited',?1,'unknown')",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    save_record(
-        &manager.paths,
-        &workspace.id,
-        &ExecutionId::from("stopped"),
-        &shoal_protocol::executions::TrackedAgent::named("claude"),
-        None,
-        None,
-    )
-    .unwrap();
-    for execution in [ExecutionId::from("stopped"), ExecutionId::from("exited")] {
-        manager
-            .agents
-            .set_agent_state(
-                &*manager,
-                &SpaceSelector::id(&workspace.id),
-                AgentState::Idle,
-                Some(execution.clone()),
-                None,
-            )
-            .await
-            .unwrap();
-        manager
-            .agents
-            .forget_execution(&*manager, &execution)
-            .await
-            .unwrap();
-    }
-
-    let path = record_path(&manager.paths, &workspace.id, &ExecutionId::from("stopped"));
-    let record = Record::load(&path).unwrap().unwrap();
-    assert_eq!(record.turn, Some(AgentState::Idle));
-    // An execution that saved no record stopped nothing to keep a turn for.
-    assert!(
-        !record_path(&manager.paths, &workspace.id, &ExecutionId::from("exited")).exists(),
-        "a turn alone must not make a recovery record"
     );
 }
