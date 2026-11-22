@@ -799,6 +799,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 271 {
         db.execute_batch(include_str!("held_moves.sql"))?;
     }
+    if version >= 272 {
+        db.execute_batch(include_str!("shared_items.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -4379,5 +4382,41 @@ fn held_events_carry_their_alert_as_a_record() -> Result<()> {
     );
     assert_eq!(calls[1]["record"]["alert"]["files"], serde_json::json!([]));
     assert_eq!(calls[2], calls[0]);
+    Ok(())
+}
+
+#[test]
+fn shared_files_become_shared_items_with_their_text_in_json() -> Result<()> {
+    let mut db = historical_database(271)?;
+    db.execute_batch(
+        "INSERT INTO hub_shared_files(file,text,revision)
+            VALUES ('shared.toml','a = \"b\"',2), ('modes/review.md',NULL,3);
+         INSERT INTO shared_files(file,hub_key,text,revision)
+            VALUES ('shared.toml','hub','a = \"b\"',2);",
+    )?;
+    migrate(&mut db)?;
+    type Item = (String, String, Option<String>, i64);
+    let items = |table: &str| -> Result<Vec<Item>> {
+        Ok(db
+            .prepare(&format!(
+                "SELECT kind,key,value,revision FROM {table} ORDER BY key"
+            ))?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    let config = (
+        "file".into(),
+        "shared.toml".into(),
+        Some(r#""a = \"b\"""#.into()),
+        2,
+    );
+    assert_eq!(
+        items("hub_shared_items")?,
+        [
+            ("file".into(), "modes/review.md".into(), None, 3),
+            config.clone()
+        ]
+    );
+    assert_eq!(items("shared_items")?, [config]);
     Ok(())
 }

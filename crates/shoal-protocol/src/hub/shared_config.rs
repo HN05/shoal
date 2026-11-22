@@ -1,8 +1,5 @@
 //! The shared config's files as joined machines share them through the hub:
 //! `shared.toml` and the mode and rule files beside it, each by its name.
-//! A machine sends the hub its edits; the hub keeps the last edit of each
-//! file that reached it, under a revision that orders its copies, and sends
-//! it to every machine.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Result, bail};
@@ -76,21 +73,10 @@ impl fmt::Display for FileName {
 
 /// A machine's edit of a shared file: its new text, none for a file it
 /// removed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Edit {
-    pub file: FileName,
-    pub text: Option<String>,
-}
+pub type Edit = super::sharing::Edit<FileName, String>;
 
-/// The hub's copy of a shared file: the last edit of it that reached the
-/// hub, at the revision the hub gave it, later edits of any file having
-/// higher ones.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Copy {
-    pub file: FileName,
-    pub text: Option<String>,
-    pub revision: i64,
-}
+/// The hub's copy of a shared file.
+pub type Copy = super::sharing::Copy<FileName, String>;
 
 #[cfg(test)]
 mod tests;

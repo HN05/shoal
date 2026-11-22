@@ -64,6 +64,7 @@ pub mod sealing;
 pub mod serving;
 pub mod session;
 mod shared_config;
+mod sharing;
 #[cfg(test)]
 mod stand_in;
 pub mod streams;
@@ -121,7 +122,7 @@ pub struct Hub {
     /// The spaces of this machine the hub took in its last report.
     reported: reports::Reported,
     /// This machine's side of the shared config.
-    sharing: shared_config::Sharing,
+    shared_files: shared_config::Files,
     /// As the hub: the capacity each machine last reported.
     capacities: placement::Capacities,
     /// As the hub: the app registered as the placer.
@@ -158,7 +159,7 @@ impl Hub {
             known_tree: Default::default(),
             parent_permissions: Default::default(),
             reported: Default::default(),
-            sharing: Default::default(),
+            shared_files: Default::default(),
             capacities: Default::default(),
             placers: Default::default(),
         }

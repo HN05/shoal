@@ -36,9 +36,9 @@ struct Open {
     told: Option<Classified>,
     /// The agent tools the member last said it has.
     agents: Vec<Agent>,
-    /// Whether the member read the hub's shared files on this link, so it
-    /// receives the copies others change.
-    shares: bool,
+    /// The kinds of shared item whose copies the member read on this link,
+    /// so it receives the copies of them others change.
+    shares: HashSet<&'static str>,
 }
 
 /// A member's open link, which leaves [`Links`] when dropped.
@@ -98,7 +98,7 @@ impl Links {
             calls: None,
             told: None,
             agents: Vec::new(),
-            shares: false,
+            shares: HashSet::new(),
         };
         open.insert(member.clone(), registered);
         Some(Registration {
@@ -156,20 +156,20 @@ impl Links {
             .map_or_else(Vec::new, |open| open.agents.clone())
     }
 
-    /// Send `member`, whose link is open, the shared files' copies others
-    /// change from now on.
-    pub fn share_with(&self, member: &MemberId) {
+    /// Send `member`, whose link is open, the copies of the shared items of
+    /// `kind` others change from now on.
+    pub fn share_with(&self, member: &MemberId, kind: &'static str) {
         if let Some(open) = self.open.lock().unwrap().get_mut(member) {
-            open.shares = true;
+            open.shares.insert(kind);
         }
     }
 
-    /// The machines whose links receive the shared files' copies, with the
-    /// hub's calls to each.
-    pub fn sharing(&self) -> Vec<(MemberId, Arc<Calls>)> {
+    /// The machines whose links receive the copies of the shared items of
+    /// `kind`, with the hub's calls to each.
+    pub fn sharing(&self, kind: &str) -> Vec<(MemberId, Arc<Calls>)> {
         let open = self.open.lock().unwrap();
         (open.iter())
-            .filter(|(_, open)| open.shares)
+            .filter(|(_, open)| open.shares.contains(kind))
             .filter_map(|(member, open)| Some((member.clone(), open.calls.clone()?)))
             .collect()
     }

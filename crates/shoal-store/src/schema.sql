@@ -953,17 +953,21 @@ CREATE TABLE hub_takeovers (
     taken_at INTEGER NOT NULL
 );
 
-CREATE TABLE hub_shared_files (
-    file TEXT PRIMARY KEY,
-    text TEXT,
-    revision INTEGER NOT NULL
+CREATE TABLE hub_shared_items (
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    revision INTEGER NOT NULL,
+    PRIMARY KEY(kind, key)
 );
 
-CREATE TABLE shared_files (
-    file TEXT PRIMARY KEY,
+CREATE TABLE shared_items (
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
     hub_key TEXT NOT NULL,
-    text TEXT,
-    revision INTEGER NOT NULL
+    value TEXT,
+    revision INTEGER NOT NULL,
+    PRIMARY KEY(kind, key)
 );
 
 CREATE TABLE space_changes (

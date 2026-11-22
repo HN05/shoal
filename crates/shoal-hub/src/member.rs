@@ -290,7 +290,7 @@ impl Hub {
     /// Serve the open link on `transport` until it ends or `stop`
     /// resolves, answering what the hub passes this machine, and sending
     /// what waited for the link, then reporting this machine's spaces,
-    /// describing it, sending its packages and sharing its shared files,
+    /// describing it, sending its packages and sharing its shared items,
     /// meanwhile.
     async fn serve_hub(
         self: &Arc<Self>,

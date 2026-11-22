@@ -1,7 +1,13 @@
 use shoal_core::{config::Config, test_support::write_beside_global_config};
+use shoal_ids::member_ids::MemberId;
+
+use shoal_protocol::hub::sharing;
 
 use super::*;
-use crate::stand_in::{self, StandIn};
+use crate::{
+    sharing::{To, copies},
+    stand_in::{self, StandIn},
+};
 
 /// The hub service over a temporary store and home, with the stand-in
 /// daemon.
@@ -14,24 +20,24 @@ fn member(name: &str) -> MemberId {
     MemberId::from(name.to_owned())
 }
 
-fn edit(file: FileName, text: Option<&str>) -> Edit {
-    Edit {
-        file,
-        text: text.map(Into::into),
+fn edit(key: FileName, text: Option<&str>) -> Edit<SharedFiles> {
+    sharing::Edit {
+        key,
+        value: text.map(Into::into),
     }
 }
 
-fn copy(file: FileName, text: Option<&str>, revision: i64) -> Copy {
-    Copy {
-        file,
-        text: text.map(Into::into),
+fn copy(key: FileName, text: Option<&str>, revision: i64) -> Copy<SharedFiles> {
+    sharing::Copy {
+        key,
+        value: text.map(Into::into),
         revision,
     }
 }
 
 /// The hub's copy of every file.
-async fn hub_copies(hub: &crate::Hub) -> Vec<Copy> {
-    hub.store.read(copies::list).await.unwrap()
+async fn hub_copies(hub: &crate::Hub) -> Vec<Copy<SharedFiles>> {
+    hub.store.read(copies::list::<SharedFiles>).await.unwrap()
 }
 
 async fn alerts_of(hub: &crate::Hub, kind: AlertKind) -> Vec<String> {
@@ -64,7 +70,7 @@ async fn the_hub_keeps_the_last_edit_of_each_file_that_changes_it() {
     let mut copies = Vec::new();
     for (from, edit) in edits {
         copies = hub
-            .take_shared_edits(&daemon, from, vec![edit])
+            .take_shared_edits::<SharedFiles>(&daemon, from, vec![edit])
             .await
             .unwrap();
     }
@@ -79,7 +85,7 @@ async fn a_copy_that_replaces_an_unsent_edit_keeps_it_as_a_backup_once() {
     let root = tempfile::tempdir().unwrap();
     let (hub, daemon) = hub(&root).await;
     write_beside_global_config(&hub.paths, "shared.toml", "local\n");
-    let take = |copies| hub.take_sent_copies(&*daemon, true, copies);
+    let take = |copies| hub.take_sent_copies::<SharedFiles>(&daemon, true, copies);
     take(vec![copy(FileName::Config, Some("hub\n"), 1)])
         .await
         .unwrap();
@@ -103,7 +109,9 @@ async fn a_copy_that_replaces_an_unsent_edit_keeps_it_as_a_backup_once() {
     assert_eq!(alerts_of(&hub, AlertKind::SharedFileKept).await.len(), 1);
     // What the hub wrote is no edit to send back.
     let own = To::Own(hub.own_member().await.unwrap());
-    hub.share_round(&daemon, &own, true).await.unwrap();
+    hub.share_round::<SharedFiles>(&daemon, &own, true)
+        .await
+        .unwrap();
     assert_eq!(hub_copies(&hub).await, []);
 }
 
@@ -114,14 +122,18 @@ async fn an_invalid_shared_config_stays_on_its_machine_until_it_is_fixed() {
     let own = To::Own(hub.own_member().await.unwrap());
     write_beside_global_config(&hub.paths, "shared.toml", "cleanup = 'often'\n");
     for _ in 0..2 {
-        hub.share_round(&daemon, &own, true).await.unwrap();
+        hub.share_round::<SharedFiles>(&daemon, &own, true)
+            .await
+            .unwrap();
     }
     assert_eq!(hub_copies(&hub).await, []);
     let problems = alerts_of(&hub, AlertKind::EnvironmentProblem).await;
     assert_eq!(problems.len(), 1, "{problems:?}");
     let valid = "[cleanup.auto]\nidle_minutes = 30\n";
     write_beside_global_config(&hub.paths, "shared.toml", valid);
-    hub.share_round(&daemon, &own, true).await.unwrap();
+    hub.share_round::<SharedFiles>(&daemon, &own, true)
+        .await
+        .unwrap();
     assert_eq!(
         hub_copies(&hub).await,
         [copy(FileName::Config, Some(valid), 1)]
@@ -135,9 +147,13 @@ async fn a_machine_reads_the_hub_s_copies_before_it_sends_a_file_the_hub_never_h
     let own = To::Own(hub.own_member().await.unwrap());
     let valid = "[cleanup.auto]\nidle_minutes = 30\n";
     write_beside_global_config(&hub.paths, "shared.toml", valid);
-    hub.share_round(&daemon, &own, false).await.unwrap();
+    hub.share_round::<SharedFiles>(&daemon, &own, false)
+        .await
+        .unwrap();
     assert_eq!(hub_copies(&hub).await, []);
-    hub.share_round(&daemon, &own, true).await.unwrap();
+    hub.share_round::<SharedFiles>(&daemon, &own, true)
+        .await
+        .unwrap();
     assert_eq!(
         hub_copies(&hub).await,
         [copy(FileName::Config, Some(valid), 1)]
@@ -152,16 +168,20 @@ async fn a_copy_the_machine_could_not_take_comes_again_on_its_next_round() {
     let review = FileName::Mode("review".into());
     let sent = vec![edit(review.clone(), Some("Review it.\n"))];
     let copies = (hub.store)
-        .write(move |tx| copies::record(tx, sent))
+        .write(move |tx| copies::record::<SharedFiles>(tx, sent))
         .await
         .unwrap();
     // A directory where the file goes fails the write.
     let path = Shared::file(&hub.paths, &review);
     std::fs::create_dir_all(&path).unwrap();
-    let taken = hub.take_sent_copies(&*daemon, true, copies).await;
+    let taken = hub
+        .take_sent_copies::<SharedFiles>(&daemon, true, copies)
+        .await;
     assert!(taken.is_err());
     std::fs::remove_dir(&path).unwrap();
-    hub.share_round(&daemon, &own, true).await.unwrap();
+    hub.share_round::<SharedFiles>(&daemon, &own, true)
+        .await
+        .unwrap();
     assert_eq!(
         read(&hub, "shared/modes/review.md").as_deref(),
         Some("Review it.\n")
@@ -177,7 +197,7 @@ async fn an_invalid_edit_made_again_after_a_revert_alerts_again() {
     let invalid = "cleanup = 'often'\n";
     let round = |text: &str| {
         write_beside_global_config(&hub.paths, "shared.toml", text);
-        hub.share_round(&daemon, &own, true)
+        hub.share_round::<SharedFiles>(&daemon, &own, true)
     };
     round(valid).await.unwrap();
     round(invalid).await.unwrap();

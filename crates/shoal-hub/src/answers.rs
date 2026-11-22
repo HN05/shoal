@@ -191,18 +191,18 @@ impl Hub {
                 self.serve_fetch(&space, (calls.streams(), stream)).await?;
                 Reply::Streaming
             }
-            Call::ShareFiles { edits } => {
+            Call::Share { edits } => {
                 ensure_machine(member)?;
-                Reply::SharedFiles(self.take_shared_edits(daemon, &member.id, edits).await?)
+                Reply::Shared(self.take_edits(daemon, &member.id, edits).await?)
             }
             Call::Serve { .. }
             | Call::ServeStream { .. }
             | Call::Expired { .. }
             | Call::Availability { .. }
             | Call::Retire { .. }
-            | Call::SharedFiles { .. } => {
+            | Call::Shared { .. } => {
                 anyhow::bail!(
-                    "only the hub passes requests, expiries, availability, retirements and shared files to machines"
+                    "only the hub passes requests, expiries, availability, retirements and shared items to machines"
                 )
             }
         })

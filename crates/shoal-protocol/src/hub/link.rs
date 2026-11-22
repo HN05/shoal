@@ -51,7 +51,7 @@ use super::{
     numbering::Numbering,
     pairing::Pairing,
     routing::{Answered, Delivery, Expired, Forwarded, Queued, Told},
-    shared_config::{Copy, Edit},
+    sharing::{Copies, Edits},
 };
 
 /// The info that derives the key of frames the member sends.
@@ -446,13 +446,15 @@ pub enum Call {
         data: Option<String>,
         stream: u64,
     },
-    /// A machine's `edits` of the shared files, which the hub keeps as its
-    /// copies where they change them and sends every other machine.
-    /// Answered with [`Reply::SharedFiles`]: the hub's copy of every file.
-    ShareFiles { edits: Vec<Edit> },
-    /// The hub's call to a machine with the `copies` that changed since
-    /// the hub last answered it. Answered with [`Reply::Delivered`].
-    SharedFiles { copies: Vec<Copy> },
+    /// A machine's `edits` of one kind of shared item, which the hub keeps
+    /// as its copies where they change them and sends every other machine.
+    /// Answered with [`Reply::Shared`]: the hub's copy of every item of
+    /// that kind.
+    Share { edits: Edits },
+    /// The hub's call to a machine with the `copies` of one kind that
+    /// changed since the hub last answered it. Answered with
+    /// [`Reply::Delivered`].
+    Shared { copies: Copies },
 }
 
 /// The answer to a [`Call`].
@@ -479,7 +481,7 @@ pub enum Reply {
     Streaming,
     Queued(Queued),
     Delivered,
-    SharedFiles(Vec<Copy>),
+    Shared(Copies),
     Failed {
         message: String,
     },

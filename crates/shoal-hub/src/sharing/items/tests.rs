@@ -1,26 +1,33 @@
+use std::collections::BTreeMap;
+
+use shoal_protocol::hub::shared_config::FileName;
+
+use shoal_protocol::hub::sharing;
+
 use super::*;
+use crate::shared_config::SharedFiles;
 
 fn mode(name: &str) -> FileName {
     FileName::Mode(name.into())
 }
 
-fn copy(file: FileName, text: Option<&str>, revision: i64) -> Copy {
-    Copy {
-        file,
-        text: text.map(Into::into),
+fn copy(key: FileName, text: Option<&str>, revision: i64) -> Copy<SharedFiles> {
+    sharing::Copy {
+        key,
+        value: text.map(Into::into),
         revision,
     }
 }
 
-fn edit(file: FileName, text: Option<&str>) -> Edit {
-    Edit {
-        file,
-        text: text.map(Into::into),
+fn edit(key: FileName, text: Option<&str>) -> Edit<SharedFiles> {
+    sharing::Edit {
+        key,
+        value: text.map(Into::into),
     }
 }
 
 #[test]
-fn a_machine_sends_what_differs_from_its_agreed_copies_and_new_files_once_it_knows_the_hub_s() {
+fn a_machine_sends_what_differs_from_its_agreed_copies_and_new_items_once_it_knows_the_hub_s() {
     let on_disk = BTreeMap::from([
         (FileName::Config, "edited".to_owned()),
         (mode("same"), "same".to_owned()),
@@ -33,14 +40,14 @@ fn a_machine_sends_what_differs_from_its_agreed_copies_and_new_files_once_it_kno
         (mode("absent"), copy(mode("absent"), None, 4)),
     ]);
     assert_eq!(
-        edits(&on_disk, &agreed, false),
+        edits::<SharedFiles>(&on_disk, &agreed, false),
         [
             edit(FileName::Config, Some("edited")),
             edit(mode("removed"), None),
         ]
     );
     assert_eq!(
-        edits(&on_disk, &agreed, true),
+        edits::<SharedFiles>(&on_disk, &agreed, true),
         [
             edit(FileName::Config, Some("edited")),
             edit(mode("new"), Some("new")),
@@ -50,7 +57,7 @@ fn a_machine_sends_what_differs_from_its_agreed_copies_and_new_files_once_it_kno
 }
 
 #[test]
-fn a_copy_keeps_only_an_edit_the_hub_never_got() {
+fn a_copy_replaces_an_edit_only_where_the_hub_never_got_it() {
     let hubs = copy(FileName::Config, Some("hub's"), 5);
     let local = "local".to_owned();
     let agreed = copy(FileName::Config, Some("agreed"), 4);
@@ -62,7 +69,7 @@ fn a_copy_keeps_only_an_edit_the_hub_never_got() {
             None,
             Taking::Stale,
         ),
-        // The file reads the copy, or holds the edit the copy is.
+        // The item holds the copy, or the edit the copy is.
         (
             Some(&"hub's".to_owned()),
             Some(agreed.clone()),
@@ -75,14 +82,14 @@ fn a_copy_keeps_only_an_edit_the_hub_never_got() {
             Some(edit(FileName::Config, Some("hub's"))),
             Taking::Agree,
         ),
-        // The file reads what the machine agreed on before.
+        // The item holds what the machine agreed on before.
         (
             Some(&"agreed".to_owned()),
             Some(agreed.clone()),
             None,
             Taking::Write { keep: false },
         ),
-        // An edit since then, or a file the machine never agreed on.
+        // An edit since then, or an item the machine never agreed on.
         (
             Some(&local),
             Some(agreed.clone()),
@@ -90,7 +97,7 @@ fn a_copy_keeps_only_an_edit_the_hub_never_got() {
             Taking::Write { keep: true },
         ),
         (Some(&local), None, None, Taking::Write { keep: true }),
-        // A removed file has nothing to keep.
+        // A removed item has nothing to keep.
         (
             None,
             Some(agreed.clone()),
@@ -100,7 +107,7 @@ fn a_copy_keeps_only_an_edit_the_hub_never_got() {
         (None, None, None, Taking::Write { keep: false }),
     ];
     for (on_disk, agreed, sent, expected) in cases {
-        let taken = taking(&hubs, on_disk, agreed.as_ref(), sent.as_ref());
+        let taken = taking::<SharedFiles>(&hubs, on_disk, agreed.as_ref(), sent.as_ref());
         assert_eq!(
             taken, expected,
             "{on_disk:?} agreed {agreed:?} sent {sent:?}"

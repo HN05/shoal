@@ -183,8 +183,8 @@ impl Hub {
 
     /// This machine's answer to `call`, which the hub passes it, or which
     /// the hub's own machine answers itself: a forwarded request for one of
-    /// its spaces, an event for one, the expiry of what it sent, its
-    /// availability, or the shared files' copies.
+    /// its spaces, an event for one, the expiry of what it sent, or its
+    /// availability.
     pub(super) async fn answer_hub_call(&self, daemon: &dyn Daemon, call: Call) -> Result<Reply> {
         match call {
             Call::Serve { request } => Ok(Reply::Answered(
@@ -204,10 +204,6 @@ impl Hub {
                 Ok(Reply::Delivered)
             }
             Call::Retire { spaces } => Ok(Reply::Retired(self.retire(daemon, spaces).await)),
-            Call::SharedFiles { copies } => {
-                self.take_sent_copies(daemon, false, copies).await?;
-                Ok(Reply::Delivered)
-            }
             _ => bail!("a machine answers only what the hub passes it from other machines"),
         }
     }
@@ -234,6 +230,9 @@ impl Hub {
             Call::ServeStream { request, stream } => {
                 let answering = (calls.streams(), stream);
                 (self.serve_streamed(&daemon, request, answering)).map(|()| Reply::Streaming)
+            }
+            Call::Shared { copies } => {
+                (self.take_sent(&daemon, false, copies).await).map(|()| Reply::Delivered)
             }
             call => self.answer_hub_call(&*daemon, call).await,
         };
