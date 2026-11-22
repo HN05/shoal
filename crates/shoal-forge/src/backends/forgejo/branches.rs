@@ -4,7 +4,8 @@ use serde_json::Value;
 
 use super::Forgejo;
 use crate::{
-    backends::{BranchFields, Branches, github_rest},
+    backends::github_rest,
+    branches::{BranchFields, Branches},
     transport::api::TransportRequests,
 };
 use shoal_forge_types::{

@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use super::GitLab;
 use crate::{
-    backends::{BranchFields, Branches},
+    branches::{BranchFields, Branches},
     transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::{

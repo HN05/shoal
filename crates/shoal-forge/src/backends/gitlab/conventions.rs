@@ -2,7 +2,10 @@
 use serde_json::Value;
 
 use super::GitLab;
-use crate::{backends::Conventions, conventions::Lookup, transport::api::TransportRequests};
+use crate::{
+    conventions::{Conventions, Lookup},
+    transport::api::TransportRequests,
+};
 use shoal_forge_types::{ForgeRepo, items::link::ItemKind};
 
 impl Conventions for GitLab {

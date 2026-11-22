@@ -4,7 +4,8 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    backends::Conventions, capability::CapabilityRequests, conventions::Label,
+    capability::CapabilityRequests,
+    conventions::{Conventions, Label},
     transport::account::Account,
 };
 use shoal_forge_types::{ForgeRepo, capability::Capability};

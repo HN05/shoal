@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    backends::Conventions,
+    conventions::Conventions,
     test_support::{Server, agent_on, repo_on},
     transport::memory::Memory,
 };

@@ -3,7 +3,8 @@ use serde_json::Value;
 
 use super::Bitbucket;
 use crate::{
-    backends::Conventions, conventions::Lookup, items::item::text,
+    conventions::{Conventions, Lookup},
+    items::item::text,
     transport::api::TransportRequests,
 };
 use shoal_forge_types::{ForgeRepo, items::link::ItemKind};

@@ -6,9 +6,8 @@ use anyhow::{Context, Result, ensure};
 use shoal_refs::CommitId;
 
 use crate::{
-    backends::Conventions,
     capability::CapabilityRequests,
-    conventions::labels::LabelRequests,
+    conventions::{Conventions, labels::LabelRequests},
     items::{
         Items,
         attach::{AttachRequests, AttachSteps, Holder, Pending},

@@ -3,8 +3,7 @@ use serde_json::Value;
 
 use super::GitHub;
 use crate::{
-    backends::Conventions,
-    conventions::{Lookup, shared_lookups},
+    conventions::{Conventions, Lookup, shared_lookups},
     items::item::text,
 };
 use shoal_forge_types::items::link::ItemKind;

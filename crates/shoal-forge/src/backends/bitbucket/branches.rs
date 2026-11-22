@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::Bitbucket;
 use crate::{
-    backends::{BranchFields, Branches},
+    branches::{BranchFields, Branches},
     transport::{
         account::Account,
         api::{Request, TransportRequests},

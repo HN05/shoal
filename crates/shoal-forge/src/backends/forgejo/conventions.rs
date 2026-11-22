@@ -4,8 +4,7 @@ use serde_json::Value;
 
 use super::{Forgejo, organization};
 use crate::{
-    backends::Conventions,
-    conventions::{Lookup, shared_lookups},
+    conventions::{Conventions, Lookup, shared_lookups},
     transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::{ForgeRepo, items::link::ItemKind};
