@@ -155,7 +155,9 @@ async fn a_chat_in_a_workspace_s_worktree_follows_that_workspace() {
     hub.handovers.release(&fix, &laptop).unwrap();
     let after = hub.handovers.release(&talk, &laptop).unwrap().after;
     let mut after = after.expect("the chat waits for its workspace");
-    assert!(!*after.borrow_and_update());
+    // Even once the laptop stays, as after a cancelled shutdown.
+    hub.handovers.stays(&laptop);
+    assert!(!after.has_changed().unwrap());
     hub.handovers.continued(&fix);
     assert!(*after.borrow_and_update());
 }

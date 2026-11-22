@@ -29,7 +29,7 @@ pub(crate) struct Handovers {
     /// The spaces handed over, with where the hub sends each.
     placed: Mutex<HashMap<SpaceId, Placed>>,
     /// The spaces released, each with whether its continuing ended, which
-    /// a chat in its worktree waits for.
+    /// a chat in its worktree waits for, until the hub's daemon stops.
     continuing: Mutex<HashMap<SpaceId, watch::Sender<bool>>>,
     /// The spaces handed over whose new machine has not claimed them yet,
     /// each with that machine.
@@ -55,19 +55,11 @@ impl Handovers {
 
     /// Record that `member`, whose link opened again or whose shutdown was
     /// cancelled, is no longer shutting down, and keeps the spaces it did
-    /// not release.
+    /// not release; those it released go on, and the chats in their
+    /// worktrees still follow them.
     pub(crate) fn stays(&self, member: &MemberId) {
         self.leaving.lock().unwrap().remove(member);
-        let mut placed = self.placed.lock().unwrap();
-        let gone: Vec<SpaceId> = (placed.iter())
-            .filter(|(_, placed)| &placed.from == member)
-            .map(|(id, _)| id.clone())
-            .collect();
-        let mut continuing = self.continuing.lock().unwrap();
-        for id in gone {
-            placed.remove(&id);
-            continuing.remove(&id);
-        }
+        (self.placed.lock().unwrap()).retain(|_, placed| &placed.from != member || placed.released);
     }
 
     /// Record that `member` hands spaces over for its shutdown.
