@@ -1,4 +1,4 @@
-use super::{Forwarding, Target};
+use super::{Forwarding, Lifetime, Target};
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +12,11 @@ use serde::{Deserialize, Serialize};
 pub enum FileMethod {
     /// The files attached to a workspace or chat, oldest first.
     ListFiles { space: SpaceSelector },
+    /// The bytes of the file `id` attached to a workspace or chat, read on
+    /// the machine that keeps its copy: answered with
+    /// [`super::Body::FileBytes`] frames as the daemon reads the copy, the
+    /// last [`crate::files::FileBytes::End`].
+    ReadFile { space: SpaceSelector, id: i64 },
     /// Attach copies of files to a workspace or chat without a message.
     AddFiles {
         space: SpaceSelector,
@@ -32,11 +37,22 @@ pub enum FileMethod {
 }
 
 impl FileMethod {
+    pub fn lifetime(&self) -> Lifetime {
+        match self {
+            Self::ReadFile { .. } => Lifetime::Open,
+            Self::ListFiles { .. } | Self::AddFiles { .. } | Self::RemoveFiles { .. } => {
+                Lifetime::Reply
+            }
+        }
+    }
+
     /// Attaching reads the files where the caller runs; the rest read or
-    /// delete the space's records.
+    /// delete the space's records, or read a copy's bytes as its machine
+    /// reads them.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ListFiles { .. } | Self::RemoveFiles { .. } => Forwarding::Online,
+            Self::ReadFile { .. } => Forwarding::Streamed,
             Self::AddFiles { .. } => Forwarding::Never,
         }
     }
@@ -44,6 +60,7 @@ impl FileMethod {
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
             Self::ListFiles { space }
+            | Self::ReadFile { space, .. }
             | Self::AddFiles { space, .. }
             | Self::RemoveFiles {
                 space: Some(space), ..

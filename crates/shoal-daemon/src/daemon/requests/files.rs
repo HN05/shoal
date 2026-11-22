@@ -13,8 +13,9 @@ use super::super::{
 use crate::protocol::{Body, FileMethod};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Every answer lists files, which no limit keeps to one frame, so each is
-/// sent in pages.
+/// Every answer but a file's bytes lists files, which no limit keeps to one
+/// frame, so each is sent in pages; the bytes come in frames as the copy
+/// is read.
 pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: FileMethod,
@@ -22,6 +23,13 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     let files = match method {
         FileMethod::ListFiles { space } => manager.attached_files(&space).await,
+        FileMethod::ReadFile { space, id } => {
+            let copy = manager.open_attached_file(&space, id).await?;
+            let manager = manager.clone();
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                manager.stream_attached_file(stream, request_id, copy, guard)
+            }));
+        }
         FileMethod::AddFiles { space, files } => {
             let attacher = manager.attacher(caller).await;
             manager.add_attached_files(&space, files, &attacher).await
@@ -50,7 +58,9 @@ pub(super) async fn handle(
 impl Checked for FileMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
-            Self::ListFiles { .. } | Self::AddFiles { .. } => Some(TargetCheck::Space),
+            Self::ListFiles { .. } | Self::ReadFile { .. } | Self::AddFiles { .. } => {
+                Some(TargetCheck::Space)
+            }
             Self::RemoveFiles { .. } => None,
         }
     }
@@ -65,6 +75,7 @@ impl Scoped for FileMethod {
         match self {
             FileMethod::AddFiles { space, .. } => Ok(Some(space)),
             FileMethod::ListFiles { space }
+            | FileMethod::ReadFile { space, .. }
             | FileMethod::RemoveFiles {
                 space: Some(space), ..
             } => {

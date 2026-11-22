@@ -4,6 +4,7 @@ mod apps;
 mod attaching;
 mod demos;
 mod directory;
+mod files;
 mod following;
 mod moves;
 mod numbers;

@@ -40,7 +40,7 @@ impl Operation {
                 | Self::Branch(BranchMethod::ListForgeBranches { .. })
                 | Self::Demo(DemoMethod::ListDemos { .. })
                 | Self::Execution(ExecutionMethod::CheckMerge | ExecutionMethod::CheckUnmerge)
-                | Self::File(FileMethod::ListFiles { .. })
+                | Self::File(FileMethod::ListFiles { .. } | FileMethod::ReadFile { .. })
                 | Self::Hold(HoldMethod::HoldList { .. })
                 | Self::Item(
                     ItemMethod::ListItems { .. }

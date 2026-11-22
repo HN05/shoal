@@ -334,6 +334,7 @@ response_bodies! {
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
     Diff(crate::diffs::DiffOutput),
+    FileBytes(crate::files::FileBytes),
     MergeWarning(Option<crate::model::MergeWarning>),
     MergePreview(crate::model::MergePreview),
     MergePath(crate::model::MergePath),

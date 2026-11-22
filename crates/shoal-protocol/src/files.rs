@@ -123,6 +123,35 @@ impl NewFile {
     }
 }
 
+/// A frame of an attached file's bytes, as the machine that keeps its
+/// copy reads them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileBytes {
+    /// The next bytes, in standard base64.
+    Data(String),
+    /// The copy's end, the answer's last frame.
+    End,
+}
+
+impl FileBytes {
+    pub fn data(bytes: &[u8]) -> Self {
+        use base64::Engine as _;
+        Self::Data(base64::engine::general_purpose::STANDARD.encode(bytes))
+    }
+
+    /// The bytes it carries; none for the end.
+    pub fn bytes(&self) -> Result<Option<Vec<u8>>> {
+        use base64::Engine as _;
+        match self {
+            Self::Data(data) => Ok(Some(
+                base64::engine::general_purpose::STANDARD.decode(data)?,
+            )),
+            Self::End => Ok(None),
+        }
+    }
+}
+
 /// Where Shoal's copy of an attached file is: at a path on the machine
 /// that answered, or on another joined machine, which alone keeps it and
 /// from which a client reads it by its space and record ID.

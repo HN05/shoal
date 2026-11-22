@@ -1,9 +1,12 @@
-//! Files attached to a workspace or chat: Shoal's copies and how they came.
+//! Files attached to a workspace or chat: Shoal's copies and how they came,
+//! and their bytes from whichever machine keeps them.
+use anyhow::Result;
 use shoal_protocol::files::{AttachedFile, NewFile};
-
-use crate::connection::PreparedPages;
-use shoal_protocol::protocol::FileMethod;
+use shoal_protocol::protocol::{Body, FileMethod, Responses};
 use shoal_protocol::space_names::SpaceSelector;
+use tokio::{io::BufReader, net::UnixStream};
+
+use crate::connection::{Daemon, PreparedPages, open_buffered};
 
 /// The files attached to `space`.
 pub fn list(space: SpaceSelector) -> PreparedPages<AttachedFile> {
@@ -24,3 +27,46 @@ pub fn remove(
 ) -> PreparedPages<AttachedFile> {
     PreparedPages::new(FileMethod::RemoveFiles { space, names, ids })
 }
+
+/// An attached file's bytes, as the machine that keeps its copy reads them.
+pub struct FileRead {
+    responses: Responses<BufReader<UnixStream>>,
+    first: Option<Body>,
+}
+
+/// Read the file `id` attached to `space`, on the machine that keeps its
+/// copy. Fails at once when the daemon refuses, as for a file outside the
+/// caller's scope or one kept on a machine that is offline.
+pub async fn read(daemon: &impl Daemon, space: SpaceSelector, id: i64) -> Result<FileRead> {
+    let (stream, first) = open_buffered(daemon, FileMethod::ReadFile { space, id }).await?;
+    Ok(FileRead {
+        responses: Responses::new(stream),
+        first: Some(first.into_result()?),
+    })
+}
+
+impl FileRead {
+    /// The next bytes of the file; none once it has all come.
+    pub async fn next(&mut self) -> Result<Option<Vec<u8>>> {
+        let body = match self.first.take() {
+            Some(body) => body,
+            None => self.responses.next().await?.body.into_result()?,
+        };
+        match body {
+            Body::FileBytes(bytes) => bytes.bytes(),
+            body => Err(body.unexpected("FileBytes")),
+        }
+    }
+
+    /// The rest of the file's bytes.
+    pub async fn to_end(mut self) -> Result<Vec<u8>> {
+        let mut all = Vec::new();
+        while let Some(bytes) = self.next().await? {
+            all.extend(bytes);
+        }
+        Ok(all)
+    }
+}
+
+#[cfg(test)]
+mod tests;

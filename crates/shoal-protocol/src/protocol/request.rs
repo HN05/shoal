@@ -175,6 +175,7 @@ impl Operation {
             Self::Demo(method) => method.lifetime(),
             Self::App(method) => method.lifetime(),
             Self::Hub(method) => method.lifetime(),
+            Self::File(method) => method.lifetime(),
             Self::Daemon(_)
             | Self::Workspace(_)
             | Self::Place(_)
@@ -187,7 +188,6 @@ impl Operation {
             | Self::Recovery(_)
             | Self::Assignment(_)
             | Self::Hold(_)
-            | Self::File(_)
             | Self::Ci(_)
             | Self::Branch(_)
             | Self::Change(_)
