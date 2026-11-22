@@ -2,6 +2,7 @@
 //! terminal, or one another joined machine runs: a terminal demo shown in
 //! this terminal, any other forwarded from a port here.
 use anyhow::{Context as _, Result, ensure};
+use shoal_workers::hosting;
 
 use super::{
     forward::forward,
@@ -12,7 +13,7 @@ use crate::cli::{
     commands::viewer::{self, Viewed},
     context::Context,
     output::Palette,
-    terminal, ui,
+    ui,
 };
 use shoal_protocol::demos::{Kind, Running};
 use shoal_protocol::space_names::SpaceSelector;
@@ -84,7 +85,7 @@ async fn open_running(ctx: &Context, demo: &Running) -> Result<()> {
     match (&demo.launch.open, demo.launch.preset) {
         (Some(open), _) => run_opener(ctx, demo, open).await,
         (None, Some(preset)) => presets::open(&ctx.paths, preset, demo).await,
-        (None, None) => terminal::open_demo(&demo.launch).await,
+        (None, None) => hosting::open_demo(&demo.launch).await,
     }
 }
 

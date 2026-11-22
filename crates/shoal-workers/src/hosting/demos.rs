@@ -2,21 +2,21 @@
 //! terminal host.
 use anyhow::{Context as _, Result};
 
+use super::Caller;
+use crate::places::groups;
 use crate::{
-    cli::context::Context,
     config::Effective,
     model::Workspace,
     sessions::Origin,
     terminal::{Demo, DemoWorker, Host, current_origin, named, names_places, place_env},
 };
 use shoal_protocol::demos::Launch;
-use shoal_workers::places::groups;
 
 /// Start a demo of `workspace` in the first host that runs queued starts and
 /// keeps demos, failing with the last host's reason when none does. `worker`
 /// gives the demo worker's argv for the place it runs in, which this returns.
-pub(in crate::cli) async fn start_demo(
-    ctx: &Context,
+pub async fn start_demo(
+    caller: Caller<'_>,
     settings: &Effective,
     workspace: &Workspace,
     name: &str,
@@ -25,9 +25,9 @@ pub(in crate::cli) async fn start_demo(
 ) -> Result<Origin> {
     let origin = current_origin();
     let repo = groups::Repo::Id(workspace.repository().as_str());
-    let env = place_env(&ctx.paths)?;
+    let env = place_env(caller.paths)?;
     groups::first_queued(
-        &ctx.paths,
+        caller.paths,
         settings,
         origin.as_ref(),
         &repo,
@@ -39,7 +39,7 @@ pub(in crate::cli) async fn start_demo(
             host.host.ensure_installed()?;
             let demo = Demo {
                 launch,
-                state: &ctx.paths.state,
+                state: &caller.paths.state,
                 origin: group,
                 workspace: &workspace.id,
                 cwd: &workspace.path,
@@ -67,7 +67,7 @@ fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
 }
 
 /// Show the demo `launch` describes in this terminal.
-pub(in crate::cli) async fn open_demo(launch: &Launch) -> Result<()> {
+pub async fn open_demo(launch: &Launch) -> Result<()> {
     let place = &launch.origin;
     named(place.host)
         .places()
@@ -77,7 +77,7 @@ pub(in crate::cli) async fn open_demo(launch: &Launch) -> Result<()> {
 }
 
 /// What the demo `launch` describes shows.
-pub(in crate::cli) async fn demo_screen(launch: &Launch) -> Result<String> {
+pub async fn demo_screen(launch: &Launch) -> Result<String> {
     let place = &launch.origin;
     named(place.host)
         .demos()
@@ -87,7 +87,7 @@ pub(in crate::cli) async fn demo_screen(launch: &Launch) -> Result<String> {
 }
 
 /// Type `keys` into the demo `launch` describes.
-pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
+pub async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
     let place = &launch.origin;
     named(place.host)
         .types()

@@ -1,9 +1,10 @@
 //! `shoal demo screen` and `shoal demo send`: reading a demo's screen and
 //! typing into it.
 use anyhow::Result;
+use shoal_workers::hosting;
 
 use super::lookup::named;
-use crate::cli::{context::Context, terminal};
+use crate::cli::context::Context;
 use crate::client::output::demo::{Screen, Sent};
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -14,7 +15,7 @@ pub(super) async fn screen(
     lines: usize,
 ) -> Result<i32> {
     let demo = named(ctx, workspace, name).await?;
-    let screen = terminal::demo_screen(&demo.launch).await?;
+    let screen = hosting::demo_screen(&demo.launch).await?;
     let text = last_lines(&screen, lines).unwrap_or_default();
     let shown = Screen {
         name: name.to_owned(),
@@ -31,7 +32,7 @@ pub(super) async fn send(
     keys: &str,
 ) -> Result<i32> {
     let demo = named(ctx, workspace, name).await?;
-    terminal::send_demo_keys(&demo.launch, keys).await?;
+    hosting::send_demo_keys(&demo.launch, keys).await?;
     ctx.emit(&format!("Sent to demo {name}"), Sent { sent: true })?;
     Ok(0)
 }

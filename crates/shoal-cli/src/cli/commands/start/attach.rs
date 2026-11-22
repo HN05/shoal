@@ -6,14 +6,15 @@
 //! leaves it to the queue's background start while the limits hold it
 //! back.
 use anyhow::{Context as _, Result};
+use shoal_workers::hosting;
 
 use super::placement::Attach;
 use crate::{
     agents::HomeRecords,
     cli::{
+        args::internal::PlaceWorkerArgs,
         commands::{links, preparation, queued_agents},
         context::Context,
-        terminal,
     },
     client::output::spaces::StartedBeside,
     config::Effective,
@@ -197,10 +198,11 @@ async fn run_beside(
         ..PlacePlan::new(&placed.space.id, entry.map(|entry| &entry.id))
     };
     let placement = match focused {
-        true => terminal::Placement::Focus,
-        false => terminal::Placement::Background,
+        true => crate::terminal::Placement::Focus,
+        false => crate::terminal::Placement::Background,
     };
-    let opened = terminal::start_place(ctx, settings, placement, &mut plan, &placed.space).await;
+    let opened =
+        hosting::start_place(ctx.caller(), settings, placement, &mut plan, &placed.space).await;
     if !failing_entry(ctx, entry, opened).await? {
         return run_named(ctx, placed, None).await;
     }
@@ -225,11 +227,25 @@ async fn failing_entry(
     opened
 }
 
+/// The place worker: carry out the plan `args` give in the place of the
+/// host they name that this process runs in, or in no place without one.
+pub(in crate::cli) async fn place_worker(mut ctx: Context, args: PlaceWorkerArgs) -> Result<i32> {
+    let plan = serde_json::from_str(&args.plan).context("invalid place plan")?;
+    if let Some(host) = args.host {
+        ctx.place = Some(hosting::Place::here(
+            host,
+            args.close_when_done,
+            args.focused,
+        )?);
+    }
+    execute_place(&ctx, plan).await
+}
+
 /// Carry out `plan` in the place opened for it, or in no place: follow
 /// the preparation it hands over and run its agent once the queue lets it,
 /// as a place beside a start's terminal does, or run the agent of the
 /// starting launch it names, or else give the workspace it names a shell.
-pub(in crate::cli) async fn execute_place(ctx: &Context, plan: PlacePlan) -> Result<i32> {
+async fn execute_place(ctx: &Context, plan: PlacePlan) -> Result<i32> {
     if plan.handoff.is_some() {
         return Box::pin(run_in_place(ctx, plan)).await;
     }
@@ -251,7 +267,7 @@ async fn shell_in_place(
         anyhow::bail!("a chat starts with its agent");
     };
     super::run::host(ctx, &records, place_name, None).await?;
-    terminal::open_shell(ctx, &workspace.path).await
+    hosting::open_shell(ctx.caller(), &workspace.path).await
 }
 
 /// Run, in the place opened for it, the agent `plan` names the entry of,

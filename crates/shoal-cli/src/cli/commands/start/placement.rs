@@ -2,10 +2,11 @@
 //! it skips the queue there because the user waits for it.
 use super::detached::leaves_caller;
 use crate::{
-    cli::{agents, context::Context, terminal},
+    cli::{agents, context::Context},
     config::{Effective, modes::ModeName},
 };
 use shoal_protocol::launches::{Launch, StartTarget};
+use shoal_workers::hosting;
 
 /// How a start runs its agent once the daemon records its space.
 #[derive(Debug, Clone, Copy, Default)]
@@ -67,19 +68,22 @@ impl Attach {
         }
         // Without a host that opens places beside it, a terminal runs
         // every start's agent here.
-        if options.here || !terminal::opens_beside(ctx, settings) {
+        if options.here || !hosting::opens_beside(ctx.caller(), settings) {
             return Some(Self::Here);
         }
-        let requested = options.focus.then_some(terminal::Placement::Focus);
+        let requested = options.focus.then_some(crate::terminal::Placement::Focus);
         let waits_for_user = agent.is_none() || waits(launch, issue_linked);
-        let placement = terminal::Placement::of(settings, &mode(launch), requested, waits_for_user);
+        let placement =
+            crate::terminal::Placement::of(settings, &mode(launch), requested, waits_for_user);
         // The queue starts only an agent of its own in the background; a
         // shell, or an agent that runs its own way, takes a place from here.
         let queued = agent.is_some() && !own_way;
         match (placement, queued) {
-            (terminal::Placement::Focus, _) => Some(Self::Beside { focused: true }),
-            (terminal::Placement::Background, false) => Some(Self::Beside { focused: false }),
-            (terminal::Placement::Background, true) => None,
+            (crate::terminal::Placement::Focus, _) => Some(Self::Beside { focused: true }),
+            (crate::terminal::Placement::Background, false) => {
+                Some(Self::Beside { focused: false })
+            }
+            (crate::terminal::Placement::Background, true) => None,
         }
     }
 }

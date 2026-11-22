@@ -1,6 +1,7 @@
 //! `shoal demo start`: choosing the demo, replacing a running one of its
 //! name, placing its worker in a terminal host and waiting until it records
 //! that it runs.
+use shoal_workers::hosting;
 use std::{collections::BTreeMap, ffi::OsString, time::Duration};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -10,7 +11,6 @@ use crate::{
     cli::{
         context::Context,
         output::Style,
-        terminal,
         ui::{self, Acting, Fallback},
     },
     demos,
@@ -241,7 +241,15 @@ async fn place(
             },
         )
     };
-    let place = terminal::start_demo(ctx, settings, workspace, &chosen.name, &id, &worker).await?;
+    let place = hosting::start_demo(
+        ctx.caller(),
+        settings,
+        workspace,
+        &chosen.name,
+        &id,
+        &worker,
+    )
+    .await?;
     Ok(launch(&place))
 }
 
@@ -268,7 +276,7 @@ async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> 
 
 /// Why the demo did not start, from the end of what its place shows.
 async fn not_started(launch: &Launch) -> anyhow::Error {
-    let screen = terminal::demo_screen(launch).await.unwrap_or_default();
+    let screen = hosting::demo_screen(launch).await.unwrap_or_default();
     anyhow::anyhow!(
         "demo {} did not start{}",
         launch.name,

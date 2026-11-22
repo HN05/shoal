@@ -1,6 +1,7 @@
 //! Opening removed spaces again from their removal records.
 use crate::cli::commands::resume::reports::QueuedExt;
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_workers::hosting;
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result};
@@ -11,7 +12,7 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
-        shell, terminal,
+        shell,
     },
     model::{Head, RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace, Space},
     state::WorkspaceState,
@@ -35,7 +36,7 @@ pub(in crate::cli::commands) async fn reopen_each(
     }
     if let [opened] = reopened.as_slice()
         && let Some(workspace) = opened.space.worktree()
-        && terminal::follows_caller(ctx)
+        && hosting::follows_caller(ctx.caller())
     {
         shell::navigate(ctx, &workspace.path)?;
     }
@@ -161,7 +162,7 @@ pub(in crate::cli::commands) async fn finish_reopen(
     }
     ctx.emit(&reopened.message(ctx, action), &reopened)?;
     if let Some(workspace) = reopened.space.worktree()
-        && terminal::follows_caller(ctx)
+        && hosting::follows_caller(ctx.caller())
     {
         shell::navigate(ctx, &workspace.path)?;
     }

@@ -2,13 +2,14 @@
 //! chat's, in this terminal, or at once where it stopped or in the
 //! background, as `shoal_workers::resume` does.
 use anyhow::{Result, ensure};
+use shoal_workers::hosting;
 use std::path::PathBuf;
 
 use super::reports::{self, Reporting};
 use super::{changed, sessions};
 use crate::execution::recovery::{LastSessionExt as _, RecordExt};
 use crate::{
-    cli::{context::Context, terminal},
+    cli::context::Context,
     config::permissions::PermissionChange,
     execution::recovery::{
         LastSession, Recovery, SavedCommand, changes::Change, claim_last_session, claim_record,
@@ -172,15 +173,15 @@ async fn launch(
     // A host that runs agents in places of its own runs the space's there.
     let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
-    let placed = terminal::AgentSpace::of(space);
+    let placed = hosting::AgentSpace::of(space);
     let command = &recovery.command;
     let source = restore_source();
     let restore = (records.as_slice(), source.is_some());
-    let ran = terminal::run_agent(ctx, &settings, &placed, &agent, restore, command);
+    let ran = hosting::run_agent(ctx.caller(), &settings, &placed, &agent, restore, command);
     if let Some(code) = ran.await? {
         return Ok(code);
     }
-    terminal::label_current(&ctx.paths, placed.owner()).await?;
+    hosting::label_current(&ctx.paths, placed.owner()).await?;
     shoal_workers::execution::run_recovery(
         &ctx.paths,
         SpaceSelector::id(&space.id),

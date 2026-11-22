@@ -15,6 +15,7 @@ pub mod hosts;
 mod labelled;
 mod naming;
 mod opening;
+mod placement;
 mod prompts;
 pub mod queued;
 mod recorded;
@@ -44,6 +45,7 @@ pub use opening::{
     chat_place_env, open_in_background, place_env, rerun_in_host, shoal_command, show_opened,
     show_place_elsewhere,
 };
+pub use placement::Placement;
 pub use prompts::PromptSession;
 pub(crate) use prompts::agents_can_be_prompted;
 pub use prompts::{CONTINUE_PROMPT, WAKE_PROMPT, send_keys, submit_prompt, submitted_by_shoal};

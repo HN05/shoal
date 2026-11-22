@@ -1,14 +1,16 @@
-//! The place a host opened for a recorded space: the place worker that
-//! runs there, and how the place hosts the space.
+//! The place a host opened for a recorded space, and how the place hosts
+//! the space.
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use std::path::Path;
 
 use anyhow::{Context as _, Result};
 
-use super::here::{created_here, label_current, place_here, record_owned};
+use super::{
+    Caller,
+    here::{created_here, label_current, place_here, record_owned},
+};
 use crate::{
-    cli::{args::internal::PlaceWorkerArgs, commands::execute_place, context::Context},
     env,
     sessions::HostName,
     terminal::{Host, Owner, Places, named},
@@ -16,7 +18,7 @@ use crate::{
 
 /// The place a host opened for this process to run a space's agent or a
 /// workspace's shell in, hosting the space in place of the caller's shell.
-pub(in crate::cli) struct Place {
+pub struct Place {
     host: &'static dyn Host,
     /// The place's ID in its origin record.
     id: String,
@@ -25,20 +27,10 @@ pub(in crate::cli) struct Place {
     focused: bool,
 }
 
-/// The place worker: carry out the plan `args` give in the place of the
-/// host they name that this process runs in, or in no place without one.
-pub(in crate::cli) async fn place_worker(mut ctx: Context, args: PlaceWorkerArgs) -> Result<i32> {
-    let plan = serde_json::from_str(&args.plan).context("invalid place plan")?;
-    if let Some(host) = args.host {
-        ctx.place = Some(Place::here(host, args.close_when_done, args.focused)?);
-    }
-    execute_place(&ctx, plan).await
-}
-
 impl Place {
     /// The place of `host` this process runs in, which it opened for it,
     /// `focused` or not, closing with the workspace when `closes_when_done`.
-    fn here(host: HostName, closes_when_done: bool, focused: bool) -> Result<Self> {
+    pub fn here(host: HostName, closes_when_done: bool, focused: bool) -> Result<Self> {
         let host = named(host);
         let id = place_here(host).with_context(|| {
             format!("{} did not name the place this worker runs in", host.name())
@@ -57,36 +49,33 @@ impl Place {
 /// with a workspace when it should, and once opened focused is where
 /// `attach -` returns. A session the user opened is labelled once an agent
 /// starts in it.
-pub(in crate::cli) async fn host_space(
-    ctx: &Context,
+pub async fn host_space(
+    caller: Caller<'_>,
     owner: Owner<'_>,
     runs_agent: bool,
     label: &str,
 ) -> Result<()> {
-    match (&ctx.place, runs_agent) {
+    match (caller.place, runs_agent) {
         // A place is labelled before it is watched, since the watcher only
         // closes a place it finds hosting the workspace.
         (Some(place), _) => {
             if let Some(sessions) = place.host.sessions() {
-                sessions.label_current(&ctx.paths.state, owner).await?;
+                sessions.label_current(&caller.paths.state, owner).await?;
             }
-            label_place(ctx, place.host, owner.id(), label).await;
+            label_place(caller, place.host, owner.id(), label).await;
             if place.closes_when_done
                 && let Owner::Workspace(workspace) = owner
             {
-                let (paths, json) = (&ctx.paths, ctx.json);
-                shoal_workers::watchers::start_watcher(
-                    paths, json, place.host, &place.id, workspace,
-                )
-                .await?;
+                let (paths, json) = (caller.paths, caller.json);
+                crate::watchers::start_watcher(paths, json, place.host, &place.id, workspace)
+                    .await?;
             }
             if place.focused {
-                shoal_workers::history::record_attach(&ctx.paths, &SpaceSelector::id(owner.id()))
-                    .await;
+                crate::history::record_attach(caller.paths, &SpaceSelector::id(owner.id())).await;
             }
             Ok(())
         }
-        (None, true) => label_current(&ctx.paths, owner).await,
+        (None, true) => label_current(caller.paths, owner).await,
         (None, false) => Ok(()),
     }
 }
@@ -94,7 +83,7 @@ pub(in crate::cli) async fn host_space(
 /// Show `label` on the place of `host` this process runs in, one `host`
 /// created for `space`, and record it as that space's. Neither is needed
 /// for the space to work, so a failure only warns.
-async fn label_place(ctx: &Context, host: &dyn Host, space: &SpaceId, label: &str) {
+async fn label_place(caller: Caller<'_>, host: &dyn Host, space: &SpaceId, label: &str) {
     let Some(here) = created_here(host).await else {
         return;
     };
@@ -103,13 +92,14 @@ async fn label_place(ctx: &Context, host: &dyn Host, space: &SpaceId, label: &st
     {
         eprintln!("warning: cannot name the {} place: {error:#}", host.name());
     }
-    record_owned(ctx, space, here).await;
+    record_owned(caller, space, here).await;
 }
 
 /// Whether the shell that started this process enters a new workspace
 /// afterwards: the caller's own or that of the place opened for it.
-pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
-    ctx.place
+pub fn follows_caller(caller: Caller<'_>) -> bool {
+    caller
+        .place
         .as_ref()
         .is_none_or(|place| place.host.places().is_none_or(Places::places_keep_shells))
 }
@@ -117,8 +107,8 @@ pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
 /// Give a workspace added without an agent a shell at `cwd` in the place
 /// opened for it, which stays open while the shell runs. The caller's own
 /// terminal gets its shell back instead.
-pub(in crate::cli) async fn open_shell(ctx: &Context, cwd: &Path) -> Result<i32> {
-    if ctx.place.is_none() {
+pub async fn open_shell(caller: Caller<'_>, cwd: &Path) -> Result<i32> {
+    if caller.place.is_none() {
         return Ok(0);
     }
     let shell = std::env::var_os("SHELL")
@@ -131,5 +121,7 @@ pub(in crate::cli) async fn open_shell(ctx: &Context, cwd: &Path) -> Result<i32>
         .status()
         .await
         .context("open workspace shell")?;
-    Ok(env::session_exit_code(crate::execution::exit_code(status)))
+    Ok(env::session_exit_code(shoal_core::execution::exit_code(
+        status,
+    )))
 }

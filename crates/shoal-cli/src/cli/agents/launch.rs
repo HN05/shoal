@@ -1,5 +1,6 @@
 //! Tracked terminal launches, the agent's configured command with Shoal's
 //! instructions, hooks and prompt, run through the execution wrapper.
+use shoal_workers::hosting;
 use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
@@ -8,7 +9,7 @@ use super::Launch;
 use crate::{
     agent::Agent,
     agents::{Integration, ensure_available},
-    cli::{context::Context, terminal},
+    cli::context::Context,
     config::Effective,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -45,13 +46,20 @@ pub(super) async fn tracked(
         narrowing,
         new_session,
     };
-    let space = terminal::AgentSpace::of_home(records.home()?);
-    if let Some(code) =
-        terminal::run_agent(ctx, &settings, &space, &agent, (&replaces, false), &command).await?
+    let space = hosting::AgentSpace::of_home(records.home()?);
+    if let Some(code) = hosting::run_agent(
+        ctx.caller(),
+        &settings,
+        &space,
+        &agent,
+        (&replaces, false),
+        &command,
+    )
+    .await?
     {
         return Ok(code);
     }
-    terminal::label_current(&ctx.paths, space.owner()).await?;
+    hosting::label_current(&ctx.paths, space.owner()).await?;
     let selector = SpaceSelector::id(space.owner().id());
     if replaces.is_empty() {
         return shoal_workers::execution::run(&ctx.paths, selector, command, Some(agent)).await;

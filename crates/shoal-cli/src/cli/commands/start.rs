@@ -38,7 +38,7 @@ mod run;
 mod settle;
 mod shown;
 
-pub(in crate::cli) use attach::execute_place;
+pub(in crate::cli) use attach::place_worker;
 pub(in crate::cli::commands) use attach::{Placed, place, run as run_attached};
 pub(in crate::cli::commands) use detached::{leaves_caller, place_agent};
 pub(in crate::cli::commands) use placement::{Attach, StartOptions};

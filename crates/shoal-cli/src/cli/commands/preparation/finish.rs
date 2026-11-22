@@ -1,6 +1,7 @@
 //! Following the setup of a workspace a start recorded, then reporting and
 //! entering it.
 use anyhow::Result;
+use shoal_workers::hosting;
 
 use crate::client::preparation::{self, Preparing, Unprepared};
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
         },
         context::Context,
         output::{Palette, Style},
-        shell, terminal,
+        shell,
     },
     client::connection::CommandPaths,
     model::Workspace,
@@ -137,7 +138,7 @@ pub(in crate::cli::commands) async fn enter_workspace(
 /// to leaves it where it was, as detaching returns to that shell rather
 /// than to the workspace.
 async fn enters(ctx: &Context, workspace: &Workspace, agent: Option<&Agent>) -> Result<bool> {
-    if !terminal::follows_caller(ctx) {
+    if !hosting::follows_caller(ctx.caller()) {
         return Ok(false);
     }
     let Some(chosen) = agent else {

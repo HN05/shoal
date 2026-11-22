@@ -115,7 +115,7 @@ async fn ensure_survives(ctx: &Context, order: &MoveOrder) -> Result<()> {
                 "this process runs in {name}, which the move ends before the package reaches standard output; move it to a file with -o, or from another terminal"
             );
             ensure!(
-                !crate::cli::terminal::closes_with(&ctx.paths, id).await?,
+                !shoal_workers::hosting::closes_with(&ctx.paths, id).await?,
                 "this terminal closes when the move ends {name}, ending the stream; move it to a file with -o, or from another terminal"
             );
         }

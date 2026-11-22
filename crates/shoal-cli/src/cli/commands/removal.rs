@@ -24,7 +24,7 @@ pub(in crate::cli::commands) async fn ensure_batch_removable(
     check.ensure_settled()?;
     let space = &check.space;
     ensure!(
-        !crate::cli::terminal::closes_with(&ctx.paths, &space.id).await?,
+        !shoal_workers::hosting::closes_with(&ctx.paths, &space.id).await?,
         "this terminal closes with the {}, ending the {noun} of the others; {verb} from another terminal",
         space.kind()
     );

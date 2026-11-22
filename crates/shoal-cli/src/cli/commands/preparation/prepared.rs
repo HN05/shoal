@@ -2,10 +2,11 @@
 //! started its agent in, following the preparation, and the shell of a
 //! workspace opened without an agent.
 use anyhow::{Context as _, Result};
+use shoal_workers::hosting;
 
 use super::finish::finish_workspace;
 use crate::{
-    cli::{context::Context, terminal},
+    cli::context::Context,
     client::preparation::Preparing,
     model::Workspace,
     protocol::operations::{Prepared, StartedWorkspace},
@@ -50,7 +51,7 @@ pub(in crate::cli::commands) async fn unprepared(
     with_agent: bool,
 ) -> Result<i32> {
     let owner = crate::terminal::Owner::Workspace(&workspace.id);
-    terminal::host_space(ctx, owner, with_agent, workspace.name.as_str()).await?;
+    hosting::host_space(ctx.caller(), owner, with_agent, workspace.name.as_str()).await?;
     Ok(1)
 }
 
@@ -70,8 +71,8 @@ pub(in crate::cli::commands) async fn shell_in(
 /// workspace; the caller's own terminal gets its shell back.
 async fn give_shell(ctx: &Context, workspace: &Workspace) -> Result<i32> {
     let owner = crate::terminal::Owner::Workspace(&workspace.id);
-    terminal::host_space(ctx, owner, false, workspace.name.as_str()).await?;
-    terminal::open_shell(ctx, &workspace.path).await
+    hosting::host_space(ctx.caller(), owner, false, workspace.name.as_str()).await?;
+    hosting::open_shell(ctx.caller(), &workspace.path).await
 }
 
 /// Follow the `operation` preparing `workspace` for its agent `agent`,

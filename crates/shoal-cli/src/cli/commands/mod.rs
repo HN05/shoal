@@ -96,7 +96,7 @@ mod viewer;
 mod tests;
 
 pub(in crate::cli) use approvals::summary as approval_summary;
-pub(in crate::cli) use start::execute_place;
+pub(in crate::cli) use start::place_worker;
 pub(in crate::cli) use threads::summary as thread_summary;
 
 use anyhow::Result;

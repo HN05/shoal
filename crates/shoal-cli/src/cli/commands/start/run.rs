@@ -2,6 +2,7 @@
 //! this process holds, in the space the daemon opened for it, whatever its
 //! kind, through one launch of the space's agent.
 use anyhow::{Context as _, Result};
+use shoal_workers::hosting;
 use std::ffi::OsString;
 
 use crate::{
@@ -11,7 +12,6 @@ use crate::{
         agents::{self, LaunchOptions, ModelRequest, Opening},
         commands::{issues, preparation, queued_agents::Hold},
         context::Context,
-        terminal,
     },
     config::{modes::ModeName, templates::Subject},
     protocol::{ItemContext, operations::QueuedLaunch},
@@ -86,11 +86,11 @@ pub(super) async fn host(
     match space {
         HomeRecords::Workspace(workspace) => {
             let owner = Owner::Workspace(&workspace.id);
-            terminal::host_space(ctx, owner, runs_agent, &label).await?;
+            hosting::host_space(ctx.caller(), owner, runs_agent, &label).await?;
             preparation::enter_workspace(ctx, workspace, agent).await
         }
         HomeRecords::Chat { chat, .. } => {
-            terminal::host_space(ctx, Owner::Chat(&chat.id), runs_agent, &label).await
+            hosting::host_space(ctx.caller(), Owner::Chat(&chat.id), runs_agent, &label).await
         }
     }
 }

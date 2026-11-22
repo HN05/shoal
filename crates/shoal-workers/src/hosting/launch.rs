@@ -10,36 +10,42 @@ use std::{
 
 use anyhow::{Result, ensure};
 
+use super::Caller;
+use crate::places::{groups, naming::name_plan};
 use crate::{
-    cli::context::Context,
-    config::{Effective, modes::ModeName},
+    config::Effective,
     env,
     model::{Part, Space},
     start_plan::{PlacePlan, open_place},
     terminal::{
-        Attaches, Configured, Owner, Places, Start, chat_session_name, current, left_open,
-        place_env, report_detach,
+        Attaches, Configured, Owner, Placement, Places, Start, chat_session_name, current,
+        left_open, place_env, report_detach,
     },
 };
-use shoal_workers::places::{groups, naming::name_plan};
 
 /// Start `plan` in `space` beside this terminal as its start placed it,
 /// focused or in the background. Returns whether it left this process; a
 /// focused launch without a new tab stays here, where its agent runs in a
 /// session this terminal attaches to.
-pub(in crate::cli) async fn start_place(
-    ctx: &Context,
+pub async fn start_place(
+    caller: Caller<'_>,
     settings: &Effective,
     placement: Placement,
     plan: &mut PlacePlan,
     space: &Space,
 ) -> Result<bool> {
     ensure!(
-        !crate::process::scoped::inherits_scope(&ctx.paths.state),
+        !crate::process::scoped::inherits_scope(&caller.paths.state),
         "workspace processes open no place beside a terminal"
     );
-    let host = ctx.launcher().host(settings);
-    name_plan(&ctx.paths, host.options.name_template.clone(), plan, space).await?;
+    let host = caller.launcher().host(settings);
+    name_plan(
+        caller.paths,
+        host.options.name_template.clone(),
+        plan,
+        space,
+    )
+    .await?;
     let Some(places) = host.places() else {
         return Ok(false);
     };
@@ -51,12 +57,12 @@ pub(in crate::cli) async fn start_place(
     }
     let cwd = std::env::current_dir()?;
     let repo = groups::Repo::of_space(space);
-    let origin = groups::beside(&ctx.paths, &host, &repo, &cwd).await?;
+    let origin = groups::beside(caller.paths, &host, &repo, &cwd).await?;
     let beside = host.beside(origin.as_ref());
-    open_place(&ctx.paths, &host, places, beside, plan, space, focus).await?;
-    if !focus && !ctx.json {
+    open_place(caller.paths, &host, places, beside, plan, space, focus).await?;
+    if !focus && !caller.json {
         let name = space.name.as_str();
-        outln!("Started {name} {}", places.background_place(name));
+        shoal_core::outln!("Started {name} {}", places.background_place(name));
     }
     Ok(true)
 }
@@ -84,7 +90,7 @@ impl AgentRun {
 
 /// The space a tracked agent runs for, as a host places the agent: beside
 /// the spaces of its repository, in its directory, under its name.
-pub(in crate::cli) struct AgentSpace<'a> {
+pub struct AgentSpace<'a> {
     /// The repository whose spaces its place opens beside, or the
     /// `root_dir` of a chat without one.
     repo: groups::Repo<'a>,
@@ -102,7 +108,7 @@ pub(in crate::cli) struct AgentSpace<'a> {
 impl<'a> AgentSpace<'a> {
     /// What a host reads of `space`, a workspace or a chat. A workspace's
     /// session is named after its worktree directory.
-    pub(in crate::cli) fn of<P: Part>(space: &'a Space<P>) -> Self {
+    pub fn of<P: Part>(space: &'a Space<P>) -> Self {
         let directory = space.workdir.path();
         let repo = match &space.repository_id {
             Some(id) => groups::Repo::Id(id.as_str()),
@@ -126,7 +132,7 @@ impl<'a> AgentSpace<'a> {
     }
 
     /// What a host reads of the space an agent runs in at `home`.
-    pub(in crate::cli) fn of_home(home: crate::agents::AgentHome<'a>) -> Self {
+    pub fn of_home(home: crate::agents::AgentHome<'a>) -> Self {
         match home {
             crate::agents::AgentHome::Workspace(workspace) => Self::of(workspace),
             crate::agents::AgentHome::Chat { chat, .. } => Self::of(chat),
@@ -134,7 +140,7 @@ impl<'a> AgentSpace<'a> {
     }
 
     /// Whom the agent's session or place is for.
-    pub(in crate::cli) fn owner(&self) -> Owner<'a> {
+    pub fn owner(&self) -> Owner<'a> {
         self.owner
     }
 }
@@ -143,8 +149,8 @@ impl<'a> AgentSpace<'a> {
 /// where the host for this terminal runs agents so, and show it here.
 /// `None` means the agent runs in place in this process. `records` are
 /// recovery records the launch consumes once it starts.
-pub(in crate::cli) async fn run_agent(
-    ctx: &Context,
+pub async fn run_agent(
+    caller: Caller<'_>,
     settings: &Effective,
     space: &AgentSpace<'_>,
     agent: &TrackedAgent,
@@ -155,22 +161,22 @@ pub(in crate::cli) async fn run_agent(
     let Some(run) = AgentRun::of(&current) else {
         return Ok(None);
     };
-    let origin = groups::beside(&ctx.paths, &current, &space.repo, space.directory).await?;
+    let origin = groups::beside(caller.paths, &current, &space.repo, space.directory).await?;
     let beside = current.beside(origin.as_ref());
     let worker = agent_worker(
-        ctx,
+        caller,
         &current,
         space.owner,
         agent,
         (records, manual),
         command,
     )?;
-    let mut env = place_env(&ctx.paths)?;
+    let mut env = place_env(caller.paths)?;
     if let Some(entry) = env::queue_entry() {
         env.push((env::QUEUE_ENTRY, entry.to_string()));
     }
     let start = Start {
-        state: &ctx.paths.state,
+        state: &caller.paths.state,
         origin: beside.origin,
         cwd: space.directory,
         label: space.label,
@@ -196,7 +202,7 @@ pub(in crate::cli) async fn run_agent(
     };
     if left_running {
         let id = space.owner.id();
-        shoal_workers::history::record_attach(&ctx.paths, &SpaceSelector::id(id)).await;
+        crate::history::record_attach(caller.paths, &SpaceSelector::id(id)).await;
     }
     Ok(Some(0))
 }
@@ -205,7 +211,7 @@ pub(in crate::cli) async fn run_agent(
 /// `host` opens, closing a workspace's with the workspace when config says
 /// so; a chat's goes with the chat's removal.
 fn agent_worker(
-    ctx: &Context,
+    caller: Caller<'_>,
     host: &Configured,
     owner: Owner<'_>,
     agent: &TrackedAgent,
@@ -215,7 +221,7 @@ fn agent_worker(
     let name = host.host.name();
     let closes = host.closes_when_done && matches!(owner, Owner::Workspace(_));
     crate::workers::internal_command(
-        &ctx.paths,
+        caller.paths,
         false,
         crate::workers::Worker::Session {
             space: owner.id(),
@@ -231,38 +237,8 @@ fn agent_worker(
 
 /// Whether the host under `settings` opens places beside this terminal for
 /// the starts made from it.
-pub(in crate::cli) fn opens_beside(ctx: &Context, settings: &Effective) -> bool {
-    ctx.launcher().host(settings).places().is_some()
-}
-
-/// Whether a launch takes the caller's terminal or runs in the background.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::cli) enum Placement {
-    Focus,
-    Background,
-}
-
-impl Placement {
-    /// Where a launch in `mode` goes under `settings`: where it was
-    /// `requested`, else as its `focus` setting says, else focused when it
-    /// waits for the user.
-    pub(in crate::cli) fn of(
-        settings: &Effective,
-        mode: &ModeName,
-        requested: Option<Self>,
-        waits_for_user: bool,
-    ) -> Self {
-        requested.unwrap_or_else(|| Self::choose(settings.focus(mode), waits_for_user))
-    }
-
-    /// The `focus` setting, otherwise focus a launch that waits for the user.
-    fn choose(setting: Option<bool>, waits_for_user: bool) -> Self {
-        if setting.unwrap_or(waits_for_user) {
-            Self::Focus
-        } else {
-            Self::Background
-        }
-    }
+pub fn opens_beside(caller: Caller<'_>, settings: &Effective) -> bool {
+    caller.launcher().host(settings).places().is_some()
 }
 
 #[cfg(test)]

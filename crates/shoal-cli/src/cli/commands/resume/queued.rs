@@ -2,9 +2,10 @@
 //! entry, where the agent stopped or in a background place, restores the
 //! agent there, taking over the entry's slot.
 use anyhow::{Result, ensure};
+use shoal_workers::hosting;
 
 use crate::{
-    cli::{args::SpaceTargets, commands::queued_agents, context::Context, terminal},
+    cli::{args::SpaceTargets, commands::queued_agents, context::Context},
     sessions::HostName,
     state::QueueState,
 };
@@ -46,7 +47,7 @@ pub async fn start_entry(
 /// background for it, as the space's, before anything runs there.
 pub async fn record_place(ctx: &Context, host: HostName, targets: &SpaceTargets) {
     if let Some(space) = background_space(targets) {
-        terminal::record_owned_here(ctx, host, &space).await;
+        hosting::record_owned_here(ctx.caller(), host, &space).await;
     }
 }
 
@@ -54,7 +55,7 @@ pub async fn record_place(ctx: &Context, host: HostName, targets: &SpaceTargets)
 /// background for it, once the one space `targets` names is done.
 pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &SpaceTargets) {
     if let Some(space) = background_space(targets) {
-        terminal::close_background_place_when_done(ctx, host, &space).await;
+        hosting::close_background_place_when_done(ctx.caller(), host, &space).await;
     }
 }
 

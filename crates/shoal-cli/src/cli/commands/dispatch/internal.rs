@@ -2,13 +2,13 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_workers::agent_hooks;
+use shoal_workers::hosting;
 
 use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{approvals, demo, environment, events, menu, sessions},
         context::Context,
-        terminal,
     },
     sessions::HostName,
 };
@@ -164,7 +164,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             };
             shoal_workers::execution::take_over(&ctx.paths, taken).await
         }
-        InternalCommand::Place(args) => terminal::place_worker(ctx, args).await,
+        InternalCommand::Place(args) => crate::cli::commands::place_worker(ctx, args).await,
         InternalCommand::Demo {
             workspace,
             launch,
@@ -206,9 +206,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             manual,
         } => {
             // `host` opened this place for the agent.
-            terminal::record_owned_here(&ctx, host, &space).await;
+            hosting::record_owned_here(ctx.caller(), host, &space).await;
             if let Some(host) = close_in {
-                terminal::close_here_when_done(&ctx, host, &space).await;
+                hosting::close_here_when_done(ctx.caller(), host, &space).await;
             }
             let agent = TrackedAgent {
                 name: agent,

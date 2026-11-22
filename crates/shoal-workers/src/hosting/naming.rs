@@ -6,19 +6,19 @@
 //! user's.
 use tokio::sync::OnceCell;
 
+use crate::places::naming::place_name;
 use crate::{
-    cli::context::Context,
+    client::connection::CommandPaths,
     config::Effective,
     model::{Space, Workspace},
     sessions::{HostName, Origin},
     terminal::{Configured, Options, PlaceName, Places},
 };
-use shoal_workers::places::naming::place_name;
 
 /// What a space's places on one host show: `new` from now on, in place of
 /// `expected`, the label Shoal gave them before.
 #[derive(Clone)]
-pub(in crate::cli) struct Labels {
+pub struct Labels {
     pub new: String,
     pub expected: String,
 }
@@ -26,17 +26,17 @@ pub(in crate::cli) struct Labels {
 /// The labels of the places hosting `space` after its name changed from
 /// `previous`, from one lookup of a workspace's repository and issue, made
 /// when a host first needs it.
-pub(in crate::cli) struct Renamed<'a> {
-    ctx: &'a Context,
+pub struct Renamed<'a> {
+    paths: &'a CommandPaths,
     space: &'a Space,
     previous: &'a str,
     name: OnceCell<Option<PlaceName>>,
 }
 
 impl<'a> Renamed<'a> {
-    pub(in crate::cli) fn new(ctx: &'a Context, space: &'a Space, previous: &'a str) -> Self {
+    pub fn new(paths: &'a CommandPaths, space: &'a Space, previous: &'a str) -> Self {
         Self {
-            ctx,
+            paths,
             space,
             previous,
             name: OnceCell::new(),
@@ -47,7 +47,7 @@ impl<'a> Renamed<'a> {
     /// for its name and its previous one. Without a template, or a worktree
     /// to fill one in, the labels are the names; without the lookup a
     /// template's places keep their labels.
-    pub(in crate::cli) async fn labels(&self, options: &Options) -> Labels {
+    pub async fn labels(&self, options: &Options) -> Labels {
         let (Some(workspace), Some(template)) = (self.space.to_workspace(), &options.name_template)
         else {
             return Labels {
@@ -73,7 +73,7 @@ impl<'a> Renamed<'a> {
     /// lookup warns.
     async fn name(&self, workspace: &Workspace) -> Option<&PlaceName> {
         let looked_up = self.name.get_or_init(async || {
-            place_name(&self.ctx.paths, workspace)
+            place_name(self.paths, workspace)
                 .await
                 .inspect_err(|error| {
                     eprintln!(
@@ -92,7 +92,7 @@ impl<'a> Renamed<'a> {
 /// place records. `labels` gives each such host's labels; a place takes the
 /// new one only while it still shows the expected one, and a host whose
 /// labels match is skipped. A place that fails warns, naming its host.
-pub(in crate::cli) async fn relabel_space(
+pub async fn relabel_space(
     settings: &Effective,
     places: &[Origin],
     labels: impl AsyncFn(&Options) -> Labels,

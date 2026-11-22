@@ -1,11 +1,11 @@
 //! `shoal rename`: rename a workspace or a chat, a picked one with what the
 //! user types, or ask its agent to choose.
 use anyhow::{Result, ensure};
+use shoal_workers::hosting;
 
 use crate::{
     cli::{
         context::Context,
-        terminal,
         ui::{self, Acting, Fallback},
     },
     model::{RenamedSpace, SpacePlaces},
@@ -82,8 +82,8 @@ async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
     let places = crate::client::places::places(&ctx.paths, SpaceSelector::id(&space.id)).await?;
     let shown = shown_places(places);
     let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::space(space)).await?;
-    let labels = terminal::Renamed::new(ctx, space, previous_name);
-    terminal::relabel_space(&settings, &shown, async |host| labels.labels(host).await).await;
+    let labels = hosting::Renamed::new(&ctx.paths, space, previous_name);
+    hosting::relabel_space(&settings, &shown, async |host| labels.labels(host).await).await;
     Ok(())
 }
 

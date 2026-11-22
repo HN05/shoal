@@ -3,7 +3,7 @@ use std::io::{self, IsTerminal};
 
 use crate::client::output::{self, Output};
 use anyhow::Result;
-use shoal_workers::{places::Launcher, resume::Starter};
+use shoal_workers::{hosting::Caller, places::Launcher, resume::Starter};
 
 use crate::{
     cli::{
@@ -17,7 +17,7 @@ use crate::{
 pub struct Context {
     pub paths: CommandPaths,
     /// The place a backend opened for this process, when it runs in one.
-    pub(in crate::cli) place: Option<super::terminal::Place>,
+    pub(in crate::cli) place: Option<shoal_workers::hosting::Place>,
     /// Emit machine-readable output and never prompt.
     pub json: bool,
     /// What the command needs of the workspace a picker offers.
@@ -101,9 +101,15 @@ impl Context {
     /// without a user, keeps work in place; a call that asked for JSON
     /// keeps its terminal's host.
     pub(in crate::cli) fn launcher(&self) -> Launcher {
-        match self.place.is_none() && self.on_terminal() {
-            true => Launcher::Terminal,
-            false => Launcher::Plain,
+        self.caller().launcher()
+    }
+
+    /// What the hosting of places reads of this command.
+    pub(in crate::cli) fn caller(&self) -> Caller<'_> {
+        Caller {
+            paths: &self.paths,
+            json: self.json,
+            place: self.place.as_ref(),
         }
     }
 

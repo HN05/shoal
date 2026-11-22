@@ -16,7 +16,6 @@ mod progress;
 pub mod recent;
 pub mod shell;
 mod supervision;
-mod terminal;
 pub mod ui;
 pub mod usage;
 

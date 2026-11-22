@@ -5,6 +5,7 @@
 //! start` starts an agent of its own there.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_workers::hosting;
 
 use crate::client::{
     output::create::Child,
@@ -15,7 +16,7 @@ use crate::{
         args::create::CreateArgs,
         context::Context,
         output::{Palette, Style},
-        shell, terminal,
+        shell,
         ui::{self, Fallback},
     },
     client::connection::CommandPaths,
@@ -281,7 +282,7 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
             workspace: child.clone(),
         },
     )?;
-    if terminal::follows_caller(ctx) && !crate::env::is_scoped() {
+    if hosting::follows_caller(ctx.caller()) && !crate::env::is_scoped() {
         shell::navigate(ctx, &child.path)?;
     }
     Ok(())
