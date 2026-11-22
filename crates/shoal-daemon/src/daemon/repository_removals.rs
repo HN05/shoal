@@ -2,6 +2,7 @@
 //! machine, where the hub carries the request, and what that removal would
 //! remove there.
 use anyhow::{Context as _, Result};
+use futures_util::{StreamExt as _, stream};
 use shoal_core::removal::InspectionPolicy;
 use shoal_protocol::{
     hub::Member,
@@ -12,6 +13,9 @@ use shoal_protocol::{
 };
 
 use super::{hub::Named, manager::Manager, scope::Caller};
+
+/// How many workspaces a removal's preview inspects at once.
+const PREVIEW_CONCURRENCY: usize = 4;
 
 impl Manager {
     /// Remove the repository `selector` names for `caller` on the joined
@@ -59,12 +63,13 @@ impl Manager {
             return RepositoryRemovalPreview::try_from(body);
         }
         let repository = self.repositories.repository(selector).await?;
-        let mut spaces = Vec::new();
-        for space in self.present_spaces().await? {
-            if space.repository_id.as_ref() == Some(&repository.id) {
-                spaces.push(self.space_work(space).await);
-            }
-        }
+        let of_repository = (self.present_spaces().await?.into_iter())
+            .filter(|space| space.repository_id.as_ref() == Some(&repository.id));
+        let spaces = (stream::iter(of_repository))
+            .map(|space| self.space_work(space))
+            .buffered(PREVIEW_CONCURRENCY)
+            .collect()
+            .await;
         Ok(RepositoryRemovalPreview { repository, spaces })
     }
 
