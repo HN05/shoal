@@ -9,9 +9,10 @@ use anyhow::{Result, anyhow, bail};
 use super::{Steps, joined};
 use crate::{client::connection::CommandPaths, protocol::operations::Step};
 use shoal_core::transfer::{
-    Carrying, MachineDestination, MoveLock, MoveSettled, RecordArrival, RemovedDelivery, SpaceMoved,
+    Carrying, MachineDestination, Manifest, MoveLock, MoveSettled, RecordArrival, RemovedDelivery,
+    SpaceMoved,
 };
-use shoal_ids::move_tickets::MoveTicket;
+use shoal_ids::{move_tickets::MoveTicket, space_ids::SpaceId};
 use shoal_protocol::model::RemovedSpace;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -59,7 +60,8 @@ async fn deliver(
             bail!("machine {machine} took none of it, so its record stays here: {error}")
         }
         RecordArrival::Unknown { error } => {
-            settle(paths, &selector, (machine, &ticket), anyhow!(error), steps).await?
+            let records = (&selector, carried_ids(&exported.manifest));
+            settle(paths, records, (machine, &ticket), anyhow!(error), steps).await?
         }
     }
     Ok(SpaceMoved {
@@ -73,20 +75,29 @@ async fn deliver(
     })
 }
 
+/// The IDs of the spaces whose records the package `manifest` carries.
+fn carried_ids(manifest: &Manifest) -> Vec<SpaceId> {
+    (manifest.carried.iter())
+        .map(|carried| carried.space.record.space_id.clone())
+        .collect()
+}
+
 /// Settle at the hub the move `ticket` of the record of the removed space
-/// `selector` names to the joined machine named `machine`, whose arrival
-/// `error` left unknown: once the hub says that machine claimed it, this
-/// machine forgot it; otherwise it stays here.
+/// `selector` names, with the records of the spaces `carried`, to the
+/// joined machine named `machine`, whose arrival `error` left unknown:
+/// once the hub says that machine claimed it, this machine forgot it, with
+/// each carried record it claimed; otherwise it stays here.
 async fn settle(
     paths: &CommandPaths,
-    selector: &SpaceSelector,
+    (selector, carried): (&SpaceSelector, Vec<SpaceId>),
     (machine, ticket): (&str, &MoveTicket),
     error: anyhow::Error,
     steps: &impl Steps,
 ) -> Result<()> {
     let ask = || {
         let (machine, ticket) = (machine.to_owned(), ticket.clone());
-        crate::client::transfer::settle_removed_move(paths, selector.clone(), machine, ticket)
+        let (space, carried) = (selector.clone(), carried.clone());
+        crate::client::transfer::settle_removed_move(paths, space, carried, machine, ticket)
     };
     let meanwhile = "its record stays here";
     match joined::ask_hub(ask, &error, meanwhile, steps).await? {

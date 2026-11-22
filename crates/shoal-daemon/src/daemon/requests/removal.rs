@@ -216,11 +216,12 @@ pub(super) async fn handle(
         ),
         RemovalMethod::SettleRemovedMove {
             space,
+            carried,
             machine,
             ticket,
         } => Body::MoveSettled(
             manager
-                .settle_removed_move(&space, &machine, &ticket)
+                .settle_removed_move(&space, &carried, &machine, &ticket)
                 .await?,
         ),
         RemovalMethod::ReleaseHeldMove { space } => {

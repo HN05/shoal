@@ -19,6 +19,7 @@ use shoal_protocol::{
 
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::move_tickets::MoveTicket;
+use shoal_ids::space_ids::SpaceId;
 
 /// Package the removal record of the removed space `space` names by ID,
 /// which stays, with the records of the spaces its removal took that
@@ -166,18 +167,20 @@ pub async fn deliver_removed(
     request(daemon, method).await
 }
 
-/// Settle at the hub the move `ticket` of the removal record of `space` to
-/// the joined machine named `machine`, whose arrival it could not report,
-/// forgetting the record here once that machine claimed it; fails while
-/// the hub cannot be asked.
+/// Settle at the hub the move `ticket` of the removal record of `space`,
+/// with the records of the spaces `carried`, to the joined machine named
+/// `machine`, whose arrival it could not report, forgetting here each
+/// record that machine claimed; fails while the hub cannot be asked.
 pub async fn settle_removed_move(
     daemon: &impl Daemon,
     space: SpaceSelector,
+    carried: Vec<SpaceId>,
     machine: String,
     ticket: MoveTicket,
 ) -> Result<MoveSettled> {
     let method = RemovalMethod::SettleRemovedMove {
         space,
+        carried,
         machine,
         ticket,
     };

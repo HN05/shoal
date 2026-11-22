@@ -73,22 +73,31 @@ impl Manager {
     }
 
     /// Settle at the hub the move `ticket` of the removal record of the
-    /// space `selector` names to the joined machine named `machine`, whose
-    /// arrival that machine could not report, and forget the record here
-    /// once that machine claimed it. Fails while the hub cannot be asked.
+    /// space `selector` names, with the records of the spaces `carried`, to
+    /// the joined machine named `machine`, whose arrival that machine could
+    /// not report, and forget here each record that machine claimed; how
+    /// the hub settled the space's own. Fails while the hub cannot be
+    /// asked, forgetting none.
     pub(crate) async fn settle_removed_move(
         &self,
         selector: &SpaceSelector,
+        carried: &[SpaceId],
         machine: &str,
         ticket: &MoveTicket,
     ) -> Result<MoveSettled> {
-        let removed = self.removed_space(selector).await?;
+        let id = self.removed_space(selector).await?.space_id;
         let Named { machine, .. } = self.hub.named_machine(self, machine).await?;
-        let id = removed.space_id;
-        if !(self.hub.settle_move(self, &id, &machine.id, ticket)).await? {
+        let mut claimed = Vec::new();
+        for record in std::iter::once(&id).chain(carried) {
+            if (self.hub.settle_move(self, record, &machine.id, ticket)).await? {
+                claimed.push(record.clone());
+            }
+        }
+        // The destination claims the space's own record before any other.
+        if !claimed.contains(&id) {
             return Ok(MoveSettled::Kept);
         }
-        self.forget_moved_records(vec![id]).await?;
+        self.forget_moved_records(claimed).await?;
         Ok(MoveSettled::Arrived)
     }
 

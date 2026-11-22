@@ -197,11 +197,14 @@ pub enum RemovalMethod {
         ticket: shoal_ids::move_tickets::MoveTicket,
     },
     /// Settle at the hub the move `ticket` of the removal record of
-    /// `space` to the joined machine `machine` names, whose arrival that
-    /// machine could not report, and forget the record here once that
-    /// machine claimed it; answered with how the hub settled it.
+    /// `space`, with the records of the spaces `carried`, to the joined
+    /// machine `machine` names, whose arrival that machine could not
+    /// report, and forget here each record that machine claimed; answered
+    /// with how the hub settled the space's own.
     SettleRemovedMove {
         space: SpaceSelector,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        carried: Vec<shoal_ids::space_ids::SpaceId>,
         machine: String,
         ticket: shoal_ids::move_tickets::MoveTicket,
     },
