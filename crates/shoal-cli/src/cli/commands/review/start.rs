@@ -394,14 +394,18 @@ async fn run(
     model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&Acting::request(|space| {
-            crate::client::reviews::show(Some(space), None)
-        })),
-    )
-    .await?;
+    // An agent's review runs on the workspace's machine; the manual
+    // command, which a run without --agent may choose, runs here.
+    let reviewing = match &reviewer {
+        Reviewer::Agent(_) => {
+            Acting::request(|space| crate::client::reviews::show(Some(space), None))
+        }
+        Reviewer::Ask | Reviewer::Manual => {
+            Acting::request(shoal_workers::execution::running_command)
+        }
+    };
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&reviewing));
+    let workspace = workspace.await?;
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
     let post = match &subject {

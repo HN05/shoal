@@ -26,9 +26,16 @@ pub(super) async fn open_pr(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
+        // It pushes from the worktree in an operation on this machine.
         ui::Fallback::CurrentDirectory(&Acting::request({
             let options = options.clone();
-            move |workspace| crate::client::items::open_pull(workspace, options.clone(), false)
+            move |workspace| {
+                let spec = OperationSpec::OpenPull {
+                    workspace,
+                    options: options.clone(),
+                };
+                crate::client::operations::start_request(spec, Default::default())
+            }
         })),
     )
     .await?;
