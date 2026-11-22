@@ -34,7 +34,12 @@ pub(super) async fn remove(
 /// acts on `machines`.
 async fn targets(ctx: &Context, named: Option<String>, machines: Machines) -> Result<Vec<Target>> {
     let here = crate::client::repositories::list(&ctx.paths).await?;
-    let (named, local, not_here, machines) = match named {
+    let Named {
+        named,
+        local,
+        not_here,
+        machines,
+    } = match named {
         Some(named) => named_here(&here, named, machines).await?,
         None => match chosen(ctx, &here).await? {
             Chosen::Named(named) => named_here(&here, named, machines).await?,
@@ -137,25 +142,35 @@ fn label(other: &RepositoryElsewhere) -> String {
     format!("{}  {}  on {}", other.name(), other.source(), other.machine)
 }
 
-/// What a removal resolves: the text that names the repository, this
-/// machine's repository of it, if any, why there is none, and the machines
-/// it acts on.
-type Named<'a> = (
-    String,
-    Option<&'a Repository>,
-    Option<anyhow::Error>,
-    Machines,
-);
+/// What a removal resolves before it asks the hub.
+struct Named<'a> {
+    /// The text that names the repository.
+    named: String,
+    /// This machine's repository of it, if any.
+    local: Option<&'a Repository>,
+    /// Why this machine has none, which stands when no machine has it.
+    not_here: Option<anyhow::Error>,
+    /// The machines it acts on.
+    machines: Machines,
+}
 
 /// `named`, with the repository among `here` it names, or why none is,
 /// when it names none here, on `machines`.
 async fn named_here(here: &[Repository], named: String, machines: Machines) -> Result<Named<'_>> {
     let selector = ui::repository_selector(named.clone())?;
     match repository::select(here, selector).await {
-        Ok(local) => Ok((named, Some(local), None, machines)),
-        Err(error) if Reason::of(&error) == Some(Reason::NotFound) => {
-            Ok((named, None, Some(error), machines))
-        }
+        Ok(local) => Ok(Named {
+            named,
+            local: Some(local),
+            not_here: None,
+            machines,
+        }),
+        Err(error) if Reason::of(&error) == Some(Reason::NotFound) => Ok(Named {
+            named,
+            local: None,
+            not_here: Some(error),
+            machines,
+        }),
         Err(error) => Err(error),
     }
 }
@@ -170,7 +185,12 @@ async fn picked(here: &[Repository], other: RepositoryElsewhere, machines: Machi
         Machines::Found => Machines::Named(vec![other.machine_id.clone()]),
         named => named,
     };
-    (other.registered.id.to_string(), local, None, machines)
+    Named {
+        named: other.registered.id.to_string(),
+        local,
+        not_here: None,
+        machines,
+    }
 }
 
 /// The repository among `here` of `origin`, a key as [`identity`] reads

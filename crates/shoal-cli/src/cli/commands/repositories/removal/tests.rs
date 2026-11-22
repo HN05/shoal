@@ -12,10 +12,10 @@ fn desks() -> RepositoryElsewhere {
 
 #[tokio::test]
 async fn a_picked_registration_acts_on_its_machine_alone_unless_others_are_named() {
-    let (named, local, _, machines) = picked(&[], desks(), Machines::Found).await;
-    assert_eq!(named, "r-desk");
-    assert!(local.is_none());
-    assert!(matches!(machines, Machines::Named(named) if named == ["m-desk"]));
-    let (_, _, _, machines) = picked(&[], desks(), Machines::All).await;
-    assert!(matches!(machines, Machines::All));
+    let found = picked(&[], desks(), Machines::Found).await;
+    assert_eq!(found.named, "r-desk");
+    assert!(found.local.is_none());
+    assert!(matches!(found.machines, Machines::Named(named) if named == ["m-desk"]));
+    let all = picked(&[], desks(), Machines::All).await;
+    assert!(matches!(all.machines, Machines::All));
 }
