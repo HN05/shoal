@@ -8,10 +8,10 @@ use std::{
 };
 
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
-use shoal_protocol::protocol::SessionSignal;
 use tokio::{sync::Notify, time::Instant};
 
 use crate::{Runner, log};
+use shoal_daemon_base::jobs::JobStop;
 
 mod cancels;
 mod claimed;
@@ -33,7 +33,6 @@ mod taken;
 mod waiting;
 
 pub use claimed::ClaimedJob;
-pub use costs::JobCost;
 pub use load::JobLoad;
 pub use overrun::GRACE;
 pub use passes::run;
@@ -275,43 +274,6 @@ impl Runners {
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-/// What stopped a job's runner, as Shoal's log names it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum JobStop {
-    /// `shoal stop` of its workspace.
-    Stop,
-    /// `shoal daemon stop`.
-    DaemonStop,
-    /// A signal to the daemon.
-    DaemonSignal,
-    /// The stop before a system shutdown.
-    SystemShutdown,
-    /// The removal of its workspace.
-    Removal,
-    /// Its runner outliving its finished run.
-    Overrun,
-    /// Load protection, for the pressure it names.
-    Overload(&'static str),
-    /// A signal ending its wrapper's session, as a logout or a shutdown
-    /// sends.
-    Signal(SessionSignal),
-}
-
-impl std::fmt::Display for JobStop {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Stop => f.write_str("shoal stop"),
-            Self::DaemonStop => f.write_str("shoal daemon stop"),
-            Self::DaemonSignal => f.write_str("a signal to the daemon"),
-            Self::SystemShutdown => f.write_str("the system shutting down"),
-            Self::Removal => f.write_str("its workspace's removal"),
-            Self::Overrun => f.write_str("its runner outliving its finished run"),
-            Self::Overload(pressure) => f.write_str(pressure),
-            Self::Signal(signal) => write!(f, "{signal} to its wrapper"),
-        }
-    }
 }
 
 /// The label every runner registers besides the configured ones, naming the

@@ -15,8 +15,9 @@ use shoal_forge_types::{ci::CiAction, items::reference::ItemRef};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{alerts::AlertKind, protocol::SessionSignal, space_names::SpaceSelector};
 
-use super::{ClaimedJob, JobStop};
+use super::ClaimedJob;
 use crate::{Runner, daemon::Daemon, log};
+use shoal_daemon_base::jobs::JobStop;
 
 impl Runner {
     /// Cancel on the forge the run of the job running in the workspace

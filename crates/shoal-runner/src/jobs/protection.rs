@@ -22,8 +22,9 @@ use shoal_forge_types::{items::reference::ItemRef, numbers::JobId};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{alerts::AlertKind, time::UnixTime};
 
-use super::{ClaimedJob, JobStop, overrun::ended_job};
+use super::{ClaimedJob, overrun::ended_job};
 use crate::{Runner, daemon::Daemon, log};
+use shoal_daemon_base::jobs::JobStop;
 
 /// How long after its stop a job waits for its run to allow its rerun.
 const PATIENCE: Duration = Duration::from_secs(24 * 60 * 60);

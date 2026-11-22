@@ -11,8 +11,9 @@ use shoal_daemon_base::events::record_job_ended;
 use shoal_forge::ci::{run_view::RunViewRequests, runner::took_job};
 use shoal_protocol::events::{JobEndedEvent, StoppedProcess};
 
-use super::{ClaimedJob, JobStop};
+use super::ClaimedJob;
 use crate::{Runner, daemon::Daemon};
+use shoal_daemon_base::jobs::JobStop;
 
 /// How long a runner may run after the forge finished its job's run, as it
 /// reports the job's end.

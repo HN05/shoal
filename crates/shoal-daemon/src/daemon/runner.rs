@@ -10,7 +10,7 @@ mod repositories;
 mod spaces;
 
 pub(crate) use records::RunnerRecords;
-pub(crate) use shoal_runner::jobs::JobStop;
+pub(crate) use shoal_daemon_base::jobs::JobStop;
 
 #[cfg(test)]
 mod tests;

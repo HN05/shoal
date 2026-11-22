@@ -10,8 +10,8 @@ use anyhow::Result;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::model::QueuedJob;
 
-use super::JobCost;
 use crate::{Runner, daemon::Daemon, time::UnixTime};
+use shoal_daemon_base::jobs::JobCost;
 
 /// A job starting or running, as admission counts it.
 #[derive(Debug, Clone, Copy, PartialEq)]

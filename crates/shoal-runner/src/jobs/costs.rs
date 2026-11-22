@@ -5,6 +5,7 @@
 //! run.
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
+use shoal_daemon_base::jobs::JobCost;
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
 use shoal_protocol::model::QueuedJob;
 
@@ -13,13 +14,6 @@ use crate::{Runner, daemon::Daemon, time::UnixTime};
 
 /// How many of a job's latest runs its cost reads.
 const RECENT_RUNS: i64 = 5;
-
-/// What a CI job is expected to use: the resident memory its earlier runs
-/// reached, `None` before it has run, when it counts as an agent's start.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct JobCost {
-    pub memory: Option<u64>,
-}
 
 impl Runner {
     /// Raise each claimed job's peak memory to what its workspace's latest

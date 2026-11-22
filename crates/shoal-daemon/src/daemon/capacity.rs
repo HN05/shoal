@@ -31,7 +31,7 @@ pub(crate) struct HostSample {
     pub disk_free: Option<u64>,
 }
 
-pub(crate) use shoal_runner::jobs::JobCost;
+pub(crate) use shoal_daemon_base::jobs::JobCost;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MemoryState {

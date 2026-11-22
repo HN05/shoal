@@ -4,7 +4,7 @@
 //! conflicting changes, the journal of events, the failures of a pass by
 //! the spaces they concern, the signals that wake waits once what they
 //! read changes, the notifications for the user, the numbers of threads
-//! and approval requests, how long what they record stays, the checks of
+//! and approval requests, a CI job's cost and what stopped its runner, how long what they record stays, the checks of
 //! file access that can stall and of directories the daemon writes, and
 //! the proof of the directories Shoal owns.
 use shoal_core::{config, git, refusal};
@@ -22,6 +22,7 @@ pub mod file_access;
 pub mod file_copies;
 pub mod gates;
 pub mod item_numbers;
+pub mod jobs;
 pub mod log;
 pub mod notifications;
 pub mod ownership;

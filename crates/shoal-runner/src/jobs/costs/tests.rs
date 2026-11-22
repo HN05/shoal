@@ -1,4 +1,5 @@
 use serde_json::json;
+use shoal_daemon_base::jobs::JobCost;
 
 use super::*;
 use crate::stand_in::Fixture;
