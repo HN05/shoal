@@ -2776,7 +2776,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-repositories"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "futures-util",
