@@ -23,6 +23,10 @@ fn only_a_detached_start_that_needs_nothing_of_this_machine_is_placed() {
             copy: Some(SpaceChoice::Space(SpaceSelector::id(&"s1".into()))),
             ..Launch::default()
         },
+        Launch {
+            blockers: vec!["7".into()],
+            ..Launch::default()
+        },
     ];
     for launch in unplaced {
         assert!(!placeable(&launch), "{launch:#?}");

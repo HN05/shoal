@@ -3,7 +3,8 @@
 //! policy puts it, which it then names as `--machine` would. One whose
 //! agent runs in the caller's terminal stays here, where the user is, as
 //! does one that needs this machine: an existing workspace, a copy, a
-//! fork, a worktree path, a repository setup, or a repository this machine
+//! fork, a worktree path, a repository setup, blockers, which are its
+//! spaces and queue entries, or a repository this machine
 //! has not registered or that has no origin, since placement never clones
 //! one. A hub that cannot be asked leaves it here too.
 use anyhow::Result;
@@ -36,7 +37,6 @@ pub(super) struct PlacedHere {
 }
 
 impl PlacedHere {
-    /// Give `launched`, which started here, what it reports of its
     /// What a launch reports that starts here instead of on the machine
     /// `decision` placed it on, which could not take it for `error`, as
     /// the daemon's log records.
@@ -52,6 +52,7 @@ impl PlacedHere {
         }
     }
 
+    /// Give `launched`, which started here, what it reports of its
     /// placement.
     pub(super) fn report(self, launched: &mut Launched) {
         launched.placement = self.decision;
@@ -212,7 +213,8 @@ impl Manager {
 }
 
 /// Whether `launch` may go to another machine than its caller's: it names
-/// none, runs its agent detached, and needs nothing of this machine's.
+/// none, runs its agent detached, and needs nothing of this machine's, as
+/// blockers, which wait on its spaces and queue entries, do.
 fn placeable(launch: &Launch) -> bool {
     launch.machine.is_none()
         && launch.forwarded.is_none()
@@ -223,6 +225,7 @@ fn placeable(launch: &Launch) -> bool {
         && launch.fork.is_none()
         && launch.path.is_none()
         && launch.setup.is_none()
+        && launch.blockers.is_empty()
 }
 
 /// Whether `mode`'s agent holds a heavy slot under `settings`.
