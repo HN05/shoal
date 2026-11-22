@@ -35,6 +35,9 @@ pub(super) async fn handle(
             path,
             shared,
         } => {
+            if shared {
+                manager.repositories.ensure_shareable(&source).await?;
+            }
             let repository = manager.repositories.register(source, name, path).await?;
             Body::Repository(match shared {
                 true => manager.share_repository(&repository.id, true).await?,

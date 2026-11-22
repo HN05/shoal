@@ -1024,7 +1024,8 @@ origin, and `shoal repo ls` shows them. Every other machine registers each
 one as `shoal repo add <url>` would, matched by origin, cloning it at once in
 the background under its own `root_dir` and under the same name where no
 repository there has it; a repository it already has, whatever its name,
-keeps that registration and becomes shared. A clone that fails records a
+keeps that registration and becomes shared; a `shoal contribute` clone that
+becomes shared is no longer removed on its own. A clone that fails records a
 `shared_repository_failed` alert naming `shoal repo add <url> --shared`,
 which registers it once you fix the cause; otherwise it is tried again when
 the machine next connects to the hub, or for the hub's own machine, when its

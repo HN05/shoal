@@ -74,27 +74,32 @@ impl Repositories {
     pub async fn share(&self, selector: impl Into<Selector>, shared: bool) -> Result<Repository> {
         let repo = self.repository(selector).await?;
         let url = match shared {
-            true => Some(
-                (repository::remote_url_from_source(&repo.source).await?).with_context(|| {
-                    format!(
-                        "{} has no origin for other machines to clone it from; add one with git remote add origin <url>",
-                        repo.display_name()
-                    )
-                })?,
-            ),
+            true => Some(shared_url(&repo.source, repo.display_name()).await?),
             false => None,
         };
         self.share_as(&repo.id, url).await
     }
 
+    /// Refuse to register `source` as shared when it has no origin for the
+    /// other machines of the hub to clone it from.
+    pub async fn ensure_shareable(&self, source: &Selector) -> Result<()> {
+        if let Ok(source) = source.source() {
+            shared_url(source, source).await?;
+        }
+        Ok(())
+    }
+
     /// Record that the repository `id` is shared under the clone URL `url`,
-    /// or with none, that it is not.
+    /// or with none, that it is not. A shared repository stays until the
+    /// user removes it, as removing it anywhere unshares it everywhere, so
+    /// a contribution that becomes shared is no longer removed on its own.
     pub async fn share_as(&self, id: &RepositoryId, url: Option<String>) -> Result<Repository> {
         let id = id.clone();
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE repositories SET shared_url=?2 WHERE id=?1",
+                    "UPDATE repositories SET shared_url=?2,
+                        contribution=contribution AND ?2 IS NULL WHERE id=?1",
                     params![id, url],
                 )?;
                 Ok(db.query_row(
@@ -151,6 +156,16 @@ impl Repositories {
             .filter(|workspace| workspace.repository() == id)
             .collect())
     }
+}
+
+/// The URL of the origin of `source`, the repository `name`, which the
+/// other machines of the hub clone it from.
+async fn shared_url(source: &str, name: &str) -> Result<String> {
+    (repository::remote_url_from_source(source).await?).with_context(|| {
+        format!(
+            "{name} has no origin for other machines to clone it from; add one with git remote add origin <url>"
+        )
+    })
 }
 
 #[cfg(test)]
