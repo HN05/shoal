@@ -189,9 +189,11 @@ fn save_stop(manager: &Manager, workspace: &Workspace, execution: &ExecutionId, 
 }
 
 async fn finish(manager: &Manager, execution: ExecutionId) {
-    (manager.finish_execution(execution, ExecutionKind::Command, Some(0)))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .finish_execution(manager, execution, ExecutionKind::Command, Some(0)))
+    .await
+    .unwrap();
     manager.links.settle_requested_agents(manager).await;
 }
 
@@ -228,9 +230,11 @@ async fn a_stopped_agent_gives_up_the_issue_an_agent_assigned_until_restored() {
     finish(manager, execution.clone()).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.queue_stopped_restore(&selector, &execution, Default::default()))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .queue_stopped_restore(&**manager, &selector, &execution, Default::default()))
+    .await
+    .unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes()[2], json!(["shoal-agent"]));
 }
@@ -300,15 +304,17 @@ async fn a_queued_launch_puts_the_agent_account_on_until_cancelled() {
     let blocker = shoal_protocol::progress::Blocker::Space(fixture.workspaces[1].id.to_string());
     let request = crate::model::QueueRequest {
         blockers: vec![blocker],
-        ..crate::daemon::agent_queue::tests::launch_in(workspace, false)
+        ..crate::daemon::agent_service::tests::queue::launch_in(workspace, false)
     };
-    let admission = manager.queue_add(request).await.unwrap();
+    let admission = manager.agents.queue_add(&**manager, request).await.unwrap();
     let entry = admission.entry.unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
-    (manager.queue_remove(entry.id.as_str(), None))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .queue_remove(&**manager, entry.id.as_str(), None))
+    .await
+    .unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
@@ -334,7 +340,11 @@ async fn a_forgotten_agent_execution_gives_up_the_issue() {
     fixture.link_as(workspace, Assigner::Agent).await;
     let execution = run_agent(manager, workspace).await;
     // As after a reboot, whose processes ran in an earlier boot.
-    manager.forget_execution(&execution).await.unwrap();
+    manager
+        .agents
+        .forget_execution(&**manager, &execution)
+        .await
+        .unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
@@ -348,9 +358,11 @@ async fn stopping_an_asleep_agent_takes_the_agent_account_off() {
     save_stop(manager, workspace, &execution, true);
     finish(manager, execution).await;
     let stop = crate::daemon::executions::StopRequest::manual();
-    (manager.stop_space(&SpaceSelector::id(&workspace.id), stop))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .stop_space(&**manager, &SpaceSelector::id(&workspace.id), stop))
+    .await
+    .unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }

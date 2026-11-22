@@ -117,7 +117,7 @@ impl Manager {
         let (turn_retry, executions) = (self.store)
             .read(move |tx| Ok((turn_retry::get(tx, &id)?, store::executions(tx, &id)?)))
             .await?;
-        Ok((turn_retry, self.proxy_retry(&executions)))
+        Ok((turn_retry, self.agents.proxy_retry(&executions)))
     }
 
     /// What the space `id` records about its links and work.

@@ -200,12 +200,20 @@ pub(crate) fn logins(names: &[&str]) -> Vec<Value> {
 /// finishes.
 pub(crate) async fn run_agent(manager: &Manager, workspace: &Workspace) -> ExecutionId {
     let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     let agent = TrackedAgent::named("claude");
     let id = execution.plan.id.clone();
-    (manager.track_agent(
+    (manager.agents.track_agent(
+        manager,
         &id,
         &agent,
         &workspace.id,

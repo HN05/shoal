@@ -155,7 +155,7 @@ impl Manager {
             running: self.workspace_execution_count(id).await?,
             idle: cancelled.to_vec(),
         };
-        let idle = self.idle_restores(id).await?;
+        let idle = self.agents.idle_restores(self, id).await?;
         // Only the execution of an idle restore needs its details, and only
         // a waiting wrapper has one.
         let mut wrappers = HashMap::new();

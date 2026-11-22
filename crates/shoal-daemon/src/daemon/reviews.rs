@@ -132,13 +132,13 @@ impl Agents for Manager {
                 queued_after,
             };
             let admission =
-                (self.agent_queue).request_oneshot(repository, serving, after_stop, stop);
+                (self.agents.agent_queue()).request_oneshot(repository, serving, after_stop, stop);
             Ok(Box::new(QueueAdmission(admission)) as Box<dyn Admission>)
         })
     }
 
     fn hold_admission(&self, repository: &RepositoryId) {
-        self.agent_queue.hold_oneshot(repository);
+        self.agents.agent_queue().hold_oneshot(repository);
     }
 
     fn message<'a>(

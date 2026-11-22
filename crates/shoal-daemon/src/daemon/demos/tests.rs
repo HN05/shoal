@@ -55,7 +55,9 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     let (temp, manager) = manager().await;
     let (first, second) = workspaces(&manager, temp.path()).await;
     let web = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -65,7 +67,9 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         .await
         .unwrap();
     let tui = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             second.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -92,7 +96,9 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
 
     // A name belongs to one demo until its execution ends.
     manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -102,7 +108,13 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         .await
         .unwrap_err();
     manager
-        .finish_execution(web.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .agents
+        .finish_execution(
+            &*manager,
+            web.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
         .await
         .unwrap();
     assert!(
@@ -113,7 +125,9 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
             .is_empty()
     );
     let replacement = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -135,7 +149,9 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
     let (temp, manager) = manager().await;
     let (first, _) = workspaces(&manager, temp.path()).await;
     let mut web = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -145,7 +161,9 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .await
         .unwrap();
     let mut tui = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -155,7 +173,14 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .await
         .unwrap();
     let mut command = manager
-        .begin_execution(first.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            &*manager,
+            first.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
 
@@ -165,7 +190,12 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .unwrap();
     assert!(*web.stop.borrow_and_update());
     assert!(!*tui.stop.borrow_and_update());
-    let request = manager.executions.stop_request(&web.plan.id).await.unwrap();
+    let request = manager
+        .agents
+        .executions()
+        .stop_request(&web.plan.id)
+        .await
+        .unwrap();
     assert_eq!(request.save, Save::Nothing);
 
     manager
@@ -187,7 +217,9 @@ async fn completion_stops_the_workspaces_demos_unless_it_keeps_them() {
     let (temp, manager) = manager().await;
     let (first, _) = workspaces(&manager, temp.path()).await;
     let mut web = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -219,7 +251,8 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
     let (temp, manager) = manager().await;
     let (first, second) = workspaces(&manager, temp.path()).await;
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -280,7 +313,9 @@ async fn a_chat_lists_no_demos_of_its_own() {
         .await
         .unwrap();
     manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -305,7 +340,9 @@ async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
     let (first, _) = workspaces(&manager, temp.path()).await;
     let wrapper = crate::process::identity::capture(std::process::id()).unwrap();
     let started = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             wrapper,
             ExecutionKind::Command,
@@ -327,12 +364,14 @@ async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
     };
     let exited = run();
     manager
+        .agents
         .record_execution_child(id.clone(), Some(exited.clone()), exited.pid)
         .await
         .unwrap();
     let next = run();
     assert!(
         manager
+            .agents
             .record_execution_child(id.clone(), Some(next.clone()), next.pid)
             .await
             .is_err(),
@@ -341,10 +380,21 @@ async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
     // The next run starts only in the worktree the workspace recorded.
     let moved = first.path.with_extension("moved");
     std::fs::rename(&first.path, &moved).unwrap();
-    assert!(manager.release_exited_child(&id, &first.id).await.is_err());
+    assert!(
+        manager
+            .agents
+            .release_exited_child(&*manager, &id, &first.id)
+            .await
+            .is_err()
+    );
     std::fs::rename(&moved, &first.path).unwrap();
-    manager.release_exited_child(&id, &first.id).await.unwrap();
     manager
+        .agents
+        .release_exited_child(&*manager, &id, &first.id)
+        .await
+        .unwrap();
+    manager
+        .agents
         .record_execution_child(id, Some(next.clone()), next.pid)
         .await
         .unwrap();
@@ -371,7 +421,9 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
     let wrapper = crate::process::identity::capture(away.id()).unwrap();
     let child = ended();
     let started = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             wrapper,
             ExecutionKind::Command,
@@ -382,12 +434,13 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
         .unwrap();
     let id = started.plan.id.clone();
     manager
+        .agents
         .record_execution_child(id.clone(), Some(child.clone()), child.pid)
         .await
         .unwrap();
     // As after a daemon restart, before the wrapper reconnects.
     drop(started);
-    manager.detach_execution(&id).await;
+    manager.agents.detach_execution(&id).await;
     manager
         .stop_demos(&SpaceSelector::id(&first.id), None)
         .await
@@ -411,7 +464,9 @@ async fn stopping_an_away_demo_between_runs_ends_its_record() {
     );
     let wrapper = crate::process::identity::capture(away.id()).unwrap();
     let started = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             wrapper,
             ExecutionKind::Command,
@@ -423,7 +478,7 @@ async fn stopping_an_away_demo_between_runs_ends_its_record() {
     let id = started.plan.id.clone();
     // The last run was released, so the record names no child.
     drop(started);
-    manager.detach_execution(&id).await;
+    manager.agents.detach_execution(&id).await;
     manager
         .stop_demos(&SpaceSelector::id(&first.id), None)
         .await
@@ -452,7 +507,9 @@ async fn running_web_demos_list_their_url() {
     dns.id = "dns".into();
     for demo in [site, dns] {
         manager
+            .agents
             .begin_execution_running(
+                &*manager,
                 first.id.as_str(),
                 None,
                 ExecutionKind::Command,
@@ -509,7 +566,9 @@ async fn demos_journal_their_first_run_and_their_end() {
     app.preset = Some(crate::demos::Preset::Simulator);
     app.environment = BTreeMap::from([(crate::demos::SIM_UDID.into(), "UDID-1".into())]);
     let started = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -521,7 +580,9 @@ async fn demos_journal_their_first_run_and_their_end() {
     let mut unrun = launch("unrun");
     unrun.id = "unrun".into();
     let never = manager
+        .agents
         .begin_execution_running(
+            &*manager,
             first.id.as_str(),
             None,
             ExecutionKind::Command,
@@ -534,11 +595,16 @@ async fn demos_journal_their_first_run_and_their_end() {
 
     let id = started.plan.id.clone();
     manager
+        .agents
         .record_execution_child(id.clone(), None, 4_000_000)
         .await
         .unwrap();
     for execution in [id, never.plan.id] {
-        manager.forget_execution(&execution).await.unwrap();
+        manager
+            .agents
+            .forget_execution(&*manager, &execution)
+            .await
+            .unwrap();
     }
     let started = (
         EventKind::DemoStarted,

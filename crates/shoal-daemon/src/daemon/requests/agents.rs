@@ -39,15 +39,18 @@ pub(super) async fn handle(
             }));
         }
         AgentMethod::ListAgents => {
-            let agents = manager.running_agents().await?;
+            let agents = manager.agents.running_agents().await?;
             Body::RunningAgents(manager.visible_agents(caller, agents).await?)
         }
         AgentMethod::SpaceAgents { space } => {
-            Body::RunningAgents(manager.space_agents(&space).await?)
+            Body::RunningAgents(manager.agents.space_agents(&**manager, &space).await?)
         }
-        AgentMethod::InterruptTurn { space, execution } => {
-            Body::AgentStatus(manager.interrupt_turn(&space, execution).await?)
-        }
+        AgentMethod::InterruptTurn { space, execution } => Body::AgentStatus(
+            manager
+                .agents
+                .interrupt_turn(&**manager, &space, execution)
+                .await?,
+        ),
         AgentMethod::WaitAgentUpdates { space } => {
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
@@ -165,7 +168,8 @@ pub(super) async fn handle(
             resets_at,
         } => {
             manager
-                .report_upstream_reset(&workspace, execution, resets_at)
+                .agents
+                .report_upstream_reset(&**manager, &workspace, execution, resets_at)
                 .await?;
             Body::Ok
         }
@@ -175,7 +179,8 @@ pub(super) async fn handle(
             limit,
         } => {
             manager
-                .report_upstream_limit(&workspace, execution, limit)
+                .agents
+                .report_upstream_limit(&**manager, &workspace, execution, limit)
                 .await?;
             Body::Ok
         }
@@ -185,7 +190,8 @@ pub(super) async fn handle(
             retry,
         } => {
             manager
-                .report_proxy_retry(&workspace, execution, retry)
+                .agents
+                .report_proxy_retry(&**manager, &workspace, execution, retry)
                 .await?;
             Body::Ok
         }
@@ -194,14 +200,20 @@ pub(super) async fn handle(
             execution,
             at,
         } => {
-            manager.report_input(&workspace, &execution, at).await?;
+            manager
+                .agents
+                .report_input(&**manager, &workspace, &execution, at)
+                .await?;
             Body::Ok
         }
         AgentMethod::ReportTyping {
             workspace,
             execution,
         } => {
-            manager.report_typing(&workspace, &execution).await?;
+            manager
+                .agents
+                .report_typing(&**manager, &workspace, &execution)
+                .await?;
             Body::Ok
         }
         AgentMethod::ReportAttach { space } => {
@@ -211,15 +223,19 @@ pub(super) async fn handle(
                 .await;
             Body::Ok
         }
-        AgentMethod::RestartAgent { space, restart } => {
-            Body::Restart(manager.restart_space(caller, &space, restart).await?)
-        }
+        AgentMethod::RestartAgent { space, restart } => Body::Restart(
+            manager
+                .agents
+                .restart_space(&**manager, caller, &space, restart)
+                .await?,
+        ),
         AgentMethod::CancelRestart { space } => {
-            Body::CancelledRestart(manager.cancel_restart(&space).await?)
+            Body::CancelledRestart(manager.agents.cancel_restart(&**manager, &space).await?)
         }
         AgentMethod::AgentSession { space } => Body::AgentSession(
             manager
-                .agent_session(&space, caller.and_then(Caller::execution_id))
+                .agents
+                .agent_session(&**manager, &space, caller.and_then(Caller::execution_id))
                 .await?,
         ),
         AgentMethod::GitCredential { host } => {

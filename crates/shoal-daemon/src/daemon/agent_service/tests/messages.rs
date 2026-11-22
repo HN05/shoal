@@ -140,7 +140,8 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         .await
         .unwrap();
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -190,11 +191,20 @@ async fn run_agent(
     workspace: &crate::model::Workspace,
 ) -> crate::daemon::executions::StartedExecution {
     let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     manager
+        .agents
         .track_agent(
+            manager,
             &execution.plan.id,
             &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
@@ -217,7 +227,7 @@ async fn a_message_to_one_space_says_when_its_agent_reads_it() {
     // Queued without the check that claude is on PATH, which CI lacks.
     let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
     let request = crate::start_plan::queued_agent_request(&queued, launch, None).unwrap();
-    manager.queue_add(request).await.unwrap();
+    manager.agents.queue_add(&*manager, request).await.unwrap();
     let without = create("without").await.unwrap();
     let repo = manager
         .repositories
@@ -372,7 +382,8 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     assert!(send(None, Some(child.id.clone())).await.reached.is_empty());
     // A workspace process names only its own repository, or none.
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -453,7 +464,14 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     // Its agent's wrapper waits to reattach, as after a daemon restart.
     let reattaching = create("reattaching").await.unwrap();
     let execution = manager
-        .begin_execution(reattaching.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            &*manager,
+            reattaching.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -498,7 +516,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     for workspace in [&queued, &full] {
         let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
         let request = crate::start_plan::queued_agent_request(workspace, launch, None).unwrap();
-        manager.queue_add(request).await.unwrap();
+        manager.agents.queue_add(&*manager, request).await.unwrap();
     }
     for n in 0..shoal_daemon_base::alerts::MAX_UNREAD {
         manager
@@ -524,7 +542,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     }
     let chats = manager.chats().await.unwrap();
     let paused = chats.iter().find(|chat| chat.name == "paused").unwrap();
-    manager.end_executions(&paused.id).await;
+    manager.agents.end_executions(&*manager, &paused.id).await;
     let reached = manager
         .send_all_message(None, None, "Rebase onto main".into(), Vec::new())
         .await
@@ -557,7 +575,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     }
     // Only the launches queued before wait in the queue.
     assert_eq!(
-        manager.queued_agent_workspaces().await.unwrap(),
+        manager.agents.queued_agent_workspaces().await.unwrap(),
         [queued.id.clone(), full.id.clone()].into()
     );
 }

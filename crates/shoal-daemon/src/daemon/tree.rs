@@ -233,7 +233,7 @@ impl Manager {
 
     /// The workspaces whose agent the daemon tracks now.
     pub(crate) async fn tracked_agents(&self) -> TrackedAgents {
-        TrackedAgents(self.running_agent_workspaces().await)
+        TrackedAgents(self.agents.running_agent_workspaces().await)
     }
 }
 

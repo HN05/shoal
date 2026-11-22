@@ -9,7 +9,7 @@ use crate::{
 };
 
 async fn has_work(manager: &Manager) -> bool {
-    manager.agents.agents_have_work(manager).await.unwrap()
+    manager.agents.agents_have_work().await.unwrap()
 }
 
 async fn watch_pr(manager: &Manager, workspace: &crate::model::Workspace) {

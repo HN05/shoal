@@ -1,0 +1,2249 @@
+use shoal_ids::execution_ids::ExecutionId;
+use std::{
+    collections::{BTreeMap, HashSet},
+    time::Duration,
+};
+
+use anyhow::Result;
+use rusqlite::params;
+
+use crate::daemon::agent_queue::{Grant, OneShotStop, dispatch::START_GRACE, slots::Slot};
+use crate::daemon::agents::ProtectionExt;
+use crate::protocol::operations::{Ended, Failure, OperationSpec, Preparation, Report, Step};
+use crate::{
+    config::permissions::{PermissionChange, PermissionsConfig},
+    daemon::{
+        capacity::Activity,
+        manager::Manager,
+        notifications::AlertKind,
+        queued_starts::fake::STARTED,
+        stopped_work::PermissionTargets,
+        test_support::{global_config, manager, repository},
+        workspace_files::Attacher,
+    },
+    model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},
+    state::{ExecutionState, QueueKind, QueueState, WorkspaceState},
+};
+use shoal_protocol::assignments::Done;
+use shoal_protocol::launches::LaunchSource;
+use shoal_protocol::space_names::SpaceSelector;
+use std::sync::Arc;
+
+pub(crate) async fn register(
+    manager: &Manager,
+    temp: &tempfile::TempDir,
+    name: &str,
+) -> Repository {
+    let checkout = repository(temp.path(), name);
+    manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap()
+}
+
+/// Limit the machine to `limit` agents; host disk must not decide the test.
+pub(crate) fn limit_globally(manager: &Manager, limit: u32) {
+    manager.publish_config(global_config(&format!(
+        "[machine]\nmax_heavy_agents = {limit}\n[machine.overload.disk]\nenabled = false"
+    )));
+}
+
+/// The launch of an agent in a new workspace of `repository` named `name`.
+pub(crate) async fn request(
+    manager: &Manager,
+    repository: &Repository,
+    name: &str,
+    now: bool,
+) -> QueueRequest {
+    launch_in(&create(manager, repository, name).await, now)
+}
+
+/// The launch of an agent in `workspace`, which the daemon starts.
+pub(crate) fn launch_in(workspace: &Workspace, now: bool) -> QueueRequest {
+    QueueRequest {
+        source: None,
+        replace: false,
+        issue_labels: Vec::new(),
+        narrowing: Default::default(),
+        mode: None,
+        name: workspace.name.clone(),
+        agent: "claude".into(),
+        issue_title: None,
+        plan: "{}".into(),
+        env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
+        now,
+        space: SpaceSelector::id(&workspace.id),
+        starts_in_caller: false,
+        blockers: Vec::new(),
+    }
+}
+
+/// Queue the launch of an agent in a new workspace of `repository` named
+/// `name`.
+pub(crate) async fn add(manager: &Manager, repository: &Repository, name: &str) -> QueueAdmission {
+    let request = request(manager, repository, name, false).await;
+    manager.agents.queue_add(manager, request).await.unwrap()
+}
+
+/// Whether `admission` admitted its launch, which the daemon starts.
+pub(super) fn admitted(admission: &QueueAdmission) -> bool {
+    (admission.entry.as_ref()).is_some_and(|entry| entry.state == QueueState::Starting)
+}
+
+/// A new workspace of `repository` whose preparation has yet to set it up.
+pub(super) async fn preparing(manager: &Manager, repository: &Repository, name: &str) -> Workspace {
+    let workspace = manager
+        .create_workspace(&repository.id, name.into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    (manager.set_state(&id, WorkspaceState::Preparing, None))
+        .await
+        .unwrap();
+    manager.workspace_by_id(&id).await.unwrap()
+}
+
+/// Whether the daemon started `id`, passing the queuing terminal's Herdr variables.
+pub(super) fn started(id: &QueueEntryId) -> bool {
+    STARTED.lock().unwrap().iter().any(|(started, env)| {
+        id == started && env.get("HERDR_ENV").map(String::as_str) == Some("1")
+    })
+}
+
+#[tokio::test]
+async fn a_full_machine_queues_until_a_start_ends() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+
+    let first = add(&manager, &repo, "first").await.entry.unwrap();
+    assert_eq!(first.state, QueueState::Starting);
+    let second = add(&manager, &repo, "second").await;
+    assert!(!admitted(&second));
+    assert_eq!(second.waiting, 1);
+    let second = second.entry.unwrap();
+    assert_eq!(
+        (second.state, second.position),
+        (QueueState::Queued, Some(1))
+    );
+    // Starting now takes a slot beyond the limit without passing the queue.
+    let urgent = request(&manager, &repo, "urgent", true).await;
+    let now = manager.agents.queue_add(&*manager, urgent).await.unwrap();
+    assert!(admitted(&now));
+
+    manager
+        .agents
+        .fail_queue_entry(&*manager, &first.id, "setup failed")
+        .await
+        .unwrap();
+    manager
+        .agents
+        .fail_queue_entry(&*manager, &now.entry.unwrap().id, "gone")
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(started(&second.id));
+    let entries = live(&manager).await;
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].state, QueueState::Starting);
+    let failure = manager.notifications.list(true, 10).await.unwrap();
+    assert!(failure.iter().any(|notification| {
+        notification.kind == AlertKind::StartFailed && notification.message.contains("setup failed")
+    }));
+    assert!(
+        failure
+            .iter()
+            .any(|notification| notification.kind == AlertKind::QueueStarted)
+    );
+}
+
+#[tokio::test]
+async fn repository_limits_hold_back_only_their_own_entries() {
+    let (temp, manager) = manager().await;
+    let limited = register(&manager, &temp, "limited").await;
+    let other = register(&manager, &temp, "other").await;
+    limit_globally(&manager, 3);
+    manager
+        .write_local_config(&limited.id, Some("agent.max_heavy_running = 1\n".into()))
+        .await
+        .unwrap();
+
+    assert!(admitted(&add(&manager, &limited, "one").await));
+    assert!(!admitted(&add(&manager, &limited, "two").await));
+    assert!(admitted(&add(&manager, &other, "three").await));
+    assert!(admitted(&add(&manager, &other, "four").await));
+    // The machine is full now, so other repositories wait too.
+    assert!(!admitted(&add(&manager, &other, "five").await));
+    let positions: Vec<_> = manager
+        .agents
+        .queue_entries(&*manager)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter_map(|entry| entry.position.map(|position| (entry.name, position)))
+        .collect();
+    assert_eq!(positions, [("two".into(), 1), ("five".into(), 2)]);
+}
+
+#[tokio::test]
+async fn completed_workspaces_and_registered_agents_release_starting_slots() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "first").await;
+    let first = manager
+        .agents
+        .queue_add(&*manager, launch_in(&workspace, false))
+        .await;
+    let first = first.unwrap().entry.unwrap();
+    let second = add(&manager, &repo, "second").await.entry.unwrap();
+    manager
+        .agents
+        .queue_attach(&*manager, &first.id, &SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(!started(&second.id));
+
+    manager
+        .mark_space_done(
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(started(&second.id));
+
+    // Only the queued launch's own agent takes over its entry, whose
+    // workspace stays known once it left the queue.
+    manager
+        .agents
+        .consume_queue_entry(&second.id, &workspace.id)
+        .await;
+    assert_eq!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        manager.agents.started_launch(&second.id).await.unwrap(),
+        None
+    );
+    manager
+        .agents
+        .consume_queue_entry(&first.id, &workspace.id)
+        .await;
+    // Recorded in the transaction that took the entry out, in the store,
+    // so neither a poll in between nor a daemon restart misses it.
+    assert_eq!(
+        manager.agents.started_launch(&first.id).await.unwrap(),
+        Some(workspace.id.clone())
+    );
+    let names: Vec<_> = manager
+        .agents
+        .queue_entries(&*manager)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect();
+    assert_eq!(names, ["second"]);
+}
+
+#[tokio::test]
+async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let held = add(&manager, &repo, "held").await.entry.unwrap();
+    add(&manager, &repo, "abandoned").await;
+    manager.agents.hold_queue_entry(&held.id).await.unwrap();
+    let past = crate::time::UnixTime::now() - START_GRACE - Duration::from_secs(1);
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE agent_queue SET seen_at=?1", [past])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let remaining: Vec<_> = (live(&manager).await.into_iter())
+        .map(|entry| entry.id)
+        .collect();
+    assert_eq!(remaining, std::slice::from_ref(&held.id));
+    assert!(
+        manager
+            .notifications
+            .list(true, 10)
+            .await
+            .unwrap()
+            .iter()
+            .any(|notification| notification.kind == AlertKind::StartFailed
+                && notification.message.contains("abandoned"))
+    );
+    // Releasing the hold starts a fresh grace period instead of ending it.
+    manager.agents.release_queue_hold(&held.id).await.unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(manager.agents.queue_entry_starting(&held.id).await.unwrap());
+}
+
+#[tokio::test]
+async fn failing_an_ended_entry_frees_nothing_and_says_nothing() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let starting = add(&manager, &repo, "starting").await.entry.unwrap();
+    manager
+        .agents
+        .fail_queue_entry(&*manager, &starting.id, "first")
+        .await
+        .unwrap();
+    // Removing its workspace also ends an entry before its launch reports.
+    manager
+        .agents
+        .fail_queue_entry(&*manager, &starting.id, "second")
+        .await
+        .unwrap();
+    let failures = manager.notifications.list(true, 10).await.unwrap();
+    assert_eq!(
+        failures
+            .iter()
+            .filter(|notification| notification.kind == AlertKind::StartFailed)
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn only_waiting_entries_can_be_removed() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let starting = add(&manager, &repo, "starting").await.entry.unwrap();
+    let waiting = add(&manager, &repo, "waiting").await.entry.unwrap();
+    // Only a start can fail; a waiting entry stays queued.
+    assert!(
+        manager
+            .agents
+            .fail_queue_entry(&*manager, &waiting.id, "not started")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+
+    manager
+        .agents
+        .queue_remove(&*manager, &starting.name, None)
+        .await
+        .unwrap_err();
+    let removed = manager
+        .agents
+        .queue_remove(&*manager, &manager.queued("waiting").await, None)
+        .await
+        .unwrap();
+    assert_eq!(removed.name, "waiting");
+    assert!(
+        manager
+            .agents
+            .queue_remove(&*manager, &manager.queued("waiting").await, None)
+            .await
+            .is_err()
+    );
+    assert!(manager.agents.queued_plan(&starting.id).await.is_ok());
+}
+
+#[tokio::test]
+async fn each_agent_execution_uses_its_own_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let workspace = manager
+        .create_workspace(&repo.id, "busy".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    // Two agents await reattachment in one workspace after a daemon restart.
+    manager
+        .store
+        .run(move |db| {
+            for execution in ["first", "second"] {
+                db.execute(
+                    "INSERT INTO executions(id,space_id,state) VALUES (?1,?2,?3)",
+                    params![execution, id, ExecutionState::Unknown],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    // A resume record of the same execution is the same agent.
+    let record = crate::execution::recovery::record_path(
+        &manager.paths,
+        &workspace.id,
+        &ExecutionId::from("first"),
+    );
+    std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+    std::fs::write(&record, "{\"agent\":\"claude\"}").unwrap();
+    assert_eq!(
+        manager
+            .agents
+            .occupied_slots(&*manager, &HashSet::new(), &Default::default())
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    assert!(!admitted(&add(&manager, &repo, "waiting").await));
+}
+
+#[tokio::test]
+async fn a_ci_jobs_runner_awaiting_reattachment_holds_no_agent_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = manager
+        .create_workspace(&repo.id, "ci-rust-4".into(), None, None, None)
+        .await
+        .unwrap();
+    let (id, repository) = (workspace.id.clone(), repo.id.clone());
+    let job = serde_json::json!({
+        "job": {"handle": "h1", "id": 4, "run": 1, "name": "rust", "labels": ["shoal"]},
+        "run": {"url": "https://forge.example/team/repo/actions/runs/1", "commit": "abc", "trigger": "other"},
+    })
+    .to_string();
+    // A job's runner awaits reattachment after a daemon restart.
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO ci_jobs(id,repository_id,workspace_id,execution_id,job,started_at)
+                 VALUES ('job',?1,?2,'runner',?3,1)",
+                params![repository, id, job],
+            )?;
+            db.execute(
+                "INSERT INTO executions(id,space_id,state) VALUES ('runner',?1,?2)",
+                params![id, ExecutionState::Unknown],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .agents
+            .occupied_slots(&*manager, &HashSet::new(), &Default::default())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(admitted(&add(&manager, &repo, "agent").await));
+}
+
+#[tokio::test]
+async fn dynamic_admission_staggers_starts() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    // Host memory and disk must not decide this test.
+    manager.publish_config(global_config(
+        "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false",
+    ));
+    // An idle machine starts the first agent whatever its CPU reads.
+    assert!(admitted(&add(&manager, &repo, "first").await));
+    // The next waits for the stagger even with room.
+    let second = add(&manager, &repo, "second").await;
+    assert!(!admitted(&second));
+    assert_eq!(second.waiting, 1);
+}
+
+#[tokio::test]
+async fn low_disk_holds_fixed_limits() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    // No disk has this much free space, so the host reads low or critical;
+    // either holds every start after the first below the fixed limit.
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 3\n[machine.overload.warning]\ndisk_free_gib = 1048576",
+    ));
+    add(&manager, &repo, "first").await;
+    assert!(!admitted(&add(&manager, &repo, "second").await));
+    // Starting now still starts at once.
+    let urgent = request(&manager, &repo, "urgent", true).await;
+    assert!(admitted(
+        &manager.agents.queue_add(&*manager, urgent).await.unwrap()
+    ));
+}
+
+/// An agent connected in `workspace`, which protection may stop, and the
+/// receiver that keeps its connection open.
+pub(super) async fn connected_agent(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+) -> (ExecutionId, tokio::sync::watch::Receiver<bool>) {
+    let started = manager
+        .agents
+        .begin_execution(
+            manager,
+            workspace.id.as_str(),
+            None,
+            crate::daemon::executions::ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    manager
+        .agents
+        .track_agent(
+            manager,
+            &started.plan.id,
+            &shoal_protocol::executions::TrackedAgent::named("claude"),
+            &workspace.id,
+            &workspace.name,
+            true,
+            Duration::from_secs(3600),
+        )
+        .await;
+    (started.plan.id, started.stop)
+}
+
+#[tokio::test]
+async fn protection_stopped_agents_keep_their_slot_without_load() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = manager
+        .create_workspace(&repo.id, "stopped".into(), None, None, None)
+        .await
+        .unwrap();
+    let agent = connected_agent(&manager, &workspace).await;
+    let activities = |slots: Vec<Slot>| -> Vec<Activity> {
+        slots.into_iter().map(|slot| slot.activity).collect()
+    };
+    assert!(matches!(
+        activities(
+            manager
+                .agents
+                .occupied_slots(&*manager, &HashSet::new(), &Default::default())
+                .await
+                .unwrap()
+        )[..],
+        [Activity::Running { .. }]
+    ));
+    assert!(
+        manager
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    // Until its processes are proven stopped the agent's load may still show.
+    assert!(matches!(
+        activities(
+            manager
+                .agents
+                .occupied_slots(&*manager, &HashSet::new(), &Default::default())
+                .await
+                .unwrap()
+        )[..],
+        [Activity::Running { .. }]
+    ));
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &agent.0)
+        .await
+        .unwrap();
+    // Without a turn report the agent counts as interrupted.
+    assert!(!manager.agents.queue_entries(&*manager,).await.unwrap()[0].waits_for_update);
+    let _restoring = await_restore(&manager, &agent.0).await;
+    assert_eq!(
+        activities(
+            manager
+                .agents
+                .occupied_slots(&*manager, &HashSet::new(), &Default::default())
+                .await
+                .unwrap()
+        ),
+        [Activity::Stopped]
+    );
+}
+
+/// A hang guard, not a deadline: the awaited step is already admitted.
+pub(super) async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
+    tokio::time::timeout(Duration::from_secs(60), future)
+        .await
+        .expect("queue step hung")
+}
+
+pub(crate) async fn create(
+    manager: &Manager,
+    repository: &Repository,
+    name: &str,
+) -> crate::model::Workspace {
+    manager
+        .create_workspace(&repository.id, name.into(), None, None, None)
+        .await
+        .unwrap()
+}
+
+/// Agents connected in `workspaces`, each stopped by memory protection with
+/// its restore queued in order.
+pub(super) async fn stopped_agents(
+    manager: &Manager,
+    workspaces: &[&crate::model::Workspace],
+) -> Vec<(ExecutionId, tokio::sync::watch::Receiver<bool>)> {
+    let mut agents = Vec::new();
+    for workspace in workspaces {
+        agents.push(connected_agent(manager, workspace).await);
+    }
+    for (id, _) in &agents {
+        assert!(
+            manager
+                .agents
+                .stop_for_overload(manager, crate::daemon::overload::Pressure::Memory)
+                .await
+        );
+        manager
+            .agents
+            .queue_agent_restore(manager, id)
+            .await
+            .unwrap();
+    }
+    agents
+}
+
+/// The restore of `execution` waiting for admission over its wrapper's link,
+/// once the link counts.
+pub(super) async fn await_restore(
+    manager: &std::sync::Arc<Manager>,
+    execution: &ExecutionId,
+) -> tokio::task::JoinHandle<Result<Grant>> {
+    let waiting = {
+        let (manager, execution) = (manager.clone(), execution.to_owned());
+        tokio::spawn(async move {
+            let link = manager.agents.agent_queue().link_restore(&execution);
+            manager.agents.await_restore_admission(&link).await
+        })
+    };
+    bounded(async {
+        while !manager
+            .agents
+            .agent_queue()
+            .restore_links()
+            .contains(execution)
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+    waiting
+}
+
+/// A process group ID above every system's PID limit, so no process has it.
+const ABSENT_GROUP: u32 = i32::MAX as u32;
+
+pub(super) fn publish_recovery(manager: &Manager) {
+    let epoch = manager.agents.overload_recovery().epoch();
+    manager.agents.overload_recovery().publish(Some(epoch));
+}
+
+/// Each entry's name, kind and state in queue order, without the failed
+/// launches, which wait for nothing.
+pub(super) async fn queue(manager: &Manager) -> Vec<(String, QueueKind, QueueState)> {
+    live(manager)
+        .await
+        .into_iter()
+        .map(|entry| (entry.name.into(), entry.kind, entry.state))
+        .collect()
+}
+
+/// The entries that wait or start, without the failed launches.
+pub(super) async fn live(manager: &Manager) -> Vec<crate::model::QueueEntry> {
+    let mut entries = manager.agents.queue_entries(manager).await.unwrap();
+    entries.retain(|entry| entry.state != QueueState::Failed);
+    entries
+}
+
+/// Discard a stopped agent as `shoal restore --discard-agent` does once its wrapper ended.
+async fn forget(manager: &Manager, workspace: &crate::model::Workspace, execution: &ExecutionId) {
+    // No marked process belongs to the agent. A host scan would also count
+    // every same-user process whose environment it cannot read, such as
+    // ssh-agent on Linux, as a survivor and keep the slot.
+    manager
+        .agents
+        .finish_execution_after_scan(
+            manager,
+            execution.to_owned(),
+            crate::daemon::executions::ExecutionKind::Command,
+            Some(0),
+            Some(Ok(crate::process::identity::Scan::default())),
+        )
+        .await
+        .unwrap();
+    std::fs::remove_file(crate::execution::recovery::record_path(
+        &manager.paths,
+        &workspace.id,
+        execution,
+    ))
+    .unwrap();
+}
+
+use QueueKind::{Launch, Restore};
+use QueueState::{Queued, Starting};
+use shoal_ids::queue_entry_ids::QueueEntryId;
+
+#[tokio::test]
+async fn stopped_agents_restore_in_queue_order_before_later_launches() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let (first, second) = (
+        create(&manager, &repo, "first").await,
+        create(&manager, &repo, "second").await,
+    );
+    let agents = stopped_agents(&manager, &[&first, &second]).await;
+    let launch = add(&manager, &repo, "later").await;
+    assert!(!admitted(&launch));
+    let launch = launch.entry.unwrap();
+    let restoring = [
+        await_restore(&manager, &agents[0].0).await,
+        await_restore(&manager, &agents[1].0).await,
+    ];
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(
+        queue(&manager).await,
+        [
+            ("first".into(), Restore, Queued),
+            ("second".into(), Restore, Queued),
+            ("later".into(), Launch, Queued),
+        ]
+    );
+
+    // A healthy interval restores the first stopped agent only.
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let [first_restore, second_restore] = restoring;
+    bounded(first_restore).await.unwrap().unwrap();
+    assert_eq!(manager.agents.overload_recovery().published(), None);
+    assert_eq!(
+        queue(&manager).await[..2],
+        [
+            ("first".into(), Restore, Starting),
+            ("second".into(), Restore, Queued),
+        ]
+    );
+    // The restored agent registers and takes over the slot it kept. Its group
+    // must not exist, or forgetting it later finds survivors and keeps the slot.
+    let register = |execution: &ExecutionId| {
+        manager
+            .agents
+            .record_execution_child(execution.to_owned(), None, ABSENT_GROUP)
+    };
+    register(&agents[0].0).await.unwrap();
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    bounded(second_restore).await.unwrap().unwrap();
+    register(&agents[1].0).await.unwrap();
+    // Both agents have their slots back, so the launch keeps waiting.
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(queue(&manager).await, [("later".into(), Launch, Queued)]);
+    forget(&manager, &first, &agents[0].0).await;
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(started(&launch.id));
+}
+
+#[tokio::test]
+async fn a_stop_after_admission_returns_the_restore_to_its_place() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let (first, second) = (
+        create(&manager, &repo, "first").await,
+        create(&manager, &repo, "second").await,
+    );
+    let agents = stopped_agents(&manager, &[&first, &second]).await;
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let epoch = bounded(restoring).await.unwrap().unwrap();
+    // Load worsens again while the restore checks its workspace.
+    manager.agents.overload_recovery().reset();
+    assert!(
+        !manager
+            .agents
+            .confirm_restore(&*manager, &agents[0].0, &first.id, epoch)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        queue(&manager).await,
+        [
+            ("first".into(), Restore, Queued),
+            ("second".into(), Restore, Queued),
+        ]
+    );
+    // The next healthy interval admits it again, and that admission holds.
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let epoch = bounded(restoring).await.unwrap().unwrap();
+    assert!(
+        manager
+            .agents
+            .confirm_restore(&*manager, &agents[0].0, &first.id, epoch)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn admission_consumes_only_the_published_recovery_epoch() {
+    let (_temp, manager) = manager().await;
+    publish_recovery(&manager);
+    let published = manager.agents.overload_recovery().published().unwrap();
+    // A stop between the check and the admission withdraws the readings.
+    manager.agents.overload_recovery().reset();
+    assert_eq!(manager.agents.overload_recovery().consume(published), None);
+    publish_recovery(&manager);
+    let published = manager.agents.overload_recovery().published().unwrap();
+    assert_eq!(
+        manager.agents.overload_recovery().consume(published),
+        Some(published + 1)
+    );
+    assert_eq!(manager.agents.overload_recovery().published(), None);
+}
+
+#[tokio::test]
+async fn lowered_limits_hold_restores_until_a_stopped_agent_is_forgotten() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let (first, second) = (
+        create(&manager, &repo, "first").await,
+        create(&manager, &repo, "second").await,
+    );
+    let agents = stopped_agents(&manager, &[&first, &second]).await;
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    limit_globally(&manager, 1);
+    publish_recovery(&manager);
+    // Each restore would take back its own slot, but the other one fills the machine.
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(queue(&manager).await[0], ("first".into(), Restore, Queued));
+    assert!(manager.agents.overload_recovery().published().is_some());
+
+    // `shoal stop` cancels the second restore; its wrapper ends with the
+    // recovery record, which still holds the slot until it is forgotten.
+    manager.agents.remove_restore(&agents[1].0).await;
+    manager
+        .agents
+        .finish_execution(
+            &*manager,
+            agents[1].0.clone(),
+            crate::daemon::executions::ExecutionKind::Command,
+            Some(0),
+        )
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(queue(&manager).await, [("first".into(), Restore, Queued)]);
+    std::fs::remove_file(crate::execution::recovery::record_path(
+        &manager.paths,
+        &second.id,
+        &agents[1].0,
+    ))
+    .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    bounded(restoring).await.unwrap().unwrap();
+    assert_eq!(queue(&manager).await, [("first".into(), Restore, Starting)]);
+}
+
+#[tokio::test]
+async fn restart_keeps_restores_in_order_without_starting_one_twice() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let (first, second) = (
+        create(&manager, &repo, "first").await,
+        create(&manager, &repo, "second").await,
+    );
+    let agents = stopped_agents(&manager, &[&first, &second]).await;
+    let launch = add(&manager, &repo, "later").await.entry.unwrap();
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    bounded(restoring).await.unwrap().unwrap();
+
+    // The daemon restarts before the restored agent registers.
+    let restarted = Manager::open(manager.paths.clone()).await.unwrap();
+    crate::daemon::quarantine::interrupted_operations(&restarted.store)
+        .await
+        .unwrap();
+    limit_globally(&restarted, 2);
+    restarted.agents.refresh_starting_entries().await.unwrap();
+    publish_recovery(&restarted);
+    // Until the waiting wrappers reattach, nothing restores and the launch
+    // behind the restores waits for its slot.
+    restarted.agents.dispatch_queue(&*restarted).await.unwrap();
+    assert!(!started(&launch.id));
+    assert_eq!(
+        queue(&restarted).await,
+        [
+            ("first".into(), Restore, Starting),
+            ("second".into(), Restore, Queued),
+            ("later".into(), Launch, Queued),
+        ]
+    );
+    // The first wrapper never got its restore, so it reattaches waiting and
+    // keeps its place instead of queueing a second restore.
+    restarted
+        .agents
+        .queue_restore(&*restarted, &agents[0].0, &"claude".into(), &first.id)
+        .await
+        .unwrap();
+    let restoring = await_restore(&restarted, &agents[0].0).await;
+    restarted.agents.dispatch_queue(&*restarted).await.unwrap();
+    bounded(restoring).await.unwrap().unwrap();
+    assert_eq!(
+        queue(&restarted).await,
+        [
+            ("first".into(), Restore, Starting),
+            ("second".into(), Restore, Queued),
+            ("later".into(), Launch, Queued),
+        ]
+    );
+    // The second wrapper never reattaches. Once its execution ends, its
+    // agent holds no slot, which the launch takes, and the daemon takes
+    // over its restore, which waits for healthy readings and a free slot.
+    let gone = agents[1].0.clone();
+    restarted
+        .store
+        .run(move |db| {
+            db.execute("DELETE FROM executions WHERE id=?1", [gone])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    restarted.agents.dispatch_queue(&*restarted).await.unwrap();
+    assert!(started(&launch.id));
+    publish_recovery(&restarted);
+    restarted.agents.dispatch_queue(&*restarted).await.unwrap();
+    assert_eq!(
+        queue(&restarted).await[1..],
+        [
+            ("later".into(), Launch, Starting),
+            ("second".into(), Restore, Queued),
+        ]
+    );
+    assert!(
+        restarted
+            .agents
+            .queued_stopped_restores()
+            .await
+            .unwrap()
+            .contains(&agents[1].0)
+    );
+}
+
+#[tokio::test]
+async fn dynamic_admission_restores_beside_a_running_agent() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false",
+    ));
+    let (busy, stopped) = (
+        create(&manager, &repo, "busy").await,
+        create(&manager, &repo, "stopped").await,
+    );
+    let agents = stopped_agents(&manager, &[&stopped]).await;
+    // A settled agent keeps running beside the stopped one; memory, not
+    // CPU, decides whether the restore fits.
+    let _running = connected_agent(&manager, &busy).await;
+    let restoring = await_restore(&manager, &agents[0].0).await;
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(queue(&manager).await[0].2, Starting);
+    bounded(restoring).await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn launches_in_an_existing_workspace_start_from_the_daemon() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .create_child(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    // Without a limit the daemon still starts it rather than the caller.
+    let admission = manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await
+        .unwrap();
+    let entry = admission.entry.unwrap();
+    assert!(!admission.start);
+    assert_eq!(entry.opens.as_ref(), Some(&child.id));
+    assert_eq!(entry.space_id, None);
+    assert_eq!(entry.state, QueueState::Starting);
+    assert!(started(&entry.id));
+    // A launch that has yet to start keeps its workspace from cleanup.
+    assert_eq!(
+        manager
+            .cleanup_reason(&crate::model::Space::from(child.clone()))
+            .await,
+        crate::model::CleanupReason::QueuedAgent
+    );
+    // Its worker may attach only the workspace it opens.
+    manager
+        .agents
+        .queue_attach(&*manager, &entry.id, &SpaceSelector::id(&parent.id))
+        .await
+        .unwrap_err();
+    manager
+        .agents
+        .queue_attach(&*manager, &entry.id, &SpaceSelector::id(&child.id))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_launch_in_an_existing_workspace_its_caller_starts_is_left_to_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
+    let workspace = create(&manager, &repo, "here").await;
+    let admission = manager
+        .agents
+        .queue_add(
+            &*manager,
+            QueueRequest {
+                starts_in_caller: true,
+                ..launch_in(&workspace, false)
+            },
+        )
+        .await
+        .unwrap();
+    // The entry keeps the workspace's one launch while the caller starts it.
+    let entry = admission.entry.unwrap();
+    assert!(admission.start);
+    assert_eq!(entry.opens.as_ref(), Some(&workspace.id));
+    assert!(!started(&entry.id));
+}
+
+#[tokio::test]
+async fn a_scoped_caller_holds_reads_and_fails_only_the_launches_it_reaches() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let parent = create(&manager, &repo, "parent").await;
+    let caller = crate::daemon::scope::Caller {
+        space_id: parent.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
+    };
+    let child = manager
+        .create_child(
+            &SpaceSelector::id(&parent.id),
+            "own".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let own = manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await
+        .unwrap();
+    let theirs = add(&manager, &repo, "theirs").await;
+    manager
+        .agents
+        .executions()
+        .issue_scope("scope".into(), caller)
+        .await;
+    for (entry, allowed) in [(own.entry.unwrap(), true), (theirs.entry.unwrap(), false)] {
+        let methods = [
+            crate::protocol::QueueMethod::QueueHold {
+                entry: entry.id.clone(),
+            },
+            crate::protocol::QueueMethod::QueuedPlan {
+                entry: entry.id.clone(),
+            },
+            crate::protocol::QueueMethod::QueueFail {
+                entry: entry.id.clone(),
+                error: "failed".into(),
+            },
+        ];
+        for mut method in methods {
+            let authorized =
+                crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
+            assert_eq!(authorized.is_ok(), allowed, "{}", entry.name);
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_launch_in_an_existing_workspace_started_now_starts_beyond_the_limit() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    assert!(admitted(&add(&manager, &repo, "busy").await));
+    let admission = manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, true))
+        .await
+        .unwrap();
+    let entry = admission.entry.unwrap();
+    assert!(!admission.start);
+    assert_eq!(entry.state, QueueState::Starting);
+    assert!(started(&entry.id));
+}
+
+#[tokio::test]
+async fn workspace_processes_start_agents_only_below_their_workspace() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let parent = create("parent").await.unwrap();
+    let sibling = create("sibling").await.unwrap();
+    let child = manager
+        .create_child(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    manager
+        .agents
+        .executions()
+        .issue_scope(
+            "scope".into(),
+            crate::daemon::scope::Caller {
+                space_id: parent.id.clone(),
+                execution: None,
+                granted: None,
+                read_only: false,
+                vouched: None,
+            },
+        )
+        .await;
+    // It queues the worker of a workspace below its own, and only there.
+    let worker = |workspace: &shoal_ids::space_ids::SpaceId, now: bool| {
+        crate::protocol::QueueMethod::QueueAgent {
+            workspace: SpaceSelector::id(workspace),
+            launch: Box::new(crate::protocol::operations::LaunchRequest {
+                now,
+                ..crate::protocol::operations::LaunchRequest::new(Some("claude".into()))
+            }),
+            blockers: Vec::new(),
+            pr: None,
+        }
+    };
+    for (workspace, allowed) in [(&child.id, true), (&parent.id, false), (&sibling.id, false)] {
+        let mut method = worker(workspace, false);
+        let authorized =
+            crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
+        assert_eq!(authorized.is_ok(), allowed, "{workspace:?}");
+    }
+    // Only the user starts one regardless of the limits.
+    let mut method = worker(&child.id, true);
+    let authorized =
+        crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method).await;
+    assert!(authorized.is_err());
+}
+
+#[tokio::test]
+async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    // Removal reserves the workspace before its final checks; the queue
+    // insertion then refuses the launch in the same transaction.
+    manager
+        .reserve_lifecycle(&child.id, crate::state::WorkspaceState::Removing)
+        .await
+        .unwrap();
+    manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await
+        .unwrap_err();
+    assert!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    let entry = manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    // Its worker ended, as on a restart, before opening the workspace.
+    let past = crate::time::UnixTime::now() - START_GRACE - Duration::from_secs(1);
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE agent_queue SET seen_at=?1", [past])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(live(&manager).await.is_empty());
+    let notifications = manager.notifications.list(true, 10).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == AlertKind::StartFailed
+                && notification.message.contains(entry.name.as_str())
+        }),
+        "{notifications:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let idle = create(&manager, &repo, "idle").await;
+    let (execution, _stop) = connected_agent(&manager, &idle).await;
+    manager
+        .agents
+        .set_agent_state(
+            &*manager,
+            &SpaceSelector::id(&idle.id),
+            crate::state::AgentState::Idle,
+            Some(execution.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &execution)
+        .await
+        .unwrap();
+    // Until its processes are proven stopped the agent keeps its slot.
+    let held = add(&manager, &repo, "held").await;
+    assert!(!admitted(&held));
+    manager
+        .agents
+        .queue_remove(&*manager, &manager.queued("held").await, None)
+        .await
+        .unwrap();
+    let restoring = await_restore(&manager, &execution).await;
+    // Healthy readings do not restore it, and its slot is free for a launch.
+    publish_recovery(&manager);
+    let launch = add(&manager, &repo, "later").await;
+    assert!(admitted(&launch));
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(manager.agents.overload_recovery().published().is_some());
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    let restore = entries.iter().find(|entry| entry.name == "idle").unwrap();
+    assert_eq!(restore.state, Queued);
+    assert!(restore.waits_for_update);
+    let asleep = manager.workspace_by_id(&idle.id).await.unwrap().asleep;
+    assert_eq!(
+        asleep.map(|asleep| (asleep.reason, asleep.wakes_when)),
+        Some((
+            "critical memory pressure".into(),
+            crate::daemon::agents::WAKES_ON_UPDATE.into()
+        ))
+    );
+
+    // An update makes it due; it waits for the launch's slot like a launch.
+    manager
+        .send_space_message(
+            None,
+            &SpaceSelector::id(&idle.id),
+            "Review requested".into(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(
+        queue(&manager)
+            .await
+            .contains(&("idle".into(), Restore, Queued))
+    );
+    let launched = launch.entry.unwrap().id;
+    manager
+        .agents
+        .fail_queue_entry(&*manager, &launched, "test")
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
+    assert_eq!(queue(&manager).await, [("idle".into(), Restore, Starting)]);
+    // The update's admission holds through later stops.
+    manager.agents.overload_recovery().reset();
+    assert!(
+        manager
+            .agents
+            .confirm_restore(&*manager, &execution, &idle.id, Grant::Update)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let idle = create(&manager, &repo, "idle").await;
+    let (execution, _stop) = connected_agent(&manager, &idle).await;
+    manager
+        .agents
+        .set_agent_state(
+            &*manager,
+            &SpaceSelector::id(&idle.id),
+            crate::state::AgentState::Idle,
+            Some(execution.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &execution)
+        .await
+        .unwrap();
+    let restoring = await_restore(&manager, &execution).await;
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(manager.agents.queue_entries(&*manager,).await.unwrap()[0].waits_for_update);
+    let reached = manager
+        .send_all_message(None, None, "Rebase onto main".into(), Vec::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        crate::daemon::test_support::names(&reached.reached.on_start.workspaces),
+        ["idle"]
+    );
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
+}
+
+/// Admission hands a restore to its wrapper's link whether or not the
+/// wrapper waits for it at that moment, and a revoked one returns to its
+/// place on the same link.
+#[tokio::test]
+async fn a_wrappers_link_carries_its_restore_without_a_wait_in_flight() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let loaded = create(&manager, &repo, "loaded").await;
+    let (execution, _stop) = connected_agent(&manager, &loaded).await;
+    assert!(
+        manager
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &execution)
+        .await
+        .unwrap();
+    let link = manager.agents.agent_queue().link_restore(&execution);
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(
+        queue(&manager).await,
+        [("loaded".into(), Restore, Starting)]
+    );
+    let grant = bounded(manager.agents.await_restore_admission(&link)).await;
+    let grant = grant.unwrap();
+    assert!(matches!(grant, Grant::Recovery(_)), "{grant:?}");
+
+    // A stop since the readings revokes it, and the link waits again.
+    manager.agents.overload_recovery().reset();
+    let confirmed = manager
+        .agents
+        .confirm_restore(&*manager, &execution, &loaded.id, grant);
+    assert!(!confirmed.await.unwrap());
+    assert_eq!(queue(&manager).await, [("loaded".into(), Restore, Queued)]);
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let grant = bounded(manager.agents.await_restore_admission(&link)).await;
+    assert!(matches!(grant.unwrap(), Grant::Recovery(_)));
+}
+
+/// An agent restored after a load stop mid-turn reports its turns again:
+/// the turn it ends leaves it idle, and activity on its PR then reaches the
+/// wait that wakes it.
+#[tokio::test]
+async fn a_restored_agent_ends_its_turn_and_an_update_reaches_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let loaded = create(&manager, &repo, "loaded").await;
+    let space = SpaceSelector::id(&loaded.id);
+    let (execution, _stop) = connected_agent(&manager, &loaded).await;
+    let working = crate::state::AgentState::Working;
+    let report = |state| {
+        manager
+            .agents
+            .set_agent_state(&*manager, &space, state, Some(execution.clone()), None)
+    };
+    report(working).await.unwrap();
+    assert!(
+        manager
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &execution)
+        .await
+        .unwrap();
+    let link = manager.agents.agent_queue().link_restore(&execution);
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let grant = bounded(manager.agents.await_restore_admission(&link))
+        .await
+        .unwrap();
+    drop(link);
+    let resumed = manager
+        .agents
+        .resume_agent_execution(&*manager, &execution, Some(grant));
+    assert!(resumed.await.unwrap());
+
+    report(working).await.unwrap();
+    let turn_end = crate::protocol::TurnEnd::default();
+    let ended =
+        manager
+            .agents
+            .end_agent_turn(&*manager, &space, Some(execution.clone()), None, turn_end);
+    assert_eq!(ended.await.unwrap().state, crate::state::AgentState::Idle);
+    let id = loaded.id.clone();
+    let current = manager
+        .store
+        .read(move |db| crate::daemon::turn_state::current(db, &id))
+        .await
+        .unwrap();
+    assert_eq!(
+        current.map(|status| status.state),
+        Some(crate::state::AgentState::Idle)
+    );
+
+    crate::daemon::links::wait::test_support::comment_on_watched_pr(&manager, &loaded.id).await;
+    let woken = bounded(manager.links.wait_space_updates(&*manager, &space))
+        .await
+        .unwrap();
+    assert_eq!(woken.updates.len(), 1, "{woken:?}");
+}
+
+#[tokio::test]
+async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    // Disk protection stays on for its readings, while admission reads
+    // every filesystem as free.
+    crate::daemon::capacity::fake_disk_free(u64::MAX);
+    manager.publish_config(global_config("[machine]\nmax_heavy_agents = 1000"));
+    let idle = create(&manager, &repo, "idle").await;
+    let (execution, _stop) = connected_agent(&manager, &idle).await;
+    manager
+        .agents
+        .set_agent_state(
+            &*manager,
+            &SpaceSelector::id(&idle.id),
+            crate::state::AgentState::Idle,
+            Some(execution.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .agents
+            .stop_agents_for_disk_space(&*manager, &crate::model::Protection::load("low disk"))
+            .await
+            .len()
+            == 1
+    );
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &execution)
+        .await
+        .unwrap();
+    let restoring = await_restore(&manager, &execution).await;
+    manager
+        .send_space_message(
+            None,
+            &SpaceSelector::id(&idle.id),
+            "Review requested".into(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    // No reading has found the cleanup threshold free yet.
+    manager.config_state.publish_disk_reading(None);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(queue(&manager).await, [("idle".into(), Restore, Queued)]);
+    let generation = manager.config_state.generation();
+    manager.config_state.publish_disk_reading(Some(generation));
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
+}
+
+#[tokio::test]
+async fn the_agent_that_takes_a_launchs_entry_learns_what_made_the_launch() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let source = LaunchSource::Trigger {
+        name: "nightly".into(),
+    };
+    let workspace = create(&manager, &repo, "launch").await;
+    let launch = QueueRequest {
+        source: Some(source.clone()),
+        ..launch_in(&workspace, false)
+    };
+    let entry = manager
+        .agents
+        .queue_add(&*manager, launch)
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    manager
+        .agents
+        .queue_attach(&*manager, &entry.id, &SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let consumed = manager
+        .agents
+        .consume_queue_entry(&entry.id, &workspace.id)
+        .await;
+    assert_eq!(consumed, Some(source));
+    // The entry is gone, so taking it again learns nothing.
+    assert_eq!(
+        manager
+            .agents
+            .consume_queue_entry(&entry.id, &workspace.id)
+            .await,
+        None
+    );
+}
+
+#[tokio::test]
+async fn a_source_this_build_cannot_read_leaves_the_entry_consumed() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "launch").await;
+    let entry = manager
+        .agents
+        .queue_add(&*manager, launch_in(&workspace, false))
+        .await;
+    let entry = entry.unwrap().entry.unwrap();
+    manager
+        .agents
+        .queue_attach(&*manager, &entry.id, &SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let id = entry.id.clone();
+    (manager.store)
+        .run(move |db| {
+            let unknown = r#"{"kind":"webhook"}"#;
+            db.execute(
+                "UPDATE agent_queue SET source=?2 WHERE id=?1",
+                params![id, unknown],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let consumed = manager
+        .agents
+        .consume_queue_entry(&entry.id, &workspace.id)
+        .await;
+    assert_eq!(consumed, None);
+    assert_eq!(
+        manager.agents.started_launch(&entry.id).await.unwrap(),
+        Some(workspace.id.clone())
+    );
+}
+
+#[tokio::test]
+async fn a_oneshot_run_starts_beside_the_agents_without_a_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "first").await;
+    let first = manager
+        .agents
+        .queue_add(&*manager, launch_in(&workspace, false))
+        .await;
+    let first = first.unwrap().entry.unwrap();
+    let launch = add(&manager, &repo, "launch").await.entry.unwrap();
+    let mut review = (manager.agents.agent_queue()).request_oneshot(
+        &repo.id,
+        serving(&workspace.id),
+        false,
+        || {},
+    );
+    manager
+        .agents
+        .queue_attach(&*manager, &first.id, &SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    manager
+        .agents
+        .consume_queue_entry(&first.id, &workspace.id)
+        .await;
+    manager
+        .mark_space_done(
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+
+    // The run starts, and holds no slot, so the launch takes the one free
+    // slot beside it.
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), review.admitted())
+        .await
+        .unwrap();
+    assert!(started(&launch.id), "the run holds no slot");
+}
+
+/// What a one-shot run of `space`'s work serves, queued after everything.
+pub(super) fn serving(
+    space: &shoal_ids::space_ids::SpaceId,
+) -> crate::daemon::agent_queue::Serving {
+    crate::daemon::agent_queue::Serving {
+        space: space.clone(),
+        queued_after: i64::MAX,
+    }
+}
+
+/// What one-shot runs of a workspace ranking finds none of serve.
+fn reviewed() -> crate::daemon::agent_queue::Serving {
+    serving(&String::from("reviewed").into())
+}
+
+#[tokio::test]
+async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let stops = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = stops.clone();
+    let mut run =
+        manager
+            .agents
+            .agent_queue()
+            .request_oneshot(&repo.id, reviewed(), false, move || {
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            });
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), run.admitted())
+        .await
+        .unwrap();
+    // Protection stops the run before any agent.
+    assert!(
+        manager
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
+    // Neither the stopped run nor a held one is stopped again, so the next
+    // stop falls to the agents, of which there are none.
+    manager.agents.agent_queue().hold_oneshot(&repo.id);
+    assert!(
+        !manager
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    assert_eq!(
+        manager.agents.agent_queue().stop_oneshots(OneShotStop::All),
+        0
+    );
+    assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
+    drop(run);
+
+    let mut again =
+        (manager.agents.agent_queue()).request_oneshot(&repo.id, reviewed(), true, || {});
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    crate::daemon::test_support::assert_pending(again.admitted()).await;
+    publish_recovery(&manager);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), again.admitted())
+        .await
+        .unwrap();
+}
+
+/// A failed `child` workspace in `repo` with a launch waiting there, and the
+/// manager without an agent limit.
+async fn launch_waiting_for_setup() -> (tempfile::TempDir, Arc<Manager>, Workspace, QueueEntry) {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .set_state(
+            &child.id,
+            WorkspaceState::Failed,
+            Some("setup failed".into()),
+        )
+        .await
+        .unwrap();
+    let launch = |now| launch_in(&child, now);
+    // One that would start now needs the workspace ready.
+    manager
+        .agents
+        .queue_add(&*manager, launch(true))
+        .await
+        .unwrap_err();
+    let admission = manager
+        .agents
+        .queue_add(&*manager, launch(false))
+        .await
+        .unwrap();
+    let entry = admission.entry.unwrap();
+    assert!(!admission.start);
+    assert_eq!(entry.state, QueueState::Queued);
+    assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
+    (temp, manager, child, entry)
+}
+
+/// Start a preparation of `workspace` that sets it up and runs its
+/// post-setup hook, as a retried setup does, readying it.
+async fn retry_setup(manager: &Manager, workspace: &Workspace) -> String {
+    manager
+        .set_state(&workspace.id, WorkspaceState::Ready, None)
+        .await
+        .unwrap();
+    let spec = OperationSpec::Prepare {
+        workspace: SpaceSelector::id(&workspace.id),
+        steps: Preparation {
+            setup: true,
+            post_setup: true,
+            ..Default::default()
+        },
+    };
+    manager.start_operation(spec, None, None).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_launch_in_a_workspace_whose_setup_failed_waits_until_its_hook_ran() {
+    let (_temp, manager, child, entry) = launch_waiting_for_setup().await;
+    let operation = retry_setup(&manager, &child).await;
+    let _worker = crate::daemon::operations::fake::take(&operation);
+    // A ready workspace whose post-setup hook has yet to run holds it back.
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(!started(&entry.id));
+
+    let ended = Report::Step(Step::PostSetupEnded);
+    manager
+        .report_operation(&operation, ended, None)
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert_eq!(queue(&manager).await[0].2, QueueState::Starting);
+    assert!(started(&entry.id));
+}
+
+#[tokio::test]
+async fn a_launch_waiting_for_setup_takes_a_permission_change() {
+    let (_temp, manager, child, entry) = launch_waiting_for_setup().await;
+    let ready = manager
+        .create_workspace(child.repository(), "ready".into(), None, None, None)
+        .await
+        .unwrap();
+    let change = PermissionChange::assigned("merge=direct").unwrap();
+    // The agent starts under the narrowing its plan keeps.
+    let narrowing = async || {
+        let id = entry.id.clone();
+        let plan: String = (manager.store)
+            .run(move |db| {
+                Ok(
+                    db.query_row("SELECT plan FROM agent_queue WHERE id=?1", [id], |row| {
+                        row.get(0)
+                    })?,
+                )
+            })
+            .await
+            .unwrap();
+        let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
+        serde_json::from_value::<PermissionsConfig>(plan["launch"]["narrowing"].clone())
+            .unwrap_or_default()
+    };
+    let change_for = async |launches: &[SpaceSelector]| {
+        let targets = PermissionTargets {
+            agents: &[],
+            launches,
+        };
+        manager
+            .agents
+            .change_stopped_permissions(&*manager, targets, &change, None)
+            .await
+    };
+
+    // No agent waits for the setup of a ready workspace, so none changes.
+    let both = [SpaceSelector::id(&child.id), SpaceSelector::id(&ready.id)];
+    change_for(&both).await.unwrap_err();
+    assert_eq!(narrowing().await, PermissionsConfig::default());
+    change_for(&both[..1]).await.unwrap();
+    assert_eq!(narrowing().await, change.set);
+    assert_eq!(
+        manager.agents.queue_entries(&*manager,).await.unwrap()[0].narrowing,
+        change.set
+    );
+}
+
+#[tokio::test]
+async fn a_launch_keeps_waiting_when_its_workspaces_post_setup_hook_fails() {
+    let (_temp, manager, child, entry) = launch_waiting_for_setup().await;
+    let operation = retry_setup(&manager, &child).await;
+    let worker = crate::daemon::operations::fake::take(&operation);
+    let failed = Ended::Failed(Failure::HookFailed {
+        message: "hook failed".into(),
+    });
+    let report = Report::Ended(failed);
+    manager
+        .report_operation(&operation, report, None)
+        .await
+        .unwrap();
+    worker.exit(0);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(!started(&entry.id));
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    assert_eq!(entries[0].blockers, vec!["setup of child".to_owned()]);
+}
+
+#[tokio::test]
+async fn a_launch_left_waiting_for_setup_frees_the_slot_of_the_start_that_failed() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    // The start in `child` holds the only slot.
+    let child = create(&manager, &repo, "child").await;
+    let starting = manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await;
+    let starting = starting.unwrap().entry.unwrap();
+    assert_eq!(starting.state, QueueState::Starting);
+    manager
+        .agents
+        .queue_attach(&*manager, &starting.id, &SpaceSelector::id(&child.id))
+        .await
+        .unwrap();
+    manager
+        .set_state(
+            &child.id,
+            WorkspaceState::Failed,
+            Some("setup failed".into()),
+        )
+        .await
+        .unwrap();
+    // Its agent, left waiting for the setup, takes its place.
+    let waiting = manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    let ids: Vec<_> = entries.iter().map(|entry| &entry.id).collect();
+    assert_eq!(ids, [&waiting.id]);
+    assert!(admitted(&add(&manager, &repo, "other").await));
+}
+
+#[tokio::test]
+async fn a_start_gives_its_queue_entry_the_workspace_it_reopens() {
+    use crate::daemon::operations::starts::{Opening, Preparing};
+    use crate::protocol::operations::WorkspaceStart;
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let child = create(&manager, &repo, "child").await;
+    let starting = manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await;
+    let starting = starting.unwrap().entry.unwrap();
+    // No caller attaches the entry: the start alone gives it the workspace.
+    let opening = Opening {
+        start: WorkspaceStart::Workspace(SpaceSelector::id(&child.id)),
+        base: None,
+        new: Default::default(),
+        parent: None,
+    };
+    let preparing = Preparing {
+        issue: None,
+        pr: None,
+        agent: None,
+        waiting: None,
+        queue_entry: Some(starting.id.clone()),
+        blockers: Vec::new(),
+        unfollowed: false,
+        env: None,
+    };
+    let started = manager
+        .start_workspace((&repo.id).into(), opening, preparing, None)
+        .await
+        .unwrap();
+    let _worker = (started.operation.as_deref()).map(crate::daemon::operations::fake::take);
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    assert_eq!(entries[0].space_id.as_ref(), Some(&child.id));
+}
+
+#[tokio::test]
+async fn a_launch_waits_for_a_setup_the_daemon_never_started() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
+    ));
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    // Its setup was refused before it registered, so it stays preparing
+    // with nothing running.
+    manager
+        .set_state(&child.id, WorkspaceState::Preparing, None)
+        .await
+        .unwrap();
+    let entry = manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    assert_eq!(entry.state, QueueState::Queued);
+    assert_eq!(entry.blockers, vec!["setup of child".to_owned()]);
+}
+
+#[tokio::test]
+async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
+    let (_temp, manager) = manager().await;
+    let queue = &manager.agents.agent_queue();
+    let id = QueueEntryId::from("waiting");
+    let memory = crate::model::HeldBy::Memory { needed: 2, left: 1 };
+    let start = std::time::Instant::now();
+    let at = |seconds| start + Duration::from_secs(seconds);
+    let unstarted = [id.clone()].into();
+    let hold = |held, seconds| {
+        queue.record_held_back([(id.clone(), held)].into(), &unstarted, at(seconds));
+    };
+    hold(memory, 0);
+    hold(memory, 60);
+    // A pass that started another entry first did not measure it.
+    queue.record_held_back(Default::default(), &unstarted, at(70));
+    assert_eq!(
+        queue.waited_for_memory(&id, at(90)),
+        Duration::from_secs(90)
+    );
+    // Held for anything else, or started, it waits for memory anew.
+    hold(crate::model::HeldBy::MaxHeavyAgents, 120);
+    assert_eq!(queue.waited_for_memory(&id, at(120)), Duration::ZERO);
+    hold(memory, 180);
+    assert_eq!(
+        queue.waited_for_memory(&id, at(200)),
+        Duration::from_secs(20)
+    );
+    queue.record_held_back(Default::default(), &Default::default(), at(240));
+    assert_eq!(queue.waited_for_memory(&id, at(240)), Duration::ZERO);
+}
+
+/// Save a stopped agent of `mode` in the space `id` for its restore, and
+/// queue the restore as `shoal resume` does.
+async fn queue_saved_restore(
+    manager: &Manager,
+    id: &shoal_ids::space_ids::SpaceId,
+    mode: &str,
+) -> QueueEntry {
+    let execution = ExecutionId::from(format!("stopped-{mode}"));
+    let agent = shoal_protocol::executions::TrackedAgent {
+        mode: mode.into(),
+        ..shoal_protocol::executions::TrackedAgent::named("claude")
+    };
+    let saved =
+        crate::execution::recovery::save_record(&manager.paths, id, &execution, &agent, None, None);
+    saved.unwrap();
+    let env = BTreeMap::from([("HERDR_ENV".into(), "1".into())]);
+    manager
+        .agents
+        .queue_stopped_restore(manager, &SpaceSelector::id(id), &execution, env)
+        .await
+        .unwrap()
+}
+
+/// A chat without a repository takes its weight from the global config's
+/// modes: a heavy mode's restore waits for a slot on a full machine, as a
+/// workspace agent's does, and a light one's starts beside it.
+#[tokio::test]
+async fn a_chats_restore_waits_for_a_slot_by_its_modes_weight() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+         [modes.solo]\nkind = 'chat'\nrepository = false\n",
+    ));
+    assert!(admitted(&add(&manager, &repo, "busy").await));
+    let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
+
+    let heavy = queue_saved_restore(&manager, &chat.id, "solo").await;
+    let light = queue_saved_restore(&manager, &chat.id, "chat").await;
+    assert_eq!(heavy.repository_id, None);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+
+    assert!(!started(&heavy.id));
+    assert!(started(&light.id));
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    let waiting = entries.iter().find(|entry| entry.id == heavy.id).unwrap();
+    assert_eq!(waiting.held_by, Some(crate::model::HeldBy::MaxHeavyAgents));
+}
+
+/// A heavy chat's agent holds a machine slot, and one in a repository
+/// that repository's.
+#[tokio::test]
+async fn a_heavy_chats_agent_holds_a_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(
+        "[machine]\nmax_heavy_agents = 2\n[machine.overload.disk]\nenabled = false\n\
+         [modes.solo]\nkind = 'chat'\nrepository = false\n\
+         [modes.pair]\nkind = 'chat'\n",
+    ));
+    let chat = |name, mode, repository| {
+        crate::daemon::test_support::chat(&manager, name, mode, repository, None)
+    };
+    chat("light", "chat", Some(&repo)).await;
+    chat("solo", "solo", None).await;
+    chat("pair", "pair", Some(&repo)).await;
+    let light_mode = manager.agents.light(&*manager).await.unwrap();
+    let slots = manager
+        .agents
+        .occupied_slots(&*manager, &HashSet::new(), &light_mode)
+        .await;
+    let mut slots: Vec<_> = (slots.unwrap().into_iter())
+        .map(|slot| slot.repository)
+        .collect();
+    slots.sort();
+    assert_eq!(slots, [None, Some(repo.id.clone())]);
+    assert!(
+        !admitted(&add(&manager, &repo, "held").await),
+        "the machine is full"
+    );
+}
+
+/// A running claude agent in a workspace of `repo`, whose proxy found
+/// claude's upstream rate-limited for an hour; the workspace and when the
+/// limit lifts.
+async fn limit_claude(
+    manager: &Manager,
+    repo: &Repository,
+) -> (SpaceSelector, crate::time::UnixTime) {
+    use shoal_protocol::executions::{ServiceLimit, UpstreamLimit};
+    let workspace = manager
+        .create_workspace(&repo.id, "busy".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,space_id,state,agent) VALUES ('running',?1,?2,'claude')",
+                params![id, ExecutionState::Running],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let until = crate::time::UnixTime::now() + Duration::from_secs(3600);
+    let selector = SpaceSelector::id(&workspace.id);
+    let limit = UpstreamLimit {
+        limit: ServiceLimit::RateLimited,
+        until: Some(until),
+    };
+    (manager
+        .agents
+        .report_upstream_limit(manager, &selector, "running".into(), Some(limit)))
+    .await
+    .unwrap();
+    (selector, until)
+}
+
+#[tokio::test]
+async fn a_tools_upstream_limit_holds_its_queued_agents_while_others_start() {
+    use shoal_protocol::executions::ServiceLimit;
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 3);
+    let (selector, until) = limit_claude(&manager, &repo).await;
+    let claude = add(&manager, &repo, "claude").await;
+    assert!(!admitted(&claude));
+    let claude = claude.entry.unwrap();
+    let codex = QueueRequest {
+        agent: "codex".into(),
+        ..request(&manager, &repo, "codex", false).await
+    };
+    assert!(admitted(
+        &manager.agents.queue_add(&*manager, codex).await.unwrap()
+    ));
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    let waiting = entries.iter().find(|entry| entry.id == claude.id).unwrap();
+    assert_eq!(
+        waiting.held_by,
+        Some(crate::model::HeldBy::UpstreamLimit {
+            limit: ServiceLimit::RateLimited,
+            until
+        })
+    );
+    // Once its upstream answers again, it starts.
+    (manager
+        .agents
+        .report_upstream_limit(&*manager, &selector, "running".into(), None))
+    .await
+    .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(started(&claude.id));
+}
+
+/// A chat's agent, light or heavy, waits while its tool's upstream stands
+/// under a limit, as a workspace agent's does.
+#[tokio::test]
+async fn a_chats_restore_waits_for_its_tools_upstream_limit() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 3);
+    limit_claude(&manager, &repo).await;
+    let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
+    let entry = queue_saved_restore(&manager, &chat.id, "chat").await;
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    assert!(!started(&entry.id));
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    let waiting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
+    assert!(matches!(
+        waiting.held_by,
+        Some(crate::model::HeldBy::UpstreamLimit { .. })
+    ));
+}
+
+#[tokio::test]
+async fn an_exit_that_waits_keeps_queued_launches_for_the_next_daemon() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let first = add(&manager, &repo, "first").await.entry.unwrap();
+    let second = add(&manager, &repo, "second").await.entry.unwrap();
+    let held = manager.gates.hold_back(crate::protocol::Exit::Stop);
+    manager
+        .agents
+        .fail_queue_entry(&*manager, &first.id, "gone")
+        .await
+        .unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let state = |entries: Vec<QueueEntry>| {
+        (entries.into_iter())
+            .find(|entry| entry.id == second.id)
+            .map(|entry| entry.state)
+    };
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    assert_eq!(state(entries), Some(QueueState::Queued));
+    assert!(!started(&second.id));
+    drop(held);
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+    assert_eq!(state(entries), Some(QueueState::Starting));
+    assert!(started(&second.id));
+}
+
+mod actions;
+mod blockers;
+mod chats;
+mod claims;
+mod failures;
+mod openings;
+mod setup_waits;
+mod stopped;
+mod weight;
+mod worker;

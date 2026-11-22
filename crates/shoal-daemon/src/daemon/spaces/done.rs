@@ -170,10 +170,10 @@ impl Manager {
         }
         self.links.agent_settles().request(&space.id);
         let closed = persisted.closed;
-        self.forget_last_sessions(&space.id);
+        self.agents.forget_last_sessions(&space.id);
         // Finished work needs no agent; only naming the space in `shoal
         // restore` restores it now.
-        if let Err(error) = self.cancel_stopped_restores(&space.id).await {
+        if let Err(error) = self.agents.cancel_stopped_restores(self, &space.id).await {
             crate::daemon::log!("agent queue: {error:#}");
         }
         self.notify_space(

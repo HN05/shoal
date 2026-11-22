@@ -42,7 +42,14 @@ pub(super) async fn launch(
     command: JobCommand,
 ) -> anyhow::Result<ExecutionId> {
     let started = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await?;
     let id = started.plan.id.clone();
     LAUNCHED
@@ -386,7 +393,7 @@ pub(super) fn launched(workspace: &str) -> Launched {
 /// Queue the forge's waiting jobs, admit them and claim each admitted one.
 pub(super) async fn admit_and_claim(manager: &Manager) -> Vec<QueueEntry> {
     refresh_waiting_jobs(manager).await;
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(manager).await.unwrap();
     let admitted = admitted_jobs(manager).await;
     for entry in &admitted {
         claim_job(manager, entry).await;
@@ -396,7 +403,8 @@ pub(super) async fn admit_and_claim(manager: &Manager) -> Vec<QueueEntry> {
 
 pub(super) async fn job_entries(manager: &Manager) -> Vec<QueueEntry> {
     manager
-        .queue_entries()
+        .agents
+        .queue_entries(manager)
         .await
         .unwrap()
         .into_iter()
@@ -479,7 +487,13 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
 
     manager.runner.jobs().take_wake();
     manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .agents
+        .finish_execution(
+            &**manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
         .await
         .unwrap();
     // Its end wakes the runner, which removes the workspace without waiting
@@ -597,7 +611,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
             .is_err()
     );
     // It waits a while before admission tries it again, held by the pool.
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&**manager).await.unwrap();
     assert!(admitted_jobs(manager).await.is_empty());
     assert_eq!(
         job_entries(manager).await[0].held_by,
@@ -661,7 +675,13 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
 
     // As if it stopped before the command started.
     manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .agents
+        .finish_execution(
+            &**manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
         .await
         .unwrap();
     forget_execution().await.unwrap();
@@ -697,7 +717,7 @@ async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
     let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], "").await;
     let manager = &fixture.manager;
     refresh_waiting_jobs(manager).await;
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&**manager).await.unwrap();
     // Low free disk space admits one of them, more room both.
     let admitted = admitted_jobs(manager).await;
     assert!(!admitted.is_empty());
@@ -784,7 +804,7 @@ async fn a_waiting_job_lists_with_its_branchs_workspace_and_what_holds_it() {
         .unwrap();
     hold_the_builds_permit(&fixture).await;
     admit_and_claim(manager).await;
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&**manager).await.unwrap();
 
     let waiting = manager
         .runner
@@ -846,7 +866,7 @@ async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     watch_pull(manager, &second.id, Some(url.clone())).await;
     let other = hold_the_builds_permit(&fixture).await;
     admit_and_claim(manager).await;
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&**manager).await.unwrap();
     let chat_status = || async {
         manager
             .space_status(&SpaceSelector::id(&chat.id))
@@ -941,7 +961,9 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
     );
 
     let stopped = manager
+        .agents
         .stop_space_manually(
+            &**manager,
             &SpaceSelector::id(&claimed[0].workspace_id),
             false,
             crate::protocol::QueuedLaunches::Cancel,
@@ -965,7 +987,13 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
     finish_ended_jobs(manager).await;
     assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
     manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(1))
+        .agents
+        .finish_execution(
+            &**manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(1),
+        )
         .await
         .unwrap();
     finish_ended_jobs(manager).await;
@@ -1032,7 +1060,7 @@ async fn a_signal_to_the_daemon_leaves_a_jobs_runner_running_for_the_next_daemon
     manager.end_work(Ending::Save).await;
     // The exit's last step detaches what the signal's stop left running,
     // the first control the runner hears.
-    manager.stop_for_shutdown().await;
+    manager.agents.stop_for_shutdown().await;
     let control: Control = read(&mut connection).await;
     assert!(matches!(control, Control::Detach), "{control:?}");
     executing.await.unwrap().unwrap();
@@ -1071,7 +1099,9 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
     // A step's command, which inherits the job's scope, neither reports
     // signals nor cancels the run with one.
     let step = manager
+        .agents
         .begin_execution(
+            &**manager,
             claimed[0].workspace_id.as_str(),
             None,
             ExecutionKind::Command,
@@ -1154,7 +1184,13 @@ async fn connect_runner(
     let (_, started) = LAUNCHED.lock().unwrap().remove(&workspace).unwrap();
     // The runner as its wrapper runs it: connected to the daemon.
     manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .agents
+        .finish_execution(
+            &**manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
         .await
         .unwrap();
     let wrapper = crate::process::identity::capture(std::process::id())
@@ -1164,6 +1200,7 @@ async fn connect_runner(
     let executing = tokio::spawn(execute(
         server,
         1,
+        manager.agents.clone(),
         manager.clone(),
         ExecutionContext {
             space: SpaceSelector::from(workspace.as_str()),
@@ -1235,7 +1272,9 @@ async fn daemon_exit_with_runner(job: Value, cancelling: Cancelling) -> Fixture 
                 Cancelling::DaemonStop => {
                     manager.end_work(Ending::Stop).await;
                 }
-                Cancelling::SystemShutdown => manager.stop_for_system_shutdown().await,
+                Cancelling::SystemShutdown => {
+                    manager.agents.stop_for_system_shutdown(&*manager).await
+                }
             }
         }
     });
@@ -1355,11 +1394,19 @@ async fn heavy_agent(manager: &Manager, repository: &RepositoryId) -> StartedExe
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     let agent = shoal_protocol::executions::TrackedAgent::named("claude");
-    (manager.track_agent(
+    (manager.agents.track_agent(
+        manager,
         &execution.plan.id,
         &agent,
         &workspace.id,
@@ -1390,7 +1437,12 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_readings_re
 
     let stopping = tokio::spawn({
         let manager = manager.clone();
-        async move { manager.stop_for_overload(Pressure::Memory).await }
+        async move {
+            manager
+                .agents
+                .stop_for_overload(&*manager, Pressure::Memory)
+                .await
+        }
     });
     let control: Control = read(&mut connection).await;
     assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
@@ -1428,7 +1480,7 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_readings_re
     };
     manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
     assert_eq!(reruns(), 0, "readings have yet to recover");
-    let recovery = &manager.overload_recovery;
+    let recovery = &manager.agents.overload_recovery();
     recovery.publish(Some(recovery.epoch()));
     manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
     manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
@@ -1476,11 +1528,15 @@ async fn load_protection_passes_over_a_job_whose_runner_ended() {
         .execution_id
         .clone()
         .expect("the claim runs its runner");
-    manager.forget_execution(&execution).await.unwrap();
+    manager
+        .agents
+        .forget_execution(&**manager, &execution)
+        .await
+        .unwrap();
     let agent = heavy_agent(manager, &fixture.repository).await;
 
     let memory = crate::daemon::overload::Pressure::Memory;
-    assert!(manager.stop_for_overload(memory).await);
+    assert!(manager.agents.stop_for_overload(&**manager, memory).await);
     assert!(*agent.stop.borrow());
     assert!(logged_stops(manager).is_empty());
 }
@@ -1490,10 +1546,10 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;
     refresh_waiting_jobs(manager).await;
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&**manager).await.unwrap();
     let admitted = admitted_jobs(manager).await;
     assert_eq!(admitted.len(), 1);
-    manager.agent_queue.suspend(true).await;
+    manager.agents.agent_queue().suspend(true).await;
     claim_job(manager, &admitted[0]).await;
     let waiting = job_entries(manager).await;
     assert_eq!(waiting.len(), 1);
@@ -1505,7 +1561,7 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
             .await
             .is_err()
     );
-    manager.agent_queue.suspend(false).await;
+    manager.agents.agent_queue().suspend(false).await;
 }
 
 #[tokio::test]
@@ -1517,7 +1573,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     .await;
     let manager = &fixture.manager;
     refresh_waiting_jobs(manager).await;
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&**manager).await.unwrap();
     let admitted = admitted_jobs(manager).await;
     assert_eq!(admitted.len(), 1);
     let entry = &admitted[0];
@@ -1574,7 +1630,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
 async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
     let manager = &fixture.manager;
     refresh_waiting_jobs(manager).await;
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&**manager).await.unwrap();
     let admitted = admitted_jobs(manager).await;
     let (entry, job) = (&admitted[0], admitted[0].job.as_deref().unwrap());
     let forge = crate::forge::ForgeRepo::resolve(

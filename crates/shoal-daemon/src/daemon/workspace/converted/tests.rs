@@ -267,7 +267,7 @@ async fn a_chat_stopped_before_its_conversion_records_stays_a_chat() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
     let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    manager.end_executions(&talk.id).await;
+    manager.agents.end_executions(&*manager, &talk.id).await;
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,

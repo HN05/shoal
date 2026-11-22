@@ -79,7 +79,12 @@ impl Manager {
             let lookup = lookups.get(&(kind, target.clone())).cloned();
             let local = match lookup {
                 Some(Lookup::Cleared(_)) => None,
-                _ => (self.cleared_locally(blocked.repository.as_ref(), kind, &target)).await?,
+                _ => {
+                    (self
+                        .agents
+                        .cleared_locally(self, blocked.repository.as_ref(), kind, &target))
+                    .await?
+                }
             };
             if let Some(found_now) = local.map(Lookup::Cleared).or(lookup) {
                 found.insert((kind, target), found_now);

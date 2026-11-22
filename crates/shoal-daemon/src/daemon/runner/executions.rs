@@ -87,7 +87,11 @@ impl shoal_runner::daemon::Executions for Manager {
             reason,
             save: Save::Nothing,
         };
-        Box::pin(async move { self.stop_space(&SpaceSelector::id(id), request).await })
+        Box::pin(async move {
+            self.agents
+                .stop_space(self, &SpaceSelector::id(id), request)
+                .await
+        })
     }
 }
 
@@ -118,7 +122,7 @@ impl Manager {
             return Ok(true);
         }
         let scan = identity::scan(HashSet::from([id.to_owned()])).await?;
-        let agents = self.agent_wrappers().await?;
+        let agents = self.agents.agent_wrappers().await?;
         let processes = Processes::inspect(&execution, &workspace.path, &scan, &agents).await?;
         if processes.wrapper.is_some() || !processes.visibility_complete() {
             return Ok(true);
@@ -127,7 +131,7 @@ impl Manager {
             processes.stop_owned().await?;
             return Ok(true);
         }
-        self.forget_execution(id).await?;
+        self.agents.forget_execution(self, id).await?;
         Ok(false)
     }
 }

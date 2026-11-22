@@ -31,7 +31,7 @@ async fn a_chat_launch_queues_its_agent_with_its_prompt() {
     assert_eq!(launched.space.kind(), SpaceKind::Chat);
     let entry = launched.entry.unwrap();
     assert_eq!(entry.space(), Some(&launched.space.id));
-    let plan = manager.queued_plan(&entry.id).await.unwrap().plan;
+    let plan = manager.agents.queued_plan(&entry.id).await.unwrap().plan;
     let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
     assert_eq!(
         start.launch.prompt.as_deref(),
@@ -137,7 +137,7 @@ async fn a_launched_chat_is_recorded_with_its_issue_before_its_agent_starts() {
     assert_eq!(entry.space(), Some(&chat.id));
     // Its agent starts on the issue its link resolved, which its start
     // reads again.
-    let plan = manager.queued_plan(&entry.id).await.unwrap().plan;
+    let plan = manager.agents.queued_plan(&entry.id).await.unwrap().plan;
     let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
     let issue = start.launch.issue.map(|issue| issue.url.url().to_owned());
     assert_eq!(
@@ -200,5 +200,12 @@ async fn a_chat_on_an_issue_nothing_can_resolve_is_refused() {
 
     assert!(refused.is_err());
     assert!(manager.chats().await.unwrap().is_empty());
-    assert!(manager.queue_entries().await.unwrap().is_empty());
+    assert!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }

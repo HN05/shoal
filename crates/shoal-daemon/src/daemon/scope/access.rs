@@ -285,7 +285,7 @@ impl Manager {
     /// The agent queue every caller sees: all of it, since positions,
     /// limits and what holds an entry back are machine-wide.
     pub(in crate::daemon) async fn visible_queue(&self) -> Result<Vec<QueueEntry>> {
-        self.queue_entries().await
+        self.agents.queue_entries(self).await
     }
 
     /// The agent queue entries `caller` may act on: those its scope reaches
@@ -297,7 +297,7 @@ impl Manager {
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<QueueEntry>> {
-        let mut entries = self.queue_entries().await?;
+        let mut entries = self.agents.queue_entries(self).await?;
         let Some(caller) = caller else {
             return Ok(entries);
         };
@@ -305,7 +305,7 @@ impl Manager {
         let Some(reached) = self.reached_spaces(Some(caller)).await? else {
             return Ok(entries);
         };
-        let parents = self.launch_parents(&entries);
+        let parents = self.agents.launch_parents(&entries);
         entries
             .retain(|entry| reached_through(entry, &parents).any(|space| reached.contains(space)));
         Ok(entries)
@@ -363,7 +363,7 @@ impl Manager {
         caller: &Caller,
         entry: &QueueEntryId,
     ) -> Result<()> {
-        let Some(started) = self.started_launch(entry).await? else {
+        let Some(started) = self.agents.started_launch(entry).await? else {
             return Ok(());
         };
         let space = self.space(&SpaceSelector::id(&started)).await?;

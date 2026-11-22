@@ -122,7 +122,7 @@ impl Agents {
         if timer_set {
             self.signals.set_wake_timer();
         }
-        daemon.wake_queue();
+        self.agent_queue.wake();
         Ok(Slept {
             space: space.name.to_owned(),
             sleep,

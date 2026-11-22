@@ -1,3 +1,4 @@
+use shoal_agents::execution_connection::RecordChange;
 use shoal_ids::repository_ids::RepositoryId;
 use std::{fs, path::PathBuf, sync::Arc};
 
@@ -8,7 +9,6 @@ use crate::{
         manager::Manager,
         scope,
         test_support::{commit, git, manager, repository},
-        workspace::RecordChange,
     },
     forge::items::action::MergeMethod,
     model::{MergeOptions, Unmerged, Workspace},
@@ -640,7 +640,9 @@ async fn an_agents_unmerge_waits_for_approval_of_the_merge_it_undoes() {
     };
     let begin = async || {
         f.manager
+            .agents
             .begin_execution_placed(
+                &*f.manager,
                 &SpaceSelector::id(&worker.id),
                 None,
                 ExecutionKind::Unmerge,
@@ -674,7 +676,13 @@ async fn an_agents_unmerge_waits_for_approval_of_the_merge_it_undoes() {
         (before.as_str(), result.as_str())
     );
     f.manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Unmerge, Some(1))
+        .agents
+        .finish_execution(
+            &*f.manager,
+            started.plan.id.clone(),
+            ExecutionKind::Unmerge,
+            Some(1),
+        )
         .await
         .unwrap();
     drop(started);

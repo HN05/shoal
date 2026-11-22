@@ -1305,7 +1305,8 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         }
         let started = f
             .manager
-            .begin_execution(workspace.id.as_str(), None, kind, None)
+            .agents
+            .begin_execution(&*f.manager, workspace.id.as_str(), None, kind, None)
             .await
             .unwrap();
         let token = &started.plan.scope_token;
@@ -1376,7 +1377,8 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             }
         }
         f.manager
-            .finish_execution(started.plan.id.clone(), kind, Some(0))
+            .agents
+            .finish_execution(&*f.manager, started.plan.id.clone(), kind, Some(0))
             .await
             .unwrap();
         assert!(f.manager.caller(token).await.unwrap().is_none());
@@ -1397,7 +1399,14 @@ async fn setup_releases_git_gate_after_registration_and_on_preparation_failure()
     drop(guard);
     assert!(
         f.manager
-            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
+            .agents
+            .begin_execution(
+                &*f.manager,
+                workspace.id.as_str(),
+                None,
+                ExecutionKind::Setup,
+                None
+            )
             .await
             .is_err()
     );
@@ -1409,12 +1418,25 @@ async fn setup_releases_git_gate_after_registration_and_on_preparation_failure()
     .unwrap();
     let started = f
         .manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
+        .agents
+        .begin_execution(
+            &*f.manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Setup,
+            None,
+        )
         .await
         .unwrap();
     assert!(gate.try_lock().is_ok(), "setup only locks registration");
     f.manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Setup, Some(0))
+        .agents
+        .finish_execution(
+            &*f.manager,
+            started.plan.id.clone(),
+            ExecutionKind::Setup,
+            Some(0),
+        )
         .await
         .unwrap();
 }
@@ -1465,7 +1487,14 @@ async fn merge_execution_holds_git_gate_through_completion_and_releases_on_failu
     for exit in [Some(0), None] {
         let started = f
             .manager
-            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Merge, None)
+            .agents
+            .begin_execution(
+                &*f.manager,
+                workspace.id.as_str(),
+                None,
+                ExecutionKind::Merge,
+                None,
+            )
             .await
             .unwrap();
         assert!(started.plan.merge.is_some());
@@ -1480,7 +1509,13 @@ async fn merge_execution_holds_git_gate_through_completion_and_releases_on_failu
             Some(ExecutionKind::Merge)
         );
         f.manager
-            .finish_execution(started.plan.id.clone(), ExecutionKind::Merge, exit)
+            .agents
+            .finish_execution(
+                &*f.manager,
+                started.plan.id.clone(),
+                ExecutionKind::Merge,
+                exit,
+            )
             .await
             .unwrap();
         assert!(gate.try_lock().is_err(), "hold the gate through completion");
@@ -1490,7 +1525,14 @@ async fn merge_execution_holds_git_gate_through_completion_and_releases_on_failu
     fs::write(workspace.path.join("dirty"), "preserve me").unwrap();
     assert!(
         f.manager
-            .begin_execution(workspace.id.as_str(), None, ExecutionKind::Merge, None)
+            .agents
+            .begin_execution(
+                &*f.manager,
+                workspace.id.as_str(),
+                None,
+                ExecutionKind::Merge,
+                None
+            )
             .await
             .is_err()
     );
@@ -1560,7 +1602,9 @@ async fn begin_merge_by_agent(
         ..Default::default()
     };
     f.manager
+        .agents
         .begin_execution_placed(
+            &*f.manager,
             &SpaceSelector::id(&workspace.id),
             None,
             ExecutionKind::Merge,
@@ -1615,7 +1659,13 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
     let started = merge_as_agent(&f, &workspace).await.unwrap();
     assert_eq!(started.plan.merge.as_ref().unwrap().source, head);
     f.manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Merge, Some(0))
+        .agents
+        .finish_execution(
+            &*f.manager,
+            started.plan.id.clone(),
+            ExecutionKind::Merge,
+            Some(0),
+        )
         .await
         .unwrap();
     drop(started);
@@ -2441,7 +2491,8 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
         copy: false,
     };
     f.manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "adoption-test".into(),
             scope::Caller {

@@ -25,9 +25,9 @@ fn caller(space: &SpaceId) -> Caller {
 async fn launch(manager: &Manager, workspace: &Workspace, blocker: &SpaceId) {
     let request = QueueRequest {
         blockers: vec![Blocker::Space(blocker.to_string())],
-        ..crate::daemon::agent_queue::tests::launch_in(workspace, false)
+        ..crate::daemon::agent_service::tests::queue::launch_in(workspace, false)
     };
-    manager.queue_add(request).await.unwrap();
+    manager.agents.queue_add(manager, request).await.unwrap();
 }
 
 /// Record the CI job `name` for the run of the spaces `for_spaces` as

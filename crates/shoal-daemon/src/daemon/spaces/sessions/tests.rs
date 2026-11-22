@@ -24,13 +24,22 @@ async fn agent(
     session: &str,
 ) -> Result<ExecutionId> {
     let id = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await?
         .plan
         .id;
     let agent = shoal_protocol::executions::TrackedAgent::named(name);
     manager
+        .agents
         .track_agent(
+            manager,
             &id,
             &agent,
             &workspace.id,
@@ -77,6 +86,7 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
     // The test process stands in for the agent; nothing here stops it.
     let child = crate::process::identity::capture(std::process::id())?.context("test process")?;
     manager
+        .agents
         .record_execution_child(running.clone(), Some(child.clone()), child.pid)
         .await?;
     // An agent that exited, and one whose session a running agent goes on.

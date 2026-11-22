@@ -236,7 +236,9 @@ async fn an_agent_exit_leaves_a_checkpoint_only_once_its_processes_are_proven_st
             .len()
     };
     f.manager
+        .agents
         .post_agent_exit(
+            &*f.manager,
             &Space::from(f.workspace.clone()),
             &"claude".into(),
             Some(0),
@@ -245,7 +247,9 @@ async fn an_agent_exit_leaves_a_checkpoint_only_once_its_processes_are_proven_st
         .await;
     assert_eq!(count().await, 0);
     f.manager
+        .agents
         .post_agent_exit(
+            &*f.manager,
             &Space::from(f.workspace.clone()),
             &"claude".into(),
             Some(0),

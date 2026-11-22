@@ -359,7 +359,7 @@ async fn a_scoped_caller_absorbs_only_the_spaces_below_its_own() {
         read_only: false,
         vouched: None,
     };
-    (manager.executions)
+    (manager.agents.executions())
         .issue_scope("scope".into(), scoped)
         .await;
     for (target, allowed) in [(&leaf, true), (&worker, false), (&parent, false)] {

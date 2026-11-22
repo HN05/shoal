@@ -50,13 +50,15 @@ impl Fixture {
     /// Start a tracked agent in the workspace, returning its execution and
     /// the caller its requests come as.
     async fn agent(&self) -> (ExecutionId, Caller) {
-        let execution = (self.manager)
-            .begin_agent_execution(self.workspace.id.as_str())
+        let execution = (self.manager.agents)
+            .begin_agent_execution(&*self.manager, self.workspace.id.as_str())
             .await
             .unwrap();
         let id = execution.plan.id.clone();
         self.manager
+            .agents
             .track_agent(
+                &*self.manager,
                 &id,
                 &shoal_protocol::executions::TrackedAgent::named("claude"),
                 &self.workspace.id,
@@ -196,7 +198,11 @@ async fn an_agents_leases_end_with_its_execution_and_the_users_stay() {
     fixture.lease_simulator("agent", agent).await;
     fixture.lease_simulator("user", Acquirer::User).await;
 
-    fixture.manager.end_test_execution(execution_id).await;
+    fixture
+        .manager
+        .agents
+        .end_test_execution(&*fixture.manager, execution_id)
+        .await;
 
     assert_eq!(fixture.permits().await, [permit("user", &Acquirer::User)]);
     assert_eq!(fixture.simulators().await, ["user"]);
@@ -239,7 +245,11 @@ async fn the_users_acquire_keeps_an_agents_permit_past_its_exit() {
     fixture.acquire("shared", Some(&caller)).await;
 
     fixture.acquire("shared", None).await;
-    fixture.manager.end_test_execution(execution_id).await;
+    fixture
+        .manager
+        .agents
+        .end_test_execution(&*fixture.manager, execution_id)
+        .await;
 
     assert_eq!(fixture.permits().await, [permit("shared", &Acquirer::User)]);
 }
@@ -253,7 +263,8 @@ async fn leases_of_ended_and_stopped_agents_are_released_and_running_ones_kept()
     let (running, _) = fixture.agent().await;
     let process = agent_process(&fixture.manager, &fixture.workspace.id).await;
     let (stopped, _) = fixture.agent().await;
-    let demo = fixture.manager.begin_execution(
+    let demo = fixture.manager.agents.begin_execution(
+        &*fixture.manager,
         fixture.workspace.id.as_str(),
         None,
         crate::daemon::executions::ExecutionKind::Command,
@@ -319,7 +330,8 @@ impl Fixture {
             origin: Origin::created(HostName::Zmx, name.into()),
         };
         let kind = crate::daemon::executions::ExecutionKind::Command;
-        let started = self.manager.begin_execution_running(
+        let started = self.manager.agents.begin_execution_running(
+            &*self.manager,
             self.workspace.id.as_str(),
             None,
             kind,
@@ -366,7 +378,11 @@ async fn a_simulator_demo_keeps_the_lease_its_agent_took_past_the_agent() {
 
     let (demo, _) = fixture.simulator_demo("app", "DEMO", &caller).await;
     fixture.simulator_demo("other", "USER", &caller).await;
-    fixture.manager.end_test_execution(agent).await;
+    fixture
+        .manager
+        .agents
+        .end_test_execution(&*fixture.manager, agent)
+        .await;
 
     let demo = Acquirer::Demo { execution_id: demo };
     assert_eq!(
@@ -402,7 +418,10 @@ async fn an_agent_ending_during_a_stop_releases_its_leases_once_the_stop_ends() 
         .await
         .unwrap();
 
-    manager.end_test_execution(execution_id.clone()).await;
+    manager
+        .agents
+        .end_test_execution(&**manager, execution_id.clone())
+        .await;
     let agent = Acquirer::Agent { execution_id };
     assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
 
@@ -429,7 +448,10 @@ async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass()
     let hook = manager.gates.resource_guard(&fixture.workspace.id, hook);
     let hook = hook.unwrap();
 
-    manager.end_test_execution(execution_id.clone()).await;
+    manager
+        .agents
+        .end_test_execution(&**manager, execution_id.clone())
+        .await;
     let agent = Acquirer::Agent { execution_id };
     assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
 

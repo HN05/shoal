@@ -133,9 +133,13 @@ async fn a_restore_of_an_agent_stopped_mid_turn_keeps_its_workspace() {
             .unwrap()
             .is_none()
     );
-    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
-        .await
-        .unwrap();
+    bounded(manager.agents.stop_space(
+        &*manager,
+        &SpaceSelector::id(&workspace.id),
+        StopRequest::manual(),
+    ))
+    .await
+    .unwrap();
     bounded(launched).await.unwrap().unwrap();
     serving.abort();
 }
@@ -186,7 +190,8 @@ async fn stop_agent_in(
         .unwrap();
     assert!(
         manager
-            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
+            .agents
+            .stop_for_overload(manager, shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
     wait_paused(manager, workspace).await;
@@ -203,7 +208,12 @@ fn wait_restore_waits<'a>(
     execution: &'a str,
 ) -> impl Future<Output = ()> + 'a {
     bounded(async move {
-        while !manager.agent_queue.restore_links().contains(execution) {
+        while !manager
+            .agents
+            .agent_queue()
+            .restore_links()
+            .contains(execution)
+        {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })

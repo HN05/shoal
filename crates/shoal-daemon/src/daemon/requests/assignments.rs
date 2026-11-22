@@ -23,9 +23,12 @@ pub(super) async fn handle(
         AssignmentMethod::UndoDone { space } => {
             Body::Completion(manager.undo_space_done(&space).await?)
         }
-        AssignmentMethod::DiscardStoppedAgent { space, execution } => {
-            Body::DiscardedAgent(manager.discard_stopped_agent(&space, execution).await?)
-        }
+        AssignmentMethod::DiscardStoppedAgent { space, execution } => Body::DiscardedAgent(
+            manager
+                .agents
+                .discard_stopped_agent(&**manager, &space, execution)
+                .await?,
+        ),
         AssignmentMethod::ChangeStoppedPermissions {
             agents,
             launches,
@@ -35,7 +38,10 @@ pub(super) async fn handle(
                 agents: &agents,
                 launches: &launches,
             };
-            (manager.change_stopped_permissions(targets, &change, caller)).await?;
+            (manager
+                .agents
+                .change_stopped_permissions(&**manager, targets, &change, caller))
+            .await?;
             Body::Ok
         }
         AssignmentMethod::MarkReady { space, selection } => {

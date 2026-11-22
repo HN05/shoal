@@ -1,7 +1,8 @@
 use shoal_protocol::space_names::SpaceSelector;
 
+use shoal_agents::engagement;
+
 use crate::daemon::{
-    engagement,
     executions::ExecutionKind,
     test_support::{manager, repository},
 };
@@ -20,7 +21,14 @@ async fn a_prompt_the_user_submits_counts_as_interaction() {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            &*manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     let (id, execution) = (workspace.id, execution.plan.id);

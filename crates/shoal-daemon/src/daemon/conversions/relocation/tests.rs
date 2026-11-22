@@ -104,7 +104,7 @@ async fn a_converted_chats_token_acts_for_the_workspace_it_became() {
     let (root, manager) = manager().await;
     let (workspace, _process, token, _issued) = converted(root.path(), &manager).await;
     // As after a restart, before the agent's wrapper connects again.
-    manager.executions.scopes().await.clear();
+    manager.agents.executions().scopes().await.clear();
 
     let caller = manager.caller(&token).await.unwrap().unwrap();
 
@@ -153,16 +153,20 @@ async fn an_agent_waits_where_it_runs_while_the_workspaces_setup_failed() {
 async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
     let (root, manager) = manager().await;
     let (workspace, mut process, token, _issued) = converted(root.path(), &manager).await;
-    let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
-        .await
-        .unwrap();
+    let targets = (manager
+        .agents
+        .stop_targets(&*manager, crate::protocol::QueuedLaunches::Keep))
+    .await
+    .unwrap();
     assert!(targets.iter().any(|target| target.id == workspace.id));
 
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_space_manually(&selector, false, keep))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .stop_space_manually(&*manager, &selector, false, keep))
+    .await
+    .unwrap();
 
     process.wait().unwrap();
     assert!(resumed(&manager.paths).is_empty());
@@ -186,16 +190,20 @@ async fn a_stop_while_the_workspace_is_set_up_stops_the_converting_agent() {
         })
         .await
         .unwrap();
-    let targets = (manager.stop_targets(crate::protocol::QueuedLaunches::Keep))
-        .await
-        .unwrap();
+    let targets = (manager
+        .agents
+        .stop_targets(&*manager, crate::protocol::QueuedLaunches::Keep))
+    .await
+    .unwrap();
     assert!(targets.iter().any(|target| target.id == workspace.id));
 
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_space_manually(&selector, false, keep))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .stop_space_manually(&*manager, &selector, false, keep))
+    .await
+    .unwrap();
 
     process.wait().unwrap();
     let state = manager.workspace_by_id(&workspace.id).await.unwrap().state;
@@ -213,9 +221,11 @@ async fn the_relocation_restarts_no_agent_a_stop_handed_over() {
     .await
     .unwrap();
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_space_manually(&selector, false, keep))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .stop_space_manually(&*manager, &selector, false, keep))
+    .await
+    .unwrap();
 
     manager.relocate_finished_turns().await.unwrap();
 
@@ -276,7 +286,7 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
 
 /// Whether a restore of the agent of the space `id` is queued.
 async fn restore_queued(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> bool {
-    let entries = manager.queue_entries().await.unwrap();
+    let entries = manager.agents.queue_entries(manager).await.unwrap();
     entries
         .iter()
         .any(|entry| entry.space_id.as_ref() == Some(id))
@@ -324,9 +334,11 @@ async fn a_stop_keeps_the_chat_a_workspace_becomes_down() {
     record_chat_conversion(&manager, &workspace, chat).await;
     let selector = SpaceSelector::id(&workspace.id);
     let keep = crate::protocol::QueuedLaunches::Keep;
-    (manager.stop_space_manually(&selector, false, keep))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .stop_space_manually(&*manager, &selector, false, keep))
+    .await
+    .unwrap();
 
     manager.relocate_finished_turns().await.unwrap();
 

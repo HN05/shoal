@@ -40,7 +40,7 @@ impl Manager {
         if self.links.awaits_merge_runs(id).await? {
             return Ok(Some(Retention::MergeRuns));
         }
-        let waits = self.has_queued_launch(id).await?;
+        let waits = self.agents.has_queued_launch(id).await?;
         Ok(waits.then_some(Retention::QueuedAgent))
     }
 

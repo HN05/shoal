@@ -94,7 +94,7 @@ impl Settings for Manager {
 
 impl Agents for Manager {
     fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<ExecutionId>> {
-        Box::pin(async move { Some(Manager::caller_agent(self, caller).await?.execution) })
+        Box::pin(async move { Some(self.agents.caller_agent(caller).await?.execution) })
     }
 
     fn runs_demo<'a>(&'a self, execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
@@ -110,7 +110,7 @@ impl Agents for Manager {
     }
 
     fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(Manager::has_queued_launch(self, id))
+        Box::pin(self.agents.has_queued_launch(id))
     }
 }
 

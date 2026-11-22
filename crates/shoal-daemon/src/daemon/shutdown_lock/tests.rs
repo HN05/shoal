@@ -86,15 +86,15 @@ async fn a_shutdown_releases_the_lock_after_stopping_and_a_cancellation_takes_it
     let (_root, manager) = manager().await;
     let mut harness = start(&manager, false);
     harness.held(1).await;
-    assert!(!manager.agent_queue.suspended());
+    assert!(!manager.agents.agent_queue().suspended());
     // A cancellation before any shutdown changes nothing.
     harness.announce.send(false).unwrap();
     harness.announce.send(true).unwrap();
     harness.held(0).await;
-    assert!(manager.agent_queue.suspended());
+    assert!(manager.agents.agent_queue().suspended());
     harness.announce.send(false).unwrap();
     harness.held(1).await;
-    assert!(!manager.agent_queue.suspended());
+    assert!(!manager.agents.agent_queue().suspended());
     harness.end().await;
 }
 
@@ -104,7 +104,7 @@ async fn a_refused_lock_is_reported_and_shutdowns_still_stop_work() {
     let harness = start(&manager, true);
     harness.announce.send(true).unwrap();
     harness.end().await;
-    assert!(manager.agent_queue.suspended());
+    assert!(manager.agents.agent_queue().suspended());
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications

@@ -23,7 +23,8 @@ impl Manager {
             .collect();
         let operations = (self.operations.running().into_iter())
             .map(|entry| (entry.workspace.clone(), Some(entry.kind)));
-        let commands = (self.executions.unattachable_spaces().into_iter()).map(|id| (id, None));
+        let commands =
+            (self.agents.executions().unattachable_spaces().into_iter()).map(|id| (id, None));
         for (id, operation) in operations.chain(commands) {
             if work.iter().any(|listed| working_in(listed) == Some(&id)) {
                 continue;

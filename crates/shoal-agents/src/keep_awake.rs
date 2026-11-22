@@ -67,7 +67,7 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
     let mut hold = Hold::Released;
     loop {
         let config = agents.config.current();
-        if let Some(wanted) = wanted(&agents, &*daemon, &config).await {
+        if let Some(wanted) = wanted(&agents, &config).await {
             hold = update(&*daemon, hold, wanted, &config, INHIBITOR).await;
         }
         let ended = tokio::select! {
@@ -87,11 +87,11 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
 
 /// Whether to hold the inhibitor under `config`, or `None` when the lookup
 /// failed and the current hold should stay.
-async fn wanted(agents: &Agents, daemon: &dyn Daemon, config: &Config) -> Option<bool> {
+async fn wanted(agents: &Agents, config: &Config) -> Option<bool> {
     if !config.machine.keep_awake {
         return Some(false);
     }
-    match agents.agents_have_work(daemon).await {
+    match agents.agents_have_work().await {
         Ok(work) => Some(work),
         Err(error) => {
             log!("keep awake: {error:#}");
@@ -101,8 +101,8 @@ async fn wanted(agents: &Agents, daemon: &dyn Daemon, config: &Config) -> Option
 }
 
 impl Agents {
-    pub async fn agents_have_work(&self, daemon: &dyn Daemon) -> Result<bool> {
-        let running = daemon.running_agent_spaces().await;
+    pub async fn agents_have_work(&self) -> Result<bool> {
+        let running = self.running_agent_workspaces().await;
         let records = self.records.clone();
         self.store
             .run(move |db| agents_have_work(db, &*records, &running))
@@ -149,7 +149,7 @@ async fn failed(daemon: &dyn Daemon, error: anyhow::Error, config: Arc<Config>) 
     let message = format!("Shoal could not keep this machine awake: {error:#}");
     log!("keep awake: {error:#}");
     daemon
-        .notify_user(AlertKind::KeepAwakeFailed, message)
+        .notify(None, AlertKind::KeepAwakeFailed, message)
         .await;
     Hold::Failed(config)
 }

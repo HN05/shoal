@@ -45,7 +45,14 @@ async fn command_caller(
     caller: Option<&Caller>,
 ) -> Caller {
     let token = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, caller)
+        .agents
+        .begin_execution(
+            manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            caller,
+        )
         .await
         .unwrap()
         .plan
@@ -57,14 +64,17 @@ async fn command_caller(
 /// `id` named `space` send requests as.
 async fn agent_caller(manager: &Manager, id: &SpaceId, space: &SpaceName, name: &str) -> Caller {
     let token = manager
-        .begin_agent_execution(id.as_str())
+        .agents
+        .begin_agent_execution(manager, id.as_str())
         .await
         .unwrap()
         .plan
         .scope_token;
     let caller = manager.caller(&token).await.unwrap().unwrap();
     manager
+        .agents
         .track_agent(
+            manager,
             caller.execution_id().unwrap(),
             &shoal_protocol::executions::TrackedAgent::named(name),
             id,
@@ -181,7 +191,8 @@ async fn an_agents_files_name_its_kind_and_session() {
     // A command reattaching after a restart before its agent, and one it
     // runs then.
     manager
-        .executions
+        .agents
+        .executions()
         .with_agents(|agents| agents.remove(&execution))
         .await
         .unwrap();
@@ -679,7 +690,8 @@ async fn results_outlive_removal_as_long_as_its_record() {
         .unwrap();
     for (token, workspace, allowed) in [("parent", &parent, true), ("sibling", &sibling, false)] {
         manager
-            .executions
+            .agents
+            .executions()
             .issue_scope(
                 token.into(),
                 Caller {
@@ -765,7 +777,8 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
             .unwrap();
     }
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "top".into(),
             Caller {
@@ -1149,7 +1162,8 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
 
     // A workspace's processes reach no chat's files.
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "worker".into(),
             Caller {
@@ -1170,7 +1184,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
             .is_err()
     );
 
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .remove_selected(
             &SpaceSelector::id(&chat.id),
@@ -1291,7 +1305,7 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
     // Deleting the files of every idle space spares a running chat's.
     assert!(manager.remove_idle_files().await.unwrap().is_empty());
 
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .remove_selected(
             &SpaceSelector::id(&chat.id),
@@ -1365,7 +1379,7 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
         .unwrap();
     assert!(!early.exists());
 
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .remove_selected(
             &SpaceSelector::id(&chat.id),
@@ -1398,7 +1412,7 @@ async fn a_chats_agent_attaches_as_an_agent_with_its_execution_and_session() {
     let workspace = workspace(&temp, &manager).await;
     let chat = chat(&manager, &workspace, "planning").await;
     // Stopped, so the execution registered below is its agent.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let caller = agent_caller(&manager, &chat.id, &chat.name, "claude").await;
     let execution = caller.execution_id().unwrap().to_owned();
     recovery::save_session(&manager.paths, &chat.id, &execution, &"s1".into()).unwrap();
@@ -1423,7 +1437,8 @@ async fn a_chats_agent_attaches_as_an_agent_with_its_execution_and_session() {
 
     // Its execution's record names it after a restart, before it reattaches.
     manager
-        .executions
+        .agents
+        .executions()
         .with_agents(|agents| agents.remove(&execution))
         .await
         .unwrap();

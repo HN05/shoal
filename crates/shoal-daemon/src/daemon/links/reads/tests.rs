@@ -20,7 +20,7 @@ async fn a_stopped_chat_reads_in_its_repositorys_checkout() {
         .start_chat(repo.id.into(), "talk".into(), "claude".into(), None)
         .await
         .unwrap();
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
 
     let forge = manager
         .links

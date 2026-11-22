@@ -113,10 +113,15 @@ impl Manager {
                 {
                     return Ok(false);
                 }
-                self.turn_ended(id, |agent| agent.space_id == *id).await
+                self.agents
+                    .turn_ended(id, |agent| agent.space_id == *id)
+                    .await
             }
             Pending::Chat { chat, .. } => {
-                (self.turn_ended(id, |agent| agent.ran_as(&chat.execution))).await
+                (self
+                    .agents
+                    .turn_ended(id, |agent| agent.ran_as(&chat.execution)))
+                .await
             }
         }
     }
@@ -291,7 +296,7 @@ impl Manager {
         }
         // The workspace runs nothing else before the agent moves there.
         let request = crate::daemon::executions::StopRequest::conversion();
-        (self.stop_space_agent_executions(id, &request)).await?;
+        (self.agents.stop_space_agent_executions(self, id, &request)).await?;
         let (space, token) = (id.to_owned(), row.scope_token.clone());
         self.store
             .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))
@@ -350,7 +355,8 @@ impl Manager {
         let env = crate::terminal::detached_start_environment(chat.origin.as_ref());
         let selector = shoal_protocol::space_names::SpaceSelector::id(id);
         (self
-            .start_stopped_restore(&selector, &chat.execution, env)
+            .agents
+            .start_stopped_restore(self, &selector, &chat.execution, env)
             .await)
             .map(drop)
     }

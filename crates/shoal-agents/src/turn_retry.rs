@@ -403,7 +403,7 @@ impl Agents {
         failure: TurnFailure,
         execution: &ExecutionId,
     ) -> Result<()> {
-        let Some(agent) = daemon.agent_name(execution).await else {
+        let Some(agent) = self.agent_name(execution).await else {
             return Ok(());
         };
         let space = daemon.space(selector).await?;

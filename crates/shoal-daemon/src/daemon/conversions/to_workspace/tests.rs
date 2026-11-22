@@ -73,7 +73,11 @@ async fn an_agent_converts_the_spaces_its_scope_reaches() {
         read_only: false,
         vouched: None,
     };
-    manager.executions.issue_scope("lead".into(), caller).await;
+    manager
+        .agents
+        .executions()
+        .issue_scope("lead".into(), caller)
+        .await;
 
     for (chat, allowed) in [(&lead, true), (&talk, true), (&other, false)] {
         let mut convert = ConversionMethod::ConvertToWorkspace {
@@ -125,7 +129,7 @@ async fn a_stopped_chat_is_resumed_before_it_converts() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
     let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    manager.end_executions(&talk.id).await;
+    manager.agents.end_executions(&*manager, &talk.id).await;
 
     let refused = refusal(&manager, SpaceSelector::id(&talk.id), None).await;
 

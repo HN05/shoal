@@ -27,7 +27,7 @@ async fn cancel_failed(fixture: &Fixture) -> bool {
 
 /// Admit the queued jobs and claim each.
 async fn claim_admitted(manager: &crate::daemon::manager::Manager) {
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(manager).await.unwrap();
     for entry in admitted_jobs(manager).await {
         claim_job(manager, &entry).await;
     }
@@ -127,7 +127,7 @@ async fn a_job_admitted_while_its_pr_is_checked_is_left_to_its_claim() {
     refresh_waiting_jobs(manager).await;
     let waiting = job_entries(manager).await.remove(0);
 
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&**manager).await.unwrap();
     let job = waiting.job.as_deref().unwrap();
     let passed = (manager.runner)
         .pass_over_job(&waiting.id, &fixture.repository, job)

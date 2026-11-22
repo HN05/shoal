@@ -134,7 +134,8 @@ async fn a_chats_status_shows_its_agents_retries() {
         next_at: UnixTime::from_seconds(1_000),
     };
     manager
-        .report_proxy_retry(&selector, execution.clone(), Some(retry.clone()))
+        .agents
+        .report_proxy_retry(&*manager, &selector, execution.clone(), Some(retry.clone()))
         .await
         .unwrap();
     let failure = TurnFailure::ServerError;

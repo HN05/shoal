@@ -95,7 +95,9 @@ pub(crate) async fn track_agent(
     workspace: &crate::model::Workspace,
 ) -> shoal_ids::execution_ids::ExecutionId {
     let execution = manager
+        .agents
         .begin_execution(
+            manager,
             workspace.id.as_str(),
             None,
             crate::daemon::executions::ExecutionKind::Command,
@@ -105,7 +107,9 @@ pub(crate) async fn track_agent(
         .unwrap();
     let id = execution.plan.id.clone();
     manager
+        .agents
         .track_agent(
+            manager,
             &id,
             &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
@@ -151,9 +155,11 @@ pub async fn agent_process(manager: &Manager, id: &SpaceId) -> ProcessGroup {
         panic!("one execution runs the agent: {executions:?}");
     };
     let child = crate::process::identity::capture(process.id()).unwrap();
-    (manager.record_execution_child(execution.id.clone(), child, process.id()))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .record_execution_child(execution.id.clone(), child, process.id()))
+    .await
+    .unwrap();
     process
 }
 
@@ -307,7 +313,7 @@ impl Manager {
     /// they queue, since a name never selects one, else the ID of the space
     /// of that name, whose agents a queue command may act on.
     pub async fn queued(&self, name: &str) -> String {
-        let entries = self.queue_entries().await.unwrap();
+        let entries = self.agents.queue_entries(self).await.unwrap();
         match entries.into_iter().find(|entry| entry.name == name) {
             Some(entry) => entry.id.to_string(),
             None => self.named(name).await.to_string(),

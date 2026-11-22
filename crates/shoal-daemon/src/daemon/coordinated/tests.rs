@@ -40,11 +40,20 @@ async fn start_agent(
     workspace: &Workspace,
 ) -> crate::daemon::executions::StartedExecution {
     let started = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     manager
+        .agents
         .track_agent(
+            manager,
             &started.plan.id,
             &TrackedAgent::named("claude"),
             &workspace.id,
@@ -59,7 +68,13 @@ async fn start_agent(
 /// End the agent `started` runs.
 async fn finish(manager: &Manager, started: crate::daemon::executions::StartedExecution) {
     manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .agents
+        .finish_execution(
+            manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
         .await
         .unwrap();
 }
@@ -192,7 +207,7 @@ async fn idle_cleanup_keeps_a_child_without_an_agent_while_its_chat_runs() {
         kept(&manager, &child).await,
         Some(CleanupReason::ParentAgentRunning)
     );
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     assert_eq!(kept(&manager, &child).await, None);
 }
 
@@ -233,7 +248,7 @@ async fn idle_cleanup_keeps_a_child_while_its_chat_becomes_a_workspace() {
         Some(CleanupReason::ParentAgentRunning)
     );
     // The hand-over stops it before the workspace's own agent starts.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let id = chat.id.clone();
     (manager.store)
         .write(move |tx| crate::daemon::conversions::record::relocated_chat(tx, &id, None))
@@ -263,7 +278,7 @@ async fn idle_cleanup_keeps_a_stopped_chat_while_its_coordinator_runs() {
     // Its own agent does its work while it runs, and the coordinator's once
     // it stopped.
     assert_eq!(chat_kept().await, Some(CleanupReason::AgentRunning));
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     assert_eq!(chat_kept().await, Some(CleanupReason::ParentAgentRunning));
     finish(&manager, started).await;
     assert_eq!(chat_kept().await, None);

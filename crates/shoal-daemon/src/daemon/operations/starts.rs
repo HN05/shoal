@@ -157,7 +157,9 @@ impl Manager {
         match repository {
             Some(repository) if !preparing.blockers.is_empty() => {
                 let blockers = preparing.blockers.clone();
-                self.check_blockers(&repository.into(), blockers).await
+                self.agents
+                    .check_blockers(self, &repository.into(), blockers)
+                    .await
             }
             _ => Ok(()),
         }
@@ -204,7 +206,10 @@ impl Manager {
             return Ok(());
         };
         let mut selector = SpaceSelector::id(&space.id);
-        let allowed = self.ensure_may_replace(caller, &mut selector, true).await;
+        let allowed = self
+            .agents
+            .ensure_may_replace(self, caller, &mut selector, true)
+            .await;
         ScopeRefusal::of(allowed)
     }
 

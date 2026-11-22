@@ -386,7 +386,8 @@ async fn scoped_callers_mark_only_their_own_workspace() {
         .await
         .unwrap();
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {

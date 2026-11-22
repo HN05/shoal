@@ -153,7 +153,7 @@ async fn a_restart_answers_with_the_spaces_of_the_work_it_cut_off() {
     assert_eq!(exited["data"]["stopped_work"], false, "{exited}");
     assert_eq!(exited["data"]["spaces"], serde_json::json!([]), "{exited}");
     // A wrapper of a release before reattachment stops with the daemon.
-    (manager.executions).mark_unattachable(&"cut-off-agent".into(), &chats[0].id);
+    (manager.agents.executions()).mark_unattachable(&"cut-off-agent".into(), &chats[0].id);
     let exited = restart().await;
     assert_eq!(exited["data"]["stopped_work"], true, "{exited}");
     assert_eq!(

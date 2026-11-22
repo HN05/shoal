@@ -101,7 +101,7 @@ impl Spaces for Manager {
     }
 
     fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>> {
-        Box::pin(async { self.running_agent_workspaces().await })
+        Box::pin(async { self.agents.running_agent_workspaces().await })
     }
 
     fn repository_workspaces<'a>(
@@ -163,7 +163,7 @@ impl Spaces for Manager {
     }
 
     fn proposing_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>> {
-        Box::pin(async move { self.agent_name(caller.execution_id()?).await })
+        Box::pin(async move { self.agents.agent_name(caller.execution_id()?).await })
     }
 
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {

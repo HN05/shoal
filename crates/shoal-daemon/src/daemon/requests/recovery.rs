@@ -35,11 +35,11 @@ pub(super) async fn handle(
                 .await?,
         ),
         RecoveryMethod::Saved { space } => {
-            let saved = manager.saved_work(&space).await;
+            let saved = manager.agents.saved_work(&**manager, &space).await;
             return Ok(Answer::pages(pieces(saved), Body::SavedPieces));
         }
         RecoveryMethod::SavedSummaries => {
-            let summaries = manager.saved_summaries(caller).await;
+            let summaries = manager.agents.saved_summaries(&**manager, caller).await;
             return Ok(Answer::pages(summaries, Body::SavedSummaries));
         }
         RecoveryMethod::Reconcile { workspace, options } => Body::Reconciled(

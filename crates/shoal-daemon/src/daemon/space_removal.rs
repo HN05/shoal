@@ -143,7 +143,7 @@ impl Manager {
     /// the restores of idle agents, which their wrappers wait to carry out,
     /// and the `cancelled` ones a removal stopped.
     async fn saved_agent(&self, id: &SpaceId, cancelled: &[IdleRestore]) -> Result<bool> {
-        let idle = self.idle_restores(id).await?;
+        let idle = self.agents.idle_restores(self, id).await?;
         crate::execution::recovery::pending_except(&self.paths, id, |execution| {
             idle.contains(execution)
                 || cancelled
@@ -168,7 +168,9 @@ impl Manager {
         policy: StopPolicy,
         request: &StopRequest,
     ) -> Result<()> {
-        self.stop_executions(&space.id, policy, request).await
+        self.agents
+            .stop_executions(self, &space.id, policy, request)
+            .await
     }
 
     /// Reserve the space `id` for `removal`, then its worktree, where it has
@@ -326,7 +328,9 @@ impl Manager {
     /// for a workspace, converted: the places it opened, its agents'
     /// recovery records and session logs, and a workspace's state.
     pub(crate) async fn forget_removed_space(&self, space: &Space) {
-        self.close_space_places(&space.id, &space.name).await;
+        self.agents
+            .close_space_places(self, &space.id, &space.name)
+            .await;
         self.agents.forget_reports(&space.id);
         if space.worktree().is_some() {
             self.forget_workspace(&space.id).await;

@@ -19,7 +19,10 @@ pub(super) async fn run(manager: Arc<Manager>) {
         tokio::time::sleep(SWEEP_INTERVAL).await;
         let _operation = manager.gates.background_pass().await;
         let mut failures = SweepFailures::default();
-        let stopped = manager.stop_idle_agents(UnixTime::now()).await;
+        let stopped = manager
+            .agents
+            .stop_idle_agents(&*manager, UnixTime::now())
+            .await;
         failures.step("idle agents", stopped);
         let result = failures.into_result();
         if let Some(failed) = logged.new_failures(&result) {

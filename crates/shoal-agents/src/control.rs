@@ -1,0 +1,1367 @@
+//! Connected agent metadata is deliberately transient: a daemon restart must
+//! not turn an unknown execution into an automatic signal target.
+use crate::execution::recovery::LastSessionExt;
+use rusqlite::OptionalExtension;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::executions::TrackedAgent;
+use shoal_protocol::model::ByKind;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_schedule::stopping::{Stop, StopOrder};
+use std::{
+    collections::{HashMap, HashSet},
+    time::{Duration, Instant},
+};
+use tokio::sync::{OwnedRwLockReadGuard, watch};
+
+use crate::Agents;
+use crate::capacity::Activity;
+pub use crate::model::Protection;
+use crate::overload::Pressure;
+use crate::queue::Grant;
+use crate::queue::RestoreLink;
+use crate::turns::Turn;
+
+use crate::agent::ModelChoice;
+use crate::daemon::Daemon;
+use crate::log;
+use crate::protocol::timing;
+use crate::state::AgentState;
+use crate::state::TurnFailure;
+use shoal_daemon_base::alerts::AlertKind;
+
+pub mod forks;
+pub mod idle_stop;
+pub mod input;
+pub mod interrupts;
+pub mod make_room;
+pub mod marked_turns;
+pub mod restart;
+pub mod stop_order;
+pub mod stops;
+pub use restart::RestartWaits;
+pub use restart::{Renewals, forget_ended_renewals};
+pub use restart::{Requested, restarted};
+pub use stops::recorded as stop_recorded;
+
+/// Operations on the client type [`Protection`] that only the `shoal` command uses.
+pub trait ProtectionExt {
+    /// Memory or CPU pressure.
+    fn load(reason: &str) -> Self;
+
+    /// `shoal restart`, whose wrapper restores the agent once its processes
+    /// stop. Wrappers handle it as any protection stop they restore.
+    fn restart() -> Self;
+
+    fn is_restart(&self) -> bool;
+
+    /// An idle agent the user is away from, which Shoal puts to sleep.
+    fn away() -> Self;
+
+    /// An idle agent Shoal puts to sleep to make room for queued work.
+    fn making_room() -> Self;
+
+    /// An idle stop for `reason`, whose restore waits for an update. Wrappers
+    /// handle it as any protection stop they restore.
+    fn idle(reason: &str) -> Self;
+
+    /// An agent whose turn ended while its space is blocked, whose restore
+    /// waits until nothing blocks the space.
+    fn blocked() -> Self;
+
+    /// An idle agent whose turn retry waits for `failure` to pass, which
+    /// Shoal puts to sleep until the retry's message restores it.
+    fn retrying(failure: TurnFailure) -> Self;
+
+    /// Whether Shoal stopped the agent between turns, idle, blocked or
+    /// waiting to retry its turn, not for load.
+    fn is_idle(&self) -> bool;
+
+    /// Whether Shoal stopped the agent for its blocked space.
+    fn is_blocked(&self) -> bool;
+
+    /// Whether `[overload.recovery]` decides its restore, as for a stop that
+    /// load or disk space caused; idle stops restore whatever it says.
+    fn follows_overload_recovery(&self) -> bool;
+
+    /// Whether a done assignment cancels its restore. An idle stop's restore
+    /// waits for an update all the same, since the agent ran until Shoal
+    /// stopped it; a blocked one's would only restore an agent with nothing
+    /// left to do, since `shoal done` removes the blockers.
+    fn ends_with_assignment(&self) -> bool;
+}
+
+impl ProtectionExt for Protection {
+    fn load(reason: &str) -> Self {
+        Self {
+            reason: reason.into(),
+            resumes_when: crate::protocol::default_resumes_when(),
+        }
+    }
+
+    fn restart() -> Self {
+        Self {
+            reason: RESTART_REASON.into(),
+            resumes_when: "its processes stop".into(),
+        }
+    }
+
+    fn is_restart(&self) -> bool {
+        self.reason == RESTART_REASON
+    }
+
+    fn away() -> Self {
+        Self::idle(AWAY_REASON)
+    }
+
+    fn making_room() -> Self {
+        Self::idle(ROOM_REASON)
+    }
+
+    fn idle(reason: &str) -> Self {
+        Self {
+            reason: reason.into(),
+            resumes_when: WAKES_ON_UPDATE.into(),
+        }
+    }
+
+    fn blocked() -> Self {
+        Self {
+            reason: BLOCKED_REASON.into(),
+            resumes_when: WAKES_UNBLOCKED.into(),
+        }
+    }
+
+    fn retrying(failure: TurnFailure) -> Self {
+        let reason = match failure {
+            TurnFailure::RateLimited => LIMITED_REASON,
+            _ => FAILED_TURN_REASON,
+        };
+        Self {
+            reason: reason.into(),
+            resumes_when: wakes_between_turns(reason).into(),
+        }
+    }
+
+    fn is_idle(&self) -> bool {
+        [
+            AWAY_REASON,
+            ROOM_REASON,
+            BLOCKED_REASON,
+            LIMITED_REASON,
+            FAILED_TURN_REASON,
+        ]
+        .contains(&self.reason.as_str())
+    }
+
+    fn is_blocked(&self) -> bool {
+        self.reason == BLOCKED_REASON
+    }
+
+    fn follows_overload_recovery(&self) -> bool {
+        !self.is_idle()
+    }
+
+    fn ends_with_assignment(&self) -> bool {
+        !self.is_idle() || self.is_blocked()
+    }
+}
+
+/// The stop reason a restarted agent's wrapper shows and saves.
+const RESTART_REASON: &str = "restarted by shoal restart";
+
+/// The stop reason of an idle agent the user is away from.
+const AWAY_REASON: &str = "idle while the user is away";
+
+/// The stop reason of an idle agent put to sleep for queued work.
+const ROOM_REASON: &str = "making room for queued work";
+
+/// The stop reason of an agent whose turn ended while its space is blocked,
+/// which its recovery record keeps.
+pub const BLOCKED_REASON: &str = "its space is blocked";
+
+/// The stop reason of an idle agent whose turn a rate or usage limit
+/// ended, which waits for its turn retry.
+const LIMITED_REASON: &str = "its rate or usage limit is reached";
+
+/// The stop reason of an idle agent whose turn another API error ended,
+/// which waits for its turn retry.
+const FAILED_TURN_REASON: &str = "its last turn failed with an API error";
+
+/// What wakes an agent stopped between turns, which has nothing to do until
+/// then.
+pub const WAKES_ON_UPDATE: &str = "an update arrives for it";
+
+/// What wakes an agent stopped because its space is blocked.
+pub const WAKES_UNBLOCKED: &str = "nothing blocks its space";
+
+/// What wakes an agent stopped while a rate or usage limit stands.
+const WAKES_LIMIT_RESET: &str = "the limit resets and Shoal retries its turn";
+
+/// What wakes an agent stopped while its failed turn waits for a retry.
+const WAKES_TURN_RETRY: &str = "Shoal retries its turn";
+
+/// What wakes an agent Shoal stopped between turns for `reason`.
+pub fn wakes_between_turns(reason: &str) -> &'static str {
+    match reason {
+        BLOCKED_REASON => WAKES_UNBLOCKED,
+        LIMITED_REASON => WAKES_LIMIT_RESET,
+        FAILED_TURN_REASON => WAKES_TURN_RETRY,
+        _ => WAKES_ON_UPDATE,
+    }
+}
+
+/// The agent a request comes from.
+pub struct CallerAgent {
+    pub execution: ExecutionId,
+    pub name: crate::agent::Agent,
+    /// The space its execution runs in.
+    pub space_id: SpaceId,
+}
+
+pub struct Agent {
+    name: crate::agent::Agent,
+    /// The model and effort it runs with, which its recovery records keep.
+    model: ModelChoice,
+    /// The mode it started in, which its recovery records keep.
+    mode: crate::config::modes::ModeName,
+    /// The `--permission` narrowing it started with, which its recovery
+    /// records keep.
+    narrowing: crate::config::permissions::PermissionsConfig,
+    workspace: SpaceName,
+    pub workspace_id: SpaceId,
+    started: Instant,
+    recover: bool,
+    stop: watch::Sender<bool>,
+    /// Holds back a daemon update from the stop until the execution's
+    /// connection takes over, so an update waits for the restore.
+    update_hold: Option<OwnedRwLockReadGuard<()>>,
+    /// The `shoal restart` of it in progress and those that ended.
+    pub restarts: restart::Restarts,
+    /// When Shoal last started typing into its terminal, which makes the
+    /// keys it reads then Shoal's, not the user's.
+    pub typed_at: Option<crate::time::UnixTime>,
+}
+
+impl Agent {
+    /// Its name with the model and effort it runs with.
+    pub fn tracked(&self) -> TrackedAgent {
+        TrackedAgent {
+            name: self.name.clone(),
+            model: self.model.clone(),
+            mode: self.mode.clone(),
+            narrowing: self.narrowing,
+            new_session: false,
+        }
+    }
+
+    /// Cancel what the agent's connection keeps for its restore; the
+    /// caller forgets its recorded stop.
+    pub fn cancel_recovery(&mut self) {
+        self.update_hold = None;
+        self.restarts.cancel();
+    }
+
+    /// Refuse another stop of the agent: protection `stopped` it and it
+    /// waits for its restore, or a stop of it is in progress.
+    fn ensure_not_stopped(&self, stopped: Option<&Protection>) -> anyhow::Result<()> {
+        if let Some(protection) = stopped {
+            anyhow::bail!(
+                "{} is stopped ({}) and resumes once {}; restore it now with shoal queue start {}",
+                self.name,
+                protection.reason,
+                protection.resumes_when,
+                self.workspace_id
+            );
+        }
+        anyhow::ensure!(
+            !*self.stop.borrow() && self.restarts.current.is_none(),
+            "{} is already stopping",
+            self.name
+        );
+        Ok(())
+    }
+
+    /// Whether the agent is connected and nothing is stopping it.
+    fn running(&self) -> bool {
+        !self.stop.is_closed() && !*self.stop.borrow()
+    }
+}
+
+/// The end of an agent's execution `execution`, which protection stopped
+/// for `reason`, with why Shoal cancelled its automatic restore on its own,
+/// if it did.
+pub struct OverloadEnd<'a> {
+    pub execution: &'a ExecutionId,
+    pub reason: &'a str,
+    pub restore_cancelled: Option<&'a str>,
+}
+
+impl Agents {
+    /// Tell the user, or the coordinator, that the agent of `space` exited
+    /// with `exit_code`, `complete` when its processes are proven stopped,
+    /// or stopped for `overload`, naming the `oom_kills` the kernel's OOM
+    /// killer made in its scope. A chat's agent that exits cleanly, without
+    /// any, tells no one: the user saw it end.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "what the exit reports, beside the daemon"
+    )]
+    pub async fn notify_agent_exit(
+        &self,
+        daemon: &dyn Daemon,
+        space: &crate::model::Space,
+        agent: &crate::agent::Agent,
+        exit_code: Option<i32>,
+        complete: bool,
+        overload: Option<OverloadEnd<'_>>,
+        oom_kills: u64,
+    ) {
+        let clean = overload.is_none() && complete && exit_code.is_some() && oom_kills == 0;
+        if clean && space.kind() == crate::model::SpaceKind::Chat {
+            return;
+        }
+        let message = if let Some(OverloadEnd {
+            execution: execution_id,
+            reason,
+            restore_cancelled,
+        }) = overload
+        {
+            let status = exit_code.map_or_else(
+                || "without an exit code".into(),
+                |code| format!("with code {code}"),
+            );
+            let recovery = if crate::execution::recovery::record_path(
+                &self.paths,
+                &space.id,
+                execution_id,
+            )
+            .is_file()
+            {
+                format!(
+                    "resume with shoal resume {} --execution {execution_id}",
+                    space.number
+                )
+            } else {
+                "recovery record unavailable; inspect the workspace and relaunch the agent's saved session".into()
+            };
+            let reconcile = if complete {
+                ""
+            } else {
+                "; its processes are not proven stopped, so the execution stays unknown until they exit or shoal stop stops them"
+            };
+            let cancelled = restore_cancelled
+                .map(|why| format!("; its automatic restore was cancelled: {why}"))
+                .unwrap_or_default();
+            format!(
+                "{agent} stopped after {reason} ({status}){cancelled}; {recovery}{reconcile}; {} and resource leases retained",
+                space.kind()
+            )
+        } else {
+            match exit_code {
+                Some(code) if complete => format!("{agent} exited with code {code}"),
+                Some(code) => format!(
+                    "{agent} exited with code {code}, leaving processes behind; stop them with shoal stop {}",
+                    space.number
+                ),
+                None => format!(
+                    "{agent} disconnected without reporting; stop what remains of it with shoal stop {}",
+                    space.number
+                ),
+            }
+        };
+        let message = match oom_kills {
+            0 => message,
+            kills => format!(
+                "{message}; the kernel's OOM killer killed {kills} of its processes for memory"
+            ),
+        };
+        daemon
+            .notify_space(&space.name, &space.id, AlertKind::AgentExited, message)
+            .await;
+    }
+
+    /// Forget a finished agent's reported session, first keeping it, with
+    /// the `turn` it ended in, as one of the last sessions of the space
+    /// `space_id` when the agent `exited` on its own before the assignment
+    /// finished, for `shoal resume` to continue.
+    pub async fn end_agent_session(
+        &self,
+        daemon: &dyn Daemon,
+        space_id: &SpaceId,
+        agent: &TrackedAgent,
+        execution: &ExecutionId,
+        exited: bool,
+        turn: Option<AgentState>,
+    ) {
+        let kept = if exited {
+            self.keep_agent_session(daemon, space_id, agent, execution, turn)
+                .await
+        } else {
+            crate::execution::recovery::forget_session(&self.paths, space_id, execution)
+        };
+        if let Err(error) = kept {
+            log!("agent session of {execution} not kept: {error:#}");
+        }
+    }
+
+    /// Forget an ended agent's reported session, first keeping it, with the
+    /// `turn` it ended in, as one of the last sessions of the space
+    /// `space_id` while its assignment is unfinished.
+    pub async fn keep_agent_session(
+        &self,
+        daemon: &dyn Daemon,
+        space_id: &SpaceId,
+        agent: &TrackedAgent,
+        execution: &ExecutionId,
+        turn: Option<AgentState>,
+    ) -> anyhow::Result<()> {
+        use crate::execution::recovery::{self, LastSession};
+        if daemon.completion(space_id).await?.is_none() {
+            LastSession::save(&self.paths, space_id, agent, execution, turn)?;
+        }
+        recovery::forget_session(&self.paths, space_id, execution)
+    }
+
+    /// A new agent or a finished assignment replaces the last sessions.
+    pub fn forget_last_sessions(&self, workspace_id: &SpaceId) {
+        let forgotten =
+            crate::execution::recovery::LastSession::forget_all(&self.paths, workspace_id);
+        if let Err(error) = forgotten {
+            log!("last agent sessions of {workspace_id} not forgotten: {error:#}");
+        }
+    }
+
+    /// What follows the exit of the agent of `space`: a workspace keeps a
+    /// checkpoint of its worktree once the agent's processes are proven
+    /// `complete`, the space runs its exit hook, then cleanup looks at it
+    /// again.
+    pub async fn post_agent_exit(
+        &self,
+        daemon: &dyn Daemon,
+        space: &crate::model::Space,
+        agent: &crate::agent::Agent,
+        exit_code: Option<i32>,
+        complete: bool,
+    ) {
+        // Processes that are not proven stopped may still write; removal or
+        // the next checkpoint keeps what they leave.
+        if complete && space.worktree().is_some() {
+            daemon.checkpoint_after_agent(&space.id).await;
+        }
+        if let Err(error) = (daemon.run_agent_exit_hook(space, agent, exit_code, complete)).await {
+            daemon
+                .notify_space(
+                    &space.name,
+                    &space.id,
+                    AlertKind::HookFailed,
+                    format!("agent exited; {error:#}"),
+                )
+                .await;
+        }
+        // A completion or forge transition may have happened while the agent
+        // was running. Retry cleanup once the exit hook is finished.
+        self.signals.wake_cleanup();
+    }
+
+    /// `running` is how long the agent has already run, so a reattached
+    /// agent keeps its place in the newest-first overload order.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the agent and the space it runs in, beside the daemon"
+    )]
+    pub async fn track_agent(
+        &self,
+        daemon: &dyn Daemon,
+        id: &ExecutionId,
+        tracked: &TrackedAgent,
+        workspace_id: &SpaceId,
+        workspace: &SpaceName,
+        recover: bool,
+        running: Duration,
+    ) {
+        self.record_execution_agent(id, tracked).await;
+        daemon.settle_agent(workspace_id);
+        let connections = self.executions.connections().await;
+        let Some(stop) = connections.stop_channel(id) else {
+            return;
+        };
+        let agent = Agent {
+            name: tracked.name.clone(),
+            model: tracked.model.clone(),
+            mode: tracked.mode.clone(),
+            narrowing: tracked.narrowing,
+            workspace: workspace.clone(),
+            workspace_id: workspace_id.clone(),
+            started: Instant::now()
+                .checked_sub(running)
+                .unwrap_or_else(Instant::now),
+            recover,
+            stop: stop.clone(),
+            update_hold: None,
+            restarts: Default::default(),
+            typed_at: None,
+        };
+        connections
+            .with_agents(|agents| agents.insert(id.clone(), agent))
+            .await;
+    }
+
+    /// Track `name` as the agent of the execution `id` in `space`, named
+    /// `space_name`, as its wrapper's registration does, without the
+    /// connection that would stop it.
+    #[cfg(test)]
+    pub(crate) async fn track_unconnected(
+        &self,
+        id: &ExecutionId,
+        space: &SpaceId,
+        space_name: &SpaceName,
+        name: crate::agent::Agent,
+    ) {
+        let tracked = TrackedAgent::named(name);
+        let agent = Agent {
+            name: tracked.name,
+            model: tracked.model,
+            mode: tracked.mode,
+            narrowing: tracked.narrowing,
+            workspace: space_name.clone(),
+            workspace_id: space.clone(),
+            started: Instant::now(),
+            recover: false,
+            stop: watch::channel(false).0,
+            update_hold: None,
+            restarts: Default::default(),
+            typed_at: None,
+        };
+        (self.executions)
+            .with_agents(|agents| agents.insert(id.clone(), agent))
+            .await;
+    }
+
+    /// Have the tracked agent of `id` run under `narrowing`, which its
+    /// restore in the wrapper that waited for it gives it, and record it as
+    /// a new wrapper's start records it.
+    pub async fn give_agent_narrowing(
+        &self,
+        id: &ExecutionId,
+        narrowing: crate::config::permissions::PermissionsConfig,
+    ) {
+        let tracked = (self.executions)
+            .with_agent(id, |agent| {
+                agent.narrowing = narrowing;
+                agent.tracked()
+            })
+            .await;
+        if let Some(tracked) = tracked {
+            self.record_execution_agent(id, &tracked).await;
+        }
+    }
+
+    /// Keep the name, model, effort, mode and narrowing of the agent
+    /// execution `id` runs with its record, which outlives this daemon,
+    /// unlike the tracked agent; the mode and narrowing become its
+    /// space's.
+    async fn record_execution_agent(&self, id: &ExecutionId, agent: &TrackedAgent) {
+        let (execution, agent) = (id.to_owned(), agent.clone());
+        let recorded = self
+            .store
+            .run(move |db| {
+                let narrowing = shoal_store::narrowing_column(&agent.narrowing)?;
+                db.execute(
+                    "UPDATE executions SET agent=?2,model=?3,effort=?4,mode=?5,narrowing=?6
+                     WHERE id=?1",
+                    rusqlite::params![
+                        execution,
+                        agent.name,
+                        agent.model.model,
+                        agent.model.effort,
+                        agent.mode,
+                        narrowing
+                    ],
+                )?;
+                db.execute(
+                    "UPDATE spaces SET mode=?2,narrowing=?3
+                     WHERE id=(SELECT space_id FROM executions WHERE id=?1)",
+                    rusqlite::params![execution, agent.mode, narrowing],
+                )?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = recorded {
+            log!("agent of execution {id} not recorded: {error:#}");
+        }
+    }
+
+    /// Prove that a protection-stopped agent ended, then forget its stopped
+    /// child and release its leases. Identity-verified processes it left
+    /// outside its process group, such as background shell commands, are
+    /// stopped as `shoal stop` stops them; the waiting wrapper is not a
+    /// target. Reports what survives when `patience` passes without proof.
+    pub async fn pause_agent_execution(
+        &self,
+        daemon: &dyn Daemon,
+        id: &ExecutionId,
+        workspace_id: &SpaceId,
+        patience: Duration,
+    ) -> anyhow::Result<Pause> {
+        let record = self
+            .space_executions(workspace_id)
+            .await?
+            .into_iter()
+            .find(|execution| execution.id == *id)
+            .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
+        if let Some(issue) =
+            await_process_proof(patience, || self.stop_agent_survivors(daemon, &record)).await
+        {
+            return Ok(Pause::Unproven(issue));
+        }
+        let record_id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE executions SET child=NULL,group_id=NULL WHERE id=?1",
+                    [record_id],
+                )?;
+                Ok(())
+            })
+            .await?;
+        // Its leases end with the agent, though its execution stays.
+        daemon.release_agent_leases(id).await;
+        Ok(Pause::Paused)
+    }
+
+    /// Stop what a command or agent that reported its exit left running
+    /// outside its process group, such as background shell commands, so
+    /// nothing outlives it. An agent's turn is kept first, while that work
+    /// still shows whether it was in flight. The completion scan that follows
+    /// decides whether anything survived.
+    pub async fn stop_exited_processes(&self, daemon: &dyn Daemon, id: &ExecutionId) {
+        let query_id = id.to_owned();
+        let stopped = async {
+            let record = self
+                .store
+                .run(move |db| shoal_store::find_execution(db, &query_id))
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
+            let scan = scan_processes(&record).await?;
+            self.keep_stopped_turn(id, Some(&scan)).await;
+            self.inspect_execution(daemon, &record, &scan)
+                .await?
+                .stop_owned()
+                .await
+        };
+        if let Err(error) = stopped.await {
+            log!("processes of exited execution {id} not stopped: {error:#}");
+        }
+    }
+
+    /// Stop the execution's verified survivors and report what keeps its
+    /// processes from being proven stopped, if anything does.
+    async fn stop_agent_survivors(
+        &self,
+        daemon: &dyn Daemon,
+        record: &crate::model::Execution,
+    ) -> Option<String> {
+        // A demo's viewer spawning meanwhile is spared once recorded.
+        let spawning = daemon.viewer_spawn_lock(&record.id);
+        let _spawning = spawning.lock().await;
+        let mut processes = match self.inspect_processes(daemon, record).await {
+            Ok(processes) => processes,
+            Err(error) => return Some(format!("process inspection failed: {error:#}")),
+        };
+        if let Ok(Some(viewer)) = daemon.viewer_group(&record.id).await {
+            processes.spare_group(viewer);
+        }
+        if let Some(issue) = processes.completion_issue() {
+            // A survivor can fork while stopping, so only a later scan proves the stop.
+            return Some(match processes.stop_owned().await {
+                Ok(()) => issue,
+                Err(error) => format!("{issue}; {error:#}"),
+            });
+        }
+        // The daemon forgets a stopped child only after proving the stop, so
+        // a reattached waiting wrapper's record needs no launch identity.
+        let proven_before =
+            record.wrapper.is_some() && record.child.is_none() && record.group_id.is_none();
+        (!processes.visibility_complete() && !proven_before)
+            .then(|| "its launch identity is incomplete".into())
+    }
+
+    /// Scan for the execution's processes and combine the evidence.
+    async fn inspect_processes(
+        &self,
+        daemon: &dyn Daemon,
+        record: &crate::model::Execution,
+    ) -> anyhow::Result<crate::process::execution::Processes> {
+        let scan = scan_processes(record).await?;
+        self.inspect_execution(daemon, record, &scan).await
+    }
+
+    /// Tell the user why a protection-stopped agent's automatic restore waits
+    /// beyond healthy readings, and a waiting `shoal restart` of it.
+    pub async fn notify_restore_waits(&self, daemon: &dyn Daemon, id: &ExecutionId, issue: &str) {
+        let Some((name, workspace, workspace_id)) = self
+            .executions
+            .with_agent(id, |agent| {
+                let (workspace, id) = (agent.workspace.clone(), agent.workspace_id.clone());
+                (agent.name.clone(), workspace, id)
+            })
+            .await
+        else {
+            return;
+        };
+        log!("restore of {name} in {workspace} waits for its processes to stop: {issue}");
+        daemon.notify_space(
+            &workspace,
+            &workspace_id,
+            AlertKind::RecoveryBlocked,
+            format!("Automatic restore of {name} waits until its remaining processes exit: {issue}; shoal stop {workspace_id} cancels the restore"),
+        )
+        .await;
+        self.restart_waits(id, issue).await;
+    }
+
+    /// Resume the stopped agent `id`, which `grant` admitted when its
+    /// automatic restore did, unless the system is shutting down: under the
+    /// queue gate, so a shutdown that begins meanwhile finds it running.
+    pub async fn resume_agent_execution(
+        &self,
+        daemon: &dyn Daemon,
+        id: &ExecutionId,
+        grant: Option<Grant>,
+    ) -> anyhow::Result<bool> {
+        let _gate = self.agent_queue.lock_admission().await;
+        anyhow::ensure!(!self.agent_queue.suspended(), "the system is shutting down");
+        // A stop of the execution, which cancels its restore, takes this lock
+        // too, so the restore it finds stays decided.
+        let connections = self.executions.connections().await;
+        // The agent's turns count again before it runs, and it reports its
+        // own.
+        let protected = self.agent_overload(id).await.is_some();
+        let restart_requested = self.restart_requested(id).await;
+        if protected || restart_requested {
+            self.forget_resumed_stop(id).await?;
+        }
+        // Its wrapper resumes it in place with the restart's options.
+        if restart_requested {
+            self.forget_applied_restart(id).await?;
+        }
+        let stop = connections
+            .stop_channel(id)
+            .ok_or_else(|| anyhow::anyhow!("execution disconnected"))?;
+        let resumed = connections
+            .with_agents(|agents| {
+                let agent = agents
+                    .get_mut(id)
+                    .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
+                let restarting = agent
+                    .restarts
+                    .current
+                    .as_mut()
+                    .map(restart::Restart::resume)
+                    .is_some();
+                if !protected && !restarting {
+                    return Ok(None);
+                }
+                stop.send(false)?;
+                agent.update_hold = None;
+                agent.started = Instant::now();
+                anyhow::Ok(Some((
+                    agent.name.clone(),
+                    (agent.workspace.clone(), agent.workspace_id.clone()),
+                    restarting,
+                )))
+            })
+            .await?;
+        drop(connections);
+        let Some((name, (workspace, workspace_id), restarting)) = resumed else {
+            return Ok(false);
+        };
+        // `shoal restart` reports its own restarts.
+        if restarting {
+            return Ok(true);
+        }
+        let cause = match grant {
+            Some(Grant::Update) => "for an update",
+            Some(Grant::Queue) => "from the agent queue",
+            _ => "after sustained healthy readings",
+        };
+        daemon
+            .notify_space(
+                &workspace,
+                &workspace_id,
+                AlertKind::AgentResumed,
+                format!("Restoring {name} {cause}"),
+            )
+            .await;
+        Ok(true)
+    }
+
+    /// The guard a protection stop took for the execution's connection.
+    pub async fn take_update_hold(&self, id: &ExecutionId) -> Option<OwnedRwLockReadGuard<()>> {
+        self.executions
+            .with_agent(id, |agent| agent.update_hold.take())
+            .await
+            .flatten()
+    }
+
+    /// Queue the automatic restore of the protection-stopped agent `id`.
+    pub async fn queue_agent_restore(
+        &self,
+        daemon: &dyn Daemon,
+        id: &ExecutionId,
+    ) -> anyhow::Result<()> {
+        let (name, workspace_id) = self
+            .executions
+            .with_agent(id, |agent| (agent.name.clone(), agent.workspace_id.clone()))
+            .await
+            .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
+        self.queue_restore(daemon, id, &name, &workspace_id).await
+    }
+
+    /// Wait until the agent queue hands the restore to the wrapper of `link`
+    /// and the admission holds through the checks of its workspace.
+    pub async fn admit_agent_restore(
+        &self,
+        daemon: &dyn Daemon,
+        link: &RestoreLink<'_>,
+        workspace_id: &SpaceId,
+    ) -> anyhow::Result<Grant> {
+        loop {
+            let grant = self.await_restore_admission(link).await?;
+            if self
+                .confirm_restore(daemon, link.execution(), workspace_id, grant)
+                .await?
+            {
+                return Ok(grant);
+            }
+        }
+    }
+
+    /// Check that the space `id` can take an agent's restore: a workspace
+    /// is ready and still the recorded worktree, so a replaced one never
+    /// receives the agent, and a chat's directory is there.
+    pub async fn verify_restore_space(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+    ) -> anyhow::Result<()> {
+        match daemon.space(&SpaceSelector::id(id)).await?.by_kind() {
+            ByKind::Workspace(workspace) => {
+                daemon.verify_worktree(&workspace).await?;
+                anyhow::ensure!(
+                    workspace.state == crate::state::WorkspaceState::Ready,
+                    "workspace is no longer ready for agent recovery"
+                );
+                Ok(())
+            }
+            ByKind::Chat(chat) => self.chat_path(daemon, &chat).await.map(drop),
+        }
+    }
+
+    /// Check that an admitted restore's workspace is ready and verified. A
+    /// stop or reload since healthy readings admitted it revokes it, since
+    /// they no longer hold, and returns it to its place; an update's admission
+    /// holds.
+    pub async fn confirm_restore(
+        &self,
+        daemon: &dyn Daemon,
+        id: &ExecutionId,
+        workspace_id: &SpaceId,
+        grant: Grant,
+    ) -> anyhow::Result<bool> {
+        self.verify_restore_space(daemon, workspace_id).await?;
+        let current = match grant {
+            Grant::Update | Grant::Queue => true,
+            Grant::Recovery(epoch) => self.overload_recovery.epoch() == epoch,
+        };
+        if !current {
+            self.requeue_restore(id).await?;
+        }
+        Ok(current)
+    }
+
+    /// Each tracked agent's execution, workspace and load, with the memory
+    /// its workspace used at the latest usage sample. One whose wrapper
+    /// waits over its link to restore it, every process of it proven
+    /// stopped, runs nothing; until that proof its load may still show.
+    pub async fn agent_executions(
+        &self,
+        daemon: &dyn Daemon,
+    ) -> std::collections::HashMap<ExecutionId, (SpaceId, Activity)> {
+        let waiting = self.agent_queue.restore_links();
+        let agents: Vec<(ExecutionId, SpaceId, std::time::Duration)> = self
+            .executions
+            .with_agents(|agents| {
+                agents
+                    .iter()
+                    .map(|(id, agent)| {
+                        (
+                            id.clone(),
+                            agent.workspace_id.clone(),
+                            agent.started.elapsed(),
+                        )
+                    })
+                    .collect()
+            })
+            .await;
+        agents
+            .into_iter()
+            .map(|(id, workspace, age)| {
+                let activity = if waiting.contains(&id) {
+                    Activity::Stopped
+                } else {
+                    Activity::Running {
+                        age,
+                        memory: daemon
+                            .workspace_usage(&workspace)
+                            .map(|usage| usage.memory_bytes),
+                    }
+                };
+                (id, (workspace, activity))
+            })
+            .collect()
+    }
+
+    /// The agent a request from `caller` comes from: the one its execution
+    /// runs, else the one whose process tree registered it.
+    pub async fn caller_agent(
+        &self,
+        caller: &shoal_daemon_base::callers::Caller,
+    ) -> Option<CallerAgent> {
+        let execution = caller.execution.as_ref()?;
+        if let Some(own) = self.execution_agent(&execution.id).await {
+            return Some(own);
+        }
+        self.execution_agent(execution.agent_execution.as_ref()?)
+            .await
+    }
+
+    /// The agent execution `id` runs: tracked while connected, else as its
+    /// record names it, as when a command it ran reattaches first after a
+    /// restart.
+    async fn execution_agent(&self, id: &ExecutionId) -> Option<CallerAgent> {
+        let tracked = self
+            .executions
+            .with_agent(id, |agent| (agent.name.clone(), agent.workspace_id.clone()))
+            .await;
+        let (name, space_id) = match tracked {
+            Some(tracked) => tracked,
+            None => self.recorded_agent(id).await?,
+        };
+        Some(CallerAgent {
+            execution: id.to_owned(),
+            // Named as `--agent` and recovery records name it.
+            name: name.normalized(),
+            space_id,
+        })
+    }
+
+    /// The agent and space the record of execution `id` names, if it ran
+    /// one.
+    async fn recorded_agent(&self, id: &ExecutionId) -> Option<(crate::agent::Agent, SpaceId)> {
+        let execution = id.to_owned();
+        let recorded = self
+            .store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT agent,space_id FROM executions WHERE id=?1 AND agent IS NOT NULL",
+                        [execution],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .optional()?)
+            })
+            .await;
+        recorded.unwrap_or_else(|error| {
+            log!("agent of execution {id} unreadable: {error:#}");
+            None
+        })
+    }
+
+    /// The name of the connected agent that `execution` runs.
+    pub async fn agent_name(&self, execution: &ExecutionId) -> Option<crate::agent::Agent> {
+        self.executions
+            .with_agent(execution, |agent| agent.name.clone())
+            .await
+    }
+
+    /// Workspaces with a connected agent that is not being stopped.
+    pub async fn running_agent_workspaces(&self) -> Vec<SpaceId> {
+        let mut workspaces: Vec<_> = self
+            .executions
+            .with_agents(|agents| {
+                agents
+                    .values()
+                    .filter(|agent| agent.running())
+                    .map(|agent| agent.workspace_id.clone())
+                    .collect()
+            })
+            .await;
+        workspaces.sort();
+        workspaces.dedup();
+        workspaces
+    }
+
+    /// Spaces with a recorded agent execution, connected or not, such as
+    /// one whose wrapper waits to reattach after a daemon restart.
+    pub async fn recorded_agent_spaces(&self) -> anyhow::Result<HashSet<SpaceId>> {
+        let agents = self.store.run(shoal_store::agent_executions).await?;
+        Ok(agents.into_keys().collect())
+    }
+
+    /// Stop the first heavy agent of the stop order whose stop frees what
+    /// `pressure` presses, as `turns` read its turn, after every agent below
+    /// it, returning whether any stopped.
+    pub async fn stop_agent_for_overload(
+        &self,
+        daemon: &dyn Daemon,
+        pressure: Pressure,
+        turns: HashMap<ExecutionId, Turn>,
+    ) -> bool {
+        let protection = Protection::load(pressure.reason());
+        !(self.stop_agents_by_turn(daemon, &protection, Select::One(pressure), turns))
+            .await
+            .is_empty()
+    }
+
+    /// Stop every running agent, since any of them may be writing, each
+    /// after the agents below it.
+    pub async fn stop_agents_for_disk_space(
+        &self,
+        daemon: &dyn Daemon,
+        protection: &Protection,
+    ) -> Vec<StoppedAgent> {
+        self.stop_agents(daemon, protection, Select::All).await
+    }
+
+    async fn stop_agents(
+        &self,
+        daemon: &dyn Daemon,
+        protection: &Protection,
+        select: Select,
+    ) -> Vec<StoppedAgent> {
+        let turns = self.protection_turns().await;
+        self.stop_agents_by_turn(daemon, protection, select, turns)
+            .await
+    }
+
+    /// The agents' turns as protection reads them; without them every agent
+    /// counts as working, as one without hooks does.
+    pub async fn protection_turns(&self) -> HashMap<ExecutionId, Turn> {
+        self.agent_turns().await.unwrap_or_else(|error| {
+            log!("agent turns unavailable to protection: {error:#}");
+            HashMap::new()
+        })
+    }
+
+    /// Stop the agents `select` picks by `turns`. One picked idle stops only
+    /// while no turn started since `turns` were read, so `select` picks
+    /// again by the turns read then, a few times at most. An agent that does
+    /// not stop keeps every agent above it running.
+    pub async fn stop_agents_by_turn(
+        &self,
+        daemon: &dyn Daemon,
+        protection: &Protection,
+        select: Select,
+        mut turns: HashMap<ExecutionId, Turn>,
+    ) -> Vec<StoppedAgent> {
+        let mut stopped = Vec::new();
+        for _ in 0..PROTECTION_CHOICES {
+            let mut raced = false;
+            let (order, chosen) = self.choose_stops(daemon, select, &turns).await;
+            // The spaces whose agent did not stop, which keep those above.
+            let mut kept: Vec<&SpaceId> = Vec::new();
+            for stop in &chosen {
+                let Some(id) = stop.agent() else {
+                    continue;
+                };
+                if kept.iter().any(|space| order.is_below(space, &stop.space)) {
+                    continue;
+                }
+                let turn = turns.get(id).copied();
+                match self.protect(id, protection, turn, None).await {
+                    Some(agent) => stopped.push(agent),
+                    None => {
+                        raced |= turn.is_some_and(|turn| turn.idle());
+                        kept.push(&stop.space);
+                    }
+                }
+            }
+            if !raced {
+                break;
+            }
+            turns = self.protection_turns().await;
+        }
+        if !stopped.is_empty() {
+            self.overload_recovery.reset();
+        }
+        for agent in &stopped {
+            self.notify_protection_stop(daemon, agent).await;
+        }
+        stopped
+    }
+
+    /// The stop order by `turns`, and the agents of it `select` picks, in
+    /// the order they stop.
+    async fn choose_stops(
+        &self,
+        daemon: &dyn Daemon,
+        select: Select,
+        turns: &HashMap<ExecutionId, Turn>,
+    ) -> (StopOrder, Vec<Stop>) {
+        let order = self.stop_order(daemon, turns).await;
+        let stops: Vec<Stop> = match select {
+            Select::One(pressure) => (order.stops().iter())
+                .find(|stop| stop.agent().is_some() && self.frees(daemon, stop, pressure))
+                .map(|stop| order.with_agents_below(stop))
+                .unwrap_or_default(),
+            Select::All => order.stops().iter().collect(),
+        }
+        .into_iter()
+        .filter(|stop| stop.agent().is_some())
+        .cloned()
+        .collect();
+        (order, stops)
+    }
+
+    /// Stop the agent of `id`, chosen in `turn`, for `protection`: save the
+    /// recovery handoff, then record the stop and deliver it. A stop recorded or
+    /// delivered meanwhile keeps the agent from this one, and so does a turn
+    /// that started since one chosen idle, or for a stop the user keeps
+    /// the agent from, their interaction with it since it was `interacted`.
+    pub async fn protect(
+        &self,
+        id: &ExecutionId,
+        protection: &Protection,
+        chosen: Option<Turn>,
+        interacted: Option<stops::Interacted>,
+    ) -> Option<StoppedAgent> {
+        let turn = chosen.map(|turn| turn.state);
+        let between = (chosen.filter(Turn::idle)).map(|turn| stops::Between {
+            turn: turn.generation,
+            interacted,
+        });
+        let mut stopped = self.stop_target(id, protection, turn).await?;
+        // Nothing presses an idle stop, so it waits for a record that
+        // restores the agent.
+        let handoff = stops::Handoff {
+            reason: &protection.reason,
+            turn,
+            for_load: protection.follows_overload_recovery(),
+            required: protection.is_idle(),
+        };
+        match (self.decide_stop(id, &stopped.protection, between, handoff)).await {
+            Ok(saved) => {
+                stopped.handoff_saved = saved;
+                Some(stopped)
+            }
+            // Load and disk space press, so a store that cannot record the
+            // stop, as on a full disk, does not keep the agent running.
+            Err(error) if error.is::<stops::Unrecorded>() && !protection.is_idle() => {
+                self.stop_unrecorded(stopped, &error).await
+            }
+            Err(error) => {
+                let (name, reason) = (&stopped.name, &protection.reason);
+                log!("{name} not stopped for {reason}: {error:#}");
+                None
+            }
+        }
+    }
+
+    /// Stop the `stopped` agent, whose stop the store could not record, as
+    /// `shoal stop` does, saving its session for `shoal resume` instead of
+    /// an automatic restore.
+    async fn stop_unrecorded(
+        &self,
+        mut stopped: StoppedAgent,
+        error: &anyhow::Error,
+    ) -> Option<StoppedAgent> {
+        let (name, reason) = (&stopped.name, &stopped.protection.reason);
+        log!("{name} stops for {reason} without automatic restore: {error:#}");
+        let request = crate::executions::StopRequest::unrecorded(reason);
+        let connections = self.executions.connections().await;
+        match connections.stop(&stopped.id, &request).await {
+            Ok(true) => {
+                stopped.recorded = false;
+                Some(stopped)
+            }
+            Ok(false) => None,
+            Err(error) => {
+                log!("{name} not stopped for {reason}: {error:#}");
+                None
+            }
+        }
+    }
+
+    /// How a stop for `protection` in `turn` stops the tracked agent of `id`.
+    async fn stop_target(
+        &self,
+        id: &ExecutionId,
+        protection: &Protection,
+        turn: Option<AgentState>,
+    ) -> Option<StoppedAgent> {
+        (self.executions)
+            .with_agent(id, |agent| StoppedAgent {
+                id: id.clone(),
+                name: agent.name.clone(),
+                workspace: agent.workspace.clone(),
+                workspace_id: agent.workspace_id.clone(),
+                recover: agent.recover,
+                recorded: true,
+                handoff_saved: false,
+                protection: restored_after(protection, turn),
+            })
+            .await
+    }
+
+    /// Record that `protection` stops the agent of `id`, chosen `between`
+    /// turns when given, and deliver the stop with its `handoff`, forgetting
+    /// the record when it cannot be delivered. Only the stop recorded saves
+    /// a handoff, so one that loses leaves the winner's. Whether the handoff
+    /// was saved.
+    async fn decide_stop(
+        &self,
+        id: &ExecutionId,
+        protection: &Protection,
+        between: Option<stops::Between>,
+        handoff: stops::Handoff<'_>,
+    ) -> anyhow::Result<bool> {
+        anyhow::ensure!(
+            self.record_agent_stop(id, protection, between).await?,
+            "it is stopped already or no longer idle in the turn it was chosen in"
+        );
+        let delivered = self.deliver_stop(id, handoff).await;
+        if delivered.is_err() {
+            self.forget_agent_stop(id).await;
+        }
+        delivered
+    }
+
+    /// Whether `shoal done` finished the workspace's assignment, which leaves
+    /// an agent `protection` stopped nothing to do, so its restore waits for
+    /// `shoal resume`.
+    pub async fn done_cancels_restore(
+        &self,
+        daemon: &dyn Daemon,
+        workspace_id: &SpaceId,
+        protection: &Protection,
+    ) -> anyhow::Result<bool> {
+        Ok(protection.ends_with_assignment() && daemon.completion(workspace_id).await?.is_some())
+    }
+
+    async fn notify_protection_stop(&self, daemon: &dyn Daemon, agent: &StoppedAgent) {
+        let StoppedAgent {
+            id,
+            name,
+            workspace,
+            workspace_id,
+            protection,
+            ..
+        } = agent;
+        let done = (self
+            .done_cancels_restore(daemon, workspace_id, protection)
+            .await)
+            .unwrap_or_else(|error| {
+                log!("completion unavailable to the stop notice: {error:#}");
+                false
+            });
+        let recovery = if !agent.recorded {
+            "its stop could not be recorded, so it has no automatic restore".into()
+        } else if !agent.recover {
+            "automatic recovery unavailable: configure [agents.<name>] resume_command with a session restore command".into()
+        } else if protection.follows_overload_recovery()
+            && !self.config.current().machine.overload.recovery.enabled
+        {
+            "automatic recovery disabled by machine.overload.recovery.enabled".into()
+        } else if done {
+            "no automatic restore, since the workspace is marked done; shoal resume withdraws the completion".into()
+        } else {
+            format!(
+                "automatic session restore waits until {}",
+                protection.resumes_when
+            )
+        };
+        daemon.notify_space(
+            workspace,
+            workspace_id,
+            AlertKind::AgentStopped,
+            format!("Stopping {name}: {}; {recovery}; after the wrapper exits, resume with shoal resume {workspace_id} --execution {id}{}; workspace and resource leases retained", protection.reason, if agent.handoff_saved || !agent.recorded { "" } else { "; recovery handoff could not be saved; run shoal stop if the wrapper exits" }),
+        )
+        .await;
+    }
+}
+
+/// How many times protection picks agents to stop again after a turn
+/// started in one it picked idle.
+const PROTECTION_CHOICES: usize = 3;
+
+#[derive(Clone, Copy)]
+pub enum Select {
+    /// The first agent of the stop order whose stop frees what the
+    /// pressure presses, with the agents below it.
+    One(Pressure),
+    All,
+}
+
+/// An agent asked to stop for protection.
+pub struct StoppedAgent {
+    pub id: ExecutionId,
+    pub name: crate::agent::Agent,
+    pub workspace: SpaceName,
+    workspace_id: SpaceId,
+    recover: bool,
+    /// Whether the store recorded its stop, without which it has no
+    /// automatic restore.
+    recorded: bool,
+    handoff_saved: bool,
+    /// What its automatic restore waits for.
+    protection: Protection,
+}
+
+/// The `protection` an agent stopped in `turn` restores after: one stopped
+/// between turns waits for what [`wakes_between_turns`] names for its
+/// reason, having nothing to do until then.
+fn restored_after(protection: &Protection, turn: Option<AgentState>) -> Protection {
+    match turn {
+        Some(AgentState::Idle) => Protection {
+            reason: protection.reason.clone(),
+            resumes_when: wakes_between_turns(&protection.reason).into(),
+        },
+        _ => protection.clone(),
+    }
+}
+
+/// What a paused agent's process check concluded.
+pub enum Pause {
+    Paused,
+    /// Processes survive, or the evidence cannot prove that none do.
+    Unproven(String),
+}
+
+/// Scan for the execution's processes.
+async fn scan_processes(
+    record: &crate::model::Execution,
+) -> anyhow::Result<crate::process::identity::Scan> {
+    let ids = std::collections::HashSet::from([record.id.clone()]);
+    crate::process::identity::scan(ids).await
+}
+
+/// Probe until it finds nothing preventing proof or `patience` passes, and
+/// return the last issue it reported.
+async fn await_process_proof<F>(patience: Duration, mut probe: impl FnMut() -> F) -> Option<String>
+where
+    F: std::future::Future<Output = Option<String>>,
+{
+    let deadline = tokio::time::Instant::now() + patience;
+    loop {
+        let issue = probe().await;
+        if issue.is_none() || tokio::time::Instant::now() >= deadline {
+            return issue;
+        }
+        tokio::time::sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
+    }
+}
+
+#[cfg(test)]
+mod process_proof_tests;

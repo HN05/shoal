@@ -101,7 +101,7 @@ impl Manager {
     /// without Shoal's hook that ends its turns.
     async fn marked_turn(&self, caller: Option<&Caller>, space: &Space) -> Result<ExecutionId> {
         let execution = caller.and_then(Caller::execution_id);
-        let (execution, agent) = self.agent_turn(space, execution).await?;
+        let (execution, agent) = self.agents.agent_turn(space, execution).await?;
         let settings = self.repositories.space_settings(self, space).await?;
         ensure!(
             settings.integration(&agent).reports_turn_ends(),

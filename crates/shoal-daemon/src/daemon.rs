@@ -1,25 +1,25 @@
 //! The per-user daemon: owns shared state, serves protocol requests over a
 //! Unix socket, and runs background cleanup.
+#[cfg(target_os = "linux")]
+pub(crate) use shoal_agents::oom_scores;
+pub(crate) use shoal_agents::{capacity, overload, queue as agent_queue, queued_starts};
 pub(crate) use shoal_agents::{
-    engagement, idle_wakes, lost_reports, messages, subagents, turn_retry, turn_state, turns,
-    wake_timers,
+    control as agents, execution_connection, executions, idle_wakes, lost_reports, messages,
+    places, restart_recovery, restarts, shutdown_stop, stopped_work, turn_retry, turn_state,
+    wake_timers, warnings,
 };
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications, retention, signals,
 };
 pub(crate) use shoal_leases::{allocation, containers, resources};
 mod absorb;
-pub(crate) mod agent_queue;
 mod agent_service;
-pub(crate) mod agents;
 mod alerts;
 mod answer;
 pub mod approvals;
 mod apps;
 mod auto_update;
 pub(crate) mod blockers;
-pub(crate) mod busy_cpu;
-pub(crate) mod capacity;
 mod carried_commits;
 mod carried_sessions;
 pub(crate) mod changes;
@@ -36,9 +36,6 @@ pub(crate) mod demos;
 pub(crate) mod disk;
 mod elsewhere;
 pub mod environment;
-mod execution_connection;
-mod execution_recovery;
-pub(crate) mod executions;
 mod exit_wait;
 pub(crate) mod fake_workers;
 pub(crate) mod forge_hosts;
@@ -58,22 +55,14 @@ pub mod links;
 mod logs;
 pub mod manager;
 mod moves;
-#[cfg(target_os = "linux")]
-mod oom_scores;
 pub(crate) mod operations;
-pub(crate) mod overload;
-mod overload_recovery;
 mod ownership;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) mod per_daemon;
 mod permissions;
-pub(crate) mod places;
 mod pr_gate;
-mod program_status;
 pub(crate) mod progress;
-pub(crate) mod proxy_retries;
 mod quarantine;
-pub(crate) mod queued_starts;
 pub(crate) mod ready_marks;
 pub mod recovery;
 mod relayed;
@@ -81,23 +70,18 @@ mod releases;
 
 mod repositories;
 mod requests;
-mod restart_recovery;
-pub(crate) mod restarts;
 mod restore;
 mod retention_periods;
 pub(crate) mod reviews;
 pub(crate) mod runner;
 pub mod scope;
-mod sessions;
 mod shared_repositories;
 mod shutdown_lock;
-mod shutdown_stop;
 pub(crate) mod space_processes;
 mod space_removal;
 pub(crate) mod spaces;
 mod startup;
 mod startup_audit;
-pub(crate) mod stopped_work;
 pub(crate) use shoal_store as store;
 mod subscriptions;
 pub(crate) mod target_checks;
@@ -115,9 +99,7 @@ mod tree;
 
 mod turn_ends;
 mod untracked;
-pub(crate) mod upstream_limits;
 mod viewer_terminals;
-mod warnings;
 mod work_memory;
 pub mod workspace;
 pub mod workspace_files;
@@ -227,12 +209,16 @@ pub async fn run(
         &mut background,
         &manager,
         "restart reconciliation",
-        restart_recovery::run,
+        |manager| restart_recovery::run(manager.agents.clone(), manager),
     );
-    spawn_supervised(&mut background, &manager, "overload monitor", overload::run);
+    spawn_supervised(&mut background, &manager, "overload monitor", |manager| {
+        overload::run(manager.agents.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "disk monitor", disk::run);
     #[cfg(target_os = "linux")]
-    spawn_supervised(&mut background, &manager, "OOM scores", oom_scores::run);
+    spawn_supervised(&mut background, &manager, "OOM scores", |manager| {
+        oom_scores::run(manager.agents.clone(), manager)
+    });
     #[cfg(target_os = "linux")]
     spawn_supervised(&mut background, &manager, "work memory", work_memory::run);
     spawn_supervised(
@@ -257,7 +243,9 @@ pub async fn run(
         "shutdown lock",
         shutdown_lock::run,
     );
-    spawn_supervised(&mut background, &manager, "agent queue", queued_starts::run);
+    spawn_supervised(&mut background, &manager, "agent queue", |manager| {
+        queued_starts::run(manager.agents.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "triggers", |manager| {
         shoal_runner::triggers::run(manager.runner.clone(), manager)
     });
@@ -281,7 +269,7 @@ pub async fn run(
         &mut background,
         &manager,
         "sequential restarts",
-        restarts::run_line,
+        |manager| restarts::run_line(manager.agents.clone(), manager),
     );
     spawn_supervised(
         &mut background,
@@ -416,7 +404,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     let audit = manager.audit_worktrees();
     startup.step("auditing worktrees", audit).await?;
     // Before requests, so no surviving start worker finds its readings held.
-    let recovery_starts = manager.return_recovery_starts();
+    let recovery_starts = manager.agents.return_recovery_starts();
     (startup.step(
         "requeueing restores admitted on old readings",
         recovery_starts,
@@ -447,7 +435,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     if let Err(error) = startup.step("stopping interrupted gate runs", gate).await {
         log!("{error:#}");
     }
-    let sessions = manager.cleanup_orphan_sessions();
+    let sessions = manager.agents.cleanup_orphan_sessions(&*manager);
     startup.step("cleaning up orphan sessions", sessions).await;
     Ok(manager)
 }
@@ -609,6 +597,7 @@ async fn serve_request(
                 stream,
                 request.id,
                 request.protocol,
+                server.manager.agents.clone(),
                 server.manager,
                 reattach,
                 operation_guard,

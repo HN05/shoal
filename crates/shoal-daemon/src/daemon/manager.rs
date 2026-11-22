@@ -1,7 +1,6 @@
 //! `Manager`, the daemon's shared state, with its configuration.
 use crate::config_file::ConfigExt;
 use crate::paths::StateFiles;
-use shoal_ids::execution_ids::ExecutionId;
 
 use crate::{config::Config, daemon::store::Store, paths::Paths};
 use anyhow::Result;
@@ -9,10 +8,6 @@ use std::sync::Arc;
 
 pub struct Manager {
     pub store: Store,
-    pub(crate) session_hosts: Vec<Arc<dyn crate::sessions::Host>>,
-    /// Held while the owner of a recorded place is read and its place
-    /// closed, or its ownership moves to another workspace.
-    pub(crate) place_ownership: tokio::sync::Mutex<()>,
     pub gates: Arc<super::gates::Gates>,
     pub(super) cleanup_health: super::cleanup::CleanupHealth,
     /// How the loop that puts idle agents to sleep is doing.
@@ -28,31 +23,16 @@ pub struct Manager {
     /// The leases workspaces hold.
     pub leases: shoal_leases::Leases,
     pub paths: Paths,
-    pub executions: super::executions::Executions,
-    pub overload_recovery: super::overload_recovery::OverloadRecovery,
-    /// The busy CPU the overload monitor reads for job admission.
-    pub(crate) busy_cpu: super::busy_cpu::BusyCpu,
-    pub agent_queue: super::agent_queue::AgentQueue,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
     /// The scope tokens approved commands take their permission's actions
     /// with.
     pub(crate) grants: crate::daemon::permissions::Grants,
-    /// Held through a stop before a shutdown; true once one finished, until
-    /// a system shutdown is cancelled, so later ones leave the work alone.
-    pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,
     pub(crate) signals: Arc<super::signals::Signals>,
     pub(crate) usage: super::workspace::usage::Usage,
     pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
     /// Held while a converted space's agent is handed over to the new place,
     /// so a stop and the relocation never both hand it over.
     pub(crate) conversion_handovers: crate::daemon::conversions::Handovers,
-    /// The restarts of agents the daemon took, and the line of sequential
-    /// ones.
-    pub(crate) restarts: crate::daemon::restarts::Restarts,
-    /// Held while an agent is admitted to a workspace, until it is tracked,
-    /// and while a workspace's conversion into a chat is recorded, so no
-    /// agent starts in a workspace that becomes a chat.
-    pub(crate) agent_admissions: tokio::sync::Mutex<()>,
     /// The spaces a removal holds, whose agent no registration runs again.
     pub(crate) space_removals: crate::daemon::spaces::Removing,
     /// The completed spaces whose completion a removal of a space below
@@ -66,14 +46,6 @@ pub struct Manager {
     pub links: Arc<shoal_links::Links>,
     /// The local reviews of workspaces.
     pub reviews: Arc<shoal_reviews::Reviews>,
-    /// The retry each proxied execution's proxy waits to make.
-    pub(super) proxy_retries:
-        std::sync::Mutex<std::collections::HashMap<ExecutionId, super::proxy_retries::ProxyRetry>>,
-    /// The limit each proxied execution's proxy found its upstream under,
-    /// with the time it stands until.
-    pub(super) upstream_limits: std::sync::Mutex<
-        std::collections::HashMap<ExecutionId, super::upstream_limits::UpstreamLimit>,
-    >,
     /// Directories whose file access stalls, shared with startup's status answer.
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
     /// The hub role, or this machine's membership of a hub.
@@ -137,13 +109,24 @@ impl Manager {
             Arc::new(super::repositories::RepositoryRecords),
         ));
         let signals = Arc::new(super::signals::Signals::default());
+        let space_removals = crate::daemon::spaces::Removing::default();
         let agents = Arc::new(shoal_agents::Agents::new(
             store.clone(),
             gates.clone(),
             config_state.clone(),
             signals.clone(),
+            notifications.clone(),
+            file_access.clone(),
             paths.clone(),
             Arc::new(super::agent_service::AgentRecords),
+            Arc::new(space_removals.clone()),
+            // Tests inject hosts and never discover or close the user's
+            // sessions.
+            if crate::daemon::fake_workers::faked() {
+                Vec::new()
+            } else {
+                crate::sessions::hosts()
+            },
         ));
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),
@@ -162,37 +145,20 @@ impl Manager {
             runner,
             publications: Default::default(),
             store,
-            // Tests inject hosts and never discover or close the user's
-            // sessions.
-            session_hosts: if crate::daemon::fake_workers::faked() {
-                Vec::new()
-            } else {
-                crate::sessions::hosts()
-            },
-            place_ownership: Default::default(),
             gates,
             paths,
-            executions: Default::default(),
-            overload_recovery: Default::default(),
-            busy_cpu: Default::default(),
-            agent_queue: Default::default(),
             operations: Default::default(),
             grants: Default::default(),
-            shutdown_stopped: Default::default(),
             signals,
             usage: Default::default(),
             leftovers: Default::default(),
             conversion_handovers: Default::default(),
-            restarts: Default::default(),
-            agent_admissions: Default::default(),
-            space_removals: Default::default(),
+            space_removals,
             completed_owners: Default::default(),
             agents,
             repositories,
             links,
             reviews,
-            proxy_retries: Default::default(),
-            upstream_limits: Default::default(),
             file_access,
             hub,
             apps: Default::default(),
@@ -221,7 +187,7 @@ impl Manager {
     /// the new thresholds.
     pub fn publish_config(&self, config: Config) {
         if super::overload::protection_changed(&self.config(), &config) {
-            self.overload_recovery.reset();
+            self.agents.overload_recovery().reset();
         }
         super::forge_hosts::learn_forge_pins(&self.config().machine.forges, &config.machine.forges);
         self.config_state.publish(config);

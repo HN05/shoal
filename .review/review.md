@@ -60,7 +60,8 @@ instead of the PR delivery guidance below.
   `shoal-links` and `shoal-repositories` on none but `shoal-core`,
   `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`, `shoal-ids`,
   `shoal-protocol`, `shoal-refs` and `shoal-store`, and `shoal-agents` on
-  none but `shoal-core`, `shoal-daemon-base`, `shoal-ids`, `shoal-protocol`,
+  none but `shoal-core`, `shoal-daemon-base`, `shoal-forge-types`,
+  `shoal-ids`, `shoal-protocol`, `shoal-refs`, `shoal-schedule`,
   `shoal-store` and `shoal-subprocess`. Flag a `Manager` method that does a
   subsystem's work, a subsystem crate that reads another's tables or calls it
   other than through such an interface, and a test of one subsystem that

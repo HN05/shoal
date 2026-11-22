@@ -413,13 +413,22 @@ async fn a_session_an_agent_reports_reaches_a_subscription() {
     };
 
     let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            &**manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap()
         .plan
         .id;
     manager
+        .agents
         .track_agent(
+            &**manager,
             &execution,
             &TrackedAgent::named("claude"),
             &workspace.id,
@@ -660,7 +669,8 @@ async fn discarding_a_stopped_session_reaches_a_subscription() {
     snapshot(&mut subscription).await;
     daemon
         .manager
-        .discard_stopped_agent(&SpaceSelector::id(&workspace.id), None)
+        .agents
+        .discard_stopped_agent(&*daemon.manager, &SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     until(

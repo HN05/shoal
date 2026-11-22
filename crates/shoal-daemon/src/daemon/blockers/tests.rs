@@ -1,4 +1,5 @@
 use super::*;
+use crate::state::BlockerKind;
 use crate::{
     daemon::{
         events::EventItem,
@@ -183,7 +184,8 @@ fn the_cleared_message_names_what_cleared_and_what_still_blocks() {
 async fn a_space_blocker_of_a_space_without_a_repository_clears_once_that_space_goes() {
     let (_temp, manager) = manager().await;
     let cleared = manager
-        .cleared_locally(None, BlockerKind::Space, "removed-space-id")
+        .agents
+        .cleared_locally(&*manager, None, BlockerKind::Space, "removed-space-id")
         .await
         .unwrap();
     assert!(cleared.is_some());

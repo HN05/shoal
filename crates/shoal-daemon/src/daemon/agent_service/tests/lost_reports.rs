@@ -74,7 +74,7 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
         .unwrap()
         .failed("refused".into());
     // A restore runs another agent.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let chat = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let mut restored = chat.clone();
     restored.agent = Some("claude".into());

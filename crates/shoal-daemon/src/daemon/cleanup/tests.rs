@@ -528,7 +528,9 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     fs::remove_file(workspace.path.join("dirty")).unwrap();
     let before_command = snapshot(&manager).await.unwrap();
     let started = manager
+        .agents
         .begin_execution(
+            &*manager,
             workspace.id.as_str(),
             None,
             crate::daemon::executions::ExecutionKind::Command,
@@ -538,7 +540,9 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         .unwrap();
     assert!(snapshot(&manager).await.is_none());
     manager
+        .agents
         .finish_execution(
+            &*manager,
             started.plan.id,
             crate::daemon::executions::ExecutionKind::Command,
             Some(0),
@@ -1345,7 +1349,7 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
     let (chat, opened) = chat_with_workspace(&temp, &manager).await;
     // A running chat is in use.
     assert_eq!(manager.cleanup_snapshot(&chat.id).await.unwrap(), None);
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let snapshot = (manager.cleanup_snapshot(&stopped.id))
         .await
@@ -1370,11 +1374,12 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
 async fn automatic_cleanup_leaves_a_chat_restored_since_its_snapshot_running() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let (chat, _) = chat_with_workspace(&temp, &manager).await;
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let snapshot = manager.cleanup_snapshot(&chat.id).await.unwrap().unwrap();
     // Its agent runs again before the removal reserves it.
     manager
-        .begin_agent_execution(chat.id.as_str())
+        .agents
+        .begin_agent_execution(&*manager, chat.id.as_str())
         .await
         .unwrap();
     let space = Space::from(manager.chat_by_id(&chat.id).await.unwrap().unwrap());
@@ -1398,7 +1403,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
         .unwrap();
     // Saved for `shoal resume`, it is kept as a workspace's saved agent
     // keeps it.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let saved = save_agent(&manager, &chat.id);
     let idle = async || {
         (manager.cleanup_candidacy(&chat.id))
@@ -1484,7 +1489,7 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
     manager.sweep_completed().await.unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(manager.workspace_by_id(&opened.id).await.is_err());
-    assert!(manager.running_agents().await.unwrap().is_empty());
+    assert!(manager.agents.running_agents().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -1541,7 +1546,7 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
         )
         .await
         .unwrap();
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
 
     let withdrawn = manager
         .undo_space_done(&SpaceSelector::id(&chat.id))
@@ -1583,7 +1588,7 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let (chat, _) = chat_with_workspace(&temp, &manager).await;
     crate::daemon::test_support::ask(&manager, &chat.id, "Which database?").await;
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(
         (manager.cleanup_candidacy(&stopped.id))
@@ -1599,7 +1604,7 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
 async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let (chat, opened) = chat_with_workspace(&temp, &manager).await;
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let snapshot = (manager.cleanup_snapshot(&stopped.id))
         .await
@@ -1667,7 +1672,7 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
 
     // A chat Shoal saved keeps it from idle cleanup, as a saved agent does,
     // but not from merged cleanup.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let saved = save_agent(&manager, &chat.id);
     assert_eq!(reason().await, CleanupReason::Recovering);
     assert!(merged().await.is_some());

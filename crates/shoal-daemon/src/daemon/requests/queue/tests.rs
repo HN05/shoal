@@ -1,6 +1,6 @@
 use crate::{
     daemon::{
-        agent_queue::tests::launch_in,
+        agent_service::tests::queue::launch_in,
         test_support::{global_config, manager, repository},
     },
     model::QueueRequest,
@@ -24,8 +24,18 @@ async fn the_users_restore_of_a_failed_launch_engages_them() {
         plan: r#"{"launch":{"agent":"claude"}}"#.into(),
         ..launch_in(&workspace, false)
     };
-    let entry = manager.queue_add(request).await.unwrap().entry.unwrap();
-    (manager.fail_queue_entry(&entry.id, "gone")).await.unwrap();
+    let entry = manager
+        .agents
+        .queue_add(&*manager, request)
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    (manager
+        .agents
+        .fail_queue_entry(&*manager, &entry.id, "gone"))
+    .await
+    .unwrap();
 
     let retry = QueueMethod::QueueRetry {
         entry: entry.id.clone(),

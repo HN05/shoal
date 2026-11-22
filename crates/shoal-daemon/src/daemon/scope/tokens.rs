@@ -28,7 +28,7 @@ impl Manager {
     /// The caller `token` acts for: a connected execution, an operation, a
     /// grant's command, or the space that issued it.
     pub(crate) async fn caller(&self, token: &ScopeToken) -> Result<Option<Caller>> {
-        if let Some(caller) = self.executions.scope(token).await {
+        if let Some(caller) = self.agents.executions().scope(token).await {
             return Ok(Some(caller));
         }
         if let Some(caller) = self.operations.caller(token) {

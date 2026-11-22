@@ -140,7 +140,7 @@ pub fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
         // Restores wait in the agent queue; aborting the server ends it too.
         let manager = server.manager.clone();
         clients.spawn(async move {
-            crate::daemon::queued_starts::run(manager).await;
+            crate::daemon::queued_starts::run(manager.agents.clone(), manager).await;
             Ok(())
         });
         loop {

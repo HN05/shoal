@@ -151,7 +151,8 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
     };
 
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             crate::daemon::scope::Caller {

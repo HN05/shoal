@@ -3,6 +3,7 @@
 //! or work outside its process group, counts as working, since that work
 //! may start its next turn.
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
@@ -10,8 +11,8 @@ use rusqlite::Connection;
 
 use crate::{
     Agents,
-    daemon::Daemon,
     model::Execution,
+    model::RunningAgent,
     process::{execution::Processes, identity as process},
     state::AgentState,
     subagents,
@@ -86,14 +87,14 @@ impl Agents {
     }
 
     /// The turn of each execution that reported one.
-    pub async fn agent_turns(&self, daemon: &dyn Daemon) -> Result<HashMap<ExecutionId, Turn>> {
+    pub async fn agent_turns(&self) -> Result<HashMap<ExecutionId, Turn>> {
         let (mut turns, idle) = self.store.read(|db| reported(db, UnixTime::now())).await?;
         if idle.is_empty() {
             return Ok(turns);
         }
         let scan =
             process::scan(idle.iter().map(|execution| execution.id.clone()).collect()).await?;
-        let agents = daemon.agent_trees().await?;
+        let agents = self.agent_trees().await?;
         for execution in idle {
             if Processes::runs_outside_group(&execution, &scan, &agents)
                 && let Some(turn) = turns.get_mut(&execution.id)
@@ -102,5 +103,26 @@ impl Agents {
             }
         }
         Ok(turns)
+    }
+}
+
+impl Agents {
+    /// Whether the agent of the space `id` ended its turn: it reported
+    /// itself idle, or no agent `runs` matches runs any longer.
+    pub async fn turn_ended(
+        &self,
+        id: &SpaceId,
+        runs: impl Fn(&RunningAgent) -> bool,
+    ) -> Result<bool> {
+        let space = id.to_owned();
+        let state = self
+            .store
+            .read(move |db| crate::turn_state::current(db, &space))
+            .await?;
+        if state.is_some_and(|status| status.state == AgentState::Idle) {
+            return Ok(true);
+        }
+        let running = self.running_agents().await?;
+        Ok(!running.iter().any(runs))
     }
 }

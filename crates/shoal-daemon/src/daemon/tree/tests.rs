@@ -210,7 +210,8 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .await
         .unwrap();
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -302,7 +303,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         read_only: false,
         vouched: None,
     };
-    (manager.executions)
+    (manager.agents.executions())
         .issue_scope("scope".into(), scoped.clone())
         .await;
     let check = |space: &str| RemovalMethod::CheckRemoval {
@@ -437,7 +438,8 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         .await
         .unwrap();
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -503,7 +505,8 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
     }
     // The child resumes the agents below it, but not its own.
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "child".into(),
             Caller {
@@ -1006,7 +1009,8 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         .unwrap();
     assert_eq!(messages.len(), 1, "{messages:?}");
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -1093,7 +1097,9 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
     let mut connections = Vec::new();
     for workspace in [&parent, &child] {
         let started = manager
+            .agents
             .begin_execution(
+                &*manager,
                 workspace.id.as_str(),
                 None,
                 crate::daemon::executions::ExecutionKind::Command,
@@ -1102,7 +1108,9 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
             .await
             .unwrap();
         manager
+            .agents
             .track_agent(
+                &*manager,
                 &started.plan.id,
                 &shoal_protocol::executions::TrackedAgent::named("droid"),
                 &workspace.id,
@@ -1174,7 +1182,9 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
         .await
         .unwrap();
     let started = manager
+        .agents
         .begin_execution(
+            &*manager,
             child.id.as_str(),
             None,
             crate::daemon::executions::ExecutionKind::Command,
@@ -1184,7 +1194,9 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
         .unwrap();
     // An agent without turn reports, which protection stops.
     manager
+        .agents
         .track_agent(
+            &*manager,
             &started.plan.id,
             &shoal_protocol::executions::TrackedAgent::named("droid"),
             &child.id,
@@ -1195,12 +1207,17 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
         .await;
     assert!(
         manager
-            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
             .await
     );
     let delegated = manager.delegated_spaces(&parent.id).await.unwrap();
     assert_eq!(delegated.len(), 1, "a stopped agent receives nothing");
-    manager.queue_agent_restore(&started.plan.id).await.unwrap();
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &started.plan.id)
+        .await
+        .unwrap();
     assert!(
         manager
             .delegated_spaces(&parent.id)
@@ -1391,7 +1408,8 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     // decider changes nothing.
     for (workspace, allowed) in [(&root, false), (&parent, true)] {
         manager
-            .executions
+            .agents
+            .executions()
             .issue_scope(
                 format!("scope-{}", workspace.name).into(),
                 Caller {
@@ -1677,7 +1695,7 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
         .await
         .unwrap();
     // Stopped, the chat keeps its workspace but has no agent to tell.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let requested = manager
         .request_approval(ApprovalRequest::new(
             &worker.id,
@@ -1770,7 +1788,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
     assert_eq!(routed.decider.as_ref(), Some(&chat.id));
 
     // Stopped after the request reached it, the chat decides it no more.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let given_back = manager
         .approval_request(requested.number)
         .await
@@ -1898,7 +1916,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     assert_eq!(listed.len(), 1);
 
     // Retrying the request once the chat's agent ended asks the user.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     tokio::time::timeout(
         std::time::Duration::from_secs(10),
         manager.notify_approval(&routed),
@@ -2185,7 +2203,8 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         vouched: None,
     };
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope("scope".into(), caller.clone())
         .await;
     for displayed in [false, true] {
@@ -2288,7 +2307,8 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
         .await
         .unwrap();
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -2427,7 +2447,8 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
             .await
             .unwrap();
         manager
-            .executions
+            .agents
+            .executions()
             .issue_scope(
                 workspace.name.to_string().into(),
                 Caller {

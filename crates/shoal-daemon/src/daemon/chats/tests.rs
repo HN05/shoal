@@ -114,7 +114,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     // The chat stops with its agent, waiting for `shoal resume` with its
     // workspace and its name; an agent that saved no session leaves it
     // naming none.
-    manager.end_executions(&ending.id).await;
+    manager.agents.end_executions(&*manager, &ending.id).await;
     let worker = SpaceRef {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
@@ -230,7 +230,7 @@ async fn a_chat_shows_its_agents_turn_state_until_it_stops() {
 
     // The state ends with the chat's agent, and a report arriving after
     // the stop is not recorded.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     assert!(!manager.chats().await.unwrap()[0].running);
     assert_eq!(shown().await, None);
     report(crate::state::AgentState::Working).await.unwrap();
@@ -373,7 +373,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     std::fs::write(tmp_dir.join("scratch"), "garbage").unwrap();
 
     // A stopped chat keeps it.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     assert!(!manager.chats().await.unwrap()[0].running);
     assert!(tmp_dir.exists());
     manager
@@ -553,7 +553,7 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
     assert!(manager.workspace_by_id(&other.id).await.is_ok());
     assert!(manager.chats().await.unwrap().is_empty());
     // The removal took the chat's agent.
-    assert!(manager.running_agents().await.unwrap().is_empty());
+    assert!(manager.agents.running_agents().await.unwrap().is_empty());
 }
 
 /// Removing a chat stops a process carrying its identity outside its
@@ -741,7 +741,8 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         vouched: None,
     };
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope("chat".into(), caller.clone())
         .await;
     let listed = manager.visible_spaces(Some(&caller)).await.unwrap();
@@ -808,14 +809,18 @@ async fn a_chat_in_a_workspace_names_it_and_runs_only_while_its_worktree_is_ther
     assert!(recorded.children.is_empty());
 
     // A stopped chat keeps naming the workspace.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let stopped = manager.chats().await.unwrap();
     assert!(!stopped[0].running);
     assert_eq!(stopped[0].workdir.workspace().cloned(), named);
 
     let moved = temp.path().join("moved");
     std::fs::rename(&workspace.path, &moved).unwrap();
-    let restore = || manager.begin_agent_execution(chat.id.as_str());
+    let restore = || {
+        manager
+            .agents
+            .begin_agent_execution(&*manager, chat.id.as_str())
+    };
     assert!(restore().await.is_err());
     std::fs::rename(&moved, &workspace.path).unwrap();
     restore().await.unwrap();

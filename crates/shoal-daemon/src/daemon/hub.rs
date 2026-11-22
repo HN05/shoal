@@ -95,7 +95,7 @@ impl Spaces for Manager {
     }
 
     fn running_agents(&self) -> BoxFuture<'_, Result<Vec<RunningAgent>>> {
-        Box::pin(Manager::running_agents(self))
+        Box::pin(self.agents.running_agents())
     }
 
     fn with_agents(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
@@ -203,7 +203,7 @@ impl Approvals for Manager {
         &'a self,
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Vec<SavedSummary>>> {
-        Box::pin(Manager::saved_summaries(self, caller))
+        Box::pin(self.agents.saved_summaries(self, caller))
     }
 
     fn visible_queue(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>> {
@@ -268,7 +268,7 @@ impl Packages for Manager {
 
 impl shoal_hub::daemon::Queue for Manager {
     fn queue_room(&self) -> BoxFuture<'_, Result<shoal_schedule::placement::snapshot::Capacity>> {
-        Box::pin(Manager::queue_room(self))
+        Box::pin(self.agents.queue_room(self))
     }
 }
 

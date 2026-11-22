@@ -45,7 +45,8 @@ impl Manager {
         }
         let blockers = self.worker_blockers(&workspace, &request, caller).await?;
         let entry = self
-            .queue_agent(&selector, request.launch, blockers, None)
+            .agents
+            .queue_agent(self, &selector, request.launch, blockers, None)
             .await?;
         Ok(queued(workspace, entry))
     }
@@ -67,7 +68,8 @@ impl Manager {
             .context("the launch names no workspace")?;
         if let Some(caller) = caller {
             let (mode, given) = (Some(&shape.mode), &launch.permissions);
-            self.ensure_may_replace(caller, &mut selector, launch.replace)
+            self.agents
+                .ensure_may_replace(self, caller, &mut selector, launch.replace)
                 .await?;
             self.worker_target(caller, &mut selector, mode, given)
                 .await?;
@@ -89,8 +91,8 @@ impl Manager {
     ) -> Result<()> {
         let space = self.space(&SpaceSelector::id(&workspace.id)).await?;
         match launch.replace {
-            true => self.ensure_replaceable(&space).await,
-            false => self.ensure_takes_worker(&space).await,
+            true => self.agents.ensure_replaceable(&space).await,
+            false => self.agents.ensure_takes_worker(&space).await,
         }
     }
 
@@ -104,7 +106,10 @@ impl Manager {
     ) -> Result<()> {
         let launch = &request.launch;
         let (mode, given) = (launch.mode.as_ref(), &launch.narrowing);
-        (self.ensure_may_replace(caller, selector, launch.replace)).await?;
+        (self
+            .agents
+            .ensure_may_replace(self, caller, selector, launch.replace))
+        .await?;
         let target = self.worker_target(caller, selector, mode, given).await?;
         if launch.now {
             (self.authorize_start_beyond_limits(caller, "start", target)).await?;

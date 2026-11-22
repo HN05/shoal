@@ -5,31 +5,65 @@
 //! that only note what they tell.
 use std::{
     collections::{HashMap, HashSet},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 use anyhow::{Context, Result};
 use futures_util::future::BoxFuture;
-use rusqlite::{Connection, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction};
 use shoal_core::{
     config::{Config, Effective, repo::ConfigLayers},
+    hooks::HookKind,
     paths::StateFiles,
-    process::identity::AgentTrees,
+    process::load::WorkLimit,
 };
 use shoal_daemon_base::{
-    alerts::AlertKind, config_state::ConfigState, gates::Gates, signals::Signals,
+    alerts::{About, AlertKind},
+    callers::Caller,
+    config_state::ConfigState,
+    gates::Gates,
+    jobs::{JobCost, JobStop},
+    notifications::Notifications,
+    signals::Signals,
 };
-use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_forge_types::items::{link::LinkKind, reference::ItemInput};
+use shoal_ids::{
+    execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, repository_ids::RepositoryId,
+    space_ids::SpaceId,
+};
 use shoal_protocol::{
     agent::Agent,
-    model::{ByKind, Repository, Space, SpacePart, Workspace},
+    approvals::ApprovalRequest,
+    config::{
+        modes::ModeName,
+        permissions::{PermissionChange, PermissionsConfig},
+    },
+    demos::Launch,
+    model::{
+        ByKind, Chat, Completion, MergeOptions, MergePlan, OpenedWorkspace, PortReservation,
+        PreparationWait, QueueEntry, QueueRequest, Relation, Repository, Space, SpaceKind,
+        SpacePart, UnmergePlan, Workspace, WorkspaceUsage,
+    },
     paths::Paths,
+    progress::Progress,
+    protocol::ScopeMemory,
+    repository::Selector,
+    scope_tokens::ScopeToken,
     space_names::{SpaceName, SpaceSelector},
+    state::WorkspaceState,
 };
+use shoal_refs::CommitId;
+use shoal_schedule::{
+    priority::Priority,
+    snapshot::Snapshot,
+    stopping::{RunningDemo, RunningJob},
+};
+use shoal_store::lifecycle::Generation;
+use tokio::sync::watch;
 
 use crate::{
-    Agents,
-    daemon::{Alerts, Executions, Queue, Records, Repositories, Spaces, Turns},
+    Agents, capacity::Activity, daemon::*, execution_connection::RecordChange, model::QueuedJob,
 };
 
 /// The service over a stand-in daemon.
@@ -178,8 +212,9 @@ impl Fixture {
             .await
             .unwrap();
         if let Some(agent) = agent {
-            let mut agents = self.daemon.agents.lock().unwrap();
-            agents.insert(execution.clone(), agent);
+            (self.agents)
+                .track_unconnected(&execution, &workspace.id, &workspace.name, agent)
+                .await;
         }
         execution
     }
@@ -191,12 +226,16 @@ async fn service(paths: Paths, config: Arc<ConfigState>, records: Arc<StandInRec
         .await
         .unwrap();
     Agents::new(
-        store,
+        store.clone(),
         Arc::new(Gates::default()),
         config,
         Arc::new(Signals::default()),
+        Arc::new(Notifications::new(store.clone())),
+        Arc::default(),
         paths,
         records,
+        Arc::new(StandInRemovals),
+        Vec::new(),
     )
 }
 
@@ -208,10 +247,6 @@ pub(crate) struct StandIn {
     pub(crate) spaces: Mutex<Vec<Space>>,
     /// The registered repositories.
     pub(crate) repositories: Mutex<Vec<Repository>>,
-    /// The agent each execution registered.
-    pub(crate) agents: Mutex<HashMap<ExecutionId, Agent>>,
-    /// The executions whose agents Shoal is stopping.
-    pub(crate) stopping: Mutex<HashSet<ExecutionId>>,
     /// What the alerts told, by kind.
     pub(crate) notified: Mutex<Vec<(AlertKind, String)>>,
     /// The failed state reports, each with the space it named.
@@ -267,6 +302,146 @@ impl Spaces for StandIn {
         });
         Box::pin(async { workspace })
     }
+
+    fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn visible_spaces<'a>(&'a self, _: Option<&'a Caller>) -> BoxFuture<'a, Result<Vec<Space>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn workspace_below<'a>(
+        &'a self,
+        _: &'a Caller,
+        _: &'a mut SpaceSelector,
+        _: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn reachable_queue<'a>(
+        &'a self,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Vec<QueueEntry>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn workspace_settings<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn workspace_settings_with_templates<'a>(
+        &'a self,
+        _: &'a Workspace,
+    ) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn workspace_paths(&self) -> BoxFuture<'_, Result<Vec<PathBuf>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn chat_workspace<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn chat_by_id<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Option<Chat>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn chat_repository<'a>(&'a self, _: &'a Chat) -> BoxFuture<'a, Result<Option<Repository>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn chat_checkout_path<'a>(&'a self, _: &'a Chat) -> BoxFuture<'a, Result<PathBuf>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn chat_tmp_dir(&self, _: Option<&Repository>, _: &Chat) -> Result<Option<PathBuf>> {
+        Ok(Default::default())
+    }
+
+    fn completion<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Option<Completion>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn reopen_for_resume<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn space_blocked<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn space_progress<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+    ) -> BoxFuture<'a, Result<Option<Progress>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn launch_priority<'a>(
+        &'a self,
+        _: &'a QueueRequest,
+        _: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Option<Priority>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn ensure_change_held<'a>(
+        &'a self,
+        _: Option<&'a Caller>,
+        _: &'a Space,
+        _: &'a PermissionChange,
+        _: Option<&'a RepositoryId>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn ensure_agent_held<'a>(
+        &'a self,
+        _: Option<&'a Caller>,
+        _: &'a SpaceSelector,
+        _: &'a ModeName,
+        _: &'a PermissionsConfig,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn verify_space<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn touch<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn run_agent_exit_hook<'a>(
+        &'a self,
+        _: &'a Space,
+        _: &'a Agent,
+        _: Option<i32>,
+        _: bool,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn workspace_hook<'a>(
+        &'a self,
+        _: &'a Workspace,
+        _: HookKind,
+    ) -> BoxFuture<'a, Result<Option<PathBuf>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn checkpoint_after_agent<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn workspace_usage(&self, _: &SpaceId) -> Option<WorkspaceUsage> {
+        Default::default()
+    }
 }
 
 impl Repositories for StandIn {
@@ -276,34 +451,21 @@ impl Repositories for StandIn {
         let found = found.cloned().context(NOT_HERE);
         Box::pin(async { found })
     }
-}
 
-impl Executions for StandIn {
-    fn agent_name<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Option<Agent>> {
-        let agent = self.agents.lock().unwrap().get(id).cloned();
-        Box::pin(async { agent })
+    fn selected_repository<'a>(&'a self, _: &'a Selector) -> BoxFuture<'a, Result<Repository>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
     }
 
-    fn agent_stopping<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, bool> {
-        let stopping = self.stopping.lock().unwrap().contains(id);
-        Box::pin(async move { stopping })
+    fn repository_settings<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
     }
 
-    fn agent_trees(&self) -> BoxFuture<'_, Result<AgentTrees>> {
-        Box::pin(async { Ok(AgentTrees::default()) })
-    }
-
-    fn running_agent_spaces(&self) -> BoxFuture<'_, Vec<SpaceId>> {
-        Box::pin(async { Vec::new() })
+    fn repository_layers<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<ConfigLayers>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
     }
 }
 
 impl Alerts for StandIn {
-    fn notify_user(&self, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
-        self.notified.lock().unwrap().push((kind, message));
-        Box::pin(async {})
-    }
-
     fn notify_space<'a>(
         &'a self,
         _: &'a SpaceName,
@@ -324,6 +486,36 @@ impl Alerts for StandIn {
         failures.push((selector.clone(), error.to_owned()));
         Box::pin(async { Ok(()) })
     }
+
+    fn notify<'a>(
+        &'a self,
+        _: Option<&'a SpaceName>,
+        kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, ()> {
+        self.notified.lock().unwrap().push((kind, message));
+        Box::pin(async {})
+    }
+
+    fn notify_about(&self, _: About, _: AlertKind, _: String) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
+
+    fn tell_space<'a>(&'a self, _: &'a SpaceId, _: AlertKind, _: String) -> BoxFuture<'a, bool> {
+        Box::pin(async { Default::default() })
+    }
+
+    fn notify_approval<'a>(&'a self, _: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn ask_user_about<'a>(&'a self, _: &'a [ApprovalRequest]) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn tell_still_blocked<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
 }
 
 impl Turns for StandIn {
@@ -337,8 +529,350 @@ impl Turns for StandIn {
     }
 }
 
-impl Queue for StandIn {
-    fn wake_queue(&self) {}
+impl Lifecycles for StandIn {
+    fn set_state<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: WorkspaceState,
+        _: Option<String>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn reserve_lifecycle<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: WorkspaceState,
+    ) -> BoxFuture<'a, Result<WorkspaceState>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn reserved_since<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: Option<Generation>,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn lifecycle_generation<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Generation>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn check_lifecycle<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn await_reservation_end<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: &'a (dyn Fn() -> Result<()> + Send + Sync),
+    ) -> BoxFuture<'a, Result<Generation>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn ensure_no_pending_rename<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn verify_worktree<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn reopen_workspace<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+    ) -> BoxFuture<'a, Result<OpenedWorkspace>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn refresh_admitted<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+}
+
+impl Operations for StandIn {
+    fn start_waiting_preparations(self: Arc<Self>) -> BoxFuture<'static, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn tell_start_warnings<'a>(&'a self, _: &'a Space, _: &'a [String]) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn pushing_operations(&self) -> Box<dyn Fn(&str) -> bool + Send + Sync> {
+        Box::new(|_| false)
+    }
+
+    fn operations_work_in(&self) -> HashSet<SpaceId> {
+        Default::default()
+    }
+
+    fn operation_runs_in(&self, _: &SpaceId) -> bool {
+        Default::default()
+    }
+
+    fn fakes_workers(&self) -> bool {
+        Default::default()
+    }
+}
+
+impl Merges for StandIn {
+    fn prepare_merge<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+        _: &'a MergeOptions,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<MergePlan>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn prepare_unmerge<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<UnmergePlan>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn authorize_scoped_merge<'a>(
+        &'a self,
+        _: &'a MergePlan,
+        _: &'a Caller,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn authorize_scoped_unmerge<'a>(
+        &'a self,
+        _: &'a UnmergePlan,
+        _: &'a Caller,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn update_merge_records<'a>(&'a self, _: &'a RecordChange) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn follow_pushed_merge_runs<'a>(&'a self, _: &'a RecordChange) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+}
+
+impl Demos for StandIn {
+    fn running_demos(&self) -> BoxFuture<'_, Result<Vec<RunningDemo>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn viewer_group<'a>(&'a self, _: &'a ExecutionId) -> BoxFuture<'a, Result<Option<u32>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn retire_execution_viewer<'a>(&'a self, _: &'a ExecutionId) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn reported_end<'a>(
+        &'a self,
+        _: &'a ExecutionId,
+        _: Option<i32>,
+    ) -> BoxFuture<'a, Option<i32>> {
+        Box::pin(async { Default::default() })
+    }
+
+    fn unrun_demo_launch<'a>(
+        &'a self,
+        _: &'a ExecutionId,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn restart_demo_command<'a>(&'a self, _: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn viewer_spawn_lock(&self, _: &ExecutionId) -> Arc<tokio::sync::Mutex<()>> {
+        Default::default()
+    }
+
+    fn end_viewer(&self, _: &ExecutionId) {}
+}
+
+impl Links for StandIn {
+    fn settle_agent(&self, _: &SpaceId) {}
+
+    fn agent_updates_recorded<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn updates_waiting<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn restart_watches<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: watch::Receiver<bool>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn current_head<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn link_item<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+        _: LinkKind,
+        _: &'a ItemInput,
+        _: Relation,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Vec<String>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
+
+impl Runner for StandIn {
+    fn job_executions(&self) -> BoxFuture<'_, Result<HashMap<SpaceId, ExecutionId>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn running_jobs(&self) -> BoxFuture<'_, Result<Vec<RunningJob>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn runs_job<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, bool> {
+        Box::pin(async { Default::default() })
+    }
+
+    fn wake_runner_for_ended_job<'a>(&'a self, _: &'a ExecutionId) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn job_workspaces(&self) -> BoxFuture<'_, HashSet<SpaceId>> {
+        Box::pin(async { Default::default() })
+    }
+
+    fn cancel_job_before_stopping<'a>(&'a self, _: &'a SpaceId, _: JobStop) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn cancel_job_in<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+        _: JobStop,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn stop_job_for_overload<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: &'static str,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn wake_jobs(&self) {}
+
+    fn job_permits_busy(&self, _: &RepositoryId) -> bool {
+        Default::default()
+    }
+
+    fn job_cost<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+        _: &'a QueuedJob,
+    ) -> BoxFuture<'a, Result<JobCost>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+
+    fn pass_over_job<'a>(
+        &'a self,
+        _: &'a QueueEntryId,
+        _: &'a RepositoryId,
+        _: &'a QueuedJob,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn job_activities(&self) -> BoxFuture<'_, Result<Vec<Activity>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
+
+impl Leases for StandIn {
+    fn release_execution_leases<'a>(&'a self, _: &'a ExecutionId) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn release_agent_leases<'a>(&'a self, _: &'a ExecutionId) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn release_ended_leases_of<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn give_demo_its_leases<'a>(
+        &'a self,
+        _: &'a ExecutionId,
+        _: &'a SpaceId,
+        _: &'a shoal_protocol::demos::Launch,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn reserved_ports<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Vec<PortReservation>>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+}
+
+impl Reviews for StandIn {
+    fn queue_unreviewed(&self, error: anyhow::Error) -> BoxFuture<'_, anyhow::Error> {
+        Box::pin(async { error })
+    }
+}
+
+impl Conversions for StandIn {
+    fn stop_converting_agent<'a>(&'a self, _: &'a SpaceId, _: bool) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn ensure_takes_agents<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn hand_over_before_removal<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+impl Memory for StandIn {
+    fn record_scope_memory<'a>(&'a self, _: &'a ExecutionId, _: ScopeMemory) -> BoxFuture<'a, ()> {
+        Box::pin(async {})
+    }
+
+    fn work_limit(&self) -> Option<WorkLimit> {
+        Default::default()
+    }
+}
+
+impl Ranking for StandIn {
+    fn ranking_snapshot(&self) -> BoxFuture<'_, Result<Snapshot>> {
+        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    }
+}
+
+/// No removals: the stand-in removes no space.
+pub(crate) struct StandInRemovals;
+
+impl Removals for StandInRemovals {
+    fn require_taking_work(&self, db: &Connection, id: &SpaceId) -> Result<()> {
+        shoal_store::require_ready(db, id)
+    }
+
+    fn being_removed(&self, _: &SpaceId) -> bool {
+        false
+    }
 }
 
 /// Records without the other subsystems' tables: no commands an agent
@@ -395,5 +929,91 @@ impl Records for StandInRecords {
 
     fn repository_registered(&self, db: &Connection, id: &RepositoryId) -> Result<bool> {
         shoal_store::exists(db, "SELECT 1 FROM repositories WHERE id=?1", [id])
+    }
+
+    fn space_is_chat(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
+        shoal_store::exists(db, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])
+    }
+
+    fn selected_space(
+        &self,
+        db: &Connection,
+        selector: &SpaceSelector,
+    ) -> Result<Option<(SpaceKind, SpaceId)>> {
+        let Some(id) = selector.given_id() else {
+            return Ok(None);
+        };
+        Ok(db
+            .query_row("SELECT kind FROM spaces WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()?
+            .map(|kind| (kind, id.to_owned())))
+    }
+
+    fn parent_ids(&self, db: &Connection) -> Result<HashMap<SpaceId, SpaceId>> {
+        Ok(db
+            .prepare("SELECT space_id, parent_id FROM space_parents")?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn agent_token(&self, _: &Connection, _: &SpaceId) -> Result<Option<ScopeToken>> {
+        Ok(None)
+    }
+
+    fn preparation_waits(&self, _: &Connection, _: &SpaceId) -> Result<Option<PreparationWait>> {
+        Ok(None)
+    }
+
+    fn note_preparation_stopped(&self, _: &Connection, _: &SpaceId) -> Result<()> {
+        Ok(())
+    }
+
+    fn agent_ended(&self, _: &Transaction<'_>, _: &SpaceId) -> Result<()> {
+        Ok(())
+    }
+
+    fn release_decided_by(&self, _: &Transaction<'_>, _: &SpaceId) -> Result<Vec<ApprovalRequest>> {
+        Ok(Vec::new())
+    }
+
+    fn record_demo(
+        &self,
+        _: &Transaction<'_>,
+        _: &ExecutionId,
+        _: &SpaceId,
+        _: &Launch,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn mark_demo_run(&self, _: &Transaction<'_>, _: &ExecutionId) -> Result<()> {
+        Ok(())
+    }
+
+    fn demo_launch(&self, _: &Connection, _: &ExecutionId) -> Result<Option<Launch>> {
+        Ok(None)
+    }
+
+    fn space_status(
+        &self,
+        db: &Connection,
+        id: &SpaceId,
+        _: &dyn Fn(&str) -> bool,
+    ) -> Result<Option<SpaceStatus>> {
+        let name: Option<String> = db
+            .query_row("SELECT name FROM spaces WHERE id=?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()?;
+        Ok(name.map(|name| SpaceStatus {
+            name,
+            thread: None,
+            approval: None,
+            done: None,
+            ready: None,
+            progress: Steps::default(),
+        }))
     }
 }

@@ -67,7 +67,14 @@ pub(super) async fn handle(
                 caller: caller.cloned(),
             };
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                execution_connection::execute(stream, request_id, manager, context, guard)
+                execution_connection::execute(
+                    stream,
+                    request_id,
+                    manager.agents.clone(),
+                    manager,
+                    context,
+                    guard,
+                )
             }));
         }
         ExecutionMethod::CheckMerge => {

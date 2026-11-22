@@ -135,7 +135,7 @@ impl Agents {
         if !daemon.space_exists(space).await? {
             return Ok(hook_reports::forget(&self.paths, space)?);
         }
-        let (ready, running) = self.ready_reports(daemon, space).await?;
+        let (ready, running) = self.ready_reports(space).await?;
         let selector = SpaceSelector::Id(space.to_owned());
         for error in lost_errors(&ready) {
             daemon.report_state_failure(&selector, &error).await?;
@@ -155,16 +155,12 @@ impl Agents {
     /// with those whose agent still runs, oldest first. The others stay,
     /// as does one made before a report a hook still sends, which may
     /// overtake it once it arrives.
-    async fn ready_reports(
-        &self,
-        daemon: &dyn Daemon,
-        space: &SpaceId,
-    ) -> Result<(Vec<Left>, Vec<Kept>)> {
+    async fn ready_reports(&self, space: &SpaceId) -> Result<(Vec<Left>, Vec<Kept>)> {
         let found = hook_reports::find(&self.paths, space)?;
         let mut ready = Vec::new();
         let mut running = Vec::new();
         for left in found.left {
-            match self.reporter(daemon, space, left.kept.as_ref()).await? {
+            match self.reporter(space, left.kept.as_ref()).await? {
                 Reporter::Reattaching => continue,
                 Reporter::Gone => {}
                 Reporter::Runs if overtaken(left.kept.as_ref(), found.sending) => continue,
@@ -189,10 +185,7 @@ impl Agents {
         kept: Kept,
     ) -> Result<()> {
         let _order = self.report_times.order(space).await;
-        let runs = matches!(
-            self.reporter(daemon, space, Some(&kept)).await?,
-            Reporter::Runs
-        );
+        let runs = matches!(self.reporter(space, Some(&kept)).await?, Reporter::Runs);
         let latest = runs && self.latest_report(space, kept.at).await?;
         hook_reports::mark_delivered(&self.paths, space, &kept)?;
         if latest {
@@ -202,12 +195,7 @@ impl Agents {
     }
 
     /// Where the agent that made `kept` in `space` stands.
-    async fn reporter(
-        &self,
-        daemon: &dyn Daemon,
-        space: &SpaceId,
-        kept: Option<&Kept>,
-    ) -> Result<Reporter> {
+    async fn reporter(&self, space: &SpaceId, kept: Option<&Kept>) -> Result<Reporter> {
         let Some(kept) = kept else {
             return Ok(Reporter::Gone);
         };
@@ -225,7 +213,7 @@ impl Agents {
         };
         // A failed turn's retry and the prompt cache's lifetime read the
         // agent its wrapper registers.
-        let registered = found.agent.is_none() || daemon.agent_name(&execution).await.is_some();
+        let registered = found.agent.is_none() || self.agent_name(&execution).await.is_some();
         Ok(match found.state {
             ExecutionState::Running if registered => Reporter::Runs,
             _ => Reporter::Reattaching,

@@ -97,8 +97,10 @@ impl Manager {
         };
         let selector = SpaceSelector::id(&chat.id);
         let kind = super::executions::ExecutionKind::Command;
-        let mut started =
-            (self.begin_execution_placed(&selector, None, kind, None, request)).await?;
+        let mut started = (self
+            .agents
+            .begin_execution_placed(&**self, &selector, None, kind, None, request))
+        .await?;
         let agent = shoal_protocol::executions::TrackedAgent {
             name: chat.agent.clone().context("the chat names no agent")?,
             model: Default::default(),
@@ -108,18 +110,21 @@ impl Manager {
         };
         let id = started.plan.id.clone();
         let running = std::time::Duration::ZERO;
-        (self.track_agent(&id, &agent, &chat.id, &chat.name, true, running)).await;
+        (self
+            .agents
+            .track_agent(&**self, &id, &agent, &chat.id, &chat.name, true, running))
+        .await;
         let (manager, space) = (self.clone(), chat.id.clone());
         tokio::spawn(async move {
             if started.stop.wait_for(|stop| *stop).await.is_ok() {
-                let request = manager.executions.stop_request(&id).await;
+                let request = manager.agents.executions().stop_request(&id).await;
                 if let Some(request) = request.filter(|request| request.saves(true)) {
                     use crate::execution::recovery::{self, RecordExt};
                     let stage = shoal_protocol::executions::Stage::Stopped;
                     let record = recovery::Record::new(&agent, Some(&request.reason), stage, None);
                     recovery::save_stopped(&manager.paths, &space, &id, record, None).unwrap();
                 }
-                manager.end_test_execution(id).await;
+                manager.agents.end_test_execution(&*manager, id).await;
             }
         });
         self.chat_by_id(&chat.id)
@@ -281,7 +286,7 @@ impl Manager {
         place: Option<crate::sessions::Origin>,
     ) -> Result<Chat> {
         ensure!(
-            !self.agent_queue.suspended(),
+            !self.agents.agent_queue().suspended(),
             "Shoal is stopping work for a shutdown or a daemon stop; start the chat once it is over"
         );
         let below = parent.map(|parent| (parent, self.space_removals.clone()));
@@ -297,7 +302,7 @@ impl Manager {
             .await?;
         let chat = (self.give_tmp_dir(chat, home.repository.as_ref())).await?;
         if let Some(place) = place {
-            self.take_chat_place(&chat.id, place).await?;
+            self.agents.take_chat_place(&chat.id, place).await?;
         }
         Ok(chat)
     }

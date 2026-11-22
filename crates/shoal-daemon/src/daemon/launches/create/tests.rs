@@ -43,7 +43,14 @@ async fn a_creation_records_a_top_level_workspace_without_an_agent() {
     assert_eq!(started.workspace.branch().map(|b| b.as_str()), Some("fix"));
     assert_eq!(started.workspace.parent, None);
     assert!(started.entry.is_none());
-    assert!(manager.queue_entries().await.unwrap().is_empty());
+    assert!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 /// A creation that names what only an agent takes, or nothing a branch

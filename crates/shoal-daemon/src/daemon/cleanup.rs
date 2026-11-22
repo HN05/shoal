@@ -203,7 +203,7 @@ pub fn walk(root: &Path) -> Result<Tree> {
 /// steps after it; the error names each step that failed, in the workspace
 /// it failed in where it concerns one.
 pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFailures> {
-    manager.cleanup_orphan_sessions().await;
+    manager.agents.cleanup_orphan_sessions(manager).await;
     let mut failed = SweepFailures::default();
     let mut step = |name: &str, result: Result<()>| failed.step(name, result);
     step(
@@ -517,7 +517,7 @@ pub async fn on_request(
 ) -> Result<ManualCleanup> {
     let targets = Targets::of(manager, selection).await?;
     if !dry_run {
-        manager.cleanup_orphan_sessions().await;
+        manager.agents.cleanup_orphan_sessions(manager).await;
     }
     let mut report = ManualCleanup {
         dry_run,

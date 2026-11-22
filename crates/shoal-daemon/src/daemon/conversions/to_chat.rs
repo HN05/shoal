@@ -31,8 +31,9 @@ impl Manager {
         super::ensure_mode(&settings, &mode)?;
         // No agent starts in the workspace from when the one that carries on
         // is chosen.
-        let _admissions = self.agent_admissions.lock().await;
+        let _admissions = self.agents.agent_admissions().lock().await;
         let execution = self
+            .agents
             .running_agents()
             .await?
             .into_iter()
@@ -55,16 +56,11 @@ impl Manager {
         Ok(workspace)
     }
 
-    /// Admit an agent to the workspace `selector` names, unless it converts:
+    /// Refuse an agent of the workspace `selector` names while it converts:
     /// one that becomes a chat, whose agent carries on there, or a chat that
     /// became it, whose agent's turn end, which another agent's reports
-    /// would hide, moves it there. The guard, held until the agent is
-    /// tracked, keeps the workspace from becoming a chat meanwhile.
-    pub(crate) async fn admit_agent(
-        &self,
-        selector: &SpaceSelector,
-    ) -> Result<tokio::sync::MutexGuard<'_, ()>> {
-        let admitted = self.agent_admissions.lock().await;
+    /// would hide, moves it there. The caller holds the agents' admissions.
+    pub(crate) async fn ensure_takes_agents(&self, selector: &SpaceSelector) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let id = workspace.id.clone();
         let pending = self.store.run(move |db| super::pending(db, &id)).await?;
@@ -77,7 +73,7 @@ impl Manager {
                 "the agent of the chat that became workspace {} moves there once its turn ends; start another agent there then",
                 workspace.name
             ),
-            None => Ok(admitted),
+            None => Ok(()),
         }
     }
 

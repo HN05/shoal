@@ -578,7 +578,14 @@ async fn a_scoped_start_reopening_a_workspace_keeps_what_its_agent_was_given() {
         )
         .await;
     assert!(refused.is_err(), "{refused:?}");
-    assert!(manager.queue_entries().await.unwrap().is_empty());
+    assert!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]

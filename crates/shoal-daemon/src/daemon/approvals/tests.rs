@@ -466,7 +466,11 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
         read_only: false,
         vouched: None,
     };
-    manager.executions.issue_scope("scope".into(), caller).await;
+    manager
+        .agents
+        .executions()
+        .issue_scope("scope".into(), caller)
+        .await;
     for (target, allowed) in [(&workspace.id, true), (&other.id, false)] {
         let mut method = crate::protocol::ApprovalMethod::WithdrawApproval {
             space: SpaceSelector::from(target),

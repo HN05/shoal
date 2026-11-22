@@ -58,6 +58,7 @@ impl Running {
         let executing = tokio::spawn(execute(
             server,
             1,
+            manager.agents.clone(),
             manager.clone(),
             ExecutionContext {
                 space: SpaceSelector::id(&workspace.id),
@@ -101,7 +102,9 @@ impl Running {
         )
         .unwrap();
         manager
+            .agents
             .queue_stopped_restore(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 &ExecutionId::from("earlier"),
                 Default::default(),
@@ -127,7 +130,9 @@ impl Running {
         let control: Control = read(&mut self.connection).await;
         // No execution starts while the stop runs, to outlive it.
         self.manager
+            .agents
             .begin_execution(
+                &*self.manager,
                 self.workspace.id.as_str(),
                 None,
                 ExecutionKind::Command,
@@ -153,6 +158,7 @@ impl Running {
 
     async fn queued_restore(&self) -> bool {
         self.manager
+            .agents
             .queued_stopped_restores()
             .await
             .unwrap()
@@ -222,7 +228,7 @@ async fn a_restart_and_a_signal_after_a_system_shutdown_stop_leave_work_alone() 
     let mut running = Running::start().await;
     bounded(running.manager.end_work(Ending::Detach)).await;
     // A signal during a system shutdown's stop waits for that stop.
-    let mut stopping = running.manager.shutdown_stopped.lock().await;
+    let mut stopping = running.manager.agents.shutdown_stopped().lock().await;
     let mut signaled = Box::pin(running.manager.end_work(Ending::Save));
     assert!(signaled.as_mut().now_or_never().is_none());
     *stopping = true;

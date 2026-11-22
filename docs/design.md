@@ -161,20 +161,25 @@ executables and environments, which read ports and temporary directories,
 fetching and fast-forwarding a default branch, which the refresh of a
 workspace's branch shares, and whether the host has headroom for a build.
 `shoal-agents` holds the agents the daemon runs: its `Agents` service
-records the turn state their hooks report, with the reports a hook left
-behind, and the subagents they run, retries the turns an API error ended,
-queues and delivers the alerts for an agent once a run of them settles,
-follows the user's engagement with each agent, wakes the agents idle for
-their mode's period, fires the timers of `shoal sleep`, keeps the agents'
-tools' trust in a repository's paths as it moves or goes, and holds the
-machine awake while agents have work. The spaces
-agents run in and their settings, the alerts that tell of them, what else
-ends with a turn, such as a marked final message, and what attaching files
-to an alert copies stay with the daemon, which its interface reaches, as
-do, until they move into the crate, the code of the executions and the
-agent queue. The crate owns the agents' records, the executions' and the
-queue's among them, and reads what the spaces and repositories record
-through its interface.
+tracks the executions their wrappers register and relay, admits, starts
+and restores agents through the agent queue, stops, restarts and
+interrupts them, stops them for overload, disk space and shutdowns,
+recovers what a daemon restart left, keeps their sessions, places and
+stopped work, records the turn state their hooks report, with the reports
+a hook left behind, and the subagents they run, retries the turns an API
+error ended, queues and delivers the alerts for an agent once a run of
+them settles, follows the user's engagement with each agent, wakes the
+agents idle for their mode's period, fires the timers of `shoal sleep`,
+keeps the agents' tools' trust in a repository's paths as it moves or
+goes, and holds the machine awake while agents have work. The spaces
+agents run in, their lifecycles and settings, the alerts that tell of
+them, the leases, CI jobs, demos, merges, links and conversions that end
+or wait with an agent, and the snapshot the queue's policy ranks, which
+reads the spaces' labels and areas, stay with the daemon, which its
+interface reaches, as do, until they move into the crate, the launches
+that create a space for an agent. The crate owns the agents' records, the
+executions' and the queue's among them, and reads what the spaces and
+repositories record through its interface.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

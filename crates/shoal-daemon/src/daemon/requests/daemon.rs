@@ -148,9 +148,13 @@ async fn exited(manager: &Manager, stopped: &StoppedSpaces) -> Exited {
             spaces,
         };
     }
-    let spaces: Vec<_> = (manager.awaiting_restore(&stopped.spaces).await.into_iter())
-        .map(|space| space.number)
-        .collect();
+    let spaces: Vec<_> = (manager
+        .agents
+        .awaiting_restore(&stopped.spaces)
+        .await
+        .into_iter())
+    .map(|space| space.number)
+    .collect();
     Exited {
         stopped_work: !spaces.is_empty(),
         spaces,

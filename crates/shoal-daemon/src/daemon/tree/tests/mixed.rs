@@ -98,7 +98,7 @@ pub(super) async fn decider(
 /// End `chat`'s agent, `process`, as a stop leaves it to resume.
 pub(super) async fn stop_chat(manager: &Manager, chat: &Chat, process: ProcessGroup) {
     process.kill();
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(manager, &chat.id).await;
 }
 
 #[tokio::test]
@@ -451,7 +451,8 @@ async fn a_scoped_chat_starts_chats_only_in_the_worktrees_of_its_tree() {
         .unwrap();
     let (root, chat, worker, _process) = mixed_tree(&manager, &repo.id).await;
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             crate::daemon::scope::Caller {
@@ -504,7 +505,11 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
             read_only: false,
             vouched: None,
         };
-        manager.executions.issue_scope(token.clone(), scope).await;
+        manager
+            .agents
+            .executions()
+            .issue_scope(token.clone(), scope)
+            .await;
         let mut restart = crate::protocol::AgentMethod::RestartAgent {
             space: shoal_protocol::space_names::SpaceSelector::id(&chat.id),
             restart: Default::default(),

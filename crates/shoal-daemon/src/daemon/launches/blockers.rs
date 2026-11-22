@@ -38,7 +38,9 @@ impl Manager {
             });
         }
         let selector = repository.into();
-        self.check_blockers(&selector, blockers.clone()).await?;
+        self.agents
+            .check_blockers(self, &selector, blockers.clone())
+            .await?;
         Ok(blockers)
     }
 

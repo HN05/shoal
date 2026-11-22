@@ -285,7 +285,7 @@ async fn a_chats_file_events_name_the_chat() {
         )
         .await
         .unwrap();
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .remove_selected(
             &SpaceSelector::id(&chat.id),
@@ -346,7 +346,7 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
         )
         .await
         .unwrap();
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .remove_selected(
             &SpaceSelector::id(&chat.id),

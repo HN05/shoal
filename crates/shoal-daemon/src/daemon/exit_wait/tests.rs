@@ -38,7 +38,8 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
     assert!(quiesce(&manager).is_some());
     // Connected setup and merges stop with the daemon.
     manager
-        .executions
+        .agents
+        .executions()
         .mark_unattachable(&ExecutionId::from("setup"), &SpaceId::from("workspace"));
     assert!(quiesce(&manager).is_none());
 }
@@ -84,7 +85,7 @@ async fn an_exit_names_each_workspace_it_would_cut_off_once() {
     let before_removal = before_removal.await.unwrap();
     let state = WorkspaceState::Removing;
     manager.set_state(&removing.id, state, None).await.unwrap();
-    let executions = &manager.executions;
+    let executions = &manager.agents.executions();
     executions.mark_unattachable(&ExecutionId::from("setup"), &setting_up.id);
     executions.mark_unattachable(&ExecutionId::from("merge"), &merging.id);
 
@@ -170,7 +171,7 @@ async fn an_exit_that_does_not_wait_refuses_named_work_and_holds_nothing_back() 
     let (root, manager) = manager().await;
     let repository = registered(root.path(), &manager).await;
     let setting_up = workspace(&manager, &repository, "setting-up").await;
-    let executions = &manager.executions;
+    let executions = &manager.agents.executions();
     executions.mark_unattachable(&ExecutionId::from("setup"), &setting_up.id);
     let (mut client, wait) = waiting(&manager, ExitWhen::IfIdle);
     let blocked = [Work::Command {

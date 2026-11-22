@@ -25,7 +25,7 @@ mod xcode;
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use copies::CopyPlace;
 pub(crate) use creation::{NewWorkspace, build_pending_in, pending_revisions};
-pub(crate) use merge::{RecordChange, squash_message};
+pub(crate) use merge::squash_message;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use stack::record_base_changed;
 
@@ -123,7 +123,7 @@ impl Manager {
                 })
             })
             .await?;
-        self.annotate_stops(&mut inspection.executions).await;
+        self.agents.annotate_stops(&mut inspection.executions).await;
         Ok(inspection)
     }
 
@@ -172,7 +172,7 @@ impl Manager {
     pub(crate) async fn forget_workspace(&self, id: &SpaceId) {
         self.usage.forget_workspace(id);
         self.repositories.forget_rejected_config(id);
-        self.executions.forget_workspace(id).await;
+        self.agents.executions().forget_workspace(id).await;
     }
 }
 

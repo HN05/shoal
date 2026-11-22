@@ -252,7 +252,8 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
     let own = create_branch("own").await.unwrap();
     let other = create_branch("other").await.unwrap();
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {

@@ -61,7 +61,10 @@ async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) 
         .unwrap();
     if !reviewers.is_empty() {
         tokio::spawn(shoal_reviews::run(manager.reviews.clone(), manager.clone()));
-        tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
+        tokio::spawn(crate::daemon::queued_starts::run(
+            manager.agents.clone(),
+            manager.clone(),
+        ));
     }
     Fixture {
         _root: root,
@@ -147,7 +150,8 @@ async fn a_review_protection_stops_is_queued_again() {
     }
     assert!(
         manager
-            .stop_for_overload(crate::daemon::overload::Pressure::Memory)
+            .agents
+            .stop_for_overload(&**manager, crate::daemon::overload::Pressure::Memory)
             .await
     );
     while manager
@@ -325,7 +329,8 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     let parent_review = fixture.review().await;
     let child_review = fixture.review_of(&child.id).await;
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -352,7 +357,8 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
             .unwrap();
     }
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "child-scope".into(),
             Caller {
@@ -750,10 +756,13 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         .await
         .unwrap();
     tokio::spawn(shoal_reviews::run(manager.reviews.clone(), manager.clone()));
-    tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
+    tokio::spawn(crate::daemon::queued_starts::run(
+        manager.agents.clone(),
+        manager.clone(),
+    ));
     // No admission pass runs while the test holds the gate, so the review
     // waits for one.
-    let gate = manager.agent_queue.lock_admission().await;
+    let gate = manager.agents.agent_queue().lock_admission().await;
     let mut ended = manager.reviews.ends();
     let target = ReviewTarget::Pr {
         url: "https://forge.example/team/repo/pulls/8".parse().unwrap(),
@@ -773,7 +782,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         .await
         .unwrap();
     // The review read the workspace and waits for admission.
-    while manager.agent_queue.waiting_oneshots().is_empty() {
+    while manager.agents.agent_queue().waiting_oneshots().is_empty() {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
     // Meanwhile the PR's head moves, and its workspace with it.
@@ -795,7 +804,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         .await
         .unwrap();
     drop(gate);
-    manager.agent_queue.wake();
+    manager.agents.agent_queue().wake();
     ended.changed().await.unwrap();
     let review = manager
         .reviews

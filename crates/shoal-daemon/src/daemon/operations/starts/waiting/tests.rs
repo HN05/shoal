@@ -131,7 +131,8 @@ async fn a_stopped_waiting_start_waits_for_its_agent_until_prepared_explicitly()
     // Its stop cancels the agent waiting there and keeps the workspace.
     let selector = SpaceSelector::id(&ui.id);
     let stopped = manager
-        .stop_space_manually(&selector, false, QueuedLaunches::Cancel)
+        .agents
+        .stop_space_manually(&*manager, &selector, false, QueuedLaunches::Cancel)
         .await
         .unwrap();
     assert_eq!(stopped.cancelled.len(), 1);
@@ -180,7 +181,14 @@ async fn a_waiting_start_goes_with_its_record() {
         )
         .await
         .unwrap();
-    assert!(manager.queue_entries().await.unwrap().is_empty());
+    assert!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     done(&manager, &api).await;
     manager.start_waiting_preparations().await.unwrap();
     assert!(!manager.operation_runs_in(&ui.id));
@@ -195,7 +203,11 @@ async fn a_release_after_its_agent_was_stopped_keeps_the_preparation_waiting() {
     let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
     done(&manager, &api).await;
     // The stop lands after the pass found the blocker done.
-    manager.cancel_waiting_launches(&ui.id).await.unwrap();
+    manager
+        .agents
+        .cancel_waiting_launches(&*manager, &ui.id)
+        .await
+        .unwrap();
     manager.release_preparation(&ui.id, None).await;
     assert!(!manager.operation_runs_in(&ui.id));
     assert!(read(&manager, &ui).await.preparation_waits.is_some());
@@ -213,11 +225,20 @@ async fn a_stop_after_the_release_leaves_the_launch_to_the_started_preparation()
     assert!(manager.operation_runs_in(&ui.id));
     // A stop that read the wait before the release cancels nothing.
     let cancelled = manager
-        .cancel_launches_while_preparation_waits(&ui.id)
+        .agents
+        .cancel_launches_while_preparation_waits(&*manager, &ui.id)
         .await
         .unwrap();
     assert!(cancelled.is_none());
-    assert_eq!(manager.queue_entries().await.unwrap().len(), 1);
+    assert_eq!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -243,7 +264,11 @@ async fn stopping_everything_stops_a_waiting_workspace() {
     let api = create(&manager, &repo, "api").await;
     let blocker = Blocker::Space(api.id.to_string());
     let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
-    let targets = manager.stop_targets(QueuedLaunches::Cancel).await.unwrap();
+    let targets = manager
+        .agents
+        .stop_targets(&*manager, QueuedLaunches::Cancel)
+        .await
+        .unwrap();
     assert!(targets.iter().any(|space| space.id == ui.id), "{targets:?}");
 }
 
@@ -256,7 +281,8 @@ async fn a_pass_that_read_the_wait_before_a_stop_keeps_the_stop() {
     let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
     let read_before = read(&manager, &ui).await.part.preparation_waits.unwrap();
     manager
-        .cancel_launches_while_preparation_waits(&ui.id)
+        .agents
+        .cancel_launches_while_preparation_waits(&*manager, &ui.id)
         .await
         .unwrap();
     let pass = (&read_before, &PreparationWait::Disk);
@@ -298,7 +324,11 @@ async fn a_cancelled_queue_entry_leaves_its_preparation_to_a_restore() {
     let blocker = Blocker::Space(api.id.to_string());
     let started = start(&manager, &repo, "ui", vec![blocker]).await;
     let entry = started.entry.as_ref().unwrap().id.clone();
-    manager.queue_remove(entry.as_str(), None).await.unwrap();
+    manager
+        .agents
+        .queue_remove(&*manager, entry.as_str(), None)
+        .await
+        .unwrap();
     let waits = read(&manager, &started.workspace)
         .await
         .part
@@ -333,12 +363,18 @@ async fn a_stopped_start_without_an_agent_stays_stopped_once_disk_allows() {
         .await
         .unwrap();
     let ui = *started.workspace;
-    let targets = manager.stop_targets(QueuedLaunches::Cancel).await.unwrap();
-    assert!(targets.iter().any(|space| space.id == ui.id), "{targets:?}");
-    let selector = SpaceSelector::id(&ui.id);
-    (manager.stop_space_manually(&selector, false, QueuedLaunches::Cancel))
+    let targets = manager
+        .agents
+        .stop_targets(&*manager, QueuedLaunches::Cancel)
         .await
         .unwrap();
+    assert!(targets.iter().any(|space| space.id == ui.id), "{targets:?}");
+    let selector = SpaceSelector::id(&ui.id);
+    (manager
+        .agents
+        .stop_space_manually(&*manager, &selector, false, QueuedLaunches::Cancel))
+    .await
+    .unwrap();
     manager.publish_config(global_config(""));
     manager.start_waiting_preparations().await.unwrap();
     assert!(!manager.operation_runs_in(&ui.id));
@@ -449,5 +485,12 @@ async fn a_start_waiting_for_no_such_space_records_nothing() {
         .await;
     assert!(refused.is_err(), "{refused:?}");
     assert!(manager.list_workspaces().await.unwrap().is_empty());
-    assert!(manager.queue_entries().await.unwrap().is_empty());
+    assert!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }

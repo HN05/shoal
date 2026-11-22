@@ -15,18 +15,27 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(manager: &Arc<Manager>, method: PlaceMethod) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        PlaceMethod::CloseOwnedPlace { workspace, place } => {
-            Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
-        }
-        PlaceMethod::PlaceOwnership { space, place } => {
-            Body::PlaceOwnership(manager.place_ownership(&space, &place).await?)
-        }
+        PlaceMethod::CloseOwnedPlace { workspace, place } => Body::PlaceClose(
+            manager
+                .agents
+                .close_recorded_place(&workspace, &place)
+                .await?,
+        ),
+        PlaceMethod::PlaceOwnership { space, place } => Body::PlaceOwnership(
+            manager
+                .agents
+                .place_ownership(&**manager, &space, &place)
+                .await?,
+        ),
         PlaceMethod::OwnedPlaces => owned_places(manager).await?,
         PlaceMethod::SpacePlaces { space } => {
-            Body::SpacePlaces(manager.space_places(&space).await?)
+            Body::SpacePlaces(manager.agents.space_places(&**manager, &space).await?)
         }
         PlaceMethod::RecordOwnedPlace { workspace, origin } => {
-            manager.record_owned_place(&workspace, origin).await?;
+            manager
+                .agents
+                .record_owned_place(&**manager, &workspace, origin)
+                .await?;
             Body::Ok
         }
     }))
@@ -36,6 +45,7 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: PlaceMethod) -> Resul
 async fn owned_places(manager: &Manager) -> Result<Body> {
     Ok(Body::OwnedPlaces(
         manager
+            .agents
             .owned_places(None)
             .await?
             .into_iter()

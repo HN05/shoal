@@ -159,7 +159,12 @@ impl Manager {
         if running
             && quiescent
             && let Err(error) = self
-                .stop_space(&SpaceSelector::id(&workspace.id), StopRequest::repair())
+                .agents
+                .stop_space(
+                    self,
+                    &SpaceSelector::id(&workspace.id),
+                    StopRequest::repair(),
+                )
                 .await
         {
             report.issues.push(format!("connected stop: {error:#}"));
@@ -313,8 +318,8 @@ impl Manager {
         scan: &mut process::Scan,
         ids: &HashSet<ExecutionId>,
     ) -> Result<ExecutionReport> {
-        let connected = self.executions.is_connected(&execution.id).await;
-        let agents = self.agent_wrappers().await?;
+        let connected = self.agents.executions().is_connected(&execution.id).await;
+        let agents = self.agents.agent_wrappers().await?;
         let mut processes = Processes::inspect(execution, &workspace.path, scan, &agents).await?;
         if options.stop && !connected {
             let inventory = (scan, ids, agents.as_slice());
@@ -374,7 +379,7 @@ impl Manager {
         if !users.is_empty() {
             return Ok(Clearance::DirectoryInUse(users));
         }
-        self.forget_execution(id).await?;
+        self.agents.forget_execution(self, id).await?;
         Ok(Clearance::Cleared)
     }
 }

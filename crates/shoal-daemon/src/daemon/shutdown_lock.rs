@@ -47,12 +47,12 @@ async fn hold(manager: &Manager, mut login: impl LoginManager) {
         if !announced(&mut login, true).await {
             return;
         }
-        manager.stop_for_system_shutdown().await;
+        manager.agents.stop_for_system_shutdown(manager).await;
         drop(lock);
         if !announced(&mut login, false).await {
             return;
         }
-        manager.system_shutdown_cancelled().await;
+        manager.agents.system_shutdown_cancelled().await;
     }
 }
 

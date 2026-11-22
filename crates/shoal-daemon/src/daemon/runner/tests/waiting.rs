@@ -58,7 +58,8 @@ fn job(handle: &str, id: u64, run: u64) -> Value {
 
 async fn jobs(manager: &Manager) -> Vec<QueueEntry> {
     manager
-        .queue_entries()
+        .agents
+        .queue_entries(manager)
         .await
         .unwrap()
         .into_iter()
@@ -153,7 +154,8 @@ async fn waiting_jobs_join_the_queue_linked_to_their_workspace_until_the_forge_d
 
     // A passed-over job stays with the forge for other runners.
     manager
-        .queue_remove(&manager.queued("ci-rust-4").await, None)
+        .agents
+        .queue_remove(&*manager, &manager.queued("ci-rust-4").await, None)
         .await
         .unwrap();
     refresh_waiting_jobs(&manager).await;
@@ -241,7 +243,8 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
         .await
         .unwrap();
     let order: Vec<String> = manager
-        .queue_entries()
+        .agents
+        .queue_entries(&*manager)
         .await
         .unwrap()
         .into_iter()

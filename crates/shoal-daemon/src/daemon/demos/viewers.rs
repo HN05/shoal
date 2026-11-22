@@ -140,7 +140,12 @@ impl Manager {
     ) -> Result<Starting> {
         let spawning = self.viewers.spawn_lock(&demo.execution_id);
         let _spawning = spawning.lock().await;
-        if self.executions.completing(&demo.execution_id).is_some() {
+        if self
+            .agents
+            .executions()
+            .completing(&demo.execution_id)
+            .is_some()
+        {
             let message = format!("demo {} is stopping", demo.launch.name);
             return Err(Refusal::new(Reason::NotReady, message).into());
         }
@@ -252,8 +257,8 @@ impl Manager {
     /// Where `demo`'s viewer runs: the demo's verified worktree, with the
     /// environment the demo's execution gives its commands, scope included.
     async fn viewer_place(&self, demo: &Running) -> Result<Place> {
-        let home = self.execution_home(&demo.workspace_id).await?;
-        let (home, configured, ports) = self.joining_environment(home).await?;
+        let home = self.agents.execution_home(self, &demo.workspace_id).await?;
+        let (home, configured, ports) = self.agents.joining_environment(home).await?;
         let space = home.plan_space();
         let execution = demo.execution_id.clone();
         let token = self

@@ -160,7 +160,14 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     )
     .await;
     let setup = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Setup, None)
+        .agents
+        .begin_execution(
+            &*manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Setup,
+            None,
+        )
         .await;
     assert!(setup.is_err());
     fs::write(destination.join("partial"), "")?;
@@ -645,7 +652,9 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
     let identity = crate::process::identity::capture(wrapper.id().context("no PID")?)?
         .context("wrapper exited")?;
     let execution = manager
+        .agents
         .begin_execution(
+            &*manager,
             workspace.id.as_str(),
             Some(identity),
             ExecutionKind::Command,
@@ -946,7 +955,7 @@ async fn a_root_move_stops_the_chats_without_a_repository_and_takes_their_files(
             .await
             .is_err()
     );
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .repositories
         .move_all(&*manager, Layout::Excluded)
@@ -968,7 +977,7 @@ async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> 
     fs::write(&report, "Plan")?;
     let selector = SpaceSelector::id(&chat.id);
     (manager.add_attached_files(&selector, vec![report.into()], &Attacher::User)).await?;
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await?;
@@ -988,7 +997,7 @@ async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> 
 async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository() -> Result<()> {
     let (temp, manager, chat, root) = with_master().await?;
     let selector = SpaceSelector::id(&chat.id);
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await?;
@@ -1057,7 +1066,7 @@ async fn an_import_reading_a_package_holds_back_the_move() -> Result<()> {
 #[tokio::test]
 async fn a_root_move_takes_what_imports_left_in_root_dir_unless_one_reads() -> Result<()> {
     let (_temp, manager, chat, root) = with_master().await?;
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let imports = manager.outside_imports(&root);
     reading_import(&imports)?;
     assert!(
@@ -1082,7 +1091,7 @@ async fn a_root_move_takes_what_imports_left_in_root_dir_unless_one_reads() -> R
 #[tokio::test]
 async fn a_root_move_keeps_a_package_an_import_reads_into_the_root_it_leaves() -> Result<()> {
     let (temp, manager, chat, root) = with_master().await?;
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     let imports = manager.outside_imports(&root);
     reading_import(&imports)?;
     let moved_to = fs::canonicalize(temp.path())?.join("new");

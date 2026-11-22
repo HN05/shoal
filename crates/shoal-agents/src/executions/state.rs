@@ -1,0 +1,393 @@
+//! What the daemon keeps in memory about executions while their wrappers are
+//! connected: the channel that stops each, the agents they run, the restarts
+//! that left their agent to a new wrapper, why the daemon asked them to stop,
+//! how far each reported exit has been recorded, and the scope tokens that
+//! act for them.
+//!
+//! Locks are taken in the order connections, agents, renewals, stop
+//! requests. Agents, renewals and stop requests are reached only through
+//! closures, which cannot await another lock, or through [`Connections`],
+//! which already holds the first.
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::scope_tokens::ScopeToken;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    sync::{
+        Mutex as StdMutex, PoisonError,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
+use anyhow::{Context, Result, ensure};
+use tokio::sync::{Mutex, MutexGuard, watch};
+
+use super::{ExecutionKind, StopRequest};
+use crate::control::Agent;
+use crate::control::Renewals;
+use crate::control::forget_ended_renewals;
+use shoal_daemon_base::callers::Caller;
+use shoal_daemon_base::callers::ScopedExecution;
+
+/// Launches that ended unrun the daemon remembers; a start asks about its
+/// own within moments.
+const UNRUN_LAUNCHES: usize = 64;
+
+/// The step a connected execution's completion is on after its wrapper
+/// reported the exit, named when a stop times out waiting for it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Completing {
+    /// Waiting for the daemon to start recording the completion.
+    Reported,
+    /// Stopping the processes an exited command left behind.
+    StoppingSurvivors,
+    /// Scanning for processes the execution left behind.
+    Verifying,
+}
+
+impl std::fmt::Display for Completing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Reported => "command exited, completion not recorded yet",
+            Self::StoppingSurvivors => "command exited, stopping its remaining processes",
+            Self::Verifying => "command exited, verifying that its processes stopped",
+        })
+    }
+}
+
+#[derive(Default)]
+pub struct Executions {
+    /// Connected executions and the channel that asks their wrapper to stop.
+    connections: Mutex<HashMap<ExecutionId, watch::Sender<bool>>>,
+    agents: Mutex<HashMap<ExecutionId, Agent>>,
+    /// Restarts that start their agent in a new wrapper, by the execution
+    /// the agent ran as, taken only with the agents lock held.
+    renewals: StdMutex<Renewals>,
+    /// Why the daemon asked connected executions to stop.
+    stop_requests: Mutex<HashMap<ExecutionId, StopRequest>>,
+    /// Connected executions whose wrapper stops instead of reattaching when
+    /// the daemon shuts down.
+    unattachable: StdMutex<HashMap<ExecutionId, SpaceId>>,
+    /// Connected executions whose wrapper reported its exit, by the
+    /// completion step the daemon is on.
+    completing: StdMutex<HashMap<ExecutionId, Completing>>,
+    /// Recent demo launches whose execution ended before their command ran,
+    /// for the start waiting on each.
+    unrun_demo_launches: StdMutex<VecDeque<String>>,
+    /// Set once the daemon refuses new registrations.
+    closed: AtomicBool,
+    shutting_down: AtomicBool,
+    /// Scope token → the execution it was issued to.
+    scopes: Mutex<HashMap<ScopeToken, Caller>>,
+}
+
+impl Executions {
+    /// Refuse a registration once the daemon closed registrations.
+    pub fn ensure_accepting(&self) -> Result<()> {
+        ensure!(
+            !self.closed.load(Ordering::Relaxed),
+            "the daemon is shutting down; retry once it restarts"
+        );
+        Ok(())
+    }
+
+    /// Take the connections lock. Registration and stops hold it across their
+    /// store work, so an execution registers either before a stop lists it or
+    /// after the stop's request reached it; external commands and agent
+    /// lifetimes run without it.
+    pub async fn connections(&self) -> Connections<'_> {
+        Connections {
+            executions: self,
+            senders: self.connections.lock().await,
+        }
+    }
+
+    pub async fn is_connected(&self, id: &ExecutionId) -> bool {
+        self.connections().await.is_connected(id)
+    }
+
+    pub async fn has_connections(&self) -> bool {
+        !self.connections.lock().await.is_empty()
+    }
+
+    /// Drop the connection of `id` and what the daemon kept for it, returning
+    /// whether it ran an agent.
+    pub async fn disconnect(&self, id: &ExecutionId) -> bool {
+        self.connections().await.disconnect(id).await
+    }
+
+    /// Refuse new registrations, as the daemon exits. Taking the connections
+    /// lock lets a registration under way finish first.
+    pub async fn close(&self) {
+        let _connections = self.connections().await;
+        self.closed.store(true, Ordering::Relaxed);
+    }
+
+    /// Before the daemon exits, refuse new registrations and ask every
+    /// connected execution to stop for `request`, returning the spaces of
+    /// those that stop instead of reattaching.
+    pub async fn shut_down(&self, request: StopRequest) -> HashSet<SpaceId> {
+        let connections = self.connections().await;
+        self.closed.store(true, Ordering::Relaxed);
+        self.shutting_down.store(true, Ordering::Relaxed);
+        for id in connections.senders.keys() {
+            let _ = connections.stop(id, &request).await;
+        }
+        self.unattachable_spaces().into_iter().collect()
+    }
+
+    /// Set once shutdown starts asking executions to stop.
+    pub fn shutting_down(&self) -> bool {
+        self.shutting_down.load(Ordering::Relaxed)
+    }
+
+    /// Why the daemon asked a connected execution to stop, if it did.
+    pub async fn stop_request(&self, id: &ExecutionId) -> Option<StopRequest> {
+        self.stop_requests.lock().await.get(id).cloned()
+    }
+
+    /// Run `f` on the tracked agent of `id`, if there is one.
+    pub async fn with_agent<R>(
+        &self,
+        id: &ExecutionId,
+        f: impl FnOnce(&mut Agent) -> R,
+    ) -> Option<R> {
+        self.agents.lock().await.get_mut(id).map(f)
+    }
+
+    /// Run `f` on every tracked agent, by execution.
+    pub async fn with_agents<R>(&self, f: impl FnOnce(&mut HashMap<ExecutionId, Agent>) -> R) -> R {
+        f(&mut *self.agents.lock().await)
+    }
+
+    /// Run `f` on every tracked agent and every restart that starts its
+    /// agent in a new wrapper.
+    pub async fn with_restarts<R>(
+        &self,
+        f: impl FnOnce(&mut HashMap<ExecutionId, Agent>, &mut Renewals) -> R,
+    ) -> R {
+        let mut agents = self.agents.lock().await;
+        let mut renewals = self.renewals.lock().unwrap_or_else(PoisonError::into_inner);
+        f(&mut agents, &mut renewals)
+    }
+
+    /// Record that a restart would stop this connected execution in `space`.
+    pub fn mark_unattachable(&self, id: &ExecutionId, space: &SpaceId) {
+        self.unattachable
+            .lock()
+            .expect("unattachable executions lock")
+            .insert(id.to_owned(), space.clone());
+    }
+
+    /// The space of each connected execution a restart would stop.
+    pub fn unattachable_spaces(&self) -> Vec<SpaceId> {
+        let unattachable = self
+            .unattachable
+            .lock()
+            .expect("unattachable executions lock");
+        unattachable.values().cloned().collect()
+    }
+
+    /// Whether a restart would stop a connected execution. Disconnected
+    /// records keep their state across it.
+    pub fn has_unattachable(&self) -> bool {
+        !self
+            .unattachable
+            .lock()
+            .expect("unattachable executions lock")
+            .is_empty()
+    }
+
+    /// Record the completion step a connected execution is on.
+    pub fn set_completing(&self, id: &ExecutionId, step: Completing) {
+        self.completing
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(id.to_owned(), step);
+    }
+
+    /// The completion step of a connected execution whose wrapper reported
+    /// its exit.
+    pub fn completing(&self, id: &ExecutionId) -> Option<Completing> {
+        self.completing
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(id)
+            .copied()
+    }
+
+    /// Remember that `launch` ended before its command ran.
+    pub fn remember_unrun_launch(&self, launch: String) {
+        let mut launches = self
+            .unrun_demo_launches
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if launches.len() == UNRUN_LAUNCHES {
+            launches.pop_front();
+        }
+        launches.push_back(launch);
+    }
+
+    pub fn launch_ended_unrun(&self, launch: &str) -> bool {
+        self.unrun_demo_launches
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .any(|ended| ended == launch)
+    }
+
+    /// Bind a scope token to the execution it was issued to.
+    pub async fn issue_scope(&self, token: ScopeToken, caller: Caller) {
+        self.scopes.lock().await.insert(token, caller);
+    }
+
+    /// The execution a scope token was issued to, while it is connected.
+    pub async fn scope(&self, token: &ScopeToken) -> Option<Caller> {
+        self.scopes.lock().await.get(token).cloned()
+    }
+
+    /// Forget the scope tokens of a workspace that no longer exists.
+    pub async fn forget_workspace(&self, workspace_id: &SpaceId) {
+        self.scopes
+            .lock()
+            .await
+            .retain(|_, caller| caller.space_id != *workspace_id);
+    }
+
+    /// The scope tokens issued, for tests that pause registration.
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn scopes(&self) -> MutexGuard<'_, HashMap<ScopeToken, Caller>> {
+        self.scopes.lock().await
+    }
+
+    /// Whether something holds the connections lock.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn connections_locked(&self) -> bool {
+        self.connections.try_lock().is_err()
+    }
+}
+
+/// The connections lock, held while registering or stopping executions.
+pub struct Connections<'a> {
+    executions: &'a Executions,
+    senders: MutexGuard<'a, HashMap<ExecutionId, watch::Sender<bool>>>,
+}
+
+impl Connections<'_> {
+    /// Refuse a registration once the daemon closed registrations.
+    pub fn ensure_accepting(&self) -> Result<()> {
+        self.executions.ensure_accepting()
+    }
+
+    /// Whether the wrapper of `id` is connected and listening.
+    pub fn is_connected(&self, id: &ExecutionId) -> bool {
+        self.senders
+            .get(id)
+            .is_some_and(|sender| !sender.is_closed())
+    }
+
+    /// The channel that stops the wrapper of `id`.
+    pub fn stop_channel(&self, id: &ExecutionId) -> Option<&watch::Sender<bool>> {
+        self.senders.get(id)
+    }
+
+    /// Give a wrapper its stop channel, starting as `stopped`, and let its
+    /// scope token act for the execution.
+    pub async fn connect(
+        &mut self,
+        id: &ExecutionId,
+        kind: ExecutionKind,
+        workspace_id: &SpaceId,
+        scope_token: ScopeToken,
+        agent_execution: Option<ExecutionId>,
+        stopped: bool,
+    ) -> watch::Receiver<bool> {
+        let (sender, stop) = watch::channel(stopped);
+        self.senders.insert(id.to_owned(), sender);
+        self.executions
+            .issue_scope(
+                scope_token,
+                Caller {
+                    execution: Some(ScopedExecution {
+                        id: id.to_owned(),
+                        kind,
+                        agent_execution,
+                    }),
+                    space_id: workspace_id.to_owned(),
+                    granted: None,
+                    read_only: false,
+                    vouched: None,
+                },
+            )
+            .await;
+        stop
+    }
+
+    /// Ask the connected wrapper of `id` to stop for `request`, cancelling
+    /// what its agent's connection keeps for an automatic restore; the
+    /// request cancels its recorded stop. Returns whether the wrapper was
+    /// asked.
+    pub async fn stop(&self, id: &ExecutionId, request: &StopRequest) -> Result<bool> {
+        let Some(sender) = self.senders.get(id).filter(|sender| !sender.is_closed()) else {
+            return Ok(false);
+        };
+        self.executions
+            .with_agent(id, |agent| agent.cancel_recovery())
+            .await;
+        self.executions
+            .stop_requests
+            .lock()
+            .await
+            .insert(id.to_owned(), request.clone());
+        sender
+            .send(true)
+            .context("execution disconnected during stop")?;
+        Ok(true)
+    }
+
+    /// Run `f` on every tracked agent, by execution.
+    pub async fn with_agents<R>(&self, f: impl FnOnce(&mut HashMap<ExecutionId, Agent>) -> R) -> R {
+        self.executions.with_agents(f).await
+    }
+
+    /// Run `f` on every tracked agent and every restart that starts its
+    /// agent in a new wrapper.
+    pub async fn with_restarts<R>(
+        &self,
+        f: impl FnOnce(&mut HashMap<ExecutionId, Agent>, &mut Renewals) -> R,
+    ) -> R {
+        self.executions.with_restarts(f).await
+    }
+
+    /// Drop the connection of `id`, then, without the lock, what the daemon
+    /// kept for it, returning whether it ran an agent.
+    pub async fn disconnect(mut self, id: &ExecutionId) -> bool {
+        self.senders.remove(id);
+        let executions = self.executions;
+        drop(self);
+        executions
+            .unattachable
+            .lock()
+            .expect("unattachable executions lock")
+            .remove(id);
+        executions
+            .completing
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(id);
+        let agent = executions
+            .with_restarts(|agents, renewals| {
+                let agent = agents.remove(id).is_some();
+                forget_ended_renewals(renewals, agents);
+                agent
+            })
+            .await;
+        executions.stop_requests.lock().await.remove(id);
+        executions
+            .scopes
+            .lock()
+            .await
+            .retain(|_, caller| caller.execution_id() != Some(id));
+        agent
+    }
+}

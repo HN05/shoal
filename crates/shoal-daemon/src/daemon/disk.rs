@@ -122,7 +122,7 @@ impl Monitor {
         {
             let message = warnings::disk(&config.machine.overload, &lowest.describe());
             self.warnings
-                .warn(manager, now, Signal::Disk, &message)
+                .warn(&manager.agents, now, Signal::Disk, &message)
                 .await;
         }
         low.retain(|filesystem| filesystem.free < settings.cleanup_free_bytes());
@@ -440,14 +440,18 @@ async fn stop_executions(
         reason: format!("{low}; all running agents stopped"),
         resumes_when: format!("free disk space reaches {} GiB", settings.cleanup_free_gib),
     };
-    for agent in manager.stop_agents_for_disk_space(&protection).await {
+    for agent in manager
+        .agents
+        .stop_agents_for_disk_space(manager, &protection)
+        .await
+    {
         log!(
             "disk space protection stopped {} in {}: {low}",
             agent.name,
             agent.workspace
         );
     }
-    let oneshots = manager.agent_queue.stop_oneshots(OneShotStop::All);
+    let oneshots = manager.agents.agent_queue().stop_oneshots(OneShotStop::All);
     if oneshots > 0 {
         log!("disk space protection stopped {oneshots} one-shot agent runs: {low}");
     }
@@ -455,7 +459,7 @@ async fn stop_executions(
     let (low, reason) = (&low, &protection.reason);
     let stops = workspaces.into_iter().map(|id| async move {
         let workspace = manager.workspace_by_id(&id).await?;
-        let (kind, message) = match manager.stop_unprotected(&SpaceSelector::id(&id), reason.clone()).await {
+        let (kind, message) = match manager.agents.stop_unprotected(&*manager, &SpaceSelector::id(&id), reason.clone()).await {
             Ok(()) => {
                 log!("disk space protection stopped commands in {}: {low}", workspace.name);
                 (
@@ -506,7 +510,9 @@ async fn workspaces_with_unprotected_executions(manager: &Manager) -> Result<Vec
         .await?;
     let mut workspaces = Vec::new();
     for (execution, workspace) in executions {
-        if !manager.agent_was_overloaded(&execution).await && !workspaces.contains(&workspace) {
+        if !manager.agents.agent_was_overloaded(&execution).await
+            && !workspaces.contains(&workspace)
+        {
             workspaces.push(workspace);
         }
     }

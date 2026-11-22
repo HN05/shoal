@@ -227,7 +227,12 @@ async fn an_abandoned_move_returns_the_agents_it_stopped_and_ends() {
     let (_, _) = export_moving(&manager, &selector, root.path()).await;
 
     let stopped = manager.abandon_move(&selector).await.unwrap();
-    let saved = manager.saved_work(&selector).await.unwrap().execution_ids();
+    let saved = manager
+        .agents
+        .saved_work(&*manager, &selector)
+        .await
+        .unwrap()
+        .execution_ids();
     assert_eq!(saved.len(), 1);
     assert_eq!(stopped[&chat.id].iter().collect::<Vec<_>>(), [&saved[0]]);
     assert!(recorded(&manager, &chat.id).await.is_none());

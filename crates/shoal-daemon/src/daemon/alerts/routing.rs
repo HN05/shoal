@@ -128,9 +128,9 @@ impl Manager {
     /// recorded or queued.
     async fn agents(&self) -> Result<WorkspaceAgents> {
         Ok(WorkspaceAgents {
-            running: self.running_agent_workspaces().await,
-            recorded: self.recorded_agent_spaces().await?,
-            queued: self.queued_agent_workspaces().await?,
+            running: self.agents.running_agent_workspaces().await,
+            recorded: self.agents.recorded_agent_spaces().await?,
+            queued: self.agents.queued_agent_workspaces().await?,
         })
     }
 
@@ -145,7 +145,7 @@ impl Manager {
             SpaceKind::Workspace
                 if agents.recorded.contains(id)
                     || agents.queued.contains(id)
-                    || self.has_saved_agent(id) =>
+                    || self.agents.has_saved_agent(id) =>
             {
                 Reader::OnStart
             }

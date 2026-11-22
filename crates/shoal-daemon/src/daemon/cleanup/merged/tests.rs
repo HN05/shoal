@@ -269,7 +269,9 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
     let saved = recovery::Record::load(&path).unwrap().unwrap();
     let queued = f
         .manager
+        .agents
         .queue_stopped_restore(
+            &*f.manager,
             &SpaceSelector::id(&f.workspace.id),
             &ExecutionId::from("saved"),
             Default::default(),
@@ -288,7 +290,8 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
     assert!(path.exists());
     assert!(
         f.manager
-            .queue_entries()
+            .agents
+            .queue_entries(&*f.manager,)
             .await
             .unwrap()
             .iter()
@@ -308,7 +311,14 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
         .unwrap();
     assert!(!f.kept_after(5).await);
     assert!(!path.exists());
-    assert!(f.manager.queue_entries().await.unwrap().is_empty());
+    assert!(
+        f.manager
+            .agents
+            .queue_entries(&*f.manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let removed = f.manager.removed_workspaces().await.unwrap();
     let removed = removed.first().unwrap();
     assert_eq!(removed.cause, EventCause::Merged);
@@ -333,7 +343,14 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
         .unwrap(),
         Some(saved)
     );
-    assert!(f.manager.queue_entries().await.unwrap().is_empty());
+    assert!(
+        f.manager
+            .agents
+            .queue_entries(&*f.manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -649,7 +666,7 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
         .await
         .unwrap();
     assert_eq!(manager.chats().await.unwrap().len(), 1);
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     // Stopped just now, it is not idle yet.
     sweep_at(&manager, &mut state, now, &Default::default())
         .await

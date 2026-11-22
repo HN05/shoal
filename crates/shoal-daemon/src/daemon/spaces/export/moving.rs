@@ -133,7 +133,11 @@ impl Manager {
     async fn stopped_since(&self, record: &MoveRecord) -> StoppedExecutions {
         let mut stopped = StoppedExecutions::new();
         for (space, before) in &record.saved_before {
-            let Ok(saved) = self.saved_work(&SpaceSelector::id(space)).await else {
+            let Ok(saved) = self
+                .agents
+                .saved_work(self, &SpaceSelector::id(space))
+                .await
+            else {
                 continue;
             };
             let now = saved.execution_ids().into_iter();
@@ -214,7 +218,10 @@ impl Manager {
         let carried = self.carried_by(&space.id, carrying).await?;
         let mut saved_before = StoppedExecutions::new();
         for moving in std::iter::once(space).chain(&carried) {
-            let saved = self.saved_work(&SpaceSelector::id(&moving.id)).await?;
+            let saved = self
+                .agents
+                .saved_work(self, &SpaceSelector::id(&moving.id))
+                .await?;
             let ids = saved.execution_ids().into_iter().collect();
             saved_before.insert(moving.id.clone(), ids);
         }
@@ -310,7 +317,10 @@ impl Manager {
         // Every agent stops before a checkpoint, since a chat may work in a
         // workspace's worktree.
         for moving in std::iter::once(&space).chain(&carried) {
-            (self.stop_space(&SpaceSelector::id(&moving.id), StopRequest::moving())).await?;
+            (self
+                .agents
+                .stop_space(self, &SpaceSelector::id(&moving.id), StopRequest::moving()))
+            .await?;
         }
         let record = self.moving_record(&space).await?;
         let mut records = Vec::new();

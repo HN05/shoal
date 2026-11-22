@@ -20,7 +20,8 @@ impl Manager {
     /// opens the work it kept.
     pub(crate) async fn retire_space(&self, space: &Space) -> Result<String> {
         let selector = SpaceSelector::id(&space.id);
-        self.stop_space(&selector, StopRequest::taken_over())
+        self.agents
+            .stop_space(self, &selector, StopRequest::taken_over())
             .await?;
         let unsaved = self.retired_work(space).await?;
         self.links.hand_over_assignees(&space.id).await?;

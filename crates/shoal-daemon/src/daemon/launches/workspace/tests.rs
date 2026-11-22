@@ -52,7 +52,14 @@ async fn a_workspace_on_an_unread_issue_is_refused() {
         assert!(refused.is_err());
     }
     assert!(manager.list_workspaces().await.unwrap().is_empty());
-    assert!(manager.queue_entries().await.unwrap().is_empty());
+    assert!(
+        manager
+            .agents
+            .queue_entries(&*manager,)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 /// A launch on a PR `--pr` names refuses what a PR link refuses beside it,

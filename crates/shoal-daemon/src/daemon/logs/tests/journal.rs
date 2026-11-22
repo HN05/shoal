@@ -157,7 +157,14 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
         .await
         .unwrap();
     let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            &*manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     for follow in [false, true] {

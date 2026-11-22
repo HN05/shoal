@@ -216,12 +216,7 @@ impl Agents {
     /// saved, before the state goes with the execution's record, judged by
     /// `scan` when its processes were scanned. A failure leaves the turn
     /// unknown.
-    pub async fn keep_stopped_turn(
-        &self,
-        daemon: &dyn Daemon,
-        id: &ExecutionId,
-        scan: Option<&Scan>,
-    ) {
+    pub async fn keep_stopped_turn(&self, id: &ExecutionId, scan: Option<&Scan>) {
         let query = id.to_owned();
         let kept = async {
             let reported = self.store.run(move |db| reported_by(db, &query)).await?;
@@ -229,7 +224,7 @@ impl Agents {
                 return Ok(());
             };
             let agents = match scan {
-                Some(_) => Some(daemon.agent_trees().await?),
+                Some(_) => Some(self.agent_trees().await?),
                 None => None,
             };
             let scan = scan.zip(agents.as_ref());
@@ -375,7 +370,7 @@ impl Agents {
         // A protection stop is decided against the turn in the transaction
         // that would record it; others show only on the agent's connection.
         if let Some(id) = &execution
-            && daemon.agent_stopping(id).await
+            && self.agent_stopping(id).await
         {
             return Ok(false);
         }
@@ -458,7 +453,7 @@ impl Agents {
     ) -> Option<crate::ai::Tool> {
         let space = daemon.space(selector).await.ok()?;
         let agent = match execution {
-            Some(execution) => daemon.agent_name(execution).await?,
+            Some(execution) => self.agent_name(execution).await?,
             None => daemon.agent_of(&space.id).await.ok()??,
         };
         let mut tools = daemon.space_settings(&space).await.ok()?.tools;

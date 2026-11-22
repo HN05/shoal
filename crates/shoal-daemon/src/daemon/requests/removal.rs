@@ -81,7 +81,10 @@ pub(super) async fn handle(
             Body::RemovedSpaces(vec![manager.restorable_space(&space).await?])
         }
         RemovalMethod::StopTargets => {
-            let targets = manager.stop_targets(QueuedLaunches::Cancel).await?;
+            let targets = manager
+                .agents
+                .stop_targets(&**manager, QueuedLaunches::Cancel)
+                .await?;
             Body::Spaces(manager.spaces_below(caller, targets).await?)
         }
         RemovalMethod::StopSpace {
@@ -100,7 +103,7 @@ pub(super) async fn handle(
         RemovalMethod::CheckStop { space } => {
             // A chat has no lifecycle state that refuses a stop.
             if let ByKind::Workspace(workspace) = manager.space(&space).await?.by_kind() {
-                manager.check_stop(&workspace).await?
+                manager.agents.check_stop(&**manager, &workspace).await?
             }
             Body::Ok
         }
@@ -339,7 +342,8 @@ async fn stop_space(
     stop: SpaceStop,
 ) -> Result<StoppedSpace> {
     let mut stopped = manager
-        .stop_space_manually(space, stop.acknowledge_unproven, stop.launches)
+        .agents
+        .stop_space_manually(manager, space, stop.acknowledge_unproven, stop.launches)
         .await?;
     if stopped.cancelled_run.is_some() {
         return Ok(stopped);
@@ -351,7 +355,8 @@ async fn stop_space(
         stopped.other_processes = untracked.processes;
     }
     // A read that fails reports nothing saved rather than failing the stop.
-    stopped.saved = (manager.saved_work(space).await).is_ok_and(|saved| !saved.is_empty());
+    stopped.saved =
+        (manager.agents.saved_work(manager, space).await).is_ok_and(|saved| !saved.is_empty());
     Ok(stopped)
 }
 

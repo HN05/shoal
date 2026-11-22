@@ -144,7 +144,7 @@ impl Agents {
             change.left_behind(repository),
             warnings.join("; ")
         );
-        daemon.notify_user(AlertKind::TrustLeft, message).await;
+        daemon.notify(None, AlertKind::TrustLeft, message).await;
     }
 
     /// [`Self::forget_agent_environments`] for the unregistered

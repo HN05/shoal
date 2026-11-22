@@ -49,7 +49,8 @@ async fn holds_are_idempotent_persistent_and_scoped() {
         hold
     );
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -275,7 +276,8 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .unwrap();
     for (token, workspace) in [("parent", &parent), ("child", &child)] {
         manager
-            .executions
+            .agents
+            .executions()
             .issue_scope(
                 token.into(),
                 Caller {

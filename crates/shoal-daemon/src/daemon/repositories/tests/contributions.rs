@@ -278,7 +278,7 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         )
         .await
         .unwrap();
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager
         .remove_selected(
             &SpaceSelector::id(&chat.id),
@@ -414,7 +414,8 @@ async fn a_scoped_caller_resumes_a_hold_only_where_it_administers_directly() {
         };
         let token = format!("scope-{mode}");
         manager
-            .executions
+            .agents
+            .executions()
             .issue_scope(token.clone().into(), caller)
             .await;
         let mut method = RepositoryMethod::HoldContribution {

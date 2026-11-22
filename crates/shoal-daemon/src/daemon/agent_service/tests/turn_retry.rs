@@ -45,7 +45,9 @@ async fn another_agent(
         .await
         .unwrap();
     let started = manager
+        .agents
         .begin_execution(
+            manager,
             workspace.id.as_str(),
             None,
             crate::daemon::executions::ExecutionKind::Command,
@@ -54,7 +56,9 @@ async fn another_agent(
         .await
         .unwrap();
     manager
+        .agents
         .track_agent(
+            manager,
             &started.plan.id,
             &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
@@ -177,7 +181,9 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let reset = UnixTime::from_seconds(4_000_000_000_000);
     // The proxy's report arrives first, as it does for Codex.
     manager
+        .agents
         .report_upstream_reset(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             execution.clone(),
             Some(reset),
@@ -207,7 +213,9 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let early = retry(&manager, &other).await.unwrap();
     assert!(early.due_at < reset, "{early:?}");
     manager
+        .agents
         .report_upstream_reset(
+            &*manager,
             &SpaceSelector::id(&other.id),
             execution.clone(),
             Some(reset),
@@ -221,7 +229,9 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     );
     // A reset that has passed holds nothing back.
     manager
+        .agents
         .report_upstream_reset(
+            &*manager,
             &SpaceSelector::id(&other.id),
             execution.clone(),
             Some(UnixTime::EPOCH),
@@ -231,7 +241,13 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     assert_eq!(retry(&manager, &other).await.unwrap().due_at, held.due_at);
     // Once the upstream answers again, a later failure backs off as its own.
     manager
-        .report_upstream_reset(&SpaceSelector::id(&other.id), execution.clone(), None)
+        .agents
+        .report_upstream_reset(
+            &*manager,
+            &SpaceSelector::id(&other.id),
+            execution.clone(),
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, None);
@@ -246,7 +262,9 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let transient = retry(&manager, &other).await.unwrap();
     assert!(transient.due_at < reset, "{transient:?}");
     manager
+        .agents
         .report_upstream_reset(
+            &*manager,
             &SpaceSelector::id(&other.id),
             execution.clone(),
             Some(reset),
@@ -256,9 +274,9 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
     // A wrapper that only lost its connection may come back, and the reset
     // still holds for it; an execution that ended waits for nothing.
-    manager.forget_proxy_reports(&execution, false).await;
+    manager.agents.forget_proxy_reports(&execution, false).await;
     assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
-    manager.forget_proxy_reports(&execution, true).await;
+    manager.agents.forget_proxy_reports(&execution, true).await;
     assert_eq!(stored_reset(&manager, &execution).await, None);
 }
 
@@ -267,7 +285,9 @@ async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
     let reset = UnixTime::from_seconds(4_000_000_000_000);
     manager
+        .agents
         .report_upstream_reset(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             execution.clone(),
             Some(reset),
@@ -277,12 +297,14 @@ async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
     // The wrapper, with its proxy, may reattach.
     let kind = crate::daemon::executions::ExecutionKind::Command;
     manager
-        .finish_execution(execution.clone(), kind, None)
+        .agents
+        .finish_execution(&*manager, execution.clone(), kind, None)
         .await
         .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
     manager
-        .finish_execution(execution.clone(), kind, Some(0))
+        .agents
+        .finish_execution(&*manager, execution.clone(), kind, Some(0))
         .await
         .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, None);
@@ -323,7 +345,8 @@ async fn a_chats_failed_turn_waits_past_its_reset_until_the_chat_is_done() {
     let selector = SpaceSelector::id(&chat.id);
     let reset = UnixTime::from_seconds(4_000_000_000_000);
     manager
-        .report_upstream_reset(&selector, execution.clone(), Some(reset))
+        .agents
+        .report_upstream_reset(&*manager, &selector, execution.clone(), Some(reset))
         .await
         .unwrap();
     let fail = |failure| {
@@ -392,9 +415,11 @@ async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets
     let (_temp, manager, workspace, execution, connection) = agent(DISK_OFF).await;
     let selector = SpaceSelector::id(&workspace.id);
     let reset = now() + secs(5 * 60 * 60);
-    (manager.report_upstream_reset(&selector, execution.clone(), Some(reset)))
-        .await
-        .unwrap();
+    (manager
+        .agents
+        .report_upstream_reset(&*manager, &selector, execution.clone(), Some(reset)))
+    .await
+    .unwrap();
     fail(
         &manager,
         &workspace,
@@ -402,9 +427,17 @@ async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets
         TurnFailure::RateLimited,
     )
     .await;
-    manager.stop_idle_agents(now() + secs(60)).await.unwrap();
+    manager
+        .agents
+        .stop_idle_agents(&*manager, now() + secs(60))
+        .await
+        .unwrap();
     assert!(*connection.borrow(), "the idle agent sleeps");
-    manager.queue_agent_restore(&execution).await.unwrap();
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &execution)
+        .await
+        .unwrap();
     let id = workspace.id.clone();
     let asleep = (manager.store)
         .read(move |tx| crate::daemon::agent_queue::asleep::current(tx, &id))
@@ -417,17 +450,21 @@ async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets
         (limited.reason, limited.resumes_when)
     );
     end_execution(&manager, &execution).await;
-    let idle = manager.idle_restores(&workspace.id).await.unwrap();
+    let idle = manager
+        .agents
+        .idle_restores(&*manager, &workspace.id)
+        .await
+        .unwrap();
     assert!(idle.is_empty(), "its retry keeps the workspace: {idle:?}");
 
     manager.agents.deliver_turn_retries(reset).await.unwrap();
     assert!(messages(&manager, &workspace).await.is_empty());
-    manager.dispatch_queue().await.unwrap();
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
     let state = |entries: Vec<crate::model::QueueEntry>| {
         let [entry] = entries.try_into().unwrap();
         entry.state
     };
-    let asleep = state(manager.queue_entries().await.unwrap());
+    let asleep = state(manager.agents.queue_entries(&*manager).await.unwrap());
     assert_eq!(asleep, crate::state::QueueState::Queued);
 
     let after = manager.agents.deliver_turn_retries(reset + RESET_MARGIN);
@@ -436,8 +473,8 @@ async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets
         messages(&manager, &workspace).await,
         [continuation(TurnFailure::RateLimited, 1)]
     );
-    manager.dispatch_queue().await.unwrap();
-    let restored = state(manager.queue_entries().await.unwrap());
+    manager.agents.dispatch_queue(&*manager).await.unwrap();
+    let restored = state(manager.agents.queue_entries(&*manager).await.unwrap());
     assert_eq!(restored, crate::state::QueueState::Starting);
 
     // The restored agent's turn failing again backs off further.
@@ -461,7 +498,9 @@ async fn rerun(
     workspace: &Workspace,
 ) -> (ExecutionId, tokio::sync::watch::Receiver<bool>) {
     let started = manager
+        .agents
         .begin_execution(
+            manager,
             workspace.id.as_str(),
             None,
             crate::daemon::executions::ExecutionKind::Command,
@@ -470,7 +509,9 @@ async fn rerun(
         .await
         .unwrap();
     manager
+        .agents
         .track_agent(
+            manager,
             &started.plan.id,
             &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,
@@ -510,13 +551,21 @@ async fn a_restore_that_leaves_the_queue_after_its_execution_drops_its_retry() {
         TurnFailure::RateLimited,
     )
     .await;
-    manager.stop_idle_agents(now() + secs(60)).await.unwrap();
+    manager
+        .agents
+        .stop_idle_agents(&*manager, now() + secs(60))
+        .await
+        .unwrap();
     assert!(*connection.borrow(), "the idle agent sleeps");
-    manager.queue_agent_restore(&execution).await.unwrap();
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &execution)
+        .await
+        .unwrap();
     end_execution(&manager, &execution).await;
     assert!(retry(&manager, &workspace).await.is_some());
 
-    manager.remove_restore(&execution).await;
+    manager.agents.remove_restore(&execution).await;
     assert_eq!(retry(&manager, &workspace).await, None);
     let waits = manager
         .agents

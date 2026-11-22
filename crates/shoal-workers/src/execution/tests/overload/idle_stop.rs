@@ -59,7 +59,11 @@ async fn idle_in_held_done_workspace(
 async fn sweep(manager: &Manager) {
     let _operation = manager.gates.operation().await;
     let later = crate::time::UnixTime::now() + std::time::Duration::from_secs(60);
-    manager.stop_idle_agents(later).await.unwrap();
+    manager
+        .agents
+        .stop_idle_agents(manager, later)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -110,7 +114,9 @@ async fn resuming_an_idle_agent_of_a_held_done_workspace_withdraws_the_completio
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
     manager
+        .agents
         .queue_stopped_restore(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             &execution,
             Default::default(),
@@ -132,11 +138,15 @@ async fn an_idle_agent_with_a_background_command_keeps_running() {
     let (launched, background) = launch_with_background(&manager, &workspace).await;
     let id = idle_in_held_done_workspace(&manager, &workspace).await;
     sweep(&manager).await;
-    assert!(manager.agent_overload(&id).await.is_none());
+    assert!(manager.agents.agent_overload(&id).await.is_none());
     assert!(crate::process::identity::alive(&background).unwrap());
-    bounded(manager.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
-        .await
-        .unwrap();
+    bounded(manager.agents.stop_space(
+        &*manager,
+        &SpaceSelector::id(&workspace.id),
+        StopRequest::manual(),
+    ))
+    .await
+    .unwrap();
     bounded(launched).await.unwrap().unwrap();
     serving.abort();
 }

@@ -2,16 +2,9 @@
 //! looks whenever an agent's state changes and every few seconds besides,
 //! for whatever Shoal recorded to happen to an agent or its space only
 //! between turns.
-use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
 
-use anyhow::Result;
-
-use crate::{
-    daemon::{log, manager::Manager},
-    model::RunningAgent,
-    state::AgentState,
-};
+use crate::daemon::{log, manager::Manager};
 
 /// How often the spaces are looked at besides when an agent's state
 /// changes, for what changes without it, such as a workspace whose setup
@@ -37,30 +30,12 @@ impl Manager {
         if let Err(error) = self.relocate_finished_turns().await {
             log!("conversions: {error:#}");
         }
-        if let Err(error) = self.restart_finished_turns().await {
+        let daemon: Arc<dyn shoal_agents::daemon::Daemon> = self.clone();
+        if let Err(error) = self.agents.restart_finished_turns(&daemon).await {
             log!("restarts: {error:#}");
         }
         if let Err(error) = self.start_moves_after_turns().await {
             log!("moves after turns: {error:#}");
         }
-    }
-
-    /// Whether the agent of the space `id` ended its turn: it reported
-    /// itself idle, or no agent `runs` matches runs any longer.
-    pub(crate) async fn turn_ended(
-        &self,
-        id: &SpaceId,
-        runs: impl Fn(&RunningAgent) -> bool,
-    ) -> Result<bool> {
-        let space = id.to_owned();
-        let state = self
-            .store
-            .read(move |db| crate::daemon::turn_state::current(db, &space))
-            .await?;
-        if state.is_some_and(|status| status.state == AgentState::Idle) {
-            return Ok(true);
-        }
-        let running = self.running_agents().await?;
-        Ok(!running.iter().any(runs))
     }
 }

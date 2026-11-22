@@ -37,7 +37,7 @@ async fn report(
 
 /// The turn state protection reads for `execution`.
 async fn state(fixture: &Fixture, execution: &ExecutionId) -> AgentState {
-    fixture.agents.agent_turns(&fixture.daemon).await.unwrap()[execution].state
+    fixture.agents.agent_turns().await.unwrap()[execution].state
 }
 
 fn started(agent_id: &str) -> SubagentChange {

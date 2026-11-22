@@ -232,7 +232,7 @@ async fn workspace_processes_refresh_only_their_own_tree() {
     let f = Fixture::new().await;
     let own = f.workspace("own", None).await;
     let other = f.workspace("other", None).await;
-    (f.manager.executions)
+    (f.manager.agents.executions())
         .issue_scope("scope".into(), caller(&own.id, "execution"))
         .await;
     for (workspace, allowed) in [(&own, true), (&other, false)] {

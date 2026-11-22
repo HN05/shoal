@@ -206,7 +206,8 @@ async fn scoped_callers_set_only_their_own_progress_read_below_and_unblock_below
     let (temp, manager) = manager().await;
     let [own, other] = workspaces(&manager, &temp, ["own", "other"]).await;
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {

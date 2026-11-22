@@ -65,6 +65,7 @@ impl Manager {
     pub(crate) async fn start_moves_after_turns(&self) -> Result<()> {
         for (space, order) in self.store.read(waiting_moves).await? {
             if !self
+                .agents
                 .turn_ended(&space, |agent| agent.space_id == space)
                 .await?
             {

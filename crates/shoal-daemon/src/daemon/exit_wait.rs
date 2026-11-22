@@ -27,11 +27,11 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 pub(super) fn quiesce(manager: &Manager) -> Option<OwnedRwLockWriteGuard<()>> {
     // Checked first too, so a connected execution does not hold operations
     // off for a moment on every attempt while it runs.
-    if manager.executions.has_unattachable() {
+    if manager.agents.executions().has_unattachable() {
         return None;
     }
     let guard = manager.gates.try_quiesce()?;
-    (!manager.executions.has_unattachable()).then_some(guard)
+    (!manager.agents.executions().has_unattachable()).then_some(guard)
 }
 
 /// A daemon ready to exit: nothing its exit would cut off runs, and nothing

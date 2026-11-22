@@ -146,7 +146,10 @@ impl Manager {
             std::iter::once(&parties.target.id).chain(parties.chats.iter().map(|chat| &chat.id));
         for id in spaces {
             let selector = SpaceSelector::id(id);
-            (self.stop_space_manually(&selector, false, QueuedLaunches::Cancel)).await?;
+            (self
+                .agents
+                .stop_space_manually(self, &selector, false, QueuedLaunches::Cancel))
+            .await?;
         }
         Ok(())
     }

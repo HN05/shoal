@@ -72,7 +72,10 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
         manager.reviews.clone(),
         manager.clone(),
     ));
-    tokio::spawn(crate::daemon::queued_starts::run(manager.clone()));
+    tokio::spawn(crate::daemon::queued_starts::run(
+        manager.agents.clone(),
+        manager.clone(),
+    ));
     let caller = Caller {
         space_id: workspace.id.clone(),
         execution: None,

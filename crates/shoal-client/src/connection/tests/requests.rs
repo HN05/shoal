@@ -606,7 +606,7 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         starts_in_caller: true,
         blockers: Vec::new(),
     };
-    let theirs = (daemon.manager.queue_add(request))
+    let theirs = (daemon.manager.agents.queue_add(&*daemon.manager, request))
         .await
         .unwrap()
         .entry
@@ -619,7 +619,12 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     let refused = connection::request::<StartedWorkspace>(&agent, create).await;
     let refusal = format!("{:#}", refused.unwrap_err());
     assert!(refusal.contains("another launch's"), "{refusal}");
-    let entries = daemon.manager.queue_entries().await.unwrap();
+    let entries = daemon
+        .manager
+        .agents
+        .queue_entries(&*daemon.manager)
+        .await
+        .unwrap();
     let entry = entries.iter().find(|entry| entry.id == theirs.id).unwrap();
     assert_eq!(entry.space_id, None, "{entry:?}");
 }

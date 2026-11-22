@@ -48,7 +48,9 @@ async fn running(
         origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "site".into()),
     };
     manager
+        .agents
         .begin_execution_running(
+            manager,
             workspace.id.as_str(),
             None,
             ExecutionKind::Command,

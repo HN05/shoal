@@ -1,10 +1,10 @@
 //! What else ends with an agent's turn.
 use futures_util::future::BoxFuture;
 use shoal_agents::daemon::Turns;
-use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::space_names::SpaceSelector;
 
 use crate::daemon::manager::Manager;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::space_names::SpaceSelector;
 
 impl Turns for Manager {
     fn end_marked_turn<'a>(

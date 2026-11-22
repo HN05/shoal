@@ -58,7 +58,9 @@ async fn started(
     let workspace = workspace(manager, root).await;
     let wrapper = crate::process::identity::capture(std::process::id()).unwrap();
     manager
+        .agents
         .begin_execution_running(
+            manager,
             workspace.id.as_str(),
             wrapper,
             ExecutionKind::Command,
@@ -173,6 +175,7 @@ async fn exited_run(manager: &Manager, execution: &ExecutionId) {
         .unwrap();
     child.kill();
     manager
+        .agents
         .record_execution_child(execution.clone(), Some(identity.clone()), identity.pid)
         .await
         .unwrap();
@@ -289,13 +292,17 @@ async fn the_viewer_outlives_the_demo_s_runs_and_ends_with_the_demo() {
     // viewer, marked as the demo's execution, is not.
     exited_run(&manager, &demo.execution_id).await;
     manager
-        .release_exited_child(&demo.execution_id, &workspace)
+        .agents
+        .release_exited_child(&*manager, &demo.execution_id, &workspace)
         .await
         .unwrap();
     assert_eq!(read(port).await, "UDID-1");
     // The demo's end stops it with the rest of its processes.
     let process = viewer_process(&manager, &demo).await;
-    manager.stop_exited_processes(&demo.execution_id).await;
+    manager
+        .agents
+        .stop_exited_processes(&*manager, &demo.execution_id)
+        .await;
     let stopped = async {
         while !matches!(manager.running_viewer(&demo.execution_id).await, Ok(None)) {
             tokio::time::sleep(START_POLL).await;
@@ -328,7 +335,8 @@ async fn a_run_that_ends_while_the_viewer_starts_spares_it() {
     }
     exited_run(&manager, &demo.execution_id).await;
     manager
-        .release_exited_child(&demo.execution_id, &workspace)
+        .agents
+        .release_exited_child(&*manager, &demo.execution_id, &workspace)
         .await
         .unwrap();
     std::fs::write(&gate, "").unwrap();
@@ -354,7 +362,12 @@ async fn a_run_that_ends_while_the_viewer_spawns_waits_until_it_is_recorded() {
         .unwrap();
     let releasing = {
         let (manager, execution) = (manager.clone(), demo.execution_id.clone());
-        tokio::spawn(async move { manager.release_exited_child(&execution, &workspace).await })
+        tokio::spawn(async move {
+            manager
+                .agents
+                .release_exited_child(&*manager, &execution, &workspace)
+                .await
+        })
     };
     let recorded = Viewer {
         port: 1,
@@ -460,7 +473,8 @@ async fn a_demo_whose_execution_is_completing_starts_no_viewer() {
     let (_, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
     let stopping = crate::daemon::executions::Completing::StoppingSurvivors;
     manager
-        .executions
+        .agents
+        .executions()
         .set_completing(&demo.execution_id, stopping);
     let refused = manager.open_viewer(&demo, None).await.err().unwrap();
     assert_eq!(Reason::of(&refused), Some(Reason::NotReady), "{refused:#}");
@@ -475,7 +489,11 @@ async fn forgetting_a_demo_s_execution_stops_its_viewer() {
     manager.open_viewer(&demo, None).await.unwrap();
     let process = viewer_process(&manager, &demo).await;
     // As a stop of a demo whose wrapper is away ends it.
-    manager.forget_execution(&demo.execution_id).await.unwrap();
+    manager
+        .agents
+        .forget_execution(&*manager, &demo.execution_id)
+        .await
+        .unwrap();
     let stopped = async {
         while runs(&process) {
             tokio::time::sleep(START_POLL).await;
@@ -638,7 +656,13 @@ async fn a_demo_whose_viewer_cannot_be_proven_stopped_keeps_its_records() {
     let (workspace, demo) = running(&manager, temp.path(), Some(ECHO_VIEWER)).await;
     let _helper = unprovable_viewer(&manager, temp.path(), &demo).await;
     // As a stop of a demo whose wrapper is away ends it.
-    assert!(manager.forget_execution(&demo.execution_id).await.is_err());
+    assert!(
+        manager
+            .agents
+            .forget_execution(&*manager, &demo.execution_id)
+            .await
+            .is_err()
+    );
     let still = listed(&manager, &workspace).await;
     assert_eq!(still.execution_id, demo.execution_id);
 }
@@ -668,7 +692,14 @@ async fn a_demo_that_ends_while_its_viewer_cannot_be_proven_stopped_keeps_its_re
         merge: None,
     };
     let operation = manager.gates.owned_operation().await;
-    let executing = tokio::spawn(execute(server, 1, manager.clone(), context, operation));
+    let executing = tokio::spawn(execute(
+        server,
+        1,
+        manager.agents.clone(),
+        manager.clone(),
+        context,
+        operation,
+    ));
     let mut wrapper_side = BufReader::new(client);
     let _: Response = crate::protocol::read_buffered(&mut wrapper_side)
         .await
@@ -728,7 +759,11 @@ async fn a_viewer_of_an_earlier_boot_leaves_a_group_that_took_its_number_alone()
     (manager.record_viewer(&demo.execution_id, &earlier))
         .await
         .unwrap();
-    manager.forget_execution(&demo.execution_id).await.unwrap();
+    manager
+        .agents
+        .forget_execution(&*manager, &demo.execution_id)
+        .await
+        .unwrap();
     assert!(runs(&live), "the unrelated group was stopped");
     unrelated.kill();
 }

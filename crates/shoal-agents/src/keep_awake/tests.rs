@@ -4,11 +4,7 @@ use super::*;
 use crate::stand_in::Fixture;
 
 async fn has_work(fixture: &Fixture) -> bool {
-    fixture
-        .agents
-        .agents_have_work(&fixture.daemon)
-        .await
-        .unwrap()
+    fixture.agents.agents_have_work().await.unwrap()
 }
 
 async fn report(fixture: &Fixture, id: &SpaceId, state: AgentState) {

@@ -69,8 +69,8 @@ impl Manager {
 
     async fn chat_environment(&self, chat: Chat) -> Result<BTreeMap<String, OsString>> {
         let id = chat.id.clone();
-        let home = self.chat_execution_home(chat).await?;
-        let (_, mut values, _) = self.joining_environment(home).await?;
+        let home = self.agents.chat_execution_home(self, chat).await?;
+        let (_, mut values, _) = self.agents.joining_environment(home).await?;
         values.extend(env::chat_environment(&id, &self.paths));
         Ok(values)
     }

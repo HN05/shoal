@@ -4,55 +4,33 @@
 //! the launch blockers that cleared and removes the space blockers that did,
 //! with what cleared them. A space blocker clears once that space is done at
 //! its current HEAD or removed, as admission decides for a launch.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use anyhow::Result;
 
-use crate::{
-    daemon::{log, manager::Manager, progress::Cleared},
-    state::BlockerKind,
-};
+use crate::daemon::{log, manager::Manager, progress::Cleared};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{progress::Progress, space_names::SpaceSelector};
 
 mod forge;
 
-/// What Shoal tells an agent it stops because its space is blocked, which
-/// waits for the agent's restore and so starts its turn there.
-pub(crate) const STOPPED_BLOCKED: &str =
-    "Shoal stopped you while your work was blocked and restored you to continue it.";
-
-/// A blocker by its kind and target: a space's ID or an item's URL.
-pub(crate) type Target = (BlockerKind, String);
-
-/// What a lookup of a blocker found.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Lookup {
-    /// It cleared, as this says, such as `run <url> passed on main at <commit>`.
-    Cleared(String),
-    Open,
-    /// The lookup failed, which keeps it.
-    Failed(String),
-}
-
-/// What the forge says of each blocker it was asked about.
-pub(crate) type Lookups = HashMap<Target, Lookup>;
+pub(crate) use shoal_agents::queue::blockers::{Lookup, Lookups, Target};
 
 impl Manager {
     /// Look up every forge blocker of the queue and of each space's
     /// progress, forget the queue's that cleared, and clear the spaces'.
     pub(crate) async fn poll_blockers(&self) -> Result<()> {
-        let mut targets: HashSet<Target> = self.queued_forge_blockers().await?;
+        let mut targets: HashSet<Target> = self.agents.queued_forge_blockers().await?;
         targets.extend(self.progress_forge_blockers().await?);
         let lookups = self.look_up_blockers(targets).await;
-        let forgotten = self.forget_cleared_launch_blockers(&lookups).await;
+        let forgotten = self.agents.forget_cleared_launch_blockers(&lookups).await;
         let cleared = self.clear_progress_blockers(&lookups).await?;
         for space in &cleared {
             self.tell_cleared(space).await;
         }
         // A restore that waited for the space to stop being blocked may be
         // due now.
-        self.agent_queue.wake();
+        self.agents.agent_queue().wake();
         forgotten
     }
 

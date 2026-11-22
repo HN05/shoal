@@ -1,0 +1,729 @@
+use shoal_protocol::progress::Blocker;
+use std::collections::HashSet;
+
+use rusqlite::params;
+
+use super::*;
+use crate::daemon::agent_queue::state::WaitingOneShot;
+use crate::daemon::{approvals::Target, manager::Manager};
+use crate::{
+    daemon::{
+        agent_queue::{Serving, last_seq},
+        agent_service::tests::queue::{add, create, launch_in, limit_globally, register, request},
+        test_support::{global_config, manager},
+    },
+    model::QueueRequest,
+    state::QueueState,
+};
+use shoal_protocol::time::UnixTime;
+use shoal_protocol::{resources::Scope, space_names::SpaceSelector};
+use shoal_schedule::{
+    priority::Priority,
+    rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier},
+    snapshot::{Carries, Edge, Node},
+};
+use std::collections::HashMap;
+
+#[tokio::test]
+async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launches() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "running").await;
+    let parent = create(&manager, &repo, "parent").await;
+    let child = create(&manager, &repo, "child").await;
+    let ids = (parent.id.clone(), child.id.clone());
+    manager
+        .store
+        .run(move |db| {
+            let (parent, child) = &ids;
+            db.execute(
+                "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
+                params![child, parent],
+            )?;
+            // A ready mark makes the parent's work finishing.
+            db.execute(
+                "INSERT INTO space_review(space_id,url,kind) VALUES (?1,'',NULL)",
+                [parent],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    add(&manager, &repo, "earlier").await;
+    manager
+        .agents
+        .queue_add(&*manager, launch_in(&child, false))
+        .await
+        .unwrap();
+
+    let waiting: Vec<_> = (manager
+        .agents
+        .queue_entries(&*manager)
+        .await
+        .unwrap()
+        .into_iter())
+    .filter(|entry| entry.state == QueueState::Queued)
+    .map(|entry| (entry.name.to_string(), entry.position, entry.rank))
+    .collect();
+    assert_eq!(
+        waiting,
+        [
+            (
+                "child".into(),
+                Some(1),
+                Some(QueueRank {
+                    priority: Priority::NORMAL,
+                    priority_from: None,
+                    tier: Tier::Finishing,
+                    tier_from: Some(InheritedRank {
+                        from: parent.number.to_string(),
+                        dependency: Dependency::Parent,
+                    }),
+                    shared_areas: Vec::new(),
+                })
+            ),
+            (
+                "earlier".into(),
+                Some(2),
+                Some(QueueRank {
+                    priority: Priority::NORMAL,
+                    priority_from: None,
+                    tier: Tier::New,
+                    tier_from: None,
+                    shared_areas: Vec::new(),
+                })
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn waits_come_from_blockers_threads_stacks_and_leases() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "running").await;
+    let base = create(&manager, &repo, "base").await;
+    let stacked = create(&manager, &repo, "stacked").await;
+    let asking = create(&manager, &repo, "asking").await;
+    let holder = create(&manager, &repo, "holder").await;
+    let issue = "https://forge.example/team/repo/issues/7";
+    let ids = [&base, &stacked, &asking, &holder].map(|workspace| workspace.id.clone());
+    manager
+        .store
+        .run(move |db| {
+            let [base, stacked, asking, holder] = &ids;
+            db.execute(
+                "UPDATE workspaces SET base_workspace_id=?1 WHERE id=?2",
+                params![base, stacked],
+            )?;
+            db.execute(
+                "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
+                params![asking, stacked],
+            )?;
+            db.execute(
+                "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
+                        holder_id)
+                    VALUES (1,?1,9,1,'question','Which?',1,'space',?2)",
+                params![asking, stacked],
+            )?;
+            db.execute(
+                "INSERT INTO thread_posts(thread_id,created_at,side,sender,sender_id,text)
+                    VALUES (1,1,'opener','space',?1,'Which?')",
+                [asking],
+            )?;
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![holder, issue],
+            )?;
+            db.execute(
+                "INSERT INTO resource_pools VALUES (?1,'devices','{}')",
+                params![Scope::Global],
+            )?;
+            db.execute(
+                "INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,created_at,mode)
+                    VALUES ('lease',?1,?2,'devices','default','devices',1,'write')",
+                params![holder, Scope::Global],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let blocked = manager
+        .agents
+        .queue_add(
+            &*manager,
+            QueueRequest {
+                blockers: vec![Blocker::Issue(issue.parse().unwrap())],
+                ..request(&manager, &repo, "blocked", false).await
+            },
+        )
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    let leases = vec![(
+        Target::Resource {
+            scope: Scope::Global,
+            pool: "devices".into(),
+        },
+        base.id.clone(),
+    )];
+    let edges: HashSet<Edge> = manager
+        .store
+        .read(move |tx| edges::waits(tx, &leases))
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+
+    let space = |workspace: &crate::model::Workspace| Node::Space(workspace.id.clone());
+    let edge = |waiting, on, dependency| Edge {
+        waiting,
+        on,
+        dependency,
+        carries: Carries::Rank,
+    };
+    let expected = HashSet::from([
+        edge(space(&stacked), space(&base), Dependency::Stacked),
+        edge(space(&stacked), space(&asking), Dependency::Parent),
+        edge(space(&asking), space(&stacked), Dependency::Thread),
+        edge(
+            Node::Space(blocked.opens.unwrap()),
+            space(&holder),
+            Dependency::Blocked,
+        ),
+        edge(space(&base), space(&holder), Dependency::Lease),
+    ]);
+    assert_eq!(edges, expected);
+}
+
+#[tokio::test]
+async fn a_space_with_a_pr_it_opened_finishes_until_the_pr_merges() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "topic").await;
+    let pr = "https://forge.example/team/repo/pulls/3";
+    let tier = |state: Option<&'static str>| {
+        let id = workspace.id.clone();
+        manager.store.read(move |tx| {
+            tx.execute(
+                "INSERT OR IGNORE INTO space_items(space_id,relation,kind,url) VALUES (?1,'opened','pr',?2)",
+                params![id, pr],
+            )?;
+            tx.execute("DELETE FROM pr_activity WHERE space_id=?1", [&id])?;
+            if let Some(state) = state {
+                tx.execute(
+                    "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,json_object('state',?3))",
+                    params![id, pr, state],
+                )?;
+            }
+            Ok(spaces::ranked(tx)?[&id].tier)
+        })
+    };
+    // No watch has read the PR yet, so it counts as open.
+    assert_eq!(tier(None).await.unwrap(), Tier::Finishing);
+    assert_eq!(tier(Some("open")).await.unwrap(), Tier::Finishing);
+    assert_eq!(tier(Some("merged")).await.unwrap(), Tier::New);
+    // The poll saw it merge while the watch's cursor still says open.
+    let id = workspace.id.clone();
+    let tier = manager.store.read(move |tx| {
+        tx.execute(
+            "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,json_object('state','merged'))",
+            params![id, pr],
+        )?;
+        tx.execute("UPDATE pr_activity SET record=json_object('state','open') WHERE space_id=?1", [&id])?;
+        Ok(spaces::ranked(tx)?[&id].tier)
+    });
+    assert_eq!(tier.await.unwrap(), Tier::New);
+}
+
+#[tokio::test]
+async fn a_review_arrives_after_the_entries_queued_before_it_in_the_same_second() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let id = repo.id.clone();
+    let queued_after = manager
+        .store
+        .run(move |db| {
+            let insert = |entry: &str| {
+                db.execute(
+                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at)
+                     VALUES (?1,'launch',?2,?1,'claude','{}','{}','queued',10)",
+                    params![entry, id],
+                )
+            };
+            insert("early")?;
+            let queued_after = last_seq(db)?;
+            insert("late")?;
+            Ok(queued_after)
+        })
+        .await
+        .unwrap();
+    let review = WaitingOneShot {
+        id: String::from("oneshot:0").into(),
+        repository: repo.id.clone(),
+        serving: Some(Serving {
+            space: String::from("reviewed").into(),
+            queued_after,
+        }),
+        requested_at: UnixTime::from_seconds(10),
+        after_stop: false,
+    };
+    let entries = manager
+        .store
+        .read(move |tx| entries::waiting(tx, &HashMap::new(), &[review]))
+        .await
+        .unwrap();
+    let arrived: Vec<_> = (entries.iter())
+        .map(|entry| (entry.id.to_string(), entry.arrival))
+        .collect();
+    assert_eq!(
+        arrived,
+        [
+            ("early".into(), 0),
+            ("oneshot:0".into(), 1),
+            ("late".into(), 2)
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_last_sequence_number_holds_after_the_newest_entry_leaves() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let id = repo.id.clone();
+    let (before, after) = manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at)
+                 VALUES ('gone','launch',?1,'gone','claude','{}','{}','queued',10)",
+                [&id],
+            )?;
+            let before = last_seq(db)?;
+            db.execute("DELETE FROM agent_queue WHERE id='gone'", [])?;
+            Ok((before, last_seq(db)?))
+        })
+        .await
+        .unwrap();
+    assert!(before > 0);
+    assert_eq!(after, before);
+}
+
+#[tokio::test]
+async fn queued_launches_rank_with_the_priority_set_on_their_spaces() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "running").await;
+    let prioritized = async |name, priority| {
+        let workspace = create(&manager, &repo, name).await;
+        let selector = SpaceSelector::id(&workspace.id);
+        (manager.set_priority(None, &selector, priority).await).unwrap();
+        workspace
+    };
+    let worker = prioritized("worker", Priority::LOW).await;
+    add(&manager, &repo, "earlier").await;
+    let urgent = prioritized("launch", Priority::URGENT).await;
+    for workspace in [&urgent, &worker] {
+        (manager
+            .agents
+            .queue_add(&*manager, launch_in(workspace, false))
+            .await)
+            .unwrap();
+    }
+
+    let waiting: Vec<_> = (manager
+        .agents
+        .queue_entries(&*manager)
+        .await
+        .unwrap()
+        .into_iter())
+    .filter(|entry| entry.state == QueueState::Queued)
+    .map(|entry| (entry.name.to_string(), entry.rank.unwrap().priority))
+    .collect();
+    assert_eq!(
+        waiting,
+        [
+            ("launch".into(), Priority::URGENT),
+            ("earlier".into(), Priority::NORMAL),
+            ("worker".into(), Priority::LOW),
+        ]
+    );
+}
+
+/// The labels config, with the machine limited to one agent.
+const LABELS: &str = "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+     [priority.labels]\nurgent = 75\nlater = 25\n";
+
+/// Queue a launch in a new workspace `name` of `repo`, whose issue
+/// `number` is labelled `later` and `urgent` in the record of `table`.
+async fn queue_labelled(
+    manager: &Manager,
+    repo: &crate::model::Repository,
+    (name, number): (&str, u32),
+    table: &'static str,
+) -> SpaceSelector {
+    let workspace = create(manager, repo, name).await;
+    let id = workspace.id.clone();
+    let url = format!("https://forge.example/team/{}/issues/{number}", repo.id);
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![id, url],
+            )?;
+            db.execute(
+                &format!(
+                    "INSERT INTO {table}(space_id,url,record) VALUES (?1,?2,
+                        json_object('details',json_object('labels',json_array('later','urgent','bug'))))"
+                ),
+                params![id, url],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .agents
+        .queue_add(manager, launch_in(&workspace, false))
+        .await
+        .unwrap();
+    SpaceSelector::id(&workspace.id)
+}
+
+/// The waiting entries' names and priorities, in queue order.
+async fn waiting_priorities(manager: &Manager) -> Vec<(String, Priority)> {
+    (manager
+        .agents
+        .queue_entries(manager)
+        .await
+        .unwrap()
+        .into_iter())
+    .filter(|entry| entry.state == QueueState::Queued)
+    .map(|entry| (entry.name.to_string(), entry.rank.unwrap().priority))
+    .collect()
+}
+
+#[tokio::test]
+async fn a_space_without_a_priority_set_takes_the_highest_its_issues_labels_map_to() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(LABELS));
+    add(&manager, &repo, "running").await;
+    // Labels as the background poll read them, as a watch read them, and
+    // under a priority set on the space.
+    queue_labelled(&manager, &repo, ("polled", 1), "space_item_activity").await;
+    queue_labelled(&manager, &repo, ("watched", 2), "pr_activity").await;
+    let set = queue_labelled(&manager, &repo, ("set", 3), "space_item_activity").await;
+    manager
+        .set_priority(None, &set, Priority::LOW)
+        .await
+        .unwrap();
+    add(&manager, &repo, "unlabelled").await;
+
+    assert_eq!(
+        waiting_priorities(&manager).await,
+        [
+            ("polled".into(), Priority::URGENT),
+            ("watched".into(), Priority::URGENT),
+            ("unlabelled".into(), Priority::NORMAL),
+            ("set".into(), Priority::LOW),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_space_with_several_issues_takes_the_highest_any_of_their_labels_maps_to() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(LABELS));
+    add(&manager, &repo, "running").await;
+    let workspace = create(&manager, &repo, "several").await;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            for (number, label) in [(1, "urgent"), (2, "later")] {
+                let url = format!("https://forge.example/team/repo/issues/{number}");
+                db.execute(
+                    "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                    params![id, url],
+                )?;
+                db.execute(
+                    "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,
+                        json_object('details',json_object('labels',json_array(?3))))",
+                    params![id, url, label],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .agents
+        .queue_add(&*manager, launch_in(&workspace, false))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        waiting_priorities(&manager).await,
+        [("several".into(), Priority::URGENT)]
+    );
+}
+
+#[tokio::test]
+async fn a_repository_whose_config_does_not_resolve_maps_no_labels_and_holds_up_no_other() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let broken = register(&manager, &temp, "broken").await;
+    manager.publish_config(global_config(LABELS));
+    add(&manager, &repo, "running").await;
+    queue_labelled(&manager, &broken, ("broken", 1), "space_item_activity").await;
+    queue_labelled(&manager, &repo, ("labelled", 1), "space_item_activity").await;
+    std::fs::write(
+        broken.path.join(".shoal.toml"),
+        "[priority.labels]\nurgent = 101\n",
+    )
+    .unwrap();
+    assert!(
+        manager
+            .repositories
+            .repository_settings(&broken.id)
+            .await
+            .is_err()
+    );
+
+    assert_eq!(
+        waiting_priorities(&manager).await,
+        [
+            ("labelled".into(), Priority::URGENT),
+            ("broken".into(), Priority::NORMAL),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_launch_in_a_space_without_a_priority_ranks_with_the_highest_its_issues_labels_map_to() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(LABELS));
+    add(&manager, &repo, "running").await;
+    let labelled = async |name| QueueRequest {
+        issue_labels: vec!["later".into(), "urgent".into()],
+        ..request(&manager, &repo, name, false).await
+    };
+    let given = labelled("given").await;
+    (manager
+        .set_priority(None, &given.space, Priority::LOW)
+        .await)
+        .unwrap();
+    manager.agents.queue_add(&*manager, given).await.unwrap();
+    add(&manager, &repo, "unlabelled").await;
+    let labelled = labelled("labelled").await;
+    manager.agents.queue_add(&*manager, labelled).await.unwrap();
+
+    assert_eq!(
+        waiting_priorities(&manager).await,
+        [
+            ("labelled".into(), Priority::URGENT),
+            ("unlabelled".into(), Priority::NORMAL),
+            ("given".into(), Priority::LOW),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_queued_restore_reads_when_its_agents_prompt_cache_expires() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let workspace = create(&manager, &repo, "stopped").await;
+    let (id, repository) = (workspace.id.clone(), repo.id.clone());
+    let entries = manager
+        .store
+        .read(move |tx| {
+            tx.execute(
+                "INSERT INTO executions(id,space_id,state,agent) VALUES ('agent',?1,?2,'claude')",
+                params![id, crate::state::ExecutionState::Unknown],
+            )?;
+            tx.execute(
+                "INSERT INTO space_agent_state(space_id,state,execution_id,since,prompt_cache_expires_at)
+                 VALUES (?1,'idle','agent',1,500)",
+                [&id],
+            )?;
+            tx.execute(
+                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,space_id,execution_id)
+                 VALUES ('restore','restore',?1,'stopped','claude',?2,1,?3,'agent')",
+                params![repository, QueueState::Queued, id],
+            )?;
+            entries::waiting(tx, &Default::default(), &[])
+        })
+        .await
+        .unwrap();
+    let caches: Vec<_> = entries
+        .iter()
+        .map(|entry| entry.prompt_cache_until)
+        .collect();
+    assert_eq!(
+        caches,
+        [Some(shoal_protocol::time::UnixTime::from_seconds(500))]
+    );
+}
+
+/// The machine limited to one agent, with area labels prefixed `area/`.
+const AREAS: &str = "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n\
+     [issue]\narea_prefix = 'area/'\n";
+
+/// Assign `workspace` the issue `number` and watch its PR `number`, whose
+/// labels the background poll read as `issue` and `pr`.
+async fn assign_labelled(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    number: u32,
+    (issue, pr): (&[&str], &[&str]),
+) {
+    let id = workspace.id.clone();
+    let issue_url = format!("https://forge.example/team/repo/issues/{number}");
+    let pr_url = format!("https://forge.example/team/repo/pulls/{number}");
+    let labels = |labels: &[&str]| serde_json::json!({"details": {"labels": labels}}).to_string();
+    let records = [
+        (issue_url.clone(), labels(issue)),
+        (pr_url.clone(), labels(pr)),
+    ];
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![id, issue_url],
+            )?;
+            db.execute(
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,json_object('urls',json_array(?2)))",
+                params![id, pr_url],
+            )?;
+            for (url, record) in records {
+                db.execute(
+                    "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)",
+                    params![id, url, record],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// Queue a launch of a new workspace `name` whose issue has `labels`.
+async fn queue_in_areas(
+    manager: &Manager,
+    repo: &crate::model::Repository,
+    name: &str,
+    labels: &[&str],
+) {
+    let request = QueueRequest {
+        issue_labels: labels.iter().map(|label| label.to_string()).collect(),
+        ..request(manager, repo, name, false).await
+    };
+    manager.agents.queue_add(manager, request).await.unwrap();
+}
+
+/// The waiting entries' names and shared areas, in queue order.
+async fn waiting_areas(manager: &Manager) -> Vec<(String, Vec<SharedArea>)> {
+    (manager
+        .agents
+        .queue_entries(manager)
+        .await
+        .unwrap()
+        .into_iter())
+    .filter(|entry| entry.state == QueueState::Queued)
+    .map(|entry| (entry.name.to_string(), entry.rank.unwrap().shared_areas))
+    .collect()
+}
+
+#[tokio::test]
+async fn a_launch_shares_the_areas_of_existing_workspaces_issues_and_prs() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config(AREAS));
+    add(&manager, &repo, "running").await;
+    let daemon = create(&manager, &repo, "daemon").await;
+    assign_labelled(&manager, &daemon, 1, (&["area/daemon", "type/bug"], &[])).await;
+    let cli = create(&manager, &repo, "cli").await;
+    assign_labelled(&manager, &cli, 2, (&[], &["area/cli", "area/daemon"])).await;
+    // A chat working on an issue occupies nothing.
+    let chat = (manager.start_chat(repo.id.clone().into(), "talk".into(), "claude".into(), None))
+        .await
+        .unwrap();
+    let chat_issue = "https://forge.example/team/repo/issues/3";
+    let chat_id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                params![chat_id, chat_issue],
+            )?;
+            db.execute(
+                "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,
+                    json_object('details',json_object('labels',json_array('area/docs'))))",
+                params![chat_id, chat_issue],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    queue_in_areas(&manager, &repo, "both", &["area/daemon", "area/cli"]).await;
+    queue_in_areas(
+        &manager,
+        &repo,
+        "daemon-only",
+        &["area/daemon", "type/feature"],
+    )
+    .await;
+    queue_in_areas(&manager, &repo, "docs", &["area/docs"]).await;
+
+    let holders = |area: &str, spaces: &[&crate::model::Workspace]| SharedArea {
+        area: area.into(),
+        spaces: spaces
+            .iter()
+            .map(|space| space.number.to_string())
+            .collect(),
+    };
+    assert_eq!(
+        waiting_areas(&manager).await,
+        [
+            ("docs".into(), vec![]),
+            (
+                "daemon-only".into(),
+                vec![holders("area/daemon", &[&daemon, &cli])]
+            ),
+            (
+                "both".into(),
+                vec![
+                    holders("area/cli", &[&cli]),
+                    holders("area/daemon", &[&daemon, &cli]),
+                ]
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn without_an_area_prefix_no_launch_shares_areas() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "running").await;
+    let daemon = create(&manager, &repo, "daemon").await;
+    assign_labelled(&manager, &daemon, 1, (&["area/daemon"], &[])).await;
+    queue_in_areas(&manager, &repo, "shared", &["area/daemon"]).await;
+    queue_in_areas(&manager, &repo, "free", &[]).await;
+
+    assert_eq!(
+        waiting_areas(&manager).await,
+        [("shared".into(), vec![]), ("free".into(), vec![])]
+    );
+}

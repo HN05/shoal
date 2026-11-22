@@ -397,7 +397,7 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     assert!(user(&manager).await.is_empty());
 
     // A stopped chat keeps them for its restore.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     assert_eq!(
         received(&manager, &chat).await,
         [
@@ -564,7 +564,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
 
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     // Opened outside the chat, the worker is the user's and stays when the
     // chat is removed.
     manager.assign_parent(&worker.id, None).await.unwrap();
@@ -691,7 +691,7 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     );
 
     // Removed with nothing below it, the chat hands the files to the user.
-    manager.end_executions(&chat.id).await;
+    manager.agents.end_executions(&*manager, &chat.id).await;
     manager.assign_parent(&worker.id, None).await.unwrap();
     manager
         .remove_selected(

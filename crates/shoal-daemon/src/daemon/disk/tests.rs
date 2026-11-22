@@ -382,7 +382,9 @@ async fn failed_cleanup_still_stops_executions_on_critical_space() {
             .unwrap();
     }
     manager
+        .agents
         .begin_execution(
+            &*manager,
             busy.id.as_str(),
             None,
             crate::daemon::executions::ExecutionKind::Command,
@@ -458,7 +460,9 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         .await
         .unwrap();
     let execution = manager
+        .agents
         .begin_execution(
+            &*manager,
             workspace.id.as_str(),
             None,
             crate::daemon::executions::ExecutionKind::Command,
@@ -467,7 +471,9 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         .await
         .unwrap();
     manager
+        .agents
         .track_agent(
+            &*manager,
             &execution.plan.id,
             &shoal_protocol::executions::TrackedAgent::named("claude"),
             &workspace.id,

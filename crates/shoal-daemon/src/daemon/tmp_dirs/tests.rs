@@ -35,7 +35,14 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
     assert_eq!(mode & 0o777, 0o700);
     std::fs::remove_dir(&expected).unwrap();
     let started = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            &*manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(started.plan.environment[env::TMPDIR], expected.as_os_str());
@@ -58,7 +65,8 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
         "post-remove inherits it"
     );
     manager
-        .finish_execution(started.plan.id, ExecutionKind::Command, Some(0))
+        .agents
+        .finish_execution(&*manager, started.plan.id, ExecutionKind::Command, Some(0))
         .await
         .unwrap();
 

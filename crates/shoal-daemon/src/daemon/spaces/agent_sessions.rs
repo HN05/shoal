@@ -18,11 +18,11 @@ impl Manager {
     /// created for them, such as a session left at its shell after a failed
     /// launch. A record the daemon cannot read counts as no session.
     pub(crate) async fn session_spaces(&self, spaces: &[Space]) -> HashSet<SpaceId> {
-        let agents = (self.running_agents().await).unwrap_or_else(|error| {
+        let agents = (self.agents.running_agents().await).unwrap_or_else(|error| {
             log!("agents unreadable for their sessions: {error:#}");
             Vec::new()
         });
-        let owned = (self.owned_places(None).await).unwrap_or_else(|error| {
+        let owned = (self.agents.owned_places(None).await).unwrap_or_else(|error| {
             log!("places unreadable for their sessions: {error:#}");
             Vec::new()
         });

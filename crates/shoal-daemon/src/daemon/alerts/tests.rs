@@ -162,7 +162,8 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     assert_eq!(unread[0].kind, AlertKind::Message);
     assert_eq!(unread[0].message, "PR #12 is ready to merge");
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {

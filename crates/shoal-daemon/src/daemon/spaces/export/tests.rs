@@ -86,6 +86,7 @@ async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manag
         .clone();
     let child = identity::capture(pid).unwrap();
     manager
+        .agents
         .record_execution_child(execution, child, pid)
         .await
         .unwrap();
@@ -112,7 +113,8 @@ fn chat_import(repository: Option<&crate::model::Repository>, chat: RemovedSpace
 async fn stop(manager: &Manager, chat: &crate::model::Chat) {
     let request = crate::daemon::executions::StopRequest::manual();
     manager
-        .stop_space(&SpaceSelector::id(&chat.id), request)
+        .agents
+        .stop_space(manager, &SpaceSelector::id(&chat.id), request)
         .await
         .unwrap();
 }

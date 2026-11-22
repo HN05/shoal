@@ -197,7 +197,8 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         .await
         .unwrap();
     manager
-        .executions
+        .agents
+        .executions()
         .issue_scope(
             "scope".into(),
             Caller {
@@ -299,7 +300,11 @@ async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
             )
             .await
             .unwrap();
-        manager.forget_execution(&execution).await.unwrap();
+        manager
+            .agents
+            .forget_execution(&*manager, &execution)
+            .await
+            .unwrap();
     }
 
     let path = record_path(&manager.paths, &workspace.id, &ExecutionId::from("stopped"));

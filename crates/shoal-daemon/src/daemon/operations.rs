@@ -362,7 +362,9 @@ impl Manager {
         match report {
             Report::Step(step) => {
                 if step == Step::PostSetupEnded {
-                    self.release_setup_waits(&entry.workspace).await?;
+                    self.agents
+                        .release_setup_waits(self, &entry.workspace)
+                        .await?;
                 }
                 entry.push(Progress::Step { step });
             }

@@ -15,15 +15,20 @@ test-support = []
 [dependencies]
 anyhow.workspace = true
 futures-util.workspace = true
+libc.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
 serde_json.workspace = true
 shoal-core.workspace = true
 shoal-daemon-base.workspace = true
+shoal-forge-types = { workspace = true, features = ["rusqlite"] }
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
+shoal-refs = { workspace = true, features = ["rusqlite"] }
+shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-store.workspace = true
 shoal-subprocess.workspace = true
 tokio = { workspace = true, features = ["process", "rt", "sync", "time"] }
+tempfile.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]

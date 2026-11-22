@@ -60,7 +60,7 @@ impl Manager {
                 demo: Box::new(demo),
             },
             Some(_) => Progress::Starting,
-            None if self.executions.launch_ended_unrun(launch) => Progress::Ended,
+            None if self.agents.executions().launch_ended_unrun(launch) => Progress::Ended,
             None => Progress::Starting,
         })
     }
@@ -130,19 +130,22 @@ impl Manager {
         let between_runs = execution.child.is_none() && execution.group_id.is_none();
         if !between_runs {
             return self
-                .stop_disconnected(execution, StopPolicy::RequireCompleteProof)
+                .agents
+                .stop_disconnected(self, execution, StopPolicy::RequireCompleteProof)
                 .await;
         }
-        self.stop_disconnected(execution, StopPolicy::ForRemoval)
+        self.agents
+            .stop_disconnected(self, execution, StopPolicy::ForRemoval)
             .await?;
         let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
         ensure!(
-            self.inspect_execution(execution, &scan)
+            self.agents
+                .inspect_execution(self, execution, &scan)
                 .await?
                 .command_stopped(),
             "process state of the demo remains uncertain; check its processes, then stop it again"
         );
-        self.forget_execution(&execution.id).await
+        self.agents.forget_execution(self, &execution.id).await
     }
 
     /// Stop the verified processes of the demo `execution` runs, whose
@@ -161,7 +164,7 @@ impl Manager {
             return Ok(false);
         };
         let scan = process::scan(HashSet::from([record.id.clone()])).await?;
-        let mut processes = self.inspect_execution(&record, &scan).await?;
+        let mut processes = self.agents.inspect_execution(self, &record, &scan).await?;
         if let Some(viewer) = self.running_viewer(execution).await? {
             processes.spare_group(viewer.process.pid);
         }
@@ -177,7 +180,7 @@ impl Manager {
             reason: "stopped by shoal demo stop".into(),
             save: Save::Nothing,
         };
-        let connections = self.executions.connections().await;
+        let connections = self.agents.executions().connections().await;
         let mut disconnected = Vec::new();
         for id in executions {
             if connections.is_connected(&id) {

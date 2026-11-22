@@ -129,7 +129,7 @@ impl Manager {
     /// launch's blockers are done and disk space allows. One whose launch
     /// was cancelled waits for an explicit preparation.
     async fn preparation_gate(&self, id: &SpaceId, for_agent: bool) -> Result<Gate> {
-        let base = match self.opening_readiness(id).await? {
+        let base = match self.agents.opening_readiness(self, id).await? {
             Some(Readiness::Waiting(blocked_by)) => {
                 return Ok(Gate::Closed(PreparationWait::Blockers { blocked_by }));
             }
@@ -137,7 +137,7 @@ impl Manager {
             None if for_agent => return Ok(Gate::Closed(PreparationWait::Stopped)),
             None => None,
         };
-        match self.disk_holds_back_starts().await? {
+        match self.agents.disk_holds_back_starts(self).await? {
             true => Ok(Gate::Closed(PreparationWait::Disk)),
             false => Ok(Gate::Open { base }),
         }

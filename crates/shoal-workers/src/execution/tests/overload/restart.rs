@@ -25,7 +25,7 @@ async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncF
     if let Interruption::Shutdown = interruption {
         // A daemon stops accepting before it shuts down.
         fs::remove_file(&manager.paths.socket).unwrap();
-        bounded(manager.stop_for_shutdown()).await;
+        bounded(manager.agents.stop_for_shutdown()).await;
     }
     serving.abort();
     let reopened = restart(&manager).await;
@@ -42,7 +42,7 @@ async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncF
     // Reattachment restores the protection stop after recording the execution
     // as running.
     bounded(async {
-        while !reopened.agent_was_overloaded(&id).await {
+        while !reopened.agents.agent_was_overloaded(&id).await {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
@@ -70,7 +70,8 @@ async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncF
 async fn stop_for_memory(manager: &Manager) {
     assert!(
         manager
-            .stop_for_overload(shoal_daemon::test_daemon::Pressure::Memory)
+            .agents
+            .stop_for_overload(manager, shoal_daemon::test_daemon::Pressure::Memory)
             .await
     );
 }
@@ -88,7 +89,11 @@ async fn daemon_crash_under_disk_pressure_keeps_the_agent_waiting_for_its_restor
             resumes_when: "free disk space recovers".into(),
         };
         assert_eq!(
-            manager.stop_agents_for_disk_space(&protection).await.len(),
+            manager
+                .agents
+                .stop_agents_for_disk_space(manager, &protection)
+                .await
+                .len(),
             1
         );
     })
@@ -120,13 +125,14 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
     // A daemon stops accepting before it shuts down; the next one serves the
     // reattachment.
     fs::remove_file(&manager.paths.socket).unwrap();
-    bounded(manager.stop_for_shutdown()).await;
+    bounded(manager.agents.stop_for_shutdown()).await;
     serving.abort();
     let reopened = restart(&manager).await;
     // The live wrapper may still reattach, so nothing is decided yet.
     assert_eq!(
         reopened
-            .reconcile_interrupted_agents()
+            .agents
+            .reconcile_interrupted_agents(&*reopened,)
             .await
             .unwrap()
             .waiting
@@ -144,13 +150,17 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
         executions(&reopened, &workspace).await[0].state == ExecutionState::Running
     })
     .await;
-    drop(reopened.executions.connections().await);
+    drop(reopened.agents.executions().connections().await);
     assert!(record(&reopened, &workspace, &id).is_none());
     assert!(blocked(&reopened).await.is_empty());
     // A stop the agent receives saves the wrapper's record as usual.
-    bounded(reopened.stop_space(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
-        .await
-        .unwrap();
+    bounded(reopened.agents.stop_space(
+        &*reopened,
+        &SpaceSelector::id(&workspace.id),
+        StopRequest::manual(),
+    ))
+    .await
+    .unwrap();
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
     assert_eq!(
         record(&reopened, &workspace, &id).unwrap().stage,

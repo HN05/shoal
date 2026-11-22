@@ -104,7 +104,7 @@ pub(super) async fn load(manager: &Manager, spaces: &[Space]) -> Result<Agents> 
 /// The first queued launch or restore of each space.
 async fn queued(manager: &Manager) -> Result<HashMap<SpaceId, QueueEntry>> {
     let mut queued = HashMap::new();
-    for entry in manager.queue_entries().await? {
+    for entry in manager.agents.queue_entries(manager).await? {
         if let Some(space) = entry.space() {
             queued.entry(space.to_owned()).or_insert(entry);
         }

@@ -30,14 +30,21 @@ impl Manager {
         };
         let place = (&recorded.space, recorded.awaits_preparation);
         let follows = (preparing.pr.clone(), preparing.blockers.clone());
-        Ok(Some(self.queue_start_agent(place, *agent, follows).await?))
+        Ok(Some(
+            self.agents
+                .queue_start_agent(self, place, *agent, follows)
+                .await?,
+        ))
     }
 
     /// Give the start's queue `entry` the `space` it recorded. A failure,
     /// such as an entry that no longer starts, leaves the start to go on
     /// without it.
     async fn give_start_entry(&self, entry: &QueueEntryId, space: &Space) {
-        let attached = (self.queue_attach(entry, &SpaceSelector::id(&space.id))).await;
+        let attached = (self
+            .agents
+            .queue_attach(self, entry, &SpaceSelector::id(&space.id)))
+        .await;
         if let Err(error) = attached {
             log!("queue entry {entry} not given {}: {error:#}", space.name);
         }

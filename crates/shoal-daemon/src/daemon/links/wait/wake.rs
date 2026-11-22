@@ -166,7 +166,7 @@ impl Manager {
         execution: &ExecutionId,
         idle: &AgentStatus,
     ) -> bool {
-        self.turn_interrupted(execution).await
+        self.agents.turn_interrupted(execution).await
             || (idled_for(idle, UNWATCHED_WAKE_DELAY)
                 && self.links.waits().unwatched_for(id, UNWATCHED_WAKE_DELAY))
     }

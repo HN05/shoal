@@ -17,12 +17,12 @@ use crate::{
 
 impl Agents for Manager {
     fn queue_entries(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>> {
-        Box::pin(Manager::queue_entries(self))
+        Box::pin(self.agents.queue_entries(self))
     }
 
     fn live_queue_entries(&self) -> BoxFuture<'_, Result<HashSet<QueueEntryId>>> {
         Box::pin(async move {
-            let entries = self.queue_entries().await?;
+            let entries = self.agents.queue_entries(self).await?;
             Ok((entries.into_iter())
                 .filter(|entry| entry.state != QueueState::Failed)
                 .map(|entry| entry.id)
@@ -34,36 +34,37 @@ impl Agents for Manager {
         &'a self,
         entry: &'a QueueEntryId,
     ) -> BoxFuture<'a, Result<Option<SpaceId>>> {
-        Box::pin(Manager::started_launch(self, entry))
+        Box::pin(self.agents.started_launch(entry))
     }
 
     fn wake_admission(&self) {
-        self.agent_queue.wake();
+        self.agents.agent_queue().wake();
     }
 
     fn queue_suspended(&self) -> bool {
-        self.agent_queue.suspended()
+        self.agents.agent_queue().suspended()
     }
 
     fn readings_recovered(&self) -> bool {
-        self.overload_recovery.published().is_some()
+        self.agents.overload_recovery().published().is_some()
     }
 
     fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>> {
         Box::pin(async move {
-            let guard: Box<dyn Send + '_> = Box::new(self.agent_queue.lock_admission().await);
+            let guard: Box<dyn Send + '_> =
+                Box::new(self.agents.agent_queue().lock_admission().await);
             guard
         })
     }
 
     fn job_could_start(&self) -> BoxFuture<'_, Result<bool>> {
-        Box::pin(Manager::job_could_start(self))
+        Box::pin(self.agents.job_could_start(self))
     }
 
     fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
         Box::pin(async move {
-            let mut spaces = self.recorded_agent_spaces().await?;
-            spaces.extend(self.queued_agent_workspaces().await?);
+            let mut spaces = self.agents.recorded_agent_spaces().await?;
+            spaces.extend(self.agents.queued_agent_workspaces().await?);
             Ok(spaces)
         })
     }

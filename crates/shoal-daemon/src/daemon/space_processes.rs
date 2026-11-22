@@ -7,9 +7,12 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 
 use crate::{
-    daemon::{events::StoppedProcess, leftovers::COMMAND_LIMIT, manager::Manager, store},
+    daemon::{
+        events::StoppedProcess, leftovers::COMMAND_LIMIT, manager::Manager, store,
+        workspace::ownership::CommonDir,
+    },
     fsutil::off_runtime,
-    model::Workspace,
+    model::{self, Workspace},
     process::{
         described,
         identity::{
@@ -59,6 +62,31 @@ impl WorktreeTies {
 const ROUNDS: usize = 3;
 
 impl Manager {
+    /// Stop every untracked process of the space being removed, such as
+    /// servers its hooks or apps started, scripts a recording left behind,
+    /// or an agent Shoal did not start under a wrapper, since none outlives
+    /// removal. Its worktree, where it has one, ties processes to it as
+    /// `ties` says once the directory is verified to be its worktree still,
+    /// of the repository whose shared Git directory is `common_dir` when
+    /// the removal read it.
+    pub(in crate::daemon) async fn stop_removed_processes(
+        &self,
+        space: &model::Space,
+        ties: WorktreeTies,
+        common_dir: Option<&CommonDir>,
+    ) -> Result<()> {
+        if let Some(workspace) = space.to_workspace()
+            && ties != WorktreeTies::None
+        {
+            self.verify_removed_worktree_with(&workspace, common_dir)
+                .await?;
+        }
+        let space = self.space_ties(space, ties).await?;
+        self.stop_untracked(space, Selection::Processes, None)
+            .await?;
+        Ok(())
+    }
+
     /// Stop the untracked processes that `selection` takes of the workspace
     /// or chat `selector` names, as [`Self::stop_untracked`] does.
     pub(crate) async fn stop_space_processes(

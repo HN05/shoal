@@ -205,7 +205,7 @@ impl Manager {
     /// from, whatever its space, else the user.
     pub(crate) async fn attacher(&self, caller: Option<&Caller>) -> Attacher {
         let agent = match caller {
-            Some(caller) => self.caller_agent(caller).await,
+            Some(caller) => self.agents.caller_agent(caller).await,
             None => None,
         };
         let Some(agent) = agent else {
@@ -381,7 +381,7 @@ impl Manager {
         for key in self.files_homes().await? {
             // Execution admission comes first, as nothing holding the files
             // gate waits for it.
-            let _admission = self.executions.connections().await;
+            let _admission = self.agents.executions().connections().await;
             let (home, _files) = self.lock_files_home(&key).await?;
             let files = self.store.run(move |db| records::idle(db, &key)).await?;
             deleted.extend(self.delete_files(&home, files).await?);

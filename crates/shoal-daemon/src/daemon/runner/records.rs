@@ -11,6 +11,7 @@ use shoal_ids::{
 use shoal_protocol::space_names::SpaceName;
 use shoal_runner::daemon::{RecordedExecutions, WaitingEntry};
 
+use crate::daemon::agent_service::AgentRecords;
 use crate::{
     model::QueuedJob,
     state::{QueueKind, QueueState},
@@ -124,7 +125,7 @@ impl shoal_runner::daemon::Records for RunnerRecords {
     }
 
     fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool> {
-        crate::daemon::agent_queue::actions::delete_waiting(db, id)
+        crate::daemon::agent_queue::actions::delete_waiting(db, &AgentRecords, id)
     }
 
     fn forget_unlisted_job_entries(

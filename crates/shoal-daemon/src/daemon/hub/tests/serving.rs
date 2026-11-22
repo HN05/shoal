@@ -56,13 +56,21 @@ async fn a_streamed_request_s_vouch_stands_for_its_caller_only_until_its_answer_
     // Its agent reported a session, whose files this machine has none of
     // yet, so the follow stays open.
     let execution = manager
-        .begin_execution(workspace.id.as_str(), None, ExecutionKind::Command, None)
+        .agents
+        .begin_execution(
+            &**manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
         .await
         .unwrap()
         .plan
         .id;
     let agent = shoal_protocol::executions::TrackedAgent::named("claude");
-    (manager.track_agent(
+    (manager.agents.track_agent(
+        &**manager,
         &execution,
         &agent,
         &workspace.id,

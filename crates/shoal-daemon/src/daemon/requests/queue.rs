@@ -25,7 +25,7 @@ pub(super) async fn handle(
         QueueMethod::QueueHold { entry } => {
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                queued_starts::hold(stream, request_id, manager, entry, guard)
+                queued_starts::hold(stream, request_id, manager.agents.clone(), entry, guard)
             }));
         }
         QueueMethod::QueueAgent {
@@ -34,19 +34,29 @@ pub(super) async fn handle(
             blockers,
             pr,
         } => {
-            let entry = manager.queue_agent(&workspace, *launch, blockers, pr);
+            let entry = manager
+                .agents
+                .queue_agent(&**manager, &workspace, *launch, blockers, pr);
             Body::QueueEntry(entry.await?)
         }
         QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue().await?),
-        QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
-        QueueMethod::OpenStart { entry } => {
-            Body::QueuedPlan(manager.open_queued_start(&entry, caller).await?)
+        QueueMethod::QueuedPlan { entry } => {
+            Body::QueuedPlan(manager.agents.queued_plan(&entry).await?)
         }
-        QueueMethod::QueueRemove { entry } => {
-            Body::QueueEntry(manager.queue_remove(&entry, caller).await?)
-        }
+        QueueMethod::OpenStart { entry } => Body::QueuedPlan(
+            manager
+                .agents
+                .open_queued_start(&**manager, &entry, caller)
+                .await?,
+        ),
+        QueueMethod::QueueRemove { entry } => Body::QueueEntry(
+            manager
+                .agents
+                .queue_remove(&**manager, &entry, caller)
+                .await?,
+        ),
         QueueMethod::QueueStart { entry, here } => {
-            let entry = manager.queue_start(&entry, here).await?;
+            let entry = manager.agents.queue_start(&**manager, &entry, here).await?;
             if entry.kind == QueueKind::Restore
                 && let Some(space) = entry.space()
             {
@@ -59,20 +69,31 @@ pub(super) async fn handle(
             }
             Body::QueueEntry(entry)
         }
-        QueueMethod::QueueClaim { entry } => Body::QueueEntry(manager.queue_claim(&entry).await?),
+        QueueMethod::QueueClaim { entry } => {
+            Body::QueueEntry(manager.agents.queue_claim(&**manager, &entry).await?)
+        }
         QueueMethod::StartedLaunch { entry } => {
-            Body::StartedLaunch(manager.started_launch(&entry).await?)
+            Body::StartedLaunch(manager.agents.started_launch(&entry).await?)
         }
         QueueMethod::QueueAttach { entry, space } => {
-            manager.queue_attach(&entry, &space).await?;
+            manager
+                .agents
+                .queue_attach(&**manager, &entry, &space)
+                .await?;
             Body::Ok
         }
         QueueMethod::QueueFail { entry, error } => {
-            manager.fail_queue_entry(&entry, &error).await?;
+            manager
+                .agents
+                .fail_queue_entry(&**manager, &entry, &error)
+                .await?;
             Body::Ok
         }
         QueueMethod::QueueRetry { entry, start } => {
-            let entry = manager.retry_failed_launch(&entry, start).await?;
+            let entry = manager
+                .agents
+                .retry_failed_launch(&**manager, &entry, start)
+                .await?;
             // A restore the user makes is their interaction with its agent,
             // as a stopped agent's is.
             if let Some(space) = entry.space() {
@@ -99,8 +120,18 @@ pub(super) async fn handle(
                 .record_user_interaction(&**manager, caller, &workspace)
                 .await;
             Body::QueueEntry(match now {
-                false => (manager.queue_stopped_restore(&workspace, &execution, env)).await?,
-                true => (manager.start_stopped_restore(&workspace, &execution, env)).await?,
+                false => {
+                    (manager
+                        .agents
+                        .queue_stopped_restore(&**manager, &workspace, &execution, env))
+                    .await?
+                }
+                true => {
+                    (manager
+                        .agents
+                        .start_stopped_restore(&**manager, &workspace, &execution, env))
+                    .await?
+                }
             })
         }
     }))

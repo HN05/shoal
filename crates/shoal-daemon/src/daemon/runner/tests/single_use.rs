@@ -92,7 +92,13 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     assert_eq!(deleted(&fixture.state), ["77"]);
 
     manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .agents
+        .finish_execution(
+            &**manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
         .await
         .unwrap();
     finish_ended_jobs(manager).await;
@@ -122,7 +128,13 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
     assert!(deleted(&fixture.state).is_empty());
 
     manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .agents
+        .finish_execution(
+            &**manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
         .await
         .unwrap();
     finish_ended_jobs(manager).await;

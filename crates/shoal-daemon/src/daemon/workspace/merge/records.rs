@@ -18,7 +18,7 @@ use crate::{
         self,
         unmerge::{first_parent_chain, holds_commits_of, merge_result, replay_identity},
     },
-    model::{ExecutionPlan, MergePlan, Repository, UnmergePlan},
+    model::{MergePlan, Repository, UnmergePlan},
 };
 
 /// A local merge of a workspace's branch into its repository's default branch.
@@ -46,22 +46,7 @@ pub(crate) struct RecordedMerge {
     pub merge: LocalMerge,
 }
 
-/// The change to the merge records an execution makes once it ends.
-pub(crate) enum RecordChange {
-    Merge(Box<MergePlan>),
-    Unmerge(Box<UnmergePlan>),
-}
-
-impl RecordChange {
-    /// The change `plan`'s execution makes, if it merges or unmerges.
-    pub(crate) fn of(plan: &ExecutionPlan) -> Option<Self> {
-        match (&plan.merge, &plan.unmerge) {
-            (Some(merge), _) => Some(Self::Merge(merge.clone())),
-            (None, Some(unmerge)) => Some(Self::Unmerge(unmerge.clone())),
-            (None, None) => None,
-        }
-    }
-}
+pub(crate) use shoal_agents::execution_connection::RecordChange;
 
 impl Manager {
     /// Bring the merge records in line with what the execution behind

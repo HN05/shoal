@@ -3,14 +3,66 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
+use shoal_ids::space_ids::SpaceId;
+
 use crate::{
     config::{Effective, hooks::HookCommand},
-    daemon::manager::Manager,
+    daemon::{gates::GuardMode, manager::Manager},
     hooks::{self, Hook, HookKind},
     model::Space,
+    state::WorkspaceState,
 };
 
 impl Manager {
+    /// Run `hooks.post_agent_exit` where the agent of `space` worked, unless
+    /// a removal has the space, which runs its own hooks.
+    pub(crate) async fn run_agent_exit_hook(
+        &self,
+        space: &crate::model::Space,
+        agent: &crate::agent::Agent,
+        exit_code: Option<i32>,
+        complete: bool,
+    ) -> anyhow::Result<()> {
+        if !self.agent_exit_space_ready(&space.id).await? {
+            return Ok(());
+        }
+        let settings = self.repositories.space_settings(self, space).await?;
+        let Some(command) = Self::space_hook(space, HookKind::PostAgentExit, &settings) else {
+            return Ok(());
+        };
+        let _resources = self.gates.resource_guard(&space.id, GuardMode::Exclusive)?;
+        // Recheck after excluding new transitions.
+        if !self.agent_exit_space_ready(&space.id).await? {
+            return Ok(());
+        }
+        self.verify_space(space).await?;
+        let hook = Hook::PostAgentExit {
+            agent,
+            exit_code,
+            complete,
+        };
+        (self.run_space_hook(hook, space, &settings, &command)).await
+    }
+
+    /// Whether the space `id` is a chat or a ready workspace that no
+    /// removal holds.
+    async fn agent_exit_space_ready(&self, id: &SpaceId) -> anyhow::Result<bool> {
+        if self.space_removals.reserved(id) {
+            return Ok(false);
+        }
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                crate::daemon::store::exists(
+                    db,
+                    "SELECT 1 FROM spaces LEFT JOIN workspaces USING (id)
+                     WHERE spaces.id=?1 AND (spaces.kind='chat' OR workspaces.state=?2)",
+                    rusqlite::params![id, WorkspaceState::Ready],
+                )
+            })
+            .await
+    }
+
     /// The hook of `kind` that `settings` configure, in where the agent of
     /// `space` works.
     pub(crate) fn space_hook(
