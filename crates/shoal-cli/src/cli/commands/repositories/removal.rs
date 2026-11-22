@@ -49,7 +49,12 @@ async fn targets(ctx: &Context, named: Option<String>, machines: &Machines) -> R
     if let (Some(local), Machines::Found) = (local, machines) {
         return Ok(vec![Target::Here(local.clone())]);
     }
-    let (elsewhere, view) = elsewhere::registered(ctx).await;
+    // Where it names machines, a removal that could not ask the hub would
+    // act on fewer than it names.
+    let (elsewhere, view) = match machines {
+        Machines::Found => elsewhere::registered_or_left_out(ctx).await,
+        Machines::Named(_) | Machines::All => elsewhere::registered(ctx).await?,
+    };
     let registered = Registered {
         here: local,
         here_origin: match local {
@@ -87,7 +92,7 @@ async fn chosen(ctx: &Context, here: &[Repository]) -> Result<Chosen> {
         "no current registered repository; {}",
         super::REPOSITORY
     );
-    let (elsewhere, _) = elsewhere::registered(ctx).await;
+    let (elsewhere, _) = elsewhere::registered_or_left_out(ctx).await;
     let mut entries = ui::repository_choices(here.to_vec()).await;
     entries.extend(elsewhere.iter().map(|other| (key(other), label(other))));
     let picked = ui::pick(ctx, "Repository> ", entries)?;

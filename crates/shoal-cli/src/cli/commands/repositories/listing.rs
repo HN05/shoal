@@ -12,7 +12,7 @@ use crate::cli::{
 
 pub(super) async fn list(ctx: &Context) -> Result<i32> {
     let here = crate::client::repositories::list(&ctx.paths).await?;
-    let (others, _) = elsewhere::registered(ctx).await;
+    let (others, _) = elsewhere::registered_or_left_out(ctx).await;
     let listed: Vec<Listed> = (here.into_iter().map(Listed::Here))
         .chain(others.into_iter().map(Listed::Elsewhere))
         .collect();

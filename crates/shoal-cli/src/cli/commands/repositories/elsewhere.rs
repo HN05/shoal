@@ -1,23 +1,31 @@
 //! The repositories the other joined machines register, as the hub lists
 //! them, which lists and removal show after this machine's.
+use anyhow::{Context as _, Result};
 use shoal_client::output::repositories::RepositoryElsewhere;
 use shoal_protocol::hub::directory::HubView;
 
 use crate::cli::context::Context;
 
 /// The repositories the other joined machines register, with the hub's
-/// view of those machines, none on a machine in no hub, and none, with a
-/// warning, while the hub cannot list them.
-pub(super) async fn registered(ctx: &Context) -> (Vec<RepositoryElsewhere>, Option<HubView>) {
-    let view = match crate::client::repositories::elsewhere(&ctx.paths).await {
-        Ok(view) => view,
-        Err(error) => {
-            eprintln!("warning: the other machines' repositories are left out: {error:#}");
-            None
-        }
-    };
+/// view of those machines; none on a machine in no hub.
+pub(super) async fn registered(
+    ctx: &Context,
+) -> Result<(Vec<RepositoryElsewhere>, Option<HubView>)> {
+    let view = (crate::client::repositories::elsewhere(&ctx.paths).await)
+        .context("cannot ask the hub for the other machines' repositories")?;
     let listed = view.as_ref().map(of).unwrap_or_default();
-    (listed, view)
+    Ok((listed, view))
+}
+
+/// [`registered`], or none, with a warning, while the hub cannot list
+/// them.
+pub(super) async fn registered_or_left_out(
+    ctx: &Context,
+) -> (Vec<RepositoryElsewhere>, Option<HubView>) {
+    registered(ctx).await.unwrap_or_else(|error| {
+        eprintln!("warning: the other machines' repositories are left out: {error:#}");
+        (Vec::new(), None)
+    })
 }
 
 /// The repositories `view` lists, by machine name, then name.
