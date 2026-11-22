@@ -2,7 +2,9 @@
 use std::path::Path;
 
 use crate::model::Workspace;
-use crate::scoping::Scoping;
+use anyhow::{Result, ensure};
+
+use crate::{fsutil::current_dir::current_directory, scoping::Scoping};
 use shoal_protocol::space_names::SpaceSelector;
 
 #[derive(Clone, Copy)]
@@ -18,6 +20,41 @@ impl ScopeOrder {
     pub fn reads_directory(self, scoping: Scoping) -> bool {
         !(scoping == Scoping::Scoped && matches!(self, Self::BeforeDirectory))
     }
+}
+
+/// No workspace is named or current, where the caller takes none from a
+/// picker.
+#[derive(Debug)]
+pub struct NoCurrentWorkspace;
+
+impl std::fmt::Display for NoCurrentWorkspace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("no current workspace; pass an explicit workspace")
+    }
+}
+
+impl std::error::Error for NoCurrentWorkspace {}
+
+/// The workspace this process acts in among `workspaces`, those it sees,
+/// its own first when it is scoped, as `order` puts its scope and its
+/// current directory, which it reads only where `order` needs it. A scoped
+/// process whose workspace is not listed is refused; `None` means an
+/// unscoped one runs in no workspace.
+pub fn current(workspaces: &[Workspace], order: ScopeOrder) -> Result<Option<&Workspace>> {
+    let scoping = Scoping::of_workspace();
+    let cwd = match order.reads_directory(scoping) {
+        true => current_directory()?,
+        false => None,
+    };
+    let context = WorkspaceContext::from_directory(workspaces, cwd.as_deref());
+    if let Some(workspace) = context.resolve(None, scoping, order) {
+        return Ok(Some(workspace));
+    }
+    ensure!(
+        scoping == Scoping::Unscoped,
+        "scoped workspace is unavailable"
+    );
+    Ok(None)
 }
 
 pub struct WorkspaceContext<'a> {

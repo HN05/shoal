@@ -12,14 +12,12 @@ pub mod worktrees;
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result};
 
 use crate::{
     client::connection::CommandPaths,
-    fsutil::current_dir::current_directory,
     model::Workspace,
-    scoping::Scoping,
-    workspace_context::{ScopeOrder, WorkspaceContext},
+    workspace_context::{self, NoCurrentWorkspace, ScopeOrder},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -40,20 +38,10 @@ async fn own_space(paths: &CommandPaths, explicit: Option<SpaceSelector>) -> Res
 /// shell has moved, such as into a child workspace.
 async fn own_workspace(paths: &CommandPaths) -> Result<SpaceSelector> {
     let workspaces = crate::client::spaces::list(paths).await?.into_workspaces();
-    let (scoping, order) = (Scoping::of_workspace(), ScopeOrder::BeforeDirectory);
-    let cwd = match order.reads_directory(scoping) {
-        true => current_directory()?,
-        false => None,
-    };
-    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    if let Some(workspace) = context.resolve(None, scoping, order) {
-        return Ok(SpaceSelector::id(&workspace.id));
+    match workspace_context::current(&workspaces, ScopeOrder::BeforeDirectory)? {
+        Some(workspace) => Ok(SpaceSelector::id(&workspace.id)),
+        None => Err(NoCurrentWorkspace.into()),
     }
-    ensure!(
-        scoping == Scoping::Unscoped,
-        "scoped workspace is unavailable"
-    );
-    bail!("no current workspace; pass an explicit workspace")
 }
 
 /// The innermost workspace containing `directory`, which a scoped caller

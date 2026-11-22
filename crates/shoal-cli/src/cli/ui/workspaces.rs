@@ -20,7 +20,7 @@ use crate::{
     },
     model::Workspace,
     scoping::Scoping,
-    workspace_context::{ScopeOrder, WorkspaceContext},
+    workspace_context::{self, ScopeOrder, WorkspaceContext},
 };
 use shoal_protocol::hub::directory::Offered;
 use shoal_protocol::space_names::SpaceSelector;
@@ -39,16 +39,7 @@ pub enum Fallback {
     OwnSpace,
 }
 
-#[derive(Debug)]
-pub struct NoCurrentWorkspace;
-
-impl std::fmt::Display for NoCurrentWorkspace {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("no current workspace; pass an explicit workspace")
-    }
-}
-
-impl std::error::Error for NoCurrentWorkspace {}
+pub use crate::workspace_context::NoCurrentWorkspace;
 
 pub(in crate::cli) use crate::fsutil::current_dir::current_directory;
 
@@ -152,24 +143,13 @@ pub(super) async fn resolve_workspace(
     let workspaces = crate::client::spaces::list(&ctx.paths)
         .await?
         .into_workspaces();
-    let scoping = Scoping::of_workspace();
     let order = match fallback {
         Fallback::OwnSpace => ScopeOrder::BeforeDirectory,
         Fallback::CurrentDirectory | Fallback::CurrentDirectoryOnly => ScopeOrder::AfterDirectory,
     };
-    let cwd = if order.reads_directory(scoping) {
-        current_directory()?
-    } else {
-        None
-    };
-    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    if let Some(workspace) = context.resolve(None, scoping, order) {
+    if let Some(workspace) = workspace_context::current(&workspaces, order)? {
         return Ok(Resolution::Current(workspace.id.clone()));
     }
-    ensure!(
-        scoping == Scoping::Unscoped,
-        "scoped workspace is unavailable"
-    );
     if matches!(
         fallback,
         Fallback::CurrentDirectoryOnly | Fallback::OwnSpace
