@@ -1193,6 +1193,34 @@ Ctrl-C of a foreground daemon hand work over too; `shoal daemon restart`,
 cancelled after the hand-over, the machine has the hub retire its copies
 of the spaces that went, as it does once its link opens again.
 
+A machine joined to a hub announces its sleep, whether it is `always_on` or
+`intermittent`: on macOS from IOKit's will-sleep notification, on Linux from
+logind's `PrepareForSleep` under a sleep delay lock. It first sends the hub
+one notice naming each space whose package lacks changes and since when,
+then a new package of each space that changed, or on an `always_on` machine,
+which keeps no packages current, of each space with an agent working or
+queued, all at once, until a second before the platform stops waiting:
+logind's `InhibitDelayMaxSec`, or 30 seconds on macOS. Then it closes its
+link and admits no queued agent until the machine fully wakes, so a dark
+wake, such as Power Nap's, changes nothing. A machine whose link drops while
+its last report said it ran on battery below 5% counts as one that announced
+its sleep at that report.
+
+Once a machine that announced its sleep has been away for 10 minutes, the
+hub takes over each of its spaces that has something to do (an agent
+working at its last report, a queued agent, or an event the hub holds for it
+since the notice, which takes it over as it arrives) and whose package is
+current or lacks only changes from less than 15 minutes before the notice.
+It places each as a shutdown's hand-over does, and the machine it chose
+continues it under its ID and queues its agents' restores; a chat in a
+workspace's worktree goes with that workspace, and only together. A
+`spaces_taken_over` alert names where they went, and the events the hub
+held for them follow them there. A space whose package lags more stays, and
+the `machine_unreachable` alert below names it. The machine retires its
+copies of the spaces taken over once it wakes, as after any takeover, while
+waking within the 10 minutes leaves everything where it was. These times
+and the battery level are fixed, not settings.
+
 The hub never takes a space over on its own otherwise: a machine that is
 awake but lost only the hub keeps working. Once an `intermittent` machine has been
 unreachable for 30 minutes, the hub records one `machine_unreachable` alert

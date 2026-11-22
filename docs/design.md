@@ -278,7 +278,30 @@ announcement of a shutdown at all, so on every platform every signal Shoal
 did not send itself hands work over, as its agents stop anyway; Shoal's own
 restart, stop and upgrades go through its control path and hand nothing
 over. A cancelled shutdown tells the hub the machine stays, so it retires
-the copies of what went at once rather than at its next link. Space numbers form
+the copies of what went at once rather than at its next link. Nor is an
+announced sleep: every machine joined to a hub, whatever its
+availability, announces its sleep from IOKit's will-sleep notification on
+macOS, whose acknowledgement it delays, and logind's `PrepareForSleep`
+under a sleep delay lock on Linux. One small notice goes first, naming
+each space whose package lags and since when, so the hub learns of the
+sleep however little else fits; then the changed packages, one stream per
+space, all at once, until the platform's allowance runs out, an
+`always_on` machine, which keeps no packages, sending every space with
+work. The machine then keeps its link closed and admits no queued work
+until it fully wakes, so a dark wake neither cancels the wait nor races a
+takeover. A link that drops while the last report, which carries whether
+the machine runs on battery and its level, said on battery below 5%
+counts as a sleep announced at that report. Once a sleeping machine has
+stayed away 10 minutes, the hub moves each of its spaces that has
+something to do, an agent working at the notice, a queued restore, or an
+update held for it while it sleeps, which takes it over as it arrives, and
+whose package is current or lagged less than 15 minutes before the
+notice, as a shutdown's hand-over does, holding what it held for the space
+for the machine it went to; a chat in a workspace's worktree goes only with
+that workspace. A space that lags more stays for the alert and a manual
+restore; the machine retires the copies taken over once it wakes, and one
+that wakes within the 10 minutes keeps everything. The hub keeps a sleep
+in its store, and these numbers are fixed, not settings. Space numbers form
 one sequence across the hub's machines, which the hub holds: it answers
 each report with a few spares it keeps for that machine, which numbers a
 new space from them without waiting for the hub, and once none is left, as
@@ -456,7 +479,8 @@ looks at a space as its agent's turn ends and at every space every 10
 minutes, sends one whose HEAD, files, agents' session files or records
 changed since its last package, at most every 5 minutes and each over a
 stream of its own, and reports with each space since when it has changes
-the hub's package lacks. The hub keeps one package per space, replacing it
+the hub's package lacks. The hub keeps one package per space, with the
+start its agent would make, which places a takeover, replacing it
 only once the new one arrived whole, until the space ends on its machine or
 the machine is revoked, and refuses new ones while its disk is below the
 overload warning threshold; the hub's own machine sends none, having

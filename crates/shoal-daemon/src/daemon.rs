@@ -80,6 +80,7 @@ pub(crate) mod runner;
 pub mod scope;
 mod shared_repositories;
 mod shutdown_lock;
+mod sleep_lock;
 pub(crate) mod space_processes;
 mod space_removal;
 pub(crate) mod spaces;
@@ -246,6 +247,7 @@ pub async fn run(
         "shutdown lock",
         shutdown_lock::run,
     );
+    spawn_supervised(&mut background, &manager, "sleep lock", sleep_lock::run);
     spawn_supervised(&mut background, &manager, "agent queue", |manager| {
         queued_starts::run(manager.agents.clone(), manager)
     });
