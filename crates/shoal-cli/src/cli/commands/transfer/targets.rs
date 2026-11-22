@@ -57,7 +57,9 @@ fn names_no_space(error: &anyhow::Error) -> bool {
 /// The IDs of the current space or those the user picks.
 async fn picked(ctx: &Context) -> Result<Vec<SpaceId>> {
     let mut ids = Vec::new();
-    for selector in ui::select_spaces(ctx, Vec::new(), true).await? {
+    for selector in
+        ui::select_spaces(ctx, Vec::new(), true, &crate::cli::ui::Acting::Unconverted).await?
+    {
         let space = crate::client::spaces::present_space(&ctx.paths, &selector)
             .await?
             .with_context(|| format!("no space {selector}"))?;

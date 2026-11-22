@@ -19,9 +19,17 @@ pub(in crate::cli::commands) async fn processes(
     // runs in.
     let selectors = match ui::current_chat(&None) {
         Some(_) if selectors.is_empty() => {
-            vec![ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?]
+            vec![
+                ui::select_space(
+                    ctx,
+                    None,
+                    ui::Fallback::CurrentDirectory,
+                    &crate::cli::ui::Acting::Unconverted,
+                )
+                .await?,
+            ]
         }
-        _ => ui::select_spaces(ctx, selectors, false).await?,
+        _ => ui::select_spaces(ctx, selectors, false, &crate::cli::ui::Acting::Unconverted).await?,
     };
     if selectors.len() > 1 {
         ensure_spaces(ctx, &selectors).await?;

@@ -25,7 +25,13 @@ pub(in crate::cli::commands) async fn setup(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
     let Some(set_up) = setup_workspace(ctx, &inspection.workspace, true).await? else {
         return Ok(1);
@@ -45,7 +51,13 @@ pub(in crate::cli::commands) async fn skip_setup(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
         .await?
         .workspace;

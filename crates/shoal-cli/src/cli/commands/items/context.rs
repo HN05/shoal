@@ -75,7 +75,13 @@ async fn known_item_context(
         return Ok(Some(checkout));
     }
     if space.is_some() || ui::current_chat(&space).is_some() {
-        let space = ui::select_space(ctx, space, ui::Fallback::CurrentDirectory).await?;
+        let space = ui::select_space(
+            ctx,
+            space,
+            ui::Fallback::CurrentDirectory,
+            &crate::cli::ui::Acting::Unconverted,
+        )
+        .await?;
         return Ok(Some(ItemContext::space(space)));
     }
     if let Some(context) = current_context(ctx).await? {
@@ -87,7 +93,13 @@ async fn known_item_context(
 /// A space the user picks.
 async fn picked_space(ctx: &Context) -> Result<ItemContext> {
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
-    let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        None,
+        ui::Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     Ok(ItemContext::space(space))
 }
 
@@ -214,7 +226,14 @@ pub(in crate::cli::commands) async fn current_context(
     if let Some(chat) = ui::current_chat(&None) {
         return Ok(Some(ItemContext::space(SpaceSelector::id(&chat))));
     }
-    match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
+    match ui::select_workspace(
+        ctx,
+        None,
+        ui::Fallback::CurrentDirectoryOnly,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await
+    {
         Ok(workspace) => {
             return Ok(Some(ItemContext::space(workspace)));
         }

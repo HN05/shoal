@@ -20,7 +20,13 @@ pub(in crate::cli::commands) async fn checkpoint(
     workspace: Option<SpaceSelector>,
     name: Option<String>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let checkpoint: Checkpoint = ctx
         .progress(
             "Taking checkpoint",
@@ -49,7 +55,13 @@ pub(super) async fn run(
 ) -> Result<i32> {
     ensure!(spaces.len() <= 1, "--checkpoint takes one workspace");
     let workspace = spaces.into_iter().next();
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     match checkpoint {
         Some(checkpoint) => restore(ctx, workspace, checkpoint).await,
         None => choose(ctx, workspace).await,

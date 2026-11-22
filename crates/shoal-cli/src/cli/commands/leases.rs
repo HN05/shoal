@@ -142,8 +142,24 @@ async fn select_target(
     explicit: Option<SpaceSelector>,
 ) -> Result<SpaceSelector> {
     match holds {
-        true => ui::select_space(ctx, explicit, Fallback::CurrentDirectory).await,
-        false => ui::select_workspace(ctx, explicit, Fallback::CurrentDirectory).await,
+        true => {
+            ui::select_space(
+                ctx,
+                explicit,
+                Fallback::CurrentDirectory,
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await
+        }
+        false => {
+            ui::select_workspace(
+                ctx,
+                explicit,
+                Fallback::CurrentDirectory,
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await
+        }
     }
 }
 
@@ -340,7 +356,10 @@ pub(super) async fn show(
         Some(LeaseKind::Resource) => resources::overview(ctx, filter, Members::Locks).await,
         Some(LeaseKind::Repo) => resources::overview(ctx, filter, Members::Repositories).await,
         None => {
-            let Some(workspace) = ui::select_workspace_filter(ctx, filter).await? else {
+            let Some(workspace) =
+                ui::select_workspace_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted)
+                    .await?
+            else {
                 return workspace_overviews(
                     ctx,
                     async |workspace| fetch_leases(ctx, &SpaceSelector::id(&workspace.id)).await,

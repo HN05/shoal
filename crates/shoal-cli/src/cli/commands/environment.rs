@@ -15,7 +15,13 @@ pub(super) async fn run(
     space: Option<SpaceSelector>,
     revoke: Option<ScopeToken>,
 ) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     match revoke {
         Some(token) => revoke_scope(ctx, space, token).await,
         None => export(ctx, space).await,

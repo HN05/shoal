@@ -12,7 +12,13 @@ pub(in crate::cli::commands) async fn rename_branch(
     workspace: Option<SpaceSelector>,
     branch: String,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let renamed =
         crate::client::workspaces::rename_branch(&ctx.paths, workspace.clone(), branch).await?;
     ctx.show(&renamed, |workspace| {

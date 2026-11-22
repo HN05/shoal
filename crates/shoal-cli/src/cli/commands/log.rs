@@ -28,7 +28,15 @@ pub(super) async fn run(ctx: &Context, args: LogArgs) -> Result<i32> {
         follow,
     } = args;
     let space = match space {
-        Some(space) => Some(ui::select_space(ctx, Some(space), Fallback::CurrentDirectory).await?),
+        Some(space) => Some(
+            ui::select_space(
+                ctx,
+                Some(space),
+                Fallback::CurrentDirectory,
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await?,
+        ),
         None => ui::space_here(ctx, ui::Workspaces::Below).await?,
     };
     let filter = if all {

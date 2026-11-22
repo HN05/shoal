@@ -3,17 +3,21 @@
 //! `shoal list` marks it, with when the hub last saw one that is offline.
 use shoal_protocol::hub::directory::{HubView, Offered};
 
-use super::{Entries, Machines, picker_width, remote_rows};
+use super::{Acting, Entries, Machines, picker_width, remote_rows};
 use crate::cli::{availability::Need, context::Context, everywhere, output::Palette};
 
-/// The picker entries of the other machines' spaces `offered` names, for
-/// a command that acts on them; none for another command or a machine in
-/// no hub, and none, with a warning, while the hub cannot be asked.
-pub(super) async fn elsewhere_entries(ctx: &Context, offered: Offered) -> Entries {
-    if !ctx.reaches_elsewhere {
-        return Entries::new();
-    }
-    let Some(view) = everywhere::elsewhere(ctx, "the other machines' spaces").await else {
+/// The picker entries of the other machines' spaces `offered` names that
+/// `acting`, what the command does with the picked space, can act on; none
+/// on a machine in no hub, and none, with a warning, while the hub cannot
+/// be asked.
+pub(super) async fn elsewhere_entries(ctx: &Context, offered: Offered, acting: &Acting) -> Entries {
+    const LEFT_OUT: &str = "the other machines' spaces";
+    let view = match acting {
+        Acting::Request(request) => everywhere::offered(ctx, request(), LEFT_OUT).await,
+        Acting::Unconverted if ctx.reaches_elsewhere => everywhere::elsewhere(ctx, LEFT_OUT).await,
+        Acting::Unconverted => None,
+    };
+    let Some(view) = view else {
         return Entries::new();
     };
     let palette = Palette::stderr(ctx.json);

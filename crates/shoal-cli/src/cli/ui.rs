@@ -43,6 +43,7 @@
 //! caller names with [`require_argument`], or one of several with
 //! [`require_one_of`]. A new kind of input or choice
 //! belongs here, built on these operations, so the next command can use it too.
+mod acting;
 mod elsewhere;
 mod fzf;
 mod keys;
@@ -57,6 +58,7 @@ mod spaces;
 mod views;
 mod workspaces;
 
+pub use acting::Acting;
 use elsewhere::elsewhere_entries;
 pub use keys::Key;
 pub use linked::pick_linked;

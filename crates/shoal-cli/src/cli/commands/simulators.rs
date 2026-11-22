@@ -80,7 +80,8 @@ pub(super) async fn history(
     limit: u32,
     before: Option<i64>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace_filter(ctx, filter).await?;
+    let workspace =
+        ui::select_workspace_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?;
     let entries = leases::simulator_history(&ctx.paths, workspace.clone(), limit, before).await?;
     ctx.show(&entries, |entries| {
         for entry in entries {
@@ -112,7 +113,8 @@ pub(super) async fn acquire(
 }
 
 pub(super) async fn overview(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
-    let workspace = ui::select_workspace_filter(ctx, filter).await?;
+    let workspace =
+        ui::select_workspace_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?;
     let overview = leases::simulators(&ctx.paths, workspace.clone()).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))

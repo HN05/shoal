@@ -18,7 +18,13 @@ pub(super) async fn run(
     space: Option<SpaceSelector>,
     value: Priority,
 ) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let set = priority::set(&ctx.paths, space, value).await?;
     ctx.show(&set, |set| {
         outln!("{}: priority {}.", set.space, set.priority)

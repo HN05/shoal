@@ -38,7 +38,13 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;
-    let space = ui::select_space(ctx, selector.space, ui::Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        selector.space,
+        ui::Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let from = Reverting::of(ctx, space).await?;
     if from.forge_reverts(ctx).await? {
         let space = from.id().to_owned();

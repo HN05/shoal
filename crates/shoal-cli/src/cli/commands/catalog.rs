@@ -20,7 +20,13 @@ pub(super) async fn show(
     kind: Option<CatalogKind>,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     match kind {
         Some(CatalogKind::Port) => {
             let catalog = ports::fetch_catalog(ctx, &workspace).await?;

@@ -393,7 +393,13 @@ async fn run(
     model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
     let post = match &subject {

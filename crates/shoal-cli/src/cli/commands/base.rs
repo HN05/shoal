@@ -23,7 +23,13 @@ pub(super) async fn run(
         Some(BaseCommand::Clear { workspace }) => (workspace, Some(Change::Clear)),
         None => (workspace, None),
     };
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let workspace = match change {
         Some(change) => {
             let base = match change {
@@ -84,7 +90,14 @@ async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
         !candidates.is_empty(),
         "no other workspace in this repository"
     );
-    Ok(ui::pick_workspace(ctx, candidates, "base").await?.into())
+    Ok(ui::pick_workspace(
+        ctx,
+        candidates,
+        "base",
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?
+    .into())
 }
 
 /// The base and stacked workspaces, when the workspace has any.

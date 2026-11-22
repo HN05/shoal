@@ -35,7 +35,7 @@ pub(in crate::cli::commands) async fn rename(
 
 /// Rename a picked workspace or chat with what the user types next.
 pub(in crate::cli::commands) async fn rename_picked(ctx: &Context) -> Result<i32> {
-    let space = ui::pick_any_space(ctx).await?;
+    let space = ui::pick_any_space(ctx, &crate::cli::ui::Acting::Unconverted).await?;
     let name = ask_name(ctx).await?;
     rename_space(ctx, space, name).await
 }
@@ -177,5 +177,11 @@ async fn chosen_space(ctx: &Context, space: Option<SpaceSelector>) -> Result<Spa
             return Ok(SpaceSelector::Id(chat.id));
         }
     }
-    ui::select_space(ctx, space, Fallback::CurrentDirectory).await
+    ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await
 }

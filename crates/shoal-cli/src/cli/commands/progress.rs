@@ -39,7 +39,13 @@ pub(super) async fn run(
 ) -> Result<i32> {
     let mut changes = changes(status, steps)?;
     changes.extend(blocker_change(blocker)?);
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let progress = match changes.is_empty() {
         true => progress::get(&ctx.paths, space).await?,
         false => apply(ctx, space, changes).await?,

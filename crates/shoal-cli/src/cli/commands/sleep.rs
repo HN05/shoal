@@ -27,7 +27,13 @@ pub(super) async fn run(
     sleep: Option<Sleep>,
     timer: Option<WakeTimer>,
 ) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let slept = sleep::set(&ctx.paths, space, sleep, timer).await?;
     ctx.show(&slept, |slept| outln!("{}", summary(slept)))?;
     Ok(0)

@@ -217,7 +217,13 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
     Ok(match repository {
         Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
         None => {
-            let picked = ui::pick_workspace(ctx, workspaces, "workspace").await?;
+            let picked = ui::pick_workspace(
+                ctx,
+                workspaces,
+                "workspace",
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await?;
             ConfigTarget::Space(SpaceSelector::id(&picked))
         }
     })

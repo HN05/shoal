@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, ensure};
 
 use super::{
-    Cell, Entries, chat_entries, elsewhere_entries, pick, pick_many, picker_width,
+    Acting, Cell, Entries, chat_entries, elsewhere_entries, pick, pick_many, picker_width,
     require_argument, rows_with_status,
     workspaces::{
         ALL_ID, Fallback, NoCurrentWorkspace, Resolution, current_workspace, resolve_workspace,
@@ -43,6 +43,7 @@ pub async fn select_spaces(
     ctx: &Context,
     names: Vec<SpaceSelector>,
     stopped_chats: bool,
+    acting: &Acting,
 ) -> Result<Vec<SpaceSelector>> {
     let mut selected = named_workspaces(ctx, names).await?;
     if selected.is_empty() {
@@ -56,7 +57,7 @@ pub async fn select_spaces(
                     false => (spaces.into_running_chats(), Offered::RunningChats),
                 };
                 require_argument(ctx, "spaces", SPACE)?;
-                let entries = space_entries(ctx, workspaces, &chats, offered).await;
+                let entries = space_entries(ctx, workspaces, &chats, offered, acting).await;
                 ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
                 picked_ids(pick_many(ctx, "Spaces> ", entries)?)
             }
@@ -193,11 +194,12 @@ fn resumable_status_cell(text: String, unfinished: bool) -> Cell {
 }
 
 /// Pick a space among the workspaces and running chats, wherever this runs.
-pub async fn pick_any_space(ctx: &Context) -> Result<SpaceSelector> {
+pub async fn pick_any_space(ctx: &Context, acting: &Acting) -> Result<SpaceSelector> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let workspaces = spaces.workspaces();
     let chats = spaces.into_running_chats();
-    let space = pick_space(ctx, workspaces, &chats, Offered::RunningChats, SPACE).await?;
+    let offered = Offered::RunningChats;
+    let space = pick_space(ctx, workspaces, &chats, offered, SPACE, acting).await?;
     Ok(SpaceSelector::Id(space))
 }
 
@@ -211,11 +213,12 @@ pub async fn select_space(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
     fallback: Fallback,
+    acting: &Acting,
 ) -> Result<SpaceSelector> {
     match current_chat(&explicit) {
         Some(chat) if matches!(fallback, Fallback::OwnSpace) => Ok(SpaceSelector::Id(chat)),
         Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Below).await,
-        None => select_other_space(ctx, explicit, fallback).await,
+        None => select_other_space(ctx, explicit, fallback, acting).await,
     }
 }
 
@@ -226,10 +229,11 @@ pub async fn select_space(
 pub async fn select_space_here(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
+    acting: &Acting,
 ) -> Result<SpaceSelector> {
     match current_chat(&explicit) {
         Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Any).await,
-        None => select_other_space(ctx, explicit, Fallback::CurrentDirectory).await,
+        None => select_other_space(ctx, explicit, Fallback::CurrentDirectory, acting).await,
     }
 }
 
@@ -288,6 +292,7 @@ pub async fn select_other_space(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
     fallback: Fallback,
+    acting: &Acting,
 ) -> Result<SpaceSelector> {
     let space = match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Named(selector) => selector,
@@ -297,7 +302,7 @@ pub async fn select_other_space(
                 .await?
                 .into_running_chats();
             let offered = Offered::RunningChats;
-            SpaceSelector::Id(pick_space(ctx, workspaces, &chats, offered, SPACE).await?)
+            SpaceSelector::Id(pick_space(ctx, workspaces, &chats, offered, SPACE, acting).await?)
         }
     };
     recent::record(ctx, &space).await;
@@ -318,12 +323,13 @@ pub fn current_chat(explicit: &Option<SpaceSelector>) -> Option<SpaceId> {
 pub async fn select_space_filter(
     ctx: &Context,
     filter: SpaceFilter,
+    acting: &Acting,
 ) -> Result<Option<SpaceSelector>> {
     if filter.all {
         return Ok(None);
     }
     if current_chat(&filter.space).is_some() {
-        let space = select_space(ctx, filter.space, Fallback::CurrentDirectory).await?;
+        let space = select_space(ctx, filter.space, Fallback::CurrentDirectory, acting).await?;
         return Ok(Some(space));
     }
     Ok(
@@ -334,7 +340,7 @@ pub async fn select_space_filter(
                 let chats = crate::client::spaces::list(&ctx.paths)
                     .await?
                     .into_running_chats();
-                (pick_space_or_all(ctx, workspaces, &chats).await?).map(SpaceSelector::Id)
+                (pick_space_or_all(ctx, workspaces, &chats, acting).await?).map(SpaceSelector::Id)
             }
         },
     )
@@ -346,8 +352,10 @@ async fn pick_space_or_all(
     ctx: &Context,
     workspaces: Vec<Workspace>,
     chats: &[Chat],
+    acting: &Acting,
 ) -> Result<Option<SpaceId>> {
-    let mut entries = space_entries(ctx, workspaces, chats, Offered::RunningChats).await;
+    let offered = Offered::RunningChats;
+    let mut entries = space_entries(ctx, workspaces, chats, offered, acting).await;
     entries.push((ALL_ID.to_owned(), ALL_SPACES.to_owned()));
     require_argument(ctx, "space", SPACE)?;
     let id = pick(ctx, "Space> ", entries)?;
@@ -370,8 +378,9 @@ pub async fn pick_space(
     chats: &[Chat],
     offered: Offered,
     argument: &str,
+    acting: &Acting,
 ) -> Result<SpaceId> {
-    let entries = space_entries(ctx, workspaces, chats, offered).await;
+    let entries = space_entries(ctx, workspaces, chats, offered, acting).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     require_argument(ctx, "space", argument)?;
     Ok(SpaceId::from(pick(ctx, "Space> ", entries)?))
@@ -384,6 +393,7 @@ async fn space_entries(
     workspaces: Vec<Workspace>,
     chats: &[Chat],
     offered: Offered,
+    acting: &Acting,
 ) -> Entries {
     let mut entries = workspace_entries(ctx, workspaces, true).await;
     let chats: Vec<Chat> = (chats.iter())
@@ -395,7 +405,7 @@ async fn space_entries(
         Palette::stderr(ctx.json),
         picker_width(),
     ));
-    entries.extend(elsewhere_entries(ctx, offered).await);
+    entries.extend(elsewhere_entries(ctx, offered, acting).await);
     entries
 }
 

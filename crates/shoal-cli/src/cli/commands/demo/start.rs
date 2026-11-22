@@ -75,7 +75,13 @@ pub(super) async fn start(
 ) -> Result<i32> {
     // Before a picker opens or a running demo is replaced.
     overrides.validate()?;
-    let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let id = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
         .await?
         .workspace;

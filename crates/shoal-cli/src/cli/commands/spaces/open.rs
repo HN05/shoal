@@ -28,7 +28,13 @@ pub(in crate::cli::commands) async fn open(
     if let Some(name) = name {
         agents::ensure_opens(agents::app(name), &args)?;
     }
-    let selector = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let selector = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let space = read(ctx, &selector).await?;
     let app = agents::app(match name {
         Some(name) => name,

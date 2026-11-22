@@ -32,7 +32,13 @@ pub(super) async fn list(
     space: Option<SpaceSelector>,
     listing: Listing,
 ) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let files = crate::client::files::list(&ctx.paths, space.clone()).await?;
     if listing == Listing::Menu && ctx.interactive_output() {
         return menu::choose(ctx, space.clone(), &files).await;
@@ -65,7 +71,13 @@ pub(super) async fn add(
     files: Vec<String>,
 ) -> Result<i32> {
     let files = super::send::attachments(&files)?;
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let added = crate::client::files::add(&ctx.paths, space.clone(), files).await?;
     ctx.show(&added, |added| {
         let now = crate::time::UnixTime::now();
@@ -91,9 +103,17 @@ pub(super) async fn remove(
     // Names and records belong to one workspace or chat, so they offer no
     // choice of every workspace.
     let space = if names.is_empty() && ids.is_empty() {
-        ui::select_space_filter(ctx, filter).await?
+        ui::select_space_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?
     } else {
-        Some(ui::select_space(ctx, filter.space, Fallback::CurrentDirectory).await?)
+        Some(
+            ui::select_space(
+                ctx,
+                filter.space,
+                Fallback::CurrentDirectory,
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await?,
+        )
     };
     if let Some(space) = &space {
         check_selected(ctx, space, &names, &ids).await?;

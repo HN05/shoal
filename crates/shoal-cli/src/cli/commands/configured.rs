@@ -48,8 +48,13 @@ pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Res
 /// An explicit workspace takes precedence over the current directory.
 async fn listing_layers(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<ConfigLayers> {
     if workspace.is_some() {
-        let workspace =
-            ui::select_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await?;
+        let workspace = ui::select_workspace(
+            ctx,
+            workspace,
+            Fallback::CurrentDirectoryOnly,
+            &crate::cli::ui::Acting::Unconverted,
+        )
+        .await?;
         return workspace_layers(ctx, workspace).await;
     }
     current_layers(ctx).await
@@ -199,12 +204,24 @@ async fn run_defined(
 ) -> Result<i32> {
     let workspace = match definition {
         Definition::Global(named) => {
-            ui::select_workspace(ctx, named, Fallback::CurrentDirectory).await?
+            ui::select_workspace(
+                ctx,
+                named,
+                Fallback::CurrentDirectory,
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await?
         }
         Definition::Workspace(workspace) => SpaceSelector::Id(workspace),
-        Definition::Elsewhere(defining) => {
-            SpaceSelector::Id(ui::pick_workspace(ctx, defining, "workspace").await?)
-        }
+        Definition::Elsewhere(defining) => SpaceSelector::Id(
+            ui::pick_workspace(
+                ctx,
+                defining,
+                "workspace",
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await?,
+        ),
     };
     ui::record_workspace(ctx, &workspace).await;
     let settings =

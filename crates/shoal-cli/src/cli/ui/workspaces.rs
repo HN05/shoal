@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use anyhow::{Result, ensure};
 
 use super::{
-    Entries, elsewhere_entries, pick, picker_width, require_argument, rows_with_status,
+    Acting, Entries, elsewhere_entries, pick, picker_width, require_argument, rows_with_status,
     spaces::stopped_spaces, status_cell,
 };
 use crate::{
@@ -47,8 +47,9 @@ pub async fn select_workspace(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
     fallback: Fallback,
+    acting: &Acting,
 ) -> Result<SpaceSelector> {
-    let workspace = choose_workspace(ctx, explicit, fallback).await?;
+    let workspace = choose_workspace(ctx, explicit, fallback, acting).await?;
     record_workspace(ctx, &workspace).await;
     Ok(workspace)
 }
@@ -65,12 +66,13 @@ pub async fn choose_workspace(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
     fallback: Fallback,
+    acting: &Acting,
 ) -> Result<SpaceSelector> {
     Ok(match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Named(selector) => selector,
         Resolution::Current(id) => SpaceSelector::Id(id),
         Resolution::Picker(workspaces) => {
-            SpaceSelector::Id(pick_workspace(ctx, workspaces, WORKSPACE).await?)
+            SpaceSelector::Id(pick_workspace(ctx, workspaces, WORKSPACE, acting).await?)
         }
     })
 }
@@ -89,6 +91,7 @@ pub async fn explicit_workspace(ctx: &Context, selector: SpaceSelector) -> Resul
 pub async fn select_workspace_filter(
     ctx: &Context,
     filter: SpaceFilter,
+    acting: &Acting,
 ) -> Result<Option<SpaceSelector>> {
     if filter.all {
         return Ok(None);
@@ -98,7 +101,7 @@ pub async fn select_workspace_filter(
             Resolution::Named(selector) => Some(selector),
             Resolution::Current(id) => Some(SpaceSelector::Id(id)),
             Resolution::Picker(workspaces) => {
-                (pick_workspace_or_all(ctx, workspaces).await?).map(SpaceSelector::Id)
+                (pick_workspace_or_all(ctx, workspaces, acting).await?).map(SpaceSelector::Id)
             }
         },
     )
@@ -107,9 +110,10 @@ pub async fn select_workspace_filter(
 async fn pick_workspace_or_all(
     ctx: &Context,
     workspaces: Vec<Workspace>,
+    acting: &Acting,
 ) -> Result<Option<SpaceId>> {
     let mut entries = workspace_entries(ctx, workspaces, true).await;
-    entries.extend(elsewhere_entries(ctx, Offered::Workspaces).await);
+    entries.extend(elsewhere_entries(ctx, Offered::Workspaces, acting).await);
     entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
     require_argument(ctx, "workspace", WORKSPACE)?;
     let id = pick(ctx, "Workspace> ", entries)?;
@@ -170,15 +174,9 @@ pub fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>>
 }
 
 /// Always run the picker, including for scoped callers (whose list is filtered).
-pub async fn workspace_picker(ctx: &Context) -> Result<SpaceId> {
-    pick_workspace(
-        ctx,
-        crate::client::spaces::list(&ctx.paths)
-            .await?
-            .into_workspaces(),
-        WORKSPACE,
-    )
-    .await
+pub async fn workspace_picker(ctx: &Context, acting: &Acting) -> Result<SpaceId> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    pick_workspace(ctx, spaces.into_workspaces(), WORKSPACE, acting).await
 }
 
 /// The command's argument that names the workspace it acts on.
@@ -192,9 +190,10 @@ pub async fn pick_workspace(
     ctx: &Context,
     workspaces: Vec<Workspace>,
     argument: &str,
+    acting: &Acting,
 ) -> Result<SpaceId> {
     let mut entries = workspace_entries(ctx, workspaces, true).await;
-    entries.extend(elsewhere_entries(ctx, Offered::Workspaces).await);
+    entries.extend(elsewhere_entries(ctx, Offered::Workspaces, acting).await);
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     require_argument(ctx, "workspace", argument)?;
     Ok(SpaceId::from(pick(ctx, "Workspace> ", entries)?))

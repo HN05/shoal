@@ -22,7 +22,13 @@ pub(super) async fn open_pr(
     workspace: Option<SpaceSelector>,
     options: PullOptions,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        ui::Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let opened = match publish(ctx, workspace, options).await? {
         OpenOutcome::Opened(opened) => *opened,
         OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "PR", &proposed),

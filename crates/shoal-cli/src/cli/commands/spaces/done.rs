@@ -14,7 +14,13 @@ use shoal_protocol::space_names::SpaceSelector;
 /// The space `space` names, else the current chat or workspace, else a
 /// picked one: a running chat's ID, or else a workspace.
 async fn selected(ctx: &Context, space: Option<SpaceSelector>) -> Result<Selected> {
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     Ok(
         match crate::client::spaces::present_space(&ctx.paths, &space)
             .await?
@@ -35,7 +41,13 @@ pub(in crate::cli::commands) async fn undone(
     ctx: &Context,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let withdrawn = assignments::undo_done(&ctx.paths, space.clone()).await?;
     ctx.emit(
         "Completion withdrawn; run shoal done when finished.",

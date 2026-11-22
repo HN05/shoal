@@ -25,7 +25,10 @@ pub(in crate::cli::commands) async fn status(
     let Some(target) = status_target(space.as_deref(), item)? else {
         let space = space.as_deref().map(SpaceSelector::parse).transpose()?;
         let space = match space {
-            Some(space) => ui::select_space_here(ctx, Some(space)).await?,
+            Some(space) => {
+                ui::select_space_here(ctx, Some(space), &crate::cli::ui::Acting::Unconverted)
+                    .await?
+            }
             None => match space_here(ctx).await? {
                 Some(space) => space,
                 None => return service::shoal_status(ctx).await,

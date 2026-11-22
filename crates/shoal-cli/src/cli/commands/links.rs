@@ -27,7 +27,13 @@ use shoal_protocol::space_names::SpaceSelector;
 /// resolved.
 pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(SpaceSelector, Selection)> {
     let selection = items.selection()?;
-    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        items.space,
+        ui::Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let target = ItemContext::space(space.clone()).into();
     let selection = resolve_kind(ctx, target, selection).await?;
     Ok((space, selection))
@@ -101,7 +107,13 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         selected.input.is_some() || ctx.interactive(),
         "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
-    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        items.space,
+        ui::Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let context = ItemContext::space(space.clone());
     let selected = resolve_kind(ctx, context.clone().into(), selected).await?;
     let (kind, input) = match selected {
@@ -211,7 +223,13 @@ pub(super) async fn watch(
     resumed: bool,
 ) -> Result<i32> {
     let selection = items.selection()?;
-    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        items.space,
+        ui::Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let (context, repository) = watch_context(ctx, &space, repo.as_deref()).await?;
     let selection = resolve_kind(ctx, context.into(), selection).await?;
     spaces::watch_items(ctx, space, selection, repository, timeout, resumed).await

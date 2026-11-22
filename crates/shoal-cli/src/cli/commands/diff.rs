@@ -18,7 +18,13 @@ pub(in crate::cli::commands) async fn diff(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let base = crate::client::diffs::diff_base(&ctx.paths, workspace).await?;
     // Another machine has the worktree, so its Git writes the diff.
     if base.machine.is_some() {

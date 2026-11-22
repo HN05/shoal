@@ -36,7 +36,13 @@ impl Selected {
         }
         let spaces = crate::client::spaces::list(&ctx.paths).await?;
         if !targets.space.is_empty() {
-            let named = ui::select_spaces(ctx, targets.space, true).await?;
+            let named = ui::select_spaces(
+                ctx,
+                targets.space,
+                true,
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await?;
             return Ok(Some(Self::resolved(&spaces, named)));
         }
         let resumable = resumable(ctx, &spaces).await?;

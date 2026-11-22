@@ -150,7 +150,13 @@ async fn target(ctx: &Context, recipients: Recipients) -> Result<AlertTarget> {
     Ok(match recipients {
         Recipients::Space(None) if super::alerts::in_own_space() => AlertTarget::Up,
         Recipients::Space(space) => AlertTarget::Space {
-            space: ui::select_space(ctx, space, Fallback::CurrentDirectory).await?,
+            space: ui::select_space(
+                ctx,
+                space,
+                Fallback::CurrentDirectory,
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await?,
         },
         Recipients::All => AlertTarget::All { repository: None },
         Recipients::Repository(repository) => AlertTarget::All {

@@ -93,7 +93,9 @@ fn describe(port: &PortReservation, palette: Palette) -> String {
 }
 
 pub(super) async fn overview(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
-    let Some(workspace) = ui::select_workspace_filter(ctx, filter).await? else {
+    let Some(workspace) =
+        ui::select_workspace_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?
+    else {
         return workspace_overviews(
             ctx,
             async |workspace| leases::ports(&ctx.paths, SpaceSelector::id(&workspace.id)).await,

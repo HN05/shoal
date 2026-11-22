@@ -72,7 +72,15 @@ pub(super) async fn spaces(
         });
     }
     let selected = match machines.is_empty() {
-        true => ui::select_spaces(ctx, targets.space, false).await?,
+        true => {
+            ui::select_spaces(
+                ctx,
+                targets.space,
+                false,
+                &crate::cli::ui::Acting::Unconverted,
+            )
+            .await?
+        }
         false => Vec::new(),
     };
     let located = crate::client::spaces::select(&ctx.paths, selected, machines.to_vec(), false);

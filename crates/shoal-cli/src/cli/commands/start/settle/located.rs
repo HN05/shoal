@@ -30,7 +30,13 @@ pub(super) async fn launch(ctx: &Context, args: &StartArgs) -> Result<Launch> {
         launch.parent = Some(SpaceSelector::Id(space_id(ctx, parent).await?));
     }
     if let Some(workspace) = args.in_workspace.clone() {
-        let selected = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+        let selected = ui::select_workspace(
+            ctx,
+            workspace,
+            Fallback::CurrentDirectory,
+            &crate::cli::ui::Acting::Unconverted,
+        )
+        .await?;
         launch.in_workspace = Some(Some(selected).into());
     }
     let copied = copies::source(ctx, args.copy.clone()).await?;
@@ -107,7 +113,13 @@ async fn forked(
     space: Option<SpaceSelector>,
     agent: Option<Agent>,
 ) -> Result<(SpaceSelector, Agent, AgentSessionId)> {
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        space,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let AgentSession {
         agent: running,
         session,

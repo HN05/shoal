@@ -23,7 +23,8 @@ pub(in crate::cli::commands) async fn remove(ctx: &Context, args: RmArgs) -> Res
     {
         return Ok(code);
     }
-    let selected = ui::select_spaces(ctx, names, true).await?;
+    let selected =
+        ui::select_spaces(ctx, names, true, &crate::cli::ui::Acting::Unconverted).await?;
     let checks = check_removals(ctx, selected, yes).await?;
     if !yes {
         confirm_removals(ctx, &checks)?;

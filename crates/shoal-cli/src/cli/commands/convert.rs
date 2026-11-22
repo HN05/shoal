@@ -33,7 +33,13 @@ pub(super) async fn to_workspace(
     if let Some(branch) = &branch.branch {
         shoal_core::git::check_branch_name(branch)?;
     }
-    let chat = ui::select_space(ctx, space, own_space()).await?;
+    let chat = ui::select_space(
+        ctx,
+        space,
+        own_space(),
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let issue = match &branch.issue {
         Some(input) => Some(load_issue(ctx, &chat, input).await?),
         None => None,
@@ -77,7 +83,13 @@ pub(super) async fn to_chat(
     space: Option<SpaceSelector>,
     mode: Option<ModeName>,
 ) -> Result<i32> {
-    let workspace = ui::select_space(ctx, space, own_space()).await?;
+    let workspace = ui::select_space(
+        ctx,
+        space,
+        own_space(),
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let workspace = crate::client::conversions::to_chat(&ctx.paths, workspace, mode).await?;
     let text = format!(
         "{} becomes a chat in the repository's checkout once its agent's turn ends; its branch {} stays",

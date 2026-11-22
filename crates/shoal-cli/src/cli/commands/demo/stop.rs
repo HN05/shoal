@@ -18,7 +18,13 @@ pub(super) async fn stop(
     workspace: Option<SpaceSelector>,
     name: Option<String>,
 ) -> Result<i32> {
-    let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let id = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
         .await?
         .workspace;

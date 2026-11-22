@@ -241,7 +241,8 @@ async fn workspace(
     name: Option<SpaceSelector>,
     fallback: Fallback,
 ) -> Result<Target> {
-    let workspace = ui::choose_workspace(ctx, name, fallback).await?;
+    let workspace =
+        ui::choose_workspace(ctx, name, fallback, &crate::cli::ui::Acting::Unconverted).await?;
     Target::inspected(&ctx.paths, workspace).await
 }
 
@@ -259,7 +260,15 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
     let workspaces = crate::client::spaces::list(&ctx.paths)
         .await?
         .into_workspaces();
-    let id = ui::pick_space(ctx, workspaces, &chats, Offered::Spaces, "workspace").await?;
+    let id = ui::pick_space(
+        ctx,
+        workspaces,
+        &chats,
+        Offered::Spaces,
+        "workspace",
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     match crate::client::spaces::locate(&ctx.paths, SpaceSelector::id(&id)).await? {
         Located::Elsewhere { space, machine, .. } => {
             Ok(chosen_elsewhere(space.space.id, machine.name))

@@ -22,7 +22,13 @@ pub(in crate::cli::commands) async fn refresh(
     if ui::current_chat(&workspace).is_some() {
         bail!("a chat has no worktree to refresh");
     }
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = ui::select_workspace(
+        ctx,
+        workspace,
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let mut refreshed = crate::client::workspaces::refresh(&ctx.paths, workspace).await?;
     if refreshed.setup {
         let Some(set_up) = setup_workspace(ctx, &refreshed.workspace, true).await? else {

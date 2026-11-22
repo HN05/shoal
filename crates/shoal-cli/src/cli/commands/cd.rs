@@ -11,7 +11,9 @@ pub(in crate::cli::commands) async fn cd(
 ) -> Result<i32> {
     let workspace = match workspace {
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
-        None => SpaceSelector::Id(ui::workspace_picker(ctx).await?),
+        None => SpaceSelector::Id(
+            ui::workspace_picker(ctx, &crate::cli::ui::Acting::Unconverted).await?,
+        ),
     };
     let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     ensure!(

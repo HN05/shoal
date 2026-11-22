@@ -40,7 +40,13 @@ async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -
 /// Merge the work of the space `args` name as the daemon decides: through
 /// its open PR, or a workspace's branch locally.
 async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
-    let space = ui::select_space(ctx, args.space.clone(), Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(
+        ctx,
+        args.space.clone(),
+        Fallback::CurrentDirectory,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     match crate::client::merging::merge_path(&ctx.paths, space.clone()).await? {
         MergePath::Pr { pr } => {
             args.ensure_pull_flags(&format!("PR {pr}"))?;

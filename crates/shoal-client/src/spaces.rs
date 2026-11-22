@@ -2,10 +2,10 @@
 //! runs, its status and environment, and its scope tokens.
 use anyhow::Result;
 
-use crate::connection::{Daemon, Prepared, pages, request};
+use crate::connection::{Daemon, pages, request};
 use shoal_protocol::{
     model::{Everywhere, Located, RenamedSpace, Space, SpaceTarget, Spaces},
-    protocol::SpaceMethod,
+    protocol::{Operation, SpaceMethod},
     scope_tokens::ScopeToken,
     space_names::{SpaceName, SpaceSelector},
     status::StatusAnswer,
@@ -38,13 +38,20 @@ pub async fn everywhere(daemon: &impl Daemon, here: bool) -> Result<Everywhere> 
 /// The other joined machines' spaces the caller sees that `acting`, a
 /// request a picker offers spaces for, can act on, or why the hub could
 /// not be asked; none when it stays on this machine.
-pub async fn offered_elsewhere<T>(daemon: &impl Daemon, acting: Prepared<T>) -> Result<Everywhere> {
-    let acting = Some(Box::new(acting.into_operation()));
+pub async fn offered_elsewhere(daemon: &impl Daemon, acting: Operation) -> Result<Everywhere> {
+    let acting = Some(Box::new(acting));
     let method = SpaceMethod::ListSpacesEverywhere {
         here: false,
         acting,
     };
     Everywhere::from_parts(pages(daemon, method).await?)
+}
+
+/// What stands for the space a picker is about to pick in the request it
+/// offers spaces for, which [`offered_elsewhere`] judges by what it does
+/// and never resolves.
+pub fn picking() -> SpaceSelector {
+    SpaceSelector::Number(shoal_ids::space_ids::SpaceNumber::new(0))
 }
 
 /// The spaces `spaces` name, or with `machines` every space of those joined

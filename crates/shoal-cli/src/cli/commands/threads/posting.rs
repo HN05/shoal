@@ -95,7 +95,13 @@ fn new_post(posting: Posting) -> Result<NewPost> {
 /// `number`.
 pub(in crate::cli) async fn post_in_chat(ctx: &Context, number: ThreadNumber) -> Result<i32> {
     super::refuse_workspace_processes(ctx)?;
-    let space = ui::select_space(ctx, None, Fallback::OwnSpace).await?;
+    let space = ui::select_space(
+        ctx,
+        None,
+        Fallback::OwnSpace,
+        &crate::cli::ui::Acting::Unconverted,
+    )
+    .await?;
     let marked = threads::post_in_chat(&ctx.paths, space, number).await?;
     crate::cli::commands::send::in_chat::show(ctx, &marked)
 }
