@@ -54,18 +54,6 @@ impl Backend for Bitbucket {
         format!("repositories/{}/{path}", repo.path)
     }
 
-    fn pull_resource(&self) -> &'static str {
-        "pullrequests"
-    }
-
-    fn number_field(&self) -> &'static str {
-        "id"
-    }
-
-    fn commit_field(&self) -> &'static str {
-        "hash"
-    }
-
     fn login_hint(&self) -> &'static str {
         "Bitbucket API request failed; private repositories need a token under [machine.forges.\"bitbucket.org\"]"
     }

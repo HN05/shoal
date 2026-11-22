@@ -52,15 +52,6 @@ pub(crate) trait Backend: Routes {
     /// The API endpoint for `path` under the repository.
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String;
 
-    /// The REST collection PRs are under.
-    fn pull_resource(&self) -> &'static str;
-
-    /// The field that holds an issue's or PR's number in the repository.
-    fn number_field(&self) -> &'static str;
-
-    /// The field that holds a commit's full ID in a list of PR commits.
-    fn commit_field(&self) -> &'static str;
-
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
 
@@ -109,11 +100,6 @@ pub(crate) trait Backend: Routes {
     /// The login `account` signs in to the forge as; none when it reads
     /// anonymously.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>>;
-
-    /// The repository's numeric ID, where the forge's uploads name it.
-    async fn repository_id(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<u64>> {
-        Ok(None)
-    }
 }
 
 /// Adds a backend's login hint to a failed read.

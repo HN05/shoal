@@ -1,6 +1,6 @@
 //! GitHub: its REST and GraphQL APIs, on GitHub.com or an Enterprise
 //! Server, signed in with the account's token for the host.
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::Value;
 
 mod actions;
@@ -52,18 +52,6 @@ impl Backend for GitHub {
         format!("repos/{}/{path}", repo.path)
     }
 
-    fn pull_resource(&self) -> &'static str {
-        "pulls"
-    }
-
-    fn number_field(&self) -> &'static str {
-        "number"
-    }
-
-    fn commit_field(&self) -> &'static str {
-        "sha"
-    }
-
     fn login_hint(&self) -> &'static str {
         "GitHub API request failed; private repositories need a token under [machine.forges.\"<host>\"]"
     }
@@ -98,17 +86,6 @@ impl Backend for GitHub {
 
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
         github_rest::own_login(repo, account).await.map(Some)
-    }
-
-    /// GitHub uploads name the repository by its numeric ID.
-    async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {
-        let repository = repo
-            .send(account, &Request::get(format!("repos/{}", repo.path)))
-            .await?;
-        repository["id"]
-            .as_u64()
-            .context("GitHub did not report the repository's ID")
-            .map(Some)
     }
 }
 

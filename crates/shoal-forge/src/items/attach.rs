@@ -6,9 +6,7 @@ use std::{ops::Range, path::Path};
 use anyhow::{Context, Result, bail};
 
 use crate::{
-    backends::{Attachments, Backend},
-    capability::CapabilityRequests,
-    transport::account::Account,
+    backends::Attachments, capability::CapabilityRequests, transport::account::Account,
     transport::api::TransportRequests,
 };
 use shoal_forge_types::{

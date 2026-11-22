@@ -33,6 +33,18 @@ use shoal_forge_types::{
 };
 
 impl Items for Bitbucket {
+    fn pull_resource(&self) -> &'static str {
+        "pullrequests"
+    }
+
+    fn number_field(&self) -> &'static str {
+        "id"
+    }
+
+    fn commit_field(&self) -> &'static str {
+        "hash"
+    }
+
     /// An issue or pull request as Bitbucket reports it.
     fn current(
         &self,

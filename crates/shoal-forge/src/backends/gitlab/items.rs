@@ -31,6 +31,18 @@ use shoal_forge_types::{
 };
 
 impl Items for GitLab {
+    fn pull_resource(&self) -> &'static str {
+        "merge_requests"
+    }
+
+    fn number_field(&self) -> &'static str {
+        "iid"
+    }
+
+    fn commit_field(&self) -> &'static str {
+        "id"
+    }
+
     /// An issue or merge request as GitLab reports it.
     fn current(
         &self,

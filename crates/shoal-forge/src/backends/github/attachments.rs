@@ -10,7 +10,7 @@ use crate::{
     items::attach::Holder,
     transport::account::Account,
     transport::{
-        api::{Request, Upload, encode},
+        api::{Request, TransportRequests, Upload, encode},
         download,
         response::Fetched,
     },
@@ -19,6 +19,17 @@ use shoal_forge_types::ForgeRepo;
 use shoal_forge_types::items::attach::{Attachment, Media};
 
 impl Attachments for GitHub {
+    /// GitHub uploads name the repository by its numeric ID.
+    async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {
+        let repository = repo
+            .send(account, &Request::get(format!("repos/{}", repo.path)))
+            .await?;
+        repository["id"]
+            .as_u64()
+            .context("GitHub did not report the repository's ID")
+            .map(Some)
+    }
+
     async fn check_uploads(
         &self,
         _repo: &ForgeRepo,

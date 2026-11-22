@@ -49,18 +49,6 @@ impl Backend for Forgejo {
         format!("repos/{}/{path}", repo.path)
     }
 
-    fn pull_resource(&self) -> &'static str {
-        "pulls"
-    }
-
-    fn number_field(&self) -> &'static str {
-        "number"
-    }
-
-    fn commit_field(&self) -> &'static str {
-        "sha"
-    }
-
     fn login_hint(&self) -> &'static str {
         "Forgejo API request failed; private repositories need a token under [machine.forges.\"<host>\"]"
     }

@@ -30,6 +30,18 @@ use shoal_forge_types::{
 };
 
 impl Items for GitHub {
+    fn pull_resource(&self) -> &'static str {
+        "pulls"
+    }
+
+    fn number_field(&self) -> &'static str {
+        "number"
+    }
+
+    fn commit_field(&self) -> &'static str {
+        "sha"
+    }
+
     fn current(
         &self,
         repo: &ForgeRepo,

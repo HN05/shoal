@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    backends::{Backend, Items, Merging, rest::commit_shas},
+    backends::{Items, Merging, rest::commit_shas},
     capability::CapabilityRequests,
     items::{
         action::ActionRequests,

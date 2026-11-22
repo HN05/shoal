@@ -5,7 +5,7 @@ use serde_json::Value;
 use shoal_refs::{BranchName, CommitId};
 
 use crate::{
-    backends::{Backend, Items},
+    backends::Items,
     capability::CapabilityRequests,
     items::{
         action::{ActionRequests, ActionSteps},

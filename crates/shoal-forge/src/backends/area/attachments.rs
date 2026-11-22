@@ -16,6 +16,11 @@ use shoal_forge_types::{ForgeRepo, backends::ForgeKind, capability::Capability};
 /// How the forge uploads, serves and shows attached files.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub(crate) trait Attachments: Backend + Supports {
+    /// The repository's numeric ID, where the forge's uploads name it.
+    async fn repository_id(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<u64>> {
+        Ok(None)
+    }
+
     /// Refuse `attachments` the forge or `account` cannot upload, before
     /// anything is posted. Returns whether the forge keeps uploads with the
     /// item or comment that shows them rather than with the repository.

@@ -42,18 +42,6 @@ impl Backend for GitLab {
         format!("projects/{}/{path}", encode(&repo.path, false))
     }
 
-    fn pull_resource(&self) -> &'static str {
-        "merge_requests"
-    }
-
-    fn number_field(&self) -> &'static str {
-        "iid"
-    }
-
-    fn commit_field(&self) -> &'static str {
-        "id"
-    }
-
     fn login_hint(&self) -> &'static str {
         "GitLab API request failed; private projects need a token under [machine.forges.\"<host>\"]"
     }

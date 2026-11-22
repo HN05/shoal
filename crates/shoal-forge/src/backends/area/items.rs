@@ -26,6 +26,15 @@ use shoal_forge_types::{
 /// and PRs, and finds a PR by its head.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub(crate) trait Items: Backend {
+    /// The REST collection PRs are under.
+    fn pull_resource(&self) -> &'static str;
+
+    /// The field that holds an issue's or PR's number in the repository.
+    fn number_field(&self) -> &'static str;
+
+    /// The field that holds a commit's full ID in a list of PR commits.
+    fn commit_field(&self) -> &'static str;
+
     /// The item an item endpoint returned as `value`; an issue read that
     /// returns a PR is refused.
     fn current(
