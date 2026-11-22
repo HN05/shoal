@@ -286,7 +286,11 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
                 &"codex".into(),
                 Some(143),
                 false,
-                Some((id, "critical memory pressure")),
+                Some(super::OverloadEnd {
+                    execution: id,
+                    reason: "critical memory pressure",
+                    restore_cancelled: None,
+                }),
                 0,
             )
             .await;

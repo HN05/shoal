@@ -290,6 +290,15 @@ impl Agent {
     }
 }
 
+/// The end of an agent's execution `execution`, which protection stopped
+/// for `reason`, with why Shoal cancelled its automatic restore on its own,
+/// if it did.
+pub(crate) struct OverloadEnd<'a> {
+    pub execution: &'a ExecutionId,
+    pub reason: &'a str,
+    pub restore_cancelled: Option<&'a str>,
+}
+
 impl Manager {
     /// Tell the user, or the coordinator, that the agent of `space` exited
     /// with `exit_code`, `complete` when its processes are proven stopped,
@@ -302,14 +311,19 @@ impl Manager {
         agent: &crate::agent::Agent,
         exit_code: Option<i32>,
         complete: bool,
-        overload: Option<(&ExecutionId, &str)>,
+        overload: Option<OverloadEnd<'_>>,
         oom_kills: u64,
     ) {
         let clean = overload.is_none() && complete && exit_code.is_some() && oom_kills == 0;
         if clean && space.kind() == crate::model::SpaceKind::Chat {
             return;
         }
-        let message = if let Some((execution_id, reason)) = overload {
+        let message = if let Some(OverloadEnd {
+            execution: execution_id,
+            reason,
+            restore_cancelled,
+        }) = overload
+        {
             let status = exit_code.map_or_else(
                 || "without an exit code".into(),
                 |code| format!("with code {code}"),
@@ -333,8 +347,11 @@ impl Manager {
             } else {
                 "; its processes are not proven stopped, so the execution stays unknown until they exit or shoal stop stops them"
             };
+            let cancelled = restore_cancelled
+                .map(|why| format!("; its automatic restore was cancelled: {why}"))
+                .unwrap_or_default();
             format!(
-                "{agent} stopped after {reason} ({status}); {recovery}{reconcile}; {} and resource leases retained",
+                "{agent} stopped after {reason} ({status}){cancelled}; {recovery}{reconcile}; {} and resource leases retained",
                 space.kind()
             )
         } else {

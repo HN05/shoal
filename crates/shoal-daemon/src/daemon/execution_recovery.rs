@@ -47,6 +47,8 @@ pub(super) struct Cancel {
     pub reason: Option<String>,
     /// Removal cancelled it, and the removal record keeps the agent.
     pub removed: bool,
+    /// A stop someone requested cancelled it, rather than Shoal on its own.
+    requested: bool,
 }
 
 impl Cancel {
@@ -54,6 +56,7 @@ impl Cancel {
         Self {
             reason: Some(reason.into()),
             removed: false,
+            requested: false,
         }
     }
 
@@ -64,7 +67,14 @@ impl Cancel {
                 .as_ref()
                 .is_some_and(StopRequest::keeps_removed_agents),
             reason: request.map(|request| request.reason),
+            requested: true,
         }
+    }
+
+    /// Why Shoal cancelled the restore on its own, which the agent's exit
+    /// alert reports; none for a stop someone requested, who knows of it.
+    pub(super) fn unrequested_reason(&self) -> Option<&str> {
+        self.reason.as_deref().filter(|_| !self.requested)
     }
 
     /// The control that tells the waiting wrapper.
@@ -397,9 +407,7 @@ async fn admit_restore(
 
 fn restore_failed(error: anyhow::Error) -> Action {
     log!("agent recovery cancelled: {error:#}");
-    Action::Stop(Cancel::because(format!(
-        "automatic restore failed: {error:#}"
-    )))
+    Action::Stop(Cancel::because(format!("{error:#}")))
 }
 
 fn cancelled_as_done() -> Action {

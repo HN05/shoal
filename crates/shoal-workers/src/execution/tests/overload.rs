@@ -1364,6 +1364,20 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
     assert!(!workspace.path.join("restored").exists());
     assert!(queue_is_empty(&manager).await);
     assert!(shoal_core::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    // The agent's exit says why Shoal cancelled its restore, and what
+    // restores it.
+    let alerts = manager.notifications.list(false, 10).await.unwrap();
+    let exit = (alerts.iter())
+        .find(|alert| alert.kind == AlertKind::AgentExited)
+        .unwrap();
+    assert!(
+        exit.message.contains("no longer ready for agent recovery")
+            && exit
+                .message
+                .contains(&format!("shoal resume {}", workspace.number)),
+        "{}",
+        exit.message
+    );
     serving.abort();
 }
 

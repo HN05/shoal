@@ -184,6 +184,7 @@ pub(super) async fn register(
         // Its child's start says whether it does.
         reports_status: false,
         stopped: false,
+        restore_cancelled: None,
         stop,
         records: RecordChange::of(&plan),
         source,

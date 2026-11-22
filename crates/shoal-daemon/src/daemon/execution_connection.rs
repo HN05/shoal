@@ -82,6 +82,9 @@ struct Connected {
     reports_status: bool,
     /// The daemon stopped the command before it finished.
     stopped: bool,
+    /// Why Shoal cancelled on its own the automatic restore the wrapper
+    /// waited for, which the agent's exit alert reports.
+    restore_cancelled: Option<String>,
     stop: watch::Receiver<bool>,
     /// What the execution changes in the merge records once it ends.
     records: Option<RecordChange>,
@@ -209,6 +212,7 @@ pub(super) async fn reattach(
         takes_narrowing: version >= protocol::RESUME_NARROWING,
         reports_status: request.reports_status,
         stopped: false,
+        restore_cancelled: None,
         stop,
         records: None,
         source: None,
@@ -379,6 +383,7 @@ async fn relay(
         hears_restore_waits,
         takes_narrowing,
         stopped,
+        restore_cancelled,
         stop,
         source,
         memory,
@@ -614,7 +619,10 @@ async fn relay(
                         controls.send(&Control::Detach).await?;
                         return Ok(Ended::Detached);
                     }
-                    Action::Stop(cancel) => controls.send(&cancel.control()).await?,
+                    Action::Stop(cancel) => {
+                        *restore_cancelled = cancel.unrequested_reason().map(str::to_owned);
+                        controls.send(&cancel.control()).await?;
+                    }
                     Action::Finished(exit_code) => {
                         *stopped = true;
                         return Ok(Ended::Finished(exit_code));
@@ -780,6 +788,7 @@ async fn finish(
         started,
         resuming,
         stopped,
+        restore_cancelled,
         memory,
         ..
     } = execution;
@@ -878,7 +887,11 @@ async fn finish(
                 complete,
                 overload_reason
                     .as_deref()
-                    .map(|reason| (&execution_id, reason)),
+                    .map(|reason| super::agents::OverloadEnd {
+                        execution: &execution_id,
+                        reason,
+                        restore_cancelled: restore_cancelled.as_deref(),
+                    }),
                 oom_kills,
             )
             .await;

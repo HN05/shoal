@@ -402,7 +402,8 @@ none;
 other agents need a `resume_command`.
 A failed command lookup warns and
 disables automatic recovery for that launch. Overload alerts include the
-pressure reason, execution ID, and automatic or manual recovery path. After the
+pressure reason, execution ID, and automatic or manual recovery path, and the
+alert of an agent whose automatic restore Shoal cancelled on its own says why. After the
 wrapper stops the agent, Shoal also stops processes that carry the execution's
 identity outside the agent's process group, such as background shell commands,
 as `shoal stop` does. Shoal saves
