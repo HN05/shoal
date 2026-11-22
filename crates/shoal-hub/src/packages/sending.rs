@@ -338,9 +338,10 @@ fn record_tried(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
 
 /// Record that the hub keeps a package of the space `id` that holds
 /// `state`, which it has no changes past.
-fn record_sent(tx: &Transaction<'_>, id: &SpaceId, state: &str) -> Result<()> {
+pub(super) fn record_sent(tx: &Transaction<'_>, id: &SpaceId, state: &str) -> Result<()> {
     tx.execute(
-        "UPDATE hub_package_states SET sent=?2, unsent_since=NULL WHERE space_id=?1",
+        "INSERT INTO hub_package_states(space_id, sent) VALUES (?1,?2)
+         ON CONFLICT(space_id) DO UPDATE SET sent=excluded.sent, unsent_since=NULL",
         params![id, state],
     )?;
     Ok(())

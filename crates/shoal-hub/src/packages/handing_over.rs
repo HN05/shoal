@@ -18,7 +18,7 @@ use shoal_protocol::{
 };
 use tokio::time::Instant;
 
-use super::sending::packageable;
+use super::sending::{self, packageable};
 use crate::{
     Hub,
     daemon::Daemon,
@@ -128,6 +128,8 @@ impl Hub {
         let directory = tempfile::tempdir()?;
         let file = directory.path().join("package.shoal");
         let built_at = UnixTime::now();
+        // Taken before the package, so a copy that changes after it differs.
+        let state = daemon.package_state(space).await?;
         let packaged = daemon.write_package(space, &file).await?;
         let start = daemon.handover_start(space, &packaged).await?;
         let hand_over = |stream| Call::HandOver {
@@ -143,6 +145,11 @@ impl Hub {
         while let Some(bytes) = answer.next().await? {
             written.extend(bytes);
         }
+        // The hub keeps it whole, which a takeover goes by.
+        let id = space.id.clone();
+        (self.store)
+            .write(move |tx| sending::record_sent(tx, &id, &state))
+            .await?;
         Ok(serde_json::from_slice(&written)?)
     }
 }
