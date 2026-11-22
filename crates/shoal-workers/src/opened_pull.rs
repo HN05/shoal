@@ -34,8 +34,8 @@ pub async fn link_or_warn(
 ) -> bool {
     let space = SpaceSelector::id(id);
     let (relation, kind) = (Relation::Assigned, LinkKind::Pr);
-    let linked =
-        crate::client::items::link(paths, &space, relation, kind, url.clone(), title).await;
+    let linking = crate::client::items::link(space, relation, kind, url.clone(), title);
+    let linked = linking.send(paths).await;
     if let Err(error) = &linked {
         eprintln!("warning: cannot link PR {url}: {error:#}");
     }

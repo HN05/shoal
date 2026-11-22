@@ -10,7 +10,7 @@ use crate::{
         args::items::{ItemArgs, RelationArgs},
         client,
         context::Context,
-        ui,
+        ui::{self, Acting},
     },
     forge::items::{
         link::{ItemKind, LinkKind, Selection},
@@ -25,15 +25,14 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// The space and the items selected in it, with the kind of a bare number
 /// resolved.
-pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(SpaceSelector, Selection)> {
+pub(super) async fn select(
+    ctx: &Context,
+    items: ItemArgs,
+    acting: &Acting,
+) -> Result<(SpaceSelector, Selection)> {
     let selection = items.selection()?;
-    let space = ui::select_space(
-        ctx,
-        items.space,
-        ui::Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
+    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory, acting);
+    let space = space.await?;
     let target = ItemContext::space(space.clone()).into();
     let selection = resolve_kind(ctx, target, selection).await?;
     Ok((space, selection))
@@ -107,13 +106,14 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         selected.input.is_some() || ctx.interactive(),
         "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
-    let space = ui::select_space(
-        ctx,
-        items.space,
-        ui::Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
+    // The item, which the space's context classifies once it is picked,
+    // decides nothing of which spaces the link reaches.
+    let linking = Acting::request(move |space| {
+        let item = ItemInput::Number(1);
+        crate::client::items::link(space, relation, LinkKind::Issue, item, None)
+    });
+    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory, &linking);
+    let space = space.await?;
     let context = ItemContext::space(space.clone());
     let selected = resolve_kind(ctx, context.clone().into(), selected).await?;
     let (kind, input) = match selected {
@@ -123,8 +123,9 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         } => (kind, input),
         Selection { kind, .. } => pick_open_item(ctx, context.clone(), kind).await?,
     };
-    let linked =
-        crate::client::items::link(&ctx.paths, &space, relation, kind, input, None).await?;
+    let linked = (crate::client::items::link(space.clone(), relation, kind, input, None))
+        .send(&ctx.paths)
+        .await?;
     if let Some(error) = linked.title_error {
         eprintln!("Title unavailable: {error}");
     }
@@ -187,15 +188,12 @@ async fn pick_open_item(
 
 pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (items, relation) = items.split()?;
-    let (space, selected) = select(ctx, items).await?;
-    let unlinked = crate::client::items::unlink(
-        &ctx.paths,
-        space.clone(),
-        relation,
-        selected.kind,
-        selected.input,
-    )
-    .await?;
+    let unlinking =
+        Acting::request(move |space| crate::client::items::unlink(space, relation, None, None));
+    let (space, selected) = select(ctx, items, &unlinking).await?;
+    let unlinked =
+        crate::client::items::unlink(space.clone(), relation, selected.kind, selected.input);
+    let unlinked = unlinked.send(&ctx.paths).await?;
     print_warnings(&unlinked.warnings);
     let unlinked = Registered {
         registered: false,
@@ -254,9 +252,12 @@ async fn watch_context(
 }
 
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
-    let (space, selection) = select(ctx, items).await?;
+    let marking = Acting::request(|space| assignments::mark_ready(space, Selection::default()));
+    let (space, selection) = select(ctx, items, &marking).await?;
     let itself = space_kind(ctx, &space).await?;
-    let outcomes = assignments::mark_ready(&ctx.paths, space.clone(), selection).await?;
+    let outcomes = (assignments::mark_ready(space.clone(), selection))
+        .send(&ctx.paths)
+        .await?;
     let ReadyMarks { marks, skipped } = outcomes.into();
     for skipped in &skipped {
         eprintln!("Skipped PR {}: {}", skipped.url, skipped.reason);
@@ -273,9 +274,13 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
 
 /// `draft` overrides `[pr] draft_on_unready` when given.
 pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
-    let (space, selection) = select(ctx, items).await?;
+    let clearing =
+        Acting::request(move |space| assignments::clear_ready(space, Selection::default(), draft));
+    let (space, selection) = select(ctx, items, &clearing).await?;
     let itself = space_kind(ctx, &space).await?;
-    let marks = assignments::clear_ready(&ctx.paths, space.clone(), selection, draft).await?;
+    let marks = (assignments::clear_ready(space.clone(), selection, draft))
+        .send(&ctx.paths)
+        .await?;
     let message = format!(
         "Ready-for-review marks cleared:\n{}",
         review_lines(&marks, itself)

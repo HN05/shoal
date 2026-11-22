@@ -26,28 +26,22 @@ pub fn undo_done(space: SpaceSelector) -> Prepared<Completion> {
 }
 
 /// Mark the items of `space` that `selection` selects ready for review.
-pub async fn mark_ready(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    selection: Selection,
-) -> Result<Vec<ReadyOutcome>> {
-    request(daemon, AssignmentMethod::MarkReady { space, selection }).await
+pub fn mark_ready(space: SpaceSelector, selection: Selection) -> Prepared<Vec<ReadyOutcome>> {
+    Prepared::new(AssignmentMethod::MarkReady { space, selection })
 }
 
 /// Clear the ready-for-review marks of the items of `space` that
 /// `selection` selects; `draft` overrides `[pr] draft_on_unready`.
-pub async fn clear_ready(
-    daemon: &impl Daemon,
+pub fn clear_ready(
     space: SpaceSelector,
     selection: Selection,
     draft: Option<bool>,
-) -> Result<Vec<ReviewMark>> {
-    let method = AssignmentMethod::ClearReady {
+) -> Prepared<Vec<ReviewMark>> {
+    Prepared::new(AssignmentMethod::ClearReady {
         space,
         selection,
         draft,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Discard `space`'s stopped agent, last sessions and stopped commands,

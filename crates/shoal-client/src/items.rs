@@ -4,7 +4,7 @@ use anyhow::Result;
 use tokio::time::Instant;
 
 use crate::{
-    connection::{Daemon, await_reply, request},
+    connection::{Daemon, Prepared, await_reply, request},
     forge::items::{
         action::Action,
         create::{NewIssue, PullOptions},
@@ -23,22 +23,20 @@ use shoal_protocol::{
 
 /// Link the `kind` item `item` names to `space` as `relation`, with the
 /// title lists show when the caller knows it.
-pub async fn link(
-    daemon: &impl Daemon,
-    space: &SpaceSelector,
+pub fn link(
+    space: SpaceSelector,
     relation: Relation,
     kind: LinkKind,
     item: ItemInput,
     title: Option<String>,
-) -> Result<shoal_protocol::links::Linked> {
-    let method = ItemMethod::LinkItem {
-        space: space.clone(),
+) -> Prepared<shoal_protocol::links::Linked> {
+    Prepared::new(ItemMethod::LinkItem {
+        space,
         kind,
         item,
         relation,
         title,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Link the issues, opened and related items `links` carries to `space`,
@@ -53,20 +51,18 @@ pub async fn relink(
 
 /// Unlink `space`'s items of `relation`, only those of `kind` or the one
 /// `item` names when given.
-pub async fn unlink(
-    daemon: &impl Daemon,
+pub fn unlink(
     space: SpaceSelector,
     relation: Relation,
     kind: Option<LinkKind>,
     item: Option<ItemInput>,
-) -> Result<shoal_protocol::links::Unlinked> {
-    let method = ItemMethod::UnlinkItems {
+) -> Prepared<shoal_protocol::links::Unlinked> {
+    Prepared::new(ItemMethod::UnlinkItems {
         space,
         relation,
         kind,
         item,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// The next activity on the items of `space` that `selection` selects, an
