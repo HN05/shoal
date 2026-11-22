@@ -3,11 +3,15 @@
 //! place opened for it, and running its agent once the queue lets it, as
 //! `shoal start` here and the place a start opens beside a terminal both
 //! do. What the process reports its own way is its [`Starting`] frontend.
+mod placed;
 mod prepared;
+mod run;
 
 use anyhow::Result;
 
+pub use placed::{Attach, Placed, execute_place, run};
 pub use prepared::{enter_workspace, finish_workspace, follow_preparation, shell_in, unprepared};
+pub use run::run_entry;
 
 use crate::{hosting::Caller, model::Workspace, preparation::Frontend};
 

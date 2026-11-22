@@ -1,15 +1,18 @@
 //! Running here the agent of a recorded space's starting launch, which
 //! this process holds, in the space the daemon opened for it, whatever its
 //! kind, through one launch of the space's agent.
-use anyhow::{Context as _, Result};
-use shoal_workers::hosting;
 use std::ffi::OsString;
 
+use anyhow::{Context as _, Result};
+
+use super::{Starting, enter_workspace};
+use crate::launch::{LaunchOptions, ModelRequest, Opening};
 use crate::{
     agent::Agent,
     agents::HomeRecords,
-    cli::{commands::queued_agents::Hold, context::Context},
+    client::queue::Hold,
     config::{modes::ModeName, templates::Subject},
+    hosting,
     protocol::{ItemContext, operations::QueuedLaunch},
     start_plan::QueuedStart,
     terminal::{Owner, PlaceName},
@@ -17,25 +20,24 @@ use crate::{
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_workers::launch::{LaunchOptions, ModelRequest, Opening};
 
 /// Run here the agent of the starting launch `entry`, which this process
 /// holds, in the space it names, the place it runs in named as
 /// `place_name` says, failing the entry when its start fails.
-pub(in crate::cli) async fn run_entry(
-    ctx: &Context,
+pub async fn run_entry(
+    starting: &impl Starting,
     entry: &QueueEntryId,
     place_name: Option<PlaceName>,
 ) -> Result<i32> {
-    let _hold = Hold::start(&ctx.paths, entry).await;
+    let _hold = Hold::start(starting.caller().paths, entry).await;
     let mut scope = SpaceScope { held: None };
-    let started = start_entry(ctx, entry, place_name, &mut scope).await;
+    let started = start_entry(starting, entry, place_name, &mut scope).await;
     // The space's scope reaches its entry, which the starter's may no
     // longer, so the failure is reported before the scope is revoked.
     if let Err(error) = &started {
-        crate::queued_starts::fail(&ctx.paths, entry, error).await;
+        crate::queued_starts::fail(starting.caller().paths, entry, error).await;
     }
-    scope.leave(ctx).await;
+    scope.leave(starting).await;
     started
 }
 
@@ -43,37 +45,37 @@ pub(in crate::cli) async fn run_entry(
 /// in the `scope` this process issues for its space when it is scoped,
 /// once the daemon opened the space for it.
 async fn start_entry(
-    ctx: &Context,
+    starting: &impl Starting,
     entry: &QueueEntryId,
     place_name: Option<PlaceName>,
     scope: &mut SpaceScope,
 ) -> Result<i32> {
-    let queued = crate::client::queue::open_start(&ctx.paths, entry.clone()).await?;
+    let queued = crate::client::queue::open_start(starting.caller().paths, entry.clone()).await?;
     let start = QueuedStart::of(&queued.plan)?;
     let space = (queued.entry.space()).context("the starting launch names no space")?;
-    let space = shoal_workers::homes::records(&ctx.paths, &SpaceSelector::id(space)).await?;
-    host(ctx, &space, place_name, Some(&start.launch.agent)).await?;
-    *scope = SpaceScope::act_in(ctx, &space).await?;
-    launch_in(ctx, space, entry, start.launch).await
+    let space = crate::homes::records(starting.caller().paths, &SpaceSelector::id(space)).await?;
+    host(starting, &space, place_name, Some(&start.launch.agent)).await?;
+    *scope = SpaceScope::act_in(starting, &space).await?;
+    launch_in(starting, space, entry, start.launch).await
 }
 
 /// Launch the agent of `launch` in `space`, taking the slot of `entry`.
 async fn launch_in(
-    ctx: &Context,
+    starting: &impl Starting,
     space: HomeRecords,
     entry: &QueueEntryId,
     launch: QueuedLaunch,
 ) -> Result<i32> {
-    let subject = subject(ctx, &space, &launch).await?;
+    let subject = subject(starting, &space, &launch).await?;
     crate::env::launch_queue_entry(entry);
-    self::launch(ctx, space, launch, subject).await
+    self::launch(starting, space, launch, subject).await
 }
 
 /// Host `space` in the place this process runs in, named as `place_name`
 /// says, for `agent`, else for a shell, which enters a workspace once the
 /// agent ends.
-pub(super) async fn host(
-    ctx: &Context,
+pub async fn host(
+    starting: &impl Starting,
     space: &HomeRecords,
     place_name: Option<PlaceName>,
     agent: Option<&Agent>,
@@ -83,11 +85,11 @@ pub(super) async fn host(
     match space {
         HomeRecords::Workspace(workspace) => {
             let owner = Owner::Workspace(&workspace.id);
-            hosting::host_space(ctx.caller(), owner, runs_agent, &label).await?;
-            shoal_workers::starts::enter_workspace(ctx, workspace, agent).await
+            hosting::host_space(starting.caller(), owner, runs_agent, &label).await?;
+            enter_workspace(starting, workspace, agent).await
         }
         HomeRecords::Chat { chat, .. } => {
-            hosting::host_space(ctx.caller(), Owner::Chat(&chat.id), runs_agent, &label).await
+            hosting::host_space(starting.caller(), Owner::Chat(&chat.id), runs_agent, &label).await
         }
     }
 }
@@ -108,7 +110,7 @@ fn place_label(space: &HomeRecords, place_name: Option<PlaceName>) -> String {
 /// read as the space reads it, open or closed, since its work goes on
 /// whatever the issue's state, else its prompt.
 async fn subject(
-    ctx: &Context,
+    starting: &impl Starting,
     space: &HomeRecords,
     launch: &QueuedLaunch,
 ) -> Result<Option<Subject>> {
@@ -117,7 +119,7 @@ async fn subject(
     };
     let context = ItemContext::space(SpaceSelector::id(space.home()?.id()));
     let issue = crate::client::forge_reads::linked_issue_details(
-        &ctx.paths,
+        starting.caller().paths,
         context,
         issue.url.clone().into(),
     )
@@ -127,7 +129,7 @@ async fn subject(
 
 /// Launch the agent of `launch` in `space`, starting on `subject`.
 async fn launch(
-    ctx: &Context,
+    starting: &impl Starting,
     space: HomeRecords,
     launch: QueuedLaunch,
     subject: Option<Subject>,
@@ -152,7 +154,7 @@ async fn launch(
         ..Default::default()
     };
     let args = args.into_iter().map(OsString::from).collect();
-    shoal_workers::launch::launch_agent(ctx.caller(), agent, space, opening, args, options).await
+    crate::launch::launch_agent(starting.caller(), agent, space, opening, args, options).await
 }
 
 /// The scope a scoped process issues itself for the space whose agent it
@@ -164,13 +166,13 @@ struct SpaceScope {
 impl SpaceScope {
     /// Make this process act in a scope it issues for `space`, when it is
     /// scoped.
-    async fn act_in(ctx: &Context, space: &HomeRecords) -> Result<Self> {
+    async fn act_in(starting: &impl Starting, space: &HomeRecords) -> Result<Self> {
         if !crate::env::is_scoped() {
             return Ok(Self { held: None });
         }
         let space = SpaceSelector::id(space.home()?.id());
         let token = crate::client::spaces::issue_scope(space.clone())
-            .send(&ctx.paths)
+            .send(starting.caller().paths)
             .await?;
         crate::env::act_in_space_scope(token.clone());
         Ok(Self {
@@ -180,10 +182,10 @@ impl SpaceScope {
 
     /// Revoke the scope, once the start ended. A token it cannot revoke
     /// goes with the space, as when its removal ended its agent.
-    async fn leave(self, ctx: &Context) {
+    async fn leave(self, starting: &impl Starting) {
         if let Some((space, token)) = self.held {
             let _ = crate::client::spaces::revoke_scope(space, token)
-                .send(&ctx.paths)
+                .send(starting.caller().paths)
                 .await;
         }
     }

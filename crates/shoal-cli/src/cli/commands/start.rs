@@ -34,19 +34,16 @@ mod detached;
 pub(in crate::cli::commands) mod placement;
 mod reads;
 mod reports;
-mod run;
 mod settle;
 mod shown;
 
-pub(in crate::cli) use attach::place_worker;
-pub(in crate::cli::commands) use attach::{Placed, place, run as run_attached};
+pub(in crate::cli::commands) use attach::place;
 pub(in crate::cli::commands) use detached::{leaves_caller, place_agent};
-pub(in crate::cli::commands) use placement::{Attach, StartOptions};
+pub(in crate::cli::commands) use placement::{StartOptions, attach};
 pub(in crate::cli::commands) use reads::{
     launch_repository, launch_settings, space_repository, start_modes, target_settings,
 };
 pub(in crate::cli::commands) use reports::report_queued_in;
-pub(in crate::cli) use run::run_entry;
 pub(in crate::cli::commands) use settle::{
     check_model, check_start_arguments, launch_args, pick_start_source, settle,
 };

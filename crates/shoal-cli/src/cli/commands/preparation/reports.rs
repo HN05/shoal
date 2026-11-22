@@ -7,7 +7,7 @@ use crate::{
     cli::{
         commands::{
             links, queued_agents,
-            start::{self, Attach, StartOptions},
+            start::{self, StartOptions},
         },
         context::Context,
         output::{Palette, Style},
@@ -43,16 +43,16 @@ pub(in crate::cli::commands) async fn enter_created(
     };
     let settings = &shoal_workers::settings::of(&ctx.paths, target).await?;
     let options = StartOptions::default();
-    let Some(attach) = Attach::of(ctx, (launch, false), None, settings, &options) else {
+    let Some(attach) = start::attach(ctx, (launch, false), None, settings, &options) else {
         return Ok(None);
     };
     links::print_warnings(&started.warnings);
-    let placed = start::Placed {
+    let placed = shoal_workers::starts::Placed {
         space: Box::new((*started.workspace).clone().into()),
         operation: started.operation.clone(),
         entry: started.entry.clone(),
     };
-    let code = start::run_attached(ctx, placed, (attach, settings)).await?;
+    let code = shoal_workers::starts::run(ctx, placed, (attach, settings)).await?;
     Ok(Some(code))
 }
 

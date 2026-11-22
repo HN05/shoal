@@ -30,61 +30,48 @@ impl StartOptions {
     }
 }
 
-/// Where the agent of a start runs when it runs in its caller.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::cli::commands) enum Attach {
-    /// In this terminal, or in this process for an agent that runs its own
-    /// way, which leaves it at once.
-    Here,
-    /// In a new place beside this terminal, `focused` or in the background,
-    /// else here.
-    Beside { focused: bool },
-}
+pub(in crate::cli::commands) use shoal_workers::starts::Attach;
 
-impl Attach {
-    /// Where the agent of `launch`, if it names one, runs in its caller as
-    /// `options` and `settings` say: `--here` runs here, as the user's
-    /// agent that runs its own way does without a terminal; on a terminal a
-    /// focused start runs in a focused place, as a shell or an agent that
-    /// runs its own way takes a place beside it, or here where no host
-    /// opens places. `None` leaves the agent's start to the daemon, as
-    /// another machine's daemon starts one there. An `issue_linked`
-    /// workspace's own issue prompts the agent where the launch names
-    /// nothing to start on.
-    pub(in crate::cli::commands) fn of(
-        ctx: &Context,
-        (launch, issue_linked): (&Launch, bool),
-        agent: Option<&crate::agent::Agent>,
-        settings: &Effective,
-        options: &StartOptions,
-    ) -> Option<Self> {
-        if launch.machine.is_some() {
-            return None;
-        }
-        let own_way = !crate::env::is_scoped()
-            && agent.is_some_and(|agent| shoal_workers::launch::runs_its_own_way(agent, settings));
-        if leaves_caller(ctx, options.here) {
-            return own_way.then_some(Self::Here);
-        }
-        // Without a host that opens places beside it, a terminal runs
-        // every start's agent here.
-        if options.here || !hosting::opens_beside(ctx.caller(), settings) {
-            return Some(Self::Here);
-        }
-        let requested = options.focus.then_some(crate::terminal::Placement::Focus);
-        let waits_for_user = agent.is_none() || waits(launch, issue_linked);
-        let placement =
-            crate::terminal::Placement::of(settings, &mode(launch), requested, waits_for_user);
-        // The queue starts only an agent of its own in the background; a
-        // shell, or an agent that runs its own way, takes a place from here.
-        let queued = agent.is_some() && !own_way;
-        match (placement, queued) {
-            (crate::terminal::Placement::Focus, _) => Some(Self::Beside { focused: true }),
-            (crate::terminal::Placement::Background, false) => {
-                Some(Self::Beside { focused: false })
-            }
-            (crate::terminal::Placement::Background, true) => None,
-        }
+/// Where the agent of `launch`, if it names one, runs in its caller as
+/// `options` and `settings` say: `--here` runs here, as the user's
+/// agent that runs its own way does without a terminal; on a terminal a
+/// focused start runs in a focused place, as a shell or an agent that
+/// runs its own way takes a place beside it, or here where no host
+/// opens places. `None` leaves the agent's start to the daemon, as
+/// another machine's daemon starts one there. An `issue_linked`
+/// workspace's own issue prompts the agent where the launch names
+/// nothing to start on.
+pub(in crate::cli::commands) fn attach(
+    ctx: &Context,
+    (launch, issue_linked): (&Launch, bool),
+    agent: Option<&crate::agent::Agent>,
+    settings: &Effective,
+    options: &StartOptions,
+) -> Option<Attach> {
+    if launch.machine.is_some() {
+        return None;
+    }
+    let own_way = !crate::env::is_scoped()
+        && agent.is_some_and(|agent| shoal_workers::launch::runs_its_own_way(agent, settings));
+    if leaves_caller(ctx, options.here) {
+        return own_way.then_some(Attach::Here);
+    }
+    // Without a host that opens places beside it, a terminal runs
+    // every start's agent here.
+    if options.here || !hosting::opens_beside(ctx.caller(), settings) {
+        return Some(Attach::Here);
+    }
+    let requested = options.focus.then_some(crate::terminal::Placement::Focus);
+    let waits_for_user = agent.is_none() || waits(launch, issue_linked);
+    let placement =
+        crate::terminal::Placement::of(settings, &mode(launch), requested, waits_for_user);
+    // The queue starts only an agent of its own in the background; a
+    // shell, or an agent that runs its own way, takes a place from here.
+    let queued = agent.is_some() && !own_way;
+    match (placement, queued) {
+        (crate::terminal::Placement::Focus, _) => Some(Attach::Beside { focused: true }),
+        (crate::terminal::Placement::Background, false) => Some(Attach::Beside { focused: false }),
+        (crate::terminal::Placement::Background, true) => None,
     }
 }
 

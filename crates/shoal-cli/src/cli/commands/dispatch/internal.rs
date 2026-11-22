@@ -1,11 +1,11 @@
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use shoal_protocol::executions::TrackedAgent;
 use shoal_workers::agent_hooks;
 use shoal_workers::hosting;
 
 use crate::{
     cli::{
-        args::internal::InternalCommand,
+        args::internal::{InternalCommand, PlaceWorkerArgs},
         commands::{approvals, environment, events, menu, sessions},
         context::Context,
     },
@@ -163,7 +163,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             };
             shoal_workers::execution::take_over(&ctx.paths, taken).await
         }
-        InternalCommand::Place(args) => crate::cli::commands::place_worker(ctx, args).await,
+        InternalCommand::Place(args) => place_worker(ctx, args).await,
         InternalCommand::Demo {
             workspace,
             launch,
@@ -223,4 +223,18 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             hosting::run_session(ctx.caller(), session).await
         }
     }
+}
+
+/// The place worker: carry out the plan `args` give in the place of the
+/// host they name that this process runs in, or in no place without one.
+async fn place_worker(mut ctx: Context, args: PlaceWorkerArgs) -> Result<i32> {
+    let plan = serde_json::from_str(&args.plan).context("invalid place plan")?;
+    if let Some(host) = args.host {
+        ctx.place = Some(hosting::Place::here(
+            host,
+            args.close_when_done,
+            args.focused,
+        )?);
+    }
+    shoal_workers::starts::execute_place(&ctx, plan).await
 }
