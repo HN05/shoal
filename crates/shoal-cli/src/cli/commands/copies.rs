@@ -1,4 +1,5 @@
 //! The workspace `--copy` and `--checkpoint` start a new one from.
+use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -47,7 +48,12 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     let selector = ui::select_workspace(
         ctx,
         args.copy.flatten(),
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(|space| {
+            // A copy's file, which it writes where it is taken, decides
+            // nothing of which spaces it reaches.
+            let file = std::path::PathBuf::from("copy.shoal");
+            crate::client::transfer::copy(space, None, file, Default::default())
+        })),
     )
     .await?;
     let workspaces = crate::client::spaces::list(&ctx.paths)

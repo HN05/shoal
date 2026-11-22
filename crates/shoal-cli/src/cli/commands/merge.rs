@@ -1,5 +1,6 @@
 //! `shoal merge`: merge a space's work, through its open PR on the forge or
 //! a workspace's branch locally into the default branch, or a PR it names.
+use crate::cli::ui::Acting;
 use anyhow::Result;
 
 use crate::{
@@ -43,10 +44,13 @@ async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
     let space = ui::select_space(
         ctx,
         args.space.clone(),
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(crate::client::merging::merge_path)),
     )
     .await?;
-    match crate::client::merging::merge_path(&ctx.paths, space.clone()).await? {
+    match crate::client::merging::merge_path(space.clone())
+        .send(&ctx.paths)
+        .await?
+    {
         MergePath::Pr { pr } => {
             args.ensure_pull_flags(&format!("PR {pr}"))?;
             let target = RepoTarget {

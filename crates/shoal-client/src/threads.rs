@@ -10,27 +10,25 @@ use shoal_protocol::{
     threads::{Listing, NewPost, Resolving, Thread, ThreadKind, ThreadNumber, ThreadState},
 };
 
-use crate::connection::{Daemon, await_reply, request};
+use crate::connection::{Daemon, Prepared, await_reply, request};
 
 /// Open a thread `name` of `kind` with the space `to`, else with the
 /// caller's coordinator or the user, acting as the space `from`: empty, or
 /// with an opening post pointing at the places in code `code`.
-pub async fn open(
-    daemon: &impl Daemon,
+pub fn open(
     name: String,
     kind: ThreadKind,
     to: Option<SpaceSelector>,
     from: Option<SpaceSelector>,
     code: Vec<NewCodeRef>,
-) -> Result<Thread> {
-    let method = ThreadMethod::OpenThread {
+) -> Prepared<Box<Thread>> {
+    Prepared::new(ThreadMethod::OpenThread {
         name,
         kind,
         to,
         from,
         code,
-    };
-    Ok(*request::<Box<Thread>>(daemon, method).await?)
+    })
 }
 
 /// Add `post` with `attachments`, pointing at the places in code `code`

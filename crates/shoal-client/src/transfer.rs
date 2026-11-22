@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
-use crate::connection::{Daemon, open_buffered, request};
+use crate::connection::{Daemon, Prepared, open_buffered, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     protocol::{self, RemovalMethod},
@@ -148,20 +148,18 @@ pub async fn settle_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<M
 /// Package a copy of `space`, with copies of the spaces below it that
 /// `carrying` carries, into `file`, leaving them running: a workspace at
 /// its checkpoint `checkpoint`, or at a new one.
-pub async fn copy(
-    daemon: &impl Daemon,
+pub fn copy(
     space: SpaceSelector,
     checkpoint: Option<CheckpointNumber>,
     file: PathBuf,
     carrying: Carrying,
-) -> Result<ExportedSpace> {
-    let method = RemovalMethod::CopySpace {
+) -> Prepared<ExportedSpace> {
+    Prepared::new(RemovalMethod::CopySpace {
         space,
         checkpoint,
         file,
         carrying,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Import the package `import` names: the daemon records its spaces as

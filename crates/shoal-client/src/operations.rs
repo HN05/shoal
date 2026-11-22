@@ -103,12 +103,20 @@ pub async fn start(
     spec: OperationSpec,
     env: BTreeMap<String, String>,
 ) -> Result<String> {
-    let method = OperationMethod::StartOperation {
+    let Started { id } = start_request(spec, env).send(daemon).await?;
+    Ok(id)
+}
+
+/// What [`start`] sends for `spec` with `env`, as the picker that chooses
+/// the space it works in judges it.
+pub fn start_request(
+    spec: OperationSpec,
+    env: BTreeMap<String, String>,
+) -> connection::Prepared<Started> {
+    connection::Prepared::new(OperationMethod::StartOperation {
         spec,
         env: Some(env),
-    };
-    let Started { id } = connection::request(daemon, method).await?;
-    Ok(id)
+    })
 }
 
 /// Cancel `operation`.

@@ -23,7 +23,7 @@ pub(super) async fn copy_one(
     let selector = SpaceSelector::id(&space.id);
     let (checkpoint, carrying) = (order.checkpoint, order.carrying());
     let copying =
-        crate::client::transfer::copy(paths, selector, checkpoint, file.clone(), carrying);
+        crate::client::transfer::copy(selector, checkpoint, file.clone(), carrying).send(paths);
     let mut exported = copying.await?;
     if let Some(number) = checkpoint {
         exported.warnings.push(format!(

@@ -71,12 +71,8 @@ async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
         });
     }
     if let Some(space) = &args.space {
-        let space = ui::select_space(
-            ctx,
-            Some(space.clone()),
-            Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-        )
-        .await?;
+        let space =
+            ui::select_space(ctx, Some(space.clone()), Fallback::CurrentDirectoryOnly).await?;
         return Ok(Listing {
             to: AlertsFor::Space { space },
             marks_read: true,

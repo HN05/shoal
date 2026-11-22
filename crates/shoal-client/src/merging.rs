@@ -2,7 +2,7 @@
 //! of a workspace's branch would do.
 use anyhow::Result;
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, Prepared, request};
 use shoal_protocol::{
     model::{MergeOptions, MergePath, MergePreview},
     protocol::MergingMethod,
@@ -11,8 +11,8 @@ use shoal_protocol::{
 
 /// How `shoal merge` merges the work of `space`: through its one open PR,
 /// or a workspace's branch locally.
-pub async fn merge_path(daemon: &impl Daemon, space: SpaceSelector) -> Result<MergePath> {
-    request(daemon, MergingMethod::MergePath { space }).await
+pub fn merge_path(space: SpaceSelector) -> Prepared<MergePath> {
+    Prepared::new(MergingMethod::MergePath { space })
 }
 
 /// What merging `workspace`'s branch as `options` say would do.

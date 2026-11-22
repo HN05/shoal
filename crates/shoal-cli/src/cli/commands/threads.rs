@@ -1,6 +1,7 @@
 //! `shoal thread`: open a thread, forward or resolve one, and list them.
 //! Posting in a thread goes through `shoal send`, reading one through
 //! `shoal view thread`, and following one through `shoal link thread`.
+use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
@@ -68,16 +69,19 @@ pub(super) async fn open(
     let from = acting_space(ctx).await?;
     let to = match space {
         None if from.is_some() => None,
-        space => Some(
-            ui::select_space(
-                ctx,
-                space,
-                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-            )
-            .await?,
-        ),
+        space => {
+            let opening = {
+                let (name, from) = (name.clone(), from.clone());
+                Acting::request(move |to| {
+                    threads::open(name.clone(), kind, Some(to), from.clone(), Vec::new())
+                })
+            };
+            Some(ui::select_space(ctx, space, Fallback::CurrentDirectory(&opening)).await?)
+        }
     };
-    let thread = threads::open(&ctx.paths, name, kind, to, from, code).await?;
+    let thread = threads::open(name, kind, to, from, code)
+        .send(&ctx.paths)
+        .await?;
     let number = thread.number;
     let holder = thread.party(Side::Holder);
     let message = match thread.posts.is_empty() {

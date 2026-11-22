@@ -1,4 +1,5 @@
 //! `shoal unmerge`: the operation that undoes a workspace's local merge.
+use crate::cli::ui::Acting;
 use anyhow::Result;
 
 use crate::{
@@ -20,7 +21,10 @@ pub(in crate::cli::commands) async fn unmerge(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(|workspace| {
+            let spec = OperationSpec::Unmerge { workspace };
+            crate::client::operations::start_request(spec, Default::default())
+        })),
     )
     .await?;
     let spec = OperationSpec::Unmerge { workspace };
