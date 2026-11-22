@@ -58,13 +58,13 @@ pub(super) async fn operation(
     // Boxed, so the wrappers that serve it each hold a pointer instead of
     // the largest request's state, which overflows a debug build's worker
     // stack within a request as deep as a removal of nested spaces.
+    // Looked up first, so a request that ran is never reported failed.
+    let machine = forwarded::answering_machine(&server.manager, scope).await?;
     let answer = Box::pin(handle(server, operation, caller, scope)).await?;
-    Ok(
-        match forwarded::answering_machine(&server.manager, scope).await? {
-            Some(machine) => answer.files_kept_on(machine.name),
-            None => answer,
-        },
-    )
+    Ok(match machine {
+        Some(machine) => answer.files_kept_on(machine.name),
+        None => answer,
+    })
 }
 
 /// Refuse a request whose space fails the check its kind declares, then

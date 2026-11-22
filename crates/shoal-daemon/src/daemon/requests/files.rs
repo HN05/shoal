@@ -80,6 +80,11 @@ impl Scoped for FileMethod {
             FileMethod::AddFiles { space, .. } => Ok(Some(space)),
             // It finds only the spaces the caller sees.
             FileMethod::FetchedDirectory { .. } => Ok(None),
+            // A post's files reach whoever reads its thread, wherever they
+            // are kept.
+            FileMethod::ReadFile { id, .. } if manager.reads_posted_file(caller, *id).await? => {
+                Ok(None)
+            }
             FileMethod::ListFiles { space }
             | FileMethod::ReadFile { space, .. }
             | FileMethod::RemoveFiles {

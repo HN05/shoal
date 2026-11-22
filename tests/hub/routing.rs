@@ -517,6 +517,36 @@ fn a_coordinator_opens_a_thread_with_its_child_on_another_machine() {
 }
 
 #[test]
+fn a_child_on_another_machine_reads_the_files_its_coordinator_posts_to_it() {
+    let tree = tree_across_machines();
+    let (hub, laptop) = (&tree.hub, &tree.laptop);
+    working(laptop, &tree.child);
+    let open = ["thread", "open", "Which layout?", "--space", &tree.child];
+    let opened = ok_in(hub, &tree.coordinator, &open);
+    let number = opened["number"].as_str().unwrap().to_owned();
+    let mock = hub.root.path().join("mock.txt");
+    std::fs::write(&mock, "two columns").unwrap();
+    let attach = mock.to_str().unwrap();
+    let post = ["send", &number, "This one?", "--attach", attach];
+    ok_in(hub, &tree.coordinator, &post);
+    let alert = message_with(laptop, &tree.child, "This one?");
+    // Kept in the coordinator's space, which the child's scope does not
+    // reach.
+    let file = &alert["files"][0];
+    assert_eq!(file["space"], json!(tree.coordinator), "{alert}");
+    let space = shoal_protocol::space_names::SpaceSelector::id(&tree.coordinator.as_str().into());
+    let id = file["id"].as_i64().unwrap();
+    let token = scope_of(laptop, &tree.child);
+    let agent = super::following::app(laptop).scope(token.as_str().into());
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let bytes = runtime.block_on(async {
+        let read = shoal_client::files::read(&agent, space, id).await.unwrap();
+        read.to_end().await.unwrap()
+    });
+    assert_eq!(bytes, b"two columns");
+}
+
+#[test]
 fn the_user_opens_and_a_holder_forwards_threads_to_a_space_on_another_machine() {
     let Tree {
         hub,

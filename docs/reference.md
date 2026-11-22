@@ -866,7 +866,8 @@ the protocol has.
 `files::read` reads the bytes of a space's [attached file](#attached-files) by
 the space and the file's record ID, which an alert's or a post's file record
 gives with its `space`, on whichever machine of the hub keeps its copy, under
-the scope that lists it; it fails at once while that machine is offline.
+the scope that lists it, or that reads a thread it was posted in; it fails at
+once while that machine is offline.
 `demos::open_stream` opens a stream to a running [demo](#demos) of a space on
 whichever machine of the hub it runs, by the space and the demo's name: it
 returns the demo, then its connection carries the demo's bytes both ways until
@@ -7115,8 +7116,9 @@ the workspace, or the chat runs. `--all` deletes the files of every workspace
 and chat where none runs, and of every removed space, after asking; noninteractive and JSON calls confirm with `--yes`. Sending files
 again copies any deleted copy anew. Scoped agents may list, add and delete the
 files of their own workspace and the spaces below it, and the files of a
-removed space that was below one of those, but not use `--all` or
-reach a chat's files.
+removed space that was below one of those, and read a file posted in a
+thread they read wherever it is kept, but not use `--all` or reach a chat's
+files.
 
 ### Threads
 

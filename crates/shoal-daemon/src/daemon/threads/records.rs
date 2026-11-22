@@ -199,6 +199,23 @@ pub(super) fn by_id(db: &Connection, id: i64) -> Result<Option<Thread>> {
     Ok(query(db, "WHERE t.id=?1", [id])?.pop())
 }
 
+/// The threads a post of which sent the attached file `file`.
+pub(super) fn posting_file(db: &Connection, file: i64) -> Result<Vec<Thread>> {
+    let ids = db
+        .prepare(
+            "SELECT DISTINCT p.thread_id FROM thread_posts p, json_each(p.files) j
+                WHERE j.value=?1",
+        )?
+        .query_map([file], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<i64>>>()?;
+    let threads = ids.into_iter().map(|id| by_id(db, id));
+    Ok(threads
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect())
+}
+
 /// The thread `item` of the space `space_id`.
 pub(super) fn by_item(db: &Connection, space_id: &SpaceId, item: u32) -> Result<Option<Thread>> {
     Ok(query(

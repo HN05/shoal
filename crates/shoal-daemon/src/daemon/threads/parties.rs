@@ -65,6 +65,25 @@ impl Manager {
         Ok(false)
     }
 
+    /// Whether `caller` reads a thread a post of which sent the attached
+    /// file `file`, whose copy it then reads too, in whichever space it is
+    /// kept.
+    pub(in crate::daemon) async fn reads_posted_file(
+        &self,
+        caller: &Caller,
+        file: i64,
+    ) -> Result<bool> {
+        let threads = (self.store)
+            .read(move |db| records::posting_file(db, file))
+            .await?;
+        for thread in &threads {
+            if self.reads(Some(caller), thread).await? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// The side of `thread` `caller` takes: the opener's for the space that
     /// opened it, the holder's for the space that holds it or a space above
     /// that one, and for the user the opener's side of a thread the user
