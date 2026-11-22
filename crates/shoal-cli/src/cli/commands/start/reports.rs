@@ -121,7 +121,7 @@ fn unanswered_why(unanswered: Unanswered) -> &'static str {
     match unanswered {
         Unanswered::NoPlacer => "no placer is registered",
         Unanswered::Late => "the placer did not answer in time",
-        Unanswered::Failed => "the placer chose no connected machine",
+        Unanswered::Failed => "the placer chose no machine the start can go to",
     }
 }
 

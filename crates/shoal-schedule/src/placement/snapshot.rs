@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use shoal_ids::member_ids::MemberId;
 
+use super::SkippedBy;
+
 /// The start to place and the machines connected to the hub, the caller's
 /// among them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,6 +77,23 @@ pub struct Capacity {
     pub memory_free: Option<u64>,
     /// The heavy agents waiting in its queue.
     pub heavy_waiting: u32,
+}
+
+impl Request {
+    /// Why the start cannot go to `machine`, none when it can: the
+    /// caller's machine has its repository, where the start found it, and
+    /// another one needs it registered, unless the start needs none, and
+    /// every machine needs its agent tool.
+    pub fn unfit(&self, machine: &Machine) -> Option<SkippedBy> {
+        let caller = machine.id == self.caller;
+        if !caller && !machine.has_repository(self.origin.as_deref()) {
+            Some(SkippedBy::NoRepository)
+        } else if !machine.has_agent(&self.agent) {
+            Some(SkippedBy::NoAgent)
+        } else {
+            None
+        }
+    }
 }
 
 impl Machine {

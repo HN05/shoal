@@ -144,13 +144,15 @@ fn balanced_instead(snapshot: &Snapshot, unanswered: Unanswered) -> (Placement, 
     )
 }
 
-/// `placement`, where it chooses a machine of `snapshot`; else the placer
-/// that made it failed.
+/// `placement`, where it chooses a machine of `snapshot` the start can go
+/// to, which has its repository and agent tool, since placement never
+/// clones a repository; else the placer that made it failed.
 fn among(placement: Placement, snapshot: &Snapshot) -> Result<Placement, Unanswered> {
     let chosen = placement.chosen().map(|placed| &placed.machine);
-    let known = chosen
-        .is_some_and(|chosen| (snapshot.machines.iter()).any(|machine| &machine.id == chosen));
-    match known {
+    let fits = (snapshot.machines.iter())
+        .find(|machine| Some(&machine.id) == chosen)
+        .is_some_and(|machine| snapshot.request.unfit(machine).is_none());
+    match fits {
         true => Ok(placement),
         false => Err(Unanswered::Failed),
     }
@@ -200,3 +202,6 @@ fn decision(
             .collect(),
     })
 }
+
+#[cfg(test)]
+mod tests;

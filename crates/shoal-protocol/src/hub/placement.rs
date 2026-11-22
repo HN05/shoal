@@ -37,7 +37,8 @@ shoal_states::states! {
         NoPlacer => "no_placer",
         /// The placer did not answer in time.
         Late => "late",
-        /// The placer chose no machine the start can go to.
+        /// The placer chose no connected machine with the start's
+        /// repository and agent tool.
         Failed => "failed",
     }
 }

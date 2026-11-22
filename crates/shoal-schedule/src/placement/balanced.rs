@@ -3,7 +3,7 @@
 use std::cmp::Reverse;
 
 use super::{
-    Placed, Placement, Placer, Reason, Skipped, SkippedBy,
+    Placed, Placement, Placer, Reason, Skipped,
     snapshot::{Capacity, Machine, Request, Snapshot},
 };
 
@@ -25,7 +25,7 @@ impl Placer for Balanced {
         let mut placement = Placement::default();
         let mut ranked = Vec::new();
         for machine in &snapshot.machines {
-            match unfit(request, machine) {
+            match request.unfit(machine) {
                 Some(why) => placement.skipped.push(Skipped {
                     machine: machine.id.clone(),
                     why,
@@ -54,19 +54,6 @@ fn rank<'a>(request: &Request, machine: &'a Machine) -> ((u8, RoomKey, &'a str),
         reason,
     };
     ((group, key, &machine.name), placed)
-}
-
-/// Why `request` cannot go to `machine`, none when it can. The caller's
-/// machine has the start's repository, where the start found it.
-fn unfit(request: &Request, machine: &Machine) -> Option<SkippedBy> {
-    let caller = machine.id == request.caller;
-    if !caller && !machine.has_repository(request.origin.as_deref()) {
-        Some(SkippedBy::NoRepository)
-    } else if !machine.has_agent(&request.agent) {
-        Some(SkippedBy::NoAgent)
-    } else {
-        None
-    }
 }
 
 /// How an `always_on` machine with room for `request` ranks among the
