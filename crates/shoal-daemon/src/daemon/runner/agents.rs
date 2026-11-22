@@ -42,7 +42,7 @@ impl Agents for Manager {
     }
 
     fn queue_suspended(&self) -> bool {
-        self.agents.agent_queue().suspended()
+        self.agents.agent_queue().holds_admission()
     }
 
     fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>> {

@@ -50,6 +50,9 @@ pub struct AgentQueue {
     wake: Notify,
     /// Admission waits while the system shuts down.
     suspended: AtomicBool,
+    /// Admission waits while the machine sleeps, from its announcement
+    /// until it fully wakes, so a dark wake starts nothing.
+    asleep: AtomicBool,
 }
 
 #[derive(Default)]
@@ -396,6 +399,22 @@ impl AgentQueue {
 
     pub fn suspended(&self) -> bool {
         self.suspended.load(Ordering::SeqCst)
+    }
+
+    /// Hold back admission while the machine sleeps; waking wakes the
+    /// dispatcher. Takes the admission gate, as [`Self::suspend`] does.
+    pub async fn sleep(&self, asleep: bool) {
+        let _gate = self.lock_admission().await;
+        self.asleep.store(asleep, Ordering::SeqCst);
+        if !asleep {
+            self.wake();
+        }
+    }
+
+    /// Whether admission waits, while the system shuts down or the machine
+    /// sleeps.
+    pub fn holds_admission(&self) -> bool {
+        self.suspended() || self.asleep.load(Ordering::SeqCst)
     }
 
     /// Wake the dispatcher, since a slot may have freed or work may fit.

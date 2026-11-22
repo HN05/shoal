@@ -156,13 +156,13 @@ impl Agents {
     /// start launches other than `caller`'s, and return whether `caller`'s
     /// entry, which the caller may hold, was admitted. An admitted restore
     /// is left to its waiting agent; nothing is admitted while the system
-    /// shuts down. Requires the queue gate.
+    /// shuts down or the machine sleeps. Requires the queue gate.
     pub async fn admit_waiting(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&QueueEntryId>,
     ) -> Result<bool> {
-        if self.agent_queue.suspended() {
+        if self.agent_queue.holds_admission() {
             return Ok(false);
         }
         let mut work = self.waiting_work(daemon, caller).await?;

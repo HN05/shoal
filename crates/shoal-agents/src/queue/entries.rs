@@ -280,7 +280,7 @@ impl Agents {
     /// Hold the queue gate for an agent taking over `entry`'s slot, refusing
     /// an entry no longer starting, whose start a stop or completion
     /// cancelled, and returning one to the queue while the system shuts
-    /// down, or once a stop, reload or unsafe reading withdrew the healthy
+    /// down or the machine sleeps, or once a stop, reload or unsafe reading withdrew the healthy
     /// readings that admitted it. The guard keeps cancellation out until the
     /// agent has taken the slot.
     pub async fn reserve_queue_entry(
@@ -288,9 +288,11 @@ impl Agents {
         entry: &QueueEntryId,
     ) -> Result<tokio::sync::MutexGuard<'_, ()>> {
         let gate = self.agent_queue.lock_admission().await;
-        if self.agent_queue.suspended() {
+        if self.agent_queue.holds_admission() {
             self.return_start(entry).await?;
-            bail!("the system is shutting down; the agent queue starts this agent later");
+            bail!(
+                "the system is shutting down or sleeping; the agent queue starts this agent later"
+            );
         }
         if !self.recovery_admission_holds(entry) {
             self.return_start(entry).await?;

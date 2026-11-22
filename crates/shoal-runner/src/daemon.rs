@@ -91,7 +91,8 @@ pub trait Agents: Send + Sync {
     /// Have admission look at the agent queue again, as once a claim ends.
     fn wake_admission(&self);
 
-    /// Whether the agent queue is suspended, as the system shuts down.
+    /// Whether the agent queue holds admission, as while the system shuts
+    /// down or the machine sleeps.
     fn queue_suspended(&self) -> bool;
 
     /// Hold the agent queue's admission until the guard drops, so a
