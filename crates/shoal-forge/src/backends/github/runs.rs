@@ -6,7 +6,6 @@ use shoal_refs::CommitId;
 
 use super::{GitHub, actions};
 use crate::{
-    account::Account,
     backends::Runs,
     ci::{
         Location,
@@ -17,6 +16,7 @@ use crate::{
         run_view::JOBS_PAGE,
     },
     items::item::text,
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
 };
 use shoal_forge_types::{

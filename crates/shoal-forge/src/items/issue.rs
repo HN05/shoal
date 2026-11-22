@@ -1,7 +1,7 @@
 //! Look up issue state.
 use anyhow::{Result, ensure};
 
-use crate::{RepoRequests, account::Account, backends::Items};
+use crate::{RepoRequests, backends::Items, transport::account::Account};
 use shoal_forge_types::{
     ForgeRepo,
     items::{issue::IssueDetails, item::ItemState, link::LinkKind, reference::ItemRef},

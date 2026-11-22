@@ -5,10 +5,10 @@ use anyhow::{Context, Result};
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
     RepoRequests,
-    account::Account,
     capability::CapabilityRequests,
     items::{action::ActionRequests, issue::IssueRequests},
     review::{reviewers::ReviewerRequests, thread::ThreadRequests},
+    transport::account::Account,
 };
 use shoal_forge_types::{
     ForgeRepo, PullRequest,

@@ -11,7 +11,9 @@ use anyhow::Result;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use shoal_core::git;
 use shoal_daemon_base::callers::Caller;
-use shoal_forge::{account::Account, branches::BranchRequests, ci::workflow::WorkflowRequests};
+use shoal_forge::{
+    branches::BranchRequests, ci::workflow::WorkflowRequests, transport::account::Account,
+};
 use shoal_forge_types::{
     ForgeRepo,
     branches::{ForgeBranch, OpenPull},

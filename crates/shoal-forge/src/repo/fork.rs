@@ -2,7 +2,7 @@
 //! branches for PRs instead.
 use anyhow::{Context, Result};
 
-use crate::{account::Account, backends::Backend, capability::CapabilityRequests};
+use crate::{backends::Backend, capability::CapabilityRequests, transport::account::Account};
 use shoal_forge_types::{ForgeRepo, capability::Capability, repo::remote_url::RemoteUrl};
 
 /// Forking the repository.

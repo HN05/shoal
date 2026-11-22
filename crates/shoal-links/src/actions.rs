@@ -9,9 +9,9 @@ use anyhow::{Context, Result};
 use shoal_core::config::Effective;
 use shoal_daemon_base::{callers::Caller, events, gates::PrGuard};
 use shoal_forge::{
-    account::Account,
     conventions,
     items::action::{ActionRequests, Sent},
+    transport::account::Account,
     updates::Edited,
 };
 use shoal_forge_types::{

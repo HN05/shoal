@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 use crate::{
-    account::Account,
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::ForgeRepo;

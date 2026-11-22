@@ -7,7 +7,7 @@ use std::future::Future;
 
 use anyhow::{Result, anyhow};
 
-use crate::{account::Account, backends::Backend};
+use crate::{backends::Backend, transport::account::Account};
 use shoal_forge_types::{
     ForgeRepo,
     backends::{ForgeKind, Routes},

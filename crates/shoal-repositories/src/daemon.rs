@@ -16,7 +16,7 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_core::shoal_dirs::ShoalDir;
 use shoal_daemon_base::notifications::Coordinators;
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 use shoal_forge_types::ForgeRepo;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{

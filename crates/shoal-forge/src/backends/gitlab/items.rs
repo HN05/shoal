@@ -6,7 +6,6 @@ use shoal_refs::BranchName;
 
 use super::GitLab;
 use crate::{
-    account::Account,
     backends::{Items, LoginHint, rest},
     conventions::draft::DraftMarker,
     items::{
@@ -14,6 +13,7 @@ use crate::{
         item::{ItemRequests, text},
         reaction::Subject,
     },
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
     updates::DISCUSSION,
 };

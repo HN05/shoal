@@ -5,7 +5,6 @@ use serde_json::{Value, json};
 
 use super::GitHub;
 use crate::{
-    account::Account,
     backends::{
         Items, LoginHint,
         github_rest::{self, GitHubShapes},
@@ -13,6 +12,7 @@ use crate::{
     },
     conventions::draft::DraftMarker,
     items::{create::Head, item::ItemRequests, reaction::Subject},
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
     updates::DISCUSSION,
 };

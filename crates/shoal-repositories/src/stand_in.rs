@@ -18,7 +18,7 @@ use shoal_daemon_base::{
     gates::Gates,
     notifications::{Coordinators, Notifications, Source},
 };
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 use shoal_forge_types::ForgeRepo;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{

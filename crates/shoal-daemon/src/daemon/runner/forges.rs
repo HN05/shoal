@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
-use shoal_forge::{RepoRequests, account::Account};
+use shoal_forge::{RepoRequests, transport::account::Account};
 use shoal_runner::daemon::Forges;
 
 use crate::{

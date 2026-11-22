@@ -5,12 +5,12 @@ use shoal_refs::BranchName;
 
 use super::GitHub;
 use crate::{
-    account::Account,
     backends::{Merging, github_rest, subject_and_body},
     items::{
         item::{ItemRequests, text},
         revert::NewRevert,
     },
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
 };
 use shoal_forge_types::{

@@ -13,7 +13,7 @@ use rusqlite::Connection;
 use shoal_core::config::{Config, Effective, repo::ConfigLayers};
 use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::notifications::Coordinators;
-use shoal_forge::{account::Account, ci::runner::JobCommand};
+use shoal_forge::{ci::runner::JobCommand, transport::account::Account};
 use shoal_forge_types::{ForgeRepo, items::reference::ItemRef};
 use shoal_ids::{
     execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, repository_ids::RepositoryId,

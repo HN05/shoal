@@ -3,12 +3,12 @@ use anyhow::{Context, Result, ensure};
 
 use super::GitHub;
 use crate::{
-    account::Account,
     backends::{
         Attachments,
         area::{image, link},
     },
     items::attach::Holder,
+    transport::account::Account,
     transport::{
         api::{Request, Upload, encode},
         download,

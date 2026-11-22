@@ -22,8 +22,8 @@ mod version;
 
 use super::{Backend, LoginHint, github_rest};
 use crate::{
-    account::Account,
     capability::{self, Support},
+    transport::account::Account,
     transport::{
         api::{Request, TransportRequests, full_page},
         response::Response,

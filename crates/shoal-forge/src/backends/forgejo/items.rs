@@ -6,7 +6,6 @@ use shoal_refs::BranchName;
 
 use super::{Forgejo, actions};
 use crate::{
-    account::Account,
     backends::{
         Items, LoginHint,
         github_rest::{self, GitHubShapes},
@@ -14,6 +13,7 @@ use crate::{
     },
     conventions::{draft::DraftMarker, labels::LabelRequests},
     items::{create::Head, item::text, reaction::Subject},
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
     updates::DISCUSSION,
 };

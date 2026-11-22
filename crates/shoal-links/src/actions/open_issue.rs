@@ -10,12 +10,12 @@ use anyhow::{Context as _, Result, bail};
 use shoal_core::config::Effective;
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
-    account::Account,
     conventions,
     items::{
         attach::AttachRequests,
         create::{CreateRequests, Created},
     },
+    transport::account::Account,
 };
 use shoal_forge_types::{
     ForgeRepo,

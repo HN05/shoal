@@ -5,7 +5,7 @@
 use anyhow::Result;
 use serde_json::Value;
 use shoal_daemon_base::{callers::Caller, permitted_actions::Action};
-use shoal_forge::{account::Account, download::DownloadRequests, raw::RawRequests};
+use shoal_forge::{download::DownloadRequests, raw::RawRequests, transport::account::Account};
 use shoal_forge_types::{
     ForgeRepo,
     download::Download,

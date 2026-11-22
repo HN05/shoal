@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use super::graphql::{graphql_nodes, next_cursor};
-use crate::account::Account;
+use crate::transport::account::Account;
 use shoal_forge_types::{
     ForgeRepo,
     numbers::{CommentId, PullNumber},

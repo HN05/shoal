@@ -15,7 +15,7 @@ use anyhow::{Context, Result, bail};
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_daemon_base::{callers::Caller, gates::Gates, notifications::About};
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_ids::space_ids::SpaceNumber;

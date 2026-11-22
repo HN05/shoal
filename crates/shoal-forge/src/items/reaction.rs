@@ -7,12 +7,12 @@ use futures_util::{StreamExt as _, TryStreamExt as _};
 use serde_json::Value;
 
 use crate::{
-    account::Account,
     backends::{Backend, Reactions},
     items::{
         action::{Acted, ActionRequests},
         comment::{self, CommentRequests},
     },
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
     updates::Edited,
 };

@@ -5,8 +5,8 @@ use serde_json::Value;
 
 use super::GitLab;
 use crate::{
-    account::Account,
     backends::{BranchFields, Branches},
+    transport::account::Account,
     transport::api::TransportRequests,
 };
 use shoal_forge_types::{

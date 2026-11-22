@@ -25,9 +25,9 @@ use shoal_daemon_base::{
 };
 use shoal_forge::{
     RepoRequests,
-    account::Account,
     hosts::{HostType, HostTypes},
     items::reference::ReferenceRequests,
+    transport::account::Account,
 };
 use shoal_forge_types::{ForgeRepo, backends::ForgeKind, items::reference::ItemRef};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};

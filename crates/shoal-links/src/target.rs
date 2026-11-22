@@ -5,7 +5,7 @@
 use anyhow::{Result, bail, ensure};
 
 use shoal_daemon_base::callers::Caller;
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 use shoal_forge_types::{
     ForgeRepo,
     items::{

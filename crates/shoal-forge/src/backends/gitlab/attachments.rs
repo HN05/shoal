@@ -5,9 +5,9 @@ use anyhow::{Context, Result, ensure};
 
 use super::GitLab;
 use crate::{
-    account::Account,
     backends::Attachments,
     items::attach::Holder,
+    transport::account::Account,
     transport::{
         api::{Request, TransportRequests, Upload, encode},
         download,

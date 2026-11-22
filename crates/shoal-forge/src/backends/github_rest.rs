@@ -6,7 +6,6 @@ use shoal_refs::BranchName;
 
 use super::LoginHint;
 use crate::{
-    account::Account,
     ci::{CiCheck, check},
     conventions::draft::DraftMarker,
     items::{
@@ -19,6 +18,7 @@ use crate::{
         reviewers::team_name,
         view::{labels, login, required, text_field},
     },
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
 };
 use shoal_forge_types::review::view::{Comment, Details, PrDetails};
@@ -475,7 +475,10 @@ pub(crate) async fn outgoing_pulls(repo: &ForgeRepo, account: &Account) -> Resul
 }
 
 /// Whether the repository's read grants `account` push access.
-pub(crate) async fn pushable(repo: &ForgeRepo, account: &crate::account::Account) -> Result<bool> {
+pub(crate) async fn pushable(
+    repo: &ForgeRepo,
+    account: &crate::transport::account::Account,
+) -> Result<bool> {
     let read = repo
         .send(account, &Request::get(format!("repos/{}", repo.path)))
         .await
@@ -487,7 +490,7 @@ pub(crate) async fn pushable(repo: &ForgeRepo, account: &crate::account::Account
 /// return the fork's `owner/repository`.
 pub(crate) async fn create_fork(
     repo: &ForgeRepo,
-    account: &crate::account::Account,
+    account: &crate::transport::account::Account,
 ) -> Result<String> {
     let request = Request::new(
         HttpMethod::Post,
@@ -524,7 +527,7 @@ pub(crate) fn head_spec(pull: &NewPull) -> String {
 /// The URLs of the open issues the list of blocking issues at `endpoint` names.
 pub(crate) async fn open_blockers(
     repo: &ForgeRepo,
-    account: &crate::account::Account,
+    account: &crate::transport::account::Account,
     endpoint: &str,
 ) -> Result<Vec<String>> {
     let issues = repo

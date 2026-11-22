@@ -9,12 +9,12 @@ use serde_json::Value;
 
 use super::Forgejo;
 use crate::{
-    account::Account,
     backends::{
         Attachments,
         area::{image, link, served_at},
     },
     items::attach::Holder,
+    transport::account::Account,
     transport::{
         api::{Request, TransportRequests, Upload, encode},
         download,

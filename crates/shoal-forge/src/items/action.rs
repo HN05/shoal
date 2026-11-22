@@ -6,7 +6,6 @@ use anyhow::{Context, Result, ensure};
 use shoal_refs::CommitId;
 
 use crate::{
-    account::Account,
     backends::{Conventions, Items, Merging},
     capability::CapabilityRequests,
     conventions::labels::LabelRequests,
@@ -19,6 +18,7 @@ use crate::{
         review::SubmitSteps,
     },
     review::thread::{ThreadRequests, ThreadSteps},
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
     updates::{Edited, ItemDetails},
 };

@@ -6,11 +6,11 @@ use serde_json::{Value, json};
 
 use super::{GitHub, threads};
 use crate::{
-    account::Account,
     backends::Reviews,
     items::item::text,
     items::review::{PlacedReview, Submission},
     review::diff::{Diff, FileDiff},
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
     updates::{activity_key, id_text},
 };

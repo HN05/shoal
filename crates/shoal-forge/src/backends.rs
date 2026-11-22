@@ -15,8 +15,8 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    account::Account,
     capability::Support,
+    transport::account::Account,
     transport::{api::Request, resend::Transient, response::Response},
 };
 use shoal_forge_types::{

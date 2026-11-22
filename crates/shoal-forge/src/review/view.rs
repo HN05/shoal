@@ -4,11 +4,11 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    account::Account,
     backends::{Activity, Merging},
     capability::CapabilityRequests,
     items::reaction::ReactionRequests,
     review::status::StatusRequests,
+    transport::account::Account,
 };
 use shoal_forge_types::{
     ForgeRepo,

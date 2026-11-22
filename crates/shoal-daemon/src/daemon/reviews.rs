@@ -34,7 +34,7 @@ use crate::{
     model::{Repository, Workspace},
     protocol::ItemContext,
 };
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 
 impl Spaces for Manager {
     fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {

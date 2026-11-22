@@ -12,7 +12,7 @@ use crate::{
     forge::{ForgeRepo, items::reference::ItemRef, review::status::PrStatus},
     model::Workspace,
 };
-use shoal_forge::{RepoRequests, account::Account, review::status::StatusRequests};
+use shoal_forge::{RepoRequests, review::status::StatusRequests, transport::account::Account};
 pub(crate) use shoal_protocol::links::pr::{Action, Registration, RegistrationKind};
 
 /// Prefixes errors from moving stacked workspaces, which a later sweep clears.

@@ -3,8 +3,8 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    RepoRequests, account::Account, backends::Backend, ci::run::workflow_segment, hosts::HostTypes,
-    transport::api::TransportRequests,
+    RepoRequests, backends::Backend, ci::run::workflow_segment, hosts::HostTypes,
+    transport::account::Account, transport::api::TransportRequests,
 };
 use shoal_forge_types::{ForgeRepo, IssueInput, items::link::decode_branch};
 

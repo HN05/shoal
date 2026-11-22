@@ -10,8 +10,8 @@ use rusqlite::{OptionalExtension, params};
 use shoal_core::fsutil::executables::find_executable;
 use shoal_daemon_base::alerts::{About, NewAlert};
 use shoal_forge::{
-    account::Account,
     ci::runner::{RegisteredRunner, RunnerRequests},
+    transport::account::Account,
 };
 use shoal_forge_types::ForgeRepo;
 use shoal_ids::repository_ids::RepositoryId;

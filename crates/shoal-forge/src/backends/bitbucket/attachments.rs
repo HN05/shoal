@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use super::Bitbucket;
 use crate::{
-    account::Account, backends::Attachments, capability, items::attach::Holder,
+    backends::Attachments, capability, items::attach::Holder, transport::account::Account,
     transport::api::Request,
 };
 use shoal_forge_types::{ForgeRepo, capability::Capability, items::attach::Attachment};

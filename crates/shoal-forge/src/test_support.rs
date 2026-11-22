@@ -140,21 +140,21 @@ pub fn repo_on(
 /// A token that is always the one it holds.
 pub struct Fixed(pub &'static str);
 
-impl crate::account::Token for Fixed {
+impl crate::transport::account::Token for Fixed {
     fn fetch(&self) -> futures_util::future::BoxFuture<'_, anyhow::Result<String>> {
         Box::pin(async move { Ok(self.0.to_owned()) })
     }
 }
 
 /// An agent account whose token for `server`'s host is `token`.
-pub fn agent_on(server: &Server, token: &'static str) -> crate::account::Account {
-    let mut logins = crate::account::Logins::default();
+pub fn agent_on(server: &Server, token: &'static str) -> crate::transport::account::Account {
+    let mut logins = crate::transport::account::Logins::default();
     logins.insert(
         &server.host,
-        crate::account::Login {
+        crate::transport::account::Login {
             token: Box::new(Fixed(token)),
             email: None,
         },
     );
-    crate::account::Account::agent(logins, Default::default())
+    crate::transport::account::Account::agent(logins, Default::default())
 }

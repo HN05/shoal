@@ -5,7 +5,7 @@ use anyhow::Result;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use shoal_daemon_base::alerts::{About, NewAlert};
 use shoal_forge::{
-    account::Account,
+    transport::account::Account,
     transport::limits::rate_limited,
     updates::{Snapshot, UpdateRequests},
 };

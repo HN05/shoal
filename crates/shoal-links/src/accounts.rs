@@ -4,7 +4,7 @@
 //! request takes. Each remembers what the forge's responses taught it.
 use shoal_core::config::forges::{Forges, Whose};
 use shoal_daemon_base::callers::Caller;
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 
 use crate::{Links, place::Place};
 

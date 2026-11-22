@@ -17,7 +17,7 @@ use crate::{
     model::{Completion, Space},
     repository,
 };
-use shoal_forge::{RepoRequests, account::Account, items::issue::IssueRequests};
+use shoal_forge::{RepoRequests, items::issue::IssueRequests, transport::account::Account};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     executions::{ProxyRetry, TurnRetry},

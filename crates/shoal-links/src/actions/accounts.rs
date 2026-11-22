@@ -1,6 +1,6 @@
 //! The forge item actions go to, and the account a place changes items as.
 use anyhow::Result;
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 use shoal_forge_types::ForgeRepo;
 use shoal_protocol::model::{Repository, Workspace};
 

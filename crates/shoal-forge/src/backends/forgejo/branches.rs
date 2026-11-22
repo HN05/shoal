@@ -22,7 +22,7 @@ impl Branches for Forgejo {
     async fn branches(
         &self,
         repo: &ForgeRepo,
-        account: &crate::account::Account,
+        account: &crate::transport::account::Account,
     ) -> Result<Vec<ForgeBranch>> {
         let listed = repo.pages(account, &repo.repo_endpoint("branches")).await?;
         (listed.iter())
@@ -41,7 +41,7 @@ impl Branches for Forgejo {
     async fn outgoing_pulls(
         &self,
         repo: &ForgeRepo,
-        account: &crate::account::Account,
+        account: &crate::transport::account::Account,
     ) -> Result<Vec<OpenPull>> {
         github_rest::outgoing_pulls(repo, account).await
     }

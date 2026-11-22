@@ -1,7 +1,7 @@
 //! The forges a contribution forks on.
 use anyhow::Result;
 use futures_util::future::BoxFuture;
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 use shoal_repositories::daemon::Forges;
 
 use crate::{daemon::manager::Manager, forge::ForgeRepo};

@@ -4,7 +4,6 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    account::Account,
     backends::{Backend, Items, Merging, rest::commit_shas},
     capability::CapabilityRequests,
     items::{
@@ -13,6 +12,7 @@ use crate::{
         create::{CreateSteps, Created, pending_edit},
         item::ItemRequests,
     },
+    transport::account::Account,
     transport::api::TransportRequests,
 };
 use shoal_forge_types::{

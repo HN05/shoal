@@ -4,9 +4,9 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    account::Account,
     backends::Backend,
     items::attach::Holder,
+    transport::account::Account,
     transport::{api::Request, response::Fetched},
 };
 use shoal_forge_types::items::attach::{Attachment, Media};

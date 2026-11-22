@@ -21,8 +21,8 @@ pub(crate) mod threads;
 
 use super::{Backend, github_rest};
 use crate::{
-    account::Account,
     capability::Support,
+    transport::account::Account,
     transport::{
         api::{Request, TransportRequests, full_page},
         response::Response,

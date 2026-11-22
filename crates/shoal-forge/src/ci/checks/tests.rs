@@ -70,7 +70,8 @@ async fn failed_logs_leave_out_another_repositorys_prs() {
             "checks": [{"name": "rust", "result": "failure"}], "review": null},
     });
     let mut views = [serde_json::from_value::<ItemView>(view).unwrap()];
-    let account = crate::account::Account::user(crate::account::Logins::default());
+    let account =
+        crate::transport::account::Account::user(crate::transport::account::Logins::default());
     forge.read_failed_logs(&account, &mut views).await;
     assert!(views[0].errors.is_empty(), "{:?}", views[0].errors);
     assert!(views[0].check_logs.is_empty());

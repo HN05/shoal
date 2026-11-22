@@ -3,7 +3,7 @@
 //! onto the branch of the workspace that merged it, unless that branch
 //! builds on them, else onto what the absorbed branch built on.
 use anyhow::{Context as _, Result, ensure};
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::pr::current_head;
 use shoal_refs::{BranchName, CommitId};

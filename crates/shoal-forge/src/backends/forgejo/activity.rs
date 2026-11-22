@@ -4,7 +4,6 @@ use serde_json::Value;
 
 use super::{Forgejo, actions};
 use crate::{
-    account::Account,
     backends::{
         Activity, LoginHint,
         rest::{self, RestCheck, RestReads, fingerprints},
@@ -13,6 +12,7 @@ use crate::{
         status::{Verdict, forgejo_reviews},
         view::login,
     },
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
     updates::{Entry, Snapshot},
 };

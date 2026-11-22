@@ -8,9 +8,9 @@ use serde_json::Value;
 
 use super::Forgejo;
 use crate::{
-    account::Account,
     backends::Runners,
     ci::runner::{JobCommand, JobLaunch, RegisteredRunner, file_url, registration},
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
 };
 use shoal_forge_types::{

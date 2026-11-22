@@ -6,7 +6,6 @@ use shoal_refs::BranchName;
 
 use super::{Bitbucket, literal};
 use crate::{
-    account::Account,
     backends::{Items, rest},
     capability,
     items::{
@@ -15,6 +14,7 @@ use crate::{
         item::{ItemRequests, text},
         reaction::Subject,
     },
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
     updates::DISCUSSION,
 };

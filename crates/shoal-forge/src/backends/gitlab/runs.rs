@@ -6,12 +6,12 @@ use shoal_refs::CommitId;
 
 use super::{GitLab, status_state};
 use crate::{
-    account::Account,
     backends::Runs,
     ci::{
         Location, checks::CheckSteps, run::NewRun, run_action::RunOperation, run_view::JOBS_PAGE,
     },
     items::item::text,
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
 };
 use shoal_forge_types::{

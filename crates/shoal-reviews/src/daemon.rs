@@ -12,7 +12,7 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_daemon_base::{callers::Caller, notifications::About};
-use shoal_forge::account::Account;
+use shoal_forge::transport::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::AlertKind;

@@ -3,9 +3,9 @@ use anyhow::Result;
 
 use super::{GitHub, actions, activity};
 use crate::{
-    account::Account,
     backends::{Checks, github_rest},
     ci::{CiCheck, Job, Location, Operation, checks::plain},
+    transport::account::Account,
 };
 use shoal_forge_types::{ForgeRepo, ci::CiAction};
 

@@ -4,7 +4,7 @@
 //! `ci_approve` permission allows, as the agent account.
 use anyhow::{Context, Result};
 use shoal_daemon_base::{callers::Caller, events, permitted_actions::Action};
-use shoal_forge::{account::Account, ci::approval::ApprovalRequests};
+use shoal_forge::{ci::approval::ApprovalRequests, transport::account::Account};
 use shoal_forge_types::{
     ci::approval::RunsApproved,
     items::{

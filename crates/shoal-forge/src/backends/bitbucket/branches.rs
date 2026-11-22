@@ -6,8 +6,8 @@ use serde_json::Value;
 
 use super::Bitbucket;
 use crate::{
-    account::Account,
     backends::{BranchFields, Branches},
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::{

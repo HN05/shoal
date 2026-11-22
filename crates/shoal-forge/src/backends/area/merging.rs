@@ -4,9 +4,9 @@ use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     MERGED_HINT,
-    account::Account,
     backends::{Backend, rest},
     items::revert::NewRevert,
+    transport::account::Account,
     transport::api::Request,
 };
 use shoal_forge_types::{

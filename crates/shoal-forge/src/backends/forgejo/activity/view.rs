@@ -3,13 +3,13 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    account::Account,
     backends::{
         forgejo::threads::{review_comments, thread_key, threads},
         github_rest,
     },
     items::action::ActionSteps,
     review::view::{login, review_comment, review_state, text_field},
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::review::view::{AutoMerge, Details, Review, ReviewComment};

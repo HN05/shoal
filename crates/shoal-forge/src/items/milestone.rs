@@ -1,7 +1,9 @@
 //! Milestones, which edits name by title and forges take by ID.
 use anyhow::{Context, Result};
 
-use crate::{account::Account, backends::Conventions, transport::api::TransportRequests};
+use crate::{
+    backends::Conventions, transport::account::Account, transport::api::TransportRequests,
+};
 use shoal_forge_types::ForgeRepo;
 
 /// Reading milestones.

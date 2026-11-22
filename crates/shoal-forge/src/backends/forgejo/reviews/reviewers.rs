@@ -2,9 +2,9 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    account::Account,
     backends::forgejo::organization,
     items::item::text,
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::{ForgeRepo, review::reviewers::Reviewer};

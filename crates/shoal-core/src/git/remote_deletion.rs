@@ -17,7 +17,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
-use shoal_forge::account::GitLogin;
+use shoal_forge::transport::account::GitLogin;
 use shoal_refs::{BranchName, CommitId};
 use tokio::process::Command;
 

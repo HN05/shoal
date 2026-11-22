@@ -5,8 +5,8 @@
 use anyhow::{Context, Result, ensure};
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
-    account::Account,
     ci::workflow::{WorkflowRequests, is_workflow_url},
+    transport::account::Account,
 };
 use shoal_forge_types::{
     ForgeRepo,

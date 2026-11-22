@@ -5,8 +5,8 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    account::Account,
     backends::Backend,
+    transport::account::Account,
     transport::api::{Request, TransportRequests, encode},
 };
 use shoal_forge_types::ForgeRepo;

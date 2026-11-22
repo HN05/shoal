@@ -4,7 +4,6 @@ use serde_json::Value;
 
 use super::{GitLab, latest_statuses, notes, status_state, username};
 use crate::{
-    account::Account,
     backends::{
         Activity, LoginHint,
         rest::{self, RestCheck, RestReads, fingerprints},
@@ -14,6 +13,7 @@ use crate::{
         item::{ItemRequests, text},
     },
     review::status::Verdict,
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
     updates::{Entry, Snapshot},
 };

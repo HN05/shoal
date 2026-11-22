@@ -2,7 +2,7 @@
 //! ones for choosing one interactively.
 use anyhow::Result;
 
-use crate::{account::Account, backends::Items, capability::CapabilityRequests};
+use crate::{backends::Items, capability::CapabilityRequests, transport::account::Account};
 use shoal_forge_types::{
     ForgeRepo,
     items::{item::Item, link::ItemKind, list::Search},

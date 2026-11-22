@@ -6,11 +6,11 @@ use serde_json::{Value, json};
 
 use super::{Forgejo, threads};
 use crate::{
-    account::Account,
     backends::Reviews,
     capability,
     items::review::{PlacedReview, Submission},
     review::diff::Diff,
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
     updates::activity_key,
 };

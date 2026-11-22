@@ -7,13 +7,13 @@ use serde_json::{Value, json};
 
 use super::GitHub;
 use crate::{
-    account::Account,
     backends::{Activity, LoginHint, rest::read_pull},
     items::action::ActionRequests,
     review::{
         status::{StatusRecords, github_reviews},
         view::login,
     },
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
     updates::{Check, DISCUSSION, Entry, Snapshot, id_text},
 };

@@ -2,7 +2,7 @@
 //! whether the forge marks them resolved.
 use anyhow::{Context, Result, ensure};
 
-use crate::{account::Account, backends::Reviews, transport::api::Request};
+use crate::{backends::Reviews, transport::account::Account, transport::api::Request};
 use shoal_forge_types::{
     ForgeRepo,
     items::action::ThreadChange,

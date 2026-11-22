@@ -9,7 +9,9 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 
-use crate::{account::Account, backends::Conventions, conventions::labels::LabelRequests};
+use crate::{
+    backends::Conventions, conventions::labels::LabelRequests, transport::account::Account,
+};
 use shoal_forge_types::{
     ForgeRepo,
     backends::ForgeKind,

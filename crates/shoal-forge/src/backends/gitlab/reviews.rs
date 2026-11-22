@@ -6,11 +6,11 @@ use serde_json::{Value, json};
 
 use super::{GitLab, notes};
 use crate::{
-    account::Account,
     backends::Reviews,
     items::item::{ItemRequests, text},
     items::review::{PlacedReview, Submission},
     review::diff::{Bases, Diff, FileDiff, Placed},
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
     updates::discussion_key,
 };

@@ -5,12 +5,12 @@ use serde_json::{Value, json};
 
 use super::{GitLab, username};
 use crate::{
-    account::Account,
     backends::Reactions,
     items::{
         item::{ItemRequests, text},
         reaction::{Listed, Subject},
     },
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::{

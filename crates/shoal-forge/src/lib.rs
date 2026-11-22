@@ -1,7 +1,7 @@
 //! Issues, PRs, review threads and CI on the forge a Git remote names,
 //! through each forge's own CLI login or REST API. Callers choose the
-//! [`account::Account`] a request acts as; this crate never decides who may act.
-pub mod account;
+//! [`transport::account::Account`] a request acts as; this crate never decides
+//! who may act.
 pub mod backends;
 pub mod branches;
 pub mod capability;
@@ -28,7 +28,10 @@ use shoal_forge_types::{
 };
 use shoal_refs::CommitId;
 
-use crate::hosts::{HostType, HostTypes};
+use crate::{
+    hosts::{HostType, HostTypes},
+    transport::account::Account,
+};
 use backends::{Items, Merging};
 
 /// Reading a repository's PRs and resolving the forge a host serves.
@@ -59,11 +62,7 @@ impl ForgeRepo {
     }
 
     /// The issue `number`, open or closed, which must have a title.
-    pub async fn issue_details(
-        &self,
-        account: &account::Account,
-        number: IssueNumber,
-    ) -> Result<Current> {
+    pub async fn issue_details(&self, account: &Account, number: IssueNumber) -> Result<Current> {
         let issue = self.kind().issue_details(self, account, number).await?;
         ensure!(!issue.item.title.trim().is_empty(), "issue title is empty");
         Ok(issue)
@@ -73,18 +72,14 @@ impl ForgeRepo {
     /// merged PR can authorize cleanup, including squash/rebase merges.
     pub async fn merged_commits(
         &self,
-        account: &account::Account,
+        account: &Account,
         number: PullNumber,
     ) -> Result<Option<Vec<CommitId>>> {
         self.kind().merged_commits(self, account, number).await
     }
 
     /// The PR `pull`, of this repository, with where its head is.
-    pub async fn pull_request(
-        &self,
-        account: &account::Account,
-        pull: &ItemRef,
-    ) -> Result<PullRequest> {
+    pub async fn pull_request(&self, account: &Account, pull: &ItemRef) -> Result<PullRequest> {
         pull.belongs_to(self)?;
         let number = pull.pull()?;
         let details = self.kind().pull_details(self, account, number).await?;

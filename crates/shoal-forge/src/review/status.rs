@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 use anyhow::{Result, bail};
 
 use crate::{
-    account::Account, backends::Activity, ci::approval::ApprovalRequests, updates::Snapshot,
+    backends::Activity, ci::approval::ApprovalRequests, transport::account::Account,
+    updates::Snapshot,
 };
 use shoal_forge_types::{
     ForgeRepo,

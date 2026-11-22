@@ -3,7 +3,7 @@
 use anyhow::{Result, ensure};
 use shoal_daemon_base::alerts::AlertKind;
 use shoal_forge::{
-    RepoRequests, account::Account, items::retarget::RetargetRequests, updates::Edited,
+    RepoRequests, items::retarget::RetargetRequests, transport::account::Account, updates::Edited,
 };
 use shoal_forge_types::{
     PullRequest,

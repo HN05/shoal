@@ -4,10 +4,10 @@ use serde_json::json;
 
 use super::GitLab;
 use crate::{
-    account::Account,
     backends::Merging,
     capability,
     items::item::ItemRequests,
+    transport::account::Account,
     transport::api::{Request, TransportRequests},
 };
 use shoal_forge_types::{

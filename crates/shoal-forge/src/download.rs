@@ -5,9 +5,9 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    account::Account,
     backends::Attachments,
     capability::CapabilityRequests,
+    transport::account::Account,
     transport::{
         api::{TransportRequests, http_body},
         response::{Fetched, Headed},
