@@ -4,10 +4,12 @@
 //! as removed there, claiming each with the move's ticket, and this machine
 //! forgets each record that machine claimed. A record whose claim the
 //! destination could not report is settled at the hub, and one it did not
-//! claim stays here.
-use anyhow::{Result, bail};
+//! claim stays here. Each record's gate keeps its restore here from running
+//! while it moves.
+use anyhow::{Context as _, Result, bail};
 use shoal_ids::{move_tickets::MoveTicket, space_ids::SpaceId};
 use shoal_protocol::{model::RemovedSpace, space_names::SpaceSelector};
+use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     daemon::{hub::Named, manager::Manager},
@@ -31,7 +33,9 @@ impl Manager {
         ticket: &MoveTicket,
     ) -> Result<RemovedDelivery> {
         let id = removed_id(selector)?;
+        let _record = self.gates.lock_removal_record(&id).await;
         let mut exported = self.export_removed_moving(selector, carrying).await?;
+        let _carried = self.lock_carried_records(&exported.manifest).await?;
         let delivered = (self.deliver_package(&id, destination, (Some(ticket), true))).await;
         self.discard_staged_package(&id);
         let machine = (destination.machine.as_str(), ticket);
@@ -56,6 +60,10 @@ impl Manager {
         ticket: &MoveTicket,
     ) -> Result<MoveSettled> {
         let id = removed_id(selector)?;
+        let mut held = vec![self.gates.lock_removal_record(&id).await];
+        for record in carried {
+            held.push(self.gates.lock_removal_record(record).await);
+        }
         self.removed_space(selector).await?;
         let Named { machine, .. } = self.hub.named_machine(self, machine).await?;
         let mut claimed = Vec::new();
@@ -70,6 +78,20 @@ impl Manager {
         }
         self.forget_moved_records(claimed).await?;
         Ok(MoveSettled::Arrived)
+    }
+
+    /// Hold the gates of the records the package `manifest` carries, each
+    /// one still here, so none is restored while they move.
+    async fn lock_carried_records(&self, manifest: &Manifest) -> Result<Vec<OwnedMutexGuard<()>>> {
+        let mut gates = Vec::new();
+        for record in carried_records(manifest) {
+            let id = &record.space_id;
+            gates.push(self.gates.lock_removal_record(id).await);
+            (self.removed_space(&SpaceSelector::id(id)).await).with_context(|| {
+                format!("{} was restored meanwhile, so nothing moved", record.name)
+            })?;
+        }
+        Ok(gates)
     }
 
     /// How the removal records the package `manifest` holds arrived on the

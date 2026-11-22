@@ -36,6 +36,7 @@ pub struct Gates {
     announcements: Mutex<()>,
     git: Keyed<Mutex<()>>,
     creations: Keyed<Mutex<()>>,
+    removal_records: Keyed<Mutex<()>>,
     fetches: Keyed<Mutex<()>>,
     message_files: Keyed<Mutex<()>>,
     forge_hosts: Keyed<Mutex<()>>,
@@ -302,6 +303,13 @@ impl Gates {
     /// Git gate under which it recorded the workspace.
     pub async fn lock_creation(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
         self.creations.gate(id.as_str()).lock_owned().await
+    }
+
+    /// Serialize reopening the removal record of the space `id` here
+    /// against moving it to another machine, so one never runs while the
+    /// other takes the record.
+    pub async fn lock_removal_record(&self, id: &SpaceId) -> OwnedMutexGuard<()> {
+        self.removal_records.gate(id.as_str()).lock_owned().await
     }
 
     /// Wait until the creation of the workspace `id`, recorded in

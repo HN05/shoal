@@ -49,6 +49,11 @@ impl Manager {
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<RestoredSpace> {
+        // Held until the record goes, so its move to another machine waits.
+        let _record = match selector.given_id() {
+            Some(id) => Some(self.gates.lock_removal_record(id).await),
+            None => None,
+        };
         let removed = self.claim_removed_space(selector).await?;
         let mut warnings = Vec::new();
         let parent = (self.restored_parent(&removed, caller, &mut warnings)).await?;
