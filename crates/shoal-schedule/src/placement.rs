@@ -88,12 +88,6 @@ pub enum Reason {
     /// The caller's machine, beside the start's parent and unpushed work,
     /// once no `always_on` machine has room.
     Caller,
-    /// Another `intermittent` machine.
-    Intermittent,
-    /// An `always_on` machine without room for the start.
-    Full,
-    /// A machine that has not reported its capacity yet.
-    Unreported,
 }
 
 /// A connected machine a start cannot go to, and why.

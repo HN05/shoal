@@ -9,13 +9,15 @@ use super::{
 
 /// The `balanced` policy. A start may go to each connected machine that
 /// has its repository, matched by origin, unless it needs none, as the
-/// caller's does, and its agent tool. The `always_on` machines with room come first: for a heavy
+/// caller's does, and its agent tool, but goes only to an `always_on` one
+/// with room or the caller's. The `always_on` machines with room come first: for a heavy
 /// start those whose admission lets a heavy agent in now, most spare memory
 /// first; for a light one, whose memory is what dynamic admission gives
 /// heavy agents, those that run no heavy agents, then those where no heavy
 /// work waits, most spare memory first, then those where the least heavy
 /// work waits. An `always_on` caller with room keeps the start, beside its
-/// parent. The caller's machine comes next, then the other machines.
+/// parent. The caller's machine comes next; no other machine is ranked, so
+/// a start the caller's machine cannot take stays there all the same.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Balanced;
 
@@ -30,7 +32,7 @@ impl Placer for Balanced {
                     machine: machine.id.clone(),
                     why,
                 }),
-                None => ranked.push(rank(request, machine)),
+                None => ranked.extend(rank(request, machine)),
             }
         }
         ranked.sort_by_key(|(key, _)| *key);
@@ -41,19 +43,20 @@ impl Placer for Balanced {
 
 /// Where `machine`, which `request` may go to, ranks, lowest first: the
 /// `always_on` machines with room, the caller's first, then the caller's
-/// machine, then the rest, each group by its rank and name; with why.
-fn rank<'a>(request: &Request, machine: &'a Machine) -> ((u8, RoomKey, &'a str), Placed) {
+/// machine, each group by its rank and name; with why. None for any other
+/// machine, which has no room for the start.
+fn rank<'a>(request: &Request, machine: &'a Machine) -> Option<((u8, RoomKey, &'a str), Placed)> {
     let caller = machine.id == request.caller;
     let ((group, key), reason) = match room(request, machine) {
         Some((key, reason)) => ((u8::from(!caller), key), reason),
         None if caller => ((2, RoomKey::default()), Reason::Caller),
-        None => ((3, RoomKey::default()), without_room(machine)),
+        None => return None,
     };
     let placed = Placed {
         machine: machine.id.clone(),
         reason,
     };
-    ((group, key, &machine.name), placed)
+    Some(((group, key, &machine.name), placed))
 }
 
 /// How an `always_on` machine with room for `request` ranks among the
@@ -99,16 +102,6 @@ fn light_room(capacity: &Capacity) -> Option<(RoomKey, Reason)> {
             Reason::HeavyWaiting { waiting },
         ),
     })
-}
-
-/// Why `machine`, which is not the caller's and has no room, comes where
-/// it does.
-fn without_room(machine: &Machine) -> Reason {
-    match (&machine.capacity, machine.always_on) {
-        (None, _) => Reason::Unreported,
-        (Some(_), true) => Reason::Full,
-        (Some(_), false) => Reason::Intermittent,
-    }
 }
 
 #[cfg(test)]

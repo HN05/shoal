@@ -65,7 +65,8 @@ fn a_heavy_start_goes_to_the_always_on_machine_with_most_memory_and_a_free_slot(
     let order: Vec<String> = (ranked(request(true), machines).into_iter())
         .map(|(machine, _)| machine)
         .collect();
-    assert_eq!(order, ["large", "small", "laptop", "full"]);
+    // A machine without room is never one to go to.
+    assert_eq!(order, ["large", "small", "laptop"]);
 }
 
 #[test]
@@ -100,6 +101,11 @@ fn a_start_stays_on_the_callers_machine_without_an_always_on_machine_with_room()
     let first = |heavy| ranked(request(heavy), machines.clone()).remove(0);
     assert_eq!(first(true), ("laptop".into(), Reason::Caller));
     assert_eq!(first(false), ("laptop".into(), Reason::Caller));
+    // A caller skipped for its agent tool, which the hub may not know of,
+    // leaves no machine to go to rather than one without room.
+    let mut machines = machines.clone();
+    machines[1].agents.clear();
+    assert_eq!(ranked(request(true), machines), []);
 }
 
 #[test]

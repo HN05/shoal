@@ -110,9 +110,6 @@ fn reason(reason: Reason) -> String {
         }
         Reason::HeavyWaiting { waiting } => format!("always_on, {waiting} heavy agents waiting"),
         Reason::Caller => "no always_on machine has room".into(),
-        Reason::Intermittent => "intermittent".into(),
-        Reason::Full => "always_on, no room".into(),
-        Reason::Unreported => "capacity not reported yet".into(),
     }
 }
 
