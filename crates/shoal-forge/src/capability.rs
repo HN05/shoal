@@ -1,12 +1,12 @@
-//! What each forge supports. Each backend declares its capabilities, and a
+//! What each forge supports. Each forge declares its capabilities, and a
 //! request that needs one the forge lacks is refused before anything is sent,
 //! with one error that names the forge and what it lacks.
 use anyhow::Result;
 
-use crate::{backends::Backend, transport::account::Account};
+use crate::transport::account::Account;
 use shoal_forge_types::{
     ForgeRepo,
-    backends::Routes,
+    backends::{ForgeKind, Routes},
     capability::{Capabilities, Capability, Entry, Unsupported},
 };
 
@@ -25,8 +25,26 @@ pub(crate) enum Support {
     Unsupported(Option<&'static str>),
 }
 
+/// What a forge supports, which each forge declares.
+#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
+pub(crate) trait Supports: Routes {
+    /// Whether the forge has `capability`.
+    fn support(&self, capability: Capability) -> Support;
+
+    /// Whether the server `repo` is on has `capability`, where the forge's
+    /// versions differ in it.
+    async fn server_support(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        capability: Capability,
+    ) -> Result<Support> {
+        Ok(self.support(capability))
+    }
+}
+
 /// Refuse `capability` unless `backend` has it.
-pub(crate) fn require(backend: &(impl Backend + ?Sized), capability: Capability) -> Result<()> {
+pub(crate) fn require(backend: &(impl Supports + ?Sized), capability: Capability) -> Result<()> {
     match backend.support(capability) {
         Support::Supported => Ok(()),
         Support::Unsupported(_) => Err(unsupported(backend, capability)),
@@ -36,7 +54,7 @@ pub(crate) fn require(backend: &(impl Backend + ?Sized), capability: Capability)
 /// The refusal of `capability`, also for a backend method that cannot carry
 /// out a request needing it.
 pub(crate) fn unsupported(
-    backend: &(impl Backend + ?Sized),
+    backend: &(impl Supports + ?Sized),
     capability: Capability,
 ) -> anyhow::Error {
     let hint = match backend.support(capability) {

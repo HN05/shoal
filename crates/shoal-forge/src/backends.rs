@@ -15,14 +15,12 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    capability::Support,
     transport::account::Account,
     transport::{api::Request, resend::Transient, response::Response},
 };
 use shoal_forge_types::{
     ForgeRepo,
     backends::{ForgeKind, Routes},
-    capability::Capability,
 };
 
 /// How a forge's tokens sign in.
@@ -47,7 +45,7 @@ pub(crate) use area::{
 };
 
 /// What a forge does its own way that every area needs beyond its
-/// [`Routes`]: its support and endpoints, sign-in, requests and pages.
+/// [`Routes`]: its endpoints, sign-in, requests and pages.
 /// Methods that need the repository take it as `repo`.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub(crate) trait Backend: Routes {
@@ -55,20 +53,6 @@ pub(crate) trait Backend: Routes {
     /// version or metadata endpoint as `account`; an error when it could
     /// not be asked.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool>;
-
-    /// Whether the forge has `capability`.
-    fn support(&self, capability: Capability) -> Support;
-
-    /// Whether the server `repo` is on has `capability`, where the forge's
-    /// versions differ in it.
-    async fn server_support(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        capability: Capability,
-    ) -> Result<Support> {
-        Ok(self.support(capability))
-    }
 
     /// The API endpoint for `path` under the repository.
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String;

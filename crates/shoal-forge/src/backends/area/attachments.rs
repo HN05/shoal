@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::{
     backends::Backend,
+    capability::{self, Supports},
     items::attach::Holder,
     transport::account::Account,
     transport::{api::Request, response::Fetched},
@@ -14,7 +15,7 @@ use shoal_forge_types::{ForgeRepo, backends::ForgeKind, capability::Capability};
 
 /// How the forge uploads, serves and shows attached files.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Attachments: Backend {
+pub(crate) trait Attachments: Backend + Supports {
     /// Refuse `attachments` the forge or `account` cannot upload, before
     /// anything is posted. Returns whether the forge keeps uploads with the
     /// item or comment that shows them rather than with the repository.
@@ -28,7 +29,7 @@ pub(crate) trait Attachments: Backend {
     /// The response to a GET of `url`, a file on the forge's web host,
     /// sent as `account`.
     async fn download(&self, _repo: &ForgeRepo, _account: &Account, _url: &str) -> Result<Fetched> {
-        Err(crate::capability::unsupported(self, Capability::Downloads))
+        Err(capability::unsupported(self, Capability::Downloads))
     }
 
     /// The request that uploads `attachment` to `holder`.

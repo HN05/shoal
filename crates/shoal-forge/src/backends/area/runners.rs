@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use crate::{
     backends::Backend,
+    capability::{self, Supports},
     ci::runner::{JobCommand, JobLaunch, RegisteredRunner, RunnerState},
     transport::account::Account,
     transport::api::Request,
@@ -20,10 +21,10 @@ use shoal_forge_types::{
 /// How the forge registers runners on this machine and has them take
 /// its jobs.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Runners: Backend {
+pub(crate) trait Runners: Backend + Supports {
     /// The program that runs one job on this machine.
     fn runner_program(&self) -> Result<&'static str> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 
     /// The jobs waiting for a runner with `labels`.
@@ -33,17 +34,17 @@ pub(crate) trait Runners: Backend {
         _account: &Account,
         _labels: &[String],
     ) -> Result<Vec<WaitingJob>> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 
     /// The path under the repository that reads the run with API ID `id`.
     fn job_run_path(&self, _id: RunId) -> Result<String> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 
     /// The run a read of its path returned as `value`.
     fn job_run(&self, _repo: &ForgeRepo, _value: &Value) -> Result<JobRun> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 
     /// Register a runner named `name` for the repository, or, where the
@@ -54,12 +55,12 @@ pub(crate) trait Runners: Backend {
         _account: &Account,
         _name: &str,
     ) -> Result<Option<RegisteredRunner>> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 
     /// The request that deletes the repository's runner `id`.
     fn delete_runner(&self, _repo: &ForgeRepo, _id: RunnerId) -> Result<Request> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 
     /// The command that claims and runs the job `launch` names.
@@ -69,7 +70,7 @@ pub(crate) trait Runners: Backend {
         _account: &Account,
         _launch: &JobLaunch<'_>,
     ) -> Result<JobCommand> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 
     /// The state of the runner `id`, or `None` once it is gone.
@@ -79,7 +80,7 @@ pub(crate) trait Runners: Backend {
         _account: &Account,
         _id: RunnerId,
     ) -> Result<Option<RunnerState>> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 
     /// The job of `run` that the runner `runner` took, if any.
@@ -90,6 +91,6 @@ pub(crate) trait Runners: Backend {
         _run: RunId,
         _runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
+        Err(capability::unsupported(self, Capability::RunJobs))
     }
 }

@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use crate::{
     backends::Backend,
+    capability::{self, Supports},
     ci::{
         CiCheck, Job, Location, Operation,
         checks::{CheckSteps, plain},
@@ -21,7 +22,7 @@ use shoal_forge_types::{
 /// How the forge reads a commit's CI checks, acts on their jobs and
 /// serves their logs.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Checks: Backend {
+pub(crate) trait Checks: Backend + Supports {
     /// Each check's latest attempt on `head`.
     async fn ci_checks(
         &self,
@@ -95,9 +96,6 @@ pub(crate) trait Checks: Backend {
     /// The endpoint under the repository that serves the plain-text log of
     /// the job at `location`.
     fn job_log_endpoint(&self, _location: Location) -> Result<String> {
-        Err(crate::capability::unsupported(
-            self,
-            Capability::ReadJobLogs,
-        ))
+        Err(capability::unsupported(self, Capability::ReadJobLogs))
     }
 }

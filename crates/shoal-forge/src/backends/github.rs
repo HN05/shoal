@@ -17,18 +17,18 @@ mod reviews;
 mod rulesets;
 mod runners;
 mod runs;
+mod support;
 pub(crate) mod threads;
 
 use super::{Backend, github_rest};
 use crate::{
-    capability::Support,
     transport::account::Account,
     transport::{
         api::{Request, TransportRequests, full_page},
         response::Response,
     },
 };
-use shoal_forge_types::{ForgeRepo, backends::github::GitHub, capability::Capability};
+use shoal_forge_types::{ForgeRepo, backends::github::GitHub};
 
 /// GitHub.com's API host; an Enterprise Server serves its API under
 /// `/api/v3` of its own host.
@@ -42,46 +42,6 @@ impl Backend for GitHub {
         Ok(["verifiable_password_authentication", "installed_version"]
             .iter()
             .any(|field| meta.get(field).is_some()))
-    }
-
-    fn support(&self, capability: Capability) -> Support {
-        match capability {
-            Capability::AutoMergeAtHead => Support::Unsupported(Some(
-                "GitHub keeps an automatic merge set after a push from an account with write access, and documents no check of the expected head after it sets one",
-            )),
-            Capability::RunJobs
-            | Capability::ResolveThreads
-            | Capability::RerunJobs
-            | Capability::CancelJobs
-            | Capability::StartRuns
-            | Capability::ReadRuns
-            | Capability::ReadJobLogs
-            | Capability::ApproveRuns
-            | Capability::ReopenPrs
-            | Capability::Labels
-            | Capability::IssueAssignees
-            | Capability::PrAssignees
-            | Capability::IssueMilestones
-            | Capability::PrMilestones
-            | Capability::DraftPrs
-            | Capability::Attachments
-            | Capability::Downloads
-            | Capability::MergeCommit
-            | Capability::RebaseMerge
-            | Capability::SquashMerge
-            | Capability::AutoMerge
-            | Capability::MergeAtHead
-            | Capability::UpdateByMerge
-            | Capability::UpdateByRebase
-            | Capability::ForkPrs
-            | Capability::Forks
-            | Capability::LineComments
-            | Capability::ApprovePrs
-            | Capability::RequestChanges
-            | Capability::Reactions
-            | Capability::RevertPrs
-            | Capability::MeaningSearch => Support::Supported,
-        }
     }
 
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {

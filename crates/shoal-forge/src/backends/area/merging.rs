@@ -5,6 +5,7 @@ use shoal_refs::{BranchName, CommitId};
 use crate::{
     MERGED_HINT,
     backends::{Backend, rest},
+    capability::{self, Supports},
     items::revert::NewRevert,
     transport::account::Account,
     transport::api::Request,
@@ -22,7 +23,7 @@ use shoal_forge_types::{
 
 /// How the forge merges and reverts PRs.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Merging: Backend {
+pub(crate) trait Merging: Backend + Supports {
     /// Fail closed on changed output: only commits the merged PR lists can
     /// authorize cleanup, including squash and rebase merges. None while the
     /// PR is unmerged.
@@ -106,7 +107,7 @@ pub(crate) trait Merging: Backend {
         _current: &Current,
         _revert: &NewRevert,
     ) -> Result<(PullNumber, BranchName)> {
-        Err(crate::capability::unsupported(self, Capability::RevertPrs))
+        Err(capability::unsupported(self, Capability::RevertPrs))
     }
 }
 
