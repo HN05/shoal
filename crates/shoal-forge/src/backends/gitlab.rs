@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::{
     backends::Runners,
     capability,
+    hosts::Hosting,
     transport::account::Account,
     transport::{
         api::{Request, TransportRequests, encode, full_page},
@@ -30,13 +31,15 @@ mod support;
 
 use super::{Backend, LoginHint, rest};
 
-impl Backend for GitLab {
+impl Hosting for GitLab {
     /// GitLab reports its version with the revision it was built from.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
         let version = host.send(account, &Request::get("version".into())).await?;
         Ok(version["version"].is_string() && version["revision"].is_string())
     }
+}
 
+impl Backend for GitLab {
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
         format!("projects/{}/{path}", encode(&repo.path, false))
     }

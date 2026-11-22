@@ -7,7 +7,7 @@ use std::future::Future;
 
 use anyhow::{Result, anyhow};
 
-use crate::{backends::Backend, transport::account::Account};
+use crate::transport::account::Account;
 use shoal_forge_types::{
     ForgeRepo,
     backends::{ForgeKind, Routes},
@@ -40,6 +40,15 @@ impl HostType {
             Self::Settled(kind) | Self::Answered(kind) => kind,
         }
     }
+}
+
+/// How a forge tells a host that serves it.
+#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
+pub(crate) trait Hosting: Routes {
+    /// Whether `host`, a repository without a path, answers this forge's
+    /// version or metadata endpoint as `account`; an error when it could
+    /// not be asked.
+    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool>;
 }
 
 /// Ask `host` which forge's API it serves, using `account`'s login where

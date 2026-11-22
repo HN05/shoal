@@ -22,6 +22,7 @@ pub(crate) mod threads;
 
 use super::{Backend, github_rest};
 use crate::{
+    hosts::Hosting,
     transport::account::Account,
     transport::{
         api::{Request, TransportRequests, full_page},
@@ -34,7 +35,7 @@ use shoal_forge_types::{ForgeRepo, backends::github::GitHub};
 /// `/api/v3` of its own host.
 const API: &str = "https://api.github.com";
 
-impl Backend for GitHub {
+impl Hosting for GitHub {
     /// GitHub's metadata names its SSH keys' password policy, and an
     /// Enterprise Server its version.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
@@ -43,7 +44,9 @@ impl Backend for GitHub {
             .iter()
             .any(|field| meta.get(field).is_some()))
     }
+}
 
+impl Backend for GitHub {
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
         format!("repos/{}/{path}", repo.path)
     }

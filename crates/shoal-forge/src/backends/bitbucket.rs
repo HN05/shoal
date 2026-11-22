@@ -10,6 +10,7 @@ use serde_json::Value;
 use crate::{
     backends::Runners,
     capability,
+    hosts::Hosting,
     transport::account::Account,
     transport::{
         api::{Request, TransportRequests, encode},
@@ -40,12 +41,14 @@ const HOST: &str = "bitbucket.org";
 /// The page size Bitbucket's lists take by default.
 const PAGE_SIZE: usize = 50;
 
-impl Backend for Bitbucket {
+impl Hosting for Bitbucket {
     /// Bitbucket Cloud serves only `bitbucket.org`, which is known by name.
     async fn serves(&self, _host: &ForgeRepo, _account: &Account) -> Result<bool> {
         Ok(false)
     }
+}
 
+impl Backend for Bitbucket {
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
         format!("repositories/{}/{path}", repo.path)
     }

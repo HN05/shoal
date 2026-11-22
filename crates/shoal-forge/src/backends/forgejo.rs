@@ -23,6 +23,7 @@ mod version;
 
 use super::{Backend, LoginHint, github_rest};
 use crate::{
+    hosts::Hosting,
     transport::account::Account,
     transport::{
         api::{Request, TransportRequests, full_page},
@@ -34,13 +35,15 @@ use shoal_forge_types::{ForgeRepo, backends::forgejo::Forgejo};
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
 
-impl Backend for Forgejo {
+impl Hosting for Forgejo {
     /// Forgejo and Gitea report their version under `/api/v1`.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
         let version = host.send(account, &Request::get("version".into())).await?;
         Ok(version["version"].is_string())
     }
+}
 
+impl Backend for Forgejo {
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
         format!("repos/{}/{path}", repo.path)
     }

@@ -49,11 +49,6 @@ pub(crate) use area::{
 /// Methods that need the repository take it as `repo`.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub(crate) trait Backend: Routes {
-    /// Whether `host`, a repository without a path, answers this forge's
-    /// version or metadata endpoint as `account`; an error when it could
-    /// not be asked.
-    async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool>;
-
     /// The API endpoint for `path` under the repository.
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String;
 
