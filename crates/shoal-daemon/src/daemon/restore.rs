@@ -24,13 +24,25 @@ impl Manager {
     /// [`Self::reopen_space`] does, unless the hub lists it on another
     /// machine: one whose machine is offline it takes over from the hub's
     /// package of it, for a scoped `caller` as its `admin` permission
-    /// allows, and any other it refuses.
+    /// allows, and any other it refuses; refused while a move of it runs.
     pub async fn restore_space(
         &self,
         selector: &SpaceSelector,
         caller: Option<&Caller>,
     ) -> Result<RestoredSpace> {
-        let _moving = self.ensure_not_moving(selector)?;
+        let moving = self.ensure_not_moving(selector)?;
+        let restored = self.restore_unmoving(selector, caller).await;
+        moving.into_iter().for_each(MoveLock::release);
+        restored
+    }
+
+    /// Open the removed space `selector` names again as
+    /// [`Self::restore_space`] does, while no move of it can start.
+    async fn restore_unmoving(
+        &self,
+        selector: &SpaceSelector,
+        caller: Option<&Caller>,
+    ) -> Result<RestoredSpace> {
         if let Some(takeover) = self.takeover(selector).await? {
             self.ensure_takeover_allowed(caller, selector).await?;
             return self.take_over_from_package(takeover, caller).await;
