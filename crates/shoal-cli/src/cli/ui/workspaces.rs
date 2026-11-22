@@ -6,13 +6,15 @@ use std::collections::HashSet;
 use anyhow::{Result, ensure};
 
 use super::{
-    Acting, Entries, elsewhere_entries, pick, picker_width, require_argument, rows_with_status,
-    spaces::stopped_spaces, status_cell,
+    Acting, Entries, elsewhere_entries,
+    offers::{Offers, Shown},
+    pick, picker_width, require_argument, rows_with_status,
+    spaces::stopped_spaces,
+    status_cell,
 };
 use crate::{
     cli::{
         args::SpaceFilter,
-        availability::{self, Availability, Fit},
         context::Context,
         list_status::ListStatus,
         output::{Palette, Style},
@@ -111,8 +113,9 @@ async fn pick_workspace_or_all(
     workspaces: Vec<Workspace>,
     acting: &Acting,
 ) -> Result<Option<SpaceId>> {
-    let mut entries = workspace_entries(ctx, workspaces, true).await;
-    entries.extend(elsewhere_entries(ctx, Offered::Workspaces, acting).await);
+    let offers = Offers::of(ctx, acting, &workspaces, &[]).await;
+    let mut entries = workspace_entries(ctx, workspaces, true, &offers).await;
+    entries.extend(elsewhere_entries(ctx, Offered::Workspaces, &offers));
     entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
     require_argument(ctx, "workspace", WORKSPACE)?;
     let id = pick(ctx, "Workspace> ", entries)?;
@@ -181,39 +184,45 @@ pub async fn pick_workspace(
     argument: &str,
     acting: &Acting,
 ) -> Result<SpaceId> {
-    let mut entries = workspace_entries(ctx, workspaces, true).await;
-    entries.extend(elsewhere_entries(ctx, Offered::Workspaces, acting).await);
-    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    let offers = Offers::of(ctx, acting, &workspaces, &[]).await;
+    let mut entries = workspace_entries(ctx, workspaces, true, &offers).await;
+    entries.extend(elsewhere_entries(ctx, Offered::Workspaces, &offers));
+    ensure!(!entries.is_empty(), "{NO_WORKSPACE}");
     require_argument(ctx, "workspace", argument)?;
     Ok(SpaceId::from(pick(ctx, "Workspace> ", entries)?))
 }
 
+/// What a workspace picker says when the command takes none of them.
+const NO_WORKSPACE: &str = "no workspace this command takes";
+
 /// Pick one of `workspaces`, which a command chose from this machine's
 /// records, such as the workspaces another can build on, for the command's
-/// `argument`.
+/// `argument`, as the request `acting` sends judges them.
 pub async fn pick_listed_workspace(
     ctx: &Context,
     workspaces: Vec<Workspace>,
     argument: &str,
+    acting: &Acting,
 ) -> Result<SpaceId> {
-    let entries = workspace_entries(ctx, workspaces, true).await;
-    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    let offers = Offers::of(ctx, acting, &workspaces, &[]).await;
+    let entries = workspace_entries(ctx, workspaces, true, &offers).await;
+    ensure!(!entries.is_empty(), "{NO_WORKSPACE}");
     require_argument(ctx, "workspace", argument)?;
     Ok(SpaceId::from(pick(ctx, "Workspace> ", entries)?))
 }
 
-/// The picker entries for `workspaces`, judged against what the command
-/// needs, starting with their state markers when `markers` says.
+/// The picker entries for `workspaces`, as `offers` judges them, starting
+/// with their state markers when `markers` says.
 pub(super) async fn workspace_entries(
     ctx: &Context,
     workspaces: Vec<Workspace>,
     markers: bool,
+    offers: &Offers,
 ) -> Entries {
-    let availability = availability::load(ctx.need, &ctx.paths, &workspaces).await;
     let stopped = stopped_spaces(&ctx.paths).await;
-    availability_entries(
+    offered_entries(
         workspaces,
-        &availability,
+        offers,
         &stopped,
         Palette::stderr(ctx.json),
         markers,
@@ -223,19 +232,18 @@ pub(super) async fn workspace_entries(
 /// Workspaces the command would act on come first; those it would refuse
 /// follow with the reason in place of their status, and those without what
 /// it acts on are left out.
-fn availability_entries(
+fn offered_entries(
     workspaces: Vec<Workspace>,
-    availability: &Availability,
+    offers: &Offers,
     stopped: &HashSet<SpaceId>,
     palette: Palette,
     markers: bool,
 ) -> Entries {
     let mut rows = workspaces
         .into_iter()
-        .filter_map(|w| match availability.fit(&w) {
-            Fit::Accepted => Some((None, w)),
-            Fit::Refused(reason) => Some((Some(reason), w)),
-            Fit::Hidden => None,
+        .filter_map(|w| match offers.shown(&w.id)? {
+            Shown::Taken => Some((None, w)),
+            Shown::Refused(reason) => Some((Some(reason.to_owned()), w)),
         })
         .collect::<Vec<_>>();
     rows.sort_by_key(|(refusal, _)| refusal.is_some());

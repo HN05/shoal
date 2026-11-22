@@ -7,8 +7,9 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, ensure};
 
 use super::{
-    Acting, Cell, Entries, chat_entries, elsewhere_entries, pick, pick_many, picker_width,
-    require_argument, rows_with_status,
+    Acting, Cell, Entries, chat_entries, elsewhere_entries,
+    offers::Offers,
+    pick, pick_many, picker_width, require_argument, rows_with_status,
     workspaces::{
         ALL_ID, Fallback, NoCurrentWorkspace, Resolution, resolve_workspace, workspace_entries,
     },
@@ -57,7 +58,7 @@ pub async fn select_spaces(
                 };
                 require_argument(ctx, "spaces", SPACE)?;
                 let entries = space_entries(ctx, workspaces, &chats, offered, acting).await;
-                ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+                ensure!(!entries.is_empty(), "{NO_SPACE}");
                 picked_ids(pick_many(ctx, "Spaces> ", entries)?)
             }
         };
@@ -366,6 +367,9 @@ const SPACE: &str = "space";
 /// How the space picker names `--all`.
 const ALL_SPACES: &str = "All spaces";
 
+/// What a space picker says when the command takes none of them.
+const NO_SPACE: &str = "no space this command takes";
+
 /// Pick a space: one of `workspaces`, or one of `chats`, listed after them
 /// by name, or for a command that acts on them one of the other joined
 /// machines' spaces `offered` names, for the command's `argument`. Returns
@@ -379,13 +383,14 @@ pub async fn pick_space(
     acting: &Acting,
 ) -> Result<SpaceId> {
     let entries = space_entries(ctx, workspaces, chats, offered, acting).await;
-    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    ensure!(!entries.is_empty(), "{NO_SPACE}");
     require_argument(ctx, "space", argument)?;
     Ok(SpaceId::from(pick(ctx, "Space> ", entries)?))
 }
 
-/// The picker entries for `workspaces`, then the `chats` the command's need
-/// offers, then the other machines' spaces `offered` names.
+/// The picker entries for `workspaces`, then `chats`, then the other
+/// machines' spaces `offered` names, as the request `acting` sends judges
+/// each.
 async fn space_entries(
     ctx: &Context,
     workspaces: Vec<Workspace>,
@@ -393,9 +398,10 @@ async fn space_entries(
     offered: Offered,
     acting: &Acting,
 ) -> Entries {
-    let mut entries = workspace_entries(ctx, workspaces, true).await;
+    let offers = Offers::of(ctx, acting, &workspaces, chats).await;
+    let mut entries = workspace_entries(ctx, workspaces, true, &offers).await;
     let chats: Vec<Chat> = (chats.iter())
-        .filter(|chat| ctx.need.offers_chat(chat))
+        .filter(|chat| offers.shown(&chat.id).is_some())
         .cloned()
         .collect();
     entries.extend(chat_entries(
@@ -403,7 +409,7 @@ async fn space_entries(
         Palette::stderr(ctx.json),
         picker_width(),
     ));
-    entries.extend(elsewhere_entries(ctx, offered, acting).await);
+    entries.extend(elsewhere_entries(ctx, offered, &offers));
     entries
 }
 

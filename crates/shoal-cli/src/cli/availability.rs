@@ -12,7 +12,7 @@ use crate::{
     state::WorkspaceState,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
-use shoal_protocol::{hub::directory::SpaceSummary, space_names::SpaceSelector};
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The condition a command's workspace must meet.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -103,49 +103,6 @@ impl Need {
     /// on: for one that acts on holds, a chat that has one.
     pub fn offers_chat(self, chat: &Chat) -> bool {
         self != Self::Holds || !chat.holds.is_empty()
-    }
-
-    /// Whether a command of this need offers `space`, another joined
-    /// machine's, as the hub lists it: one that attaches a space with an
-    /// agent, one that stops a space whose agent or a process runs, and one
-    /// whose need the listing says nothing of, such as holds, none. A need
-    /// of the space's state is that machine's to judge.
-    pub fn offers_elsewhere(self, space: &SpaceSummary) -> bool {
-        match self {
-            Self::Any | Self::Ready | Self::Settled | Self::Links => true,
-            Self::Session => space.agent,
-            Self::Running => {
-                space.agent_runs_or_sleeps() || space.status == ListStatus::ProcessRunning
-            }
-            Self::Setup
-            | Self::Checkpoint
-            | Self::Directory
-            | Self::Untracked
-            | Self::Done
-            | Self::Base
-            | Self::Holds
-            | Self::Marks => false,
-        }
-    }
-
-    /// What a picker reports when no workspace is left to offer.
-    pub fn none_offered(self) -> &'static str {
-        match self {
-            Self::Session => "no workspace or chat has an agent session",
-            Self::Running => "nothing is running in any workspace",
-            Self::Done => "no workspace is done",
-            Self::Base => "no workspace has a base workspace",
-            Self::Holds => "no space has holds",
-            Self::Marks => "no workspace is marked ready",
-            Self::Directory => "no workspace directory exists",
-            Self::Untracked => "no workspace or chat",
-            Self::Any
-            | Self::Ready
-            | Self::Settled
-            | Self::Links
-            | Self::Setup
-            | Self::Checkpoint => "no workspaces",
-        }
     }
 
     /// Flags that change the operation also change which workspaces it offers.

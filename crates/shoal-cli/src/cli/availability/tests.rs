@@ -141,31 +141,3 @@ fn agent_places_count_stopped_agents_as_connected() {
         }
     );
 }
-
-/// Another machine's workspace, as the hub lists it with `fields`.
-fn listed(fields: serde_json::Value) -> SpaceSummary {
-    let mut space = serde_json::json!({
-        "id": "w", "number": 1, "name": "w", "kind": "workspace", "status": "inactive",
-    });
-    space
-        .as_object_mut()
-        .unwrap()
-        .extend(fields.as_object().unwrap().clone());
-    serde_json::from_value(space).unwrap()
-}
-
-#[test]
-fn another_machine_s_spaces_are_offered_by_what_its_listing_shows() {
-    let idle = listed(serde_json::json!({"agent": true}));
-    let running = listed(serde_json::json!({"agent": true, "running": "claude"}));
-    let asleep = listed(serde_json::json!({"agent": true, "status": "asleep"}));
-    let process = listed(serde_json::json!({"status": "process-running"}));
-    assert!(!Need::Running.offers_elsewhere(&idle));
-    for space in [&running, &asleep, &process] {
-        assert!(Need::Running.offers_elsewhere(space));
-    }
-    assert!(Need::Session.offers_elsewhere(&idle));
-    assert!(!Need::Session.offers_elsewhere(&process));
-    assert!(Need::Ready.offers_elsewhere(&idle));
-    assert!(!Need::Holds.offers_elsewhere(&running));
-}

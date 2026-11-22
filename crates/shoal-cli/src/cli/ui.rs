@@ -50,6 +50,7 @@ mod keys;
 mod linked;
 mod machines;
 mod modes;
+mod offers;
 mod picker;
 mod prompt;
 mod rows;

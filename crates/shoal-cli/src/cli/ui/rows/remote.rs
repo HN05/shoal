@@ -20,12 +20,28 @@ pub fn remote_rows(
     palette: Palette,
     width: Option<usize>,
 ) -> Vec<String> {
+    let remote: Vec<_> = remote.iter().map(|remote| (*remote, None)).collect();
+    judged_remote_rows(&remote, machines, palette, width)
+}
+
+/// One row per space of `remote` as [`remote_rows`] gives it, with the
+/// reason a command would refuse it in place of its status where it has
+/// one.
+pub fn judged_remote_rows(
+    remote: &[(&Remote, Option<&str>)],
+    machines: &Machines<'_>,
+    palette: Palette,
+    width: Option<usize>,
+) -> Vec<String> {
     let (markers, cells): (Vec<_>, Vec<_>) = (remote.iter())
-        .map(|remote| {
+        .map(|(remote, refusal)| {
             let repository = (remote.space.repository.as_ref())
                 .map(|origin| origin.name.clone())
                 .unwrap_or_default();
-            let (marker, cells) = remote_row(remote, (repository, None), 0, palette);
+            let (marker, mut cells) = remote_row(remote, (repository, None), 0, palette);
+            if let Some(refusal) = refusal {
+                cells[STATUS] = ((*refusal).to_owned(), Some(Style::Muted));
+            }
             (marker, with_machine(cells, machines.cell(&remote.machine)))
         })
         .unzip();
@@ -42,6 +58,9 @@ pub(super) fn machine_title_limit(width: Option<usize>) -> Option<WidthLimit> {
         ..limit
     })
 }
+
+/// The column of [`remote_row`]'s cells that holds the space's status.
+const STATUS: usize = 4;
 
 /// The row of another machine's space, as its machine last reported it,
 /// naming the agent it runs where its status line does not take the place.

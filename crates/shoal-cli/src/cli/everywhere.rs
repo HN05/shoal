@@ -24,15 +24,23 @@ pub(in crate::cli) async fn elsewhere(ctx: &Context, left_out: &str) -> Option<H
     listed_or_left_out(everywhere, left_out)
 }
 
-/// The other machines' spaces that `acting`, the request a picker offers
-/// spaces for, can act on, as [`elsewhere`] lists them.
-pub(in crate::cli) async fn offered(
-    ctx: &Context,
-    acting: Operation,
-    left_out: &str,
-) -> Option<HubView> {
-    let everywhere = crate::client::spaces::offered_elsewhere(&ctx.paths, acting).await;
-    listed_or_left_out(everywhere, left_out)
+/// The spaces on every machine, with how `acting`, the request a picker
+/// offers them for, judges each, warning that the other machines' are left
+/// out while they cannot be listed, and that every space is offered while
+/// the daemon cannot judge them.
+pub(in crate::cli) async fn offered(ctx: &Context, acting: Operation) -> Everywhere {
+    match crate::client::spaces::offered(&ctx.paths, acting).await {
+        Ok(everywhere) => {
+            if let Some(error) = &everywhere.unreachable {
+                eprintln!("warning: the other machines' spaces are left out: {error}");
+            }
+            everywhere
+        }
+        Err(error) => {
+            eprintln!("warning: the daemon cannot say which spaces this command takes: {error:#}");
+            Everywhere::default()
+        }
+    }
 }
 
 /// The other machines' spaces `everywhere` lists, none, with a warning that

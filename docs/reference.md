@@ -1166,11 +1166,10 @@ starting a demo and an agent's hooks, are refused for a space elsewhere,
 naming its machine, as is a command that attaches files, which that
 machine cannot read. Without a target, a
 command's picker offers the other machines' spaces that the request it
-sends for the picked space reaches, after this machine's, where the hub's
-listing shows what the command needs, such as an agent for
-`attach`, but none where it does not, such as a hold for `release hold`,
-each naming its machine, and an offline one with when the hub last saw
-it; choosing one acts as naming it does. A command that works in the
+sends for the picked space reaches, after this machine's, as each
+machine's daemon judges its own for that request, every space of one that
+is offline, each naming its machine, and an offline one with when the hub
+last saw it; choosing one acts as naming it does. A command that works in the
 space's worktree, terminal or files here, as `cd`, `exec` and
 `stop --interrupt` do, offers only this machine's.
 
@@ -1502,10 +1501,12 @@ with `-w`/`--workspace`, or `-s`/`--space` for a command that also acts on chats
 otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an
 interactive fzf picker; a deleted current directory provides no workspace context.
-The picker leaves out workspaces without what the command acts on, such as an
+The picker leaves out spaces without what the command acts on, such as an
 agent session for `attach` or a running agent or command for `stop`, and reports
-when none is left. Workspaces the command would refuse for their state, or for
-`setup` a running execution, come last with the reason in place of their status.
+when none is left. Spaces the command would refuse for their state, or for
+`setup` running work, come last with the reason the command would give in place
+of their status. The daemon of the machine each space runs on judges it by the
+request the command sends for it.
 `cd`, `attach` and the commands that open, show or run something in one space
 remember, across terminals, the spaces each acted on, workspaces and chats
 alike, and take `-` as the target for the latest one other than the current

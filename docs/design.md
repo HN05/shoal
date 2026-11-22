@@ -2700,10 +2700,14 @@ it names, such as a ready workspace or one where an agent runs, and the daemon
 judges the space by it before the handler runs, accepting it, refusing it with
 the check's reason, or finding it without what the request acts on, which its
 handler answers.
-Each command states what it needs of its workspace in one table; completion and
-pickers leave out a workspace without what the command acts on, and describe one
-refused for its state or a running execution by the reason, which pickers list
-last.
+A picker names the request its command sends for the space it picks, and
+the daemon of each machine judges that machine's spaces by that request's check,
+including facts only it has, such as where its terminal hosts keep agent
+sessions; the picker leaves out a space without what the request acts on and
+lists one the request refuses last, with the refusal's reason. A command that
+acts on this machine's spaces in its own process, and completion, still state
+what the command needs of a workspace in one table of the CLI's, which judges
+them alike.
 
 Named `[commands]` are executable/argument arrays resolved per name from saved
 repository config, worktree config, then global config and built-in defaults at

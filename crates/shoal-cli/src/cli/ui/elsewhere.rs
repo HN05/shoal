@@ -3,40 +3,45 @@
 //! `shoal list` marks it, with when the hub last saw one that is offline.
 use shoal_protocol::hub::directory::{HubView, Offered};
 
-use super::{Acting, Entries, Machines, picker_width, remote_rows};
-use crate::cli::{availability::Need, context::Context, everywhere, output::Palette};
+use super::{
+    Entries, Machines, judged_remote_rows,
+    offers::{Offers, Shown},
+    picker_width,
+};
+use crate::cli::{context::Context, output::Palette};
 
-/// The picker entries of the other machines' spaces `offered` names that
-/// `acting`, what the command does with the picked space, can act on; none
-/// for a command that acts here or on a machine in no hub, and none, with
-/// a warning, while the hub cannot be asked.
-pub(super) async fn elsewhere_entries(ctx: &Context, offered: Offered, acting: &Acting) -> Entries {
-    let Some(acting) = acting.operation() else {
-        return Entries::new();
-    };
-    let offered_view = everywhere::offered(ctx, acting, "the other machines' spaces");
-    let Some(view) = offered_view.await else {
+/// The picker entries of the other machines' spaces `offered` names, as
+/// `offers` judges them; none for a command that acts here or on a machine
+/// in no hub.
+pub(super) fn elsewhere_entries(ctx: &Context, offered: Offered, offers: &Offers) -> Entries {
+    let Some(view) = &offers.elsewhere else {
         return Entries::new();
     };
     let palette = Palette::stderr(ctx.json);
-    view_entries(&view, offered, ctx.need, palette, picker_width())
+    view_entries(view, offered, offers, palette, picker_width())
 }
 
-/// The entries of the spaces of `view` that `offered` names and `need`
-/// offers, by their IDs, in `palette` cut to `width`.
+/// The entries of the spaces of `view` that `offered` names and `offers`
+/// offers, by their IDs, those the command would refuse last, in `palette`
+/// cut to `width`.
 fn view_entries(
     view: &HubView,
     offered: Offered,
-    need: Need,
+    offers: &Offers,
     palette: Palette,
     width: Option<usize>,
 ) -> Entries {
-    let spaces: Vec<_> = (view.directory.spaces.iter())
-        .filter(|listed| offered.offers(&listed.space) && need.offers_elsewhere(&listed.space))
+    let mut spaces: Vec<_> = (view.directory.spaces.iter())
+        .filter(|listed| offered.offers(&listed.space))
+        .filter_map(|listed| match offers.shown(&listed.space.id)? {
+            Shown::Taken => Some((listed, None)),
+            Shown::Refused(reason) => Some((listed, Some(reason))),
+        })
         .collect();
-    let rows = remote_rows(&spaces, &Machines::new(view), palette, width);
+    spaces.sort_by_key(|(_, refusal)| refusal.is_some());
+    let rows = judged_remote_rows(&spaces, &Machines::new(view), palette, width);
     (spaces.iter())
-        .map(|listed| listed.space.id.to_string())
+        .map(|(listed, _)| listed.space.id.to_string())
         .zip(rows)
         .collect()
 }

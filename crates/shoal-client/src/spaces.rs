@@ -35,10 +35,12 @@ pub async fn everywhere(daemon: &impl Daemon, here: bool) -> Result<Everywhere> 
     Everywhere::from_parts(pages(daemon, method).await?)
 }
 
-/// The other joined machines' spaces the caller sees that `acting`, a
-/// request a picker offers spaces for, can act on, or why the hub could
-/// not be asked; none when it stays on this machine.
-pub async fn offered_elsewhere(daemon: &impl Daemon, acting: Operation) -> Result<Everywhere> {
+/// How `acting`, the request a picker offers spaces for, judges each space
+/// the caller sees on every machine, by the daemon of the machine it runs
+/// on, with the other machines' spaces as [`everywhere`] lists them; none
+/// of those when it stays on this one. This machine's, which the picker
+/// lists itself, are judged but not listed.
+pub async fn offered(daemon: &impl Daemon, acting: Operation) -> Result<Everywhere> {
     let acting = Some(Box::new(acting));
     let method = SpaceMethod::ListSpacesEverywhere {
         here: false,
@@ -48,8 +50,8 @@ pub async fn offered_elsewhere(daemon: &impl Daemon, acting: Operation) -> Resul
 }
 
 /// What stands for the space a picker is about to pick in the request it
-/// offers spaces for, which [`offered_elsewhere`] judges by what it does
-/// and never resolves.
+/// sends [`offered`], whose daemons judge each space by what that request
+/// does and never resolve this one.
 pub fn picking() -> SpaceSelector {
     SpaceSelector::Number(shoal_ids::space_ids::SpaceNumber::new(0))
 }

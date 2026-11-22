@@ -110,9 +110,13 @@ async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
         !candidates.is_empty(),
         "no other workspace in this repository"
     );
-    Ok(ui::pick_listed_workspace(ctx, candidates, "base")
-        .await?
-        .into())
+    // No request names the base it builds on.
+    let choosing = Acting::here();
+    Ok(
+        ui::pick_listed_workspace(ctx, candidates, "base", &choosing)
+            .await?
+            .into(),
+    )
 }
 
 /// The base and stacked workspaces, when the workspace has any.
