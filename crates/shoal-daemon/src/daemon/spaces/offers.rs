@@ -16,7 +16,7 @@ use crate::daemon::{
     log,
     manager::Manager,
     scope::Caller,
-    target_checks::{Checked, TargetCheck, Verdict},
+    target_checks::{Checked, Facts, TargetCheck, Verdict},
 };
 
 impl Manager {
@@ -26,7 +26,23 @@ impl Manager {
         caller: Option<&Caller>,
         acting: &Operation,
     ) -> Result<Vec<SpaceOffer>> {
-        Ok(judged(acting, &self.listed_spaces(caller).await?))
+        let spaces = self.listed_spaces(caller).await?;
+        Ok(self.judged_here(caller, acting, &spaces).await)
+    }
+
+    /// How `acting` judges each of `spaces`, this machine's that `caller`
+    /// sees, with the facts its check reads of them.
+    pub(crate) async fn judged_here(
+        &self,
+        caller: Option<&Caller>,
+        acting: &Operation,
+        spaces: &[Space],
+    ) -> Vec<SpaceOffer> {
+        let facts = match acting.target_check() {
+            Some(check) => self.facts(caller, check, spaces).await,
+            None => Facts::default(),
+        };
+        judged(acting, spaces, &facts)
     }
 
     /// How `acting` judges each space of the other joined machines in
@@ -39,12 +55,7 @@ impl Manager {
         acting: &Operation,
         view: &HubView,
     ) -> HashMap<SpaceId, Offer> {
-        let machines = (view.directory.machines.iter()).filter(|machine| {
-            machine.connected
-                && machine.id != view.machine
-                && (view.directory.spaces.iter()).any(|listed| listed.machine == machine.id)
-        });
-        let asked = machines.map(|machine| self.judged_by(machine, acting, caller));
+        let asked = (judging_machines(view)).map(|machine| self.judged_by(machine, acting, caller));
         let mut offers = HashMap::new();
         for answer in join_all(asked).await {
             match answer {
@@ -76,21 +87,32 @@ impl Manager {
     }
 }
 
-/// How `acting` judges each of `spaces`, by the check it declares.
-pub(crate) fn judged(acting: &Operation, spaces: &[Space]) -> Vec<SpaceOffer> {
+/// The other connected machines in `view` that run spaces the caller sees,
+/// whose daemons judge them.
+fn judging_machines(view: &HubView) -> impl Iterator<Item = &Member> {
+    (view.directory.machines.iter()).filter(|machine| {
+        machine.connected
+            && machine.id != view.machine
+            && (view.directory.spaces.iter()).any(|listed| listed.machine == machine.id)
+    })
+}
+
+/// How `acting` judges each of `spaces`, by the check it declares, with
+/// `facts`.
+fn judged(acting: &Operation, spaces: &[Space], facts: &Facts) -> Vec<SpaceOffer> {
     let check = acting.target_check();
     (spaces.iter())
         .map(|space| SpaceOffer {
             space: space.id.clone(),
-            offer: offer(check, space),
+            offer: offer(check, space, facts),
         })
         .collect()
 }
 
-/// How a request with `check` judges `space`; a request that names no
-/// space takes any.
-fn offer(check: Option<TargetCheck>, space: &Space) -> Offer {
-    match check.map(|check| check.judge(space)) {
+/// How a request with `check` judges `space` with `facts`; a request that
+/// names no space takes any.
+fn offer(check: Option<TargetCheck>, space: &Space, facts: &Facts) -> Offer {
+    match check.map(|check| check.judge(space, facts)) {
         None | Some(Verdict::Accepted) => Offer::Accepted,
         Some(Verdict::Refused(error)) => Offer::Refused {
             reason: format!("{error:#}"),

@@ -18,7 +18,10 @@ use super::super::{
     target_checks::{Checked, TargetCheck},
     workspace::NewWorkspace,
 };
-use crate::protocol::{Body, ErrorCode, OperationMethod, Response, operations::Started};
+use crate::protocol::{
+    Body, ErrorCode, OperationMethod, Response,
+    operations::{OperationSpec, Started},
+};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether `method` starts a workspace or an operation, whose worker an
@@ -177,12 +180,32 @@ pub(super) async fn handle(
     }))
 }
 
+/// What the operation `spec` requires of the workspace it works in: its
+/// setup's state, or for one that runs there, a ready workspace, which it
+/// waits for while another lifecycle operation passes.
+fn operation_check(spec: &OperationSpec) -> Option<TargetCheck> {
+    match spec {
+        // One that only runs the post-setup hook starts no setup there.
+        OperationSpec::Prepare { steps, .. } => Some(match steps.setup {
+            true => TargetCheck::SetupWorkspace,
+            false => TargetCheck::Workspace,
+        }),
+        // Opening a PR pushes through a command run, as a push does.
+        OperationSpec::Merge { .. }
+        | OperationSpec::Unmerge { .. }
+        | OperationSpec::Push { .. }
+        | OperationSpec::OpenPull { .. } => Some(TargetCheck::AwaitedReadySpace),
+        OperationSpec::Move { .. } | OperationSpec::FinishMove { .. } => None,
+    }
+}
+
 impl Checked for OperationMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
             Self::FollowOperation { .. } | Self::CancelOperation { .. } => Some(TargetCheck::Space),
-            Self::StartOperation { .. }
-            | Self::StartWorkspace { .. }
+            // Its spec names its workspace, which only a picker judges.
+            Self::StartOperation { spec, .. } => operation_check(spec),
+            Self::StartWorkspace { .. }
             | Self::StartCreation { .. }
             | Self::StartChild { .. }
             | Self::ReportProgress { .. }

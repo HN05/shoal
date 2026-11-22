@@ -1,4 +1,5 @@
 use super::judged;
+use crate::daemon::target_checks::Facts;
 use crate::{model::Space, state::WorkspaceState};
 use shoal_protocol::{
     model::Offer,
@@ -17,7 +18,7 @@ fn workspace(state: WorkspaceState) -> Space {
 
 /// The one offer `acting` makes of `space`.
 fn offer(acting: Operation, space: Space) -> Offer {
-    let [judged] = <[_; 1]>::try_from(judged(&acting, &[space])).unwrap();
+    let [judged] = <[_; 1]>::try_from(judged(&acting, &[space], &Facts::default())).unwrap();
     judged.offer
 }
 

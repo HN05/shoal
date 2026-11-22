@@ -31,7 +31,7 @@ use crate::{
     state::{ExecutionState, WorkspaceState},
 };
 use anyhow::{Context, Result, bail, ensure};
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{Transaction, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
@@ -193,12 +193,8 @@ impl ExecutionKindExt for ExecutionKind {
                 store::require_ready(tx, workspace_id)?
             }
             Self::Setup => {
-                let blocking: Option<ExecutionId> = tx.query_row(
-                    "SELECT id FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
-                    params![workspace_id, parent_execution],
-                    |r| r.get(0),
-                ).optional()?;
-                if let Some(blocking) = blocking {
+                let blocking = other_executions(tx, Some(workspace_id), parent_execution)?;
+                if let Some((_, blocking)) = blocking.into_iter().next() {
                     bail!(
                         "workspace has active or unknown execution {blocking}; setup is unavailable until it finishes or is cleared"
                     );
@@ -1076,6 +1072,21 @@ impl Manager {
         self.close_demo_session(demo).await;
         Ok(())
     }
+}
+
+/// The executions, with their spaces, other than `own`, which a setup in
+/// their space leaves running, of the space `space` or of every space.
+pub(crate) fn other_executions(
+    db: &rusqlite::Connection,
+    space: Option<&SpaceId>,
+    own: Option<&ExecutionId>,
+) -> Result<Vec<(SpaceId, ExecutionId)>> {
+    let mut query = db.prepare(
+        "SELECT space_id, id FROM executions
+         WHERE (?1 IS NULL OR space_id=?1) AND (?2 IS NULL OR id != ?2)",
+    )?;
+    let rows = query.query_map(params![space, own], |row| Ok((row.get(0)?, row.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// Whether a reattaching wrapper is the one the record names. One awaiting a

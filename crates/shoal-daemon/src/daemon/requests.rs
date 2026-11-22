@@ -67,7 +67,7 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
     scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
-    server.manager.check_target(&operation).await?;
+    server.manager.check_target(&operation, caller).await?;
     match operation {
         Operation::Daemon(method) => daemon::handle(server, method).await,
         Operation::Repository(method) => {

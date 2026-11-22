@@ -64,6 +64,8 @@ pub(super) async fn handle(
 impl Checked for LaunchMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
+            // A launch the queue holds until setup is retried names a
+            // workspace in any state its handler then decides on.
             Self::Launch { .. }
             | Self::CheckLaunch { .. }
             | Self::CheckCreation { .. }

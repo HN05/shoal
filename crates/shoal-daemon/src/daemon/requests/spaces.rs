@@ -130,8 +130,8 @@ impl Checked for SpaceMethod {
             | Self::SpaceStatus { .. }
             | Self::SpaceSessions { .. }
             | Self::FollowSession { .. }
-            | Self::AttachSession { .. }
             | Self::SpaceLog { .. } => Some(TargetCheck::Space),
+            Self::AttachSession { .. } => Some(TargetCheck::SessionSpace),
             Self::ListSpaces
             | Self::JudgeSpaces { .. }
             | Self::ListSpacesEverywhere { .. }

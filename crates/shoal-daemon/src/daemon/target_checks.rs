@@ -3,9 +3,12 @@
 //! The daemon runs it before the request's handler, and a handler that
 //! reads the space again under a lock judges it by the same check, so both
 //! refuse a space alike.
-use anyhow::Result;
+use std::collections::HashSet;
 
-use super::manager::Manager;
+use anyhow::Result;
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+
+use super::{manager::Manager, scope::Caller};
 use crate::{
     model::{Space, SpaceKind, SpacePart, Worktree},
     protocol::{Operation, Target},
@@ -25,6 +28,12 @@ pub(crate) enum TargetCheck {
     ReadyWorkspace,
     /// A ready workspace, or a chat.
     ReadySpace,
+    /// A ready workspace, or one a lifecycle operation that passes holds,
+    /// which the request waits out; or a chat.
+    AwaitedReadySpace,
+    /// A workspace its setup can run in: preparing, ready or failed, with no
+    /// execution in it but the caller's own.
+    SetupWorkspace,
     /// A ready workspace, or a failed one an interrupted operation left
     /// for the request to finish.
     SettledWorkspace,
@@ -46,6 +55,20 @@ pub(crate) enum TargetCheck {
     MarkedSpace,
     /// A workspace that records a base workspace to clear.
     StackedWorkspace,
+    /// A space with an agent session to attach to, where this machine's
+    /// terminal hosts keep it.
+    SessionSpace,
+}
+
+/// What a check reads besides the space it judges, which
+/// [`Manager::facts`] loads only for a check that reads it.
+#[derive(Debug, Default)]
+pub(crate) struct Facts {
+    /// The spaces where work runs other than the caller's own execution,
+    /// which a setup leaves running.
+    pub(crate) busy: HashSet<SpaceId>,
+    /// The spaces with an agent session.
+    pub(crate) sessions: HashSet<SpaceId>,
 }
 
 /// How a request's check judges one space.
@@ -140,9 +163,12 @@ impl TargetCheck {
             | Self::RunningSpace
             | Self::HeldSpace
             | Self::MarkedSpace
-            | Self::StackedWorkspace => false,
+            | Self::StackedWorkspace
+            | Self::SessionSpace => false,
             Self::ReadyWorkspace
             | Self::ReadySpace
+            | Self::AwaitedReadySpace
+            | Self::SetupWorkspace
             | Self::SettledWorkspace
             | Self::LinkingSpace
             | Self::LinkingWorkspace
@@ -151,13 +177,15 @@ impl TargetCheck {
         }
     }
 
-    /// How a request of this check judges `space`.
-    pub(crate) fn judge(self, space: &Space) -> Verdict {
+    /// How a request of this check judges `space`, with `facts`.
+    pub(crate) fn judge(self, space: &Space, facts: &Facts) -> Verdict {
         match self {
             Self::Space => Verdict::Accepted,
             Self::Workspace => workspace(space, |_| Verdict::Accepted),
             Self::ReadyWorkspace => workspace(space, |w| ready(space, w.state)),
             Self::ReadySpace => ready_space(space),
+            Self::AwaitedReadySpace => awaited_ready(space),
+            Self::SetupWorkspace => setup(space, facts.busy.contains(&space.id)),
             Self::SettledWorkspace => workspace(space, |w| settled(space, w.state)),
             Self::LinkingSpace => linking_space(space),
             Self::LinkingWorkspace => workspace(space, |w| linking(w.state)),
@@ -167,6 +195,7 @@ impl TargetCheck {
             Self::HeldSpace => present(!space.holds.is_empty()),
             Self::MarkedSpace => present(!space.review.is_empty()),
             Self::StackedWorkspace => workspace(space, |w| present(w.base_workspace.is_some())),
+            Self::SessionSpace => present(facts.sessions.contains(&space.id)),
         }
     }
 }
@@ -211,6 +240,33 @@ fn ready_space(space: &Space) -> Verdict {
         SpacePart::Workspace(worktree) => ready(space, worktree.state),
         SpacePart::Chat(_) => Verdict::Accepted,
     }
+}
+
+/// A ready workspace, or one a lifecycle operation that passes holds, which
+/// the request waits out; or any chat.
+fn awaited_ready(space: &Space) -> Verdict {
+    match &space.part {
+        SpacePart::Workspace(worktree) if worktree.state.passes() => Verdict::Accepted,
+        SpacePart::Workspace(worktree) => ready(space, worktree.state),
+        SpacePart::Chat(_) => Verdict::Accepted,
+    }
+}
+
+/// A workspace its setup can run in: preparing, ready or failed, and not
+/// `busy` with work other than the caller's own execution.
+fn setup(space: &Space, busy: bool) -> Verdict {
+    workspace(space, |worktree| match worktree.state {
+        WorkspaceState::Preparing | WorkspaceState::Ready | WorkspaceState::Failed if busy => {
+            let number = space.number;
+            Verdict::Refused(anyhow::anyhow!(
+                "workspace {space} runs work; setup runs once it ends, which shoal stop {number} does"
+            ))
+        }
+        WorkspaceState::Preparing | WorkspaceState::Ready | WorkspaceState::Failed => {
+            Verdict::Accepted
+        }
+        state => Verdict::Refused(not_ready(space, state)),
+    })
 }
 
 /// A workspace whose state takes link changes, or any chat.
@@ -281,7 +337,11 @@ impl Manager {
     /// Refuse `operation` where the space it names fails the check its kind
     /// declares. A space this machine has no record of is left to the
     /// handler, which refuses or forwards it as before.
-    pub(crate) async fn check_target(&self, operation: &Operation) -> Result<()> {
+    pub(crate) async fn check_target(
+        &self,
+        operation: &Operation,
+        caller: Option<&Caller>,
+    ) -> Result<()> {
         let Some(check) = operation.target_check() else {
             return Ok(());
         };
@@ -294,10 +354,44 @@ impl Manager {
             Some(Target::Space(selector)) => selector,
             Some(Target::Item(_) | Target::Acting(_)) | None => return Ok(()),
         };
-        match self.space(selector).await {
-            Ok(space) => check.judge(&space).require(),
-            Err(_) => Ok(()),
+        let Ok(space) = self.space(selector).await else {
+            return Ok(());
+        };
+        let facts = self
+            .facts(caller, check, std::slice::from_ref(&space))
+            .await;
+        check.judge(&space, &facts).require()
+    }
+
+    /// What `check` reads of `spaces` besides their records, for `caller`.
+    pub(crate) async fn facts(
+        &self,
+        caller: Option<&Caller>,
+        check: TargetCheck,
+        spaces: &[Space],
+    ) -> Facts {
+        let own = caller.and_then(Caller::execution_id);
+        Facts {
+            busy: match check {
+                TargetCheck::SetupWorkspace => self.busy_spaces(own).await,
+                _ => HashSet::new(),
+            },
+            sessions: match check {
+                TargetCheck::SessionSpace => self.session_spaces(spaces).await,
+                _ => HashSet::new(),
+            },
         }
+    }
+
+    /// The spaces with an execution other than `own`; none where the store
+    /// cannot say, which leaves setup to refuse.
+    async fn busy_spaces(&self, own: Option<&ExecutionId>) -> HashSet<SpaceId> {
+        let own = own.cloned();
+        let busy = self
+            .store
+            .read(move |db| super::executions::other_executions(db, None, own.as_ref()));
+        let busy = busy.await.unwrap_or_default().into_iter();
+        busy.map(|(space, _)| space).collect()
     }
 }
 

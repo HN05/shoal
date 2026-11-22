@@ -17,7 +17,8 @@ pub enum SpaceMethod {
     /// The spaces the caller sees on every machine: this machine's, unless
     /// `here` is false, then the other joined machines' as the hub lists
     /// them, in pages; with `acting`, the request a picker offers them for,
-    /// none of the other machines' when it stays on this one.
+    /// how it judges each space of every machine, listed or not, and none
+    /// of the other machines' when it stays on this one.
     ListSpacesEverywhere {
         here: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]

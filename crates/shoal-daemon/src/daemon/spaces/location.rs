@@ -20,23 +20,31 @@ impl Manager {
     /// The spaces `caller` sees on every machine: this machine's as a
     /// listing shows them, unless not `here`, and the other machines' as
     /// the hub lists them, or why the hub could not be asked. With `acting`,
-    /// the request a picker offers them for, each is judged by the daemon
-    /// of the machine it runs on, and none of the other machines' are
-    /// listed for a request that stays on this one.
+    /// the request a picker offers them for, the daemon of the machine each
+    /// runs on judges it, this machine's whether or not they are listed,
+    /// and none of the other machines' are listed for a request that stays
+    /// on this one.
     pub(crate) async fn spaces_everywhere(
         &self,
         caller: Option<&Caller>,
         here: bool,
         acting: Option<&Operation>,
     ) -> Result<Everywhere> {
+        let listed = match here || acting.is_some() {
+            true => self.listed_spaces(caller).await?,
+            false => Vec::new(),
+        };
+        let offers = match acting {
+            Some(acting) => self.judged_here(caller, acting, &listed).await,
+            None => Vec::new(),
+        };
         let here = match here {
-            true => Spaces(self.listed_spaces(caller).await?),
+            true => Spaces(listed),
             false => Spaces::default(),
         };
-        let offers = acting.map(|acting| super::offers::judged(acting, &here.0));
         let mut everywhere = Everywhere {
             here,
-            offers: (offers.into_iter().flatten())
+            offers: (offers.into_iter())
                 .map(|judged| (judged.space, judged.offer))
                 .collect(),
             ..Everywhere::default()

@@ -90,7 +90,12 @@ pub(super) async fn handle(
 impl Checked for ExecutionMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
-            Self::Execute { .. } => Some(TargetCheck::Space),
+            Self::Execute { kind, .. } => Some(match kind {
+                ExecutionKind::Setup => TargetCheck::SetupWorkspace,
+                ExecutionKind::Command | ExecutionKind::Merge | ExecutionKind::Unmerge => {
+                    TargetCheck::AwaitedReadySpace
+                }
+            }),
             Self::CheckMerge | Self::CheckUnmerge | Self::SessionSignalled { .. } => None,
         }
     }
