@@ -41,10 +41,11 @@ impl Manager {
         self.reopen_space(selector, caller).await
     }
 
-    /// Refuse the restore of the space `selector` names while a move of its
-    /// record to another machine holds the space's move lock, as until the
-    /// hub settles an arrival that machine could not report; the lock,
-    /// held for the restore, keeps such a move from starting meanwhile.
+    /// Refuse the restore of the space `selector` names while a move of it
+    /// holds the space's move lock, as a move of its record to another
+    /// machine does until the hub settles an arrival that machine could not
+    /// report; the lock, held for the restore, keeps a move from starting
+    /// meanwhile.
     fn ensure_not_moving(&self, selector: &SpaceSelector) -> Result<Option<MoveLock>> {
         let Some(id) = selector.given_id() else {
             return Ok(None);
@@ -53,7 +54,7 @@ impl Manager {
             Some(lock) => Ok(Some(lock)),
             None => Err(Refusal::new(
                 Reason::MoveInProgress,
-                format!("a move of space {id} to another machine is in progress; shoal restore {id} works once it ends here"),
+                format!("a move of space {id} is in progress; shoal restore {id} works once it ends here"),
             )
             .into()),
         }
