@@ -23,6 +23,10 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     let files = match method {
         FileMethod::ListFiles { space } => manager.attached_files(&space).await,
+        FileMethod::FetchedDirectory { space } => {
+            let directory = manager.fetched_directory(caller, &space).await?;
+            return Ok(Answer::Body(Body::FetchedDirectory(directory)));
+        }
         FileMethod::ReadFile { space, id } => {
             let copy = manager.open_attached_file(&space, id).await?;
             let manager = manager.clone();
@@ -61,7 +65,7 @@ impl Checked for FileMethod {
             Self::ListFiles { .. } | Self::ReadFile { .. } | Self::AddFiles { .. } => {
                 Some(TargetCheck::Space)
             }
-            Self::RemoveFiles { .. } => None,
+            Self::RemoveFiles { .. } | Self::FetchedDirectory { .. } => None,
         }
     }
 }
@@ -74,6 +78,8 @@ impl Scoped for FileMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         match self {
             FileMethod::AddFiles { space, .. } => Ok(Some(space)),
+            // It finds only the spaces the caller sees.
+            FileMethod::FetchedDirectory { .. } => Ok(None),
             FileMethod::ListFiles { space }
             | FileMethod::ReadFile { space, .. }
             | FileMethod::RemoveFiles {

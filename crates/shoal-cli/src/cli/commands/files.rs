@@ -34,7 +34,7 @@ pub(super) async fn list(
     listing: Listing,
 ) -> Result<i32> {
     let menu = listing == Listing::Menu && ctx.interactive_output();
-    let listing_files = showing(menu);
+    let listing_files = showing();
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&listing_files)).await?;
     let files = crate::client::files::list(space.clone())
         .send(&ctx.paths)
@@ -203,13 +203,9 @@ fn source_label(source: FileSource) -> &'static str {
     }
 }
 
-/// What listing a space's files sends for the space a picker picks; the
-/// `menu` prints and opens the kept copies from this machine's disk.
-pub(super) fn showing(menu: bool) -> Acting {
-    match menu {
-        true => Acting::here(crate::client::files::list),
-        false => Acting::request(crate::client::files::list),
-    }
+/// What listing a space's files sends for the space a picker picks.
+pub(super) fn showing() -> Acting {
+    Acting::request(crate::client::files::list)
 }
 
 /// What adding files sends for the space a picker picks; the files decide

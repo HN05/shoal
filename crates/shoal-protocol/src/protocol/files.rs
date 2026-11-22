@@ -17,6 +17,11 @@ pub enum FileMethod {
     /// [`super::Body::FileBytes`] frames as the daemon reads the copy, the
     /// last [`crate::files::FileBytes::End`].
     ReadFile { space: SpaceSelector, id: i64 },
+    /// The directory, marked as Shoal's, where this machine keeps the
+    /// copies a caller here fetches of the files of `space`: in its
+    /// repository's directory when this machine has the repository, else
+    /// in `root_dir`.
+    FetchedDirectory { space: SpaceSelector },
     /// Attach copies of files to a workspace or chat without a message.
     AddFiles {
         space: SpaceSelector,
@@ -40,20 +45,21 @@ impl FileMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::ReadFile { .. } => Lifetime::Open,
-            Self::ListFiles { .. } | Self::AddFiles { .. } | Self::RemoveFiles { .. } => {
-                Lifetime::Reply
-            }
+            Self::ListFiles { .. }
+            | Self::FetchedDirectory { .. }
+            | Self::AddFiles { .. }
+            | Self::RemoveFiles { .. } => Lifetime::Reply,
         }
     }
 
-    /// Attaching reads the files where the caller runs; the rest read or
-    /// delete the space's records, or read a copy's bytes as its machine
-    /// reads them.
+    /// Attaching reads the files where the caller runs, and fetched copies
+    /// are kept there; the rest read or delete the space's records, or read
+    /// a copy's bytes as its machine reads them.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ListFiles { .. } | Self::RemoveFiles { .. } => Forwarding::Online,
             Self::ReadFile { .. } => Forwarding::Streamed,
-            Self::AddFiles { .. } => Forwarding::Never,
+            Self::AddFiles { .. } | Self::FetchedDirectory { .. } => Forwarding::Never,
         }
     }
 
@@ -65,7 +71,8 @@ impl FileMethod {
             | Self::RemoveFiles {
                 space: Some(space), ..
             } => Some(Target::Space(space)),
-            Self::RemoveFiles { space: None, .. } => None,
+            // Where this machine keeps what a caller here fetches.
+            Self::RemoveFiles { space: None, .. } | Self::FetchedDirectory { .. } => None,
         }
     }
 }

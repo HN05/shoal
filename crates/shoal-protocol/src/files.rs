@@ -152,6 +152,13 @@ impl FileBytes {
     }
 }
 
+/// The directory where this machine keeps the copies of a space's files
+/// that a caller here fetches from the machine that keeps them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FetchedDirectory {
+    pub path: PathBuf,
+}
+
 /// Where Shoal's copy of an attached file is: at a path on the machine
 /// that answered, or on another joined machine, which alone keeps it and
 /// from which a client reads it by its space and record ID.

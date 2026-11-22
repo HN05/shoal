@@ -10,7 +10,12 @@ use super::{
     directory::{join, listed, machine, workspace},
     following::app,
     numbers::reroute,
-    support::{fixture::Base, wait::wait_for},
+    support::{
+        fixture::Base,
+        install_test_script, printed,
+        prompt::{self, AnswerOptions},
+        wait::wait_for,
+    },
 };
 
 /// A laptop joined to `hub` whose new workspace has `notes.md` attached,
@@ -83,4 +88,44 @@ fn reading_a_file_on_an_offline_machine_fails_at_once_naming_it() {
     ));
     let error = format!("{:#}", refused.err().expect("a refusal"));
     assert!(error.contains("machine laptop is offline"), "{error}");
+}
+
+/// A picker that takes its first row, the first file, with the key
+/// `SHOAL_TEST_PICK_KEY`, as fzf's `--expect` reports it.
+const PICKER: &str = "#!/bin/sh\nrows=$(cat)\nprintf '%s\\n' \"$SHOAL_TEST_PICK_KEY\"\nprintf '%s\\n' \"$rows\" | head -n 1\n";
+
+/// What `shoal files <space>` on `machine` prints on a terminal once its
+/// picker takes the first file with `key`, which is empty for Enter.
+fn picked(machine: &Base, space: &str, key: &str) -> String {
+    install_test_script(machine.root.path().join("bin/fzf"), PICKER);
+    let mut files = machine.command();
+    files.env("SHOAL_TEST_PICK_KEY", key).args(["files", space]);
+    let options = AnswerOptions {
+        terminal_stdout: true,
+        ..AnswerOptions::default()
+    };
+    let (output, transcript) = prompt::answer(&mut files, "", options);
+    assert!(
+        output.status.success(),
+        "{}\n{transcript}",
+        printed(&output)
+    );
+    transcript
+}
+
+#[test]
+fn the_files_picker_prints_and_opens_a_file_another_machine_keeps() {
+    let hub = machine(true, "app");
+    let (_laptop, space) = laptop_with_notes(&hub);
+    assert!(picked(&hub, &space, "").contains("plan"));
+    // The desktop's opener, which records what it opens.
+    let opened = hub.root.path().join("opened");
+    for opener in ["xdg-open", "open"] {
+        let script = format!("#!/bin/sh\nprintf '%s' \"$1\" > '{}'\n", opened.display());
+        install_test_script(hub.root.path().join("bin").join(opener), script);
+    }
+    picked(&hub, &space, "ctrl-o");
+    let copy = wait_for("the opener", || fs::read_to_string(&opened).ok());
+    assert!(copy.contains("/.fetched/"), "{copy}");
+    assert_eq!(fs::read_to_string(&copy).unwrap(), "plan");
 }

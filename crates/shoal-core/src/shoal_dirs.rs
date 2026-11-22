@@ -27,6 +27,9 @@ pub enum Contents {
     TmpDirs,
     /// The files attached to workspaces and chats.
     Attachments,
+    /// Copies of the files attached to spaces that a caller here fetched
+    /// from the machine that keeps them.
+    Fetched,
     /// Copies of the files proposed issues and PRs attach.
     ProposalFiles,
     /// Each running local review's checkout and its reviewer's output.
@@ -45,9 +48,10 @@ pub enum Contents {
 }
 
 impl Contents {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::TmpDirs,
         Self::Attachments,
+        Self::Fetched,
         Self::ProposalFiles,
         Self::ReviewRuns,
         Self::GateRuns,
@@ -62,6 +66,7 @@ impl Contents {
         match self {
             Self::TmpDirs => ".tmp",
             Self::Attachments => ".attachments",
+            Self::Fetched => ".fetched",
             Self::ProposalFiles => ".proposals",
             Self::ReviewRuns => ".reviews",
             Self::GateRuns => ".gate",
@@ -83,6 +88,7 @@ impl Contents {
         match self {
             Self::TmpDirs => "temporary files",
             Self::Attachments => "attached files",
+            Self::Fetched => "fetched files",
             Self::ProposalFiles => "proposals' files",
             Self::ReviewRuns => "review runs",
             Self::GateRuns => "gate runs",

@@ -18,6 +18,7 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
+mod fetched;
 pub(crate) mod layout;
 mod reading;
 mod records;

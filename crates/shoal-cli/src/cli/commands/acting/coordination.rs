@@ -22,12 +22,7 @@ pub(super) fn acting(command: &CoordinationCommand) -> Option<Acting> {
             command: Some(FilesCommand::Rm { .. }),
             ..
         } => files::removing(),
-        CoordinationCommand::Files {
-            command: None,
-            path,
-            print,
-            ..
-        } => files::showing(!path && !print),
+        CoordinationCommand::Files { command: None, .. } => files::showing(),
         CoordinationCommand::Progress {
             status,
             steps,

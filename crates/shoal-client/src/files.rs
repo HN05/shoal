@@ -1,12 +1,14 @@
 //! Files attached to a workspace or chat: Shoal's copies and how they came,
 //! and their bytes from whichever machine keeps them.
+use std::path::PathBuf;
+
 use anyhow::Result;
-use shoal_protocol::files::{AttachedFile, NewFile};
+use shoal_protocol::files::{AttachedFile, FetchedDirectory, NewFile};
 use shoal_protocol::protocol::{Body, FileMethod, Responses};
 use shoal_protocol::space_names::SpaceSelector;
 use tokio::{io::BufReader, net::UnixStream};
 
-use crate::connection::{Daemon, PreparedPages, open_buffered};
+use crate::connection::{Daemon, PreparedPages, open_buffered, request};
 
 /// The files attached to `space`.
 pub fn list(space: SpaceSelector) -> PreparedPages<AttachedFile> {
@@ -26,6 +28,14 @@ pub fn remove(
     ids: Vec<i64>,
 ) -> PreparedPages<AttachedFile> {
     PreparedPages::new(FileMethod::RemoveFiles { space, names, ids })
+}
+
+/// The directory, marked as Shoal's, where the caller's machine keeps the
+/// copies it fetches of `space`'s files from the machine that keeps them.
+pub async fn fetched_directory(daemon: &impl Daemon, space: SpaceSelector) -> Result<PathBuf> {
+    let method = FileMethod::FetchedDirectory { space };
+    let directory: FetchedDirectory = request(daemon, method).await?;
+    Ok(directory.path)
 }
 
 /// An attached file's bytes, as the machine that keeps its copy reads them.

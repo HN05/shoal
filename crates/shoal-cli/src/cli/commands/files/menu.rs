@@ -1,6 +1,12 @@
 //! The picker `shoal files` opens on a terminal: a space's files, and a
 //! row that adds one, where a key binding chooses what to do.
 
+use std::{
+    io::Write as _,
+    path::{Path, PathBuf},
+};
+
+use crate::client::files::FileRead;
 use anyhow::{Context as _, Result, ensure};
 
 use super::{add, cells, remove};
@@ -44,12 +50,12 @@ pub(super) async fn choose(
             let path = ui::input(ctx, "File to add")?;
             add(ctx, Some(space), vec![path]).await
         }
-        FileAction::Print => print(picked_file(files, &picked.id)?),
+        FileAction::Print => print(ctx, picked_file(files, &picked.id)?).await,
         FileAction::PrintPath => {
             outln!("{}", kept_here(picked_file(files, &picked.id)?)?.display());
             Ok(0)
         }
-        FileAction::Open => open(ctx, picked_file(files, &picked.id)?),
+        FileAction::Open => open(ctx, picked_file(files, &picked.id)?).await,
         FileAction::Delete => {
             let file = picked_file(files, &picked.id)?;
             let filter = SpaceFilter {
@@ -87,10 +93,10 @@ fn resolve_action(action: FileAction, id: &str) -> Result<FileAction> {
     Ok(FileAction::Add)
 }
 
-/// Print the file's text; other files would garble the terminal.
-fn print(file: &AttachedFile) -> Result<i32> {
-    let path = kept_here(file)?;
-    let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
+/// Print the file's text, read on the machine that keeps it; other files
+/// would garble the terminal.
+async fn print(ctx: &Context, file: &AttachedFile) -> Result<i32> {
+    let bytes = read(ctx, file).await?.to_end().await?;
     let text = String::from_utf8(bytes).ok().with_context(|| {
         format!(
             "{} is not text; open it with ctrl-o or print its path with ctrl-y",
@@ -102,16 +108,54 @@ fn print(file: &AttachedFile) -> Result<i32> {
 }
 
 /// Open the file in the application the desktop chooses for it, and print
-/// its path, also for a terminal elsewhere; workspace processes cannot.
-fn open(ctx: &Context, file: &AttachedFile) -> Result<i32> {
+/// its path, also for a terminal elsewhere: its copy, or one fetched here
+/// from the machine that keeps it; workspace processes cannot.
+async fn open(ctx: &Context, file: &AttachedFile) -> Result<i32> {
     ensure!(
         !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes cannot open files on the user's screen; ask the user"
     );
-    let path = kept_here(file)?;
+    let path = match file.path() {
+        Some(path) => path.to_path_buf(),
+        None => fetch(ctx, file).await?,
+    };
     outln!("{}", path.display());
-    crate::cli::desktop::open(path)?;
+    crate::cli::desktop::open(&path)?;
     Ok(0)
+}
+
+/// The file's bytes, as the machine that keeps it reads them.
+async fn read(ctx: &Context, file: &AttachedFile) -> Result<FileRead> {
+    let space = SpaceSelector::id(&file.space.id);
+    crate::client::files::read(&ctx.paths, space, file.id).await
+}
+
+/// Fetch the file from the machine that keeps it into the directory where
+/// this machine keeps such copies, replacing an earlier one; its path.
+async fn fetch(ctx: &Context, file: &AttachedFile) -> Result<PathBuf> {
+    let space = SpaceSelector::id(&file.space.id);
+    let directory = crate::client::files::fetched_directory(&ctx.paths, space).await?;
+    let name = Path::new(&file.name)
+        .file_name()
+        .context("the file has no name")?;
+    let path = directory.join(file.id.to_string()).join(name);
+    write_whole(&path, read(ctx, file).await?).await?;
+    Ok(path)
+}
+
+/// Write what `read` brings to `path`, which takes it only once it has
+/// come whole.
+async fn write_whole(path: &Path, mut read: FileRead) -> Result<()> {
+    let parent = path.parent().context("a fetched file has a directory")?;
+    std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    let partial = parent.join(".partial");
+    let mut out =
+        std::fs::File::create(&partial).with_context(|| format!("create {}", partial.display()))?;
+    while let Some(bytes) = read.next().await? {
+        out.write_all(&bytes)
+            .with_context(|| format!("write {}", partial.display()))?;
+    }
+    std::fs::rename(&partial, path).with_context(|| format!("write {}", path.display()))
 }
 
 /// The path of the file's copy, which this machine keeps.
