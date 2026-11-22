@@ -7,9 +7,11 @@
 //! has not registered or that has no origin, since placement never clones
 //! one. A hub that cannot be asked leaves it here too.
 use anyhow::Result;
+use shoal_hub::session::Unanswered;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::placement::Decision;
 use shoal_protocol::launches::Launch;
+use shoal_protocol::protocol::Launched;
 use shoal_schedule::placement::snapshot::Request;
 
 use crate::{
@@ -17,10 +19,76 @@ use crate::{
     daemon::{log, manager::Manager, scope::Caller},
 };
 
+/// Where a launch went once placed.
+pub(super) enum Placed {
+    /// Another machine started it.
+    Elsewhere(Launched),
+    /// It starts here.
+    Here(PlacedHere),
+}
+
+/// What a launch that starts here reports of its placement: the hub's
+/// decision, and why it starts here where the hub placed it elsewhere.
+#[derive(Default)]
+pub(super) struct PlacedHere {
+    decision: Option<Decision>,
+    warning: Option<String>,
+}
+
+impl PlacedHere {
+    /// Give `launched`, which started here, what it reports of its
+    /// placement.
+    pub(super) fn report(self, launched: &mut Launched) {
+        launched.placement = self.decision;
+        launched.warnings.extend(self.warning);
+    }
+}
+
 impl Manager {
+    /// Start `launch` for `caller` on the other machine it names, or the
+    /// hub places it on, with the hub's decision; else what it reports of
+    /// its placement as it starts here. Where the machine the hub placed it
+    /// on cannot take it, as when it went offline since its last report,
+    /// `launch` is as before its placement and starts here, saying why;
+    /// one whose answer was lost there fails, since that machine may have
+    /// started it.
+    pub(super) async fn launch_where_placed(
+        &self,
+        launch: &mut Launch,
+        caller: Option<&Caller>,
+    ) -> Result<Placed> {
+        let unplaced = launch.clone();
+        let decision = self.place_launch(launch, caller).await?;
+        let placed_elsewhere = unplaced.machine.is_none() && launch.machine.is_some();
+        match self.launch_on_machine(launch, caller).await {
+            Ok(Some(mut launched)) => {
+                launched.placement = decision;
+                Ok(Placed::Elsewhere(launched))
+            }
+            Ok(None) => Ok(Placed::Here(PlacedHere {
+                decision,
+                warning: None,
+            })),
+            Err(error) if placed_elsewhere && !error.is::<Unanswered>() => {
+                *launch = unplaced;
+                let name =
+                    (decision.as_ref()).map_or_else(String::new, |decision| decision.name.clone());
+                let warning = format!(
+                    "machine {name}, where the hub placed it, could not take the start, so it starts on this machine: {error:#}"
+                );
+                log!("{warning}");
+                Ok(Placed::Here(PlacedHere {
+                    decision,
+                    warning: Some(warning),
+                }))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     /// Name in `launch` for `caller` the machine the hub places it on, and
     /// return the hub's decision; none for a launch that is not placed.
-    pub(super) async fn place_launch(
+    async fn place_launch(
         &self,
         launch: &mut Launch,
         caller: Option<&Caller>,
