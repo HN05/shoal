@@ -8,7 +8,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use crate::{
     Reviews,
     daemon::Daemon,
-    reviews::{CarriedReview, ReviewState},
+    reviews::{Author, CarriedReview, Review, ReviewState},
     store,
 };
 
@@ -24,13 +24,9 @@ impl Reviews {
                 None => Ok(None),
             })
             .await?;
-        Ok(review
-            .filter(|review| matches!(review.state, ReviewState::Queued | ReviewState::Running))
-            .map(|review| CarriedReview {
-                target: review.target,
-                agent: review.agent,
-                model: review.model,
-            }))
+        let active = (review)
+            .filter(|review| matches!(review.state, ReviewState::Queued | ReviewState::Running));
+        Ok(active.and_then(carried))
     }
 
     /// Queue `review`, which a package of the workspace `id` carried, again
@@ -49,5 +45,18 @@ impl Reviews {
         let selector = SpaceSelector::id(id);
         (self.queue(daemon, &selector, target, Some(agent), model)).await?;
         Ok(())
+    }
+}
+
+/// `review` as a package carries it: Shoal's, with the agent and model its
+/// reviewer runs, which only Shoal's reviews queue and run with.
+fn carried(review: Review) -> Option<CarriedReview> {
+    match review.author {
+        Author::Shoal { agent, model } => Some(CarriedReview {
+            target: review.target,
+            agent,
+            model,
+        }),
+        Author::User | Author::Space { .. } => None,
     }
 }

@@ -1,6 +1,7 @@
 //! Local reviews: a one-shot, read-only reviewer's run over a workspace's
 //! committed HEAD or a PR, whose findings are `review` threads the
-//! workspace's agent resolves.
+//! workspace's agent resolves, or a review the user or a space writes
+//! itself, whose comments are `review` threads its writer resolves.
 use shoal_ids::space_ids::SpaceId;
 use std::{fmt, str::FromStr};
 
@@ -10,7 +11,7 @@ use shoal_refs::{BranchName, CommitId};
 use shoal_states::states;
 
 use crate::space_names::SpaceName;
-use crate::threads::Thread;
+use crate::threads::{Thread, ThreadSpace};
 
 states!(
     /// Where a review is in its run.
@@ -18,7 +19,11 @@ states!(
         /// Waiting to start; it takes the workspace's HEAD when it does.
         Queued => "queued",
         Running => "running",
-        /// The reviewer returned its findings, whatever its verdict.
+        /// Being written by the user or a space, whose comments reach
+        /// nobody until it is submitted.
+        Pending => "pending",
+        /// The reviewer returned its findings, or its writer submitted it,
+        /// whatever its verdict.
         Finished => "finished",
         /// No reviewer returned findings; the review says why.
         Failed => "failed",
@@ -29,7 +34,7 @@ states!(
 impl ReviewState {
     /// Whether the review has yet to end.
     pub fn is_active(self) -> bool {
-        matches!(self, Self::Queued | Self::Running)
+        matches!(self, Self::Queued | Self::Running | Self::Pending)
     }
 }
 
@@ -152,8 +157,37 @@ pub enum ReviewTarget {
     },
 }
 
-/// One review: what it covers, who ran it, how it ended, and the threads of
-/// its findings.
+/// Who writes a review.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Author {
+    /// Shoal, whose reviewer is a one-shot run of `agent`, with `model`
+    /// over the agent's configured model and effort.
+    Shoal {
+        agent: crate::agent::Agent,
+        #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
+        model: crate::agent::ModelChoice,
+    },
+    /// The user, who writes it.
+    User,
+    /// A space's agent, such as a parent's, which writes it.
+    Space { space: ThreadSpace },
+}
+
+impl Author {
+    /// Who wrote it, as text names them: the agent Shoal's reviewer runs,
+    /// the user or the space.
+    pub fn label(&self) -> String {
+        match self {
+            Self::Shoal { agent, .. } => agent.to_string(),
+            Self::User => "the user".into(),
+            Self::Space { space } => space.label(),
+        }
+    }
+}
+
+/// One review: what it covers, who wrote it, how it ended, and the threads
+/// of its findings or comments.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Review {
     pub id: ReviewId,
@@ -161,14 +195,9 @@ pub struct Review {
     /// The workspace's name.
     pub workspace: SpaceName,
     pub target: ReviewTarget,
-    /// The agent asked to review.
-    pub agent: crate::agent::Agent,
-    /// The model and effort asked for `agent`; what it leaves out follows
-    /// the agent's configuration.
-    #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
-    pub model: crate::agent::ModelChoice,
-    /// The agent that produced the result, which differs from `agent` after
-    /// a fallback.
+    pub author: Author,
+    /// The agent that produced the result of Shoal's reviewer, which
+    /// differs from the one asked for after a fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reviewer: Option<crate::agent::Agent>,
     pub state: ReviewState,
@@ -217,6 +246,32 @@ pub enum Posted {
 }
 
 impl Review {
+    /// The agent Shoal's reviewer runs, none for a review the user or a
+    /// space writes.
+    pub fn agent(&self) -> Option<&crate::agent::Agent> {
+        match &self.author {
+            Author::Shoal { agent, .. } => Some(agent),
+            Author::User | Author::Space { .. } => None,
+        }
+    }
+
+    /// The model and effort asked for the agent Shoal's reviewer runs.
+    pub fn model(&self) -> Option<&crate::agent::ModelChoice> {
+        match &self.author {
+            Author::Shoal { model, .. } => Some(model),
+            Author::User | Author::Space { .. } => None,
+        }
+    }
+
+    /// Who reviewed, as text names them: the agent that produced the result
+    /// of Shoal's reviewer, else whoever wrote the review.
+    pub fn reviewed_by(&self) -> String {
+        match &self.reviewer {
+            Some(reviewer) => reviewer.to_string(),
+            None => self.author.label(),
+        }
+    }
+
     /// The time from start to end, once both are known.
     pub fn duration(&self) -> Option<std::time::Duration> {
         Some(self.ended_at?.duration_since(self.started_at?))

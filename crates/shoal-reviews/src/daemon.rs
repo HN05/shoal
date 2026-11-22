@@ -24,7 +24,7 @@ use shoal_protocol::repository::Selector;
 use shoal_protocol::reviews::{ReviewId, Severity};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
-use shoal_protocol::threads::Thread;
+use shoal_protocol::threads::{Thread, ThreadSpace};
 use shoal_protocol::views::Viewed;
 use shoal_refs::CommitId;
 
@@ -339,6 +339,10 @@ pub struct AwaitedPost {
 pub trait Records: Send + Sync {
     /// The name of the space `id`, while it exists.
     fn space_name(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceName>>;
+
+    /// The space `id` as threads name it, by its number and name while it
+    /// exists.
+    fn thread_space(&self, db: &Connection, id: &SpaceId) -> Result<ThreadSpace>;
 
     /// The workspaces of `repository`, or every workspace without one.
     fn workspaces(

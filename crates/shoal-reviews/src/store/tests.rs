@@ -102,7 +102,7 @@ async fn one_review_is_queued_or_running_per_workspace() {
             };
             let first = queue(db, &SpaceId::from("work"), &ReviewTarget::Workspace, &"claude".into(), &model, UnixTime::from_seconds(1))?;
             assert!(matches!(first, Queued::New(_)));
-            assert_eq!(load(db, &records(), first.id())?.unwrap().model, model);
+            assert_eq!(load(db, &records(), first.id())?.unwrap().model(), Some(&model));
             let again = queue(
                 db,
                 &SpaceId::from("work"),

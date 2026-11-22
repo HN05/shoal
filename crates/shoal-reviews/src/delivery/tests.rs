@@ -1,5 +1,5 @@
 use super::*;
-use crate::reviews::{FailureReason, ReviewTarget, Severity};
+use crate::reviews::{Author, FailureReason, ReviewTarget, Severity};
 use crate::stand_in::finding;
 use crate::time::UnixTime;
 
@@ -9,8 +9,10 @@ fn review(state: ReviewState, findings: u32) -> Review {
         workspace_id: "work".into(),
         workspace: "fix-login".into(),
         target: ReviewTarget::Workspace,
-        agent: "claude".into(),
-        model: Default::default(),
+        author: Author::Shoal {
+            agent: "claude".into(),
+            model: Default::default(),
+        },
         reviewer: Some("claude".into()),
         state,
         failure: (state == ReviewState::Failed).then_some(FailureReason::RateLimit),

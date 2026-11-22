@@ -1,5 +1,5 @@
 use super::*;
-use crate::reviews::{ReviewId, ReviewState, ReviewTarget, Severity};
+use crate::reviews::{Author, ReviewId, ReviewState, ReviewTarget, Severity};
 use shoal_protocol::{
     changes::{ChangeEntry, ChangeKind, EntryFile},
     threads::{Outcome, Resolution, Sender},
@@ -29,8 +29,10 @@ fn review(threads: Vec<Thread>) -> Review {
         workspace_id: "work".into(),
         workspace: "fix-login".into(),
         target: ReviewTarget::Workspace,
-        agent: "claude".into(),
-        model: Default::default(),
+        author: Author::Shoal {
+            agent: "claude".into(),
+            model: Default::default(),
+        },
         reviewer: Some("claude".into()),
         state: ReviewState::Finished,
         failure: None,

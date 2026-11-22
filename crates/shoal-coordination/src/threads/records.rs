@@ -560,6 +560,23 @@ pub(super) fn renumber(tx: &Transaction<'_>, id: i64, to: &SpaceId) -> Result<It
     Ok(number)
 }
 
+/// The space `id` by its number and name while this machine has it.
+pub fn thread_space(db: &Connection, id: &SpaceId) -> Result<ThreadSpace> {
+    let named: Option<(Option<SpaceNumber>, SpaceName)> = db
+        .query_row("SELECT number,name FROM spaces WHERE id=?1", [id], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .optional()?;
+    Ok(match named {
+        Some((number, name)) => ThreadSpace {
+            id: id.clone(),
+            name: Some(name),
+            number,
+        },
+        None => ThreadSpace::here(id.clone()),
+    })
+}
+
 /// The space `id` as text names it: by its number and name while it has
 /// them, else by its ID.
 pub(super) fn label(db: &Connection, id: &SpaceId) -> Result<String> {

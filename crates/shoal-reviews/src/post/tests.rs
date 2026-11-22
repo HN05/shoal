@@ -1,5 +1,5 @@
 use super::*;
-use crate::reviews::{ReviewId, ReviewState};
+use crate::reviews::{Author, ReviewId, ReviewState};
 use crate::time::UnixTime;
 
 fn finding(item: u32, path: &str, severity: Severity) -> Thread {
@@ -17,8 +17,10 @@ fn review(threads: Vec<Thread>) -> Review {
             base: "main".into(),
             post: true,
         },
-        agent: "codex".into(),
-        model: Default::default(),
+        author: Author::Shoal {
+            agent: "codex".into(),
+            model: Default::default(),
+        },
         reviewer: Some("claude".into()),
         state: ReviewState::Finished,
         failure: None,

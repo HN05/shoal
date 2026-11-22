@@ -136,37 +136,6 @@ CREATE TABLE "space_files" (
     created_at INTEGER NOT NULL
 , attached_by TEXT, title TEXT, root_dir TEXT);
 
-CREATE TABLE "reviews" (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    -- The JSON target: the workspace, or a PR and whether to post there.
-    target TEXT NOT NULL,
-    agent TEXT NOT NULL,
-    -- The JSON model and effort asked for the agent, when any.
-    model TEXT,
-    reviewer TEXT,
-    state TEXT NOT NULL CHECK(state IN ('queued','running','finished','failed','cancelled')),
-    failure TEXT CHECK(failure IN ('usage-limit','quota-exhausted','rate-limit',
-        'authentication-failed','execution-failed','invalid-output','timed-out',
-        'invalid-false-positives')),
-    head TEXT,
-    base TEXT,
-    created_at INTEGER NOT NULL,
-    started_at INTEGER,
-    ended_at INTEGER,
-    summary TEXT,
-    verdict TEXT CHECK(verdict IN ('approve','comment','request_changes')),
-    -- The JSON result of posting a PR review.
-    posted TEXT,
-    -- The workspace whose process cancelled the review, whose agents are
-    -- not told about it.
-    cancelled_by TEXT,
-    -- Whether protection stopped its run, so it waits for healthy readings
-    -- before it runs again, through a daemon restart too.
-    waits_for_recovery INTEGER NOT NULL DEFAULT 0, session TEXT,
-    CHECK((state='failed') = (failure IS NOT NULL))
-);
-
 CREATE TABLE "pr_cleanup" (
     space_id TEXT PRIMARY KEY,
     record TEXT NOT NULL
@@ -947,12 +916,6 @@ CREATE TABLE hub_package_states (
     unsent_since INTEGER
 );
 
-CREATE TABLE hub_sleep_lags (
-    space_id TEXT PRIMARY KEY,
-    member_id TEXT NOT NULL REFERENCES hub_members(id),
-    since INTEGER
-);
-
 CREATE TABLE hub_takeovers (
     space_id TEXT PRIMARY KEY,
     member_id TEXT NOT NULL REFERENCES hub_members(id),
@@ -1073,6 +1036,52 @@ CREATE TABLE hub_kept_files (
     PRIMARY KEY(space_id, member_id)
 );
 
+CREATE TABLE hub_sleep_lags (
+    space_id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    since INTEGER
+);
+
+CREATE TABLE "reviews" (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    -- The JSON target: the workspace, or a PR and whether to post there.
+    target TEXT NOT NULL,
+    -- Who writes it, and the space that does.
+    opener TEXT NOT NULL CHECK(opener IN ('shoal','user','space')),
+    opener_id TEXT,
+    -- The agent Shoal's reviewer runs.
+    agent TEXT,
+    -- The JSON model and effort asked for the agent, when any.
+    model TEXT,
+    reviewer TEXT,
+    state TEXT NOT NULL
+        CHECK(state IN ('queued','running','pending','finished','failed','cancelled')),
+    failure TEXT CHECK(failure IN ('usage-limit','quota-exhausted','rate-limit',
+        'authentication-failed','execution-failed','invalid-output','timed-out',
+        'invalid-false-positives')),
+    head TEXT,
+    base TEXT,
+    created_at INTEGER NOT NULL,
+    started_at INTEGER,
+    ended_at INTEGER,
+    summary TEXT,
+    verdict TEXT CHECK(verdict IN ('approve','comment','request_changes')),
+    -- The JSON result of posting a PR review.
+    posted TEXT,
+    -- The workspace whose process cancelled the review, whose agents are
+    -- not told about it.
+    cancelled_by TEXT,
+    -- Whether protection stopped its run, so it waits for healthy readings
+    -- before it runs again, through a daemon restart too.
+    waits_for_recovery INTEGER NOT NULL DEFAULT 0,
+    session TEXT,
+    CHECK((state='failed') = (failure IS NOT NULL)),
+    CHECK((opener='shoal') = (agent IS NOT NULL)),
+    CHECK((opener='space') = (opener_id IS NOT NULL)),
+    CHECK(opener='shoal' OR state IN ('pending','finished','cancelled'))
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1085,11 +1094,6 @@ CREATE INDEX simulators_effective_owner ON simulators (
 );
 
 CREATE INDEX repository_resource_owner ON repository_resource_leases(repository_id);
-
-CREATE INDEX reviews_workspace ON reviews(workspace_id, id);
-
-CREATE UNIQUE INDEX reviews_active ON reviews(workspace_id)
-    WHERE state IN ('queued','running');
 
 CREATE INDEX space_parents_parent ON space_parents(parent_id);
 
@@ -1167,7 +1171,6 @@ CREATE INDEX thread_code_repository ON thread_code(repository_id);
 CREATE INDEX hub_packages_member ON hub_packages(member_id);
 
 CREATE INDEX hub_takeovers_member ON hub_takeovers(member_id);
-CREATE INDEX hub_sleep_lags_member ON hub_sleep_lags(member_id);
 
 CREATE INDEX space_changes_thread ON space_changes(thread_id);
 
@@ -1180,6 +1183,16 @@ CREATE INDEX thread_post_changes_change ON thread_post_changes(change_id);
 CREATE INDEX space_turn_retries_execution ON space_turn_retries(execution_id);
 
 CREATE INDEX threads_review ON threads(review_id) WHERE review_id IS NOT NULL;
+
+CREATE INDEX hub_sleep_lags_member ON hub_sleep_lags(member_id);
+
+CREATE INDEX reviews_workspace ON reviews(workspace_id, id);
+
+CREATE UNIQUE INDEX reviews_active ON reviews(workspace_id)
+    WHERE state IN ('queued','running');
+
+CREATE UNIQUE INDEX reviews_pending ON reviews(workspace_id, opener, COALESCE(opener_id, ''))
+    WHERE state='pending';
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

@@ -151,10 +151,9 @@ impl Reviews {
         let saved = self.answer_session(review, place.settings).await;
         let agent = match &saved {
             Some((_, agent, _)) => agent.clone(),
-            None => review
-                .reviewer
-                .clone()
-                .unwrap_or_else(|| review.agent.clone()),
+            None => (review.reviewer.clone())
+                .or_else(|| review.agent().cloned())
+                .context("only Shoal's reviews answer their findings")?,
         };
         let session = saved.as_ref().map(|(_, _, session)| session.clone());
         let instructions = instructions(place.workspace, &place.held.files, thread);

@@ -39,7 +39,7 @@ fn status_counts_findings_by_severity() {
 fn a_finished_review_counts_the_findings_it_reopened() {
     let mut review: Review = serde_json::from_value(serde_json::json!({
         "id": 4, "workspace_id": "w1", "workspace": "cache", "target": {"kind": "workspace"},
-        "agent": "claude", "state": "finished", "created_at": 0,
+        "author": {"by": "shoal", "agent": "claude"}, "state": "finished", "created_at": 0,
     }))
     .unwrap();
     assert_eq!(review.status(), "finished: no findings");

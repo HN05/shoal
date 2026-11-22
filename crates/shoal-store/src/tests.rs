@@ -823,6 +823,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 279 {
         db.execute_batch(include_str!("ci_job_rerun_causes.sql"))?;
     }
+    if version >= 280 {
+        db.execute_batch(include_str!("review_authors.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -3114,8 +3117,8 @@ fn reviews_keep_their_findings_replies_and_ids_when_they_can_fail_for_false_posi
     )?;
     assert_eq!(kept, ("Title".to_owned(), "Reply".to_owned()));
     db.execute(
-        "INSERT INTO reviews(workspace_id,target,agent,state,failure,created_at)
-            VALUES ('workspace','{}','codex','failed','invalid-false-positives',4)",
+        "INSERT INTO reviews(workspace_id,target,opener,agent,state,failure,created_at)
+            VALUES ('workspace','{}','shoal','codex','failed','invalid-false-positives',4)",
         [],
     )?;
     assert_eq!(db.last_insert_rowid(), 3);
@@ -3222,6 +3225,35 @@ fn review_findings_become_threads_with_their_replies_outcomes_and_checks() -> Re
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
     assert_eq!(reopened, (2, 4));
+    Ok(())
+}
+
+#[test]
+fn reviews_become_shoals_and_keep_their_reopens_and_ids_once_they_name_their_author() -> Result<()>
+{
+    let mut db = historical_database(279)?;
+    db.execute_batch(
+        "INSERT INTO threads(space_id,space_number,number,kind,name,created_at,opener,holder_id)
+            VALUES ('workspace',1,1,'review','Still',1,'shoal','workspace');
+        INSERT INTO reviews(id,workspace_id,target,agent,state,created_at)
+            VALUES (1,'workspace','{\"kind\":\"workspace\"}','codex','finished',1),
+                (2,'workspace','{\"kind\":\"workspace\"}','codex','cancelled',2);
+        INSERT INTO review_reopens(review_id,thread_id) VALUES (1,1);
+        DELETE FROM reviews WHERE id=2;",
+    )?;
+    migrate(&mut db)?;
+    let kept: (String, Option<String>, i64) = db.query_row(
+        "SELECT opener,agent,thread_id FROM reviews JOIN review_reopens ON review_id=reviews.id",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(kept, ("shoal".to_owned(), Some("codex".to_owned()), 1));
+    db.execute(
+        "INSERT INTO reviews(workspace_id,target,opener,state,created_at)
+            VALUES ('workspace','{}','user','pending',3)",
+        [],
+    )?;
+    assert_eq!(db.last_insert_rowid(), 3);
     Ok(())
 }
 

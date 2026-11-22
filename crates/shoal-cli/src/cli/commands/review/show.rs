@@ -130,7 +130,7 @@ fn render_list(reviews: &[Review], json: bool) {
             "{:>5}  {}  {status}{unresolved}{outdated}  {}",
             review.id,
             review.workspace,
-            review.reviewer.as_ref().unwrap_or(&review.agent)
+            review.reviewed_by()
         );
     }
 }
@@ -150,12 +150,11 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
         ReviewTarget::Workspace => outln!("Target:   committed changes"),
         ReviewTarget::Pr { url, .. } => outln!("Target:   {url}"),
     }
-    match &review.reviewer {
-        Some(reviewer) if *reviewer != review.agent => {
-            outln!("Reviewer: {reviewer}, after {} failed", review.agent)
+    match (&review.reviewer, review.agent()) {
+        (Some(reviewer), Some(agent)) if reviewer != agent => {
+            outln!("Reviewer: {reviewer}, after {agent} failed")
         }
-        Some(reviewer) => outln!("Reviewer: {reviewer}"),
-        None => outln!("Reviewer: {}", review.agent),
+        _ => outln!("Reviewer: {}", review.reviewed_by()),
     }
     if let (Some(head), Some(base)) = (&review.head, &review.base) {
         let outdated = match review.outdated {
@@ -242,7 +241,7 @@ fn render_thread(thread: &Thread, palette: Palette) {
 
 fn state_style(review: &Review) -> Style {
     match review.state {
-        ReviewState::Queued | ReviewState::Running => Style::Active,
+        ReviewState::Queued | ReviewState::Running | ReviewState::Pending => Style::Active,
         ReviewState::Finished if review.unresolved().next().is_some() => Style::Attention,
         ReviewState::Finished => Style::Success,
         ReviewState::Failed => Style::Error,

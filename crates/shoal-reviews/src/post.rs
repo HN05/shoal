@@ -125,7 +125,7 @@ fn new_review(
         counts if counts.is_empty() => "no findings".to_owned(),
         counts => counts,
     };
-    let reviewer = review.reviewer.as_ref().unwrap_or(&review.agent);
+    let reviewer = review.reviewed_by();
     let _ = write!(body, "\n\n_Reviewed by {reviewer}: {tally}._");
     if let Some(head) = outdated {
         let _ = write!(

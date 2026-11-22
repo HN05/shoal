@@ -322,7 +322,7 @@ impl Reviews {
     ) -> Result<(Agent, Ended)> {
         let instructions = self.review_instructions(daemon, place).await?;
         let session = self.review_session(place.review, place.settings).await;
-        let agent = &place.review.agent;
+        let agent = (place.review.agent()).context("only Shoal's reviews run a reviewer")?;
         (self.run_reviewer(daemon, place, agent, instructions, session, cancelled)).await
     }
 
@@ -390,7 +390,7 @@ impl Reviews {
     ) -> (Agent, Ended<O>) {
         let Attempt { run, review, agent } = attempt;
         let settings = run.settings;
-        let model = settings.model(agent, review.model.clone());
+        let model = settings.model(agent, review.model().cloned().unwrap_or_default());
         let ended = self
             .review_by_agent(run, review.id, agent, &model, session, cancelled)
             .await;
@@ -422,14 +422,13 @@ impl Reviews {
         review: &Review,
         settings: &Effective,
     ) -> Option<AgentSessionId> {
-        if !resumes(settings, &review.agent) {
+        let agent = review.agent()?;
+        if !resumes(settings, agent) {
             return None;
         }
         let id = review.id;
         match self.store.run(move |db| store::session(db, id)).await {
-            Ok(saved) => {
-                saved.and_then(|(agent, session)| (agent == review.agent).then_some(session))
-            }
+            Ok(saved) => saved.and_then(|(saved, session)| (saved == *agent).then_some(session)),
             Err(error) => {
                 log!("review {id}: its reviewer's session: {error:#}");
                 None

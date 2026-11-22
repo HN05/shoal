@@ -11,11 +11,12 @@ use crate::{
     agent::{Agent, ModelChoice},
     daemon::{FindingCode, FindingThread, Records},
     reviews::{
-        FailureReason, Posted, Review, ReviewId, ReviewState, ReviewStatus, ReviewTarget,
+        Author, FailureReason, Posted, Review, ReviewId, ReviewState, ReviewStatus, ReviewTarget,
         output::ReviewerOutput,
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_protocol::threads::{Sender, ThreadSpace};
 use shoal_protocol::{space_names::SpaceName, time::UnixTime};
 
 /// What queueing a review found.
@@ -54,8 +55,8 @@ pub fn queue(
         return Ok(Queued::Existing(id));
     }
     db.execute(
-        "INSERT INTO reviews(workspace_id,target,agent,model,state,created_at)
-            VALUES (?1,?2,?3,?4,?5,?6)",
+        "INSERT INTO reviews(workspace_id,target,opener,agent,model,state,created_at)
+            VALUES (?1,?2,'shoal',?3,?4,?5,?6)",
         params![
             workspace_id,
             serde_json::to_string(target)?,
@@ -384,7 +385,7 @@ pub fn set_posted(db: &Connection, id: ReviewId, posted: &Posted) -> Result<()> 
 }
 
 const COLUMNS: &str = "id,workspace_id,target,agent,reviewer,state,failure,head,base,created_at,
-    started_at,ended_at,summary,verdict,posted,model";
+    started_at,ended_at,summary,verdict,posted,model,opener,opener_id";
 
 /// Review `id` with its threads.
 pub fn load(db: &Connection, records: &dyn Records, id: ReviewId) -> Result<Option<Review>> {
@@ -408,12 +409,16 @@ fn load_record(db: &Connection, records: &dyn Records, id: ReviewId) -> Result<O
         .flatten())
 }
 
-/// `review` with its workspace's name, or none once the workspace is gone.
+/// `review` with its workspace's name, and the number and name of the
+/// space that wrote it, or none once the workspace is gone.
 fn named(db: &Connection, records: &dyn Records, mut review: Review) -> Result<Option<Review>> {
     let Some(name) = records.space_name(db, &review.workspace_id)? else {
         return Ok(None);
     };
     review.workspace = name;
+    if let Author::Space { space } = &mut review.author {
+        *space = records.thread_space(db, &space.id)?;
+    }
     Ok(Some(review))
 }
 
@@ -505,14 +510,13 @@ pub fn earlier(
 fn review(row: &Row) -> rusqlite::Result<Review> {
     let target: String = row.get(2)?;
     let posted: Option<String> = row.get(14)?;
-    let model: Option<String> = row.get(15)?;
     Ok(Review {
         id: row.get(0)?,
         workspace_id: row.get(1)?,
         // Read from the spaces' records by [`named`].
         workspace: SpaceName::from(String::new()),
         target: json(2, &target)?,
-        agent: row.get(3)?,
+        author: author(row)?,
         reviewer: row.get(4)?,
         state: row.get(5)?,
         failure: row.get(6)?,
@@ -529,12 +533,28 @@ fn review(row: &Row) -> rusqlite::Result<Review> {
             .as_deref()
             .map(|posted| json(14, posted))
             .transpose()?,
-        model: model
-            .as_deref()
-            .map(|model| json(15, model))
-            .transpose()?
-            .unwrap_or_default(),
         outdated: None,
+    })
+}
+
+/// Who wrote the review in `row`: Shoal, with the agent and model its
+/// reviewer runs, the user, or a space, which [`named`] names.
+fn author(row: &Row) -> rusqlite::Result<Author> {
+    Ok(match row.get(16)? {
+        Sender::Shoal => {
+            let model: Option<String> = row.get(15)?;
+            Author::Shoal {
+                agent: row.get(3)?,
+                model: (model.as_deref())
+                    .map(|model| json(15, model))
+                    .transpose()?
+                    .unwrap_or_default(),
+            }
+        }
+        Sender::User => Author::User,
+        Sender::Space => Author::Space {
+            space: ThreadSpace::here(row.get(17)?),
+        },
     })
 }
 

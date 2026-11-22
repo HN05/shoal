@@ -494,7 +494,7 @@ async fn queue(
         "Review {id} of {} is queued for {}; its findings arrive as a message. Wait for it with \
          shoal watch review {id}.",
         review.workspace,
-        review.agent,
+        review.author.label(),
         id = review.id,
     );
     ctx.emit(&message, &review)?;

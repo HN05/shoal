@@ -190,7 +190,7 @@ async fn a_reviewer_runs_with_the_requested_or_configured_model_and_effort() {
         )
         .await
         .unwrap();
-    assert_eq!(queued.model, model);
+    assert_eq!(queued.model(), Some(&model));
     ended.changed().await.unwrap();
     let review = fixture
         .reviews
@@ -265,10 +265,10 @@ async fn a_failed_reviewer_falls_back_once_and_failures_are_typed() {
     assert_eq!(review.failure, Some(FailureReason::InvalidOutput));
     assert_eq!(
         (
-            review.agent.name(),
+            review.agent().map(|agent| agent.name()),
             review.reviewer.as_ref().map(|agent| agent.name())
         ),
-        ("first", Some("second"))
+        (Some("first"), Some("second"))
     );
 }
 

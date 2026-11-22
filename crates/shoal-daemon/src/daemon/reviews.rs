@@ -12,7 +12,11 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::repository::Selector;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
-use shoal_protocol::{item_numbers::ItemNumber, reviews::ReviewId, threads::Thread};
+use shoal_protocol::{
+    item_numbers::ItemNumber,
+    reviews::ReviewId,
+    threads::{Thread, ThreadSpace},
+};
 use shoal_refs::CommitId;
 use shoal_reviews::daemon::{
     Admission, Agents, AwaitedPost, FindingThread, Forge, Records, Repositories, Settings, Spaces,
@@ -237,6 +241,10 @@ pub(crate) struct ReviewRecords;
 impl Records for ReviewRecords {
     fn space_name(&self, db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceName>> {
         super::spaces::space_name(db, id)
+    }
+
+    fn thread_space(&self, db: &rusqlite::Connection, id: &SpaceId) -> Result<ThreadSpace> {
+        super::threads::thread_space(db, id)
     }
 
     fn workspaces(

@@ -511,6 +511,13 @@ impl Records for StandInRecords {
         Ok((id.as_str() == self.workspace).then(|| self.name.into()))
     }
 
+    fn thread_space(&self, db: &Connection, id: &SpaceId) -> Result<ThreadSpace> {
+        Ok(ThreadSpace {
+            name: self.space_name(db, id)?,
+            ..ThreadSpace::here(id.clone())
+        })
+    }
+
     fn workspaces(
         &self,
         _db: &Connection,
