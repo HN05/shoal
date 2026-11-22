@@ -69,11 +69,7 @@ async fn deliver(
         RecordArrival::Unknown { error } => {
             let carried = carried_ids(&exported.manifest);
             // Each record's lock keeps its restore here off until it settles.
-            let unlocked: Vec<SpaceId> = (carried.iter())
-                .filter(|id| !locked.contains(id))
-                .cloned()
-                .collect();
-            let _locks = lock_each(paths, &unlocked).await?;
+            let _locks = lock_others(paths, &carried, locked).await?;
             let records = (&selector, carried);
             settle(paths, records, (machine, &ticket), anyhow!(error), steps).await?
         }
@@ -96,6 +92,20 @@ async fn lock_each(paths: &CommandPaths, ids: &[SpaceId]) -> Result<Vec<MoveLock
         locks.push(MoveLock::take(paths, id).await?);
     }
     Ok(locks)
+}
+
+/// Take the move lock of each space `ids` names that `locked` does not,
+/// whose lock is held already.
+async fn lock_others(
+    paths: &CommandPaths,
+    ids: &[SpaceId],
+    locked: &[SpaceId],
+) -> Result<Vec<MoveLock>> {
+    let others: Vec<SpaceId> = (ids.iter())
+        .filter(|id| !locked.contains(id))
+        .cloned()
+        .collect();
+    lock_each(paths, &others).await
 }
 
 /// The IDs of the spaces whose records the package `manifest` carries.
