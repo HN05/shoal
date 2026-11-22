@@ -21,7 +21,9 @@ pub(super) async fn named(
     let id = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&Acting::request(crate::client::workspaces::inspect)),
+        // A demo's screen is read, and its keys typed, through this
+        // machine's terminal host, as a command `shoal exec` runs there.
+        Fallback::CurrentDirectory(&Acting::request(shoal_workers::execution::running_command)),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(id.clone())

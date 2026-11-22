@@ -33,12 +33,18 @@ pub(super) async fn list(
     space: Option<SpaceSelector>,
     listing: Listing,
 ) -> Result<i32> {
-    let listing_files = Acting::request(crate::client::files::list);
+    let menu = listing == Listing::Menu && ctx.interactive_output();
+    // The menu prints and opens the kept copies from this machine's disk,
+    // as a command `shoal exec` runs there reads them.
+    let listing_files = match menu {
+        true => Acting::request(shoal_workers::execution::running_command),
+        false => Acting::request(crate::client::files::list),
+    };
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&listing_files)).await?;
     let files = crate::client::files::list(space.clone())
         .send(&ctx.paths)
         .await?;
-    if listing == Listing::Menu && ctx.interactive_output() {
+    if menu {
         return menu::choose(ctx, space.clone(), &files).await;
     }
     let paths = listing == Listing::Paths;
