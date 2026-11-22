@@ -10,7 +10,7 @@ use crate::{
     config::Effective,
 };
 use shoal_protocol::launches::Launch;
-use shoal_protocol::protocol::Started;
+use shoal_protocol::protocol::{Launched, Started};
 
 /// Send `launch` under `settings`, its agent, the one it names or else
 /// `agent.default`, run in this caller where `options` and this terminal
@@ -55,16 +55,8 @@ pub(in crate::cli::commands) async fn send(
     attach: Option<(Attach, &Effective)>,
 ) -> Result<i32> {
     let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
-    if let Some(decision) = &launched.placement {
-        super::reports::report_placement(ctx, decision)?;
-    }
     let Some(attach) = attach else {
-        return match &launched.start {
-            Started::Queued { .. } | Started::Detached(_) => {
-                super::reports::report_started(ctx, launched)
-            }
-            _ => preparation::report_launched(ctx, launched, (wait, agent)).await,
-        };
+        return report_detached(ctx, launched, (wait, agent)).await;
     };
     match &launched.start {
         Started::Detached(_) => super::reports::report_started(ctx, launched),
@@ -78,4 +70,28 @@ pub(in crate::cli::commands) async fn send(
             starts::run(ctx, Placed::of(launched), attach).await
         }
     }
+}
+
+/// Report what the daemon `launched` for a start whose agent, which
+/// `agent` runs if it names one, runs in no terminal of this caller, as
+/// [`send`] does, with the machine the hub placed it on: first in text, and
+/// in JSON inside a chat's launch, or after a workspace's documents, so a
+/// start's first document stays its space.
+async fn report_detached(
+    ctx: &Context,
+    launched: Launched,
+    (wait, agent): (bool, Option<crate::agent::Agent>),
+) -> Result<i32> {
+    let placement = launched.placement.clone();
+    if let Some(decision) = placement.as_ref().filter(|_| !ctx.json) {
+        super::reports::report_placement(ctx, decision)?;
+    }
+    if let Started::Queued { .. } | Started::Detached(_) = &launched.start {
+        return super::reports::report_started(ctx, launched);
+    }
+    let code = preparation::report_launched(ctx, launched, (wait, agent)).await?;
+    if let Some(decision) = placement.as_ref().filter(|_| ctx.json) {
+        super::reports::report_placement(ctx, decision)?;
+    }
+    Ok(code)
 }

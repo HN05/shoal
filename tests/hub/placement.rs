@@ -93,8 +93,14 @@ fn placed(machines: &Machines, args: &[&str]) -> Value {
         .args(args);
     let started = machines.hub.output(&mut command);
     assert!(started.status.success(), "{}", printed(&started));
-    let mut shown = serde_json::Deserializer::from_slice(&started.stdout).into_iter::<Value>();
-    shown.next().unwrap().unwrap()
+    // A chat's start carries it; a workspace's start prints it last.
+    let shown = serde_json::Deserializer::from_slice(&started.stdout).into_iter::<Value>();
+    let shown: Vec<Value> = shown.map(Result::unwrap).collect();
+    let first = &shown[0];
+    match &first["placement"] {
+        Value::Null => shown.last().unwrap().clone(),
+        placement => placement.clone(),
+    }
 }
 
 #[test]

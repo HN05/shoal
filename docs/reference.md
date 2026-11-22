@@ -1211,8 +1211,9 @@ memory new work may use and the heavy agents waiting in its queue, which
 meanwhile waits in its queue there; placement never moves a space once it
 is created. `shoal start` names the machine with the policy's reason, and
 each connected machine it skipped for lacking the repository or the agent
-tool; `--json` prints that first as its own document, and a hub that cannot
-be asked leaves the start on your machine. Under `placement = "external"`, an
+tool, which `--json` gives as `placement` in a chat's start and as a last
+document after a workspace's; a hub that cannot be asked leaves the start on
+your machine. Under `placement = "external"`, an
 unscoped client on the hub's machine, such as an app's server, registers as
 the placer with `shoal-client`'s `hub::Placing` and answers each snapshot the
 hub sends it, the start and every connected machine, with the machines in
