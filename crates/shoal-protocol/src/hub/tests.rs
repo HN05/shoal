@@ -185,6 +185,7 @@ fn a_stream_s_frames_and_call_keep_their_json() {
                     caller: Vouched::User,
                     method: serde_json::json!({"follow_session": {"space": "s"}}),
                     summary: "follow_session for space s".into(),
+                    space: None,
                 },
                 stream: 3,
             },

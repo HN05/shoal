@@ -1208,8 +1208,8 @@ its sleep at that report.
 
 Once a machine that announced its sleep has been away for 10 minutes, the
 hub takes over each of its spaces that has something to do (an agent
-working at its last report, a queued agent, or an event the hub holds for it
-since the notice, which takes it over as it arrives) and whose package is
+working at its last report, a queued agent, or an event or request the hub
+holds for it since the notice, which takes it over as it arrives) and whose package is
 current or lacks only changes from less than 15 minutes before the notice.
 It places each as a shutdown's hand-over does, and the machine it chose
 continues it under its ID and queues its agents' restores; a chat in a

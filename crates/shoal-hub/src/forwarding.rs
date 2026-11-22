@@ -146,7 +146,8 @@ impl Hub {
         };
         let forwarded = async {
             let method = without_caller_machine(forwardable(&request, space, &machine)?)?;
-            (self.send(daemon, &machine, space, method, &request, Delivery::Now)).await
+            let to = (space, space.given_id());
+            (self.send(daemon, &machine, to, method, &request, Delivery::Now)).await
         };
         Some(forwarded.await)
     }
@@ -199,17 +200,19 @@ impl Hub {
         };
         // A number another space there may take while it waits, never an ID.
         bind_space(&mut method, space, &listed.space.id)?;
-        self.send(daemon, machine, space, method, &request, delivery)
+        let to = (space, Some(&listed.space.id));
+        self.send(daemon, machine, to, method, &request, delivery)
             .await
     }
 
-    /// Send `method`, which `request` for the space `space` became, to
-    /// `machine` through the hub with `delivery`, vouching for its caller.
+    /// Send `method`, which `request` for the space `space`, with the ID
+    /// `id` where it has one, became, to `machine` through the hub with
+    /// `delivery`, vouching for its caller.
     async fn send(
         &self,
         daemon: &dyn Daemon,
         machine: &Member,
-        space: &SpaceSelector,
+        (space, id): (&SpaceSelector, Option<&SpaceId>),
         method: serde_json::Value,
         request: &Unanswered<'_>,
         delivery: Delivery,
@@ -223,6 +226,7 @@ impl Hub {
             caller: self.vouch(daemon, request.caller).await?,
             method,
             summary: format!("{name} for space {space}"),
+            space: id.cloned(),
         };
         if let Forwarding::Streamed | Forwarding::Duplex = request.forwarding {
             // Refusals of the request itself come on the stream, so what
@@ -356,6 +360,7 @@ impl Hub {
             caller: self.vouch(daemon, caller).await?,
             method,
             summary: format!("{name} on machine {}", machine.name),
+            space: None,
         })
     }
 

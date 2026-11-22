@@ -72,6 +72,10 @@ pub struct Forwarded {
     /// What the request does, for its sender to read should it expire in
     /// the hub's queue.
     pub summary: String,
+    /// The space it acts on, where its machine was chosen by one, which a
+    /// request the hub holds follows should the hub take the space over.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space: Option<SpaceId>,
 }
 
 /// How the hub delivers a forwarded request whose machine is offline.

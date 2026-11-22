@@ -19,7 +19,6 @@ use shoal_protocol::{
         Member,
         availability::Availability,
         directory::{Directory, Listed},
-        link::Call,
     },
     list_status::ListStatus,
     state::AgentState,
@@ -123,9 +122,9 @@ fn dropped(directory: &Directory, now: UnixTime) -> Vec<(&Member, UnixTime)> {
 pub(super) fn held(tx: &Transaction<'_>, member: &MemberId, since: UnixTime) -> Result<Held> {
     let mut held = Held::default();
     for call in queue::held_since(tx, member, since)? {
-        match call {
-            Call::Tell { told } => drop(held.spaces.insert(told.above)),
-            _ => held.others += 1,
+        match queue::held_for(&call) {
+            Some(space) => drop(held.spaces.insert(space.clone())),
+            None => held.others += 1,
         }
     }
     Ok(held)

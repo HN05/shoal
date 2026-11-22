@@ -1,5 +1,6 @@
 use rusqlite::Connection;
 use serde_json::json;
+use shoal_protocol::hub::routing::{Forwarded, Vouched};
 
 use super::*;
 
@@ -110,8 +111,22 @@ fn a_held_request_the_machine_answered_with_an_error_was_refused() {
     assert_eq!(refusal(&answered(Body::Ok)), None);
 }
 
+/// A request for the space `space` held as `summary`.
+fn request(summary: &str, space: Option<&str>) -> Held {
+    let request = Forwarded {
+        caller: Vouched::User,
+        method: json!({"send": {}}),
+        summary: summary.into(),
+        space: space.map(|space| SpaceId::from(space.to_owned())),
+    };
+    Held {
+        call: Call::Serve { request },
+        ..held(summary)
+    }
+}
+
 #[test]
-fn a_takeover_passes_the_events_held_for_its_space_to_the_machine_that_took_it() {
+fn a_takeover_passes_what_the_hub_held_for_its_space_to_the_machine_that_took_it() {
     let mut db = database();
     let tx = db.transaction().unwrap();
     let (laptop, desk) = (
@@ -119,17 +134,28 @@ fn a_takeover_passes_the_events_held_for_its_space_to_the_machine_that_took_it()
         MemberId::from("desk".to_owned()),
     );
     let (now, expires) = (UnixTime::now(), UnixTime::now() + LIFETIME);
-    let mut other = held("other");
+    let mut other = held("other event");
     if let Call::Tell { told } = &mut other.call {
         told.above = SpaceId::from("elsewhere".to_owned());
     }
-    push(&tx, &laptop, &held("taken"), now, expires).unwrap();
-    push(&tx, &laptop, &other, now, expires).unwrap();
+    let held = [
+        held("event"),
+        other,
+        request("request", Some("coordinator")),
+        request("machine request", None),
+    ];
+    for held in &held {
+        push(&tx, &laptop, held, now, expires).unwrap();
+    }
     let taken = SpaceId::from("coordinator".to_owned());
     redirect(&tx, &taken, &laptop, &desk).unwrap();
-    let (_, call) = claim_first(&tx, &desk, now).unwrap().unwrap();
-    assert_eq!(message(&call.held.call), "taken");
-    let (_, call) = claim_first(&tx, &laptop, now).unwrap().unwrap();
-    assert_eq!(message(&call.held.call), "other");
-    assert!(claim_first(&tx, &laptop, now).unwrap().is_none());
+    let claimed = |member| {
+        let mut summaries = Vec::new();
+        while let Some((_, call)) = claim_first(&tx, member, now).unwrap() {
+            summaries.push(call.held.summary);
+        }
+        summaries
+    };
+    assert_eq!(claimed(&desk), ["event", "request"]);
+    assert_eq!(claimed(&laptop), ["other event", "machine request"]);
 }

@@ -103,6 +103,7 @@ async fn a_streamed_request_s_vouch_stands_for_its_caller_only_until_its_answer_
         caller,
         method: serde_json::json!({"follow_session": {"space": workspace.id}}),
         summary: "follow".into(),
+        space: None,
     };
     let link = linked();
     let mut incoming = link.opener.streams().open();
@@ -131,6 +132,7 @@ async fn a_request_whose_answer_goes_on_is_refused_where_answers_are_collected()
         caller: Vouched::User,
         method: serde_json::json!({"follow_session": {"space": workspace.id}}),
         summary: "follow".into(),
+        space: None,
     };
     let refused = daemon
         .manager

@@ -365,8 +365,18 @@ fn take_expired(tx: &Transaction<'_>, now: UnixTime) -> Result<Vec<Lapsed>> {
     rows.into_iter().map(|row| Ok(decode(row)?.1)).collect()
 }
 
-/// Hold for `to` the events the hub holds for the space `id` on `from`,
-/// which `to` took over, but one it is sending now.
+/// The space the held `call` is for, an event's or a request's, none for
+/// one for its machine.
+pub(super) fn held_for(call: &Call) -> Option<&SpaceId> {
+    match call {
+        Call::Tell { told } => Some(&told.above),
+        Call::Serve { request } => request.space.as_ref(),
+        _ => None,
+    }
+}
+
+/// Hold for `to` the events and requests the hub holds for the space `id`
+/// on `from`, which `to` took over, but one it is sending now.
 pub(super) fn redirect(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -380,7 +390,7 @@ pub(super) fn redirect(
     for row in rows {
         let (seq, call): (i64, String) = row?;
         let call: Call = serde_json::from_str(&call).context("unreadable held call")?;
-        if matches!(&call, Call::Tell { told } if &told.above == id) {
+        if held_for(&call) == Some(id) {
             moved.push(seq);
         }
     }
