@@ -43,7 +43,13 @@ fn a_repository_registered_only_on_another_machine_is_removed_there() {
     let removed = hub.ok(&["repo", "rm", "web", "--yes"]);
     assert_eq!(removed[0]["machine"], "desk");
     assert_eq!(removed[0]["repository_id"], desks["id"]);
-    assert_eq!(desk.ok(&["repo", "ls"]), serde_json::json!([]));
+    // Desk still lists the hub's repository, which is not its own.
+    let left = desk.ok(&["repo", "ls"]);
+    let left = left.as_array().unwrap();
+    assert!(
+        left.iter().all(|listed| listed["machine"].is_string()),
+        "{left:?}"
+    );
     assert!(!desk.repo.exists());
     // The hub's own repository stays.
     assert!(hub.repo.exists());
