@@ -365,17 +365,21 @@ pub enum Call {
     /// duplex stream `stream` it opened, for the hub to keep and continue
     /// where its placement puts `start`, the space's agent as a start
     /// would place it, among the other connected machines, the hub's own
-    /// as the caller's. The hub writes that placement on its side, as an
-    /// optional [`Decision`](super::placement::Decision) in JSON, none
-    /// where no machine can take the space, then ends it, with an error
-    /// once it did not keep the package whole, and continues the space
-    /// once the machine leaves it with [`Call::Release`]. Answered with
+    /// as the caller's, or for a chat in the worktree of the workspace
+    /// `within`, where it placed that workspace, after that workspace. The
+    /// hub writes that placement on its side, as an optional
+    /// [`Decision`](super::placement::Decision) in JSON, none where no
+    /// machine can take the space, then ends it, with an error once it did
+    /// not keep the package whole, and continues the space once the
+    /// machine leaves it with [`Call::Release`]. Answered with
     /// [`Reply::Streaming`].
     HandOver {
         space: SpaceId,
         built_at: UnixTime,
         stream: u64,
         start: shoal_schedule::placement::snapshot::Request,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        within: Option<SpaceId>,
     },
     /// A shutting-down machine's word that it read where the hub sends the
     /// space `space` it handed over, and leaves it: only now does the hub

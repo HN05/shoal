@@ -23,8 +23,13 @@ fn start() -> Request {
 }
 
 /// What the hub writes back as the laptop hands its space `space` over
-/// with the package `bytes`, and how it ends the stream.
-async fn hand_over(hub: &Arc<Hub>, space: &str, bytes: &[u8]) -> (Vec<u8>, Result<()>) {
+/// with the package `bytes`, as a chat in the worktree of the workspace
+/// `within` when it names one, and how it ends the stream.
+async fn hand_over(
+    hub: &Arc<Hub>,
+    (space, within): (&str, Option<&str>),
+    bytes: &[u8],
+) -> (Vec<u8>, Result<()>) {
     let link = linked();
     let (mut answer, mut package): (Incoming, Outgoing) = link.opener.streams().open_duplex();
     let sent = Sent {
@@ -34,7 +39,8 @@ async fn hand_over(hub: &Arc<Hub>, space: &str, bytes: &[u8]) -> (Vec<u8>, Resul
     };
     let streams = (link.writer.streams(), answer.number());
     let daemon: Arc<dyn Daemon> = Arc::new(StandIn::default());
-    hub.take_handover(&daemon, sent, start(), streams)
+    let within = within.map(|id| SpaceId::from(id.to_owned()));
+    hub.take_handover(&daemon, (sent, within), start(), streams)
         .await
         .unwrap();
     package.write(bytes).await.unwrap();
@@ -76,7 +82,7 @@ async fn the_hub_keeps_a_handed_over_package_and_answers_where_its_space_goes() 
         };
         assert!(hub.placers.answer(asked.number, placement));
     };
-    let ((written, ended), ()) = tokio::join!(hand_over(&hub, "plan", b"plan"), answering);
+    let ((written, ended), ()) = tokio::join!(hand_over(&hub, ("plan", None), b"plan"), answering);
     ended.unwrap();
     let decision: Option<Decision> = serde_json::from_slice(&written).unwrap();
     assert_eq!(decision.unwrap().machine, own);
@@ -116,4 +122,40 @@ async fn the_hub_keeps_a_handed_over_package_and_answers_where_its_space_goes() 
     assert!(hub.handovers.is_leaving(&laptop));
     hub.hear_stay(&laptop);
     assert!(!hub.handovers.is_leaving(&laptop));
+}
+
+#[tokio::test]
+async fn a_chat_in_a_workspace_s_worktree_follows_that_workspace() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = hub(&root, "", &["laptop"]).await;
+    report(&hub, "laptop", &["fix", "talk"]).await;
+    let (laptop, fix, talk) = (
+        MemberId::from("laptop".to_owned()),
+        SpaceId::from("fix".to_owned()),
+        SpaceId::from("talk".to_owned()),
+    );
+    let decision = Decision {
+        machine: "desk".into(),
+        name: "desk".into(),
+        reason: Reason::Caller,
+        policy: shoal_schedule::placement::Policy::Balanced,
+        unanswered: None,
+        skipped: Vec::new(),
+    };
+    hub.handovers.place(&fix, (&laptop, None), decision);
+    // The chat goes where its workspace goes, whatever placement says.
+    let (written, ended) = hand_over(&hub, ("talk", Some("fix")), b"talk").await;
+    ended.unwrap();
+    let placed: Option<Decision> = serde_json::from_slice(&written).unwrap();
+    assert_eq!(placed.unwrap().name, "desk");
+    // Its release waits for its workspace's, and its continuing for the
+    // workspace's to end.
+    let daemon: Arc<dyn Daemon> = Arc::new(StandIn::default());
+    assert!(hub.hear_release(&daemon, &laptop, &talk).is_err());
+    hub.handovers.release(&fix, &laptop).unwrap();
+    let after = hub.handovers.release(&talk, &laptop).unwrap().after;
+    let mut after = after.expect("the chat waits for its workspace");
+    assert!(!*after.borrow_and_update());
+    hub.handovers.continued(&fix);
+    assert!(*after.borrow_and_update());
 }

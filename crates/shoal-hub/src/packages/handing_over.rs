@@ -47,21 +47,53 @@ impl Hub {
                 return Some(Vec::new());
             }
         };
-        let spaces: Vec<Space> = (spaces.into_iter())
-            .filter(|space| packageable(space) && !kept.contains(&space.id))
-            .collect();
-        let calls = self.hub_calls().await;
-        let handing = spaces.into_iter().map(|space| {
-            let calls = calls.as_ref();
-            async move {
-                let handed = match calls {
-                    Ok(calls) => self.hand_over_by(daemon, calls, &space, deadline).await,
-                    Err(error) => Handed::Stayed(format!("{error:#}")),
-                };
-                (space, handed)
+        let spaces =
+            (spaces.into_iter()).filter(|space| packageable(space) && !kept.contains(&space.id));
+        let calls = match self.hub_calls().await {
+            Ok(calls) => calls,
+            Err(error) => {
+                let why = format!("{error:#}");
+                return Some(
+                    spaces
+                        .map(|space| (space, Handed::Stayed(why.clone())))
+                        .collect(),
+                );
             }
+        };
+        // A chat in a workspace's worktree follows that workspace.
+        let (chats, others): (Vec<Space>, Vec<Space>) =
+            spaces.partition(|space| within(space).is_some());
+        let none = HashSet::new();
+        let mut handed = (self.hand_over_all(daemon, &calls, others, (deadline, &none))).await;
+        let left: HashSet<SpaceId> = (handed.iter())
+            .filter(|(_, handed)| handed.left())
+            .map(|(space, _)| space.id.clone())
+            .collect();
+        handed.extend((self.hand_over_all(daemon, &calls, chats, (deadline, &left))).await);
+        Some(handed)
+    }
+
+    /// Hand each of `spaces` over through the hub over `calls` by
+    /// `deadline`, all at once, a chat in a workspace's worktree only once
+    /// this machine `left` that workspace to the hub, and where each went.
+    async fn hand_over_all(
+        &self,
+        daemon: &dyn Daemon,
+        calls: &Calls,
+        spaces: Vec<Space>,
+        (deadline, left): (Instant, &HashSet<SpaceId>),
+    ) -> Vec<(Space, Handed)> {
+        let handing = spaces.into_iter().map(|space| async move {
+            let handed = match within(&space) {
+                Some(workspace) if !left.contains(workspace) => {
+                    let why = "the workspace whose worktree it runs in stays here";
+                    Handed::Stayed(why.into())
+                }
+                within => (self.hand_over_by(daemon, calls, (&space, within), deadline)).await,
+            };
+            (space, handed)
         });
-        Some(join_all(handing).await)
+        join_all(handing).await
     }
 
     /// Hand `space` over through the hub over `calls` by `deadline`, and
@@ -72,10 +104,10 @@ impl Hub {
         &self,
         daemon: &dyn Daemon,
         calls: &Calls,
-        space: &Space,
+        (space, within): (&Space, Option<&SpaceId>),
         deadline: Instant,
     ) -> Handed {
-        let handing = self.hand_over_space(daemon, calls, space);
+        let handing = self.hand_over_space(daemon, calls, (space, within));
         let decision = match tokio::time::timeout_at(deadline, handing).await {
             Ok(Ok(Some(decision))) => decision,
             Ok(Ok(None)) => {
@@ -123,7 +155,7 @@ impl Hub {
         &self,
         daemon: &dyn Daemon,
         calls: &Calls,
-        space: &Space,
+        (space, within): (&Space, Option<&SpaceId>),
     ) -> Result<Option<Decision>> {
         let directory = tempfile::tempdir()?;
         let file = directory.path().join("package.shoal");
@@ -137,6 +169,7 @@ impl Hub {
             built_at,
             stream,
             start,
+            within: within.cloned(),
         };
         let (mut answer, mut package) = calls.duplex(hand_over).await?;
         package.write_file(&file).await?;
@@ -152,6 +185,15 @@ impl Hub {
             .await?;
         Ok(serde_json::from_slice(&written)?)
     }
+}
+
+/// The workspace whose worktree the chat `space` runs in, none for any
+/// other space.
+fn within(space: &Space) -> Option<&SpaceId> {
+    let chat = space.worktree().is_none();
+    (space.workdir.workspace())
+        .filter(|_| chat)
+        .map(|workspace| &workspace.id)
 }
 
 /// Where a space this machine released to the hub, which sends it as

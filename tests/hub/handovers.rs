@@ -78,9 +78,8 @@ fn shut_down(machine: &mut Base) {
     machine.daemon.child.wait().unwrap();
 }
 
-/// The message of `machine`'s unread `daemon_stopped` alert.
-fn stop_alert(machine: &Base) -> String {
-    let alerts = machine.ok(&["alert", "list", "--unread"]);
+/// The message of the `daemon_stopped` alert among `alerts`.
+fn stop_alert(alerts: &Value) -> String {
     let stopped = (alerts.as_array().unwrap().iter())
         .find(|alert| alert["kind"] == "daemon_stopped")
         .unwrap_or_else(|| panic!("{alerts}"));
@@ -88,17 +87,20 @@ fn stop_alert(machine: &Base) -> String {
 }
 
 #[test]
-fn a_shutdown_continues_a_running_workspace_and_chat_on_another_machine() {
+fn a_shutdown_continues_running_workspaces_and_chats_on_another_machine() {
     let (hub, mut laptop) = machines();
     let repo = laptop.repo.to_str().unwrap().to_owned();
     let work = running(&laptop, &["start", &repo, "--branch", "work"], "work");
     let talk = running(&laptop, &["start", &repo, "--mode", "chat"], "talk");
+    // A chat in the workspace's worktree goes with it.
+    let side = ["start", "--in", &work, "--mode", "chat"];
+    let side = running(&laptop, &side, "side");
 
     shut_down(&mut laptop);
 
-    // The hub, the only other machine, continues both under their IDs and
+    // The hub, the only other machine, continues them under their IDs and
     // restores their agents.
-    for (id, chats) in [(&work, false), (&talk, true)] {
+    for (id, chats) in [(&work, false), (&talk, true), (&side, true)] {
         wait_for("the space's agent running on the hub", || {
             (own(&hub, id, chats).is_some() && runs_agent(&hub, id)).then_some(())
         });
@@ -106,9 +108,21 @@ fn a_shutdown_continues_a_running_workspace_and_chat_on_another_machine() {
     // Back, the laptop retires its copies instead of restoring them.
     laptop.restart();
     wait_for("the laptop's copies retired", || {
-        (own(&laptop, &work, false).is_none() && own(&laptop, &talk, true).is_none()).then_some(())
+        let gone = |id, chats| own(&laptop, id, chats).is_none();
+        (gone(&work, false) && gone(&talk, true) && gone(&side, true)).then_some(())
     });
-    let told = stop_alert(&laptop);
+    let alerts = laptop.ok(&["alert", "list", "--unread"]);
+    // Nothing changed here after the packages, so nothing diverged.
+    let kinds = alerts
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|alert| &alert["kind"]);
+    assert!(
+        kinds.clone().all(|kind| kind != "space_diverged"),
+        "{alerts}"
+    );
+    let told = stop_alert(&alerts);
     assert!(told.contains("work") && told.contains("talk"), "{told}");
 }
 
@@ -123,7 +137,7 @@ fn a_space_whose_package_never_reaches_the_hub_stays_on_its_machine() {
 
     laptop.restart();
     assert!(own(&laptop, &work, false).is_some());
-    let told = stop_alert(&laptop);
+    let told = stop_alert(&laptop.ok(&["alert", "list", "--unread"]));
     let (stopped, handed) = told.split_once(". ").unwrap();
     // What it stopped continues here, as without a hub.
     assert!(stopped.contains("shoal resume"), "{told}");

@@ -263,7 +263,9 @@ takes the rest, and writes the placement back; only once the machine,
 having read it, says it leaves the space there does that machine import the
 package under the space's ID and queue its agents' restores, so a machine
 that gave up waiting keeps its space, and one whose word went unanswered
-keeps no restore, as the space may have gone; nothing waits for an import. That machine's takeover claim stands though the
+keeps no restore, as the space may have gone; nothing waits for an import.
+A chat in a workspace's worktree follows it to the same machine, released
+and continued after it, since it opens only in that worktree. That machine's takeover claim stands though the
 machine it came from may still be connected, which forgets the space's
 restores so it does not come back at boot, and retires its copy once its
 link opens, as after any takeover; work a reboot moved away stays where it

@@ -187,6 +187,7 @@ impl Hub {
                 built_at,
                 stream,
                 start,
+                within,
             } => {
                 ensure_machine(member)?;
                 let sent = Sent {
@@ -195,7 +196,7 @@ impl Hub {
                     built_at,
                 };
                 let streams = (calls.streams(), stream);
-                self.take_handover(daemon, sent, start, streams).await?;
+                (self.take_handover(daemon, (sent, within), start, streams)).await?;
                 Reply::Streaming
             }
             Call::Release { space } => {

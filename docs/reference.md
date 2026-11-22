@@ -1169,7 +1169,8 @@ space's repository, its agent's tool and its mode. Once the shutting-down
 machine has read that choice and tells the hub it leaves the space there,
 that machine imports the package under the space's ID, as `shoal restore`
 of a kept package does, and queues its agents' restores, which continue
-their sessions. The `system_shutdown` or `daemon_stopped` alert names, for
+their sessions. A chat in a workspace's worktree goes where that workspace
+went, once it has continued there, and stays when the workspace stays. The `system_shutdown` or `daemon_stopped` alert names, for
 each space, the machine it went to, or that it stays and why: its package
 did not reach the hub in time, no machine can take it, or the hub cannot
 be reached. A space whose leaving the hub did not acknowledge in time may

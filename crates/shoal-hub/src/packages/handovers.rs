@@ -7,11 +7,7 @@
 //! machine it came from is still connected, and the machine it came from
 //! retires its copy once its link opens again, as after any takeover, or
 //! at once when its shutdown was cancelled and it stays.
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{Result, anyhow};
 use shoal_daemon_base::alerts::About;
@@ -33,71 +29,11 @@ use crate::{
     log,
     streams::{Outgoing, Streams},
 };
+pub(crate) use state::Handovers;
 
 /// How long the hub waits for a machine to continue a space handed over,
 /// which may clone its repository and set its worktree up first.
 const CONTINUE_WITHIN: Duration = Duration::from_secs(30 * 60);
-
-/// What the hub keeps of the hand-overs under way.
-#[derive(Default)]
-pub(crate) struct Handovers {
-    /// The spaces handed over whose machine has yet to leave them, each
-    /// with that machine and where the hub sends it.
-    placed: Mutex<HashMap<SpaceId, (MemberId, Decision)>>,
-    /// The spaces handed over whose new machine has not claimed them yet,
-    /// each with that machine.
-    claims: Mutex<HashMap<SpaceId, MemberId>>,
-    /// The machines that handed spaces over for a shutdown that has not
-    /// ended their link, nor been cancelled.
-    leaving: Mutex<HashSet<MemberId>>,
-}
-
-impl Handovers {
-    /// Whether the space `id` was handed over to `taker`, which may then
-    /// take it over while the machine it comes from is still connected.
-    pub(crate) fn handed_to(&self, id: &SpaceId, taker: &MemberId) -> bool {
-        self.claims.lock().unwrap().get(id) == Some(taker)
-    }
-
-    /// Record that `member`, whose link opened again or whose shutdown was
-    /// cancelled, is no longer shutting down, and keeps the spaces it did
-    /// not leave.
-    pub(crate) fn stays(&self, member: &MemberId) {
-        self.leaving.lock().unwrap().remove(member);
-        (self.placed.lock().unwrap()).retain(|_, (from, _)| from != member);
-    }
-
-    fn place(&self, id: &SpaceId, from: &MemberId, decision: Decision) {
-        let placed = (from.clone(), decision);
-        self.placed.lock().unwrap().insert(id.clone(), placed);
-    }
-
-    /// Where the space `id` that `from` handed over goes, which it now
-    /// leaves; none unless the hub placed it.
-    fn left(&self, id: &SpaceId, from: &MemberId) -> Option<Decision> {
-        let mut placed = self.placed.lock().unwrap();
-        match placed.get(id) {
-            Some((placer, _)) if placer == from => placed.remove(id).map(|(_, decision)| decision),
-            _ => None,
-        }
-    }
-
-    fn start(&self, id: &SpaceId, to: &MemberId) {
-        self.claims.lock().unwrap().insert(id.clone(), to.clone());
-    }
-
-    fn end(&self, id: &SpaceId) {
-        self.claims.lock().unwrap().remove(id);
-    }
-
-    fn leaves(&self, member: &MemberId) {
-        self.leaving.lock().unwrap().insert(member.clone());
-    }
-
-    fn is_leaving(&self, member: &MemberId) -> bool {
-        self.leaving.lock().unwrap().contains(member)
-    }
-}
 
 impl Hub {
     /// Take the final package `sent` that a machine shutting down writes up
@@ -109,7 +45,7 @@ impl Hub {
     pub(crate) async fn take_handover(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
-        sent: Sent,
+        (sent, within): (Sent, Option<SpaceId>),
         start: Request,
         streams: (&Streams, u64),
     ) -> Result<()> {
@@ -119,17 +55,20 @@ impl Hub {
         tokio::spawn(async move {
             let (space, from) = (sent.space.clone(), sent.member.clone());
             let (kept, operation) = hub.take_package(sent, up).await;
-            let placed = match kept {
-                Ok(()) => hub.place_handover(&*daemon, &from, start).await,
-                Err(error) => Err(error),
+            let placed = match (kept, &within) {
+                (Ok(()), Some(workspace)) => {
+                    (hub.handovers.placed_workspace(workspace, &from)).map(Some)
+                }
+                (Ok(()), None) => hub.place_handover(&*daemon, &from, start).await,
+                (Err(error), _) => Err(error),
             };
-            // Placed before the machine reads it, which may leave it at once.
+            // Placed before the machine reads it, which may release it at once.
             let decision = placed.as_ref().ok().cloned().flatten();
             if let Some(decision) = decision.clone() {
-                hub.handovers.place(&space, &from, decision);
+                (hub.handovers).place(&space, (&from, within.as_ref()), decision);
             }
             if answer(out, placed).await.is_none() && decision.is_some() {
-                hub.handovers.left(&space, &from);
+                hub.handovers.unplace(&space);
             }
             drop(operation);
         });
@@ -179,18 +118,22 @@ impl Hub {
 
     /// As the hub: take `member`'s word that it leaves the space `id` where
     /// the hub placed it, and have that machine continue it, in the
-    /// background; refused unless the hub placed it for `member`.
+    /// background, after the workspace a chat follows; refused unless the
+    /// hub placed it for `member` and took the release of that workspace.
     pub(crate) fn hear_release(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
         member: &MemberId,
         id: &SpaceId,
     ) -> Result<()> {
-        let decision = (self.handovers.left(id, member))
-            .ok_or_else(|| anyhow!("no hand-over of space {id} waits for its machine's word"))?;
+        let released = self.handovers.release(id, member)?;
         let (hub, daemon, from, id) = (self.clone(), daemon.clone(), member.clone(), id.clone());
         tokio::spawn(async move {
-            hub.continue_handover(&*daemon, &id, &from, &decision).await;
+            if let Some(mut after) = released.after {
+                let _ = after.wait_for(|ended| *ended).await;
+            }
+            (hub.continue_handover(&*daemon, &id, &from, &released.decision)).await;
+            hub.handovers.continued(&id);
         });
         Ok(())
     }
@@ -291,5 +234,6 @@ async fn answer(mut out: Outgoing, placed: Result<Option<Decision>>) -> Option<D
     }
 }
 
+mod state;
 #[cfg(test)]
 mod tests;
