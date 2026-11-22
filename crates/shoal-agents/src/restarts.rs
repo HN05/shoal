@@ -353,3 +353,6 @@ fn answer_all(waiting: Vec<Waiter>, outcome: &Result<RestartOutcome>) -> bool {
         .count()
         > 0
 }
+
+#[cfg(test)]
+mod tests;
