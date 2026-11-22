@@ -7,5 +7,6 @@ impl Followers for Manager {
     fn local_config_changed(&self) {
         // The runner follows `runner.enabled` as soon as it changes.
         self.runner.jobs().settings_changed();
+        self.hub.shared_local_configs_changed();
     }
 }

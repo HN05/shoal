@@ -83,5 +83,14 @@ fn an_edit_of_a_shared_repository_s_local_config_reaches_every_machine() {
         "make all",
     ]);
     let edited = hub.ok(&["repo", "config", cloned])["toml"].clone();
-    local_config_reads(&desk, repo, edited.as_str().unwrap());
+    let edited = edited.as_str().unwrap();
+    local_config_reads(&desk, repo, edited);
+    // Shared again, an edit made meanwhile gives way to the hub's copy and
+    // stays as a backup.
+    desk.ok(&["repo", "unshare", repo]);
+    fs::write(desks, MAKE).unwrap();
+    desk.ok(&["repo", "share", repo]);
+    local_config_reads(&desk, repo, edited);
+    let backup = fs::read_to_string(format!("{desks}.backup")).unwrap();
+    assert_eq!(backup, MAKE);
 }
