@@ -1,7 +1,12 @@
-use super::*;
+use std::{fs, path::Path, time::Duration};
+
+use shoal_repositories::seed::{Layout, Snapshot};
+
 use crate::daemon::test_support::{
     commit, git, install_test_script, manager, native_cloning, repository,
 };
+use crate::daemon::{manager::Manager, notifications::AlertKind};
+use crate::model::Repository;
 use crate::presets::Preset;
 use crate::state::WorkspaceState;
 use shoal_protocol::space_names::SpaceSelector;
@@ -57,7 +62,7 @@ async fn new_workspaces_start_from_the_default_branch_build() {
         .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     // The build prepared and used the shared cache.
     let cache = repo.workspaces_dir.join(".caches/shared/go");
     assert!(cache.join("seed").exists());
@@ -93,7 +98,7 @@ async fn new_workspaces_start_from_the_default_branch_build() {
     }
 
     // The moved default branch rebuilds the seed, restoring the edited file.
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let snapshot = Snapshot::open(&layout).unwrap().unwrap();
     assert_eq!(
         snapshot.commit,
@@ -142,14 +147,14 @@ async fn a_failed_build_is_reported_once_per_commit() {
         "[machine.overload.memory]\nenabled = false\n[machine.overload.warning]\ndisk_free_gib = 1000000\n",
     )
     .await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     assert!(!layout.log().exists(), "the build waits for headroom");
     configure(&manager, NO_PRESSURE).await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let log = fs::read_to_string(layout.log()).unwrap();
     assert!(log.contains("broken\n"), "{log}");
     fs::remove_file(layout.log()).unwrap();
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     assert!(!layout.log().exists(), "the failed commit is not rebuilt");
     // Other settings at the same commit are a new build.
     fs::write(
@@ -157,7 +162,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
         "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n[env]\nMODE = 'seed'\n",
     )
     .unwrap();
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     assert!(layout.log().exists(), "changed settings rebuild");
     // Returning to the failed settings retries them.
     fs::remove_file(layout.log()).unwrap();
@@ -166,7 +171,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
         "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n",
     )
     .unwrap();
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     assert!(layout.log().exists(), "a revisited failure is retried");
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
@@ -204,7 +209,7 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
         .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     let log = fs::read_to_string(layout.log()).unwrap();
     let built = layout.worktree().join("target/debug/libseeded.rlib");
@@ -226,7 +231,7 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
     // A change to the code alone builds on the outputs.
     fs::write(checkout.join("src/lib.rs"), "pub fn f() {}\n").unwrap();
     commit(&checkout, "src/lib.rs");
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let log = fs::read_to_string(layout.log()).unwrap();
     assert!(!log.contains("cargo clean"), "{log}");
     assert!(log.contains("$ cargo clippy --all-targets\n"), "{log}");
@@ -287,7 +292,7 @@ async fn a_failed_soft_step_keeps_the_other_steps_outputs() {
     let (temp, manager) = manager().await;
     configure(&manager, NO_PRESSURE).await;
     let (checkout, repo) = fake_tools(&manager, temp.path(), "['cargo']", 0).await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
@@ -315,7 +320,7 @@ async fn a_failed_soft_step_keeps_the_other_steps_outputs() {
     }
     // The snapshot is current, so the same tip and settings do not rebuild.
     fs::remove_file(layout.log()).unwrap();
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     assert!(!layout.log().exists(), "the seed is not rebuilt");
 }
 
@@ -324,7 +329,7 @@ async fn a_failure_after_a_soft_one_fails_the_build() {
     let (temp, manager) = manager().await;
     configure(&manager, NO_PRESSURE).await;
     let (_, repo) = fake_tools(&manager, temp.path(), "['cargo', 'npm']", 1).await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     let log = fs::read_to_string(layout.log()).unwrap();
     assert!(log.contains("$ npm ci\n"), "{log}");
@@ -372,7 +377,7 @@ async fn new_workspaces_take_the_spare_which_is_then_refilled() {
         "#!/bin/sh\nmkdir -p out\necho built > out/built\n",
     )
     .await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
@@ -384,7 +389,7 @@ async fn new_workspaces_take_the_spare_which_is_then_refilled() {
     )
     .await
     .expect("the build wants a spare");
-    manager.refill_spares().await;
+    manager.repositories.refill_spares(&*manager).await;
     assert!(layout.has_spare());
     let workspace = manager
         .create_workspace(&repo.id, "feature".into(), None, None, None)
@@ -401,7 +406,7 @@ async fn new_workspaces_take_the_spare_which_is_then_refilled() {
     )
     .await
     .expect("taking the spare wants another");
-    manager.refill_spares().await;
+    manager.repositories.refill_spares(&*manager).await;
     assert!(layout.has_spare());
 }
 
@@ -418,7 +423,7 @@ async fn repository_removal_cancels_a_running_build() {
     let layout = Layout::of(&repo);
     let refresh = tokio::spawn({
         let manager = manager.clone();
-        async move { manager.refresh_seeds().await }
+        async move { manager.repositories.refresh_seeds(&*manager).await }
     });
     // The command starts only while its build holds the slot.
     let started = layout.worktree().join("started");
@@ -451,7 +456,7 @@ async fn a_removed_seed_is_neither_applied_nor_kept() {
         "#!/bin/sh\nmkdir -p out\ntouch out/built\n",
     )
     .await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
@@ -476,7 +481,7 @@ async fn a_removed_seed_is_neither_applied_nor_kept() {
         .await
         .unwrap();
     assert!(!workspace.path.join("out").exists());
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     assert!(!layout.root().exists());
 }
 
@@ -507,7 +512,7 @@ async fn processes_a_build_leaves_behind_are_stopped() {
         "#!/bin/sh\nsleep 600 &\necho $! > ../leftover\nmkdir -p out\n",
     )
     .await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     let pid: i32 = fs::read_to_string(layout.root().join("leftover"))
         .unwrap()
@@ -539,7 +544,7 @@ async fn removal_keeps_a_symlinked_seed_worktree() {
     let (temp, manager) = manager().await;
     configure(&manager, NO_PRESSURE).await;
     let (_, repo) = seeded(&manager, temp.path(), "#!/bin/sh\nmkdir -p out\n").await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     if !layout.worktree().exists() {
         return; // The seed was not created on this filesystem.
@@ -605,7 +610,7 @@ async fn a_start_clones_while_a_refill_reads_the_snapshot() {
         "#!/bin/sh\nmkdir -p out\necho built > out/built\n",
     )
     .await;
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;
@@ -644,7 +649,7 @@ async fn a_copy_s_starting_checkpoint_holds_the_seed_it_started_with() {
         .take_checkpoint(&SpaceSelector::id(&source.id), None)
         .await
         .unwrap();
-    manager.refresh_seeds().await;
+    manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {
         return assert_clone_refused(&manager, &layout).await;

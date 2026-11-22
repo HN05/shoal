@@ -271,7 +271,9 @@ impl Manager {
     ) -> Result<bool> {
         let configured = materialized?;
         if let Some(settings) = &configured.seed {
-            self.apply_seed(repo, workspace, settings).await;
+            self.repositories
+                .apply_seed(self, repo, workspace, settings)
+                .await;
         }
         Ok(configured.needs_setup)
     }

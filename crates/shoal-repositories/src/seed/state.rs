@@ -35,7 +35,7 @@ impl Seeds {
 
     /// Whether `build` is the one that last failed; any other build makes
     /// the failed one worth retrying when it comes back.
-    pub fn repeats_failure(&self, repository_id: &RepositoryId, build: &Build) -> bool {
+    pub(crate) fn repeats_failure(&self, repository_id: &RepositoryId, build: &Build) -> bool {
         let mut failures = self.failures.lock().expect("seed failures lock");
         if failures.get(repository_id) == Some(build) {
             return true;
@@ -46,7 +46,7 @@ impl Seeds {
 
     /// Have the spare task refill spares: a workspace took one, or a new
     /// snapshot has none.
-    pub fn want_spare(&self) {
+    pub(crate) fn want_spare(&self) {
         self.spares.notify_one();
     }
 
@@ -57,7 +57,7 @@ impl Seeds {
     }
 
     /// Remember the build that failed, or forget an earlier failure.
-    pub fn record_result(&self, repository_id: &RepositoryId, failed: Option<Build>) {
+    pub(crate) fn record_result(&self, repository_id: &RepositoryId, failed: Option<Build>) {
         let mut failures = self.failures.lock().expect("seed failures lock");
         match failed {
             Some(build) => failures.insert(repository_id.to_owned(), build),
@@ -91,12 +91,12 @@ impl Default for SeedSlot {
 
 impl SeedSlot {
     /// Held while a build runs.
-    pub fn gate(&self) -> &tokio::sync::Mutex<()> {
+    pub(crate) fn gate(&self) -> &tokio::sync::Mutex<()> {
         &self.gate
     }
 
     /// Whether the running build should stop.
-    pub fn cancelled(&self) -> watch::Receiver<bool> {
+    pub(crate) fn cancelled(&self) -> watch::Receiver<bool> {
         self.cancel.subscribe()
     }
 
@@ -107,7 +107,7 @@ impl SeedSlot {
     }
 
     /// Held while a new worktree takes the spare.
-    pub fn spare(&self) -> &tokio::sync::Mutex<()> {
+    pub(crate) fn spare(&self) -> &tokio::sync::Mutex<()> {
         &self.spare
     }
 }

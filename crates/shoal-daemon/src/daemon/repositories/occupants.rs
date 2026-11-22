@@ -32,10 +32,6 @@ impl Occupants for Manager {
         Box::pin(self.runner.delete_runner_of_removed(self, repo))
     }
 
-    fn remove_seed<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::remove_seed(self, repo))
-    }
-
     fn delete_kept_files<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             self.links.delete_proposal_files(repo).await?;

@@ -146,14 +146,17 @@ other subsystems call in their own transactions.
 `shoal-repositories` holds the registered repositories: its `Repositories`
 service registers and looks them up, prepares the `root_dir` that holds
 them, resolves the config layers of repositories and their spaces, keeps
-the seed's layout and the slots that pause its builds, empties the shared
-caches, removes repositories, sweeps finished contributions and moves
-repository directories into a new root. The spaces a removal or move
+each checkout's default branch in sync, builds the seeds and starts new
+workspaces from their snapshots, empties the shared caches, removes
+repositories, sweeps finished contributions and moves repository
+directories into a new root. The spaces a removal or move
 takes, whether a workspace's worktree may go or move with it, where the
 chats without a repository keep their files, the subsystems that work and
 keep files in a repository's directories and the agents that trust its
 paths stay with the daemon, which its interface reaches; so do the hooks'
-executables and environments, which read ports and temporary directories.
+executables and environments, which read ports and temporary directories,
+fetching and fast-forwarding a default branch, which the refresh of a
+workspace's branch shares, and whether the host has headroom for a build.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

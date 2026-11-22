@@ -117,9 +117,6 @@ pub trait Occupants: Send + Sync {
     /// Delete the runner of the removed `repo`.
     fn delete_runner_of_removed<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>>;
 
-    /// Delete the seed of `repo`, whose builds are stopped.
-    fn remove_seed<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>>;
-
     /// Delete the files other subsystems keep in `repo`'s directory: its
     /// proposals', imported sessions' and spaces' kept files.
     fn delete_kept_files<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>>;
@@ -167,6 +164,14 @@ pub trait Branches: Send + Sync {
     ) -> BoxFuture<'a, Result<SyncedRepository>>;
 }
 
+/// The host the daemon runs on.
+pub trait Host: Send + Sync {
+    /// Whether memory and the disks of `paths` are clear of their overload
+    /// warning thresholds, so a seed build or spare adds no load to a
+    /// strained host. A failed reading defers it.
+    fn clear_of_overload(&self, paths: &[&Path]) -> bool;
+}
+
 /// The forges registrations reach.
 pub trait Forges: Send + Sync {
     /// The repository `remote` names, on the forge its host serves.
@@ -178,12 +183,12 @@ pub trait Forges: Send + Sync {
 
 /// Everything the repositories need of the daemon.
 pub trait Daemon:
-    Spaces + Followers + Occupants + Agents + Branches + Forges + Coordinators
+    Spaces + Followers + Occupants + Agents + Branches + Host + Forges + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Spaces + Followers + Occupants + Agents + Branches + Forges + Coordinators
+    T: Spaces + Followers + Occupants + Agents + Branches + Host + Forges + Coordinators
 {
 }
 

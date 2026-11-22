@@ -625,7 +625,9 @@ impl Manager {
         self.leases.remove_simulators(&workspace.id).await?;
         match registration {
             Registration::Listed => {
-                self.destroy_seed_outputs(workspace).await;
+                self.repositories
+                    .destroy_seed_outputs(self, workspace)
+                    .await;
                 let removed = git::worktree::remove(repo, &workspace.path, files, branch).await?;
                 return Ok(removed.into());
             }

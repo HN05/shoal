@@ -20,7 +20,7 @@ impl Repositories {
     /// Delete what Shoal keeps of the removed `repo`, then its checkout,
     /// its local config and its directory, once nothing else is left there.
     pub(super) async fn delete_files(&self, daemon: &dyn Daemon, repo: &Repository) -> Result<()> {
-        daemon.remove_seed(repo).await?;
+        self.remove_seed(repo).await?;
         delete_caches(repo).await?;
         delete_shoal_dir(repo, Contents::TmpDirs).await?;
         delete_shoal_dir(repo, Contents::ReviewRuns).await?;

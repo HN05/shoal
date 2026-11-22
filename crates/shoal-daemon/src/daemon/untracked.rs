@@ -91,7 +91,7 @@ impl Manager {
             .map(|w| w.part.path)
             .collect();
         let seed = shoal_repositories::seed::Layout::new(root, &repo.id);
-        let verified_seed = crate::daemon::seed::is_seed_worktree(repo, &seed)
+        let verified_seed = shoal_repositories::seed::is_seed_worktree(repo, &seed)
             .await
             .unwrap_or(false);
         let review_runs = ShoalDir::new(root, &repo.id, Contents::ReviewRuns);

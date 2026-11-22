@@ -91,7 +91,6 @@ mod retention_periods;
 pub(crate) mod reviews;
 pub(crate) mod runner;
 pub mod scope;
-pub(crate) mod seed;
 mod sessions;
 mod shutdown_lock;
 mod shutdown_stop;
@@ -306,8 +305,12 @@ pub async fn run(
         "simulator cleanup",
         expire_simulators,
     );
-    spawn_supervised(&mut background, &manager, "seed builds", seed::run);
-    spawn_supervised(&mut background, &manager, "seed spares", seed::run_spares);
+    spawn_supervised(&mut background, &manager, "seed builds", |manager| {
+        shoal_repositories::seed::builds::run(manager.repositories.clone(), manager)
+    });
+    spawn_supervised(&mut background, &manager, "seed spares", |manager| {
+        shoal_repositories::seed::builds::run_spares(manager.repositories.clone(), manager)
+    });
     spawn_supervised(&mut background, &manager, "runner", |manager| {
         shoal_runner::jobs::run(manager.runner.clone(), manager)
     });

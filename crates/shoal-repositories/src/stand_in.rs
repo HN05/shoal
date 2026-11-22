@@ -31,7 +31,7 @@ use shoal_refs::BranchName;
 
 use crate::{
     Repositories,
-    daemon::{Activity, Agents, Branches, Followers, Forges, Occupants, Records, Spaces},
+    daemon::{Activity, Agents, Branches, Followers, Forges, Host, Occupants, Records, Spaces},
     moves::{Running, chats::OutsideChat},
 };
 
@@ -161,10 +161,6 @@ impl Occupants for StandIn {
         Box::pin(async { Ok(()) })
     }
 
-    fn remove_seed<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { Ok(()) })
-    }
-
     fn delete_kept_files<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
@@ -205,6 +201,12 @@ impl Branches for StandIn {
         _: &'a BranchName,
     ) -> BoxFuture<'a, Result<SyncedRepository>> {
         Box::pin(async { bail!("no remotes") })
+    }
+}
+
+impl Host for StandIn {
+    fn clear_of_overload(&self, _: &[&Path]) -> bool {
+        true
     }
 }
 
