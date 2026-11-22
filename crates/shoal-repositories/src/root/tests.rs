@@ -38,6 +38,21 @@ async fn an_excluded_root_refuses_a_sibling_that_resolves_into_state() {
 }
 
 #[tokio::test]
+async fn an_excluded_root_refuses_a_workspace_at_its_excluded_directory() {
+    let (_temp, parent, root) = excluded_root();
+    let placed = parent.join(".shoal.noindex");
+    std::fs::create_dir(&placed).unwrap();
+    let workspace = shoal_protocol::test_support::workspace("placed", "repo", "placed", &placed);
+    let recorded = Recorded {
+        repositories: &[],
+        workspaces: &[workspace],
+    };
+    let prepared = prepare_root(&root, &parent.join("state"), &recorded, None).await;
+    assert!(prepared.is_err());
+    assert!(std::fs::symlink_metadata(&root.path).is_err());
+}
+
+#[tokio::test]
 async fn an_excluded_root_refuses_a_recorded_repository_directory() {
     let (_temp, parent, root) = excluded_root();
     std::fs::create_dir(&root.path).unwrap();
