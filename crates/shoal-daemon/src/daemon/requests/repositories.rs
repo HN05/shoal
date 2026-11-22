@@ -30,7 +30,7 @@ pub(super) async fn handle(
             Body::Repositories(manager.visible_repositories(caller).await?)
         }
         RepositoryMethod::RepositoriesElsewhere => {
-            Body::RepositoriesElsewhere(manager.hub.repositories_view(&**manager).await?)
+            Body::RepositoriesElsewhere(manager.visible_repositories_elsewhere(caller).await?)
         }
         RepositoryMethod::RegisterRepository {
             source,

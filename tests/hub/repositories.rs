@@ -4,8 +4,8 @@
 use serde_json::Value;
 
 use super::{
-    directory::{join, machine},
-    support::{fixture::Base, wait::wait_for},
+    directory::{join, machine, workspace},
+    support::{fixture::Base, shoal_binary, wait::wait_for},
 };
 
 /// The registration `machine` lists for the machine `on`, once it does.
@@ -47,4 +47,19 @@ fn a_repository_registered_only_on_another_machine_is_removed_there() {
     assert!(!desk.repo.exists());
     // The hub's own repository stays.
     assert!(hub.repo.exists());
+}
+
+#[test]
+fn a_space_lists_no_other_machine_s_repository_of_another_origin() {
+    let hub = machine(true, "app");
+    let desk = machine(false, "web");
+    join(&desk, &hub, "desk");
+    listed_on(&hub, "desk");
+    let mine = workspace(&hub, "mine");
+    let mut command = hub.command();
+    command.args(["run", "--workspace", &mine, "--", shoal_binary()]);
+    let listed = hub.ok_from(&mut command, &["repo", "ls"]);
+    let listed = listed.as_array().unwrap();
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    assert!(listed[0]["machine"].is_null(), "{listed:?}");
 }

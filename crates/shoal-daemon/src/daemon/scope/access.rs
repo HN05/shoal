@@ -14,7 +14,7 @@ use crate::{
     protocol::operations::WorkspaceStart,
     repository::Selector,
 };
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{hub::directory::HubView, repository::url_key, space_names::SpaceSelector};
 
 /// Why a scoped caller cannot start the worker of a workspace outside its
 /// tree.
@@ -89,6 +89,29 @@ impl Manager {
             repositories.retain(|repository| repository.id == own);
         }
         Ok(repositories)
+    }
+
+    /// The other joined machines' repositories `caller` sees, with the
+    /// hub's machines: every one, or as it sees only its own repository
+    /// here, those of its own repository's origin; none on a machine in no
+    /// hub.
+    pub(in crate::daemon) async fn visible_repositories_elsewhere(
+        &self,
+        caller: Option<&Caller>,
+    ) -> Result<Option<HubView>> {
+        let Some(mut view) = self.hub.repositories_view(self).await? else {
+            return Ok(None);
+        };
+        if let Some(caller) = caller
+            && let Some(own) = self.caller_repository(caller).await?
+        {
+            let own = self.repositories.repository(&own).await?;
+            let url = crate::repository::remote_url_from_source(&own.source).await;
+            let origin = url.ok().flatten().map(|url| url_key(&url));
+            (view.directory.repositories)
+                .retain(|listed| origin.is_some() && listed.repository.repository.origin == origin);
+        }
+        Ok(Some(view))
     }
 
     /// The repository of the caller's own space; none for a chat without
