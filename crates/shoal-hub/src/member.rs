@@ -65,6 +65,9 @@ pub(super) struct Link {
     /// Whether the daemon restarts on a replaced binary, as a managed one
     /// does.
     restarts_on_update: std::sync::atomic::AtomicBool,
+    /// Whether the machine sleeps, from its announcement until it fully
+    /// wakes, while the link stays closed.
+    asleep: std::sync::atomic::AtomicBool,
 }
 
 /// How often the user hears of a refusal that came unsealed, which anyone
@@ -105,6 +108,22 @@ impl Link {
     /// Whether the daemon restarts on a replaced binary.
     pub(super) fn restarts(&self) -> bool {
         (self.restarts_on_update).load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Keep the link closed while the machine sleeps, as `asleep` says,
+    /// once it next reads what to do.
+    pub(super) fn sleeps(&self, asleep: bool) {
+        (self.asleep).store(asleep, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Have the link read what to do again now, as once the machine went
+    /// to sleep or woke.
+    pub(super) fn reread(&self) {
+        self.wake.notify_one();
+    }
+
+    fn asleep(&self) -> bool {
+        self.asleep.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub(super) fn calls(&self) -> Option<Arc<Calls>> {
@@ -212,8 +231,8 @@ enum Kept {
 }
 
 impl Hub {
-    /// What the link does next, from the hub role, the membership and
-    /// `[machine.hub] connect`.
+    /// What the link does next, from the hub role, the membership,
+    /// whether the machine sleeps and `[machine.hub] connect`.
     async fn link_attempt(&self, daemon: &dyn Daemon) -> Result<Attempt> {
         let Some(settings) = self.hub_settings(daemon).filter(|hub| !hub.enabled) else {
             return Ok(Attempt::Idle(None));
@@ -221,6 +240,10 @@ impl Hub {
         let Some(joined) = self.store.read(membership::load).await? else {
             return Ok(Attempt::Idle(None));
         };
+        if self.member.asleep() {
+            let asleep = "this machine sleeps until it fully wakes";
+            return Ok(Attempt::Idle(Some(asleep.into())));
+        }
         if joined.revoked {
             return Ok(Attempt::Idle(Some(
                 "the hub revoked this machine's credential; run shoal hub join to join it again"

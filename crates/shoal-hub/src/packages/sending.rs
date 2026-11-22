@@ -249,6 +249,36 @@ impl Hub {
 }
 
 impl Hub {
+    /// Send the hub a package of each of `spaces` whose state changed since
+    /// the last that arrived there, or of every one when `every`, all at
+    /// once over `calls`, holding none back for one sent lately, as before
+    /// this machine sleeps.
+    pub(super) async fn send_current_packages(
+        &self,
+        daemon: &dyn Daemon,
+        calls: &Calls,
+        spaces: Vec<Space>,
+        every: bool,
+    ) {
+        let sends = spaces.iter().map(|space| async move {
+            let state = match daemon.package_state(space).await {
+                Ok(state) => state,
+                Err(error) => {
+                    return log!(
+                        "hub: could not tell whether {} changed since its package: {error:#}",
+                        space.name
+                    );
+                }
+            };
+            let id = space.id.clone();
+            let sent = self.store.read(move |tx| sent_state(tx, &id)).await;
+            if every || sent.ok().flatten().as_ref() != Some(&state) {
+                self.send_package(daemon, calls, space, &state).await;
+            }
+        });
+        futures_util::future::join_all(sends).await;
+    }
+
     /// Since when each space has changes the hub's package of it lacks,
     /// while the hub tells this machine it is intermittent, which it keeps
     /// them for; none on any other machine.
@@ -329,7 +359,7 @@ fn load(tx: &Transaction<'_>, id: &SpaceId) -> Result<Recorded> {
 
 /// Since when each space has changes the hub's package lacks, of those
 /// that have.
-fn unsent(tx: &Transaction<'_>) -> Result<HashMap<SpaceId, UnixTime>> {
+pub(super) fn unsent(tx: &Transaction<'_>) -> Result<HashMap<SpaceId, UnixTime>> {
     let mut statement = tx.prepare(
         "SELECT space_id, unsent_since FROM hub_package_states WHERE unsent_since IS NOT NULL",
     )?;
