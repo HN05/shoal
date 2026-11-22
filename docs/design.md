@@ -3849,7 +3849,9 @@ is no edit. A member takes a shared copy by sharing its registration of that
 origin, whatever its name, or by registering a URL clone under its own
 `root_dir` in the background, with no registered-but-uncloned state and no
 setting for it, agreeing on the copy once the clone is registered, so a
-failed clone, which alerts, is tried again when the link next opens. A copy
+failed clone, which alerts naming `repo add <url> --shared`, is tried again
+when the link next opens, or on the hub's own machine when its daemon
+restarts, rather than every round, which would alert every ten seconds. A copy
 without a value, from `repo unshare` or a removal anywhere, leaves every
 registration, no longer shared. Machines clone from the origin; the hub
 carries no Git data. A worktree file the current format rejects counts as absent,

@@ -3,7 +3,8 @@
 //! and takes each copy the hub sends. A shared copy shares the registration
 //! of its origin here, whatever its name, or, where there is none,
 //! registers a clone of it in the background; a failed clone alerts and is
-//! cloned again when the link next opens. A copy without a value, as from
+//! cloned again when the link next opens, or on the hub's own machine,
+//! when its daemon restarts. A copy without a value, as from
 //! a machine that stopped sharing it, leaves the registration here, no
 //! longer shared. Git data never goes through the hub: machines clone from
 //! the origin.
@@ -288,7 +289,7 @@ impl Hub {
         error: anyhow::Error,
     ) {
         let message = format!(
-            "Could not register {name}, which another machine of the hub shares, as a clone of {url}: {error:#}; it is cloned again once this machine's link to the hub opens again"
+            "Could not register {name}, which another machine of the hub shares, as a clone of {url}: {error:#}; fix that, then run shoal repo add {url} --shared, or Shoal tries again when this machine next connects to the hub, which for the hub's own machine is when its daemon restarts"
         );
         log!("hub: {message}");
         (self.notify(
