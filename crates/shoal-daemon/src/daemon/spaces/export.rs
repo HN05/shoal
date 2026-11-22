@@ -128,7 +128,7 @@ impl Manager {
             .find(|removed| selector.given_id() == Some(&removed.space_id))
             .with_context(|| format!("no space or restorable space {selector}"))?
             .clone();
-        let carried = carried::taken_by_removal(&records, &removed.space_id, carrying);
+        let carried = crate::transfer::taken_by_removal(&records, &removed.space_id, carrying);
         let mut settings = Vec::new();
         for record in std::iter::once(&removed).chain(&carried) {
             settings.push(

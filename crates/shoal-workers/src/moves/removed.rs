@@ -20,7 +20,7 @@ use shoal_protocol::space_names::SpaceSelector;
 /// Move the record of the removed space `space`, with the records of the
 /// spaces its removal took that `carrying` carries, to the joined machine
 /// `destination` names, telling `steps` how far it got, while it holds the
-/// space's move lock.
+/// move lock of each record, which keeps its restore here off.
 pub(super) async fn move_to_machine(
     paths: &CommandPaths,
     space: &RemovedSpace,
@@ -29,19 +29,25 @@ pub(super) async fn move_to_machine(
     steps: &impl Steps,
 ) -> Result<SpaceMoved> {
     let lock = MoveLock::take(paths, &space.space_id).await?;
-    let moved = deliver(paths, space, (destination, carrying), steps).await;
+    let records = crate::client::removal::removed(paths).await?;
+    let carried = shoal_core::transfer::taken_by_removal(&records, &space.space_id, carrying);
+    let carried: Vec<SpaceId> = carried.into_iter().map(|record| record.space_id).collect();
+    let locks = lock_each(paths, &carried).await?;
+    let moved = deliver(paths, space, (destination, carrying), (&carried, steps)).await;
+    locks.into_iter().for_each(MoveLock::release);
     lock.release();
     moved
 }
 
 /// Have the daemon pack the record of `space` with those `carrying`
 /// carries and deliver it to the joined machine `destination` names,
-/// settling at the hub an arrival that machine could not report.
+/// settling at the hub an arrival that machine could not report, while it
+/// holds the move locks of the carried records `locked`.
 async fn deliver(
     paths: &CommandPaths,
     space: &RemovedSpace,
     (destination, carrying): (&MachineDestination, &Carrying),
-    steps: &impl Steps,
+    (locked, steps): (&[SpaceId], &impl Steps),
 ) -> Result<SpaceMoved> {
     steps.reached(Step::MoveDelivering).await;
     let selector = SpaceSelector::id(&space.space_id);
@@ -63,7 +69,11 @@ async fn deliver(
         RecordArrival::Unknown { error } => {
             let carried = carried_ids(&exported.manifest);
             // Each record's lock keeps its restore here off until it settles.
-            let _locks = lock_each(paths, &carried).await?;
+            let unlocked: Vec<SpaceId> = (carried.iter())
+                .filter(|id| !locked.contains(id))
+                .cloned()
+                .collect();
+            let _locks = lock_each(paths, &unlocked).await?;
             let records = (&selector, carried);
             settle(paths, records, (machine, &ticket), anyhow!(error), steps).await?
         }
