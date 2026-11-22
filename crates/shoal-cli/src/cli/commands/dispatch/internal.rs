@@ -1,5 +1,4 @@
 use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_workers::agent_hooks;
 use shoal_workers::hosting;
@@ -205,11 +204,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             close_in,
             manual,
         } => {
-            // `host` opened this place for the agent.
-            hosting::record_owned_here(ctx.caller(), host, &space).await;
-            if let Some(host) = close_in {
-                hosting::close_here_when_done(ctx.caller(), host, &space).await;
-            }
             let agent = TrackedAgent {
                 name: agent,
                 model: model.into(),
@@ -217,39 +211,16 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 narrowing,
                 new_session,
             };
-            let source = manual.then_some(shoal_protocol::launches::LaunchSource::Manual);
-            run_session(&ctx, space, agent, (records, source), command).await
+            let session = hosting::Session {
+                space,
+                agent,
+                host,
+                close_in,
+                records,
+                manual,
+                command,
+            };
+            hosting::run_session(ctx.caller(), session).await
         }
     }
-}
-
-/// Run a session's tracked agent, consuming `records` once it starts, a
-/// restore made by `source` when it says.
-async fn run_session(
-    ctx: &Context,
-    space: SpaceId,
-    agent: TrackedAgent,
-    (records, source): (
-        Vec<std::path::PathBuf>,
-        Option<shoal_protocol::launches::LaunchSource>,
-    ),
-    command: Vec<std::ffi::OsString>,
-) -> Result<i32> {
-    if records.is_empty() {
-        return shoal_workers::execution::run(
-            &ctx.paths,
-            SpaceSelector::Id(space),
-            command,
-            Some(agent),
-        )
-        .await;
-    }
-    shoal_workers::execution::run_recovery(
-        &ctx.paths,
-        SpaceSelector::Id(space),
-        command,
-        agent,
-        (records, source),
-    )
-    .await
 }
