@@ -2711,8 +2711,11 @@ including facts only it has, such as where its terminal hosts keep agent
 sessions; the picker leaves out a space without what the request acts on and
 lists one the request refuses last, with the refusal's reason. A command that
 acts on this machine's spaces in its own process asks this machine's daemon
-alone. Completion still states what the command needs of a workspace in one
-table of the CLI's.
+alone. Every command declares that request, or that it sends none a space's
+offer depends on, in one match over the command tree with no default arm,
+which its pickers and completion read alike; completion asks this machine's
+daemon for the request of the line typed so far, and offers every space while
+the line does not parse yet.
 
 Named `[commands]` are executable/argument arrays resolved per name from saved
 repository config, worktree config, then global config and built-in defaults at

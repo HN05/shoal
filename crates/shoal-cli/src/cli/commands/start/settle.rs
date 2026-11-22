@@ -27,7 +27,7 @@ mod repository;
 mod stopped;
 
 pub(in crate::cli::commands) use arguments::check_start_arguments;
-pub(in crate::cli::commands) use located::launch_args;
+pub(in crate::cli::commands) use located::{launch_args, starting};
 pub(in crate::cli::commands) use pickers::{check_model, pick_start_source};
 
 /// Start what `args` ask for: refuse what they alone refuse, and what

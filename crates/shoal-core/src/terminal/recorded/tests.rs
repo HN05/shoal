@@ -207,3 +207,98 @@ fn agent_places_count_stopped_agents_as_connected() {
         }
     );
 }
+
+#[tokio::test]
+async fn sessions_follow_recorded_places_and_ask_each_host_once() -> anyhow::Result<()> {
+    let root = tempfile::tempdir_in("/tmp")?;
+    install_session_hosts(root.path());
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        crate::test_support::isolated_test(
+            root.path(),
+            "terminal::recorded::tests::session_hosts_child",
+        )
+        .env("PATH", root.path().join("bin"))
+        .output(),
+    )
+    .await??;
+    let printed = crate::test_support::printed(&output);
+    anyhow::ensure!(output.status.success(), "{printed}");
+    // One listing answers for every recorded place, and Herdr is asked only
+    // where it is on.
+    let read = |name: &str| std::fs::read_to_string(root.path().join(name)).unwrap();
+    assert_eq!(read("zmx-lists"), "list\n");
+    assert_eq!(read("herdr-calls"), "pane get w9:p2\n");
+    Ok(())
+}
+
+/// A zmx that lists only `retained` and counts its listings, and a Herdr
+/// that records what it is asked and cannot answer.
+fn install_session_hosts(root: &std::path::Path) {
+    let bin = root.join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    crate::test_support::install_test_script(
+        bin.join("zmx"),
+        format!(
+            "#!/bin/sh\n[ \"$*\" = list ] || exit 1\necho list >> '{}'\nprintf '  name=retained\\tpid=3\\tclients=0\\n'\n",
+            root.join("zmx-lists").display()
+        ),
+    );
+    crate::test_support::install_test_script(
+        bin.join("herdr"),
+        format!(
+            "#!/bin/sh\necho \"$*\" >> '{}'\necho unavailable\nexit 1\n",
+            root.join("herdr-calls").display()
+        ),
+    );
+}
+
+#[tokio::test]
+#[ignore = "isolated environment launched by the session hosts regression"]
+async fn session_hosts_child() -> anyhow::Result<()> {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return Ok(());
+    }
+    let agent = |space: &str, name: Option<&str>, session: &str| RunningAgent {
+        execution: format!("{space}-execution").into(),
+        space_id: space.into(),
+        agent: name.map(Into::into),
+        restorable: name.is_some(),
+        state: None,
+        interrupted: false,
+        origin: Some(Origin::created(HostName::Zmx, session.into())),
+        stopped: None,
+        restarted_from: Vec::new(),
+    };
+    // A connected agent counts as it is; executions whose wrapper is gone
+    // count only while their session is open.
+    let agents = [
+        agent("w1", Some("claude"), "workspace-session"),
+        agent("w3", None, "stale"),
+        agent("w4", None, "retained"),
+        agent("c1", Some("codex"), "chat-session"),
+    ];
+    // `w5` turned Herdr off, so its pane is never asked about; `w6`'s Herdr
+    // cannot answer, which leaves zmx's answers.
+    let owned: Vec<(SpaceId, Origin)> = [
+        ("w2", HostName::Zmx, "retained"),
+        ("w3", HostName::Zmx, "gone"),
+        ("w5", HostName::Herdr, "w9:p1"),
+        ("w6", HostName::Herdr, "w9:p2"),
+    ]
+    .into_iter()
+    .map(|(space, host, place)| (space.into(), Origin::created(host, place.into())))
+    .collect();
+    let known = known_sessions(&agents, owned.iter().map(|(space, origin)| (space, origin)));
+    let settings = ["w1", "w2", "w3", "w4", "w5", "w6"].map(|space| {
+        let mut layers = crate::config::repo::ConfigLayers::default();
+        layers.local_config.terminal.herdr.enabled = Some(space != "w5");
+        let settings = crate::config::Config::default().resolve(&layers).unwrap();
+        (SpaceId::from(space), settings)
+    });
+    let mut owners = known.owners;
+    owners.extend(open_session_owners(&known.to_ask, &HashMap::from(settings)).await);
+    let expected = ["w1", "w2", "w4", "c1"].map(SpaceId::from);
+    assert_eq!(owners, HashSet::from(expected));
+    Ok(())
+}

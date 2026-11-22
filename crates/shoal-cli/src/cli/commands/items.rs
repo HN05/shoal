@@ -35,6 +35,8 @@ pub(crate) use content::read_body;
 pub(super) use context::{
     current_context, in_context, named_repository, select_item_target, select_repo_context,
 };
+pub(super) use open::{opening_issue, opening_pull};
+pub(super) use revert::reverting;
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {

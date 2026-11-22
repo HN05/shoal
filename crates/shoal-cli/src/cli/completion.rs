@@ -1,8 +1,8 @@
 //! Completion runs before the normal CLI: read-only, scoped, and time bounded.
 use crate::paths::PathsExt;
 use std::{
-    collections::BTreeSet,
-    ffi::OsStr,
+    collections::{BTreeSet, HashMap},
+    ffi::{OsStr, OsString},
     future::Future,
     path::PathBuf,
     sync::{Arc, OnceLock},
@@ -10,15 +10,14 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use clap::{Command, CommandFactory};
+use clap::{Command, CommandFactory, FromArgMatches};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::{
     agent::Agent,
     cli::{
         agents,
-        availability::{self, Fit, Need},
-        ui,
+        ui::{self, Acting},
     },
     client::connection::CommandPaths,
     client::leases,
@@ -36,7 +35,8 @@ use crate::{
     scoping::Scoping,
     workspace_context::{ScopeOrder, WorkspaceContext},
 };
-use shoal_ids::space_ids::SpaceNumber;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_protocol::model::Offer;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// What was already typed on the command line when completion was requested.
@@ -51,8 +51,9 @@ struct Typed {
     restore: RestoreAction,
     /// Workspaces already named on the line, which are not offered again.
     named: Vec<String>,
-    /// The selected command also governs inherited global workspace options.
-    need: Option<Need>,
+    /// What the typed command sends for the space it acts on, by which the
+    /// daemon judges the spaces offered for each of its space arguments.
+    acting: Option<Acting>,
     settings: OnceLock<Settings>,
 }
 
@@ -84,7 +85,7 @@ impl RestoreAction {
     fn target(self) -> Target {
         match self {
             Self::Reopen => Target::RemovedSpaces,
-            Self::Checkpoint => Target::Workspaces(Need::Checkpoint),
+            Self::Checkpoint => Target::Workspaces,
             Self::Discard => Target::ResumeSpaces,
         }
     }
@@ -111,10 +112,10 @@ enum Target {
     /// remote-tracking, which `shoal start --branch` opens.
     Branches,
     /// Workspaces, each described by why the command would refuse it.
-    Workspaces(Need),
+    Workspaces,
     /// Spaces: workspaces as [`Target::Workspaces`] offers them, then
     /// chats.
-    Spaces(Need),
+    Spaces,
     /// Workspaces described by what `shoal resume` brings back in them,
     /// then the stopped chats.
     ResumeSpaces,
@@ -155,7 +156,6 @@ pub fn command() -> Command {
             path.push(name);
             leaf = child;
         }
-        typed.need = Need::of_matches(&path, leaf);
         typed.workspace = space_value(leaf, "workspace").or_else(|| space_value(leaf, "space"));
         typed.named = leaf
             .try_get_many::<SpaceSelector>("workspace")
@@ -169,10 +169,22 @@ pub fn command() -> Command {
         if path == ["restore"] {
             typed.restore = RestoreAction::of(leaf);
         }
+        typed.acting = typed_acting(&words);
     }
     // Decoration reads every command's arguments, which are deferred until built.
     command.build();
     decorate(command, &[], Arc::new(typed))
+}
+
+/// What the command `words` type, before the one being completed, sends
+/// for the space it acts on; none where they do not yet parse, as while a
+/// required argument is missing.
+fn typed_acting(words: &[OsString]) -> Option<Acting> {
+    let typed = &words[..words.len().saturating_sub(1)];
+    let command = crate::cli::Cli::command().ignore_errors(true);
+    let matches = command.try_get_matches_from(typed).ok()?;
+    let cli = crate::cli::Cli::from_arg_matches(&matches).ok()?;
+    cli.command.as_ref().and_then(crate::cli::commands::acting)
 }
 
 fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
@@ -196,9 +208,6 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
         [.., parent, _] => parent.as_str(),
         _ => "",
     };
-    let need = typed
-        .need
-        .unwrap_or_else(|| Need::of_command(&path.iter().map(String::as_str).collect::<Vec<_>>()));
     // A positional workspace or space argument beside `--all` offers it first
     // among the names, so the flag itself is not listed again after them. A
     // `--space` option never completes where a flag is typed, so `--all`
@@ -212,14 +221,14 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
             if offer_all && arg.get_id() == "all" {
                 return arg.hide(true);
             }
-            let target = target_of(arg.get_id().as_str(), parent, name.as_str(), need);
+            let target = target_of(arg.get_id().as_str(), parent, name.as_str());
             if let Some(target) = target {
                 let typed = typed.clone();
                 let offer_all = offer_all
                     && !typed.all
                     && matches!(
                         target,
-                        Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeSpaces
+                        Target::Workspaces | Target::Spaces | Target::ResumeSpaces
                     );
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut values = typed.complete(target, current);
@@ -396,10 +405,7 @@ impl Typed {
         };
         let workspaces = matches!(
             target,
-            Target::Workspaces(_)
-                | Target::Spaces(_)
-                | Target::ResumeSpaces
-                | Target::RemovedSpaces
+            Target::Workspaces | Target::Spaces | Target::ResumeSpaces | Target::RemovedSpaces
         );
         values.retain(|value| {
             value.get_value().to_str().is_some_and(|s| {
@@ -453,26 +459,16 @@ impl Typed {
                 .collect());
         }
         let workspaces = crate::client::spaces::list(&paths).await?.into_workspaces();
-        if let Target::Workspaces(need) | Target::Spaces(need) = target {
-            let availability = availability::load(need, &paths, &workspaces).await;
-            let mut candidates: Vec<_> = workspaces
-                .iter()
+        if matches!(target, Target::Workspaces | Target::Spaces) {
+            let offers = self.offers(&paths).await;
+            let mut candidates: Vec<_> = (workspaces.iter())
                 .filter_map(|w| {
                     let candidate = space_candidate(w.number, &w.name);
-                    match availability.fit(w) {
-                        Fit::Accepted => Some(candidate),
-                        Fit::Refused(reason) => {
-                            Some(candidate.help(Some(format!("{}: {reason}", w.name).into())))
-                        }
-                        Fit::Hidden => None,
-                    }
+                    offered(candidate, w.name.to_string(), offers.get(&w.id))
                 })
                 .collect();
-            // Attaching reaches running chats' sessions too.
-            if need == Need::Session {
-                candidates.extend(session_chat_candidates(&paths).await?);
-            } else if matches!(target, Target::Spaces(_)) {
-                candidates.extend(chat_candidates(&paths, need).await?);
+            if target == Target::Spaces {
+                candidates.extend(chat_candidates(&paths, &offers).await?);
             }
             return Ok(candidates);
         }
@@ -550,14 +546,26 @@ impl Typed {
             Target::Commands
             | Target::Repositories
             | Target::Branches
-            | Target::Workspaces(_)
-            | Target::Spaces(_)
+            | Target::Workspaces
+            | Target::Spaces
             | Target::ResumeSpaces
             | Target::RemovedSpaces
             | Target::ApprovalRequests
             | Target::Threads => unreachable!(),
         }
         Ok(names.into_iter().map(CompletionCandidate::new).collect())
+    }
+
+    /// The daemon's verdicts on this machine's spaces for the typed
+    /// command's request; none, which offers every space, without one or
+    /// while the daemon cannot say.
+    async fn offers(&self, paths: &CommandPaths) -> HashMap<SpaceId, Offer> {
+        let Some(acting) = &self.acting else {
+            return HashMap::new();
+        };
+        let judged = crate::client::spaces::judged_here(paths, acting.operation()).await;
+        let judged = judged.unwrap_or_default().into_iter();
+        judged.map(|judged| (judged.space, judged.offer)).collect()
     }
 
     /// The explicitly typed workspace, else the one containing the current
@@ -591,19 +599,37 @@ fn chat_candidate(chat: &Chat, kind: &str) -> CompletionCandidate {
     CompletionCandidate::new(chat.number.to_string()).help(Some(help.into()))
 }
 
-/// Every chat `need` offers, a stopped one described as such.
-async fn chat_candidates(paths: &CommandPaths, need: Need) -> Result<Vec<CompletionCandidate>> {
-    Ok(crate::client::spaces::list(paths)
-        .await?
-        .into_chats()
-        .iter()
-        .filter(|chat| need.offers_chat(chat))
-        .map(|chat| {
+/// `candidate`, the space `name` labels, as `offer` shows it: described by
+/// the reason it is refused, or left out where it lacks what the command
+/// acts on.
+fn offered(
+    candidate: CompletionCandidate,
+    name: String,
+    offer: Option<&Offer>,
+) -> Option<CompletionCandidate> {
+    match offer {
+        None | Some(Offer::Accepted) => Some(candidate),
+        Some(Offer::Refused { reason }) => {
+            Some(candidate.help(Some(format!("{name}: {reason}").into())))
+        }
+        Some(Offer::Lacking) => None,
+    }
+}
+
+/// Every chat `offers` offers, a stopped one described as such.
+async fn chat_candidates(
+    paths: &CommandPaths,
+    offers: &HashMap<SpaceId, Offer>,
+) -> Result<Vec<CompletionCandidate>> {
+    let chats = crate::client::spaces::list(paths).await?.into_chats();
+    Ok((chats.iter())
+        .filter_map(|chat| {
             let kind = match chat.running {
                 false => STOPPED_CHAT,
                 true => "chat",
             };
-            chat_candidate(chat, kind)
+            let label = format!("{} ({kind})", chat.name);
+            offered(chat_candidate(chat, kind), label, offers.get(&chat.id))
         })
         .collect())
 }
@@ -620,9 +646,8 @@ fn stopped_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
 /// How completion describes a stopped chat.
 const STOPPED_CHAT: &str = "stopped chat";
 
-/// What the argument `id` of the command `name`, under `parent`, completes,
-/// given what the command needs of a workspace.
-fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
+/// What the argument `id` of the command `name`, under `parent`, completes.
+fn target_of(id: &str, parent: &str, name: &str) -> Option<Target> {
     match (id, parent, name) {
         ("id", _, "approvals") | ("id", "approvals", "withdraw") => Some(Target::ApprovalRequests),
         ("thread" | "of", "thread", _) => Some(Target::Threads),
@@ -631,9 +656,11 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
         ("branch", _, "start") => Some(Target::Branches),
         ("space", _, "resume") => Some(Target::ResumeSpaces),
         ("space", _, "restore") => Some(Target::RemovedSpaces),
-        ("workspace", _, _) | ("in_workspace", _, "start") => Some(Target::Workspaces(need)),
-        ("parent", _, "start") => Some(Target::Spaces(need)),
-        ("space", _, _) => Some(Target::Spaces(need)),
+        // Attaching reaches chats' sessions too.
+        ("workspace", _, "attach") => Some(Target::Spaces),
+        ("workspace", _, _) | ("in_workspace", _, "start") => Some(Target::Workspaces),
+        ("parent", _, "start") => Some(Target::Spaces),
+        ("space", _, _) => Some(Target::Spaces),
         ("name", "acquire", "port") => Some(Target::Ports),
         ("pool", "acquire" | "release", "resource" | "repo") | ("resource", "acquire", "repo") => {
             Some(Target::Pools)
@@ -644,21 +671,6 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
         ("lease", "release", _) => Some(Target::ResourceNames),
         _ => None,
     }
-}
-
-/// The running chats with an agent session.
-async fn session_chat_candidates(paths: &CommandPaths) -> Result<Vec<CompletionCandidate>> {
-    let chats = crate::client::spaces::list(paths)
-        .await?
-        .into_running_chats();
-    let places = super::commands::sessions::chat_places(paths, &chats).await;
-    let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
-    let attachable = crate::terminal::session_owners(&places);
-    Ok(chats
-        .iter()
-        .filter(|chat| attachable.contains(&chat.id))
-        .map(|chat| chat_candidate(chat, "chat"))
-        .collect())
 }
 
 /// The branches of the current directory's repository, as `--branch`

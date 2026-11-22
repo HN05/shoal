@@ -14,7 +14,7 @@ use crate::{
         agents, client,
         context::Context,
         recent,
-        ui::{self, Acting, Fallback},
+        ui::{self, Fallback},
     },
     client::connection::CommandPaths,
     config::{Config, named_commands::Commands, repo::ConfigLayers, resolve::Stack},

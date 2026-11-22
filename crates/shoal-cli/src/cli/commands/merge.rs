@@ -25,6 +25,37 @@ pub(super) async fn run(ctx: &Context, args: MergeArgs) -> Result<i32> {
     }
 }
 
+/// What merging as `args` ask sends for the space a picker picks; `None`
+/// where they conflict, which the merge refuses before any picker.
+pub(super) fn acting(args: &MergeArgs) -> Option<Acting> {
+    Some(match args.merged().ok()? {
+        Merged::Pr(item) => merging_pr(item, args),
+        Merged::Work => merging_work(),
+    })
+}
+
+/// What merging the PR `item` names, or the space's linked one, sends in
+/// the context of the space a picker picks.
+fn merging_pr(item: Option<ItemInput>, args: &MergeArgs) -> Acting {
+    let action = pull::action(args).0;
+    crate::cli::commands::items::in_context(move |target| {
+        crate::client::items::act(target, ItemKind::Pr, item.clone(), action.clone())
+    })
+}
+
+/// What merging a space's work sends for the space a picker picks: a
+/// space without a PR merges in an operation on this machine, which its
+/// worktree's branch merges into.
+fn merging_work() -> Acting {
+    Acting::request(|workspace| {
+        let spec = OperationSpec::Merge {
+            workspace,
+            options: Default::default(),
+        };
+        crate::client::operations::start_request(spec, Default::default())
+    })
+}
+
 /// Merge the PR `item` names, or the space's linked one, in the repository
 /// `args` name.
 async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -> Result<i32> {
@@ -34,12 +65,7 @@ async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -
     };
     args.ensure_pull_flags(&named)?;
     let (space, repo) = (args.space.clone(), args.repo.name.clone());
-    let merging = {
-        let (item, action) = (item.clone(), pull::action(args).0);
-        crate::cli::commands::items::in_context(move |target| {
-            crate::client::items::act(target, ItemKind::Pr, item.clone(), action.clone())
-        })
-    };
+    let merging = merging_pr(item.clone(), args);
     let target = select_item_target(ctx, space, repo, item.as_ref(), &merging).await?;
     pull::merge(ctx, target, item, args).await
 }
@@ -47,15 +73,7 @@ async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -
 /// Merge the work of the space `args` name as the daemon decides: through
 /// its open PR, or a workspace's branch locally.
 async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
-    // A space without a PR merges in an operation on this machine, which
-    // its worktree's branch merges into.
-    let merging = Acting::request(|workspace| {
-        let spec = OperationSpec::Merge {
-            workspace,
-            options: Default::default(),
-        };
-        crate::client::operations::start_request(spec, Default::default())
-    });
+    let merging = merging_work();
     let space = ui::select_space(
         ctx,
         args.space.clone(),

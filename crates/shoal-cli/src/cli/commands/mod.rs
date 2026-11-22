@@ -3,6 +3,7 @@
 use crate::paths::PathsExt;
 mod absorb;
 mod acquisition;
+mod acting;
 mod adopt;
 mod alerts;
 mod api;
@@ -95,6 +96,7 @@ mod viewer;
 #[cfg(test)]
 mod tests;
 
+pub(in crate::cli) use acting::acting;
 pub(in crate::cli) use approvals::summary as approval_summary;
 pub(in crate::cli) use threads::summary as thread_summary;
 

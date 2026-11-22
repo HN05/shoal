@@ -1,6 +1,5 @@
 pub(crate) mod agents;
 pub mod args;
-pub mod availability;
 pub mod client;
 pub mod commands;
 pub mod completion;

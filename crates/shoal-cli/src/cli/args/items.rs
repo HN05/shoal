@@ -115,11 +115,9 @@ pub struct RelationArgs {
 impl RelationArgs {
     /// Split the trailing relation from the item selection before it.
     pub fn split(self) -> Result<(ItemArgs, Relation)> {
+        let relation = self.relation()?;
         let mut args = self.args;
-        let last = args.pop().unwrap_or_default();
-        let relation = Relation::from_str(&last, false).map_err(|_| {
-            anyhow::anyhow!("end with a relation: assigned, opened or related (got {last})")
-        })?;
+        args.pop();
         let mut items = args.into_iter();
         let items = ItemArgs {
             kind_or_url: items.next().as_deref().map(str::parse).transpose()?,
@@ -127,6 +125,14 @@ impl RelationArgs {
             space: self.space,
         };
         Ok((items, relation))
+    }
+
+    /// The trailing relation.
+    pub fn relation(&self) -> Result<Relation> {
+        let last = self.args.last().map_or("", String::as_str);
+        Relation::from_str(last, false).map_err(|_| {
+            anyhow::anyhow!("end with a relation: assigned, opened or related (got {last})")
+        })
     }
 }
 

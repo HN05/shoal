@@ -89,4 +89,4 @@ pub(super) mod import;
 pub(super) mod reopen;
 mod targets;
 
-pub(super) use checkpoints::checkpoint;
+pub(super) use checkpoints::{checkpoint, returning, taking};

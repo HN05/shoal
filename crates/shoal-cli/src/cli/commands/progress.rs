@@ -37,9 +37,10 @@ pub(super) async fn run(
     steps: bool,
     blocker: BlockerFlags,
 ) -> Result<i32> {
+    let blocks = blocker.add.is_some() || blocker.remove.is_some();
+    let acting = reporting(status.is_some() || steps || blocks);
     let mut changes = changes(status, steps)?;
     changes.extend(blocker_change(blocker)?);
-    let acting = reporting(!changes.is_empty());
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&acting)).await?;
     let progress = match changes.is_empty() {
         true => progress::get(space).send(&ctx.paths).await?,
@@ -240,7 +241,7 @@ fn step_lines(progress: &Progress, palette: Palette) -> Vec<String> {
 }
 
 /// What reporting progress sends for the space a picker picks: a change
-/// where it `changes` anything, else a read of it.
+/// where it `changes` a status, the steps or a blocker, else a read of it.
 pub(super) fn reporting(changes: bool) -> Acting {
     match changes {
         true => Acting::request(|space| progress::set(space, ProgressChange::Status(None))),

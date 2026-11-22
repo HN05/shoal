@@ -31,7 +31,7 @@ fn setup_completion_exempts_only_the_callers_own_execution() {
     assert!(
         nested
             .lines()
-            .any(|line| line.starts_with("1:first") && line.ends_with("running")),
+            .any(|line| line.starts_with("1:first:") && line.contains("runs work")),
         "{nested}"
     );
 }
@@ -187,7 +187,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     assert!(
         choices
             .iter()
-            .any(|choice| choice.starts_with("3:broken") && choice.ends_with("failed")),
+            .any(|choice| choice.starts_with("3:broken:") && choice.contains("is failed")),
         "{choices:?}"
     );
     assert!(choices.contains(&"2:second".into()), "{choices:?}");

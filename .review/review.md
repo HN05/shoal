@@ -448,7 +448,9 @@ instead of the PR delivery guidance below.
   where the declared check covers it. A picker names the request its command
   sends for the space it picks, which each machine's daemon judges; flag one
   that names another request, and CLI code that judges a space the daemon
-  judges.
+  judges. `commands::acting` declares each command's request in a match with
+  no default arm, which completion reads; flag a default arm there, and a
+  picker that builds its request apart from the function that match calls.
   Ancestry and exact-ref failures stop branch selection, refresh, and removal;
   only a documented negative exit status is a negative answer.
 - Explicit workspace paths override only that creation; reject overlaps with state,

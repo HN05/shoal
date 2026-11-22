@@ -1,6 +1,5 @@
 //! Showing reviews: `review ls`, `view review`, `watch review`, and the
 //! latest review `shoal view` adds after a workspace's linked items.
-use crate::cli::ui::Acting;
 use anyhow::Result;
 
 use crate::client::reviews;

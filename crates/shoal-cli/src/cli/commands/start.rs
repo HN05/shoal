@@ -45,7 +45,7 @@ pub(in crate::cli::commands) use reads::{
 };
 pub(in crate::cli::commands) use reports::report_queued_in;
 pub(in crate::cli::commands) use settle::{
-    check_model, check_start_arguments, launch_args, pick_start_source, settle,
+    check_model, check_start_arguments, launch_args, pick_start_source, settle, starting,
 };
 
 #[cfg(test)]

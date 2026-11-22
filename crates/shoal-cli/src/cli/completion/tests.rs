@@ -1,19 +1,10 @@
 use super::*;
-use crate::test_support::install_test_script;
 use crate::time::UnixTime;
 use crate::{
     config::repo::ConfigLayers,
-    model::{Chat, OwnedPlace, RunningAgent},
-    protocol::{
-        self, AgentMethod, Body, ConfigMethod, ConfigTarget, Method, Operation, PlaceMethod,
-        RepositoryLayers, Request, Response, SpaceMethod,
-    },
-    sessions::{HostName, Origin},
-    state::WorkspaceState,
+    model::Chat,
+    protocol::{Operation, RemovalMethod},
 };
-use shoal_core::test_support::printed;
-use std::fs;
-use tokio::net::UnixListener;
 
 #[tokio::test(start_paused = true)]
 async fn live_lookups_keep_the_interactive_budget() {
@@ -31,221 +22,6 @@ async fn live_lookups_keep_the_interactive_budget() {
             .to_string(),
         "discovery failed"
     );
-}
-
-#[tokio::test]
-async fn attach_candidates_follow_recorded_places() -> Result<()> {
-    let root = tempfile::tempdir_in("/tmp")?;
-    install_session_fixture(root.path())?;
-    let output = tokio::time::timeout(
-        Duration::from_secs(60),
-        crate::test_support::isolated_test(
-            root.path(),
-            "cli::completion::tests::attach_candidates_child",
-        )
-        .env("PATH", root.path().join("bin"))
-        .output(),
-    )
-    .await
-    .context("attach candidate discovery stalled")??;
-    assert!(output.status.success(), "{}", printed(&output));
-    // One listing answers for every recorded place, and Herdr is asked only
-    // where it is on.
-    assert_eq!(fs::read_to_string(root.path().join("zmx-lists"))?, "list\n");
-    assert_eq!(
-        fs::read_to_string(root.path().join("herdr-calls"))?,
-        "pane get w9:p2\n"
-    );
-    Ok(())
-}
-
-fn install_session_fixture(root: &std::path::Path) -> Result<()> {
-    let bin = root.join("bin");
-    fs::create_dir(&bin)?;
-    // Only `retained` is open: the records of `gone` and `stale` outlive
-    // their sessions.
-    let script = bin.join("zmx");
-    install_test_script(
-        &script,
-        format!(
-            "#!/bin/sh\n[ \"$*\" = list ] || exit 1\necho list >> '{}'\nprintf '  name=retained\\tpid=3\\tclients=0\\n'\n",
-            root.join("zmx-lists").display()
-        ),
-    );
-    let herdr = bin.join("herdr");
-    install_test_script(
-        &herdr,
-        format!(
-            "#!/bin/sh\necho \"$*\" >> '{}'\necho unavailable\nexit 1\n",
-            root.join("herdr-calls").display()
-        ),
-    );
-    Ok(())
-}
-
-#[tokio::test]
-#[ignore = "isolated environment launched by attach candidate regression"]
-async fn attach_candidates_child() -> Result<()> {
-    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
-        return Ok(());
-    }
-    let root = std::env::current_dir()?;
-    let paths = Paths::for_test(&root);
-    paths.prepare()?;
-    let listener = UnixListener::bind(&paths.socket)?;
-    let daemon = serve_attach_targets(listener, &root);
-    let typed = Typed {
-        state: Some(paths.state),
-        ..Typed::default()
-    };
-    // Exercise the same discovery as Tab, without requiring two subprocesses
-    // and daemon replies to finish within its 500 ms interactive deadline.
-    let (candidates, served) = tokio::join!(
-        typed.candidates(Target::Workspaces(Need::Session), ""),
-        daemon
-    );
-    served?;
-    let candidates = candidates?;
-    let numbers: BTreeSet<_> = candidates.iter().map(|value| value.get_value()).collect();
-    // `first`, `second`, `fourth` and the chat.
-    assert_eq!(
-        numbers,
-        BTreeSet::from([
-            OsStr::new("1"),
-            OsStr::new("2"),
-            OsStr::new("4"),
-            OsStr::new("7")
-        ])
-    );
-    Ok(())
-}
-
-async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) -> Result<()> {
-    // Six listings, the chats' places among them, then the settings of each
-    // of the five workspaces whose recorded places are asked about.
-    for _ in 0..11 {
-        let (mut stream, _) = listener.accept().await?;
-        let request: Request = protocol::read(&mut stream).await?;
-        let body = if matches!(
-            request.method,
-            Method::Operation(Operation::Agent(AgentMethod::ListAgents))
-        ) {
-            // A connected agent counts as it is; executions whose wrapper
-            // is gone count only while their session is open.
-            Body::RunningAgents(
-                [
-                    ("w1", Some("claude"), "workspace-session"),
-                    ("w3", None, "stale"),
-                    ("w4", None, "retained"),
-                    ("c1", Some("codex"), "chat-session"),
-                ]
-                .map(|(workspace, agent, session)| RunningAgent {
-                    execution: format!("{workspace}-execution").into(),
-                    space_id: workspace.into(),
-                    agent: agent.map(Into::into),
-                    restorable: agent.is_some(),
-                    state: None,
-                    interrupted: false,
-                    origin: Some(Origin::created(HostName::Zmx, session.into())),
-                    stopped: None,
-                    restarted_from: Vec::new(),
-                })
-                .into(),
-            )
-        } else if matches!(
-            request.method,
-            Method::Operation(Operation::Place(PlaceMethod::OwnedPlaces))
-        ) {
-            // `fifth` turned Herdr off, so its pane is never asked about;
-            // `sixth`'s Herdr cannot answer, which leaves zmx's answers.
-            Body::OwnedPlaces(
-                [
-                    ("w2", HostName::Zmx, "retained"),
-                    ("w3", HostName::Zmx, "gone"),
-                    ("w5", HostName::Herdr, "w9:p1"),
-                    ("w6", HostName::Herdr, "w9:p2"),
-                ]
-                .map(|(workspace, host, place)| OwnedPlace {
-                    space_id: workspace.into(),
-                    origin: Origin::created(host, place.into()),
-                })
-                .into(),
-            )
-        } else if let Method::Operation(Operation::Config(ConfigMethod::LayeredConfig {
-            target: ConfigTarget::Space(workspace),
-        })) = &request.method
-        {
-            let mut layers = ConfigLayers::default();
-            layers.local_config.terminal.herdr.enabled = Some(workspace != "w5");
-            Body::LayeredConfig(RepositoryLayers::of(&layers).unwrap())
-        } else {
-            assert!(matches!(
-                request.method,
-                Method::Operation(Operation::Space(SpaceMethod::ListSpaces))
-            ));
-            let chat = Chat {
-                narrowing: Default::default(),
-                mode: Some("chat".into()),
-                number: 7.into(),
-                id: "c1".into(),
-                repository_id: Some("repo".into()),
-                name: "chat".into(),
-                running: true,
-                links: Default::default(),
-                review: Vec::new(),
-                holds: Vec::new(),
-                agent_state: None,
-                progress: None,
-                sleep: None,
-                wake_at: None,
-                asleep: None,
-                restart: None,
-                parent: None,
-                children: Vec::new(),
-                workdir: shoal_protocol::model::Workdir::Checkout {
-                    path: "/repo".into(),
-                },
-                part: shoal_protocol::model::ChatPart {
-                    agent: Some("codex".into()),
-                    started_at: UnixTime::from_seconds(0),
-                    tmp_dir: None,
-                    completion: None,
-                },
-            };
-            let workspaces = attach_workspaces(root)
-                .into_iter()
-                .map(crate::model::Space::from);
-            Body::Spaces(workspaces.chain([chat.into()]).collect())
-        };
-        protocol::write(&mut stream, &Response::new(request.id, body)).await?;
-    }
-    Ok(())
-}
-
-fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
-    [
-        ("w1", "first"),
-        ("w2", "second"),
-        ("w3", "third"),
-        ("w4", "fourth"),
-        ("w5", "fifth"),
-        ("w6", "sixth"),
-    ]
-    .into_iter()
-    .zip(1..)
-    .map(|((id, name), number)| {
-        let mut workspace = Workspace::new_record(
-            "repo".into(),
-            name.into(),
-            root.join(name),
-            crate::model::Head::Branch(name.into()),
-            WorkspaceState::Ready,
-        );
-        workspace.id = id.into();
-        workspace.number = number.into();
-        workspace
-    })
-    .collect()
 }
 
 #[test]
@@ -266,12 +42,9 @@ fn a_repositorys_own_agents_complete_as_agents() {
 
 #[test]
 fn resume_completes_resumable_spaces_and_restore_removed_ones() {
+    assert_eq!(target_of("space", "", "resume"), Some(Target::ResumeSpaces));
     assert_eq!(
-        target_of("space", "", "resume", Need::Any),
-        Some(Target::ResumeSpaces)
-    );
-    assert_eq!(
-        target_of("space", "", "restore", Need::Any),
+        target_of("space", "", "restore"),
         Some(Target::RemovedSpaces)
     );
     let chat = |name: &str, running| Chat {
@@ -325,8 +98,8 @@ fn rm_completes_spaces() {
     rm.build();
     let positional = rm.get_positionals().next().unwrap();
     assert_eq!(
-        target_of(positional.get_id().as_str(), "", "rm", Need::Any),
-        Some(Target::Spaces(Need::Any))
+        target_of(positional.get_id().as_str(), "", "rm"),
+        Some(Target::Spaces)
     );
 }
 
@@ -343,9 +116,42 @@ fn restore_completes_the_spaces_its_flags_act_on() {
         RestoreAction::of(restore).target()
     };
     assert_eq!(target(&[]), Target::RemovedSpaces);
-    assert_eq!(
-        target(&["--checkpoint"]),
-        Target::Workspaces(Need::Checkpoint)
-    );
+    assert_eq!(target(&["--checkpoint"]), Target::Workspaces);
     assert_eq!(target(&["--discard-agent"]), Target::ResumeSpaces);
+}
+
+#[test]
+fn a_line_names_the_request_its_command_sends_once_it_parses() {
+    let acting = |line: &str| {
+        let words: Vec<OsString> = line.split(' ').map(OsString::from).collect();
+        typed_acting(&words).map(|acting| acting.operation())
+    };
+    // The word being completed is left out, so a partial number is no
+    // space yet.
+    assert!(matches!(
+        acting("shoal stop --processes 1"),
+        Some(Operation::Removal(RemovalMethod::StopProcesses { .. }))
+    ));
+    assert!(matches!(
+        acting("shoal stop "),
+        Some(Operation::Removal(RemovalMethod::StopSpace { .. }))
+    ));
+    // A hold names its required name before it parses.
+    assert!(acting("shoal acquire hold ").is_none());
+    assert!(acting("shoal repo ls ").is_none());
+}
+
+#[test]
+fn a_refused_space_completes_with_its_reason_and_a_lacking_one_not_at_all() {
+    let shown = |offer: Option<Offer>| {
+        let candidate = CompletionCandidate::new("3");
+        let shown = offered(candidate, "fix".into(), offer.as_ref());
+        shown.map(|candidate| candidate.get_help().map(ToString::to_string))
+    };
+    assert_eq!(shown(None), Some(None));
+    assert_eq!(shown(Some(Offer::Accepted)), Some(None));
+    let reason = "workspace 3 is preparing".to_owned();
+    let refused = shown(Some(Offer::Refused { reason }));
+    assert_eq!(refused, Some(Some("fix: workspace 3 is preparing".into())));
+    assert_eq!(shown(Some(Offer::Lacking)), None);
 }

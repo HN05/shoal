@@ -7416,9 +7416,9 @@ subcommands (including global configured commands), flags, fixed values, and
 paths without a daemon; with one running it also suggests repository-configured
 commands, repositories, workspaces, pools, members, lease names, ports,
 and simulator leases for the current or named workspace, honoring `--state-dir`
-and scope with a 500 ms timeout, never starting a daemon or picker. A workspace
-the command would refuse for its state, or for `setup` a running execution, is
-described by the reason; one without what the command acts on is left out. Targets sort before flags,
+and scope with a 500 ms timeout, never starting a daemon or picker. A space
+the command would refuse is described by the reason the command would give;
+one without what the command acts on is left out. Targets sort before flags,
 also in fzf-tab. `shoal shell completions <shell>` prints scripts for
 Bash, Zsh, Fish, PowerShell, and Elvish.
 

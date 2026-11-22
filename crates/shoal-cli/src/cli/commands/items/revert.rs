@@ -39,9 +39,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;
-    // A revert is opened from a worktree it verifies here, or a chat's
-    // checkout here.
-    let reverting = Acting::here(crate::client::spaces::status);
+    let reverting = reverting();
     let space = ui::select_space(
         ctx,
         selector.space,
@@ -275,4 +273,10 @@ fn report(ctx: &Context, outcome: OpenOutcome, workspace: Option<&Workspace>) ->
         },
     )?;
     Ok(0)
+}
+
+/// What reverting a PR reads of the space a picker picks: a revert is
+/// opened from a worktree it verifies here, or a chat's checkout here.
+pub(in crate::cli::commands) fn reverting() -> Acting {
+    Acting::here(crate::client::spaces::status)
 }
