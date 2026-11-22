@@ -14,7 +14,7 @@ use crate::{
     protocol::operations::WorkspaceStart,
     repository::Selector,
 };
-use shoal_protocol::{hub::directory::HubView, repository::url_key, space_names::SpaceSelector};
+use shoal_protocol::{hub::directory::HubView, space_names::SpaceSelector};
 
 /// Why a scoped caller cannot start the worker of a workspace outside its
 /// tree.
@@ -106,8 +106,7 @@ impl Manager {
             && let Some(own) = self.caller_repository(caller).await?
         {
             let own = self.repositories.repository(&own).await?;
-            let url = crate::repository::remote_url_from_source(&own.source).await;
-            let origin = url.ok().flatten().map(|url| url_key(&url));
+            let origin = crate::repository::identity(&own.source).await?;
             (view.directory.repositories)
                 .retain(|listed| origin.is_some() && listed.repository.repository.origin == origin);
         }
