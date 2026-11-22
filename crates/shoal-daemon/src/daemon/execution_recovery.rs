@@ -7,7 +7,7 @@ use crate::daemon::agents::ProtectionExt;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
-use std::time::Duration;
+use std::{io::ErrorKind, time::Duration};
 use tokio::sync::{OwnedRwLockReadGuard, mpsc, watch};
 
 use super::{
@@ -118,50 +118,143 @@ pub(super) async fn pause(
     // Stop survivors before anything can cancel the restore, so every outcome
     // leaves only processes Shoal cannot stop. The wrapper finishes on each,
     // and the daemon's completion scan decides whether they leave it unknown.
-    let stopped = match manager
-        .pause_agent_execution(execution_id, workspace_id, timing::PROCESS_PROOF_TIMEOUT)
-        .await
-    {
-        Ok(stopped) => stopped,
-        Err(error) => return Ok(restore_failed(error)),
-    };
-    match manager
-        .done_cancels_restore(workspace_id, &protection)
-        .await
-    {
-        Ok(false) => {}
-        Ok(true) => return Ok(cancelled_as_done()),
-        Err(error) => return Ok(restore_failed(error)),
-    }
-    // Take a place in the agent queue as the agent stops, so restores and
-    // launches start in the order they arrived.
-    if let Err(error) = manager.queue_agent_restore(execution_id).await {
-        return Ok(restore_failed(error));
-    }
-    let ready = tokio::select! {
-        biased;
-        action = interrupted(manager, execution_id, incoming, stop) => return action,
-        () = recovery_disabled(manager), if follows_policy => {
-            return Ok(Action::Stop(Cancel::because("automatic recovery was disabled")));
+    let mut stopped = Some(
+        manager
+            .pause_agent_execution(execution_id, workspace_id, timing::PROCESS_PROOF_TIMEOUT)
+            .await,
+    );
+    let mut setbacks = Setbacks::default();
+    loop {
+        let ready = tokio::select! {
+            biased;
+            action = interrupted(manager, execution_id, incoming, stop) => return action,
+            () = recovery_disabled(manager), if follows_policy => {
+                return Ok(Action::Stop(Cancel::because("automatic recovery was disabled")));
+            }
+            ready = async {
+                setbacks.wait().await;
+                let waiting = Waiting { manager, execution_id, workspace_id, notices };
+                waiting.admit(&protection, stopped.take(), hold).await
+            } => ready,
+        };
+        let resume = async {
+            let Some(grant) = ready? else {
+                return Ok(cancelled_as_done());
+            };
+            ensure!(
+                !follows_policy || manager.config().machine.overload.recovery.enabled,
+                "overload recovery was disabled while the agent waited"
+            );
+            prepare_resume(resumes, grant, &protection).await
         }
-        ready = async {
-            await_stopped(manager, execution_id, workspace_id, stopped, notices).await?;
-            // Every process the agent left has stopped writing.
-            manager.checkpoint_after_agent(workspace_id).await;
-            let link = manager.agent_queue.link_restore(execution_id);
-            admit_restore(manager, &link, workspace_id, hold).await
-        } => ready,
-    };
-    let resume = async {
-        let grant = ready?;
-        ensure!(
-            !follows_policy || manager.config().machine.overload.recovery.enabled,
-            "overload recovery was disabled while the agent waited"
-        );
-        prepare_resume(resumes, grant, &protection).await
+        .await;
+        match resume {
+            Ok(action) => return Ok(action),
+            Err(error) if waits_out(&error) => setbacks.note(&error),
+            Err(error) => return Ok(restore_failed(error)),
+        }
     }
-    .await;
-    Ok(resume.unwrap_or_else(restore_failed))
+}
+
+/// The stopped agent of `execution_id` in the space `workspace_id`, whose
+/// wrapper hears through `notices` what holds its restore back.
+struct Waiting<'a> {
+    manager: &'a Manager,
+    execution_id: &'a ExecutionId,
+    workspace_id: &'a SpaceId,
+    notices: Option<&'a Controls>,
+}
+
+impl Waiting<'_> {
+    /// Wait until the agent's restore after `protection` stopped it is
+    /// admitted once its processes are, or `None` when `shoal done` leaves
+    /// it nothing to do. `paused` is how the first attempt's pause of the
+    /// agent went; a later attempt pauses it again.
+    async fn admit(
+        self,
+        protection: &Protection,
+        paused: Option<Result<Pause>>,
+        hold: &mut Option<OwnedRwLockReadGuard<()>>,
+    ) -> Result<Option<Grant>> {
+        let Self {
+            manager,
+            execution_id,
+            workspace_id,
+            notices,
+        } = self;
+        let stopped = match paused {
+            Some(paused) => paused?,
+            None => {
+                let patience = timing::PROCESS_PROOF_TIMEOUT;
+                (manager.pause_agent_execution(execution_id, workspace_id, patience)).await?
+            }
+        };
+        if manager
+            .done_cancels_restore(workspace_id, protection)
+            .await?
+        {
+            return Ok(None);
+        }
+        // Take a place in the agent queue as the agent stops, so restores and
+        // launches start in the order they arrived.
+        manager.queue_agent_restore(execution_id).await?;
+        await_stopped(manager, execution_id, workspace_id, stopped, notices).await?;
+        // Every process the agent left has stopped writing.
+        manager.checkpoint_after_agent(workspace_id).await;
+        let link = manager.agent_queue.link_restore(execution_id);
+        admit_restore(manager, &link, workspace_id, hold)
+            .await
+            .map(Some)
+    }
+}
+
+/// Whether `error` comes from what a protection stop's restore waits out,
+/// a full disk or exhausted memory, such as a store that cannot write while
+/// free disk space is low, which the restore outlives by trying again.
+fn waits_out(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        if let Some(rusqlite::Error::SqliteFailure(failure, _)) = cause.downcast_ref() {
+            return matches!(
+                failure.code,
+                rusqlite::ErrorCode::DiskFull | rusqlite::ErrorCode::OutOfMemory
+            );
+        }
+        cause.downcast_ref::<std::io::Error>().is_some_and(|error| {
+            matches!(
+                error.kind(),
+                ErrorKind::StorageFull | ErrorKind::QuotaExceeded | ErrorKind::OutOfMemory
+            )
+        })
+    })
+}
+
+/// How long a restore that what it waits out set back waits before it
+/// tries again.
+const SETBACK_RETRY_INTERVAL: Duration = Duration::from_secs(30);
+
+/// The errors a protection stop's restore waited out, logging each kind
+/// once rather than on every attempt while the condition lasts.
+#[derive(Default)]
+struct Setbacks {
+    last: Option<String>,
+}
+
+impl Setbacks {
+    /// Wait before trying again after a setback; the first attempt waits
+    /// for none.
+    async fn wait(&self) {
+        if self.last.is_some() {
+            tokio::time::sleep(SETBACK_RETRY_INTERVAL).await;
+        }
+    }
+
+    fn note(&mut self, error: &anyhow::Error) {
+        let message = format!("{error:#}");
+        if self.last.as_ref() != Some(&message) {
+            log!("agent recovery tries again: {message}");
+        }
+        self.last = Some(message);
+    }
 }
 
 /// Restore an agent `shoal restart` stopped once its processes are proven
@@ -502,3 +595,6 @@ async fn claim_saved(
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }
+
+#[cfg(test)]
+mod tests;

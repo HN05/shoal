@@ -420,7 +420,10 @@ positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
 a fresh healthy interval, which a reload changing `[machine.overload]` restarts. Missing
 readings, manual stop/removal, an exited wrapper, changed workspace ownership
-or a done assignment prevent recovery, except from an [idle stop](#sleep). Surviving processes Shoal cannot stop, or cannot prove stopped,
+or a done assignment prevent recovery, except from an [idle stop](#sleep). A
+failure that comes from what the restore waits out, such as a store that cannot
+write while the disk is full, delays it, and it tries again until it runs or the
+agent is resumed, stopped or removed. Surviving processes Shoal cannot stop, or cannot prove stopped,
 delay it: a `recovery_blocked` alert and the agent's terminal name
 them, and the wrapper keeps waiting until they exit. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
