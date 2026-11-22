@@ -1146,13 +1146,13 @@ starting a demo and an agent's hooks, are refused for a space elsewhere,
 naming its machine, as is a command that attaches files, which that
 machine cannot read. Without a target, a
 command's picker offers the other machines' spaces that the request it
-sends for the picked space reaches, after this machine's, unless the
-command works in the space's worktree, terminal or files here, as `cd`,
-`exec` and `stop --interrupt` do, where the hub's
+sends for the picked space reaches, after this machine's, where the hub's
 listing shows what the command needs, such as an agent for
 `attach`, but none where it does not, such as a hold for `release hold`,
 each naming its machine, and an offline one with when the hub last saw
-it; choosing one acts as naming it does.
+it; choosing one acts as naming it does. A command that works in the
+space's worktree, terminal or files here, as `cd`, `exec` and
+`stop --interrupt` do, offers only this machine's.
 
 While a space's machine is offline, a message, an answer, an approval
 decision or a stop for it waits at the hub, and the command says so, naming
