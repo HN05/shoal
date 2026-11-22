@@ -1881,7 +1881,11 @@ async fn removing_a_repository_deletes_its_runner_on_the_forge() {
     .await;
     manager.runner.reconcile_runners(&*manager).await.unwrap();
 
-    manager.remove_repository(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .remove(&*manager, &repo.id)
+        .await
+        .unwrap();
 
     assert_eq!(
         *deleted.lock().unwrap(),

@@ -107,7 +107,11 @@ async fn new_workspaces_start_from_the_default_branch_build() {
     let untracked = manager.untracked_worktrees().await.unwrap();
     assert!(untracked.is_empty(), "{untracked:?}");
 
-    manager.remove_repository(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .remove(&*manager, &repo.id)
+        .await
+        .unwrap();
     assert!(!layout.root().exists());
 }
 
@@ -425,7 +429,11 @@ async fn repository_removal_cancels_a_running_build() {
     })
     .await
     .expect("the build starts");
-    manager.remove_repository(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .remove(&*manager, &repo.id)
+        .await
+        .unwrap();
     assert!(!layout.root().exists());
     tokio::time::timeout(Duration::from_secs(60), refresh)
         .await
@@ -479,7 +487,13 @@ async fn removal_keeps_a_seed_worktree_shoal_did_not_create() {
     let layout = Layout::of(&repo);
     fs::create_dir_all(layout.worktree()).unwrap();
     fs::write(layout.worktree().join("keep"), "user data").unwrap();
-    assert!(manager.remove_repository(&repo.id).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .remove(&*manager, &repo.id)
+            .await
+            .is_err()
+    );
     assert!(layout.worktree().join("keep").exists());
 }
 
@@ -535,7 +549,13 @@ async fn removal_keeps_a_symlinked_seed_worktree() {
     fs::rename(layout.worktree(), &moved).unwrap();
     git(&repo.path, &["worktree", "repair", moved.to_str().unwrap()]);
     std::os::unix::fs::symlink(&moved, layout.worktree()).unwrap();
-    assert!(manager.remove_repository(&repo.id).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .remove(&*manager, &repo.id)
+            .await
+            .is_err()
+    );
     assert!(moved.join("seed.sh").exists());
 }
 

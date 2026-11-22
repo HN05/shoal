@@ -56,7 +56,11 @@ async fn a_contribution_waits_out_the_grace_period() {
         .write_local_config(&repo.id, Some("[cleanup]\ngrace_minutes = 10\n".into()))
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(registered(&manager, &repo).await);
     let id = repo.id.clone();
     manager
@@ -70,7 +74,11 @@ async fn a_contribution_waits_out_the_grace_period() {
         })
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(!registered(&manager, &repo).await);
 }
 
@@ -107,7 +115,11 @@ async fn a_borrowed_contribution_stays_available() {
         })
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(registered(&manager, &repo).await);
     // No removal began, so new work in it is still accepted.
     manager
@@ -123,7 +135,11 @@ async fn a_borrowed_contribution_stays_available() {
         })
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(!registered(&manager, &repo).await);
 }
 
@@ -131,7 +147,13 @@ async fn a_borrowed_contribution_stays_available() {
 async fn new_work_is_refused_once_a_contribution_removal_begins() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
-    assert!(manager.begin_contribution_removal(&repo).await.unwrap());
+    assert!(
+        manager
+            .repositories
+            .begin_contribution_removal(&repo)
+            .await
+            .unwrap()
+    );
     manager
         .start_chat((&repo.id).into(), "chat-1".into(), "claude".into(), None)
         .await
@@ -141,7 +163,11 @@ async fn new_work_is_refused_once_a_contribution_removal_begins() {
         .await
         .unwrap_err();
     // The interrupted removal finishes on the next sweep.
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(!registered(&manager, &repo).await);
 }
 
@@ -159,7 +185,11 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
         .create_workspace(&repo.id, "topic".into(), None, None, None)
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(
         registered(&manager, &repo).await,
         "a workspace keeps the contribution"
@@ -173,7 +203,11 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
         )
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(
         registered(&manager, &repo).await,
         "a removal's checkpoint keeps it"
@@ -197,10 +231,18 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     // Work left in the checkout, such as a chat's, keeps it too.
     let left = checkout.join("notes");
     std::fs::write(&left, "unsaved\n").unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(registered(&manager, &repo).await, "checkout work keeps it");
     std::fs::remove_file(&left).unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(!registered(&manager, &repo).await);
     assert!(!checkout.exists());
     let config = std::fs::read_to_string(&claude).unwrap();
@@ -245,7 +287,11 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         )
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(
         registered(&manager, &repo).await,
         "the removed chat's files and removal record keep it"
@@ -260,7 +306,11 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         })
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(!registered(&manager, &repo).await);
 }
 
@@ -281,11 +331,19 @@ async fn a_held_contribution_stays_until_its_connection_closes() {
     let response: Response = crate::protocol::read(&mut client).await.unwrap();
     assert!(matches!(response.body, Body::Ok), "{:?}", response.body);
     // The fixture's grace period is over at once.
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(registered(&manager, &repo).await);
     drop(client);
     held.await.unwrap().unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(!registered(&manager, &repo).await);
 }
 
@@ -296,7 +354,11 @@ async fn a_removed_contribution_names_the_fork_it_leaves() {
     let fork = repository(root.path(), "fork");
     let fork = fork.to_str().unwrap();
     git(&repo.path, &["remote", "add", "fork", fork]);
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(!registered(&manager, &repo).await);
     let notifications = manager.notifications.list(false, 10).await.unwrap();
     let removed = notifications
@@ -313,10 +375,18 @@ async fn a_restarted_daemon_keeps_contributions_while_their_holds_resume() {
     let started = tokio::time::Instant::now();
     let holds = manager.repositories.contribution_holds();
     holds.await_resumes(started + std::time::Duration::from_secs(3600));
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(registered(&manager, &repo).await);
     holds.await_resumes(started);
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(!registered(&manager, &repo).await);
 }
 
@@ -374,6 +444,10 @@ async fn a_contribution_stays_while_a_stopped_job_waits_to_rerun() {
         })
         .await
         .unwrap();
-    manager.sweep_contributions().await.unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
     assert!(registered(&manager, &repo).await);
 }

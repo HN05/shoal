@@ -85,7 +85,11 @@ async fn a_workspace_recorded_where_the_local_config_belongs_is_never_local_conf
         .await
         .unwrap();
     assert!(!directory.exists());
-    manager.remove_repository(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .remove(&*manager, &repo.id)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

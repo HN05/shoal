@@ -339,7 +339,7 @@ async fn a_conversion_during_the_repositorys_removal_waits_for_it() {
     let git = manager.gates.lock_git(&repo.id).await;
     let removing = tokio::spawn({
         let (manager, id) = (manager.clone(), repo.id.clone());
-        async move { manager.remove_repository(&id).await }
+        async move { manager.repositories.remove(&**manager, &id).await }
     });
     let converting = tokio::spawn({
         let manager = manager.clone();

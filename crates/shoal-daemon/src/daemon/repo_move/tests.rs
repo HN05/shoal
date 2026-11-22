@@ -124,7 +124,13 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
         )
         .await;
     assert!(chat.is_err());
-    assert!(manager.remove_repository(&repo.id).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .remove(&*manager, &repo.id)
+            .await
+            .is_err()
+    );
     // Quarantine fails the reserved workspaces; setup must not revive one.
     crate::daemon::quarantine::interrupted_operations(&manager.store).await?;
     test_support::configure(
@@ -381,7 +387,7 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
         .register(other.to_str().context("path")?.into(), None, None)
         .await?;
     assert!(manager.move_repositories(Layout::Regular).await.is_err());
-    manager.remove_repository(&other.id).await?;
+    manager.repositories.remove(&*manager, &other.id).await?;
 
     manager.move_repositories(Layout::Regular).await?;
     let moved = manager.repositories.repository(&repo.id).await?;

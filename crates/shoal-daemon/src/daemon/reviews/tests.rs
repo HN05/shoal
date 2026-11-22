@@ -690,7 +690,8 @@ async fn removing_the_repository_stops_its_reviews_first() {
         changed.changed().await.unwrap();
     }
     manager
-        .remove_repository(fixture.workspace.repository())
+        .repositories
+        .remove(&**manager, fixture.workspace.repository())
         .await
         .unwrap();
     assert!(!fixture.runs.root().exists());
@@ -703,7 +704,13 @@ async fn a_run_left_in_the_repository_directory_holds_back_its_removal() {
     let repository = fixture.workspace.repository().clone();
     let run = fixture.left_run(ReviewId(7));
     std::fs::create_dir_all(run.join("checkout")).unwrap();
-    assert!(manager.remove_repository(&repository).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .remove(&**manager, &repository)
+            .await
+            .is_err()
+    );
     assert!(run.exists());
 }
 

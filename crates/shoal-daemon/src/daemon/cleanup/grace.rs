@@ -20,22 +20,6 @@ impl Manager {
         .await
     }
 
-    /// [`Self::claim_grace`] for removing a contribution repository.
-    pub(crate) async fn claim_contribution_grace(
-        &self,
-        id: &str,
-        grace: Duration,
-    ) -> Result<UnixTime> {
-        self.claim(
-            "INSERT INTO contribution_grace(repository_id, cleanup_at, claimed) VALUES (?1, ?2, 1)
-             ON CONFLICT(repository_id) DO UPDATE SET claimed=1
-             RETURNING cleanup_at",
-            id,
-            grace,
-        )
-        .await
-    }
-
     async fn claim(&self, statement: &'static str, id: &str, grace: Duration) -> Result<UnixTime> {
         let id = id.to_owned();
         let cleanup_at = UnixTime::now() + grace;
@@ -70,24 +54,18 @@ impl Manager {
     pub(super) async fn begin_grace_pass(&self) -> Result<()> {
         self.store
             .run(|db| {
-                db.execute_batch(
-                    "UPDATE cleanup_grace SET claimed=0; UPDATE contribution_grace SET claimed=0;",
-                )?;
+                db.execute("UPDATE cleanup_grace SET claimed=0", [])?;
                 Ok(())
             })
             .await
     }
 
     /// End the grace periods no attempt in this pass claimed: those
-    /// spaces and contributions stopped qualifying, so a later attempt
-    /// starts a new one.
+    /// spaces stopped qualifying, so a later attempt starts a new one.
     pub(super) async fn end_unclaimed_grace(&self) -> Result<()> {
         self.store
             .run(|db| {
-                db.execute_batch(
-                    "DELETE FROM cleanup_grace WHERE claimed=0;
-                     DELETE FROM contribution_grace WHERE claimed=0;",
-                )?;
+                db.execute("DELETE FROM cleanup_grace WHERE claimed=0", [])?;
                 Ok(())
             })
             .await

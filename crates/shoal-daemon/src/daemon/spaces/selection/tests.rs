@@ -127,7 +127,11 @@ async fn a_removed_space_s_id_names_the_repository_removed_with_it() {
     (manager.remove_selected(&removed, UnsavedWork::default(), InspectionPolicy::GitOnly))
         .await
         .unwrap();
-    manager.remove_repository(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .remove(&*manager, &repo.id)
+        .await
+        .unwrap();
 
     let refused = manager.space(&removed).await.unwrap_err().to_string();
     assert!(refused.contains("was removed"), "{refused}");

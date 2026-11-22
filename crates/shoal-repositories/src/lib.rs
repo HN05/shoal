@@ -16,6 +16,7 @@ pub mod contributions;
 pub mod daemon;
 mod records;
 pub mod registration;
+mod removal;
 pub mod root;
 pub mod seed;
 pub mod spotlight;

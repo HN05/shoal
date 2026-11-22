@@ -1,27 +1,90 @@
 //! What the repositories need of the rest of the daemon, which implements
-//! it: the spaces whose settings they read, those who follow the local
-//! config, the coordinators alerts about a space reach, the forge a
-//! contribution forks on, and the records of other subsystems they read in
-//! their own transactions.
+//! it: the spaces whose settings they read and that a removal takes, the
+//! subsystems that work and keep files in a repository's directories, the
+//! agents that trust its paths, the coordinators alerts about a space
+//! reach, the forge a contribution forks on, and the records of other
+//! subsystems they read and write in their own transactions.
+use std::path::PathBuf;
+
 use anyhow::Result;
 use futures_util::future::BoxFuture;
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction};
 use shoal_daemon_base::notifications::Coordinators;
 use shoal_forge::account::Account;
 use shoal_forge_types::ForgeRepo;
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Space, Workspace},
+    model::{Repository, RepositoryRemoval, Space, Workspace},
     space_names::SpaceSelector,
 };
 
-/// The spaces whose settings the repositories' layers resolve.
+/// The spaces whose settings the repositories' layers resolve, and that a
+/// repository's removal takes.
 pub trait Spaces: Send + Sync {
     /// The workspace or chat `selector` names, by ID or name.
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>>;
 
+    /// The workspace or chat with the ID `id`, while it exists.
+    fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>>;
+
+    /// Refuse a workspace its repository's removal cannot take: one busy or
+    /// whose worktree is not verifiably its own.
+    fn ensure_removable_workspace<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<()>>;
+
+    /// Remove the space `id` as its repository's removal does.
+    fn remove_for_repository<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
+
+    /// Run `work`, a repository's removal, while no converted space's agent
+    /// is handed over to its new place.
+    fn hold_handovers<'a>(
+        &'a self,
+        work: BoxFuture<'a, Result<Option<RepositoryRemoval>>>,
+    ) -> BoxFuture<'a, Result<Option<RepositoryRemoval>>>;
+
     /// Tell those that follow a repository's local config, such as the
     /// runner, that it changed.
     fn local_config_changed(&self);
+}
+
+/// The subsystems that work in a repository's directories or keep files
+/// there, which its removal stops or deletes.
+pub trait Occupants: Send + Sync {
+    /// Stop the reviews running or queued in the repository `id`.
+    fn stop_reviews<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, ()>;
+
+    /// Refuse while a review's run left processes in the repository `id`.
+    fn ensure_no_review_runs_left<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<()>>;
+
+    /// Refuse while a gate run works in the repository `id`.
+    fn ensure_no_gate_runs_in<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<()>>;
+
+    /// Delete the runner of the removed `repo`.
+    fn delete_runner_of_removed<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>>;
+
+    /// Delete the seed of `repo`, whose builds are stopped.
+    fn remove_seed<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>>;
+
+    /// Delete the files other subsystems keep in `repo`'s directory: its
+    /// proposals', imported sessions' and spaces' kept files.
+    fn delete_kept_files<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>>;
+}
+
+/// The agents' tools, whose configs trust a repository's paths.
+pub trait Agents: Send + Sync {
+    /// Drop the trust entries for `repo` and its workspaces at `paths`,
+    /// which go with it; whether the agents' configs were read, which
+    /// the removal then forgets.
+    fn trust_removed<'a>(
+        &'a self,
+        repo: &'a Repository,
+        paths: Vec<PathBuf>,
+    ) -> BoxFuture<'a, bool>;
+
+    /// Forget the config locations `repo`'s agents ran with.
+    fn forget_agent_environments<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, ()>;
 }
 
 /// The forges registrations reach.
@@ -34,13 +97,29 @@ pub trait Forges: Send + Sync {
 }
 
 /// Everything the repositories need of the daemon.
-pub trait Daemon: Spaces + Forges + Coordinators {}
+pub trait Daemon: Spaces + Occupants + Agents + Forges + Coordinators {}
 
-impl<T> Daemon for T where T: Spaces + Forges + Coordinators {}
+impl<T> Daemon for T where T: Spaces + Occupants + Agents + Forges + Coordinators {}
 
-/// The records of other subsystems the repositories read in their own
-/// transactions.
+/// The records of other subsystems the repositories read and write in
+/// their own transactions.
 pub trait Records: Send + Sync {
     /// Every workspace, by name.
     fn workspaces(&self, db: &Connection) -> Result<Vec<Workspace>>;
+
+    /// How many spaces the removal of the space `id` takes before it.
+    fn removal_depth(&self, db: &Connection, id: &SpaceId) -> Result<u32>;
+
+    /// Refuse while another repository's workspace borrows the checkout of
+    /// the repository `id` as a resource.
+    fn ensure_no_external_leases(&self, db: &Connection, id: &RepositoryId) -> Result<()>;
+
+    /// Whether anything recorded still uses the repository `id`: a space,
+    /// a queued agent, a pending issue proposal, a kept branch, a job
+    /// waiting to rerun, an unexpired checkpoint, removal record or removed
+    /// space's files, or a resource another repository's workspace borrows.
+    fn repository_in_use(&self, db: &Connection, id: &RepositoryId) -> Result<bool>;
+
+    /// Forget the resource pools of the repository `id`, which goes.
+    fn forget_repository_pools(&self, tx: &Transaction<'_>, id: &RepositoryId) -> Result<()>;
 }

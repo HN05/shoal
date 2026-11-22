@@ -73,7 +73,7 @@ pub(super) async fn handle(
                 .await?,
         ),
         RepositoryMethod::RemoveRepository { repository } => {
-            Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
+            Body::RepositoryRemoved(manager.repositories.remove(&**manager, &repository).await?)
         }
         RepositoryMethod::PlanRepositoryMoves { root, regular_dir } => Body::RepositoryMoves(
             manager

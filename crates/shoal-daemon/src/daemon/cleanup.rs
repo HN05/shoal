@@ -240,7 +240,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
         "notification expiry",
         manager.notifications.expire(manager).await,
     );
-    step("contributions", manager.sweep_contributions().await);
+    step(
+        "contributions",
+        manager.repositories.sweep_contributions(manager).await,
+    );
     step("carried commits", manager.release_unclaimed_carried().await);
     step(
         "proposal files",

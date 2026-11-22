@@ -143,7 +143,11 @@ async fn a_decided_proposal_takes_its_files_and_a_removed_repository_the_rest() 
     assert!(!decided.path.exists());
 
     let (_, left) = kept_copy(&manager, &workspace, &repo.id, "left.png").await;
-    manager.remove_repository(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .remove(&*manager, &repo.id)
+        .await
+        .unwrap();
     assert!(!left.path.exists());
     let files = repo.workspaces_dir.clone().join(".proposals");
     assert!(!files.exists());

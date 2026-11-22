@@ -1,4 +1,6 @@
 mod configuration;
+mod contributions;
+mod removal;
 
 use crate::daemon::test_support::repository;
 use shoal_repositories::{root, spotlight::Layout};

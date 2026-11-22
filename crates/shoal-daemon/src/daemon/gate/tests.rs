@@ -361,6 +361,12 @@ async fn a_gate_run_in_the_repository_directory_holds_back_its_removal() {
     runs.create().unwrap();
     let run = runs.root().join("request");
     std::fs::create_dir_all(&run).unwrap();
-    assert!(manager.remove_repository(&repository).await.is_err());
+    assert!(
+        manager
+            .repositories
+            .remove(&**manager, &repository)
+            .await
+            .is_err()
+    );
     assert!(run.exists());
 }

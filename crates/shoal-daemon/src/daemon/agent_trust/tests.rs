@@ -12,7 +12,11 @@ async fn a_removal_that_leaves_trust_entries_alerts_the_user() {
     // A config Shoal cannot read keeps the entries it holds.
     std::fs::write(manager.paths.home.join(".claude.json"), "not JSON").unwrap();
 
-    manager.remove_repository(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .remove(&*manager, &repo.id)
+        .await
+        .unwrap();
     let alerts = manager.notifications.list(false, 10).await.unwrap();
     let left = alerts
         .iter()
@@ -46,7 +50,11 @@ async fn a_development_build_leaves_kept_locations_outside_its_home() {
     let config = outside.path().join(".claude.json");
     std::fs::write(&config, projects.to_string()).unwrap();
 
-    manager.remove_repository(&repo.id).await.unwrap();
+    manager
+        .repositories
+        .remove(&*manager, &repo.id)
+        .await
+        .unwrap();
     let left = std::fs::read_to_string(&config).unwrap();
     let kept = left.contains(checkout.to_str().unwrap());
     assert_eq!(kept, !crate::build::changes_user_files(), "{left}");
