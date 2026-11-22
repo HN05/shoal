@@ -24,7 +24,10 @@ pub(super) async fn acquire(
     workspace: SpaceSelector,
     reason: Option<String>,
 ) -> Result<i32> {
-    match leases::acquire_containers(&ctx.paths, workspace, reason).await? {
+    match leases::acquire_containers(workspace, reason)
+        .send(&ctx.paths)
+        .await?
+    {
         ContainerAcquisition::Started(containers) => {
             let text = describe(&containers, Palette::stdout(ctx.json));
             ctx.emit_styled(Style::Success, &text, &*containers)?;

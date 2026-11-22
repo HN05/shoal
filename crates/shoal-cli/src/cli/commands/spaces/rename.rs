@@ -157,7 +157,9 @@ struct AskedSpace {
 /// `rename --request` asks it: as its machine reports it, or while that
 /// machine is offline, as it last reported it.
 async fn asked_space(ctx: &Context, selector: &SpaceSelector) -> Result<AskedSpace> {
-    let status = crate::client::spaces::status(&ctx.paths, selector.clone()).await?;
+    let status = crate::client::spaces::status(selector.clone())
+        .send(&ctx.paths)
+        .await?;
     let space = match status {
         StatusAnswer::Live(status) => status.space,
         StatusAnswer::Reported(reported) => {

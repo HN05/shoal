@@ -26,9 +26,9 @@ pub(super) async fn acquire(
     mut request: PortRequest,
 ) -> Result<i32> {
     loop {
-        let acquired =
-            leases::acquire_port(&ctx.paths, workspace.clone(), name.clone(), request.clone())
-                .await?;
+        let acquired = (leases::acquire_port(workspace.clone(), name.clone(), request.clone()))
+            .send(&ctx.paths)
+            .await?;
         match acquired {
             PortAcquisition::Reserved(reservation) => {
                 ctx.emit(

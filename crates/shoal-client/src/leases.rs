@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use tokio::time::sleep;
 
-use crate::connection::{Daemon, Prepared, call, request};
+use crate::connection::{Daemon, Prepared, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus},
@@ -138,31 +138,34 @@ pub enum PortAcquisition {
 }
 
 /// Reserve the port `name` for `workspace`.
-pub async fn acquire_port(
-    daemon: &impl Daemon,
+pub fn acquire_port(
     workspace: SpaceSelector,
     name: String,
     request: PortRequest,
-) -> Result<PortAcquisition> {
-    let method = PortMethod::PortAcquire {
+) -> Prepared<PortAcquisition> {
+    Prepared::new(PortMethod::PortAcquire {
         workspace,
         name,
         request,
-    };
-    match call(daemon, method).await? {
-        Body::Port(reservation) => Ok(PortAcquisition::Reserved(reservation)),
-        Body::ApprovalRequest(request) => Ok(PortAcquisition::Approval(request)),
-        Body::PortSuggestion(suggestion) => Ok(PortAcquisition::Suggested(suggestion)),
-        body => Err(body.unexpected("Port, ApprovalRequest or PortSuggestion")),
+    })
+}
+
+impl TryFrom<Body> for PortAcquisition {
+    type Error = anyhow::Error;
+
+    fn try_from(body: Body) -> Result<Self> {
+        match body {
+            Body::Port(reservation) => Ok(Self::Reserved(reservation)),
+            Body::ApprovalRequest(request) => Ok(Self::Approval(request)),
+            Body::PortSuggestion(suggestion) => Ok(Self::Suggested(suggestion)),
+            body => Err(body.unexpected("Port, ApprovalRequest or PortSuggestion")),
+        }
     }
 }
 
-pub async fn release_port(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    name: String,
-) -> Result<()> {
-    request(daemon, PortMethod::PortRelease { workspace, name }).await
+/// Release the port `name` of `workspace`.
+pub fn release_port(workspace: SpaceSelector, name: String) -> Prepared<()> {
+    Prepared::new(PortMethod::PortRelease { workspace, name })
 }
 
 /// The ports `workspace` reserved.
@@ -175,20 +178,17 @@ pub fn port_catalog(workspace: SpaceSelector) -> Prepared<PortCatalog> {
     Prepared::new(PortMethod::PortCatalog { workspace })
 }
 
-pub async fn acquire_simulator(
-    daemon: &impl Daemon,
+/// Lease a simulator for `workspace` as `request` asks.
+pub fn acquire_simulator(
     workspace: SpaceSelector,
     request: SimRequest,
-) -> Result<Acquisition<Simulator>> {
-    self::request(daemon, SimulatorMethod::SimAcquire { workspace, request }).await
+) -> Prepared<Acquisition<Simulator>> {
+    Prepared::new(SimulatorMethod::SimAcquire { workspace, request })
 }
 
-pub async fn release_simulator(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    name: String,
-) -> Result<()> {
-    request(daemon, SimulatorMethod::SimRelease { workspace, name }).await
+/// Release the simulator lease `name` of `workspace`.
+pub fn release_simulator(workspace: SpaceSelector, name: String) -> Prepared<()> {
+    Prepared::new(SimulatorMethod::SimRelease { workspace, name })
 }
 
 /// The simulators `workspace` leases, or every workspace's.
@@ -239,27 +239,29 @@ pub enum ContainerAcquisition {
 }
 
 /// Start the containers of `workspace`, or return them when they run.
-pub async fn acquire_containers(
-    daemon: &impl Daemon,
+pub fn acquire_containers(
     workspace: SpaceSelector,
     reason: Option<String>,
-) -> Result<ContainerAcquisition> {
-    match call(
-        daemon,
-        ContainerMethod::ContainerAcquire { workspace, reason },
-    )
-    .await?
-    {
-        Body::Containers(containers) => Ok(ContainerAcquisition::Started(containers)),
-        Body::ApprovalRequest(request) => Ok(ContainerAcquisition::Approval(request)),
-        Body::PortSuggestion(suggestion) => Ok(ContainerAcquisition::Suggested(suggestion)),
-        body => Err(body.unexpected("Containers, ApprovalRequest or PortSuggestion")),
+) -> Prepared<ContainerAcquisition> {
+    Prepared::new(ContainerMethod::ContainerAcquire { workspace, reason })
+}
+
+impl TryFrom<Body> for ContainerAcquisition {
+    type Error = anyhow::Error;
+
+    fn try_from(body: Body) -> Result<Self> {
+        match body {
+            Body::Containers(containers) => Ok(Self::Started(containers)),
+            Body::ApprovalRequest(request) => Ok(Self::Approval(request)),
+            Body::PortSuggestion(suggestion) => Ok(Self::Suggested(suggestion)),
+            body => Err(body.unexpected("Containers, ApprovalRequest or PortSuggestion")),
+        }
     }
 }
 
 /// Stop the containers of `workspace`, keeping their volumes and ports.
-pub async fn release_containers(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
-    request(daemon, ContainerMethod::ContainerRelease { workspace }).await
+pub fn release_containers(workspace: SpaceSelector) -> Prepared<()> {
+    Prepared::new(ContainerMethod::ContainerRelease { workspace })
 }
 
 /// Start the containers of `workspace` after its setup command, where its
@@ -297,30 +299,21 @@ pub async fn container_catalog(
     request(daemon, ContainerMethod::ContainerCatalog { workspace }).await
 }
 
-pub async fn acquire_resource(
-    daemon: &impl Daemon,
+/// Lease a permit of a resource pool for `workspace` as `request` asks.
+pub fn acquire_resource(
     workspace: SpaceSelector,
     request: ResourceRequest,
-) -> Result<Acquisition<ResourceLease>> {
-    self::request(
-        daemon,
-        ResourceMethod::ResourceAcquire { workspace, request },
-    )
-    .await
+) -> Prepared<Acquisition<ResourceLease>> {
+    Prepared::new(ResourceMethod::ResourceAcquire { workspace, request })
 }
 
-pub async fn release_resource(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    pool: String,
-    name: String,
-) -> Result<()> {
-    let method = ResourceMethod::ResourceRelease {
+/// Release the lease `name` of `pool` that `workspace` holds.
+pub fn release_resource(workspace: SpaceSelector, pool: String, name: String) -> Prepared<()> {
+    Prepared::new(ResourceMethod::ResourceRelease {
         workspace,
         pool,
         name,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// The resource pools `workspace` sees and the permits it holds.
@@ -333,26 +326,22 @@ pub async fn resource_catalog(daemon: &impl Daemon, workspace: SpaceSelector) ->
     request(daemon, ResourceMethod::ResourceCatalog { workspace }).await
 }
 
-pub async fn acquire_secret(
-    daemon: &impl Daemon,
+/// Ask for the secret `name` for `workspace` as `request` asks.
+pub fn acquire_secret(
     workspace: SpaceSelector,
     name: String,
     request: SecretRequest,
-) -> Result<Acquisition<SecretGrant>> {
-    let method = SecretMethod::SecretAcquire {
+) -> Prepared<Acquisition<SecretGrant>> {
+    Prepared::new(SecretMethod::SecretAcquire {
         workspace,
         name,
         request,
-    };
-    self::request(daemon, method).await
+    })
 }
 
-pub async fn release_secret(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    name: String,
-) -> Result<()> {
-    request(daemon, SecretMethod::SecretRelease { workspace, name }).await
+/// Give up the grant of the secret `name` that `workspace` holds.
+pub fn release_secret(workspace: SpaceSelector, name: String) -> Prepared<()> {
+    Prepared::new(SecretMethod::SecretRelease { workspace, name })
 }
 
 /// The secrets `workspace`'s configuration defines.

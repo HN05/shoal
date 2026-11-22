@@ -28,7 +28,11 @@ pub(super) async fn acquire(
         ctx,
         &format!("pool {}", request.pool),
         request.queue,
-        async || leases::acquire_resource(&ctx.paths, workspace.clone(), request.clone()).await,
+        async || {
+            leases::acquire_resource(workspace.clone(), request.clone())
+                .send(&ctx.paths)
+                .await
+        },
     )
     .await?;
     outcome.finish(

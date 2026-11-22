@@ -107,7 +107,9 @@ pub(super) async fn acquire(
     request: SimRequest,
 ) -> Result<i32> {
     let outcome = obtain(ctx, "a simulator", request.queue, async || {
-        leases::acquire_simulator(&ctx.paths, workspace.clone(), request.clone()).await
+        leases::acquire_simulator(workspace.clone(), request.clone())
+            .send(&ctx.paths)
+            .await
     })
     .await?;
     outcome.finish(

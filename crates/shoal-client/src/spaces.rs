@@ -116,6 +116,6 @@ pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Ve
 /// What `space` is doing: its links, agents, leases and assignment, from
 /// the machine that runs it, or what that machine last reported while it
 /// is offline.
-pub async fn status(daemon: &impl Daemon, space: SpaceSelector) -> Result<StatusAnswer> {
-    request(daemon, SpaceMethod::SpaceStatus { space }).await
+pub fn status(space: SpaceSelector) -> Prepared<StatusAnswer> {
+    Prepared::new(SpaceMethod::SpaceStatus { space })
 }

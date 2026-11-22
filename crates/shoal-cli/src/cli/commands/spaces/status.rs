@@ -34,7 +34,10 @@ pub(in crate::cli::commands) async fn status(
                 None => return service::shoal_status(ctx).await,
             },
         };
-        match crate::client::spaces::status(&ctx.paths, space).await? {
+        match crate::client::spaces::status(space)
+            .send(&ctx.paths)
+            .await?
+        {
             StatusAnswer::Live(status) => {
                 let status = status_view(ctx, *status).await;
                 ctx.show(&status, |status| render_status(status, ctx.json))?;
@@ -48,8 +51,9 @@ pub(in crate::cli::commands) async fn status(
     for space in spaces {
         let selector = SpaceSelector::id(&space.id);
         // The spaces it finds are this machine's, whose status is its own.
-        let StatusAnswer::Live(status) =
-            crate::client::spaces::status(&ctx.paths, selector).await?
+        let StatusAnswer::Live(status) = crate::client::spaces::status(selector)
+            .send(&ctx.paths)
+            .await?
         else {
             bail!("space {} has no status of its own here", space.id);
         };

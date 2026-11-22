@@ -327,18 +327,29 @@ async fn release_one(ctx: &Context, workspace: &SpaceSelector, held: &Held) -> R
     let workspace = workspace.to_owned();
     match held {
         Held::Port { name } => {
-            leases::release_port(&ctx.paths, workspace.clone(), name.clone()).await
+            leases::release_port(workspace.clone(), name.clone())
+                .send(&ctx.paths)
+                .await
         }
         Held::Sim { name } => {
-            leases::release_simulator(&ctx.paths, workspace.clone(), name.clone()).await
+            leases::release_simulator(workspace.clone(), name.clone())
+                .send(&ctx.paths)
+                .await
         }
-        Held::Containers => leases::release_containers(&ctx.paths, workspace.clone()).await,
+        Held::Containers => {
+            leases::release_containers(workspace.clone())
+                .send(&ctx.paths)
+                .await
+        }
         Held::Resource { pool, name } | Held::Repo { pool, name } => {
-            leases::release_resource(&ctx.paths, workspace.clone(), pool.clone(), name.clone())
+            leases::release_resource(workspace.clone(), pool.clone(), name.clone())
+                .send(&ctx.paths)
                 .await
         }
         Held::Secret { name } => {
-            leases::release_secret(&ctx.paths, workspace.clone(), name.clone()).await
+            leases::release_secret(workspace.clone(), name.clone())
+                .send(&ctx.paths)
+                .await
         }
     }
 }

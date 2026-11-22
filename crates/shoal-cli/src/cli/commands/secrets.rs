@@ -25,7 +25,8 @@ pub(super) async fn acquire(
             reason: reason.clone(),
             source: None,
         };
-        leases::acquire_secret(&ctx.paths, workspace.clone(), name.clone(), request).await
+        let acquiring = leases::acquire_secret(workspace.clone(), name.clone(), request);
+        acquiring.send(&ctx.paths).await
     })
     .await?;
     outcome.finish(

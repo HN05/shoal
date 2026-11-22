@@ -121,13 +121,9 @@ async fn reserve_port(
         reason: None,
         on_conflict: Some(ConflictPolicy::Auto),
     };
-    let acquired = leases::acquire_port(
-        &ctx.paths,
-        SpaceSelector::id(&workspace.id),
-        name.to_owned(),
-        request,
-    )
-    .await?;
+    let acquired = leases::acquire_port(SpaceSelector::id(&workspace.id), name.to_owned(), request)
+        .send(&ctx.paths)
+        .await?;
     match acquired {
         PortAcquisition::Reserved(reservation) => Ok(Ok(reservation)),
         PortAcquisition::Approval(request) => Ok(Err(approvals::declined(ctx, &request)?)),
@@ -150,12 +146,9 @@ async fn lease_simulator(
         ..SimRequest::new(SIM_LEASE.into())
     };
     let outcome = obtain(ctx, "a simulator", queue, async || {
-        leases::acquire_simulator(
-            &ctx.paths,
-            SpaceSelector::id(&workspace.id),
-            request.clone(),
-        )
-        .await
+        leases::acquire_simulator(SpaceSelector::id(&workspace.id), request.clone())
+            .send(&ctx.paths)
+            .await
     })
     .await?;
     match outcome {
