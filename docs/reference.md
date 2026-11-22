@@ -1202,8 +1202,9 @@ chat, a child an agent starts or a trigger's launch, goes where the hub's
 [`[machine.hub] placement`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 policy puts it, and continues there as a start with `--machine` does; one
 that runs in your terminal, or needs your machine, as `--in`, `--copy`,
-`--fork`, `--path`, `--add-blocker` and a repository your machine lacks or
-that has no origin do, stays on your machine. The hub places it from what each connected
+`--fork`, `--path`, `--add-blocker`, a workspace of yours it reopens on its
+branch or issue, and a repository your machine lacks or that has no origin
+do, stays on your machine. The hub places it from what each connected
 machine last reported with its spaces: the origins of its repositories, its
 `max_heavy_agents`, the heavy agents its admission would start now, the
 memory new work may use and the heavy agents waiting in its queue, which

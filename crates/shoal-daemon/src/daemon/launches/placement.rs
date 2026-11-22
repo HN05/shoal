@@ -2,11 +2,12 @@
 //! a launch whose agent starts detached goes where the hub's placement
 //! policy puts it, which it then names as `--machine` would. One whose
 //! agent runs in the caller's terminal stays here, where the user is, as
-//! does one that needs this machine: an existing workspace, a copy, a
-//! fork, a worktree path, a repository setup, blockers, which are its
-//! spaces and queue entries, or a repository this machine
-//! has not registered or that has no origin, since placement never clones
-//! one. A hub that cannot be asked leaves it here too.
+//! does one that needs this machine: an existing workspace, one it would
+//! reopen on its branch or issue, a copy, a fork, a worktree path, a
+//! repository setup, blockers, which are its spaces and queue entries, or
+//! a repository this machine has not registered or that has no origin,
+//! since placement never clones one. A hub that cannot be asked leaves it
+//! here too.
 use anyhow::Result;
 use shoal_hub::session::Unsent;
 use shoal_ids::member_ids::MemberId;
@@ -18,6 +19,7 @@ use shoal_schedule::placement::snapshot::Request;
 use crate::{
     config::{Effective, modes::Weight},
     daemon::{log, manager::Manager, scope::Caller},
+    model::SpaceKind,
 };
 
 /// Where a launch went once placed.
@@ -76,13 +78,13 @@ impl Manager {
         let unplaced = launch.clone();
         let decision = self.place_launch(launch, caller).await?;
         let placed_elsewhere = unplaced.machine.is_none() && launch.machine.is_some();
-        match self.launch_on_machine(launch, caller).await {
-            Ok(Some(mut launched)) => {
         if placed_elsewhere && !self.reaches_named_machine(launch).await? {
             *launch = unplaced;
             let why = "it is no longer connected";
             return Ok(Placed::Here(PlacedHere::instead(decision, why)));
         }
+        match self.launch_on_machine(launch, caller).await {
+            Ok(Some(mut launched)) => {
                 launched.placement = decision;
                 Ok(Placed::Elsewhere(launched))
             }
@@ -99,14 +101,14 @@ impl Manager {
         }
     }
 
-    /// Name in `launch` for `caller` the machine the hub places it on, and
-    /// return the hub's decision; none for a launch that is not placed.
     /// Whether the other machine `launch` names is connected now.
     async fn reaches_named_machine(&self, launch: &Launch) -> Result<bool> {
         let machine = self.machine_elsewhere(launch).await?;
         Ok(machine.is_some_and(|machine| machine.connected))
     }
 
+    /// Name in `launch` for `caller` the machine the hub places it on, and
+    /// return the hub's decision; none for a launch that is not placed.
     async fn place_launch(
         &self,
         launch: &mut Launch,
@@ -152,6 +154,9 @@ impl Manager {
     ) -> Result<Option<Request>> {
         self.select_launch_spaces(launch).await?;
         let shape = self.launch_shape(launch, caller).await?;
+        if shape.kind == SpaceKind::Workspace && self.opens_workspace_here(launch, caller).await {
+            return Ok(None);
+        }
         let placed = self.placed_repository(launch, caller, shape.repository);
         let Some((origin, settings)) = placed.await? else {
             return Ok(None);
@@ -168,6 +173,15 @@ impl Manager {
             caller: this.clone(),
             parent: self.parent_machine(launch, caller, this).await?,
         }))
+    }
+
+    /// Whether `launch` goes into a workspace this machine has for
+    /// `caller`: the one on the branch it names, or the one its issue's
+    /// earlier work left, which it reopens. One that check refuses stays
+    /// here too, where its start says why.
+    async fn opens_workspace_here(&self, launch: &Launch, caller: Option<&Caller>) -> bool {
+        let opened = self.check_workspace_creation(launch, caller).await;
+        !matches!(opened, Ok(None))
     }
 
     /// The origin of the repository `launch` starts in for `caller`, by the
