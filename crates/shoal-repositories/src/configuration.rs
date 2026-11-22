@@ -24,6 +24,7 @@ use shoal_protocol::{
 
 use crate::{Repositories, daemon::Daemon};
 
+mod copies;
 mod rejected;
 pub(crate) use rejected::RejectedConfigs;
 

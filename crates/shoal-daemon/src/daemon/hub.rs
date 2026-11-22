@@ -284,6 +284,23 @@ impl Registrations for Manager {
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move { self.repositories.share_as(id, url).await.map(drop) })
     }
+
+    fn local_config_text<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(self.repositories.local_config_text(id))
+    }
+
+    fn take_local_config_copy<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+        expected: Option<String>,
+        text: Option<String>,
+        keep: bool,
+    ) -> BoxFuture<'a, Result<Option<std::path::PathBuf>>> {
+        Box::pin((self.repositories).take_local_config_copy(self, id, expected, text, keep))
+    }
 }
 
 impl GlobalConfig for Manager {

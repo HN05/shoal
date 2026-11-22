@@ -83,6 +83,23 @@ impl Registrations for StandIn {
     ) -> BoxFuture<'a, Result<()>> {
         none("repositories to share")
     }
+
+    fn local_config_text<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        none("local configs")
+    }
+
+    fn take_local_config_copy<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+        _: Option<String>,
+        _: Option<String>,
+        _: bool,
+    ) -> BoxFuture<'a, Result<Option<std::path::PathBuf>>> {
+        none("local configs")
+    }
 }
 
 impl Spaces for StandIn {

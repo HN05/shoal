@@ -4,9 +4,9 @@
 //! between machines, the app store a member asks of the hub, the
 //! packages of an intermittent machine's spaces, the room its queue has,
 //! the global config the hub's copies of the shared files change and the
-//! registrations of the repositories they share.
+//! registrations and local configs of the repositories they share.
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -236,7 +236,8 @@ pub trait GlobalConfig: Send + Sync {
     fn reload_config(&self) -> BoxFuture<'_, Result<()>>;
 }
 
-/// The registrations of the repositories a hub's machines share.
+/// The registrations of the repositories a hub's machines share, with
+/// their local configs.
 pub trait Registrations: Send + Sync {
     /// Register a clone of `url`, which another machine has as `name`.
     fn register_clone(&self, url: String, name: String) -> BoxFuture<'_, Result<Repository>>;
@@ -248,6 +249,24 @@ pub trait Registrations: Send + Sync {
         id: &'a RepositoryId,
         url: Option<String>,
     ) -> BoxFuture<'a, Result<()>>;
+
+    /// The text of the repository `id`'s local config, none without one.
+    fn local_config_text<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<Option<String>>>;
+
+    /// Make the repository `id`'s local config read `text`, the hub's copy
+    /// of it, removing it for none, unless it no longer reads `expected`;
+    /// with `keep`, the file it replaces stays as a backup, which is
+    /// returned once there was a file to keep.
+    fn take_local_config_copy<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+        expected: Option<String>,
+        text: Option<String>,
+        keep: bool,
+    ) -> BoxFuture<'a, Result<Option<PathBuf>>>;
 }
 
 /// This machine's agent queue, whose room its reports carry.
