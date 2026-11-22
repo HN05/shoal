@@ -6,8 +6,9 @@ use std::{ops::Range, path::Path};
 use anyhow::{Context, Result, bail};
 
 use crate::{
-    backends::Attachments, capability::CapabilityRequests, transport::account::Account,
-    transport::api::TransportRequests,
+    backends::Attachments,
+    capability::CapabilityRequests,
+    transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::{
     ForgeRepo, capability::Capability, items::attach::Attachment, numbers::CommentId,

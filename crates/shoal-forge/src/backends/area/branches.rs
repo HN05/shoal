@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use serde_json::Value;
 
-use crate::{backends::Backend, transport::account::Account};
+use crate::transport::{account::Account, backend::Backend};
 use shoal_forge_types::{
     ForgeRepo,
     backends::ForgeKind,

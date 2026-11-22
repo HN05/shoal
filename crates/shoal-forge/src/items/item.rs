@@ -3,8 +3,7 @@
 use anyhow::{Result, ensure};
 use serde_json::Value;
 
-use crate::backends::Items;
-use crate::transport::api::TransportRequests;
+use crate::{backends::Items, transport::api::TransportRequests};
 use shoal_forge_types::{
     ForgeRepo,
     items::{item::Current, link::ItemKind},

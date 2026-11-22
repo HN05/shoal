@@ -8,8 +8,7 @@ use serde_json::{Value, json};
 use super::{GitHub, graphql::graphql_nodes, rulesets::DeletionRules};
 use crate::{
     backends::{BranchFields, Branches, github_rest},
-    transport::account::Account,
-    transport::api::TransportRequests,
+    transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::{
     ForgeRepo,

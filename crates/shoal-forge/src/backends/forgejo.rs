@@ -22,12 +22,13 @@ mod support;
 pub(crate) mod threads;
 mod version;
 
-use super::{Backend, LoginHint, github_rest};
+use super::github_rest;
 use crate::{
     hosts::Hosting,
-    transport::account::Account,
     transport::{
+        account::Account,
         api::{Request, TransportRequests, full_page},
+        backend::{Backend, LoginHint},
         response::Response,
     },
 };

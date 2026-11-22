@@ -14,8 +14,10 @@ use crate::{
         item::{ItemRequests, text},
         reaction::Subject,
     },
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests, encode},
+    },
     updates::DISCUSSION,
 };
 use shoal_forge_types::{

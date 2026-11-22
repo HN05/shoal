@@ -7,11 +7,15 @@ use serde_json::{Value, json};
 use super::{Bitbucket, listed, roots};
 use crate::{
     backends::Reviews,
-    items::item::{ItemRequests, text},
-    items::review::{PlacedReview, Submission},
+    items::{
+        item::{ItemRequests, text},
+        review::{PlacedReview, Submission},
+    },
     review::diff::Diff,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

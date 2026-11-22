@@ -4,11 +4,9 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    backends::Backend,
     capability::{self, Supports},
     items::attach::Holder,
-    transport::account::Account,
-    transport::{api::Request, response::Fetched},
+    transport::{account::Account, api::Request, backend::Backend, response::Fetched},
 };
 use shoal_forge_types::items::attach::{Attachment, Media};
 use shoal_forge_types::{ForgeRepo, backends::ForgeKind, capability::Capability};

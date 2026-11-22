@@ -4,11 +4,10 @@ use shoal_refs::{BranchName, CommitId};
 
 use crate::{
     MERGED_HINT,
-    backends::{Backend, rest},
+    backends::rest,
     capability::{self, Supports},
     items::revert::NewRevert,
-    transport::account::Account,
-    transport::api::Request,
+    transport::{account::Account, api::Request, backend::Backend},
 };
 use shoal_forge_types::{
     ForgeRepo,

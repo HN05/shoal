@@ -7,8 +7,8 @@ use anyhow::{Context, Result, ensure};
 use crate::{
     backends::Attachments,
     capability::CapabilityRequests,
-    transport::account::Account,
     transport::{
+        account::Account,
         api::{TransportRequests, http_body},
         response::{Fetched, Headed},
     },

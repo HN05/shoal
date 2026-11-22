@@ -7,13 +7,16 @@ use futures_util::{StreamExt as _, TryStreamExt as _};
 use serde_json::Value;
 
 use crate::{
-    backends::{Backend, Reactions},
+    backends::Reactions,
     items::{
         action::{Acted, ActionRequests},
         comment::{self, CommentRequests},
     },
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+        backend::Backend,
+    },
     updates::Edited,
 };
 use shoal_forge_types::{

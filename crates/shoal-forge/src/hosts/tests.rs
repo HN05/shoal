@@ -53,3 +53,15 @@ fn learned_hosts_override_names_and_guesses() {
         "https://ghe.learned.example/team/repo/pull/3"
     );
 }
+
+#[test]
+fn well_known_and_gitlab_named_hosts_are_recognized() {
+    for (host, kind) in [
+        ("github.com", ForgeKind::GitHub),
+        ("gitlab.corp.example", ForgeKind::GitLab),
+        ("git.corp.example", ForgeKind::Forgejo),
+        ("mygitlab.example", ForgeKind::Forgejo),
+    ] {
+        assert_eq!(detect(host, None), kind, "{host}");
+    }
+}

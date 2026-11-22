@@ -6,8 +6,10 @@ use super::Forgejo;
 use crate::{
     backends::{Merging, github_rest, subject_and_body},
     items::item::ItemRequests,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

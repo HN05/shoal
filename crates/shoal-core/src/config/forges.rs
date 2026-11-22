@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use super::value::Value;
 use crate::forge::backends::ForgeKind;
-use shoal_forge::{
-    backends::SignIn,
-    transport::account::{Login, Logins, Missing, Token},
+use shoal_forge::transport::{
+    account::{Login, Logins, Missing, Token},
+    backend::SignIn,
 };
 
 /// Bounds a token command, which may wait on a password manager.

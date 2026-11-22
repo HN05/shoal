@@ -3,13 +3,12 @@
 use anyhow::Result;
 
 use crate::{
-    backends::Backend,
     capability::{self, Supports},
     ci::{
         CiCheck, Job, Location, Operation,
         checks::{CheckSteps, plain},
     },
-    transport::account::Account,
+    transport::{account::Account, backend::Backend},
 };
 use shoal_forge_types::{
     ForgeRepo,

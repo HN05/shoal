@@ -10,8 +10,10 @@ use crate::{
         item::{ItemRequests, text},
         revert::NewRevert,
     },
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests, encode},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

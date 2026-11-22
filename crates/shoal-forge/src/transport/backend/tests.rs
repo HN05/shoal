@@ -1,5 +1,4 @@
 use super::*;
-use shoal_forge_types::hosts::detect;
 
 #[test]
 fn only_failures_a_login_may_fix_carry_the_login_hint() {
@@ -14,16 +13,4 @@ fn only_failures_a_login_may_fix_carry_the_login_hint() {
         denied,
         format!("{}: GET pulls/1: HTTP 404", ForgeKind::Forgejo.login_hint())
     );
-}
-
-#[test]
-fn well_known_and_gitlab_named_hosts_are_recognized() {
-    for (host, kind) in [
-        ("github.com", ForgeKind::GitHub),
-        ("gitlab.corp.example", ForgeKind::GitLab),
-        ("git.corp.example", ForgeKind::Forgejo),
-        ("mygitlab.example", ForgeKind::Forgejo),
-    ] {
-        assert_eq!(detect(host, None), kind, "{host}");
-    }
 }

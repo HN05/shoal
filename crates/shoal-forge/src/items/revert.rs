@@ -12,8 +12,7 @@ use crate::{
         create::{CreateSteps, Created, pending_edit},
         item::ItemRequests,
     },
-    transport::account::Account,
-    transport::api::TransportRequests,
+    transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::{
     ForgeRepo,

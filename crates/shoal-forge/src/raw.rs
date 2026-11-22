@@ -4,10 +4,10 @@
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::{
-    backends::Backend,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+use crate::transport::{
+    account::Account,
+    api::{Request, TransportRequests, encode},
+    backend::Backend,
 };
 use shoal_forge_types::ForgeRepo;
 use shoal_forge_types::raw::HttpMethod;

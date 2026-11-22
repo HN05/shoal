@@ -7,8 +7,7 @@ use crate::{
     backends::Items,
     items::review::{PlacedReview, Submission},
     review::diff::Diff,
-    transport::account::Account,
-    transport::api::Request,
+    transport::{account::Account, api::Request},
 };
 use shoal_forge_types::{
     ForgeRepo,

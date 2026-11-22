@@ -4,11 +4,9 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    backends::Backend,
     capability::{self, Supports},
     ci::{run::NewRun, run_action::RunOperation},
-    transport::account::Account,
-    transport::api::Request,
+    transport::{account::Account, api::Request, backend::Backend},
 };
 use shoal_forge_types::{
     ForgeRepo,

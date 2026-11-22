@@ -9,8 +9,10 @@ use crate::{
     backends::{Checks, Runs},
     ci::{approval::RUNS_PAGE, run::NewRun, run_action::RunOperation},
     items::item::text,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests, encode},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

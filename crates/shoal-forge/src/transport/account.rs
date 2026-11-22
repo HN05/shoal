@@ -6,7 +6,7 @@ use anyhow::{Result, bail, ensure};
 use futures_util::future::BoxFuture;
 use tokio::sync::OnceCell;
 
-use crate::{backends::Backend, transport::memory::Memory};
+use crate::transport::{backend::Backend, memory::Memory};
 use shoal_forge_types::{ForgeRepo, backends::ForgeKind};
 /// Fetches the token of one login, such as by running a command; the
 /// caller owns where it comes from and what a failure names.

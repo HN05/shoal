@@ -2,7 +2,8 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    backends::Conventions, transport::account::Account, transport::api::TransportRequests,
+    backends::Conventions,
+    transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::ForgeRepo;
 

@@ -2,9 +2,9 @@
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
-use crate::{
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+use crate::transport::{
+    account::Account,
+    api::{Request, TransportRequests},
 };
 use shoal_forge_types::{ForgeRepo, raw::HttpMethod};
 

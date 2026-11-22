@@ -6,7 +6,7 @@ use crate::{
     config::forges::Whose,
     daemon::{manager::Manager, scope::Caller},
 };
-use shoal_forge::backends::SignIn;
+use shoal_forge::transport::backend::SignIn;
 use shoal_protocol::agents::GitCredential;
 
 impl Manager {

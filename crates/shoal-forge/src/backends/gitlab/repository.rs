@@ -2,12 +2,12 @@
 use anyhow::Result;
 
 use crate::{
-    backends::LoginHint,
     capability,
     repo::Repositories,
     transport::{
         account::Account,
         api::{Request, TransportRequests, encode},
+        backend::LoginHint,
     },
 };
 use shoal_forge_types::{ForgeRepo, backends::gitlab::GitLab, capability::Capability};

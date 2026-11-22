@@ -18,8 +18,10 @@ use crate::{
         review::SubmitSteps,
     },
     review::thread::{ThreadRequests, ThreadSteps},
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
     updates::{Edited, ItemDetails},
 };
 use shoal_forge_types::{

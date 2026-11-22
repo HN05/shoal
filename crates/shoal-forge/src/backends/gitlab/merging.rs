@@ -7,8 +7,10 @@ use crate::{
     backends::Merging,
     capability,
     items::item::ItemRequests,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

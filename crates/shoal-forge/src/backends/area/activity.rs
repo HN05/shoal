@@ -2,7 +2,10 @@
 //! views.
 use anyhow::Result;
 
-use crate::{backends::Backend, transport::account::Account, updates::Snapshot};
+use crate::{
+    transport::{account::Account, backend::Backend},
+    updates::Snapshot,
+};
 use shoal_forge_types::review::view::{Details, Review};
 use shoal_forge_types::{
     ForgeRepo,

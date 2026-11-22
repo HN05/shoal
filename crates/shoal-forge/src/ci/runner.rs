@@ -15,8 +15,10 @@ use crate::{
     backends::Runners,
     capability::CapabilityRequests,
     ci::checks::CheckRequests,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

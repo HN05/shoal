@@ -13,8 +13,10 @@ use shoal_time::UnixTime;
 use crate::{
     backends::{Activity, rest::RestCheck},
     ci::run_view::RunViewRequests,
-    transport::account::Account,
-    transport::limits::{RateLimited, rate_limited},
+    transport::{
+        account::Account,
+        limits::{RateLimited, rate_limited},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

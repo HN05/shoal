@@ -7,8 +7,7 @@ use crate::{
     backends::Reactions,
     capability,
     items::reaction::{Listed, Subject},
-    transport::account::Account,
-    transport::api::Request,
+    transport::{account::Account, api::Request},
 };
 use shoal_forge_types::{
     ForgeRepo,

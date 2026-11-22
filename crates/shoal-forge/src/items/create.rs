@@ -11,8 +11,10 @@ use crate::{
         action::{ActionRequests, ActionSteps},
         attach::{AttachRequests, AttachSteps, Pending},
     },
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

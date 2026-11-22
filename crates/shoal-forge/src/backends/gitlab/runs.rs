@@ -11,8 +11,10 @@ use crate::{
         Location, checks::CheckSteps, run::NewRun, run_action::RunOperation, run_view::JOBS_PAGE,
     },
     items::item::text,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests, encode},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

@@ -5,8 +5,10 @@ use super::{Forgejo, actions};
 use crate::{
     backends::{Checks, github_rest},
     ci::{CiCheck, Job, Location, Operation, checks::plain},
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

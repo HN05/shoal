@@ -10,8 +10,10 @@ use super::Forgejo;
 use crate::{
     backends::Runners,
     ci::runner::{JobCommand, JobLaunch, RegisteredRunner, file_url, registration},
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests, encode},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

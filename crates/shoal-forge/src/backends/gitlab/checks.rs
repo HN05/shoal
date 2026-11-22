@@ -6,8 +6,7 @@ use super::{GitLab, latest_statuses, status_state};
 use crate::{
     backends::Checks,
     ci::{CiCheck, Job, Location, Operation, check, checks::plain},
-    transport::account::Account,
-    transport::api::TransportRequests,
+    transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::{ForgeRepo, ci::CiAction, numbers::JobId, repo::locator::id};
 

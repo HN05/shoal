@@ -6,9 +6,9 @@ use anyhow::{Context, Result};
 use futures_util::StreamExt;
 use serde_json::Value;
 
-use crate::{
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+use crate::transport::{
+    account::Account,
+    api::{Request, TransportRequests},
 };
 use shoal_forge_types::{
     ForgeRepo,

@@ -2,9 +2,9 @@
 //! Gitea serves the same version endpoint with its own numbering.
 use anyhow::{Context, Result};
 
-use crate::{
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+use crate::transport::{
+    account::Account,
+    api::{Request, TransportRequests},
 };
 use shoal_forge_types::ForgeRepo;
 

@@ -8,8 +8,10 @@ use crate::{
     backends::{Checks, Runs},
     capability::CapabilityRequests,
     ci::run_action::RunActionSteps,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
     updates::{FailedJob, MAX_LISTED_JOBS, Snapshot},
 };
 use shoal_forge_types::updates::{SnapshotKind, SnapshotState};

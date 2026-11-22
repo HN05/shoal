@@ -4,10 +4,13 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    backends::{Backend, LoginHint, rest},
+    backends::rest,
     items::{action::ActionRequests, comment::Found, create::Head, reaction::Subject},
-    transport::account::Account,
-    transport::api::Request,
+    transport::{
+        account::Account,
+        api::Request,
+        backend::{Backend, LoginHint},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

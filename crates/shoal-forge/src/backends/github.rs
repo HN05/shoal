@@ -21,12 +21,13 @@ mod runs;
 mod support;
 pub(crate) mod threads;
 
-use super::{Backend, github_rest};
+use super::github_rest;
 use crate::{
     hosts::Hosting,
-    transport::account::Account,
     transport::{
+        account::Account,
         api::{Request, TransportRequests, full_page},
+        backend::Backend,
         response::Response,
     },
 };

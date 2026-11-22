@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::{GitLab, latest_statuses, notes, status_state, username};
 use crate::{
     backends::{
-        Activity, LoginHint,
+        Activity,
         rest::{self, RestCheck, RestReads, fingerprints},
     },
     items::{
@@ -13,8 +13,11 @@ use crate::{
         item::{ItemRequests, text},
     },
     review::status::Verdict,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+        backend::LoginHint,
+    },
     updates::{Entry, Snapshot},
 };
 use shoal_forge_types::review::view::{

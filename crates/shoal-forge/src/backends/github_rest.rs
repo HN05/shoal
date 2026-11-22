@@ -4,7 +4,6 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use shoal_refs::BranchName;
 
-use super::LoginHint;
 use crate::{
     ci::{CiCheck, check},
     conventions::draft::DraftMarker,
@@ -18,8 +17,11 @@ use crate::{
         reviewers::team_name,
         view::{labels, login, required, text_field},
     },
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests, encode},
+        backend::LoginHint,
+    },
 };
 use shoal_forge_types::review::view::{Comment, Details, PrDetails};
 use shoal_forge_types::{

@@ -10,8 +10,10 @@ use crate::{
     capability::CapabilityRequests,
     ci::{CiCheck, CiSteps, Location},
     items::action::ActionRequests,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

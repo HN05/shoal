@@ -8,8 +8,10 @@ use crate::{
     backends::Runs,
     capability,
     ci::{run::NewRun, run_action::RunOperation},
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
 };
 use shoal_forge_types::{
     ForgeRepo,

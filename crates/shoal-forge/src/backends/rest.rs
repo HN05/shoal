@@ -8,11 +8,14 @@ use serde_json::Value;
 use shoal_refs::CommitId;
 
 use crate::{
-    backends::{Backend, Items, LoginHint},
+    backends::Items,
     items::{action::ActionRequests, item::ItemRequests},
     review::status::{StatusRecords, Verdict},
-    transport::account::Account,
-    transport::api::TransportRequests,
+    transport::{
+        account::Account,
+        api::TransportRequests,
+        backend::{Backend, LoginHint},
+    },
     updates::{DISCUSSION, Entry, Snapshot, verdict_entries},
 };
 use shoal_forge_types::{

@@ -1,7 +1,10 @@
 //! The branch a repository's forge reports as its default.
 use anyhow::{Context, Result};
 
-use crate::{repo::Repositories, transport::account::Account, transport::api::TransportRequests};
+use crate::{
+    repo::Repositories,
+    transport::{account::Account, api::TransportRequests},
+};
 use shoal_forge_types::ForgeRepo;
 
 /// Reading the repository's default branch.

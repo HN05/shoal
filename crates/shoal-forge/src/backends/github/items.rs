@@ -6,14 +6,17 @@ use serde_json::{Value, json};
 use super::GitHub;
 use crate::{
     backends::{
-        Items, LoginHint,
+        Items,
         github_rest::{self, GitHubShapes},
         rest,
     },
     conventions::draft::DraftMarker,
     items::{create::Head, item::ItemRequests, reaction::Subject},
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests, encode},
+        backend::LoginHint,
+    },
     updates::DISCUSSION,
 };
 use shoal_forge_types::{

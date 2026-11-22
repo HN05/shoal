@@ -9,8 +9,7 @@ use crate::{
     },
     items::action::ActionSteps,
     review::view::{login, review_comment, review_state, text_field},
-    transport::account::Account,
-    transport::api::TransportRequests,
+    transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::review::view::{AutoMerge, Details, Review};
 use shoal_forge_types::{

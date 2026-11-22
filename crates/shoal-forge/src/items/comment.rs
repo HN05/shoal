@@ -9,8 +9,7 @@ use crate::{
         attach::{AttachSteps, Holder},
         reaction::Subject,
     },
-    transport::account::Account,
-    transport::api::TransportRequests,
+    transport::{account::Account, api::TransportRequests},
     updates::Edited,
 };
 use shoal_forge_types::{

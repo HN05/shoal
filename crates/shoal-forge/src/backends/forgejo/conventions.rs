@@ -6,8 +6,7 @@ use super::{Forgejo, organization};
 use crate::{
     backends::Conventions,
     conventions::{Lookup, shared_lookups},
-    transport::account::Account,
-    transport::api::TransportRequests,
+    transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::{ForgeRepo, items::link::ItemKind};
 

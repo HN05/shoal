@@ -6,15 +6,18 @@ use shoal_refs::BranchName;
 
 use super::GitLab;
 use crate::{
-    backends::{Items, LoginHint, rest},
+    backends::{Items, rest},
     conventions::draft::DraftMarker,
     items::{
         create::Head,
         item::{ItemRequests, text},
         reaction::Subject,
     },
-    transport::account::Account,
-    transport::api::{Request, TransportRequests, encode},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests, encode},
+        backend::LoginHint,
+    },
     updates::DISCUSSION,
 };
 use shoal_forge_types::{

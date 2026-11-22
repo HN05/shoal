@@ -3,6 +3,7 @@
 //! account each request is signed as, whose memory is this transport's cache.
 pub mod account;
 pub(crate) mod api;
+pub mod backend;
 pub(crate) mod download;
 pub mod limits;
 pub mod memory;

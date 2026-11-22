@@ -5,15 +5,18 @@ use serde_json::Value;
 use super::{Forgejo, actions};
 use crate::{
     backends::{
-        Activity, LoginHint,
+        Activity,
         rest::{self, RestCheck, RestReads, fingerprints},
     },
     review::{
         status::{Verdict, forgejo_reviews},
         view::login,
     },
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+        backend::LoginHint,
+    },
     updates::{Entry, Snapshot},
 };
 use shoal_forge_types::review::view::{Details, Review};

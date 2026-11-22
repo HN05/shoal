@@ -11,9 +11,10 @@ use crate::{
     backends::Runners,
     capability,
     hosts::Hosting,
-    transport::account::Account,
     transport::{
+        account::Account,
         api::{Request, TransportRequests},
+        backend::Backend,
         response::Response,
     },
 };
@@ -31,8 +32,6 @@ mod repository;
 mod reviews;
 mod runs;
 mod support;
-
-use super::Backend;
 
 /// Bitbucket Cloud's API, which is not served from its web host.
 const API: &str = "https://api.bitbucket.org/2.0";

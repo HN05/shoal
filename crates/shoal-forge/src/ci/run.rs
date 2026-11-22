@@ -7,11 +7,10 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    backends::{Backend, Runs},
+    backends::Runs,
     capability::CapabilityRequests,
     ci::workflow::{WorkflowLink, is_workflow_url},
-    transport::account::Account,
-    transport::api::TransportRequests,
+    transport::{account::Account, api::TransportRequests, backend::Backend},
 };
 use shoal_forge_types::{ForgeRepo, capability::Capability, ci::run::StartedRun};
 

@@ -6,9 +6,10 @@ use serde_json::Value;
 use crate::{
     backends::Runners,
     hosts::Hosting,
-    transport::account::Account,
     transport::{
+        account::Account,
         api::{Request, TransportRequests, encode, full_page},
+        backend::{Backend, LoginHint},
         response::Response,
     },
 };
@@ -27,7 +28,7 @@ mod reviews;
 mod runs;
 mod support;
 
-use super::{Backend, LoginHint, rest};
+use super::rest;
 
 impl Hosting for GitLab {
     /// GitLab reports its version with the revision it was built from.

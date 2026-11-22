@@ -10,8 +10,10 @@ use crate::{
     capability,
     items::review::{PlacedReview, Submission},
     review::diff::Diff,
-    transport::account::Account,
-    transport::api::{Request, TransportRequests},
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
     updates::activity_key,
 };
 use shoal_forge_types::{
