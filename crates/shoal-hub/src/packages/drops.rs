@@ -36,9 +36,9 @@ const LOOK_EVERY: Duration = Duration::from_secs(60);
 /// What the hub holds for a dropped machine since its link dropped: the
 /// spaces the events it holds are for, and how many other requests wait.
 #[derive(Debug, Default, PartialEq)]
-struct Held {
-    spaces: HashSet<SpaceId>,
-    others: usize,
+pub(super) struct Held {
+    pub spaces: HashSet<SpaceId>,
+    pub others: usize,
 }
 
 impl Hub {
@@ -120,7 +120,7 @@ fn dropped(directory: &Directory, now: UnixTime) -> Vec<(&Member, UnixTime)> {
 }
 
 /// What the hub holds for `member` since `since`.
-fn held(tx: &Transaction<'_>, member: &MemberId, since: UnixTime) -> Result<Held> {
+pub(super) fn held(tx: &Transaction<'_>, member: &MemberId, since: UnixTime) -> Result<Held> {
     let mut held = Held::default();
     for call in queue::held_since(tx, member, since)? {
         match call {
@@ -149,13 +149,17 @@ fn busy_spaces<'a>(
 ) -> Vec<&'a Listed> {
     (directory.spaces.iter())
         .filter(|listed| &listed.machine == machine)
-        .filter(|listed| {
-            let space = &listed.space;
-            space.agent_state == Some(AgentState::Working)
-                || space.status == ListStatus::Queued
-                || held.contains(&space.id)
-        })
+        .filter(|listed| had_work(listed, held))
         .collect()
+}
+
+/// Whether `listed` had something to do: an agent working as its machine
+/// last reported, a queued agent, or an event among those `held` for it.
+pub(super) fn had_work(listed: &Listed, held: &HashSet<SpaceId>) -> bool {
+    let space = &listed.space;
+    space.agent_state == Some(AgentState::Working)
+        || space.status == ListStatus::Queued
+        || held.contains(&space.id)
 }
 
 /// The alert that `machine`, last seen at `dropped_at` and unreachable

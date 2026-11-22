@@ -205,6 +205,7 @@ pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: boo
         hub.escalate_waiting(&*daemon),
         hub.keep_marking_presence(&*daemon),
         hub.keep_alerting_drops(&*daemon),
+        hub.keep_taking_over_sleepers(&daemon),
         hub.keep_sharing_own(&daemon),
         member::run(hub.clone(), daemon.clone()),
     );

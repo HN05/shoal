@@ -167,9 +167,13 @@ states!(AlertKind {
     /// An intermittent machine stayed unreachable while its spaces had
     /// work to do.
     MachineUnreachable => "machine_unreachable",
-    /// A space a machine handed over as it shut down did not continue on
-    /// the machine the hub placed it on, so it stays on its own.
+    /// A space a machine handed over as it shut down, or that the hub took
+    /// over from a sleeping machine, did not continue on the machine the
+    /// hub placed it on, so it stays on its own.
     HandoverFailed => "handover_failed",
+    /// The hub continued spaces of a machine that slept with work to do on
+    /// another machine.
+    SpacesTakenOver => "spaces_taken_over",
     /// The hub's copy of a shared config file, or of a shared repository's
     /// local config, replaced an edit this machine had not sent it, which
     /// Shoal kept as a backup.

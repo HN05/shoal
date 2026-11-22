@@ -109,3 +109,27 @@ fn a_held_request_the_machine_answered_with_an_error_was_refused() {
     assert_eq!(refusal(&refused).as_deref(), Some("it may still run"));
     assert_eq!(refusal(&answered(Body::Ok)), None);
 }
+
+#[test]
+fn a_takeover_passes_the_events_held_for_its_space_to_the_machine_that_took_it() {
+    let mut db = database();
+    let tx = db.transaction().unwrap();
+    let (laptop, desk) = (
+        MemberId::from("laptop".to_owned()),
+        MemberId::from("desk".to_owned()),
+    );
+    let (now, expires) = (UnixTime::now(), UnixTime::now() + LIFETIME);
+    let mut other = held("other");
+    if let Call::Tell { told } = &mut other.call {
+        told.above = SpaceId::from("elsewhere".to_owned());
+    }
+    push(&tx, &laptop, &held("taken"), now, expires).unwrap();
+    push(&tx, &laptop, &other, now, expires).unwrap();
+    let taken = SpaceId::from("coordinator".to_owned());
+    redirect(&tx, &taken, &laptop, &desk).unwrap();
+    let (_, call) = claim_first(&tx, &desk, now).unwrap().unwrap();
+    assert_eq!(message(&call.held.call), "taken");
+    let (_, call) = claim_first(&tx, &laptop, now).unwrap().unwrap();
+    assert_eq!(message(&call.held.call), "other");
+    assert!(claim_first(&tx, &laptop, now).unwrap().is_none());
+}

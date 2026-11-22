@@ -52,13 +52,20 @@ impl Hub {
             .write(move |tx| push(tx, &to, &held, now, expires_at))
             .await?;
         // Its link may have opened since the hub looked.
-        self.deliveries.of(&machine.id).wake.notify_one();
+        self.wake_delivery(&machine.id);
+        // An update for a sleeping machine's space may take it over.
+        self.sleeps.look();
         Ok(Queued {
             machine: machine.id.clone(),
             name: machine.name.clone(),
             last_seen: machine.last_seen,
             expires_at,
         })
+    }
+
+    /// Deliver what the hub holds for `member` now, should its link be open.
+    pub(super) fn wake_delivery(&self, member: &MemberId) {
+        self.deliveries.of(member).wake.notify_one();
     }
 
     /// Deliver what the hub holds for `member` over its link `link`, as it
@@ -356,6 +363,34 @@ fn take_expired(tx: &Transaction<'_>, now: UnixTime) -> Result<Vec<Lapsed>> {
         [now],
     )?;
     rows.into_iter().map(|row| Ok(decode(row)?.1)).collect()
+}
+
+/// Hold for `to` the events the hub holds for the space `id` on `from`,
+/// which `to` took over, but one it is sending now.
+pub(super) fn redirect(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    from: &MemberId,
+    to: &MemberId,
+) -> Result<()> {
+    let mut statement =
+        tx.prepare("SELECT seq, call FROM hub_queue WHERE member_id=?1 AND NOT delivering")?;
+    let rows = statement.query_map([from], |row| Ok((row.get::<_, i64>(0)?, row.get(1)?)))?;
+    let mut moved = Vec::new();
+    for row in rows {
+        let (seq, call): (i64, String) = row?;
+        let call: Call = serde_json::from_str(&call).context("unreadable held call")?;
+        if matches!(&call, Call::Tell { told } if &told.above == id) {
+            moved.push(seq);
+        }
+    }
+    for seq in moved {
+        tx.execute(
+            "UPDATE hub_queue SET member_id=?2 WHERE seq=?1",
+            params![seq, to],
+        )?;
+    }
+    Ok(())
 }
 
 /// Drop what the hub holds for `member`, which it revoked.

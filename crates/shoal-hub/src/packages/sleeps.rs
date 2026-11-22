@@ -5,8 +5,10 @@
 //! nearly empty counts as one that announced its sleep at that report,
 //! with what that report said its packages lacked. A package its machine
 //! built after the notice makes its space's current. The hub forgets the
-//! sleep once the machine's link opens again. The hub keeps a sleep in its
-//! store, so a restart of its own daemon meanwhile changes nothing.
+//! sleep once the machine's link opens again, and meanwhile takes the
+//! machine's spaces with work over once it has stayed away long enough, in
+//! [`taking_over`]. The hub keeps a sleep in its store, so a restart of
+//! its own daemon meanwhile changes nothing.
 use std::{
     collections::{HashMap, HashSet},
     sync::Mutex,
@@ -200,5 +202,6 @@ pub(super) fn caught_up(
     Ok(())
 }
 
+mod taking_over;
 #[cfg(test)]
 mod tests;
