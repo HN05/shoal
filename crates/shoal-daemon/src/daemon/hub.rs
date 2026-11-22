@@ -12,7 +12,7 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shoal_daemon_base::alerts::{AlertKind, NewAlert};
 use shoal_hub::daemon::{
-    Approvals, Apps, Dispatch, GlobalConfig, Messages, Packages, Receiver, Records,
+    Approvals, Apps, Dispatch, GlobalConfig, Messages, Packages, Receiver, Records, Registrations,
     SpacePermissions, Spaces,
 };
 
@@ -269,6 +269,20 @@ impl Packages for Manager {
 impl shoal_hub::daemon::Queue for Manager {
     fn queue_room(&self) -> BoxFuture<'_, Result<shoal_schedule::placement::snapshot::Capacity>> {
         Box::pin(Manager::queue_room(self))
+    }
+}
+
+impl Registrations for Manager {
+    fn register_clone(&self, url: String, name: String) -> BoxFuture<'_, Result<Repository>> {
+        Box::pin(self.repositories.register_clone(url, name))
+    }
+
+    fn share_repository_as<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+        url: Option<String>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move { self.repositories.share_as(id, url).await.map(drop) })
     }
 }
 

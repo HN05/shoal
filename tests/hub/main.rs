@@ -10,6 +10,7 @@ mod numbers;
 mod placement;
 mod routing;
 mod shared_config;
+mod shared_repositories;
 mod starts;
 #[path = "../support/mod.rs"]
 mod support;

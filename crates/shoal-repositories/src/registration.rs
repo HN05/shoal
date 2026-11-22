@@ -46,6 +46,17 @@ impl Repositories {
         (self.register_locked(source, name, clone_path, Registration::Regular)).await
     }
 
+    /// Register a clone of `url`, which another machine of the hub has as
+    /// `name`, under that name where no repository here has it and it is
+    /// valid.
+    pub async fn register_clone(&self, url: String, name: String) -> Result<Repository> {
+        let _guard = self.gates.lock_registry().await;
+        let repositories = self.list().await?;
+        let taken = (repositories.iter()).any(|repo| repo.name.as_deref() == Some(&name));
+        let name = (!taken && validate::name("repository", &name).is_ok()).then_some(name);
+        (self.register_locked(url.into(), name, None, Registration::Regular)).await
+    }
+
     /// `shoal contribute`: clone a repository URL as a contribution, which
     /// pushes to the user's fork when the user cannot push to the repository.
     /// An existing registration is returned as it is. The hold keeps it

@@ -37,7 +37,7 @@ use crate::{
     Hub,
     daemon::{
         Approvals, Apps, Dispatch, GlobalConfig, Messages, Packages, Queue, Receiver, Records,
-        SpacePermissions, Spaces,
+        Registrations, SpacePermissions, Spaces,
     },
     streams::{Incoming, Outgoing},
 };
@@ -69,6 +69,20 @@ pub(crate) struct StandIn;
 fn none<T>(what: &str) -> BoxFuture<'static, Result<T>> {
     let message = format!("the stand-in daemon has no {what}");
     Box::pin(async move { bail!(message) })
+}
+
+impl Registrations for StandIn {
+    fn register_clone(&self, _: String, _: String) -> BoxFuture<'_, Result<Repository>> {
+        none("repositories to clone")
+    }
+
+    fn share_repository_as<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+        _: Option<String>,
+    ) -> BoxFuture<'a, Result<()>> {
+        none("repositories to share")
+    }
 }
 
 impl Spaces for StandIn {

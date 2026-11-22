@@ -170,6 +170,9 @@ states!(AlertKind {
     /// The hub's copy of a shared config file replaced an edit this
     /// machine had not sent it, which Shoal kept as a backup.
     SharedFileKept => "shared_file_kept",
+    /// A repository another machine of the hub shares could not be
+    /// registered here.
+    SharedRepositoryFailed => "shared_repository_failed",
 });
 
 states!(Sender {

@@ -58,6 +58,7 @@ impl Kind for SharedFiles {
     fn of(copies: Copies) -> Option<Vec<Copy<Self>>> {
         match copies {
             Copies::Files(copies) => Some(copies),
+            Copies::Repositories(_) => None,
         }
     }
 
@@ -77,6 +78,7 @@ impl Kind for SharedFiles {
     fn take<'a>(
         hub: &'a Arc<Hub>,
         daemon: &'a Arc<dyn Daemon>,
+        _: &'a shoal_protocol::hub::PublicKey,
         copies: Vec<Copy<Self>>,
         agreed: &'a Agreed<Self>,
         sent: &'a [Edit<Self>],

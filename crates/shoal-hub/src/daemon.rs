@@ -3,7 +3,8 @@
 //! messages that reach their agents, the approvals and threads that pass
 //! between machines, the app store a member asks of the hub, the
 //! packages of an intermittent machine's spaces, the room its queue has,
-//! and the global config the hub's copies of the shared files change.
+//! the global config the hub's copies of the shared files change and the
+//! registrations of the repositories they share.
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -235,6 +236,20 @@ pub trait GlobalConfig: Send + Sync {
     fn reload_config(&self) -> BoxFuture<'_, Result<()>>;
 }
 
+/// The registrations of the repositories a hub's machines share.
+pub trait Registrations: Send + Sync {
+    /// Register a clone of `url`, which another machine has as `name`.
+    fn register_clone(&self, url: String, name: String) -> BoxFuture<'_, Result<Repository>>;
+
+    /// Record that the repository `id` is shared under the clone URL `url`,
+    /// or with none, that it is not.
+    fn share_repository_as<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+        url: Option<String>,
+    ) -> BoxFuture<'a, Result<()>>;
+}
+
 /// This machine's agent queue, whose room its reports carry.
 pub trait Queue: Send + Sync {
     /// What the queue has room for now, without the machine's
@@ -254,6 +269,7 @@ pub trait Daemon:
     + Apps
     + Packages
     + GlobalConfig
+    + Registrations
     + Coordinators
 {
 }
@@ -268,6 +284,7 @@ impl<T> Daemon for T where
         + Apps
         + Packages
         + GlobalConfig
+        + Registrations
         + Coordinators
 {
 }

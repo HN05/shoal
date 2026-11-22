@@ -4,7 +4,7 @@
 //! orders its copies, and sends it to every machine.
 use serde::{Deserialize, Serialize};
 
-use super::shared_config;
+use super::{shared_config, shared_repositories};
 
 /// A machine's edit of a shared item: its new value, none for an item it
 /// removed.
@@ -29,6 +29,7 @@ pub struct Copy<K, V> {
 #[serde(rename_all = "snake_case")]
 pub enum Edits {
     Files(Vec<shared_config::Edit>),
+    Repositories(Vec<shared_repositories::Edit>),
 }
 
 /// The hub's copies of one kind of shared item.
@@ -36,4 +37,5 @@ pub enum Edits {
 #[serde(rename_all = "snake_case")]
 pub enum Copies {
     Files(Vec<shared_config::Copy>),
+    Repositories(Vec<shared_repositories::Copy>),
 }

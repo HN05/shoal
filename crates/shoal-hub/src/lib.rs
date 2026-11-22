@@ -64,6 +64,7 @@ pub mod sealing;
 pub mod serving;
 pub mod session;
 mod shared_config;
+mod shared_repositories;
 mod sharing;
 #[cfg(test)]
 mod stand_in;
@@ -123,6 +124,8 @@ pub struct Hub {
     reported: reports::Reported,
     /// This machine's side of the shared config.
     shared_files: shared_config::Files,
+    /// This machine's side of the shared repositories.
+    shared_repositories: shared_repositories::Repositories,
     /// As the hub: the capacity each machine last reported.
     capacities: placement::Capacities,
     /// As the hub: the app registered as the placer.
@@ -160,6 +163,7 @@ impl Hub {
             parent_permissions: Default::default(),
             reported: Default::default(),
             shared_files: Default::default(),
+            shared_repositories: Default::default(),
             capacities: Default::default(),
             placers: Default::default(),
         }

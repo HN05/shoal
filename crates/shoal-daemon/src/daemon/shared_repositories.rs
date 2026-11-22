@@ -6,12 +6,14 @@ use super::manager::Manager;
 
 impl Manager {
     /// Share the repository `selector` names with the other machines of
-    /// the hub, or stop sharing it.
+    /// the hub, or stop sharing it, and have the hub hear of it at once.
     pub(super) async fn share_repository(
         &self,
         selector: impl Into<Selector>,
         shared: bool,
     ) -> Result<Repository> {
-        self.repositories.share(selector, shared).await
+        let repository = self.repositories.share(selector, shared).await?;
+        self.hub.shared_repositories_changed();
+        Ok(repository)
     }
 }

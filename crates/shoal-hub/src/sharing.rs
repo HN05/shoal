@@ -1,6 +1,6 @@
 //! What a hub's machines share, item by item, of each [`Kind`]. Each
-//! machine, the hub's own included, looks at its items every [`LOOK_EVERY`]
-//! and on each config reload, and sends the hub each item it edited since
+//! machine, the hub's own included, looks at its items every [`LOOK_EVERY`],
+//! on each config reload and once told they changed, and sends the hub each item it edited since
 //! it last agreed on that item with the hub, once they may go; on each link
 //! it first reads the hub's copies. The hub keeps the last edit of each
 //! item that reached it and sends it to every other machine, which takes
@@ -24,15 +24,18 @@ use shoal_protocol::hub::{
     sharing::{self, Copies, Edits},
 };
 
-use crate::{Hub, daemon::Daemon, log, membership, session::Calls, shared_config::SharedFiles};
+use crate::{
+    Hub, daemon::Daemon, log, membership, session::Calls, shared_config::SharedFiles,
+    shared_repositories::SharedRepositories,
+};
 
 mod agreed;
 pub(crate) mod copies;
 pub(crate) mod items;
 mod values;
 
-/// How often a machine looks at its shared items for edits; a reload
-/// looks at once.
+/// How often a machine looks at its shared items for edits; a reload, or
+/// word that they changed, looks at once.
 const LOOK_EVERY: Duration = Duration::from_secs(10);
 
 /// A kind of item a hub's machines share, under keys of its own.
@@ -67,12 +70,13 @@ pub(crate) trait Kind: Sized + Send + Sync + 'static {
     /// them.
     fn sendable<'a>(hub: &'a Hub, daemon: &'a dyn Daemon, edited: bool) -> BoxFuture<'a, bool>;
 
-    /// Take the hub's `copies` into this machine's items, given the copies
-    /// it `agreed` on before and the edits it `sent` for them, returning
-    /// the copies it agrees on now.
+    /// Take the copies of the hub whose key is `key` into this machine's
+    /// items, given the copies it `agreed` on before and the edits it
+    /// `sent` for them, returning the copies it agrees on now.
     fn take<'a>(
         hub: &'a Arc<Hub>,
         daemon: &'a Arc<dyn Daemon>,
+        key: &'a PublicKey,
         copies: Vec<Copy<Self>>,
         agreed: &'a Agreed<Self>,
         sent: &'a [Edit<Self>],
@@ -101,6 +105,21 @@ pub(crate) struct Sharing {
     /// Whether a copy the hub sent was not taken, so the next round reads
     /// the hub's copies again.
     missed: std::sync::atomic::AtomicBool,
+    /// Wakes a round once the items change.
+    changed: tokio::sync::Notify,
+}
+
+impl Sharing {
+    /// Look at the items at once, since they changed.
+    pub(crate) fn changed(&self) {
+        self.changed.notify_one();
+    }
+
+    /// Hold off every round, which compares the items with the hub's
+    /// copies and takes them, while the guard lives.
+    pub(crate) async fn hold_rounds(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.round.lock().await
+    }
 }
 
 /// Where a machine's edits go: over its link, or, on the hub's own
@@ -168,7 +187,10 @@ impl Hub {
         daemon: &Arc<dyn Daemon>,
         hub: &To<'_>,
     ) -> Infallible {
-        self.keep_sharing_with::<SharedFiles>(daemon, hub).await
+        tokio::select! {
+            never = self.keep_sharing_with::<SharedFiles>(daemon, hub) => never,
+            never = self.keep_sharing_with::<SharedRepositories>(daemon, hub) => never,
+        }
     }
 
     /// Share this machine's items of `S` with `hub`: read its copies first,
@@ -192,6 +214,7 @@ impl Hub {
             }
             tokio::select! {
                 () = tokio::time::sleep(LOOK_EVERY) => {}
+                () = S::sharing(self).changed.notified() => {}
                 changed = reloaded.changed() => {
                     if changed.is_err() {
                         std::future::pending::<()>().await;
@@ -292,6 +315,9 @@ impl Hub {
         copies: Copies,
     ) -> Result<()> {
         match copies {
+            Copies::Repositories(copies) => {
+                (self.take_sent_copies::<SharedRepositories>(daemon, own, copies)).await
+            }
             Copies::Files(copies) => {
                 self.take_sent_copies::<SharedFiles>(daemon, own, copies)
                     .await
@@ -333,7 +359,7 @@ impl Hub {
         agreed: Agreed<S>,
         sent: Vec<Edit<S>>,
     ) -> Result<()> {
-        let taken = S::take(self, daemon, copies, &agreed, &sent).await?;
+        let taken = S::take(self, daemon, key, copies, &agreed, &sent).await?;
         self.agree::<S>(key, taken).await
     }
 
@@ -364,6 +390,9 @@ impl Hub {
             Edits::Files(edits) => Copies::Files(
                 self.take_shared_edits::<SharedFiles>(daemon, from, edits)
                     .await?,
+            ),
+            Edits::Repositories(edits) => Copies::Repositories(
+                (self.take_shared_edits::<SharedRepositories>(daemon, from, edits)).await?,
             ),
         })
     }
