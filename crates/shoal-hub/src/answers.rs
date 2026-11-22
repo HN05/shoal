@@ -132,6 +132,7 @@ impl Hub {
                 Reply::Availability(self.describe_member(&member.id, description).await?)
             }
             Call::Directory => Reply::Directory(self.local_directory(&**daemon).await?),
+            Call::Repositories => Reply::Directory(self.local_repositories(&**daemon).await?),
             Call::Place { mut request } => {
                 ensure_machine(member)?;
                 request.caller = member.id.clone();

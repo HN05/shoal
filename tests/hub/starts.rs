@@ -103,6 +103,16 @@ fn on_hub(machines: &Machines, name: &str, kind: &str) -> Value {
     })
 }
 
+/// The repositories `machine` registers, which `repo ls` lists before the
+/// other machines'.
+fn registered_here(machine: &Base) -> Vec<Value> {
+    let repositories = machine.ok(&["repo", "ls"]);
+    (repositories.as_array().unwrap().iter())
+        .filter(|repository| repository["machine"].is_null())
+        .cloned()
+        .collect()
+}
+
 /// Start a workspace of `machine`'s repository `repository` on the new
 /// branch `name` and return its ID.
 fn workspace_of(machine: &Base, repository: &str, name: &str) -> String {
@@ -127,9 +137,8 @@ fn a_space_starts_a_child_workspace_on_another_machine_that_clones_its_repositor
     let child = on_laptop(&machines, "child", "workspace");
     assert_eq!(child["parent"], machines.coordinator.as_str(), "{child}");
     // The laptop registered a clone of the hub's repository for it.
-    let repositories = machines.laptop.ok(&["repo", "ls"]);
-    let count = repositories.as_array().unwrap().len();
-    assert_eq!(count, 2, "{repositories}");
+    let repositories = registered_here(&machines.laptop);
+    assert_eq!(repositories.len(), 2, "{repositories:?}");
 }
 
 #[test]
@@ -543,8 +552,8 @@ fn a_space_carries_nothing_for_a_start_in_another_repository_than_its_own() {
     let started = start_in_coordinator(&machines, &args);
     assert!(!started.status.success(), "{}", printed(&started));
     // The laptop registered nothing of it.
-    let repositories = machines.laptop.ok(&["repo", "ls"]);
-    assert_eq!(repositories.as_array().unwrap().len(), 1, "{repositories}");
+    let repositories = registered_here(&machines.laptop);
+    assert_eq!(repositories.len(), 1, "{repositories:?}");
 }
 
 #[test]
@@ -587,9 +596,8 @@ fn a_start_below_another_machine_s_space_clones_its_repository_where_it_starts()
     let child = on_hub(&machines, "child", "workspace");
     assert_eq!(child["parent"], there.as_str(), "{child}");
     // The hub registered a clone of the laptop's repository for it.
-    let repositories = machines.hub.ok(&["repo", "ls"]);
-    let count = repositories.as_array().unwrap().len();
-    assert_eq!(count, 2, "{repositories}");
+    let repositories = registered_here(&machines.hub);
+    assert_eq!(repositories.len(), 2, "{repositories:?}");
 }
 
 #[test]
@@ -651,9 +659,8 @@ fn a_space_cannot_clone_the_repository_of_a_space_outside_its_scope() {
     ];
     let started = machines.hub.output(command.args(args));
     assert!(!started.status.success(), "{}", printed(&started));
-    let repositories = machines.hub.ok(&["repo", "ls"]);
-    let count = repositories.as_array().unwrap().len();
-    assert_eq!(count, 1, "{repositories}");
+    let repositories = registered_here(&machines.hub);
+    assert_eq!(repositories.len(), 1, "{repositories:?}");
 }
 
 /// The ID of a ready workspace of the laptop's repository, which only the
@@ -828,9 +835,8 @@ fn a_start_below_another_machine_s_space_with_an_unknown_agent_clones_nothing() 
     ];
     let started = machines.hub.run(&args);
     assert!(!started.status.success(), "{}", printed(&started));
-    let repositories = machines.hub.ok(&["repo", "ls"]);
-    let count = repositories.as_array().unwrap().len();
-    assert_eq!(count, 1, "{repositories}");
+    let repositories = registered_here(&machines.hub);
+    assert_eq!(repositories.len(), 1, "{repositories:?}");
 }
 
 #[test]
@@ -843,7 +849,6 @@ fn a_start_below_another_machine_s_space_with_arguments_its_mode_refuses_clones_
     ];
     let started = (machines.hub).run(&[&args[..], &["--agent", "pi", "--json"]].concat());
     assert!(!started.status.success(), "{}", printed(&started));
-    let repositories = machines.hub.ok(&["repo", "ls"]);
-    let count = repositories.as_array().unwrap().len();
-    assert_eq!(count, 1, "{repositories}");
+    let repositories = registered_here(&machines.hub);
+    assert_eq!(repositories.len(), 1, "{repositories:?}");
 }

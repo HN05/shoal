@@ -10,6 +10,7 @@ use tokio::{io::AsyncReadExt as _, net::UnixStream};
 use crate::connection::{Daemon, call, open, pages, request};
 use shoal_protocol::{
     config::edit::Change,
+    hub::directory::HubView,
     model::{
         Branch, BranchTarget, CheckoutSync, KeptBranch, LocalConfigEdit, MovedRepository,
         Repository, RepositoryMoves, RepositoryRemoval, SyncedRepository,
@@ -24,6 +25,12 @@ const HOLD_RETRY: Duration = Duration::from_secs(1);
 /// The registered repositories.
 pub async fn list(daemon: &impl Daemon) -> Result<Vec<Repository>> {
     request(daemon, RepositoryMethod::ListRepositories).await
+}
+
+/// The repositories the other joined machines register, with the hub's
+/// machines; none on a machine in no hub.
+pub async fn elsewhere(daemon: &impl Daemon) -> Result<Option<HubView>> {
+    request(daemon, RepositoryMethod::RepositoriesElsewhere).await
 }
 
 /// Register `source`, a path or URL, as `name`, cloning a URL to `path`,

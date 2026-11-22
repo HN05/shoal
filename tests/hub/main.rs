@@ -10,6 +10,7 @@ mod handovers;
 mod moves;
 mod numbers;
 mod placement;
+mod repositories;
 mod routing;
 mod shared_config;
 mod shared_repositories;

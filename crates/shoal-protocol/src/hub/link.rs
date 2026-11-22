@@ -403,6 +403,9 @@ pub enum Call {
     /// The directory of every machine's spaces. Answered with
     /// [`Reply::Directory`].
     Directory,
+    /// The directory's machines and the repositories each registers,
+    /// without their spaces. Answered with [`Reply::Directory`].
+    Repositories,
     /// The machine that owns the space `space`, if any, and none while the
     /// caller claims it. Answered with [`Reply::Owner`].
     Owner { space: SpaceId },

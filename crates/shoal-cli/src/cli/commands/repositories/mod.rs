@@ -1,6 +1,7 @@
 //! Dispatch repository commands to their workflows.
 
 mod configuration;
+mod elsewhere;
 mod listing;
 mod moving;
 mod naming;

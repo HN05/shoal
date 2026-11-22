@@ -8,6 +8,9 @@ use super::{Forwarding, Lifetime, Target};
 #[serde(rename_all = "snake_case")]
 pub enum RepositoryMethod {
     ListRepositories,
+    /// The repositories the other joined machines register, with the
+    /// hub's machines, as the hub lists them.
+    RepositoriesElsewhere,
     RegisterRepository {
         source: crate::repository::Selector,
         name: Option<String>,
@@ -122,6 +125,7 @@ impl RepositoryMethod {
         match self {
             Self::ReceiveCommits { .. } => Forwarding::Duplex,
             Self::ListRepositories
+            | Self::RepositoriesElsewhere
             | Self::RegisterRepository { .. }
             | Self::RegisterContribution { .. }
             | Self::HoldContribution { .. }
@@ -145,6 +149,7 @@ impl RepositoryMethod {
         match self {
             Self::ReceiveCommits { .. }
             | Self::ListRepositories
+            | Self::RepositoriesElsewhere
             | Self::RegisterRepository { .. }
             | Self::RegisterContribution { .. }
             | Self::HoldContribution { .. }

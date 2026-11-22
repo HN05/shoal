@@ -1,7 +1,8 @@
 //! What a machine's callers see of the hub's directory: the other machines'
 //! repositories and spaces, from the hub itself or through this machine's
 //! link, the spaces as far as a scoped caller's scope reaches them, and
-//! which of this machine's spaces are below them.
+//! which of this machine's spaces are below them; or the repositories
+//! alone, without any space.
 use shoal_daemon_base::callers::Caller;
 use std::collections::{HashMap, HashSet};
 
@@ -47,6 +48,32 @@ impl Hub {
             machine,
             directory,
             below_elsewhere,
+        }))
+    }
+
+    /// The other machines' repositories, with the hub's machines and this
+    /// machine's ID there, without any space; none on a machine that is
+    /// not the hub and joined none.
+    pub async fn repositories_view(&self, daemon: &dyn Daemon) -> Result<Option<HubView>> {
+        let (machine, mut directory) = if self.is_hub(daemon) {
+            let machine = self.own_member().await?;
+            (machine, self.local_repositories(daemon).await?)
+        } else {
+            let Some(joined) = self.store.read(membership::load).await? else {
+                return Ok(None);
+            };
+            match self.through_hub(Call::Repositories).await? {
+                Reply::Directory(directory) => (joined.membership.member, directory),
+                reply => return Err(anyhow!("the hub answered with an unexpected {reply:?}")),
+            }
+        };
+        directory
+            .repositories
+            .retain(|listed| listed.machine != machine);
+        Ok(Some(HubView {
+            machine,
+            directory,
+            below_elsewhere: Vec::new(),
         }))
     }
 

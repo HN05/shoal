@@ -29,6 +29,9 @@ pub(super) async fn handle(
         RepositoryMethod::ListRepositories => {
             Body::Repositories(manager.visible_repositories(caller).await?)
         }
+        RepositoryMethod::RepositoriesElsewhere => {
+            Body::RepositoriesElsewhere(manager.hub.repositories_view(&**manager).await?)
+        }
         RepositoryMethod::RegisterRepository {
             source,
             name,
@@ -190,6 +193,7 @@ impl Checked for RepositoryMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
             Self::ListRepositories
+            | Self::RepositoriesElsewhere
             | Self::RegisterRepository { .. }
             | Self::RegisterContribution { .. }
             | Self::HoldContribution { .. }
@@ -220,7 +224,9 @@ impl Scoped for RepositoryMethod {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         let repository = match self {
-            RepositoryMethod::ListRepositories => return Ok(None),
+            RepositoryMethod::ListRepositories | RepositoryMethod::RepositoriesElsewhere => {
+                return Ok(None);
+            }
             // A start's commits, which another machine carries for a start
             // there that it confined to the caller's scope; they go under a
             // ref of Shoal's own and change no branch.

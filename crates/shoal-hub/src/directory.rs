@@ -124,19 +124,37 @@ impl Hub {
     /// whether each is connected and when it was last seen, and their
     /// spaces and repositories.
     pub(super) async fn local_directory(&self, daemon: &dyn Daemon) -> Result<Directory> {
-        let members = self.local_hub_overview(daemon).await?.members;
+        let machines = self.local_machines(daemon).await?;
         let ((spaces, conflicts), repositories) = (self.store)
             .read(|tx| Ok((records::read(tx)?, repositories::read(tx)?)))
             .await?;
-        let machines = (members.into_iter())
-            .filter(|member| member.kind == MemberKind::Machine)
-            .collect();
         Ok(Directory {
             machines,
             spaces,
             conflicts,
             repositories,
         })
+    }
+
+    /// The directory this daemon keeps as the hub without its spaces: its
+    /// machines and the repositories each registers.
+    pub(super) async fn local_repositories(&self, daemon: &dyn Daemon) -> Result<Directory> {
+        let machines = self.local_machines(daemon).await?;
+        let repositories = self.store.read(repositories::read).await?;
+        Ok(Directory {
+            machines,
+            repositories,
+            ..Directory::default()
+        })
+    }
+
+    /// The machines this daemon's directory lists as the hub, with whether
+    /// each is connected and when it was last seen.
+    async fn local_machines(&self, daemon: &dyn Daemon) -> Result<Vec<Member>> {
+        let members = self.local_hub_overview(daemon).await?.members;
+        Ok((members.into_iter())
+            .filter(|member| member.kind == MemberKind::Machine)
+            .collect())
     }
 
     /// The machine that owns the space `id` in this hub's directory, as

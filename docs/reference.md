@@ -1025,7 +1025,9 @@ and sends those the hub lacks. When a copy replaces an edit the hub never
 got, the machine keeps that edit as `<file>.backup`, such as
 `shared.toml.backup`, and alerts you naming it.
 
-They also share the repositories you mark shared: `shoal repo add <url>
+`shoal repo ls` lists the repositories every other joined machine registers
+after this machine's, each naming its machine, which `--json` gives as
+`machine` and `machine_id`. They also share the repositories you mark shared: `shoal repo add <url>
 --shared`, or `shoal repo share [repo]` for a registered one, which needs an
 origin, and `shoal repo ls` shows them. Every other machine registers each
 one as `shoal repo add <url>` would, matched by origin, cloning it at once in

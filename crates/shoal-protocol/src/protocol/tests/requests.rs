@@ -13,6 +13,7 @@ const REQUESTS: &[&str] = &[
     r#""reload_config""#,
     // Repositories.
     r#""list_repositories""#,
+    r#""repositories_elsewhere""#,
     r#"{"register_repository":{"source":"app","name":null,"path":null,"shared":true}}"#,
     r#"{"register_contribution":{"source":"https://forge.example/team/app","name":"app"}}"#,
     r#"{"hold_contribution":{"repository":"r1"}}"#,

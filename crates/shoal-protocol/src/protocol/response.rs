@@ -194,6 +194,7 @@ response_bodies! {
     Exited(Exited),
     ExitWaits(Vec<Work>),
     Repositories(Vec<Repository>),
+    RepositoriesElsewhere(Option<crate::hub::directory::HubView>),
     Repository(Repository),
     LocalConfigPath(std::path::PathBuf),
     ChatRoot(chats::ChatRoot),
