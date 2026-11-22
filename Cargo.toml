@@ -4,7 +4,7 @@ default-members = [".", "crates/*"]
 
 # Shoal's version, which the packages built into the shoal binary share.
 [workspace.package]
-version = "0.20.3"
+version = "0.20.4"
 edition = "2024"
 rust-version = "1.100"
 license = "MIT"

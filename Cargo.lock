@@ -2402,7 +2402,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "shoal"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "base64",
@@ -2427,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-cli"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -2487,7 +2487,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-core"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2528,7 +2528,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-daemon"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "base64",
@@ -2574,7 +2574,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-daemon-base"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -2637,7 +2637,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-hub"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "base64",
@@ -2676,7 +2676,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-leases"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -2699,7 +2699,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-links"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -2774,7 +2774,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-reviews"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -2799,7 +2799,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-runner"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "form_urlencoded",
@@ -2849,7 +2849,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-store"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "libc",
@@ -2888,7 +2888,7 @@ dependencies = [
 
 [[package]]
 name = "shoal-workers"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "base64",
