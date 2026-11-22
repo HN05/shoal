@@ -36,13 +36,14 @@ async fn hand_over(
         member: MemberId::from("laptop".to_owned()),
         space: SpaceId::from(space.to_owned()),
         built_at: UnixTime::now(),
+        continuation: Continuation {
+            start: Some(start()),
+            within: within.map(|id| SpaceId::from(id.to_owned())),
+        },
     };
     let streams = (link.writer.streams(), answer.number());
     let daemon: Arc<dyn Daemon> = Arc::new(StandIn::default());
-    let within = within.map(|id| SpaceId::from(id.to_owned()));
-    hub.take_handover(&daemon, (sent, within), start(), streams)
-        .await
-        .unwrap();
+    hub.take_handover(&daemon, sent, streams).await.unwrap();
     package.write(bytes).await.unwrap();
     package.end(None).await;
     let mut written = Vec::new();

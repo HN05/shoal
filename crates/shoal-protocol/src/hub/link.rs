@@ -347,15 +347,23 @@ pub enum Call {
     /// The hub's call to a machine whose availability changed. Answered
     /// with [`Reply::Delivered`].
     Availability { availability: Classified },
-    /// The latest package of the space `space`, which an intermittent
-    /// machine built at `built_at` and writes up the duplex stream `stream`
-    /// it opened, for the hub to keep in place of the one before. The hub
-    /// ends its side of the stream once it kept the package whole, with an
-    /// error when it did not. Answered with [`Reply::Streaming`].
+    /// The latest package of the space `space`, which a machine built at
+    /// `built_at` and writes up the duplex stream `stream` it opened, for
+    /// the hub to keep in place of the one before, with what continues the
+    /// space from it elsewhere: `start`, the start its agent would make,
+    /// which the hub places a takeover by, none where the machine could
+    /// not tell it, and for a chat in a workspace's worktree, that
+    /// workspace `within`. The hub ends its side of the stream once it
+    /// kept the package whole, with an error when it did not. Answered with
+    /// [`Reply::Streaming`].
     Keep {
         space: SpaceId,
         built_at: UnixTime,
         stream: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        start: Option<shoal_schedule::placement::snapshot::Request>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        within: Option<SpaceId>,
     },
     /// The package the hub keeps of the space `space`, whose machine is
     /// offline, which the caller would take the space over from; none

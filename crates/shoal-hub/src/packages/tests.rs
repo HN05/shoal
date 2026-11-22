@@ -72,6 +72,7 @@ pub(crate) async fn send(hub: &Arc<Hub>, member: &str, space: &str, bytes: &[u8]
         member: MemberId::from(member.to_owned()),
         space: SpaceId::from(space.to_owned()),
         built_at: UnixTime::now(),
+        continuation: Default::default(),
     };
     let streams = (link.writer.streams(), answer.number());
     hub.keep_package(&StandIn::default(), sent, streams).await?;

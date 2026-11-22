@@ -15,6 +15,7 @@ use std::{
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Transaction, params};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+use shoal_schedule::placement::snapshot::Request;
 use tokio::sync::OwnedRwLockReadGuard;
 
 use shoal_core::fsutil::off_runtime;
@@ -43,11 +44,22 @@ pub(crate) struct Kept {
     refusal_alerted: AtomicBool,
 }
 
-/// A package `member` sends of `space`, which it built at `built_at`.
+/// A package `member` sends of `space`, which it built at `built_at`, with
+/// what continues the space from it elsewhere.
 pub(crate) struct Sent {
     pub member: MemberId,
     pub space: SpaceId,
     pub built_at: UnixTime,
+    pub continuation: Continuation,
+}
+
+/// What continues a space from its package elsewhere: the start its agent
+/// would make, which places it, and for a chat in a workspace's worktree,
+/// that workspace, which it follows.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Continuation {
+    pub start: Option<Request>,
+    pub within: Option<SpaceId>,
 }
 
 impl Hub {
@@ -152,12 +164,13 @@ impl Hub {
             member,
             space,
             built_at,
+            continuation,
         } = sent;
         (incoming.persist(&path))
             .map_err(|error| error.error)
             .with_context(|| format!("write {}", path.display()))?;
         let recorded = (self.store)
-            .write(move |tx| record(tx, &member, &space, built_at, size))
+            .write(move |tx| record(tx, (&member, &space), (built_at, size), &continuation))
             .await;
         if recorded.is_err() {
             let _ = off_runtime::run(move || Ok(std::fs::remove_file(path)?)).await;
@@ -223,25 +236,36 @@ fn lists_under(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<
 }
 
 /// Record `member`'s package of the space `id`, built at `built_at`, of
-/// `size` bytes, in place of the one before, while the directory lists the
-/// space under `member`.
+/// `size` bytes, with what continues the space from it, in place of the
+/// one before, while the directory lists the space under `member`.
 fn record(
     tx: &Transaction<'_>,
-    member: &MemberId,
-    id: &SpaceId,
-    built_at: UnixTime,
-    size: u64,
+    (member, id): (&MemberId, &SpaceId),
+    (built_at, size): (UnixTime, u64),
+    continuation: &Continuation,
 ) -> Result<()> {
     ensure!(
         lists_under(tx, id, member)?,
         "space {id} ended on this machine while its package came"
     );
+    let start = (continuation.start.as_ref())
+        .map(serde_json::to_string)
+        .transpose()?;
     tx.execute(
-        "INSERT INTO hub_packages(space_id, member_id, built_at, size, kept_at)
-         VALUES (?1,?2,?3,?4,?5)
+        "INSERT INTO hub_packages(space_id, member_id, built_at, size, kept_at, start, within)
+         VALUES (?1,?2,?3,?4,?5,?6,?7)
          ON CONFLICT(space_id) DO UPDATE SET member_id=excluded.member_id,
-            built_at=excluded.built_at, size=excluded.size, kept_at=excluded.kept_at",
-        params![id, member, built_at, size as i64, UnixTime::now()],
+            built_at=excluded.built_at, size=excluded.size, kept_at=excluded.kept_at,
+            start=excluded.start, within=excluded.within",
+        params![
+            id,
+            member,
+            built_at,
+            size as i64,
+            UnixTime::now(),
+            start,
+            continuation.within,
+        ],
     )?;
     Ok(())
 }

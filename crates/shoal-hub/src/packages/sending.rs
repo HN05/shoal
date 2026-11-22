@@ -210,7 +210,8 @@ impl Hub {
     }
 
     /// Build a package of `space` and write it up a stream of `calls`,
-    /// returning once the hub kept it.
+    /// with the start its agent would make elsewhere, returning once the
+    /// hub kept it.
     async fn deliver_package(
         &self,
         daemon: &dyn Daemon,
@@ -220,11 +221,23 @@ impl Hub {
         let directory = tempfile::tempdir()?;
         let file = directory.path().join("package.shoal");
         let built_at = UnixTime::now();
-        daemon.write_package(space, &file).await?;
+        let packaged = daemon.write_package(space, &file).await?;
+        let start = match daemon.package_start(space, &packaged).await {
+            Ok(start) => Some(start),
+            Err(error) => {
+                log!(
+                    "hub: no machine can continue {} from its package: {error:#}",
+                    space.name
+                );
+                None
+            }
+        };
         let keep = |stream| Call::Keep {
             space: space.id.clone(),
             built_at,
             stream,
+            start: start.clone(),
+            within: within(space).cloned(),
         };
         let (mut kept, mut package) = calls.duplex(keep).await?;
         package.write_file(&file).await?;
@@ -257,6 +270,15 @@ fn next_due(due: Option<Instant>, found: Option<Instant>, every_space: bool) -> 
         (false, Some(due), Some(found)) => Some(due.min(found)),
         (false, due, found) => due.or(found),
     }
+}
+
+/// The workspace whose worktree the chat `space` runs in, none for any
+/// other space.
+pub(super) fn within(space: &Space) -> Option<&SpaceId> {
+    let chat = space.worktree().is_none();
+    (space.workdir.workspace())
+        .filter(|_| chat)
+        .map(|workspace| &workspace.id)
 }
 
 /// Whether a package can hold `space`: a chat, or a workspace whose

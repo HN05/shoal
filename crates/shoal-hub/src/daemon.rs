@@ -238,10 +238,10 @@ pub trait Packages: Send + Sync {
     /// what then opens that work, for the user to read.
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>>;
 
-    /// How placement reads a start of the agent of `space`, which this
-    /// machine hands over as it shuts down in a package that records it as
-    /// `packaged`; the hub names the caller.
-    fn handover_start<'a>(
+    /// How placement reads a start of the agent of `space`, which a
+    /// package that records it as `packaged` continues on another machine,
+    /// as when this machine shuts down or sleeps; the hub names the caller.
+    fn package_start<'a>(
         &'a self,
         space: &'a Space,
         packaged: &'a RemovedSpace,

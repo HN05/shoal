@@ -388,7 +388,7 @@ impl Packages for StandIn {
         Box::pin(async { bail!("the stand-in daemon has no spaces to retire") })
     }
 
-    fn handover_start<'a>(
+    fn package_start<'a>(
         &'a self,
         _: &'a Space,
         _: &'a shoal_protocol::model::RemovedSpace,

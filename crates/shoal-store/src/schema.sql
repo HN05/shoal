@@ -938,7 +938,7 @@ CREATE TABLE hub_packages (
     built_at INTEGER NOT NULL,
     size INTEGER NOT NULL,
     kept_at INTEGER NOT NULL
-);
+, start TEXT, within TEXT);
 
 CREATE TABLE hub_package_states (
     space_id TEXT PRIMARY KEY,

@@ -16,7 +16,7 @@ use tokio::sync::OwnedRwLockReadGuard;
 
 use super::{
     directory, members,
-    packages::{self, Sent, takeovers},
+    packages::{self, Continuation, Sent, takeovers},
     session::Calls,
 };
 use crate::{
@@ -180,12 +180,15 @@ impl Hub {
                 space,
                 built_at,
                 stream,
+                start,
+                within,
             } => {
                 ensure_machine(member)?;
                 let sent = Sent {
                     member: member.id.clone(),
                     space,
                     built_at,
+                    continuation: Continuation { start, within },
                 };
                 let streams = (calls.streams(), stream);
                 self.keep_package(&**daemon, sent, streams).await?;
@@ -203,9 +206,13 @@ impl Hub {
                     member: member.id.clone(),
                     space,
                     built_at,
+                    continuation: Continuation {
+                        start: Some(start),
+                        within,
+                    },
                 };
                 let streams = (calls.streams(), stream);
-                (self.take_handover(daemon, (sent, within), start, streams)).await?;
+                self.take_handover(daemon, sent, streams).await?;
                 Reply::Streaming
             }
             Call::Release { space } => {

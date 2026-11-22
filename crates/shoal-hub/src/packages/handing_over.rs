@@ -18,7 +18,7 @@ use shoal_protocol::{
 };
 use tokio::time::Instant;
 
-use super::sending::{self, packageable};
+use super::sending::{self, packageable, within};
 use crate::{
     Hub,
     daemon::Daemon,
@@ -163,7 +163,7 @@ impl Hub {
         // Taken before the package, so a copy that changes after it differs.
         let state = daemon.package_state(space).await?;
         let packaged = daemon.write_package(space, &file).await?;
-        let start = daemon.handover_start(space, &packaged).await?;
+        let start = daemon.package_start(space, &packaged).await?;
         let hand_over = |stream| Call::HandOver {
             space: space.id.clone(),
             built_at,
@@ -185,15 +185,6 @@ impl Hub {
             .await?;
         Ok(serde_json::from_slice(&written)?)
     }
-}
-
-/// The workspace whose worktree the chat `space` runs in, none for any
-/// other space.
-fn within(space: &Space) -> Option<&SpaceId> {
-    let chat = space.worktree().is_none();
-    (space.workdir.workspace())
-        .filter(|_| chat)
-        .map(|workspace| &workspace.id)
 }
 
 /// Where a space this machine released to the hub, which sends it as

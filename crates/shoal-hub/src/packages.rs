@@ -13,7 +13,7 @@ mod sending;
 pub(crate) mod takeovers;
 
 pub(crate) use handovers::Handovers;
-pub(crate) use keeping::{Kept, Sent, forget};
+pub(crate) use keeping::{Continuation, Kept, Sent, forget};
 
 #[cfg(test)]
 mod tests;

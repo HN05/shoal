@@ -21,7 +21,7 @@ use shoal_protocol::{
 };
 use shoal_schedule::placement::snapshot::Request;
 
-use super::Sent;
+use super::{Continuation, Sent};
 use crate::{
     Hub,
     answers::unexpected,
@@ -38,15 +38,15 @@ const CONTINUE_WITHIN: Duration = Duration::from_secs(30 * 60);
 impl Hub {
     /// Take the final package `sent` that a machine shutting down writes up
     /// the duplex stream `stream` of `streams`, keeping it as
-    /// [`Self::keep_package`] does, then place its space for `start` among
-    /// the other connected machines, write that placement on this side of
-    /// the stream and end it, for the machine to leave the space there;
-    /// refused at once as `keep_package` refuses a package.
+    /// [`Self::keep_package`] does, then place its space for its start
+    /// among the other connected machines, or for a chat in a workspace's
+    /// worktree where it placed that workspace, write that placement on
+    /// this side of the stream and end it, for the machine to leave the
+    /// space there; refused at once as `keep_package` refuses a package.
     pub(crate) async fn take_handover(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
-        (sent, within): (Sent, Option<SpaceId>),
-        start: Request,
+        sent: Sent,
         streams: (&Streams, u64),
     ) -> Result<()> {
         let (out, up) = self.accept_package(&**daemon, &sent, streams).await?;
@@ -54,13 +54,15 @@ impl Hub {
         let (hub, daemon) = (self.clone(), daemon.clone());
         tokio::spawn(async move {
             let (space, from) = (sent.space.clone(), sent.member.clone());
+            let Continuation { start, within } = sent.continuation.clone();
             let (kept, operation) = hub.take_package(sent, up).await;
-            let placed = match (kept, &within) {
-                (Ok(()), Some(workspace)) => {
+            let placed = match (kept, &within, start) {
+                (Ok(()), Some(workspace), _) => {
                     (hub.handovers.placed_workspace(workspace, &from)).map(Some)
                 }
-                (Ok(()), None) => hub.place_handover(&*daemon, &from, start).await,
-                (Err(error), _) => Err(error),
+                (Ok(()), None, Some(start)) => hub.place_handover(&*daemon, &from, start).await,
+                (Ok(()), None, None) => Ok(None),
+                (Err(error), _, _) => Err(error),
             };
             // Placed before the machine reads it, which may release it at once.
             let decision = placed.as_ref().ok().cloned().flatten();

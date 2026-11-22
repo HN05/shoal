@@ -1,6 +1,6 @@
-//! The start a machine's hand-over of a space as it shuts down places it
-//! by: the hub continues the space on the machine its placement puts that
-//! start on.
+//! The start a package of a space places it by when the hub continues the
+//! space on another machine, as when its own shuts down or sleeps: the hub
+//! continues it on the machine its placement puts that start on.
 use anyhow::{Context as _, Result};
 use shoal_ids::member_ids::MemberId;
 use shoal_schedule::placement::snapshot::Request;
@@ -12,11 +12,11 @@ use crate::{
 };
 
 impl Manager {
-    /// How placement reads a start of the agent of `space`, which this
-    /// machine hands over in a package that records it as `packaged`: the
+    /// How placement reads a start of the agent of `space`, which a
+    /// package that records it as `packaged` continues elsewhere: the
     /// origin of its repository, the tool of the agent that continues
     /// there, else its settings' default one, and its mode.
-    pub(crate) async fn handover_start(
+    pub(crate) async fn package_start(
         &self,
         space: &Space,
         packaged: &RemovedSpace,
