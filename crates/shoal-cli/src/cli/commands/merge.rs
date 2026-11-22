@@ -12,7 +12,7 @@ use crate::{
     },
     forge::items::reference::ItemInput,
     model::MergePath,
-    protocol::{ItemContext, RepoTarget},
+    protocol::{ItemContext, RepoTarget, operations::OperationSpec},
 };
 
 mod local;
@@ -44,10 +44,19 @@ async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -
 /// Merge the work of the space `args` name as the daemon decides: through
 /// its open PR, or a workspace's branch locally.
 async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
+    // A space without a PR merges in an operation on this machine, which
+    // its worktree's branch merges into.
+    let merging = Acting::request(|workspace| {
+        let spec = OperationSpec::Merge {
+            workspace,
+            options: Default::default(),
+        };
+        crate::client::operations::start_request(spec, Default::default())
+    });
     let space = ui::select_space(
         ctx,
         args.space.clone(),
-        Fallback::CurrentDirectory(&Acting::request(crate::client::merging::merge_path)),
+        Fallback::CurrentDirectory(&merging),
     )
     .await?;
     match crate::client::merging::merge_path(space.clone())

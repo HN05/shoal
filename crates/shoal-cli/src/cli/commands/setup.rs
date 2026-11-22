@@ -28,7 +28,11 @@ pub(in crate::cli::commands) async fn setup(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&Acting::request(crate::client::workspaces::inspect)),
+        Fallback::CurrentDirectory(&preparing(Preparation {
+            setup: true,
+            post_setup: true,
+            ..Default::default()
+        })),
     )
     .await?;
     let inspection = crate::client::workspaces::inspect(workspace.clone())
@@ -46,6 +50,18 @@ pub(in crate::cli::commands) async fn setup(
     Ok(0)
 }
 
+/// What setup sends for the workspace it picks: an operation that takes
+/// `steps` in it on this machine, where its worktree is.
+fn preparing(steps: Preparation) -> Acting {
+    Acting::request(move |workspace| {
+        let spec = OperationSpec::Prepare {
+            workspace,
+            steps: steps.clone(),
+        };
+        crate::client::operations::start_request(spec, Default::default())
+    })
+}
+
 /// Accept a failed setup as it is: mark the workspace ready once its
 /// worktree verifies and no setup process remains.
 pub(in crate::cli::commands) async fn skip_setup(
@@ -55,7 +71,10 @@ pub(in crate::cli::commands) async fn skip_setup(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&Acting::request(crate::client::workspaces::inspect)),
+        Fallback::CurrentDirectory(&preparing(Preparation {
+            post_setup: true,
+            ..Default::default()
+        })),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(workspace.clone())

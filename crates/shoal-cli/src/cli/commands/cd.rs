@@ -15,8 +15,15 @@ pub(in crate::cli::commands) async fn cd(
 ) -> Result<i32> {
     let workspace = match workspace {
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
+        // The shell goes on in the worktree on this machine, as a command
+        // `shoal exec` runs there does, which the inspection it reads
+        // the path with would reach on another.
         None => SpaceSelector::Id(
-            ui::workspace_picker(ctx, &Acting::request(crate::client::workspaces::inspect)).await?,
+            ui::workspace_picker(
+                ctx,
+                &Acting::request(shoal_workers::execution::running_command),
+            )
+            .await?,
         ),
     };
     let inspection = crate::client::workspaces::inspect(workspace)
