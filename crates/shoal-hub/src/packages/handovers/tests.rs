@@ -81,6 +81,14 @@ async fn the_hub_keeps_a_handed_over_package_and_answers_where_its_space_goes() 
     let decision: Option<Decision> = serde_json::from_slice(&written).unwrap();
     assert_eq!(decision.unwrap().machine, own);
     assert_eq!(kept(&hub, "plan").as_deref(), Some(&b"plan"[..]));
+    // Only the laptop's word that it leaves the space continues it, once.
+    let (laptop, plan) = (
+        MemberId::from("laptop".to_owned()),
+        SpaceId::from("plan".to_owned()),
+    );
+    let daemon: Arc<dyn Daemon> = Arc::new(StandIn::default());
+    hub.hear_release(&daemon, &laptop, &plan).unwrap();
+    assert!(hub.hear_release(&daemon, &laptop, &plan).is_err());
     // The stand-in continues nothing, so the user hears the space stays.
     let failed = tokio::time::timeout(HANG, async {
         loop {
@@ -105,7 +113,6 @@ async fn the_hub_keeps_a_handed_over_package_and_answers_where_its_space_goes() 
     );
     // The laptop is shutting down, so it retires nothing until it says it
     // stays, as once its shutdown was cancelled.
-    let laptop = MemberId::from("laptop".to_owned());
     assert!(hub.handovers.is_leaving(&laptop));
     hub.hear_stay(&laptop);
     assert!(!hub.handovers.is_leaving(&laptop));

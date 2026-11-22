@@ -9,7 +9,11 @@ use anyhow::Result;
 use futures_util::future::join_all;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
-    hub::{link::Call, packages::Handed, placement::Decision},
+    hub::{
+        link::{Call, Reply},
+        packages::Handed,
+        placement::Decision,
+    },
     model::Space,
 };
 use tokio::time::Instant;
@@ -55,7 +59,9 @@ impl Hub {
     }
 
     /// Hand `space` over through the hub over `calls` by `deadline`, and
-    /// where it went.
+    /// where it went: once it read where the hub sends it, this machine
+    /// leaves it there, and whether the hub took that word decides only
+    /// whether the space surely went.
     async fn hand_over_by(
         &self,
         daemon: &dyn Daemon,
@@ -64,15 +70,31 @@ impl Hub {
         deadline: Instant,
     ) -> Handed {
         let handing = self.hand_over_space(daemon, calls, space);
-        match tokio::time::timeout_at(deadline, handing).await {
-            Ok(Ok(Some(decision))) => Handed::Went(decision),
-            Ok(Ok(None)) => Handed::Stayed("no other machine of the hub can take it".into()),
+        let decision = match tokio::time::timeout_at(deadline, handing).await {
+            Ok(Ok(Some(decision))) => decision,
+            Ok(Ok(None)) => {
+                return Handed::Stayed("no other machine of the hub can take it".into());
+            }
             Ok(Err(error)) => {
                 log!("hub: could not hand space {} over: {error:#}", space.name);
-                Handed::Stayed(format!("{error:#}"))
+                return Handed::Stayed(format!("{error:#}"));
             }
             Err(_) => {
-                Handed::Stayed("its package did not reach the hub before the shutdown".into())
+                let why = "its package did not reach the hub before the shutdown";
+                return Handed::Stayed(why.into());
+            }
+        };
+        let leave = calls.call(Call::Release {
+            space: space.id.clone(),
+        });
+        match tokio::time::timeout_at(deadline, leave).await {
+            Ok(Ok(Reply::Delivered)) => Handed::Went(decision),
+            left => {
+                log!(
+                    "hub: the hub did not take space {} as left: {left:?}",
+                    space.name
+                );
+                Handed::Unconfirmed(decision)
             }
         }
     }

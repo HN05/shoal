@@ -368,7 +368,8 @@ pub enum Call {
     /// as the caller's. The hub writes that placement on its side, as an
     /// optional [`Decision`](super::placement::Decision) in JSON, none
     /// where no machine can take the space, then ends it, with an error
-    /// once it did not keep the package whole. Answered with
+    /// once it did not keep the package whole, and continues the space
+    /// once the machine leaves it with [`Call::Release`]. Answered with
     /// [`Reply::Streaming`].
     HandOver {
         space: SpaceId,
@@ -376,6 +377,11 @@ pub enum Call {
         stream: u64,
         start: shoal_schedule::placement::snapshot::Request,
     },
+    /// A shutting-down machine's word that it read where the hub sends the
+    /// space `space` it handed over, and leaves it: only now does the hub
+    /// continue the space there, so one whose machine gave up waiting
+    /// stays. Answered with [`Reply::Delivered`].
+    Release { space: SpaceId },
     /// A machine's word that the shutdown it handed its spaces over for was
     /// cancelled, so it stays: the hub has it retire the spaces taken over
     /// from it now, and those claimed later as each is. Answered with

@@ -20,6 +20,18 @@ pub enum Handed {
     /// The hub keeps its package and continues it on the machine the
     /// decision names.
     Went(super::placement::Decision),
+    /// It may go to the machine the decision names: its machine left it
+    /// to the hub, whose acknowledgement did not come in time, so it keeps
+    /// no restore there either.
+    Unconfirmed(super::placement::Decision),
     /// It stays on its machine, for this reason.
     Stayed(String),
+}
+
+impl Handed {
+    /// Whether its machine left it to the hub, so it keeps no restore
+    /// there, whether or not the hub confirmed it.
+    pub fn left(&self) -> bool {
+        matches!(self, Self::Went(_) | Self::Unconfirmed(_))
+    }
 }

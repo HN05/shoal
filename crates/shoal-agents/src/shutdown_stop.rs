@@ -216,7 +216,7 @@ impl Agents {
     async fn hand_over(&self, daemon: &dyn Daemon, deadline: Instant) -> Vec<(Space, Handed)> {
         let handed = daemon.hand_over(deadline).await;
         for (space, handed) in &handed {
-            if let Handed::Went(_) = handed
+            if handed.left()
                 && let Err(error) = self.cancel_stopped_restores(daemon, &space.id).await
             {
                 log!(
@@ -330,10 +330,10 @@ fn handover_deadline(started: Instant, window: Duration) -> Instant {
 const HANDOVER_MARGIN: Duration = Duration::from_secs(1);
 
 /// Those of the `stopped` spaces that stay here, which `handed` does not
-/// say went to another machine.
+/// say this machine left to the hub.
 fn staying(stopped: &[Space], handed: &[(Space, Handed)]) -> Vec<Space> {
     let went: HashSet<&SpaceId> = (handed.iter())
-        .filter(|(_, handed)| matches!(handed, Handed::Went(_)))
+        .filter(|(_, handed)| handed.left())
         .map(|(space, _)| &space.id)
         .collect();
     (stopped.iter())
@@ -350,6 +350,10 @@ fn handovers(handed: &[(Space, Handed)]) -> String {
             Handed::Went(decision) => {
                 format!("{name} ({number}) went to machine {}", decision.name)
             }
+            Handed::Unconfirmed(decision) => format!(
+                "{name} ({number}) may have gone to machine {}, which the hub did not confirm in time, as shoal list shows once this machine is back",
+                decision.name
+            ),
             Handed::Stayed(why) => format!("{name} ({number}) stays here: {why}"),
         }
     });

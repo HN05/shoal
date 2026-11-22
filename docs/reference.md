@@ -1165,12 +1165,15 @@ chooses a machine by its
 [`[machine.hub] placement`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 policy among the other
 connected machines, its own taking the place of the caller's, from the
-space's repository, its agent's tool and its mode, and that machine imports
-the package under the space's ID, as `shoal restore` of a kept package
-does, and queues its agents' restores, which continue their sessions. The
-`system_shutdown` or `daemon_stopped` alert names, for each space, the
-machine it went to, or that it stays and why: its package did not reach the
-hub in time, no machine can take it, or the hub cannot be reached. A space
+space's repository, its agent's tool and its mode. Once the shutting-down
+machine has read that choice and tells the hub it leaves the space there,
+that machine imports the package under the space's ID, as `shoal restore`
+of a kept package does, and queues its agents' restores, which continue
+their sessions. The `system_shutdown` or `daemon_stopped` alert names, for
+each space, the machine it went to, or that it stays and why: its package
+did not reach the hub in time, no machine can take it, or the hub cannot
+be reached. A space whose leaving the hub did not acknowledge in time may
+have gone, which the alert says; it keeps no restore here either. A space
 that stays restores here at boot as before. One that went keeps no restore
 here, and once this machine's link opens again it retires its copy as after
 any takeover; work a reboot moved does not come back on its own. A space

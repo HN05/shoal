@@ -198,6 +198,11 @@ impl Hub {
                 self.take_handover(daemon, sent, start, streams).await?;
                 Reply::Streaming
             }
+            Call::Release { space } => {
+                ensure_machine(member)?;
+                self.hear_release(daemon, &member.id, &space)?;
+                Reply::Delivered
+            }
             Call::Stay => {
                 ensure_machine(member)?;
                 self.hear_stay(&member.id);

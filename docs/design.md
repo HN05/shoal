@@ -259,9 +259,11 @@ sending has to fit in the shutdown's window, logind's delay limit or the
 service's stop timeout. The hub keeps each package that arrives whole as
 it keeps any, places its space among the other connected machines, its own
 as the caller's, so `always_on` machines with room come first and the hub
-takes the rest, and writes the placement back before that machine imports
-the package under the space's ID and queues its agents' restores; nothing
-waits for an import. That machine's takeover claim stands though the
+takes the rest, and writes the placement back; only once the machine,
+having read it, says it leaves the space there does that machine import the
+package under the space's ID and queue its agents' restores, so a machine
+that gave up waiting keeps its space, and one whose word went unanswered
+keeps no restore, as the space may have gone; nothing waits for an import. That machine's takeover claim stands though the
 machine it came from may still be connected, which forgets the space's
 restores so it does not come back at boot, and retires its copy once its
 link opens, as after any takeover; work a reboot moved away stays where it

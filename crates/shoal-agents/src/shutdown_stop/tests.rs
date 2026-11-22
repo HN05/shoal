@@ -105,18 +105,28 @@ fn the_notification_names_where_each_space_went_and_continues_only_those_left() 
         unanswered: None,
         skipped: Vec::new(),
     };
+    let unsure = workspace(root.path(), "unsure", false);
     let handed = [
-        (gone.clone(), Handed::Went(decision)),
+        (gone.clone(), Handed::Went(decision.clone())),
+        (unsure.clone(), Handed::Unconfirmed(decision)),
         (left.clone(), Handed::Stayed("the hub is offline".into())),
     ];
     let told = handovers(&handed);
-    let (went, stayed) = told.split_once("; ").unwrap();
+    let [went, maybe, stayed] = told.split("; ").collect::<Vec<_>>()[..] else {
+        panic!("{told}");
+    };
     assert!(went.starts_with("gone") && went.contains("desk"), "{told}");
+    assert!(
+        maybe.starts_with("unsure") && maybe.contains("desk"),
+        "{told}"
+    );
     assert!(
         stayed.starts_with("left") && stayed.contains("the hub is offline"),
         "{told}"
     );
-    let here = staying(&[gone, left.clone()], &handed);
+    // A space this machine left to the hub keeps no restore here, confirmed
+    // or not, so only the one that stays continues here.
+    let here = staying(&[gone, unsure, left.clone()], &handed);
     let here: Vec<_> = here.iter().map(|space| &space.id).collect();
     assert_eq!(here, [&left.id]);
 }

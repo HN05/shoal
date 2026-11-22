@@ -2,8 +2,8 @@
 //! sends the final package of each of its spaces with the start its agent
 //! would make. The hub keeps it as it keeps any package, places the space
 //! among the other connected machines, its own as the caller's, answers
-//! with where it goes, and asks that machine to continue the space from
-//! the package. That machine's claim takes the space over even while the
+//! with where it goes, and once the machine leaves it the space, asks that
+//! machine to continue it from the package. That machine's claim takes the space over even while the
 //! machine it came from is still connected, and the machine it came from
 //! retires its copy once its link opens again, as after any takeover, or
 //! at once when its shutdown was cancelled and it stays.
@@ -41,6 +41,9 @@ const CONTINUE_WITHIN: Duration = Duration::from_secs(30 * 60);
 /// What the hub keeps of the hand-overs under way.
 #[derive(Default)]
 pub(crate) struct Handovers {
+    /// The spaces handed over whose machine has yet to leave them, each
+    /// with that machine and where the hub sends it.
+    placed: Mutex<HashMap<SpaceId, (MemberId, Decision)>>,
     /// The spaces handed over whose new machine has not claimed them yet,
     /// each with that machine.
     claims: Mutex<HashMap<SpaceId, MemberId>>,
@@ -57,9 +60,26 @@ impl Handovers {
     }
 
     /// Record that `member`, whose link opened again or whose shutdown was
-    /// cancelled, is no longer shutting down.
+    /// cancelled, is no longer shutting down, and keeps the spaces it did
+    /// not leave.
     pub(crate) fn stays(&self, member: &MemberId) {
         self.leaving.lock().unwrap().remove(member);
+        (self.placed.lock().unwrap()).retain(|_, (from, _)| from != member);
+    }
+
+    fn place(&self, id: &SpaceId, from: &MemberId, decision: Decision) {
+        let placed = (from.clone(), decision);
+        self.placed.lock().unwrap().insert(id.clone(), placed);
+    }
+
+    /// Where the space `id` that `from` handed over goes, which it now
+    /// leaves; none unless the hub placed it.
+    fn left(&self, id: &SpaceId, from: &MemberId) -> Option<Decision> {
+        let mut placed = self.placed.lock().unwrap();
+        match placed.get(id) {
+            Some((placer, _)) if placer == from => placed.remove(id).map(|(_, decision)| decision),
+            _ => None,
+        }
     }
 
     fn start(&self, id: &SpaceId, to: &MemberId) {
@@ -84,8 +104,8 @@ impl Hub {
     /// the duplex stream `stream` of `streams`, keeping it as
     /// [`Self::keep_package`] does, then place its space for `start` among
     /// the other connected machines, write that placement on this side of
-    /// the stream and end it, and have the machine it chose continue the
-    /// space; refused at once as `keep_package` refuses a package.
+    /// the stream and end it, for the machine to leave the space there;
+    /// refused at once as `keep_package` refuses a package.
     pub(crate) async fn take_handover(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
@@ -103,13 +123,15 @@ impl Hub {
                 Ok(()) => hub.place_handover(&*daemon, &from, start).await,
                 Err(error) => Err(error),
             };
-            let answered = answer(out, placed).await;
-            drop(operation);
-            // Only a machine that read where its space goes leaves it.
-            if let Some(decision) = answered {
-                hub.continue_handover(&*daemon, &space, &from, &decision)
-                    .await;
+            // Placed before the machine reads it, which may leave it at once.
+            let decision = placed.as_ref().ok().cloned().flatten();
+            if let Some(decision) = decision.clone() {
+                hub.handovers.place(&space, &from, decision);
             }
+            if answer(out, placed).await.is_none() && decision.is_some() {
+                hub.handovers.left(&space, &from);
+            }
+            drop(operation);
         });
         Ok(())
     }
@@ -153,6 +175,24 @@ impl Hub {
             let about = About::named(None);
             (self.notify(daemon, about, AlertKind::HandoverFailed, message)).await;
         }
+    }
+
+    /// As the hub: take `member`'s word that it leaves the space `id` where
+    /// the hub placed it, and have that machine continue it, in the
+    /// background; refused unless the hub placed it for `member`.
+    pub(crate) fn hear_release(
+        self: &Arc<Self>,
+        daemon: &Arc<dyn Daemon>,
+        member: &MemberId,
+        id: &SpaceId,
+    ) -> Result<()> {
+        let decision = (self.handovers.left(id, member))
+            .ok_or_else(|| anyhow!("no hand-over of space {id} waits for its machine's word"))?;
+        let (hub, daemon, from, id) = (self.clone(), daemon.clone(), member.clone(), id.clone());
+        tokio::spawn(async move {
+            hub.continue_handover(&*daemon, &id, &from, &decision).await;
+        });
+        Ok(())
     }
 
     /// As the hub: take `member`'s word that the shutdown it handed spaces
