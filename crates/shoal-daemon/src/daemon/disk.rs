@@ -20,7 +20,6 @@ use tokio::time::Instant;
 use super::{
     agent_queue::OneShotStop,
     agents::Protection,
-    caches::Emptying,
     manager::Manager,
     notifications::AlertKind,
     spaces::removal_notices::Cleanup,
@@ -32,6 +31,7 @@ use crate::{
     config::overload::Disk,
     model::{Repository, Space, Workspace},
 };
+use shoal_protocol::cleanup::Emptying;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Each pass inspects every workspace, so a pass that could not free enough
@@ -330,7 +330,7 @@ async fn empty_caches(
             continue;
         }
         let name = repo.display_name();
-        let emptying = manager.empty_caches(&repo, false).await;
+        let emptying = manager.repositories.empty_caches(&repo, false).await;
         if let Some((kind, message)) = emptying_notice(name, emptying, filesystem) {
             manager.notify(None, kind, message).await;
         }

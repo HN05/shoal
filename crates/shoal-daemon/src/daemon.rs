@@ -18,7 +18,6 @@ mod apps;
 mod auto_update;
 pub(crate) mod blockers;
 pub(crate) mod busy_cpu;
-pub(crate) mod caches;
 pub(crate) mod capacity;
 mod carried_commits;
 mod carried_sessions;

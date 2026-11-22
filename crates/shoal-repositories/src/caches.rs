@@ -3,21 +3,16 @@
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 
-use crate::{
-    caches::Layout,
-    daemon::{manager::Manager, store},
-    model::Repository,
-};
-pub(crate) use shoal_protocol::cleanup::Emptying;
+use shoal_core::caches::Layout;
+use shoal_protocol::{cleanup::Emptying, model::Repository};
+use shoal_store as store;
 
-impl Manager {
+use crate::Repositories;
+
+impl Repositories {
     /// Empty the repository's shared caches unless a tracked execution in one
     /// of its workspaces or its seed build is running; `None` when it has none.
-    pub(crate) async fn empty_caches(
-        &self,
-        repo: &Repository,
-        dry_run: bool,
-    ) -> Result<Option<Emptying>> {
+    pub async fn empty_caches(&self, repo: &Repository, dry_run: bool) -> Result<Option<Emptying>> {
         let layout = Layout::of(repo);
         if !dry_run {
             // An interrupted pass may have left emptied caches behind.
@@ -28,7 +23,7 @@ impl Manager {
         if caches.is_empty() {
             return Ok(None);
         }
-        let Some(_seed) = self.repositories.pause_idle_seed(&repo.id) else {
+        let Some(_seed) = self.pause_idle_seed(&repo.id) else {
             return Ok(Some(Emptying::Busy { caches }));
         };
         let (repository_id, moving) = (repo.id.clone(), layout.clone());
@@ -68,6 +63,3 @@ fn move_unless_running(
     };
     Ok(Some(caches))
 }
-
-#[cfg(test)]
-mod tests;

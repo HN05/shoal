@@ -1,4 +1,4 @@
-use super::*;
+use crate::caches::Layout;
 use crate::{
     config::repo::{Cache, CacheScope},
     daemon::{
@@ -6,6 +6,7 @@ use crate::{
         test_support::{manager, repository},
     },
 };
+use shoal_protocol::cleanup::Emptying;
 use std::collections::BTreeMap;
 
 #[tokio::test]
@@ -22,7 +23,14 @@ async fn caches_empty_only_while_nothing_uses_them() {
         .await
         .unwrap();
     let repo = manager.repositories.repository(&repo.id).await.unwrap();
-    assert_eq!(manager.empty_caches(&repo, false).await.unwrap(), None);
+    assert_eq!(
+        manager
+            .repositories
+            .empty_caches(&repo, false)
+            .await
+            .unwrap(),
+        None
+    );
 
     let configured = BTreeMap::from([(
         "go".to_owned(),
@@ -44,7 +52,11 @@ async fn caches_empty_only_while_nothing_uses_them() {
         .await
         .unwrap();
     assert_eq!(
-        manager.empty_caches(&repo, false).await.unwrap(),
+        manager
+            .repositories
+            .empty_caches(&repo, false)
+            .await
+            .unwrap(),
         Some(busy.clone())
     );
     manager
@@ -54,22 +66,41 @@ async fn caches_empty_only_while_nothing_uses_them() {
 
     let seed = manager.repositories.pause_idle_seed(&repo.id).unwrap();
     assert_eq!(
-        manager.empty_caches(&repo, false).await.unwrap(),
+        manager
+            .repositories
+            .empty_caches(&repo, false)
+            .await
+            .unwrap(),
         Some(busy)
     );
     drop(seed);
 
     assert_eq!(
-        manager.empty_caches(&repo, true).await.unwrap(),
+        manager
+            .repositories
+            .empty_caches(&repo, true)
+            .await
+            .unwrap(),
         Some(emptied.clone())
     );
     assert!(go.join("entry").exists());
     assert_eq!(
-        manager.empty_caches(&repo, false).await.unwrap(),
+        manager
+            .repositories
+            .empty_caches(&repo, false)
+            .await
+            .unwrap(),
         Some(emptied)
     );
     assert!(!go.exists());
-    assert_eq!(manager.empty_caches(&repo, false).await.unwrap(), None);
+    assert_eq!(
+        manager
+            .repositories
+            .empty_caches(&repo, false)
+            .await
+            .unwrap(),
+        None
+    );
 
     // A pass interrupted before purging leaves nothing behind for long.
     let layout = Layout::of(&repo);
@@ -77,7 +108,14 @@ async fn caches_empty_only_while_nothing_uses_them() {
     assert_eq!(layout.move_aside().unwrap(), ["go"]);
     let trash = layout.root().join("trash");
     assert!(trash.is_dir());
-    assert_eq!(manager.empty_caches(&repo, false).await.unwrap(), None);
+    assert_eq!(
+        manager
+            .repositories
+            .empty_caches(&repo, false)
+            .await
+            .unwrap(),
+        None
+    );
     assert!(!trash.exists());
 }
 
@@ -121,7 +159,11 @@ async fn executions_do_not_start_without_their_caches() {
     )]);
     crate::caches::directories(&repo, &configured).unwrap();
     assert_eq!(
-        manager.empty_caches(&repo, false).await.unwrap(),
+        manager
+            .repositories
+            .empty_caches(&repo, false)
+            .await
+            .unwrap(),
         Some(Emptying::Emptied {
             caches: vec!["go".into()]
         })

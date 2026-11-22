@@ -20,8 +20,7 @@ use tokio::time::{Instant, sleep};
 
 use crate::{
     daemon::{
-        caches::Emptying, file_access, lifecycle::not_ready, log, manager::Manager,
-        spaces::removal_notices::Cleanup,
+        file_access, lifecycle::not_ready, log, manager::Manager, spaces::removal_notices::Cleanup,
     },
     fsutil::off_runtime,
     model::{CleanupReason, Space, Workspace},
@@ -29,6 +28,7 @@ use crate::{
     state::WorkspaceState,
     time::UnixTime,
 };
+use shoal_protocol::cleanup::Emptying;
 pub(crate) use shoal_protocol::cleanup::{
     CacheCleanup, Kept, ManualCleanup, Pick, Retained, Selection,
 };
@@ -585,7 +585,7 @@ async fn empty_caches_on_request(
         if !pick.covers(repo.display_name(), repo.id.as_str()) {
             continue;
         }
-        let emptying = match manager.empty_caches(&repo, dry_run).await {
+        let emptying = match manager.repositories.empty_caches(&repo, dry_run).await {
             Ok(None) => continue,
             Ok(Some(emptying)) => emptying,
             Err(error) => {

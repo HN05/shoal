@@ -11,6 +11,7 @@ use shoal_daemon_base::{
 };
 use shoal_store::Store;
 
+mod caches;
 pub mod configuration;
 pub mod contributions;
 pub mod daemon;
