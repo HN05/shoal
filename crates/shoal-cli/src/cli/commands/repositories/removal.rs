@@ -20,7 +20,7 @@ pub(super) async fn remove(
     let result = ctx
         .progress(
             "Removing repository",
-            crate::client::repositories::remove(&ctx.paths, repository),
+            crate::client::repositories::remove(&ctx.paths, repository, None),
         )
         .await?;
     ctx.emit(

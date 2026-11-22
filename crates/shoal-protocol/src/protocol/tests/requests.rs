@@ -22,7 +22,7 @@ const REQUESTS: &[&str] = &[
     r#"{"share_repository":{"repository":"app","shared":true}}"#,
     r#"{"local_config_path":{"repository":"app"}}"#,
     r#"{"edit_local_config":{"repository":"app","changes":[{"key":"setup.command","value":null}]}}"#,
-    r#"{"remove_repository":{"repository":"app"}}"#,
+    r#"{"remove_repository":{"repository":"r1","machine":"desk"}}"#,
     r#"{"plan_repository_moves":{"root":"/work","regular_dir":false}}"#,
     r#"{"move_repositories":{"regular_dir":true}}"#,
     r#"{"sync_repository":{"repository":"app"}}"#,

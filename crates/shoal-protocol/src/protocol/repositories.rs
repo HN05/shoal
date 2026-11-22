@@ -48,8 +48,12 @@ pub enum RepositoryMethod {
         repository: crate::repository::Selector,
         changes: Vec<crate::config::edit::Change>,
     },
+    /// Remove the repository on the joined machine `machine` names by its
+    /// name or ID, or on this one.
     RemoveRepository {
         repository: crate::repository::Selector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        machine: Option<String>,
     },
     /// The repositories `MoveRepositories` would move into `root`, or the
     /// configured `root_dir`, after the checks it runs before moving any.
@@ -120,10 +124,12 @@ impl RepositoryMethod {
 impl RepositoryMethod {
     /// Each is about the caller's machine's registrations, except commits
     /// another machine carries, which the hub sends to the machine that
-    /// takes them.
+    /// takes them, and a removal, which the daemon sends to the machine it
+    /// names.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ReceiveCommits { .. } => Forwarding::Duplex,
+            Self::RemoveRepository { .. } => Forwarding::Online,
             Self::ListRepositories
             | Self::RepositoriesElsewhere
             | Self::RegisterRepository { .. }
@@ -133,7 +139,6 @@ impl RepositoryMethod {
             | Self::ShareRepository { .. }
             | Self::LocalConfigPath { .. }
             | Self::EditLocalConfig { .. }
-            | Self::RemoveRepository { .. }
             | Self::PlanRepositoryMoves { .. }
             | Self::MoveRepositories { .. }
             | Self::SyncRepository { .. }

@@ -69,6 +69,7 @@ mod relayed;
 mod releases;
 
 mod repositories;
+mod repository_removals;
 mod requests;
 mod restore;
 mod retention_periods;

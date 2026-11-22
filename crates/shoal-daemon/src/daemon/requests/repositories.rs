@@ -90,9 +90,14 @@ pub(super) async fn handle(
                 .edit_local_config(&**manager, &repository, changes)
                 .await?,
         ),
-        RepositoryMethod::RemoveRepository { repository } => {
-            Body::RepositoryRemoved(manager.repositories.remove(&**manager, &repository).await?)
-        }
+        RepositoryMethod::RemoveRepository {
+            repository,
+            machine,
+        } => Body::RepositoryRemoved(
+            manager
+                .remove_repository(repository, machine.as_deref(), caller)
+                .await?,
+        ),
         RepositoryMethod::PlanRepositoryMoves { root, regular_dir } => Body::RepositoryMoves(
             manager
                 .repositories
@@ -137,6 +142,25 @@ pub(super) async fn handle(
     }))
 }
 
+/// How a scoped caller is refused a repository not its own.
+const OWN: &str = "scoped processes administer only their own repository";
+
+/// Refuse a scoped caller's request for the repository on another joined
+/// machine than its own, which `machine` names, where its repository is
+/// registered; one that names this machine names none.
+async fn ensure_own_machine(manager: &Manager, machine: &mut Option<String>) -> Result<()> {
+    let Some(named) = machine.as_deref() else {
+        return Ok(());
+    };
+    let named = manager.hub.named_machine(manager, named).await?;
+    anyhow::ensure!(
+        named.own,
+        "scoped processes administer only their own repository, on their own machine"
+    );
+    *machine = None;
+    Ok(())
+}
+
 /// The repository an administering `method` of `caller` acts in, which must
 /// be the caller's own where the method names one, and where it names none,
 /// the caller's own repository, if it has one; none for one that acts in
@@ -146,9 +170,8 @@ async fn administered_repository(
     caller: &Caller,
     method: &mut RepositoryMethod,
 ) -> Result<Option<RepositoryId>> {
-    const REFUSAL: &str = "scoped processes administer only their own repository";
     let own = async |named: &crate::repository::Selector| {
-        let selected = manager.own_repository(caller, named, REFUSAL).await?;
+        let selected = manager.own_repository(caller, named, OWN).await?;
         Ok::<_, anyhow::Error>(manager.repositories.repository(&selected).await?.id)
     };
     Ok(match method {
@@ -156,7 +179,7 @@ async fn administered_repository(
         | RepositoryMethod::ShareRepository { repository, .. }
         | RepositoryMethod::LocalConfigPath { repository }
         | RepositoryMethod::EditLocalConfig { repository, .. }
-        | RepositoryMethod::RemoveRepository { repository }
+        | RepositoryMethod::RemoveRepository { repository, .. }
         | RepositoryMethod::ListBranches { repository } => {
             let id = own(repository).await?;
             *repository = (&id).into();
@@ -252,6 +275,10 @@ impl Scoped for RepositoryMethod {
                 let action = Action::new(PermissionKey::Notifications, "the failing syncs");
                 manager.authorize_action(Some(caller), action).await?;
                 return Ok(None);
+            }
+            RepositoryMethod::RemoveRepository { machine, .. } => {
+                ensure_own_machine(manager, machine).await?;
+                administered_repository(manager, caller, self).await?
             }
             RepositoryMethod::SyncRepository { repository } => {
                 *repository = manager

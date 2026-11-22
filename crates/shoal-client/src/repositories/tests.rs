@@ -100,7 +100,7 @@ async fn removing_a_repository_cleans_its_trust_where_its_agents_kept_configs() 
         trust_in(config, &[&checkout, &directory, &worktree, keep]);
     }
 
-    remove(&daemon.connector(), repo.id.clone().into())
+    remove(&daemon.connector(), repo.id.clone().into(), None)
         .await
         .unwrap();
     for config in [&home, &inherited] {

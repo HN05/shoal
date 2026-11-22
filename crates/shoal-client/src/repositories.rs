@@ -116,8 +116,18 @@ pub async fn share(daemon: &impl Daemon, repository: Selector, shared: bool) -> 
     .await
 }
 
-pub async fn remove(daemon: &impl Daemon, repository: Selector) -> Result<RepositoryRemoval> {
-    request(daemon, RepositoryMethod::RemoveRepository { repository }).await
+/// Remove `repository` on the joined machine `machine` names, or on this
+/// one.
+pub async fn remove(
+    daemon: &impl Daemon,
+    repository: Selector,
+    machine: Option<String>,
+) -> Result<RepositoryRemoval> {
+    let method = RepositoryMethod::RemoveRepository {
+        repository,
+        machine,
+    };
+    request(daemon, method).await
 }
 
 /// What moving every repository into `root`, or into the configured root,
