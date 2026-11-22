@@ -10,8 +10,7 @@ use super::{
     Acting, Cell, Entries, chat_entries, elsewhere_entries, pick, pick_many, picker_width,
     require_argument, rows_with_status,
     workspaces::{
-        ALL_ID, Fallback, NoCurrentWorkspace, Resolution, current_workspace, resolve_workspace,
-        workspace_entries,
+        ALL_ID, Fallback, NoCurrentWorkspace, Resolution, resolve_workspace, workspace_entries,
     },
 };
 use crate::client::output::resume::ResumableSpace;
@@ -26,7 +25,7 @@ use crate::{
     client::connection::CommandPaths,
     model::{Chat, Workspace},
     scoping::Scoping,
-    workspace_context::{ScopeOrder, WorkspaceContext},
+    workspace_context::{self, ScopeOrder, WorkspaceContext},
 };
 use shoal_protocol::hub::directory::Offered;
 use shoal_protocol::saved::SavedSummary;
@@ -273,7 +272,7 @@ async fn current_workspace_or_chat(
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let below = spaces.below(&chat);
     let workspaces = spaces.workspaces();
-    let current = current_workspace(&workspaces)?.filter(|workspace| match which {
+    let current = workspace_context::of_directory(&workspaces)?.filter(|workspace| match which {
         Workspaces::Below => below.iter().any(|space| space.id == workspace.id),
         Workspaces::Any => true,
     });

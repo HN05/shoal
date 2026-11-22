@@ -2432,7 +2432,6 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete",
- "fs2",
  "futures-util",
  "libc",
  "qrcode",
@@ -2917,6 +2916,7 @@ version = "0.20.4"
 dependencies = [
  "anyhow",
  "base64",
+ "fs2",
  "futures-util",
  "libc",
  "serde",

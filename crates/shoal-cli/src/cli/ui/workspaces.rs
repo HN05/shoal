@@ -19,8 +19,7 @@ use crate::{
         recent,
     },
     model::Workspace,
-    scoping::Scoping,
-    workspace_context::{self, ScopeOrder, WorkspaceContext},
+    workspace_context::{self, ScopeOrder},
 };
 use shoal_protocol::hub::directory::Offered;
 use shoal_protocol::space_names::SpaceSelector;
@@ -161,16 +160,6 @@ pub(super) async fn resolve_workspace<'a>(
         Fallback::CurrentDirectory(acting) => Ok(Resolution::Picker(workspaces, acting)),
         Fallback::CurrentDirectoryOnly | Fallback::OwnSpace => Err(NoCurrentWorkspace.into()),
     }
-}
-
-/// The workspace containing the current directory, for an unscoped caller.
-pub fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
-    if Scoping::of_workspace() == Scoping::Scoped {
-        return Ok(None);
-    }
-    let cwd = current_directory()?;
-    let context = WorkspaceContext::from_directory(workspaces, cwd.as_deref());
-    Ok(context.resolve(None, Scoping::Unscoped, ScopeOrder::BeforeDirectory))
 }
 
 /// Always run the picker, including for scoped callers (whose list is filtered).

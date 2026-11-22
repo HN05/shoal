@@ -71,7 +71,8 @@ pub(super) async fn scope(
             let workspaces = crate::client::spaces::list(&ctx.paths)
                 .await?
                 .into_workspaces();
-            ui::current_workspace(&workspaces)?.map(|workspace| SpaceSelector::id(&workspace.id))
+            crate::workspace_context::of_directory(&workspaces)?
+                .map(|workspace| SpaceSelector::id(&workspace.id))
         }
     };
     match id {

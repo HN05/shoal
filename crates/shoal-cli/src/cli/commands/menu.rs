@@ -59,7 +59,7 @@ async fn current_items(ctx: &Context, entries: &Entries) -> Result<Option<String
     let workspaces = crate::client::spaces::list(&ctx.paths)
         .await?
         .into_workspaces();
-    let Some(current) = ui::current_workspace(&workspaces)? else {
+    let Some(current) = crate::workspace_context::of_directory(&workspaces)? else {
         return Ok(None);
     };
     let has_items = entries.iter().any(|(id, _)| {

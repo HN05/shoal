@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result};
 
 use super::here::{created_here, label_current, place_here, record_owned};
 use crate::{
-    cli::{args::internal::PlaceWorkerArgs, commands::execute_place, context::Context, recent},
+    cli::{args::internal::PlaceWorkerArgs, commands::execute_place, context::Context},
     env,
     sessions::HostName,
     terminal::{Host, Owner, Places, named},
@@ -81,7 +81,8 @@ pub(in crate::cli) async fn host_space(
                 .await?;
             }
             if place.focused {
-                recent::record_attach(ctx, &SpaceSelector::id(owner.id())).await;
+                shoal_workers::history::record_attach(&ctx.paths, &SpaceSelector::id(owner.id()))
+                    .await;
             }
             Ok(())
         }

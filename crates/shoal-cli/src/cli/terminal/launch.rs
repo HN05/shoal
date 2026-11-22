@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Result, ensure};
 
 use crate::{
-    cli::{context::Context, recent},
+    cli::context::Context,
     config::{Effective, modes::ModeName},
     env,
     model::{Part, Space},
@@ -196,7 +196,7 @@ pub(in crate::cli) async fn run_agent(
     };
     if left_running {
         let id = space.owner.id();
-        recent::record_attach(ctx, &SpaceSelector::id(id)).await;
+        shoal_workers::history::record_attach(&ctx.paths, &SpaceSelector::id(id)).await;
     }
     Ok(Some(0))
 }

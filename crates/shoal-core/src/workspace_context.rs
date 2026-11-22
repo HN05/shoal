@@ -57,6 +57,17 @@ pub fn current(workspaces: &[Workspace], order: ScopeOrder) -> Result<Option<&Wo
     Ok(None)
 }
 
+/// The workspace containing the current directory, for an unscoped caller;
+/// a scoped one takes its workspace from its scope, never its directory.
+pub fn of_directory(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
+    if Scoping::of_workspace() == Scoping::Scoped {
+        return Ok(None);
+    }
+    let cwd = current_directory()?;
+    let context = WorkspaceContext::from_directory(workspaces, cwd.as_deref());
+    Ok(context.resolve(None, Scoping::Unscoped, ScopeOrder::BeforeDirectory))
+}
+
 pub struct WorkspaceContext<'a> {
     workspaces: &'a [Workspace],
     current: Option<&'a Workspace>,

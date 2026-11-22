@@ -54,7 +54,7 @@ pub(super) async fn attach(
         // Remember the space once its session was shown and still runs, so
         // `attach -` returns to the session last detached from rather than
         // the one last attached, which another terminal may still show.
-        recent::record_attach(ctx, &id).await;
+        shoal_workers::history::record_attach(&ctx.paths, &id).await;
     }
     Ok(0)
 }
@@ -71,7 +71,7 @@ async fn view_elsewhere(
     let viewed = Viewed::session(space.clone(), session).await;
     let ended = viewer::view(ctx, viewed, machine).await?;
     if ended.open {
-        recent::record_attach_elsewhere(ctx, &space);
+        shoal_workers::history::record_attach_elsewhere(&ctx.paths, &space);
     }
     Ok(ended.code)
 }
