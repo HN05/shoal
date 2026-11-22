@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use crate::{
     config::Effective,
-    model::{Execution, Protection},
+    model::{Execution, Protection, RunningAgent},
     sessions::{HostName, Origin},
     terminal::{Elsewhere, Host, Places, Session, Sessions, enabled_host, named},
 };
@@ -177,6 +177,64 @@ fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
         }
     }
     distinct
+}
+
+/// What the places `agents` were recorded running in, and `owned`, the
+/// places Shoal created for spaces, tell of agent sessions before any host
+/// is asked.
+#[derive(Debug, PartialEq, Eq)]
+pub struct KnownSessions<'a> {
+    /// The spaces with a connected agent in a host that keeps sessions,
+    /// including one Shoal stopped whose wrapper waits to restore it,
+    /// which attaching resumes.
+    pub owners: HashSet<SpaceId>,
+    /// The places of the other spaces, of executions whose wrapper is gone
+    /// and those Shoal created, such as a session left at its shell after a
+    /// failed launch, whose hosts [`open_session_owners`] asks once the
+    /// caller has their owners' settings.
+    pub to_ask: Vec<(&'a SpaceId, &'a Origin)>,
+}
+
+/// What the places of `agents` and `owned` tell of agent sessions; an
+/// agent without a recorded place has none.
+pub fn known_sessions<'a>(
+    agents: &'a [RunningAgent],
+    owned: impl IntoIterator<Item = (&'a SpaceId, &'a Origin)>,
+) -> KnownSessions<'a> {
+    let places = agent_places(agents);
+    let owners = session_owners(&places.connected);
+    let to_ask = (places.unknown.into_iter())
+        .chain(owned)
+        .filter(|(owner, _)| !owners.contains(*owner))
+        .collect();
+    KnownSessions { owners, to_ask }
+}
+
+/// Where agents were recorded running, as (space ID, place) pairs.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct AgentPlaces<'a> {
+    /// Connected agents, which run in their places or, stopped by Shoal,
+    /// wait there to be restored.
+    connected: Vec<(&'a SpaceId, &'a Origin)>,
+    /// Executions whose wrapper is gone, whose record outlives the session.
+    unknown: Vec<(&'a SpaceId, &'a Origin)>,
+}
+
+/// Sort the places of `agents` by what runs in them; an agent without a
+/// recorded place has none.
+fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
+    let mut places = AgentPlaces::default();
+    for agent in agents {
+        let Some(place) = agent.origin.as_ref() else {
+            continue;
+        };
+        let kind = match &agent.agent {
+            None => &mut places.unknown,
+            Some(_) => &mut places.connected,
+        };
+        kind.push((&agent.space_id, place));
+    }
+    places
 }
 
 /// The IDs of the owners with an agent session: those of `places`, recorded

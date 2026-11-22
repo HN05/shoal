@@ -7,8 +7,7 @@ use crate::{
     cli::list_status::ListStatus,
     client::connection::CommandPaths,
     client::connection::Daemon,
-    model::{Chat, RunningAgent, Workspace},
-    sessions::Origin,
+    model::{Chat, Workspace},
     state::WorkspaceState,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
@@ -278,45 +277,12 @@ async fn session_workspaces(paths: &CommandPaths) -> HashSet<SpaceId> {
     let owned = crate::client::places::owned_places(paths)
         .await
         .unwrap_or_default();
-    let places = agent_places(&agents);
-    let mut owners = crate::terminal::session_owners(&places.connected);
-    // Each host lists its sessions once for the owners still in question.
-    let recorded: Vec<_> = places
-        .unknown
-        .into_iter()
-        .chain(owned.iter().map(|place| (&place.space_id, &place.origin)))
-        .filter(|(owner, _)| !owners.contains(*owner))
-        .collect();
-    let settings = workspace_settings(paths, recorded.iter().map(|(owner, _)| *owner)).await;
-    owners.extend(crate::terminal::open_session_owners(&recorded, &settings).await);
+    let owned = owned.iter().map(|place| (&place.space_id, &place.origin));
+    let known = crate::terminal::known_sessions(&agents, owned);
+    let settings = workspace_settings(paths, known.to_ask.iter().map(|(owner, _)| *owner)).await;
+    let mut owners = known.owners;
+    owners.extend(crate::terminal::open_session_owners(&known.to_ask, &settings).await);
     owners
-}
-
-/// Where agents were recorded running, as (workspace ID, place) pairs.
-#[derive(Debug, Default, PartialEq, Eq)]
-struct AgentPlaces<'a> {
-    /// Connected agents, which run in their places or, stopped by Shoal,
-    /// wait there to be restored.
-    connected: Vec<(&'a SpaceId, &'a Origin)>,
-    /// Executions whose wrapper is gone, whose record outlives the session.
-    unknown: Vec<(&'a SpaceId, &'a Origin)>,
-}
-
-/// Sort the places of `agents` by what runs in them; an agent without a
-/// recorded place has none.
-fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
-    let mut places = AgentPlaces::default();
-    for agent in agents {
-        let Some(place) = agent.origin.as_ref() else {
-            continue;
-        };
-        let kind = match &agent.agent {
-            None => &mut places.unknown,
-            Some(_) => &mut places.connected,
-        };
-        kind.push((&agent.space_id, place));
-    }
-    places
 }
 
 /// The settings of each of `workspaces`, which say which hosts to ask about

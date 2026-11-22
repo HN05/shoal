@@ -7,7 +7,7 @@ use shoal_ids::space_ids::SpaceId;
 use crate::{
     config::Effective,
     daemon::{log, manager::Manager},
-    model::{RunningAgent, Space},
+    model::Space,
     sessions::Origin,
 };
 
@@ -26,15 +26,11 @@ impl Manager {
             log!("places unreadable for their sessions: {error:#}");
             Vec::new()
         });
-        let places = agent_places(&agents);
-        let mut owners = crate::terminal::session_owners(&places.connected);
-        // Each host lists its sessions once for the owners still in question.
-        let recorded: Vec<_> = (places.unknown.into_iter())
-            .chain(owned.iter().map(|(space, origin)| (space, origin)))
-            .filter(|(owner, _)| !owners.contains(*owner))
-            .collect();
-        let settings = self.place_settings(spaces, &recorded).await;
-        owners.extend(crate::terminal::open_session_owners(&recorded, &settings).await);
+        let owned = owned.iter().map(|(space, origin)| (space, origin));
+        let known = crate::terminal::known_sessions(&agents, owned);
+        let settings = self.place_settings(spaces, &known.to_ask).await;
+        let mut owners = known.owners;
+        owners.extend(crate::terminal::open_session_owners(&known.to_ask, &settings).await);
         owners
     }
 
@@ -59,33 +55,3 @@ impl Manager {
         settings
     }
 }
-
-/// Where agents were recorded running, as (space ID, place) pairs.
-#[derive(Debug, Default, PartialEq, Eq)]
-struct AgentPlaces<'a> {
-    /// Connected agents, which run in their places or, stopped by Shoal,
-    /// wait there to be restored.
-    connected: Vec<(&'a SpaceId, &'a Origin)>,
-    /// Executions whose wrapper is gone, whose record outlives the session.
-    unknown: Vec<(&'a SpaceId, &'a Origin)>,
-}
-
-/// Sort the places of `agents` by what runs in them; an agent without a
-/// recorded place has none.
-fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
-    let mut places = AgentPlaces::default();
-    for agent in agents {
-        let Some(place) = agent.origin.as_ref() else {
-            continue;
-        };
-        let kind = match &agent.agent {
-            None => &mut places.unknown,
-            Some(_) => &mut places.connected,
-        };
-        kind.push((&agent.space_id, place));
-    }
-    places
-}
-
-#[cfg(test)]
-mod tests;
