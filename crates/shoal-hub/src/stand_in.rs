@@ -24,6 +24,7 @@ use shoal_protocol::{
     alerts::AlertKind,
     approvals::ApprovalRequest,
     config::permissions::Permissions,
+    files::SentFile,
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
     paths::Paths,
@@ -70,6 +71,8 @@ pub(crate) struct StandIn {
     registered: std::sync::Mutex<Vec<Registered>>,
     /// The repositories whose local config a write fails to replace.
     refusing: std::sync::Mutex<HashSet<RepositoryId>>,
+    /// The records of the files a test keeps here, with their paths.
+    kept: Vec<SentFile>,
 }
 
 /// A repository a test registers with the stand-in, with the text of its
@@ -83,11 +86,17 @@ pub(crate) struct Registered {
 impl StandIn {
     /// A stand-in with `registered` repositories.
     pub(crate) fn registering(registered: Vec<Registered>) -> Self {
-        let registered = std::sync::Mutex::new(registered);
-        let refusing = Default::default();
         Self {
-            registered,
-            refusing,
+            registered: std::sync::Mutex::new(registered),
+            ..Self::default()
+        }
+    }
+
+    /// A stand-in that keeps the files `kept` here.
+    pub(crate) fn keeping(kept: Vec<SentFile>) -> Self {
+        Self {
+            kept,
+            ..Self::default()
         }
     }
 
@@ -289,6 +298,16 @@ impl Messages for StandIn {
 
     fn alert<'a>(&'a self, _: &'a SpaceId, _: NewAlert, _: bool) -> BoxFuture<'a, Result<()>> {
         none("agents")
+    }
+
+    fn kept_copies(&self, files: Vec<SentFile>) -> BoxFuture<'_, Result<Vec<SentFile>>> {
+        let kept = (files.iter())
+            .filter_map(|file| {
+                (self.kept.iter()).find(|kept| (kept.id, &kept.space) == (file.id, &file.space))
+            })
+            .cloned()
+            .collect();
+        Box::pin(async { Ok(kept) })
     }
 }
 

@@ -3,7 +3,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
 use std::time::Duration;
 
-use super::{Attacher, FileSource};
+use super::{Attacher, FileSource, KeptCopy};
 use crate::{
     daemon::{
         executions::ExecutionKind,
@@ -15,6 +15,7 @@ use crate::{
     model::Workspace,
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::files::SentFile;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// Whether permissions bind this test process; root reads and deletes past
@@ -996,6 +997,38 @@ async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
             .is_err()
     );
     assert!(elsewhere.join(inside).exists());
+}
+
+#[tokio::test]
+async fn sent_files_relayed_back_take_their_copies_paths_by_id() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "plan").unwrap();
+    let added = manager
+        .add_attached_files(
+            &SpaceSelector::id(&workspace.id),
+            vec![file.into()],
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    // The records as another machine read them, and one removed since.
+    let elsewhere = |id: i64| SentFile {
+        id,
+        space: workspace.id.clone(),
+        name: "notes.md".into(),
+        title: None,
+        copy: KeptCopy::Elsewhere {
+            machine: "here".into(),
+        },
+    };
+    let kept = manager
+        .kept_sent_files(vec![elsewhere(added[0].id + 1), elsewhere(added[0].id)])
+        .await
+        .unwrap();
+    let paths: Vec<_> = kept.iter().map(SentFile::path).collect();
+    assert_eq!(paths, [added[0].path()]);
 }
 
 #[tokio::test]

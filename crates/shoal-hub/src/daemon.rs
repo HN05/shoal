@@ -19,6 +19,7 @@ use shoal_protocol::{
     alerts::AlertKind,
     approvals::ApprovalRequest,
     config::permissions::Permissions,
+    files::SentFile,
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, RemovedSpace, Repository, RunningAgent, Space},
     protocol::{AppMethod, Request},
@@ -149,6 +150,11 @@ pub trait Messages: Send + Sync {
         alert: NewAlert,
         for_user: bool,
     ) -> BoxFuture<'a, Result<()>>;
+
+    /// The records of `files`, which spaces here sent, with the paths of
+    /// the copies this machine keeps, in their order; a file whose record
+    /// is gone drops out.
+    fn kept_copies(&self, files: Vec<SentFile>) -> BoxFuture<'_, Result<Vec<SentFile>>>;
 }
 
 /// The approval requests and threads that pass between machines, and

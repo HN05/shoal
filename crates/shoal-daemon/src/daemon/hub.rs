@@ -21,6 +21,7 @@ use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
     approvals::ApprovalRequest,
     config::permissions::Permissions,
+    files::SentFile,
     hub::{Member, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
     protocol::{AppMethod, Request},
@@ -176,6 +177,10 @@ impl Messages for Manager {
         for_user: bool,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move { self.agents.queue_alert(id, alert, for_user).await.map(drop) })
+    }
+
+    fn kept_copies(&self, files: Vec<SentFile>) -> BoxFuture<'_, Result<Vec<SentFile>>> {
+        Box::pin(self.kept_sent_files(files))
     }
 }
 

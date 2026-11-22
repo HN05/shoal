@@ -238,6 +238,14 @@ impl Manager {
         Ok(records.iter().map(SentFile::from).collect())
     }
 
+    /// The records of `files`, which this machine keeps, by their space and
+    /// ID, with their copies' paths, in their order; a file whose record is
+    /// gone drops out.
+    pub(crate) async fn kept_sent_files(&self, files: Vec<SentFile>) -> Result<Vec<SentFile>> {
+        let records = self.store.read(move |db| records::sent(db, &files)).await?;
+        Ok(records.iter().map(SentFile::from).collect())
+    }
+
     /// The workspace or chat `selector` names, or else the removed space of
     /// that ID whose files are kept.
     pub(crate) async fn file_space(&self, selector: &SpaceSelector) -> Result<Space> {

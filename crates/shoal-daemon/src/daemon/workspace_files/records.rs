@@ -12,7 +12,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use super::{
     AttachedFile, AttachedTo, Attacher, FileSource, HomeKey, KeptCopy, Space, layout::Copy,
 };
-use shoal_protocol::model::SpaceKind;
+use shoal_protocol::{files::SentFile, model::SpaceKind};
 
 const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
     (SELECT expires_at FROM removed_space_files r WHERE r.space_id=space_files.space_id),
@@ -131,6 +131,22 @@ pub(super) fn at(db: &Connection, paths: &[PathBuf]) -> Result<Vec<AttachedFile>
     for path in paths {
         let found = statement
             .query_row([path.to_string_lossy()], row)
+            .optional()?;
+        records.extend(found);
+    }
+    Ok(records)
+}
+
+/// The records of the sent `files`, by their space and ID, in their
+/// order; a file whose record is gone drops out.
+pub(super) fn sent(db: &Connection, files: &[SentFile]) -> Result<Vec<AttachedFile>> {
+    let mut statement = db.prepare(&format!(
+        "SELECT {COLUMNS} FROM space_files WHERE id=?1 AND space_id=?2"
+    ))?;
+    let mut records = Vec::new();
+    for file in files {
+        let found = statement
+            .query_row(params![file.id, file.space], row)
             .optional()?;
         records.extend(found);
     }

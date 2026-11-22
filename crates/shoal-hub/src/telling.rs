@@ -10,7 +10,7 @@ use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     alerts::AlertKind,
-    files::{KeptCopy, SentFile},
+    files::SentFile,
     hub::{
         link::Call,
         routing::{Expired, HeldOutcome, Told, ToldAbout, ToldRecord},
@@ -21,7 +21,6 @@ use shoal_protocol::{
 use super::{membership, session::Calls};
 use crate::{Hub, daemon::Daemon, daemon::Receiver, log, time::UnixTime};
 use shoal_daemon_base::alerts::{About, NewAlert, Sender};
-use shoal_store::sent_files::kept_path;
 
 /// How often the outbox looks for what it keeps, besides when it keeps
 /// something new.
@@ -210,10 +209,14 @@ impl Hub {
     /// those whose record is gone, as an alert of its own space shows them.
     async fn files_here(&self, daemon: &dyn Daemon, files: &[SentFile]) -> Result<Vec<SentFile>> {
         let machine = self.machine_name(daemon).await;
-        let files = files.to_vec();
-        (self.store)
-            .read(move |tx| kept_here(tx, &machine, files))
-            .await
+        let (back, elsewhere): (Vec<_>, Vec<_>) =
+            (files.iter().cloned()).partition(|file| file.copy.is_on(&machine));
+        if back.is_empty() {
+            return Ok(elsewhere);
+        }
+        let mut here = daemon.kept_copies(back).await?;
+        here.extend(elsewhere);
+        Ok(here)
     }
 
     /// Tell whoever sent what expired at the hub: the space that sent it,
@@ -263,22 +266,6 @@ fn told_alert(kind: AlertKind, about: About, message: String, files: Vec<SentFil
         ..NewAlert::shoal(kind, about, message)
     };
     alert.with_files(&files)
-}
-
-/// `files` with the copies `machine`, this one, keeps by their path here,
-/// dropping those whose record is gone.
-fn kept_here(tx: &Transaction<'_>, machine: &str, files: Vec<SentFile>) -> Result<Vec<SentFile>> {
-    let mut here = Vec::with_capacity(files.len());
-    for mut file in files {
-        if file.copy.is_on(machine) {
-            let Some(path) = kept_path(tx, file.id, &file.space)? else {
-                continue;
-            };
-            file.copy = KeptCopy::Here { path };
-        }
-        here.push(file);
-    }
-    Ok(here)
 }
 
 /// What tells the space `above` of `event`, whose files `machine`, this
