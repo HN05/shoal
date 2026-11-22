@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 use crate::{
     config::{Settings, modes},
-    forge::items::reference::ItemRef,
+    forge::items::{issue::IssueDetails, reference::ItemRef},
     model::{ChatHome, Head, SpaceKind, SpaceLinks, Workspace},
 };
 
@@ -183,6 +183,40 @@ impl Subject {
     /// A task given in words.
     pub fn told(text: String) -> Self {
         Self { text, issue: None }
+    }
+
+    /// `issue` as an agent's subject, worded the same in every mode; the
+    /// body is the issue's description when the agent starts.
+    pub fn issue(issue: &IssueDetails) -> Self {
+        let number = issue.number.get();
+        let mut text = format!("Issue #{number}: {}\n{}\n", issue.title, issue.url);
+        let details = issue.details.trim();
+        if !details.is_empty() {
+            text.push_str(&format!("\nIssue description:\n{details}\n"));
+        }
+        text.push_str(&format!(
+            "\n{}`shoal view` shows the issue with its comments and later edits.",
+            comment_count(issue.comments)
+        ));
+        Self {
+            text,
+            issue: Some(IssueFields {
+                number,
+                title: issue.title.clone(),
+                url: issue.url.to_string(),
+            }),
+        }
+    }
+}
+
+/// What an agent's first message says of how many `comments` the issue
+/// has, where the forge says: Shoal reports only those posted later.
+fn comment_count(comments: Option<u64>) -> String {
+    match comments {
+        Some(0) => "The issue has no comments. ".to_owned(),
+        Some(1) => "The issue has 1 comment. ".to_owned(),
+        Some(count) => format!("The issue has {count} comments. "),
+        None => String::new(),
     }
 }
 

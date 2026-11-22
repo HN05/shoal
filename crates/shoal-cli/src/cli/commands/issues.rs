@@ -158,9 +158,6 @@ pub(in crate::cli) struct Issue {
     pub(in crate::cli) number: u64,
     pub(in crate::cli) title: String,
     pub(super) url: ItemRef,
-    pub(super) details: String,
-    /// How many comments it has, where the forge says.
-    pub(super) comments: Option<u64>,
 }
 
 impl Issue {
@@ -168,28 +165,6 @@ impl Issue {
     /// names it.
     pub fn branch_name(&self) -> String {
         crate::launches::workspace::issue_branch(self.number, &self.title)
-    }
-
-    /// The issue as an agent's subject, worded the same in every mode; the
-    /// body is the issue's description when the agent starts.
-    pub fn subject(&self) -> crate::config::templates::Subject {
-        let mut text = format!("Issue #{}: {}\n{}\n", self.number, self.title, self.url);
-        let details = self.details.trim();
-        if !details.is_empty() {
-            text.push_str(&format!("\nIssue description:\n{details}\n"));
-        }
-        text.push_str(&format!(
-            "\n{}`shoal view` shows the issue with its comments and later edits.",
-            comment_count(self.comments)
-        ));
-        crate::config::templates::Subject {
-            text,
-            issue: Some(crate::config::templates::IssueFields {
-                number: self.number,
-                title: self.title.clone(),
-                url: self.url.to_string(),
-            }),
-        }
     }
 }
 
@@ -221,36 +196,13 @@ pub(in crate::cli) async fn load(
     Ok(Issue::from(issue))
 }
 
-/// [`load`] of the issue a workspace already has, open or closed.
-pub(in crate::cli) async fn load_linked(
-    ctx: &Context,
-    context: ItemContext,
-    input: impl Into<ItemInput>,
-) -> Result<Issue> {
-    let issue = client::linked_issue_details(&ctx.paths, context, input.into()).await?;
-    Ok(Issue::from(issue))
-}
-
 impl From<crate::forge::items::issue::IssueDetails> for Issue {
     fn from(issue: crate::forge::items::issue::IssueDetails) -> Self {
         Self {
             number: issue.number.get(),
             title: issue.title,
             url: issue.url,
-            details: issue.details,
-            comments: issue.comments,
         }
-    }
-}
-
-/// What an agent's first message says of how many `comments` the issue
-/// has, where the forge says: Shoal reports only those posted later.
-fn comment_count(comments: Option<u64>) -> String {
-    match comments {
-        Some(0) => "The issue has no comments. ".to_owned(),
-        Some(1) => "The issue has 1 comment. ".to_owned(),
-        Some(count) => format!("The issue has {count} comments. "),
-        None => String::new(),
     }
 }
 

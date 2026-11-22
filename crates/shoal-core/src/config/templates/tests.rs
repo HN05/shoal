@@ -354,3 +354,33 @@ fn review_instructions_keep_their_fixed_part_before_any_template() {
     assert!(!replaced.contains("careful senior colleague"));
     assert!(!review_instructions(None, &fields).contains("careful senior colleague"));
 }
+
+#[test]
+fn an_issues_subject_names_it_by_number_title_and_url() {
+    let mut issue = IssueDetails {
+        number: crate::forge::numbers::IssueNumber::new(34),
+        url: "https://forge.example/team/repo/issues/34".parse().unwrap(),
+        title: "日本語 to the".into(),
+        details: "body".into(),
+        labels: Vec::new(),
+        comments: Some(2),
+    };
+    let subject = Subject::issue(&issue);
+    assert!(
+        (subject.text).contains("#34: 日本語 to the\nhttps://forge.example/team/repo/issues/34\n"),
+        "{}",
+        subject.text
+    );
+    assert!(
+        (subject.text).contains("Issue description:\nbody\n"),
+        "{}",
+        subject.text
+    );
+    assert!(subject.text.contains("has 2 comments"), "{}", subject.text);
+    assert_eq!(subject.issue.unwrap().number, 34);
+    issue.details = " \n".into();
+    issue.comments = None;
+    let unknown = Subject::issue(&issue).text;
+    assert!(!unknown.contains("Issue description"));
+    assert!(!unknown.contains("The issue has"), "{unknown}");
+}

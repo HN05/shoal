@@ -108,32 +108,3 @@ async fn missing_repositories_suggest_the_repository_url() {
         );
     }
 }
-
-#[test]
-fn an_issues_subject_names_it_by_number_title_and_url() {
-    let mut issue = Issue {
-        number: 34,
-        title: "日本語 to the".into(),
-        url: "https://forge.example/team/repo/issues/34".parse().unwrap(),
-        details: "body".into(),
-        comments: Some(2),
-    };
-    let subject = issue.subject();
-    assert!(
-        (subject.text).contains("#34: 日本語 to the\nhttps://forge.example/team/repo/issues/34\n"),
-        "{}",
-        subject.text
-    );
-    assert!(
-        (subject.text).contains("Issue description:\nbody\n"),
-        "{}",
-        subject.text
-    );
-    assert!(subject.text.contains("has 2 comments"), "{}", subject.text);
-    assert_eq!(subject.issue.unwrap().number, 34);
-    issue.details = " \n".into();
-    issue.comments = None;
-    let unknown = issue.subject().text;
-    assert!(!unknown.contains("Issue description"));
-    assert!(!unknown.contains("The issue has"), "{unknown}");
-}

@@ -9,7 +9,7 @@ use crate::{
     agent::Agent,
     agents::HomeRecords,
     cli::{
-        commands::{issues, preparation, queued_agents::Hold},
+        commands::{preparation, queued_agents::Hold},
         context::Context,
     },
     config::{modes::ModeName, templates::Subject},
@@ -119,8 +119,13 @@ async fn subject(
         return Ok(launch.prompt.clone().map(Subject::told));
     };
     let context = ItemContext::space(SpaceSelector::id(space.home()?.id()));
-    let issue = issues::load_linked(ctx, context, issue.url.clone()).await?;
-    Ok(Some(issue.subject()))
+    let issue = crate::client::forge_reads::linked_issue_details(
+        &ctx.paths,
+        context,
+        issue.url.clone().into(),
+    )
+    .await?;
+    Ok(Some(Subject::issue(&issue)))
 }
 
 /// Launch the agent of `launch` in `space`, starting on `subject`.
