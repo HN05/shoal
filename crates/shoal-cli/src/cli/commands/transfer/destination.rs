@@ -55,9 +55,9 @@ pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<SpaceI
     if let Some(Named::File(path)) = &named {
         ensure_new_file(path)?;
     }
-    // Only a file takes a removed space's record.
-    let files = matches!(named, Some(Named::File(_)) | None);
-    let spaces = targets::select(ctx, args, files).await?;
+    // A file or a joined machine takes a removed space's record.
+    let removed = matches!(named, Some(Named::File(_) | Named::Machine(_)) | None);
+    let spaces = targets::select(ctx, args, removed).await?;
     ensure!(
         args.checkpoint.is_none() || spaces.len() == 1,
         "--checkpoint copies one workspace, whose checkpoints it numbers; name one"

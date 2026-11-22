@@ -57,18 +57,37 @@ pub(super) async fn settle(
     error: anyhow::Error,
     steps: &impl Steps,
 ) -> Result<()> {
+    let ask = || crate::client::transfer::settle_move(paths, SpaceSelector::id(id));
+    let meanwhile = "its agents stay stopped";
+    match ask_hub(ask, &error, meanwhile, steps).await? {
+        MoveSettled::Arrived => {
+            super::warn(&format!(
+                "warning: {error:#}; the hub says {machine} took the space, so it continues there"
+            ));
+            Ok(())
+        }
+        MoveSettled::Kept => Err(moving::stays_here(paths, id, error).await),
+    }
+}
+
+/// How the hub, which `ask` asks, settled a move whose arrival `error` left
+/// unknown, asking again every [`ASK_AGAIN`] while it cannot be asked,
+/// saying `meanwhile` what stays as it is until it answers, until `steps`
+/// says the move was cancelled.
+pub(super) async fn ask_hub<Asked>(
+    ask: impl Fn() -> Asked,
+    error: &anyhow::Error,
+    meanwhile: &str,
+    steps: &impl Steps,
+) -> Result<MoveSettled>
+where
+    Asked: Future<Output = Result<MoveSettled>>,
+{
     loop {
-        let asked = crate::client::transfer::settle_move(paths, SpaceSelector::id(id)).await;
-        match asked {
-            Ok(MoveSettled::Arrived) => {
-                super::warn(&format!(
-                    "warning: {error:#}; the hub says {machine} took the space, so it continues there"
-                ));
-                return Ok(());
-            }
-            Ok(MoveSettled::Kept) => return Err(moving::stays_here(paths, id, error).await),
+        match ask().await {
+            Ok(settled) => return Ok(settled),
             Err(asking) => super::warn(&format!(
-                "warning: {error:#}, and the hub cannot say whether it did, so its agents stay stopped; asking again in {} seconds: {asking:#}",
+                "warning: {error:#}, and the hub cannot say whether it did, so {meanwhile}; asking again in {} seconds: {asking:#}",
                 ASK_AGAIN.as_secs()
             )),
         }

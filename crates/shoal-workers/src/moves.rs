@@ -14,6 +14,7 @@ mod joined;
 mod moving;
 mod packages;
 mod relayed;
+mod removed;
 mod ssh;
 
 use std::{io::Write as _, path::PathBuf};
@@ -54,7 +55,8 @@ pub enum Planned {
     /// A live space a copy of which moves, leaving it running; its file is
     /// reserved as it goes, since a copy that fails keeps no other.
     Copied { space: Space },
-    /// A removed space, whose removal record moves to a file.
+    /// A removed space, whose removal record moves to a file or a joined
+    /// machine.
     Removed { space: RemovedSpace, file: PathBuf },
 }
 
@@ -145,7 +147,7 @@ fn ensure_takes(order: &MoveOrder, planned: &[Planned], refusals: &[String]) -> 
     Ok(())
 }
 
-/// Plan the move of the removed space `space` to a file, which a copy
+/// Plan the move of the removed space `space`'s record, which a copy
 /// refuses, since it keeps no running work.
 fn plan_removed(paths: &CommandPaths, order: &MoveOrder, space: RemovedSpace) -> Result<Planned> {
     ensure!(!order.keep, "it is removed, so it keeps no work to copy");
@@ -235,9 +237,13 @@ async fn move_planned(
             moving::move_one(paths, order, (checked, file), steps).await
         }
         Planned::Copied { space } => copying::copy_one(paths, order, &space, steps).await,
-        Planned::Removed { space, file } => {
-            packages::export_removed(paths, &space, file, &order.carrying()).await
-        }
+        Planned::Removed { space, file } => match &order.destination {
+            MoveDestination::Machine(destination) => {
+                let carrying = order.carrying();
+                removed::move_to_machine(paths, &space, destination, &carrying, steps).await
+            }
+            _ => packages::export_removed(paths, &space, file, &order.carrying()).await,
+        },
     }
 }
 

@@ -1,8 +1,9 @@
 //! Who moves a space to another joined machine: a scoped caller moves every
 //! space its scope reaches, chats included, with no permission key, as it
-//! renames or converts them, and a caller on another machine too, since the
-//! space stays within the hub; ending a space the user holds takes those
-//! holds only as the caller's `user_holds` permission allows. A copy opens
+//! renames or converts them, and the removed spaces it may restore, and a
+//! caller on another machine too, since the space stays within the hub;
+//! ending a space the user holds takes those holds only as the caller's
+//! `user_holds` permission allows. A copy opens
 //! below the space its original is below, so only a copy of a space below
 //! the caller's own skips the `admin` permission: one of its own would open
 //! beside it, where a scoped caller creates nothing.
@@ -27,7 +28,7 @@ pub(crate) fn moves_without_permission(caller: &Caller, order: &MoveOrder) -> bo
 impl Manager {
     /// Let `caller` move the spaces `spaces` to a joined machine: each one
     /// here that its scope reaches, and that the user holds only where it
-    /// may take those holds.
+    /// may take those holds, and each removed one it may restore.
     pub(crate) async fn authorize_joined_move(
         &self,
         caller: &Caller,
@@ -35,8 +36,11 @@ impl Manager {
     ) -> Result<()> {
         for id in spaces {
             let selector = SpaceSelector::id(id);
-            self.ensure_reaches(caller, &self.space(&selector).await?)
-                .await?;
+            let Ok(space) = self.space(&selector).await else {
+                self.ensure_restorable_by(&selector, caller).await?;
+                continue;
+            };
+            self.ensure_reaches(caller, &space).await?;
             self.authorize_held_removal(caller, &selector, false)
                 .await?;
         }

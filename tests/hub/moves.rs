@@ -301,3 +301,39 @@ fn a_file_the_command_cannot_create_refuses_another_machine_s_move_before_it_sta
     let moved = hub.ok(&["move", &work, "-o", file.to_str().unwrap()]);
     assert_eq!(moved["failed"], json!([]), "{moved}");
 }
+
+/// Whether `machine` keeps a removal record of the space `id`.
+fn keeps_removed(machine: &Base, id: &str) -> bool {
+    let removed = machine.ok(&["restore"])["removed"].clone();
+    (removed.as_array().unwrap().iter()).any(|record| record["workspace_id"] == id)
+}
+
+#[test]
+fn a_removed_space_s_record_moves_to_a_joined_machine_where_its_restore_opens_it() {
+    let (_hub, laptop, desk, _laptop_id, _desk_id) = machines("");
+    give_origin(&laptop);
+    let work = workspace(&laptop, "work");
+    laptop.ok(&["rm", &work, "--wait", "--yes"]);
+
+    let moved = laptop.ok(&["move", &work, "--machine", "desk"]);
+
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    assert!(!keeps_removed(&laptop, &work));
+    assert!(keeps_removed(&desk, &work));
+    desk.ok(&["restore", &work, "--no-resume"]);
+    assert!(own_spaces(&desk).iter().any(|space| space["id"] == work));
+}
+
+#[test]
+fn a_removed_space_s_record_the_destination_cannot_take_stays_on_its_machine() {
+    let (_hub, laptop, desk, _laptop_id, _desk_id) = machines("");
+    // Without an origin, the desk has nothing to clone the repository from.
+    let work = workspace(&laptop, "work");
+    laptop.ok(&["rm", &work, "--wait", "--yes"]);
+
+    let moved = laptop.run(&["move", &work, "--machine", "desk", "--json"]);
+
+    assert!(!moved.status.success(), "{}", printed(&moved));
+    assert!(keeps_removed(&laptop, &work));
+    assert!(!keeps_removed(&desk, &work));
+}

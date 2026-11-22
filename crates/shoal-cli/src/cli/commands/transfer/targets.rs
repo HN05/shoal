@@ -11,26 +11,26 @@ use shoal_protocol::protocol::{ErrorCode, RemoteError};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces `args` selects, by ID, refusing one that selects no space, or
-/// with `files` no live or removed space, before asking for anything else.
-pub(super) async fn select(ctx: &Context, args: &MoveArgs, files: bool) -> Result<Vec<SpaceId>> {
+/// with `removed` no live or removed space, before asking for anything else.
+pub(super) async fn select(ctx: &Context, args: &MoveArgs, removed: bool) -> Result<Vec<SpaceId>> {
     let ids = match &args.repository {
         Some(repository) => (repository_spaces(ctx, repository.clone())
             .await?
             .into_iter())
         .map(|space| space.id)
         .collect(),
-        None if !args.space.is_empty() => named(ctx, &args.space, files).await?,
+        None if !args.space.is_empty() => named(ctx, &args.space, removed).await?,
         None => picked(ctx).await?,
     };
     Ok(ids)
 }
 
 /// The IDs of the spaces `names` select, here or on another joined
-/// machine, or with `files` of the removed spaces they select by ID.
-async fn named(ctx: &Context, names: &[SpaceSelector], files: bool) -> Result<Vec<SpaceId>> {
+/// machine, or with `removed` of the removed spaces they select by ID.
+async fn named(ctx: &Context, names: &[SpaceSelector], removed: bool) -> Result<Vec<SpaceId>> {
     let mut ids = Vec::new();
     for selector in names {
-        let id = live_or_removed(ctx, selector, files).await?;
+        let id = live_or_removed(ctx, selector, removed).await?;
         if !ids.contains(&id) {
             ids.push(id);
         }
@@ -38,17 +38,21 @@ async fn named(ctx: &Context, names: &[SpaceSelector], files: bool) -> Result<Ve
     Ok(ids)
 }
 
-/// The ID of the space `selector` names, wherever it runs, or with `files`
-/// of the removed space it names by ID.
-async fn live_or_removed(ctx: &Context, selector: &SpaceSelector, files: bool) -> Result<SpaceId> {
+/// The ID of the space `selector` names, wherever it runs, or with
+/// `removed` of the removed space it names by ID.
+async fn live_or_removed(
+    ctx: &Context,
+    selector: &SpaceSelector,
+    removed: bool,
+) -> Result<SpaceId> {
     let located = crate::client::spaces::locate(&ctx.paths, selector.clone()).await;
     let missing = match located {
         Ok(located) => return Ok(located.id().clone()),
-        Err(error) if files && names_no_space(&error) => error,
+        Err(error) if removed && names_no_space(&error) => error,
         Err(error) => return Err(error),
     };
-    let removed = crate::client::removal::removed_space(&ctx.paths, selector.clone());
-    Ok((removed.await).context(missing)?.space_id)
+    let record = crate::client::removal::removed_space(&ctx.paths, selector.clone());
+    Ok((record.await).context(missing)?.space_id)
 }
 
 /// Whether `error` is the daemon's refusal for a space no machine has.

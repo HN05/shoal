@@ -35,8 +35,8 @@ pub(crate) async fn finish_interrupted(manager: Arc<Manager>) {
 
 impl Manager {
     /// Start `order` in a worker that acts with `caller`'s scope, in `env`
-    /// when given, once every space it takes is here: live, or for a file a
-    /// removed one. A space another machine has refuses it, naming that
+    /// when given, once every space it takes is here: live, or for a file
+    /// or a joined machine a removed one. A space another machine has refuses it, naming that
     /// space, which the hub forwards it for, as does a joined machine to
     /// move to that is this one or offline. A move to a joined machine that
     /// would stop `caller`'s agent waits for its turn to end instead.
@@ -69,21 +69,24 @@ impl Manager {
     }
 
     /// Refuse a space `id` that is not here to move to `destination`: a
-    /// file takes a removed space too, and one another joined machine runs,
-    /// whose package this machine's worker reads from there; a move to
-    /// another machine, or one holding its package for this machine's, goes
-    /// to the machine that has the space.
+    /// file or a joined machine takes a removed space too, and a file one
+    /// another joined machine runs, whose package this machine's worker
+    /// reads from there; a move to another machine, or one holding its
+    /// package for this machine's, goes to the machine that has the space.
     async fn ensure_movable(&self, id: &SpaceId, destination: &MoveDestination) -> Result<()> {
         let selector = SpaceSelector::id(id);
         let absent = match self.space(&selector).await {
             Ok(_) => return Ok(()),
             Err(absent) => absent,
         };
-        if destination.machine().is_some() || *destination == MoveDestination::Held {
+        if *destination == MoveDestination::Held {
             return Err(absent);
         }
         if self.removed_space(&selector).await.is_ok() {
             return Ok(());
+        }
+        if destination.machine().is_some() {
+            return Err(absent);
         }
         match (self.space_anywhere(&selector).await?, destination) {
             (

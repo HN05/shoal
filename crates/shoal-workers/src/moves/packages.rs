@@ -111,9 +111,16 @@ pub(super) fn other_machine(destination: &MoveDestination) -> Option<String> {
 
 /// The line that tells where `moved` went on `host`, under the name the
 /// import there gave it: a workspace's path there, and whether its agents
-/// continue there.
+/// continue there, or for a removed space's record what opens it there.
 fn arrived(host: &str, copy: bool, moved: &SpaceMoved) -> String {
     let name = &moved.name;
+    // Only a removed space neither copies nor ends here.
+    if !copy && moved.removal.is_none() && moved.arrived.is_none() {
+        return format!(
+            "Moved the record of {name} to {host}; shoal restore {} there opens it",
+            moved.id
+        );
+    }
     let mut message = match (copy, &moved.arrived) {
         (true, Some(arrived)) if arrived.space.name != *name => {
             format!("Copied {name} as {} to {host}", arrived.space.name)

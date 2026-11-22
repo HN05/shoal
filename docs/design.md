@@ -4576,7 +4576,13 @@ which answers from its claims and owners and, when the destination has not
 claimed it, refuses that ticket's later claims, so an import still running
 there cannot take the space after its source restored it. While the hub
 cannot be asked, the source keeps the agents stopped and asks again instead
-of guessing, so the agents never run on both machines. The worker checks the spaces before any ends,
+of guessing, so the agents never run on both machines. A removed space's
+record moves to a joined machine through the same delivery and claim, in one
+daemon request with no recorded move, since no agent runs to stop and nothing
+ends here: the destination's daemon records it as removed without opening it,
+and the source forgets the record once the claim stands, or once the hub says
+it does, so a source that stops before it learns keeps the record, as an
+export to a file does. The worker checks the spaces before any ends,
 and where ending them needs the user it ends nothing and asks, so the command,
 or an app, starts the move again with consent to what the question listed. A
 move request for another joined machine's space goes through the hub to that

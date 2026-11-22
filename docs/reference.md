@@ -5076,8 +5076,11 @@ import went, as when the link drops, the move asks the hub whether it claimed
 the space; while the hub cannot be asked, the agents stay stopped here and the
 move asks again every 30 seconds, and once the hub answers, a machine that did
 not claim the space no longer can. `--keep` copies the spaces there as new
-spaces, without a claim. A removed space's record moves only to a file. A
-space's agent moves every space its scope reaches there, chats included,
+spaces, without a claim. A removed space's record moves there too: that
+machine records it as removed under its ID, claiming it at the hub, so
+`shoal restore <id>` opens it there, and this one forgets it once that claim
+stands, keeping it when the claim is refused; an agent moves the record
+of a space it may restore. A space's agent moves every space its scope reaches there, chats included,
 with no permission key, also from another joined machine, and ends one the
 user holds as its `user_holds` permission allows; a copy of its own space,
 which would open beside it, takes its `admin` permission. A move that would stop its
