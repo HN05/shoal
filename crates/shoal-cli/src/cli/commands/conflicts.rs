@@ -16,7 +16,7 @@ pub(in crate::cli::commands) async fn conflicts(
         let target = target.clone();
         Acting::request(move |space| crate::client::diffs::conflicts(space, target.clone()))
     };
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory, &checking);
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&checking));
     let workspace = workspace.await?;
     let check = (crate::client::diffs::conflicts(workspace.clone(), target))
         .send(&ctx.paths)

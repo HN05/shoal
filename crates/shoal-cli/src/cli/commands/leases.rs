@@ -146,8 +146,7 @@ async fn select_target(
             ui::select_space(
                 ctx,
                 explicit,
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
+                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
             )
             .await
         }
@@ -155,8 +154,7 @@ async fn select_target(
             ui::select_workspace(
                 ctx,
                 explicit,
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
+                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
             )
             .await
         }

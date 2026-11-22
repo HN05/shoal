@@ -35,8 +35,7 @@ pub(super) async fn list(
     let space = ui::select_space(
         ctx,
         space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let files = crate::client::files::list(&ctx.paths, space.clone()).await?;
@@ -74,8 +73,7 @@ pub(super) async fn add(
     let space = ui::select_space(
         ctx,
         space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let added = crate::client::files::add(&ctx.paths, space.clone(), files).await?;
@@ -109,8 +107,7 @@ pub(super) async fn remove(
             ui::select_space(
                 ctx,
                 filter.space,
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
+                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
             )
             .await?,
         )

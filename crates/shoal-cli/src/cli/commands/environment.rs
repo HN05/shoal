@@ -18,8 +18,7 @@ pub(super) async fn run(
     let space = ui::select_space(
         ctx,
         space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     match revoke {

@@ -47,8 +47,7 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     let selector = ui::select_workspace(
         ctx,
         args.copy.flatten(),
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let workspaces = crate::client::spaces::list(&ctx.paths)

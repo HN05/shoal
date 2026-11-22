@@ -25,8 +25,7 @@ pub(super) async fn open_pr(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        ui::Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let opened = match publish(ctx, workspace, options).await? {

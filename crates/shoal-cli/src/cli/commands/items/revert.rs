@@ -41,8 +41,7 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
     let space = ui::select_space(
         ctx,
         selector.space,
-        ui::Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let from = Reverting::of(ctx, space).await?;

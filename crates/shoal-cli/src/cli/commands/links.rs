@@ -31,7 +31,7 @@ pub(super) async fn select(
     acting: &Acting,
 ) -> Result<(SpaceSelector, Selection)> {
     let selection = items.selection()?;
-    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory, acting);
+    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory(acting));
     let space = space.await?;
     let target = ItemContext::space(space.clone()).into();
     let selection = resolve_kind(ctx, target, selection).await?;
@@ -112,7 +112,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         let item = ItemInput::Number(1);
         crate::client::items::link(space, relation, LinkKind::Issue, item, None)
     });
-    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory, &linking);
+    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory(&linking));
     let space = space.await?;
     let context = ItemContext::space(space.clone());
     let selected = resolve_kind(ctx, context.clone().into(), selected).await?;
@@ -224,8 +224,7 @@ pub(super) async fn watch(
     let space = ui::select_space(
         ctx,
         items.space,
-        ui::Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let (context, repository) = watch_context(ctx, &space, repo.as_deref()).await?;

@@ -47,10 +47,10 @@ pub async fn select_spaces(
 ) -> Result<Vec<SpaceSelector>> {
     let mut selected = named_workspaces(ctx, names).await?;
     if selected.is_empty() {
-        selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
+        selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory(acting)).await? {
             Resolution::Named(selector) => vec![selector],
             Resolution::Current(id) => vec![SpaceSelector::Id(id)],
-            Resolution::Picker(workspaces) => {
+            Resolution::Picker(workspaces, acting) => {
                 let spaces = crate::client::spaces::list(&ctx.paths).await?;
                 let (chats, offered) = match stopped_chats {
                     true => (spaces.into_chats(), Offered::Spaces),
@@ -102,8 +102,7 @@ pub async fn select_resumable(
     ctx: &Context,
     resumable: &[ResumableSpace],
 ) -> Result<Option<Vec<SpaceSelector>>> {
-    if let Resolution::Current(id) =
-        resolve_workspace(ctx, None, Fallback::CurrentDirectory).await?
+    if let Some(id) = current_workspace_id(ctx).await?
         && resumable.iter().any(|space| space.space.id == id)
     {
         return Ok(Some(vec![SpaceSelector::Id(id)]));
@@ -212,13 +211,12 @@ pub async fn pick_any_space(ctx: &Context, acting: &Acting) -> Result<SpaceSelec
 pub async fn select_space(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
-    fallback: Fallback,
-    acting: &Acting,
+    fallback: Fallback<'_>,
 ) -> Result<SpaceSelector> {
     match current_chat(&explicit) {
         Some(chat) if matches!(fallback, Fallback::OwnSpace) => Ok(SpaceSelector::Id(chat)),
         Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Below).await,
-        None => select_other_space(ctx, explicit, fallback, acting).await,
+        None => select_other_space(ctx, explicit, fallback).await,
     }
 }
 
@@ -233,7 +231,7 @@ pub async fn select_space_here(
 ) -> Result<SpaceSelector> {
     match current_chat(&explicit) {
         Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Any).await,
-        None => select_other_space(ctx, explicit, Fallback::CurrentDirectory, acting).await,
+        None => select_other_space(ctx, explicit, Fallback::CurrentDirectory(acting)).await,
     }
 }
 
@@ -244,13 +242,20 @@ pub async fn space_here(ctx: &Context, which: Workspaces) -> Result<Option<Space
     if let Some(chat) = current_chat(&None) {
         return current_workspace_or_chat(ctx, chat, which).await.map(Some);
     }
+    let Some(id) = current_workspace_id(ctx).await? else {
+        return Ok(None);
+    };
+    let workspace = SpaceSelector::Id(id);
+    recent::record(ctx, &workspace).await;
+    Ok(Some(workspace))
+}
+
+/// The ID of the workspace the current directory is in, never offering a
+/// picker; none outside every workspace.
+async fn current_workspace_id(ctx: &Context) -> Result<Option<SpaceId>> {
     match resolve_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await {
-        Ok(Resolution::Current(id)) => {
-            let workspace = SpaceSelector::Id(id);
-            recent::record(ctx, &workspace).await;
-            Ok(Some(workspace))
-        }
-        Ok(Resolution::Named(_) | Resolution::Picker(_)) => Ok(None),
+        Ok(Resolution::Current(id)) => Ok(Some(id)),
+        Ok(Resolution::Named(_) | Resolution::Picker(..)) => Ok(None),
         Err(error) if error.is::<NoCurrentWorkspace>() => Ok(None),
         Err(error) => Err(error),
     }
@@ -291,13 +296,12 @@ async fn current_workspace_or_chat(
 pub async fn select_other_space(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
-    fallback: Fallback,
-    acting: &Acting,
+    fallback: Fallback<'_>,
 ) -> Result<SpaceSelector> {
     let space = match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Named(selector) => selector,
         Resolution::Current(id) => SpaceSelector::Id(id),
-        Resolution::Picker(workspaces) => {
+        Resolution::Picker(workspaces, acting) => {
             let chats = crate::client::spaces::list(&ctx.paths)
                 .await?
                 .into_running_chats();
@@ -329,14 +333,14 @@ pub async fn select_space_filter(
         return Ok(None);
     }
     if current_chat(&filter.space).is_some() {
-        let space = select_space(ctx, filter.space, Fallback::CurrentDirectory, acting).await?;
+        let space = select_space(ctx, filter.space, Fallback::CurrentDirectory(acting)).await?;
         return Ok(Some(space));
     }
     Ok(
-        match resolve_workspace(ctx, filter.space, Fallback::CurrentDirectory).await? {
+        match resolve_workspace(ctx, filter.space, Fallback::CurrentDirectory(acting)).await? {
             Resolution::Named(selector) => Some(selector),
             Resolution::Current(id) => Some(SpaceSelector::Id(id)),
-            Resolution::Picker(workspaces) => {
+            Resolution::Picker(workspaces, acting) => {
                 let chats = crate::client::spaces::list(&ctx.paths)
                     .await?
                     .into_running_chats();

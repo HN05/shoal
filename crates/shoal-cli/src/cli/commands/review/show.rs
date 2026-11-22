@@ -31,14 +31,9 @@ pub(in crate::cli::commands) async fn list(
     let workspace = match (workspace, &repository) {
         (Some(workspace), _) => Some(workspace),
         (None, Some(_)) => None,
-        (None, None) => ui::select_workspace(
-            ctx,
-            None,
-            Fallback::CurrentDirectoryOnly,
-            &crate::cli::ui::Acting::Unconverted,
-        )
-        .await
-        .ok(),
+        (None, None) => ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly)
+            .await
+            .ok(),
     };
     let repository = match repository {
         Some(repository) => Some(ui::repository_selector(repository)?),
@@ -102,8 +97,7 @@ async fn selected(
             ui::select_workspace(
                 ctx,
                 workspace,
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
+                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
             )
             .await?,
         ),

@@ -15,8 +15,7 @@ pub(in crate::cli::commands) async fn rename_branch(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let renamed =

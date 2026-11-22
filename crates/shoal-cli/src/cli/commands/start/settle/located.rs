@@ -33,8 +33,7 @@ pub(super) async fn launch(ctx: &Context, args: &StartArgs) -> Result<Launch> {
         let selected = ui::select_workspace(
             ctx,
             workspace,
-            Fallback::CurrentDirectory,
-            &crate::cli::ui::Acting::Unconverted,
+            Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
         )
         .await?;
         launch.in_workspace = Some(Some(selected).into());
@@ -116,8 +115,7 @@ async fn forked(
     let space = ui::select_space(
         ctx,
         space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let AgentSession {

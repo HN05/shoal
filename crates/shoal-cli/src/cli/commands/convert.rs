@@ -12,7 +12,7 @@ use crate::{
         args::create::BranchArgs,
         context::Context,
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     config::modes::ModeName,
     forge::items::reference::ItemInput,
@@ -33,13 +33,8 @@ pub(super) async fn to_workspace(
     if let Some(branch) = &branch.branch {
         shoal_core::git::check_branch_name(branch)?;
     }
-    let chat = ui::select_space(
-        ctx,
-        space,
-        own_space(),
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
+    let chat =
+        ui::select_space(ctx, space, own_space(&crate::cli::ui::Acting::Unconverted)).await?;
     let issue = match &branch.issue {
         Some(input) => Some(load_issue(ctx, &chat, input).await?),
         None => None,
@@ -83,13 +78,8 @@ pub(super) async fn to_chat(
     space: Option<SpaceSelector>,
     mode: Option<ModeName>,
 ) -> Result<i32> {
-    let workspace = ui::select_space(
-        ctx,
-        space,
-        own_space(),
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
+    let workspace =
+        ui::select_space(ctx, space, own_space(&crate::cli::ui::Acting::Unconverted)).await?;
     let workspace = crate::client::conversions::to_chat(&ctx.paths, workspace, mode).await?;
     let text = format!(
         "{} becomes a chat in the repository's checkout once its agent's turn ends; its branch {} stays",
@@ -101,10 +91,10 @@ pub(super) async fn to_chat(
 
 /// Where a conversion's space comes from without `--space`: an agent's own
 /// space, or the user's current workspace, else a picker.
-fn own_space() -> Fallback {
+fn own_space(acting: &Acting) -> Fallback<'_> {
     match crate::env::is_scoped() {
         true => Fallback::OwnSpace,
-        false => Fallback::CurrentDirectory,
+        false => Fallback::CurrentDirectory(acting),
     }
 }
 

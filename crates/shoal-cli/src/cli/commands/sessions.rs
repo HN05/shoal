@@ -222,7 +222,8 @@ async fn resolve_here(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chos
     if let Some(name) = name {
         let target = match (chats.into_iter()).find(|chat| name.selects(&chat.id, chat.number)) {
             Some(chat) => Target::Chat(Box::new(chat)),
-            None => workspace(ctx, Some(name), Fallback::CurrentDirectory).await?,
+            // A named workspace needs no picker.
+            None => workspace(ctx, Some(name), Fallback::CurrentDirectoryOnly).await?,
         };
         return Ok(Chosen::Here(target));
     }
@@ -239,10 +240,9 @@ async fn resolve_here(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chos
 async fn workspace(
     ctx: &Context,
     name: Option<SpaceSelector>,
-    fallback: Fallback,
+    fallback: Fallback<'_>,
 ) -> Result<Target> {
-    let workspace =
-        ui::choose_workspace(ctx, name, fallback, &crate::cli::ui::Acting::Unconverted).await?;
+    let workspace = ui::choose_workspace(ctx, name, fallback).await?;
     Target::inspected(&ctx.paths, workspace).await
 }
 

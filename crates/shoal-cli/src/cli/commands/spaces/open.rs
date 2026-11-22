@@ -31,8 +31,7 @@ pub(in crate::cli::commands) async fn open(
     let selector = ui::select_space(
         ctx,
         space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let space = read(ctx, &selector).await?;

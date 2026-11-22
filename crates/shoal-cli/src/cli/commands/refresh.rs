@@ -25,8 +25,7 @@ pub(in crate::cli::commands) async fn refresh(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let mut refreshed = crate::client::workspaces::refresh(&ctx.paths, workspace).await?;

@@ -21,8 +21,7 @@ pub(super) async fn named(
     let id = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())
@@ -62,15 +61,9 @@ pub(super) async fn scope(
         Some(selector) => Some(ui::explicit_workspace(ctx, selector).await?),
         // A workspace process selects as start and stop do: the directory's
         // workspace, which may be a child of its own, otherwise its own.
-        None if crate::env::is_scoped() => Some(
-            ui::select_workspace(
-                ctx,
-                None,
-                Fallback::CurrentDirectoryOnly,
-                &crate::cli::ui::Acting::Unconverted,
-            )
-            .await?,
-        ),
+        None if crate::env::is_scoped() => {
+            Some(ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await?)
+        }
         None => {
             let workspaces = crate::client::spaces::list(&ctx.paths)
                 .await?

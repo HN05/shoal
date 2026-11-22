@@ -21,7 +21,7 @@ pub(in crate::cli::commands) async fn diff(
     // The base it diffs against, which another machine's workspace's
     // machine reads.
     let reading = Acting::request(crate::client::diffs::diff_base);
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory, &reading);
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&reading));
     let base = (crate::client::diffs::diff_base(workspace.await?))
         .send(&ctx.paths)
         .await?;

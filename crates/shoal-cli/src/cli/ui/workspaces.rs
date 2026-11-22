@@ -27,9 +27,11 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// How to choose a workspace when the command line names none.
 #[derive(Clone, Copy)]
-pub enum Fallback {
-    /// Use the worktree containing the current directory, else open the picker.
-    CurrentDirectory,
+pub enum Fallback<'a> {
+    /// Use the worktree containing the current directory, else open the
+    /// picker, which offers the spaces that what the command does with the
+    /// picked one reaches.
+    CurrentDirectory(&'a Acting),
     /// Use only the current workspace; never open a picker.
     CurrentDirectoryOnly,
     /// Use the space the caller's scope belongs to, a workspace or a chat,
@@ -46,10 +48,9 @@ pub(in crate::cli) use crate::fsutil::current_dir::current_directory;
 pub async fn select_workspace(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
-    fallback: Fallback,
-    acting: &Acting,
+    fallback: Fallback<'_>,
 ) -> Result<SpaceSelector> {
-    let workspace = choose_workspace(ctx, explicit, fallback, acting).await?;
+    let workspace = choose_workspace(ctx, explicit, fallback).await?;
     record_workspace(ctx, &workspace).await;
     Ok(workspace)
 }
@@ -65,13 +66,12 @@ pub(in crate::cli) async fn record_workspace(ctx: &Context, workspace: &SpaceSel
 pub async fn choose_workspace(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
-    fallback: Fallback,
-    acting: &Acting,
+    fallback: Fallback<'_>,
 ) -> Result<SpaceSelector> {
     Ok(match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Named(selector) => selector,
         Resolution::Current(id) => SpaceSelector::Id(id),
-        Resolution::Picker(workspaces) => {
+        Resolution::Picker(workspaces, acting) => {
             SpaceSelector::Id(pick_workspace(ctx, workspaces, WORKSPACE, acting).await?)
         }
     })
@@ -97,10 +97,10 @@ pub async fn select_workspace_filter(
         return Ok(None);
     }
     Ok(
-        match resolve_workspace(ctx, filter.space, Fallback::CurrentDirectory).await? {
+        match resolve_workspace(ctx, filter.space, Fallback::CurrentDirectory(acting)).await? {
             Resolution::Named(selector) => Some(selector),
             Resolution::Current(id) => Some(SpaceSelector::Id(id)),
-            Resolution::Picker(workspaces) => {
+            Resolution::Picker(workspaces, acting) => {
                 (pick_workspace_or_all(ctx, workspaces, acting).await?).map(SpaceSelector::Id)
             }
         },
@@ -125,20 +125,21 @@ pub const ALL_WORKSPACES: &str = "All workspaces";
 /// The picker ID of the entry that stands for `--all`; no workspace has it.
 pub(super) const ALL_ID: &str = "--all";
 
-pub(super) enum Resolution {
+pub(super) enum Resolution<'a> {
     /// The space the command line names, or the previous one.
     Named(SpaceSelector),
     /// The current workspace.
     Current(SpaceId),
-    /// No workspace is explicit or current; the user picks among these.
-    Picker(Vec<Workspace>),
+    /// No workspace is explicit or current; the user picks among these, for
+    /// what the command does with the picked one.
+    Picker(Vec<Workspace>, &'a Acting),
 }
 
-pub(super) async fn resolve_workspace(
+pub(super) async fn resolve_workspace<'a>(
     ctx: &Context,
     explicit: Option<SpaceSelector>,
-    fallback: Fallback,
-) -> Result<Resolution> {
+    fallback: Fallback<'a>,
+) -> Result<Resolution<'a>> {
     if let Some(selector) = explicit {
         return Ok(Resolution::Named(explicit_workspace(ctx, selector).await?));
     }
@@ -149,18 +150,17 @@ pub(super) async fn resolve_workspace(
         .into_workspaces();
     let order = match fallback {
         Fallback::OwnSpace => ScopeOrder::BeforeDirectory,
-        Fallback::CurrentDirectory | Fallback::CurrentDirectoryOnly => ScopeOrder::AfterDirectory,
+        Fallback::CurrentDirectory(_) | Fallback::CurrentDirectoryOnly => {
+            ScopeOrder::AfterDirectory
+        }
     };
     if let Some(workspace) = workspace_context::current(&workspaces, order)? {
         return Ok(Resolution::Current(workspace.id.clone()));
     }
-    if matches!(
-        fallback,
-        Fallback::CurrentDirectoryOnly | Fallback::OwnSpace
-    ) {
-        return Err(NoCurrentWorkspace.into());
+    match fallback {
+        Fallback::CurrentDirectory(acting) => Ok(Resolution::Picker(workspaces, acting)),
+        Fallback::CurrentDirectoryOnly | Fallback::OwnSpace => Err(NoCurrentWorkspace.into()),
     }
-    Ok(Resolution::Picker(workspaces))
 }
 
 /// The workspace containing the current directory, for an unscoped caller.

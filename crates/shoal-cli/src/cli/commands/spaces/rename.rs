@@ -196,5 +196,5 @@ async fn chosen_space(
             return Ok(SpaceSelector::Id(chat.id));
         }
     }
-    ui::select_space(ctx, space, Fallback::CurrentDirectory, acting).await
+    ui::select_space(ctx, space, Fallback::CurrentDirectory(acting)).await
 }

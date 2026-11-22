@@ -19,7 +19,7 @@ pub(super) async fn run(
     value: Priority,
 ) -> Result<i32> {
     let setting = Acting::request(move |space| priority::set(space, value));
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory, &setting).await?;
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&setting)).await?;
     let set = priority::set(space, value).send(&ctx.paths).await?;
     ctx.show(&set, |set| {
         outln!("{}: priority {}.", set.space, set.priority)

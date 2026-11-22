@@ -20,8 +20,7 @@ pub(in crate::cli::commands) async fn unmerge(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let spec = OperationSpec::Unmerge { workspace };

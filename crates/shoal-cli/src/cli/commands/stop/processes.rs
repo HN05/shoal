@@ -23,8 +23,7 @@ pub(in crate::cli::commands) async fn processes(
                 ui::select_space(
                     ctx,
                     None,
-                    ui::Fallback::CurrentDirectory,
-                    &crate::cli::ui::Acting::Unconverted,
+                    ui::Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
                 )
                 .await?,
             ]

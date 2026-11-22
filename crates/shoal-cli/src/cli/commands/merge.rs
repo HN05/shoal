@@ -43,8 +43,7 @@ async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
     let space = ui::select_space(
         ctx,
         args.space.clone(),
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     match crate::client::merging::merge_path(&ctx.paths, space.clone()).await? {

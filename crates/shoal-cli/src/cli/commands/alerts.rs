@@ -74,8 +74,7 @@ async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
         let space = ui::select_space(
             ctx,
             Some(space.clone()),
-            Fallback::CurrentDirectory,
-            &crate::cli::ui::Acting::Unconverted,
+            Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
         )
         .await?;
         return Ok(Listing {
@@ -105,13 +104,7 @@ pub(in crate::cli::commands) fn in_own_space() -> bool {
 /// when it runs under one outside any workspace scope, otherwise its
 /// workspace's.
 pub(in crate::cli::commands) async fn own_space(ctx: &Context) -> Result<SpaceSelector> {
-    ui::select_space(
-        ctx,
-        None,
-        Fallback::OwnSpace,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await
+    ui::select_space(ctx, None, Fallback::OwnSpace).await
 }
 
 /// The space this process sends and withdraws alerts as, which the daemon

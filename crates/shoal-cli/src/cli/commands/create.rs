@@ -86,14 +86,7 @@ async fn parent_space(
     ctx: &Context,
     named: Option<SpaceSelector>,
 ) -> Result<Option<SpaceSelector>> {
-    match ui::select_space(
-        ctx,
-        named,
-        Fallback::CurrentDirectoryOnly,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await
-    {
+    match ui::select_space(ctx, named, Fallback::CurrentDirectoryOnly).await {
         Ok(parent) => Ok(Some(parent)),
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => Ok(None),
         Err(error) => Err(error),

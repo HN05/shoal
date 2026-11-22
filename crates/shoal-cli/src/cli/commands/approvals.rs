@@ -103,13 +103,7 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
     let owner = match crate::env::own_space() {
         Some(own) => own,
         None => {
-            let owner = ui::select_workspace(
-                ctx,
-                None,
-                ui::Fallback::OwnSpace,
-                &crate::cli::ui::Acting::Unconverted,
-            )
-            .await?;
+            let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnSpace).await?;
             crate::client::workspaces::inspect(&ctx.paths, owner.clone())
                 .await?
                 .workspace
@@ -331,13 +325,7 @@ async fn escalate(
     shown: Option<Box<ApprovalRequest>>,
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
-    let space = ui::select_space(
-        ctx,
-        None,
-        ui::Fallback::OwnSpace,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
+    let space = ui::select_space(ctx, None, ui::Fallback::OwnSpace).await?;
     let request = approvals::escalate(&ctx.paths, space.clone(), number, shown).await?;
     let decider = match &request.decider {
         Some(_) => "the space above",

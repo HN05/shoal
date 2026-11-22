@@ -43,7 +43,7 @@ pub(super) async fn run(
         Some(change) => Acting::request(move |space| progress::set(space, change.clone())),
         None => Acting::request(progress::get),
     };
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory, &acting).await?;
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&acting)).await?;
     let progress = match changes.is_empty() {
         true => progress::get(space).send(&ctx.paths).await?,
         false => apply(ctx, space, changes).await?,

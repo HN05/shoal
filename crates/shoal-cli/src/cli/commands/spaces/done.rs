@@ -18,7 +18,7 @@ async fn selected(ctx: &Context, space: Option<SpaceSelector>, done: &Done) -> R
         let done = done.clone();
         Acting::request(move |space| assignments::mark_done(space, done.clone()))
     };
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory, &marking).await?;
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&marking)).await?;
     Ok(
         match crate::client::spaces::present_space(&ctx.paths, &space)
             .await?
@@ -40,7 +40,7 @@ pub(in crate::cli::commands) async fn undone(
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
     let undoing = Acting::request(assignments::undo_done);
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory, &undoing).await?;
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&undoing)).await?;
     let withdrawn = assignments::undo_done(space.clone())
         .send(&ctx.paths)
         .await?;

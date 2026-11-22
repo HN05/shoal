@@ -48,13 +48,8 @@ pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Res
 /// An explicit workspace takes precedence over the current directory.
 async fn listing_layers(ctx: &Context, workspace: Option<SpaceSelector>) -> Result<ConfigLayers> {
     if workspace.is_some() {
-        let workspace = ui::select_workspace(
-            ctx,
-            workspace,
-            Fallback::CurrentDirectoryOnly,
-            &crate::cli::ui::Acting::Unconverted,
-        )
-        .await?;
+        let workspace =
+            ui::select_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await?;
         return workspace_layers(ctx, workspace).await;
     }
     current_layers(ctx).await
@@ -207,8 +202,7 @@ async fn run_defined(
             ui::select_workspace(
                 ctx,
                 named,
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
+                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
             )
             .await?
         }

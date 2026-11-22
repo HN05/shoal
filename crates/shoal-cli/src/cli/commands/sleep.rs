@@ -31,7 +31,7 @@ pub(super) async fn run(
         let timer = timer.clone();
         Acting::request(move |space| sleep::set(space, sleep, timer.clone()))
     };
-    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory, &sleeping).await?;
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&sleeping)).await?;
     let slept = sleep::set(space, sleep, timer).send(&ctx.paths).await?;
     ctx.show(&slept, |slept| outln!("{}", summary(slept)))?;
     Ok(0)

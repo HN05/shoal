@@ -168,7 +168,7 @@ async fn target(ctx: &Context, recipients: Recipients, acting: &Acting) -> Resul
     Ok(match recipients {
         Recipients::Space(None) if super::alerts::in_own_space() => AlertTarget::Up,
         Recipients::Space(space) => AlertTarget::Space {
-            space: ui::select_space(ctx, space, Fallback::CurrentDirectory, acting).await?,
+            space: ui::select_space(ctx, space, Fallback::CurrentDirectory(acting)).await?,
         },
         Recipients::All => AlertTarget::All { repository: None },
         Recipients::Repository(repository) => AlertTarget::All {

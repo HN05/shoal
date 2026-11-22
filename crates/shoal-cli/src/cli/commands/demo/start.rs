@@ -78,8 +78,7 @@ pub(super) async fn start(
     let id = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(&ctx.paths, id.clone())

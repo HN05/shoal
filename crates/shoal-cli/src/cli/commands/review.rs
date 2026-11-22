@@ -53,8 +53,7 @@ async fn select(ctx: &Context, space: Option<SpaceSelector>) -> Result<Space> {
     let selected = ui::select_space(
         ctx,
         space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
+        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
     )
     .await?;
     let found = crate::client::spaces::present_space(&ctx.paths, &selected).await?;
@@ -73,8 +72,7 @@ async fn chat(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<Cha
             ui::select_space(
                 ctx,
                 None,
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
+                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
             )
             .await?
         }

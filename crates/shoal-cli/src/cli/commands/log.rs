@@ -32,8 +32,7 @@ pub(super) async fn run(ctx: &Context, args: LogArgs) -> Result<i32> {
             ui::select_space(
                 ctx,
                 Some(space),
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
+                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
             )
             .await?,
         ),

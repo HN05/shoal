@@ -72,8 +72,7 @@ pub(super) async fn open(
             ui::select_space(
                 ctx,
                 space,
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
+                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
             )
             .await?,
         ),
@@ -173,13 +172,7 @@ pub(super) fn selects_thread(items: &RelationArgs) -> bool {
 pub(super) async fn link(ctx: &Context, items: RelationArgs, linked: bool) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
     let number = linked_thread(&items.args, linked)?;
-    let space = ui::select_space(
-        ctx,
-        items.space,
-        Fallback::OwnSpace,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
+    let space = ui::select_space(ctx, items.space, Fallback::OwnSpace).await?;
     let thread = match linked {
         true => threads::link(&ctx.paths, space, number).await?,
         false => threads::unlink(&ctx.paths, space, number).await?,
