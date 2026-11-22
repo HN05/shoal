@@ -59,3 +59,47 @@ async fn a_message_no_coordinator_takes_reaches_the_user_from_its_space() {
         (Sender::Space, Some("child"))
     );
 }
+
+#[tokio::test]
+async fn files_relayed_back_to_the_machine_keeping_them_show_their_path() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = crate::stand_in::hub(&root, shoal_core::config::Config::default()).await;
+    let daemon = crate::stand_in::StandIn::default();
+    (hub.store)
+        .write(|tx| {
+            tx.execute(
+                "INSERT INTO space_files(id,space_id,space,source,name,path,bytes,created_at)
+                    VALUES (7,'child','child','alert','kept.md','/shoal/kept.md',1,1)",
+                [],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    // The event this machine passed up, back with its files: one it keeps,
+    // one whose record it removed since, and one another machine keeps.
+    let here = hub.machine_name(&daemon).await;
+    let file = |id: i64, name: &str, machine: &str| {
+        serde_json::from_value(json!({
+            "id": id, "space": "child", "name": name, "machine": machine,
+        }))
+        .unwrap()
+    };
+    let mut event = told(&[]);
+    event.record = ToldRecord::Alert {
+        kind: AlertKind::Message,
+        message: "from here".into(),
+        files: vec![
+            file(7, "kept.md", &here),
+            file(8, "removed.md", &here),
+            file(7, "other.md", "laptop"),
+        ],
+    };
+    hub.deliver_told(&daemon, event).await.unwrap();
+    let alerts = hub.notifications.list(true, 10).await.unwrap();
+    let [alert] = alerts.as_slice() else {
+        panic!("{alerts:?}");
+    };
+    let shown: Vec<_> = alert.files.iter().map(SentFile::shown).collect();
+    assert_eq!(shown, ["/shoal/kept.md", "other.md on machine laptop"]);
+}

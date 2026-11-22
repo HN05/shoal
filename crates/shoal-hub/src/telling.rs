@@ -10,7 +10,7 @@ use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     alerts::AlertKind,
-    files::SentFile,
+    files::{KeptCopy, SentFile},
     hub::{
         link::Call,
         routing::{Expired, HeldOutcome, Told, ToldAbout, ToldRecord},
@@ -21,6 +21,7 @@ use shoal_protocol::{
 use super::{membership, session::Calls};
 use crate::{Hub, daemon::Daemon, daemon::Receiver, log, time::UnixTime};
 use shoal_daemon_base::alerts::{About, NewAlert, Sender};
+use shoal_store::sent_files::kept_path;
 
 /// How often the outbox looks for what it keeps, besides when it keeps
 /// something new.
@@ -174,7 +175,7 @@ impl Hub {
         let receiver = daemon.receiver_from(&told.above).await?;
         let kind = told.record.kind();
         let (agent, user) = told.record.texts();
-        let files = told.record.files().to_vec();
+        let files = self.files_here(daemon, told.record.files()).await?;
         match (receiver, told.about) {
             (Some(Receiver::Here(coordinator)), about) => {
                 let about = about.map_or_else(About::default, |about| {
@@ -201,6 +202,17 @@ impl Hub {
             }
             (None, None) => anyhow::bail!("space {} has no agent to tell", told.above),
         }
+    }
+
+    /// `files` as this machine reads them: those it keeps itself by their
+    /// copy's path, as when an event it passed up comes back to it, without
+    /// those whose record is gone, as an alert of its own space shows them.
+    async fn files_here(&self, daemon: &dyn Daemon, files: &[SentFile]) -> Result<Vec<SentFile>> {
+        let machine = self.machine_name(daemon).await;
+        let files = files.to_vec();
+        (self.store)
+            .read(move |tx| kept_here(tx, &machine, files))
+            .await
     }
 
     /// Tell whoever sent what expired at the hub: the space that sent it,
@@ -237,19 +249,35 @@ impl Hub {
     }
 }
 
-/// The alert of `kind` with `message` about the space `about`, with the
-/// `files` another machine keeps, that a told event becomes: that space's
-/// own message, which it may withdraw, or else Shoal's alert about it.
+/// The alert of `kind` with `message` about the space `about`, with its
+/// `files`, that a told event becomes: that space's own message, which it
+/// may withdraw, or else Shoal's alert about it.
 fn told_alert(kind: AlertKind, about: About, message: String, files: Vec<SentFile>) -> NewAlert {
     let sender = match kind {
         AlertKind::Message if about.id.is_some() => Sender::Space,
         _ => Sender::Shoal,
     };
-    NewAlert {
+    let alert = NewAlert {
         sender,
-        relayed: files,
         ..NewAlert::shoal(kind, about, message)
+    };
+    alert.with_files(&files)
+}
+
+/// `files` with the copies `machine`, this one, keeps by their path here,
+/// dropping those whose record is gone.
+fn kept_here(tx: &Transaction<'_>, machine: &str, files: Vec<SentFile>) -> Result<Vec<SentFile>> {
+    let mut here = Vec::with_capacity(files.len());
+    for mut file in files {
+        if file.copy.is_on(machine) {
+            let Some(path) = kept_path(tx, file.id, &file.space)? else {
+                continue;
+            };
+            file.copy = KeptCopy::Here { path };
+        }
+        here.push(file);
     }
+    Ok(here)
 }
 
 /// What tells the space `above` of `event`, whose files `machine`, this

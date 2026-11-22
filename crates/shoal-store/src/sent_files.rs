@@ -1,6 +1,10 @@
 //! The files a message sent, as the column of its row that lists them
 //! holds and reads them.
+use std::path::PathBuf;
+
 use anyhow::Result;
+use rusqlite::{OptionalExtension as _, Transaction, params};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::files::SentFile;
 
 /// SQL for a `files` column with the files whose record IDs the JSON array
@@ -24,4 +28,17 @@ pub use crate::sent_files;
 pub fn sent_ids(files: &[SentFile]) -> Result<String> {
     let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
     Ok(serde_json::to_string(&ids)?)
+}
+
+/// The path of the copy this machine keeps of the file `id` attached to
+/// `space`, while its record lasts.
+pub fn kept_path(tx: &Transaction<'_>, id: i64, space: &SpaceId) -> Result<Option<PathBuf>> {
+    let path: Option<String> = tx
+        .query_row(
+            "SELECT path FROM space_files WHERE id=?1 AND space_id=?2",
+            params![id, space],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(path.map(PathBuf::from))
 }

@@ -1209,8 +1209,8 @@ yours. An action a space's permission sets to `propose` is refused from another
 machine, since its approval request would belong to that space's machine. This covers every command
 that reads or changes a space's state, and following an agent's session and
 reading an attached file, whose bytes come back as its machine reads them. An
-attached file stays on the machine that keeps its copy: a record of it from
-another machine, in `shoal files`, an alert or a thread, names that machine
+attached file stays on the machine that keeps its copy: a record of it on
+any other machine, in `shoal files`, an alert or a thread, names that machine
 where it would give the copy's path. The link to the hub carries such answers as byte streams beside
 its other traffic, each held to what its reader has taken, so a reader that
 falls behind holds up nothing else. A machine that received a request but

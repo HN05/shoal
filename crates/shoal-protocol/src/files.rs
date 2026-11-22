@@ -196,6 +196,11 @@ impl KeptCopy {
             };
         }
     }
+
+    /// Whether the copy is one `machine` keeps, seen from another machine.
+    pub fn is_on(&self, machine: &str) -> bool {
+        matches!(self, Self::Elsewhere { machine: on } if on == machine)
+    }
 }
 
 /// A file an agent sent with an alert or a post: the record of
