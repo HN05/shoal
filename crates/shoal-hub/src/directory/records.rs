@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use anyhow::{Context as _, Result};
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
-use shoal_protocol::hub::directory::{Conflict, Listed, Report, SpaceSummary};
+use shoal_protocol::hub::directory::{Conflict, KeptFiles, Listed, Report, SpaceSummary};
 
 use super::{super::members, numbers, repositories};
 use crate::packages::takeovers;
@@ -45,6 +45,7 @@ pub(super) fn apply(
 /// it; another machine's copy takes the place of each space it owned.
 pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute("DELETE FROM hub_space_claims WHERE member_id=?1", [member])?;
+    tx.execute("DELETE FROM hub_kept_files WHERE member_id=?1", [member])?;
     numbers::forget(tx, member)?;
     repositories::forget(tx, member)?;
     for space in held(tx, member)? {
@@ -74,6 +75,31 @@ pub(super) fn read(tx: &Transaction<'_>) -> Result<(Vec<Listed>, Vec<Conflict>)>
     }
     spaces.sort_by_key(|listed| listed.space.number);
     Ok((spaces, conflicts(tx)?))
+}
+
+/// Record that `member` keeps the files of the removed spaces `kept`, and
+/// of no others.
+pub(super) fn keep_files(tx: &Transaction<'_>, member: &MemberId, kept: &[SpaceId]) -> Result<()> {
+    tx.execute("DELETE FROM hub_kept_files WHERE member_id=?1", [member])?;
+    let mut insert =
+        tx.prepare("INSERT OR IGNORE INTO hub_kept_files(space_id, member_id) VALUES (?1,?2)")?;
+    for space in kept {
+        insert.execute(params![space, member])?;
+    }
+    Ok(())
+}
+
+/// Every removed space whose files a machine keeps, with that machine.
+pub(super) fn kept_files(tx: &Transaction<'_>) -> Result<Vec<KeptFiles>> {
+    let mut statement =
+        tx.prepare("SELECT space_id, member_id FROM hub_kept_files ORDER BY space_id, member_id")?;
+    let kept = statement.query_map([], |row| {
+        Ok(KeptFiles {
+            space: row.get(0)?,
+            machine: row.get(1)?,
+        })
+    })?;
+    Ok(kept.collect::<rusqlite::Result<_>>()?)
 }
 
 /// The machine that owns the space `id`, if any reported it.

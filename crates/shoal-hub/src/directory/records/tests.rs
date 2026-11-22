@@ -213,3 +213,32 @@ fn a_returning_machine_s_copy_of_a_space_taken_from_it_raises_no_conflict() {
     assert!(conflicts.is_empty());
     assert_eq!(listed(&mut db), [("a".into(), "desk".into())]);
 }
+
+/// Each removed space whose files a machine keeps, with that machine.
+fn kept(db: &mut Connection) -> Vec<(String, String)> {
+    let tx = db.transaction().unwrap();
+    (kept_files(&tx).unwrap().into_iter())
+        .map(|kept| (kept.space.to_string(), kept.machine.to_string()))
+        .collect()
+}
+
+fn keep(db: &mut Connection, member: &str, spaces: &[&str]) {
+    let tx = db.transaction().unwrap();
+    let spaces: Vec<SpaceId> = spaces.iter().map(|id| (*id).to_owned().into()).collect();
+    keep_files(&tx, &MemberId::from(member.to_owned()), &spaces).unwrap();
+    tx.commit().unwrap();
+}
+
+#[test]
+fn a_machines_kept_files_replace_those_it_reported_before_until_it_is_forgotten() {
+    let mut db = database();
+    keep(&mut db, "desk", &["a", "b"]);
+    keep(&mut db, "laptop", &["c"]);
+    keep(&mut db, "desk", &["b"]);
+    let expected = [("b".into(), "desk".into()), ("c".into(), "laptop".into())];
+    assert_eq!(kept(&mut db), expected);
+    let tx = db.transaction().unwrap();
+    forget(&tx, &MemberId::from("laptop".to_owned())).unwrap();
+    tx.commit().unwrap();
+    assert_eq!(kept(&mut db), [("b".into(), "desk".into())]);
+}

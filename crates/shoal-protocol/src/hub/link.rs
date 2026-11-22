@@ -320,14 +320,17 @@ pub enum Call {
     /// [`Reply::Updated`].
     Update,
     /// A machine's report of its spaces and repositories, with every
-    /// number it holds without a space, as for a removed space's issue proposals, which no
-    /// other space may take, and its capacity, which the hub places new
-    /// spaces by, once it measured it. Answered with [`Reply::Reported`]
-    /// and the numbers the hub keeps for the machine.
+    /// number it holds without a space, as for a removed space's issue
+    /// proposals, which no other space may take, every removed space whose
+    /// files it keeps, and its capacity, which the hub places new spaces
+    /// by, once it measured it. Answered with [`Reply::Reported`] and the
+    /// numbers the hub keeps for the machine.
     Report {
         report: Report,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         reserved: Vec<SpaceNumber>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        kept_files: Vec<SpaceId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         capacity: Option<shoal_schedule::placement::snapshot::Capacity>,
         /// Every repository it registers, which replaces what the hub had

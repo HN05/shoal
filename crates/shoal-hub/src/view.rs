@@ -27,6 +27,9 @@ impl Hub {
             return Ok(None);
         };
         directory.spaces.retain(|listed| listed.machine != machine);
+        // Callers list live spaces; only routing reads where removed ones'
+        // files are kept.
+        directory.kept_files.clear();
         if let Some(root) = daemon.reach_root(caller).await? {
             let reached = daemon.spaces_within(Some(&root)).await?;
             let reached = reached.into_iter().map(|space| space.id).collect();

@@ -24,29 +24,38 @@ mod repositories;
 
 pub(super) use records::{forget, owner};
 
+/// What a machine holds of the spaces it has not, which it reports with
+/// its spaces: the numbers no other space may take, as for a removed
+/// space's issue proposals, and the removed spaces whose files it keeps.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Held {
+    pub(crate) reserved: Vec<SpaceNumber>,
+    pub(crate) kept_files: Vec<SpaceId>,
+}
+
 impl Hub {
-    /// Record the machine `member`'s `report` of its spaces, the numbers
-    /// it holds without a space, `reserved`, and its `repositories`, none
-    /// when they did not change, alerting the user to each space ID it
-    /// reported that another machine owns, deleting the packages of the
-    /// spaces that ended there, and return the numbers the hub keeps for
-    /// the machine.
+    /// Record the machine `member`'s `report` of its spaces, what it
+    /// `held` without them, and its `repositories`, none when they did not
+    /// change, alerting the user to each space ID it reported that another
+    /// machine owns, deleting the packages of the spaces that ended there,
+    /// and return the numbers the hub keeps for the machine.
     pub(super) async fn record_report(
         &self,
         daemon: &dyn Daemon,
         member: &MemberId,
         report: Report,
-        (reserved, repositories): (Vec<SpaceNumber>, Option<Vec<RegisteredRepository>>),
+        (held, repositories): (Held, Option<Vec<RegisteredRepository>>),
     ) -> Result<Numbering> {
         let member = member.clone();
         let (conflicts, numbering) = (self.store)
             .write(move |tx| {
-                numbers::reserve_held(tx, &member, &reserved)?;
+                numbers::reserve_held(tx, &member, &held.reserved)?;
                 let conflicts = records::apply(tx, &member, report)?;
                 if let Some(repositories) = &repositories {
                     repositories::replace(tx, &member, repositories)?;
                 }
                 numbers::replace_held(tx, &member)?;
+                records::keep_files(tx, &member, &held.kept_files)?;
                 Ok((conflicts, numbers::kept_for(tx, &member)?))
             })
             .await?;
@@ -121,15 +130,19 @@ impl Hub {
     }
 
     /// The directory this daemon keeps as the hub: its machines, with
-    /// whether each is connected and when it was last seen, and their
-    /// spaces, without the repositories [`Self::local_repositories`] lists.
+    /// whether each is connected and when it was last seen, their spaces,
+    /// and the removed ones whose files they keep, without the repositories
+    /// [`Self::local_repositories`] lists.
     pub(super) async fn local_directory(&self, daemon: &dyn Daemon) -> Result<Directory> {
         let machines = self.local_machines(daemon).await?;
-        let (spaces, conflicts) = self.store.read(records::read).await?;
+        let ((spaces, conflicts), kept_files) = (self.store)
+            .read(|tx| Ok((records::read(tx)?, records::kept_files(tx)?)))
+            .await?;
         Ok(Directory {
             machines,
             spaces,
             conflicts,
+            kept_files,
             ..Directory::default()
         })
     }

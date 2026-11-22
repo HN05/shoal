@@ -24,7 +24,7 @@ mod reading;
 mod records;
 mod retention;
 
-pub(crate) use records::{claim, count, keep_removed, rebase, record, restore};
+pub(crate) use records::{claim, count, keep_removed, kept_ids, rebase, record, restore};
 
 use layout::{Kept, Layout};
 

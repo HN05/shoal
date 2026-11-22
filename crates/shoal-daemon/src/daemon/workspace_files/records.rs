@@ -229,6 +229,17 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The IDs of the removed workspaces and removed chats whose files are
+/// kept.
+pub(crate) fn kept_ids(db: &Connection) -> Result<Vec<SpaceId>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT DISTINCT space_id FROM space_files WHERE {GONE} ORDER BY space_id"
+        ))?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// The removed workspaces and removed chats whose files `home` keeps though
 /// their record expired, or that never had one. The record stays until the
 /// files are deleted, so a failed deletion still lists them as the space's.

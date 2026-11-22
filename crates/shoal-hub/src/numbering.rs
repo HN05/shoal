@@ -67,15 +67,6 @@ impl Hub {
             .await
     }
 
-    /// The numbers this machine holds without a space, as for a removed
-    /// space's issue proposals, which no other machine's space may take.
-    pub(super) async fn reserved_numbers(&self) -> Result<Vec<SpaceNumber>> {
-        let records = self.records.clone();
-        self.store
-            .read(move |tx| records.reserved_numbers(tx))
-            .await
-    }
-
     /// Give new spaces the smallest number free here again, once this
     /// machine neither takes the hub role nor is a member of a hub.
     pub(super) async fn forget_numbering_unless_joined(&self) -> Result<()> {

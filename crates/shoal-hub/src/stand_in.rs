@@ -443,6 +443,10 @@ impl Records for StandInRecords {
         Ok(Vec::new())
     }
 
+    fn kept_files(&self, _: &Connection) -> Result<Vec<SpaceId>> {
+        Ok(Vec::new())
+    }
+
     fn space_number(
         &self,
         _: &Connection,

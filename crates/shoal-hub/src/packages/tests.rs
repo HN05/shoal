@@ -13,6 +13,7 @@ use shoal_protocol::hub::directory::{Report, SpaceSummary};
 use super::Sent;
 use crate::{
     Hub,
+    directory::Held,
     stand_in::{self, StandIn},
     streams::{Incoming, Outgoing},
     test_support::linked,
@@ -56,7 +57,7 @@ pub(crate) async fn report(hub: &Hub, member: &str, ids: &[&str]) {
         &StandIn::default(),
         &member,
         Report::Whole(spaces),
-        (Vec::new(), None),
+        (Held::default(), None),
     ))
     .await
     .unwrap();

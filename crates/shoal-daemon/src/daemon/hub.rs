@@ -30,7 +30,7 @@ use shoal_protocol::{
 };
 use shoal_schedule::priority::Priority;
 
-use super::{approvals, manager::Manager, messages, scope::Caller, tree};
+use super::{approvals, manager::Manager, messages, scope::Caller, tree, workspace_files};
 
 pub(crate) use shoal_hub::{Elsewhere, Event, Incoming, Named, Outgoing, Unanswered, numbering};
 
@@ -359,6 +359,10 @@ impl Records for HubRecords {
         )?;
         let numbers = statement.query_map([], |row| row.get(0))?;
         Ok(numbers.collect::<rusqlite::Result<_>>()?)
+    }
+
+    fn kept_files(&self, db: &Connection) -> Result<Vec<SpaceId>> {
+        workspace_files::kept_ids(db)
     }
 
     fn space_number(

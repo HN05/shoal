@@ -145,8 +145,17 @@ pub struct Conflict {
     pub since: UnixTime,
 }
 
+/// A removed space whose attached files a machine keeps, which a request
+/// for them reaches there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptFiles {
+    pub space: SpaceId,
+    pub machine: MemberId,
+}
+
 /// The hub's directory: its machines, every space and repository they
-/// reported, and the space IDs two of them report.
+/// reported, the space IDs two of them report, and the removed spaces
+/// whose files they keep.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Directory {
     /// The joined machines, the hub's own among them, with when each was
@@ -157,6 +166,8 @@ pub struct Directory {
     pub conflicts: Vec<Conflict>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub repositories: Vec<ListedRepository>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept_files: Vec<KeptFiles>,
 }
 
 impl Listed {
@@ -258,6 +269,8 @@ impl HubView {
             spaces,
             conflicts,
             repositories: _,
+            // A view leaves them out.
+            kept_files: _,
         } = self.directory;
         let below = self.below_elsewhere.into_iter();
         (std::iter::once(ViewPart::Here(self.machine)))

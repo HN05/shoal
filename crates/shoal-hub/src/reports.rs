@@ -1,7 +1,7 @@
 //! A machine's reports of its spaces to the hub: every space once its link
 //! opens, which replaces what the hub had for it, then what changed, once a
-//! burst of changes settles, each with the numbers the machine holds
-//! without a space and its capacity, which the hub places new spaces by,
+//! burst of changes settles, each with what the machine holds of the
+//! spaces it has not and its capacity, which the hub places new spaces by,
 //! and with every repository it registers, once and whenever they change.
 //! The hub's own machine reports to its own directory the same way, for as
 //! long as it takes the hub role.
@@ -11,10 +11,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use shoal_ids::{
-    member_ids::MemberId,
-    space_ids::{SpaceId, SpaceNumber},
-};
+use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::hub::{
     directory::{RegisteredRepository, Report, SpaceSummary},
     link::{Call, Reply},
@@ -23,7 +20,7 @@ use shoal_schedule::placement::snapshot::Capacity;
 use tokio::{sync::watch, time::Instant};
 
 use super::session::Calls;
-use crate::{Hub, daemon::Daemon, log};
+use crate::{Hub, daemon::Daemon, directory::Held, log};
 
 mod capacity;
 mod summaries;
@@ -87,12 +84,12 @@ impl Hub {
         // keeps no space's summary from naming it.
         let (mut origins, mut registered_origins) = Default::default();
         let mut sent = comparable(self.space_summaries(daemon, &mut origins).await?)?;
-        let mut reserved = self.reserved_numbers().await?;
+        let mut held = self.held().await?;
         let mut registered = (self.registrations(daemon, &mut registered_origins)).await?;
         let whole = sent.values().map(|(summary, _)| summary.clone()).collect();
         let report = (Report::Whole(whole), measured.borrow_and_update().clone());
-        let held = (reserved.clone(), Some(registered.clone()));
-        self.report(daemon, &sink, report, held).await?;
+        let holds = (held.clone(), Some(registered.clone()));
+        self.report(daemon, &sink, report, holds).await?;
         self.reported.0.send_replace(sent.keys().cloned().collect());
         // Counted from the last report, so changes that report nothing do
         // not put the next one off.
@@ -112,13 +109,13 @@ impl Hub {
             stored.borrow_and_update();
             agents.borrow_and_update();
             let current = comparable(self.space_summaries(daemon, &mut origins).await?)?;
-            let held = self.reserved_numbers().await?;
+            let holds = self.held().await?;
             let registrations = (self.registrations(daemon, &mut registered_origins)).await?;
             let changes = changes(&sent, &current);
             let repositories = (registrations != registered).then(|| registrations.clone());
             if reported.elapsed() >= QUIET
                 || changes.is_some()
-                || held != reserved
+                || holds != held
                 || repositories.is_some()
                 || moved
             {
@@ -127,14 +124,14 @@ impl Hub {
                     removed: Vec::new(),
                 });
                 let report = (changes, measured.borrow_and_update().clone());
-                self.report(daemon, &sink, report, (held.clone(), repositories))
+                self.report(daemon, &sink, report, (holds.clone(), repositories))
                     .await?;
                 self.reported
                     .0
                     .send_replace(current.keys().cloned().collect());
                 reported = Instant::now();
             }
-            (sent, reserved, registered) = (current, held, registrations);
+            (sent, held, registered) = (current, holds, registrations);
         }
     }
 
@@ -203,27 +200,41 @@ impl Hub {
         }
     }
 
+    /// What this machine holds of the spaces it has not.
+    async fn held(&self) -> Result<Held> {
+        let records = self.records.clone();
+        (self.store)
+            .read(move |db| {
+                Ok(Held {
+                    reserved: records.reserved_numbers(db)?,
+                    kept_files: records.kept_files(db)?,
+                })
+            })
+            .await
+    }
+
     /// Send `report` to `sink`, with this machine's capacity, none before
-    /// it measured it, `reserved`, the numbers it holds without a space,
-    /// and its `repositories`, none when they are as it last sent them, and
-    /// number this machine's spaces from what the hub answers.
+    /// it measured it, what it `held` of the spaces it has not, and its
+    /// `repositories`, none when they are as it last sent them, and number
+    /// this machine's spaces from what the hub answers.
     async fn report(
         &self,
         daemon: &dyn Daemon,
         sink: &Sink<'_>,
         (report, capacity): (Report, Option<Capacity>),
-        (reserved, repositories): (Vec<SpaceNumber>, Option<Vec<RegisteredRepository>>),
+        (held, repositories): (Held, Option<Vec<RegisteredRepository>>),
     ) -> Result<()> {
         let numbering = match sink {
             Sink::Hub(own) => {
                 self.capacities.keep(own, &report, capacity);
-                let held = (reserved, repositories);
+                let held = (held, repositories);
                 self.record_report(daemon, own, report, held).await?
             }
             Sink::Link(calls) => {
                 let call = Call::Report {
                     report,
-                    reserved,
+                    reserved: held.reserved,
+                    kept_files: held.kept_files,
                     capacity,
                     repositories,
                 };

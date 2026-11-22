@@ -31,6 +31,7 @@ fn a_view_larger_than_a_frame_arrives_in_pages_whole() {
             spaces,
             conflicts: Vec::new(),
             repositories: Vec::new(),
+            kept_files: Vec::new(),
         },
         below_elsewhere: vec![(
             shoal_ids::space_ids::SpaceId::from("here".to_owned()),
@@ -84,6 +85,7 @@ fn a_space_whose_threads_fill_more_than_a_frame_arrives_whole() {
             spaces: vec![listed],
             conflicts: Vec::new(),
             repositories: Vec::new(),
+            kept_files: Vec::new(),
         },
         below_elsewhere: Vec::new(),
     };

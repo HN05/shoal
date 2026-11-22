@@ -99,12 +99,17 @@ impl Hub {
             Call::Report {
                 report,
                 reserved,
+                kept_files,
                 capacity,
                 repositories,
             } => {
                 ensure_machine(member)?;
                 self.capacities.keep(&member.id, &report, capacity);
-                let held = (reserved, repositories);
+                let held = directory::Held {
+                    reserved,
+                    kept_files,
+                };
+                let held = (held, repositories);
                 Reply::Reported(
                     self.record_report(&**daemon, &member.id, report, held)
                         .await?,
