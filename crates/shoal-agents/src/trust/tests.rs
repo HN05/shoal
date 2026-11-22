@@ -14,6 +14,7 @@ fn registered(fixture: &Fixture, path: &Path) -> Repository {
         name: None,
         workspaces_dir: path.with_extension("workspaces"),
         contribution: false,
+        shared_url: None,
     };
     let mut repositories = fixture.daemon.repositories.lock().unwrap();
     repositories.push(repository.clone());
