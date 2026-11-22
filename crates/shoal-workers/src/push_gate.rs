@@ -16,9 +16,8 @@ use crate::{
     client::approvals,
     client::connection::CommandPaths,
     git,
-    scoping::Scoping,
     tools::Tool,
-    workspace_context::{ScopeOrder, WorkspaceContext},
+    workspace_context::{self, ScopeOrder},
 };
 use shoal_protocol::{
     approvals::PushSpecification, links::PushOutcome, space_names::SpaceSelector,
@@ -287,10 +286,7 @@ fn one_line(message: &str) -> String {
 /// caller's own, which a workspace's scope lists first.
 async fn workspace(paths: &CommandPaths) -> Result<SpaceSelector> {
     let workspaces = crate::client::spaces::list(paths).await?.into_workspaces();
-    let cwd = crate::fsutil::current_dir::current_directory()?;
-    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
-    let workspace = context
-        .resolve(None, Scoping::of_workspace(), ScopeOrder::AfterDirectory)
+    let workspace = workspace_context::current(&workspaces, ScopeOrder::AfterDirectory)?
         .context("the push comes from no workspace")?;
     Ok(SpaceSelector::id(&workspace.id))
 }
