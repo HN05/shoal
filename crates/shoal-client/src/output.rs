@@ -23,6 +23,7 @@ pub mod inbox;
 pub mod items;
 pub mod leases;
 pub mod overviews;
+pub mod queue;
 pub mod removal;
 pub mod repositories;
 pub mod restore;

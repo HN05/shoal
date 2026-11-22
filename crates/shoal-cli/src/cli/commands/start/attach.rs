@@ -148,9 +148,19 @@ async fn run_named(ctx: &Context, placed: Placed, place_name: Option<PlaceName>)
     let space = match (operation, space.to_workspace()) {
         (Some(operation), Some(workspace)) => {
             let agent = entry.as_ref().map(|entry| entry.agent.clone());
-            match preparation::follow_preparation(ctx, workspace.clone(), operation, agent).await? {
+            match shoal_workers::starts::follow_preparation(
+                ctx,
+                workspace.clone(),
+                operation,
+                agent,
+            )
+            .await?
+            {
                 Some(prepared) => Box::new(prepared.into()),
-                None => return preparation::unprepared(ctx, &workspace, entry.is_some()).await,
+                None => {
+                    return shoal_workers::starts::unprepared(ctx, &workspace, entry.is_some())
+                        .await;
+                }
             }
         }
         // An existing workspace opened without an agent, which the daemon
@@ -169,7 +179,7 @@ async fn run_named(ctx: &Context, placed: Placed, place_name: Option<PlaceName>)
         Some(entry) => start_held(ctx, &space, &entry, place_name).await,
         None => {
             let workspace = (space.to_workspace()).context("a chat starts with its agent")?;
-            preparation::shell_in(ctx, &workspace).await
+            shoal_workers::starts::shell_in(ctx, &workspace).await
         }
     }
 }

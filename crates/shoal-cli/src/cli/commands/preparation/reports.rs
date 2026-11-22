@@ -2,10 +2,7 @@
 //! creation without an agent enters it.
 use anyhow::Result;
 
-use super::{
-    finish::{finish_workspace, show_prepared},
-    prepared,
-};
+use super::prepared;
 use crate::{
     cli::{
         commands::{
@@ -26,6 +23,7 @@ use crate::{
 use shoal_protocol::launches::Launch;
 use shoal_protocol::protocol::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_workers::starts::{Starting, finish_workspace};
 
 /// Enter the workspace a creation `started` without an agent where a start
 /// without one enters it from the user's terminal: here, or in a place
@@ -94,7 +92,7 @@ pub(in crate::cli::commands) async fn report_launched(
 async fn follow_elsewhere(ctx: &Context, started: StartedWorkspace, machine: &str) -> Result<i32> {
     let reused = started.reused;
     let Prepared { workspace, agent } = prepared_on(ctx, started, Some(machine)).await?;
-    show_prepared(ctx, &workspace, reused)?;
+    ctx.prepared(&workspace, reused)?;
     match agent {
         Some(entry) => start::report_queued_in(ctx, &workspace.name, &entry),
         None => Ok(0),

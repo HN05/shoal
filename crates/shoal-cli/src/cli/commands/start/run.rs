@@ -8,10 +8,7 @@ use std::ffi::OsString;
 use crate::{
     agent::Agent,
     agents::HomeRecords,
-    cli::{
-        commands::{preparation, queued_agents::Hold},
-        context::Context,
-    },
+    cli::{commands::queued_agents::Hold, context::Context},
     config::{modes::ModeName, templates::Subject},
     protocol::{ItemContext, operations::QueuedLaunch},
     start_plan::QueuedStart,
@@ -87,7 +84,7 @@ pub(super) async fn host(
         HomeRecords::Workspace(workspace) => {
             let owner = Owner::Workspace(&workspace.id);
             hosting::host_space(ctx.caller(), owner, runs_agent, &label).await?;
-            preparation::enter_workspace(ctx, workspace, agent).await
+            shoal_workers::starts::enter_workspace(ctx, workspace, agent).await
         }
         HomeRecords::Chat { chat, .. } => {
             hosting::host_space(ctx.caller(), Owner::Chat(&chat.id), runs_agent, &label).await

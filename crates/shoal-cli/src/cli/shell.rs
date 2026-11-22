@@ -160,28 +160,22 @@ pub fn completions(shell: clap_complete::Shell) -> Result<String> {
     Ok(script)
 }
 
-/// Ask the calling shell to enter `path`, whatever the output format. A
-/// scoped process's shell, including one that cleared its token, is its
-/// agent's, which keeps its own working directory, so it is never moved.
+/// Ask the calling shell to enter `path`, whatever the output format,
+/// warning a user on a terminal whose shell lacks the integration it needs.
 pub fn navigate(ctx: &CliContext, path: &Path) -> Result<()> {
-    if crate::process::scoped::inherits_scope(&ctx.paths.state) {
-        return Ok(());
+    if !shoal_workers::hosting::enter_directory(&ctx.paths, path)? {
+        not_integrated(ctx.json);
     }
-    let json = ctx.json;
-    if let Some(destination) = std::env::var_os(crate::env::SHELL_DIRECTIVE) {
-        let path = path
-            .to_str()
-            .context("shell navigation path is not UTF-8")?;
-        ensure!(
-            !path.contains(['\n', '\r']),
-            "shell navigation does not support newlines in paths"
-        );
-        std::fs::write(destination, format!("{path}\n")).context("write shell directory change")?;
-    } else if CliContext::is_interactive(json) {
+    Ok(())
+}
+
+/// Warn a user on a terminal that its shell cannot follow a command into a
+/// directory without Shoal's shell integration.
+pub fn not_integrated(json: bool) {
+    if CliContext::is_interactive(json) {
         eprintln!(
             "{} shell integration is not loaded; run `{INIT_COMMAND}` to enable directory changes",
             Palette::stderr(json).paint(Style::Warning, "warning:")
         );
     }
-    Ok(())
 }

@@ -8,6 +8,7 @@ mod here;
 mod launch;
 mod naming;
 mod session;
+mod shell;
 
 use std::io::IsTerminal;
 
@@ -20,6 +21,7 @@ pub use here::{
 pub use launch::{AgentSpace, opens_beside, run_agent, start_place};
 pub use naming::{Labels, Renamed, relabel_space};
 pub use session::{Session, run_session};
+pub use shell::enter_directory;
 
 use crate::{client::connection::CommandPaths, places::Launcher};
 

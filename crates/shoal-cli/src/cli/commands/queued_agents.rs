@@ -12,18 +12,6 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
-/// When the queued `entry` starts: once nothing blocks it and a heavy slot
-/// is free.
-pub(super) fn starts_when(entry: &QueueEntry) -> String {
-    match entry.blockers.as_slice() {
-        [] => "when a heavy slot is free".to_owned(),
-        blockers => format!(
-            "once it is no longer blocked by {} and a heavy slot is free",
-            blockers.join(", ")
-        ),
-    }
-}
-
 pub(super) use crate::client::queue::Hold;
 
 /// Run the launch `entry`, which this process marked starting for itself,

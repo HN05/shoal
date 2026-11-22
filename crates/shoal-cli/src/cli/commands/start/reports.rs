@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
-    cli::{commands::queued_agents, context::Context},
+    cli::context::Context,
     model::{QueueEntry, Space},
     state::QueueState,
 };
@@ -47,7 +47,7 @@ fn queued(space: &Space, entry: &QueueEntry, waiting: usize) -> String {
         space.number,
         space.name,
         entry.position.unwrap_or(waiting),
-        queued_agents::starts_when(entry)
+        crate::client::output::queue::starts_when(entry)
     )
 }
 
@@ -57,15 +57,6 @@ pub(in crate::cli::commands) fn report_queued_in(
     name: &str,
     entry: &QueueEntry,
 ) -> Result<i32> {
-    let text = match entry.state {
-        QueueState::Queued => format!(
-            "Queued {} in {name} (position {}); it starts {}",
-            entry.agent,
-            entry.position.unwrap_or(1),
-            queued_agents::starts_when(entry)
-        ),
-        _ => format!("Starting {} in {name}", entry.agent),
-    };
-    ctx.emit(&text, entry)?;
+    ctx.emit(&crate::client::output::queue::queued_in(name, entry), entry)?;
     Ok(0)
 }
