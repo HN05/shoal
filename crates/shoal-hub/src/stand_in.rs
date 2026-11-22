@@ -68,6 +68,8 @@ pub(crate) async fn hub(root: &tempfile::TempDir, config: Config) -> Arc<Hub> {
 #[derive(Default)]
 pub(crate) struct StandIn {
     registered: std::sync::Mutex<Vec<Registered>>,
+    /// The repositories whose local config a write fails to replace.
+    refusing: std::sync::Mutex<HashSet<RepositoryId>>,
 }
 
 /// A repository a test registers with the stand-in, with the text of its
@@ -82,7 +84,21 @@ impl StandIn {
     /// A stand-in with `registered` repositories.
     pub(crate) fn registering(registered: Vec<Registered>) -> Self {
         let registered = std::sync::Mutex::new(registered);
-        Self { registered }
+        let refusing = Default::default();
+        Self {
+            registered,
+            refusing,
+        }
+    }
+
+    /// Fail every write of the local config of the repository `id` while
+    /// `refuse` holds.
+    pub(crate) fn refuse_writes(&self, id: &RepositoryId, refuse: bool) {
+        let mut refusing = self.refusing.lock().unwrap();
+        match refuse {
+            true => refusing.insert(id.clone()),
+            false => refusing.remove(id),
+        };
     }
 
     /// The repositories registered now.
@@ -151,6 +167,9 @@ impl Registrations for StandIn {
         let taken = (|| {
             if self.local_config(id)? != expected {
                 bail!("the local config of {id} changed");
+            }
+            if self.refusing.lock().unwrap().contains(id) {
+                bail!("the local config of {id} cannot be written");
             }
             let mut kept = None;
             self.change(id, |found| {

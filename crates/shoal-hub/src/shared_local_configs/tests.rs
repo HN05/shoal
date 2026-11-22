@@ -154,6 +154,45 @@ async fn a_copy_replaces_shared_registrations_files_and_is_agreed_on_for_other_o
 }
 
 #[tokio::test]
+async fn a_copy_one_registration_cannot_take_comes_again_without_holding_back_the_others() {
+    let root = tempfile::tempdir().unwrap();
+    let registrations = vec![
+        registered("app", APP, Some(APP), None),
+        registered("other", OTHER, Some(OTHER), Some("[setup]\n")),
+    ];
+    let (hub, daemon) = hub(&root, registrations).await;
+    let stand_in = daemon.clone();
+    let daemon: Arc<dyn Daemon> = daemon;
+    let app = RepositoryId::from("app");
+    stand_in.refuse_writes(&app, true);
+    let edits = [APP, OTHER].map(|url| sharing::Edit {
+        key: Origin::of(url),
+        value: Some(VALID.to_owned()),
+    });
+    let edits = edits.to_vec();
+    let copies = (hub.store)
+        .write(move |tx| copies::record::<SharedLocalConfigs>(tx, edits))
+        .await
+        .unwrap();
+    let take = hub.take_sent_copies::<SharedLocalConfigs>(&daemon, true, copies);
+    take.await.unwrap();
+    assert_eq!(
+        local_configs_of(&stand_in),
+        [("app".into(), None), ("other".into(), Some(VALID.into()))]
+    );
+    assert_eq!(alerts_of(&hub, AlertKind::SharedFileKept).await.len(), 1);
+    // The next round reads the copy the registration could not take.
+    stand_in.refuse_writes(&app, false);
+    let own = To::Own(hub.own_member().await.unwrap());
+    let round = hub.share_round::<SharedLocalConfigs>(&daemon, &own, true);
+    round.await.unwrap();
+    assert_eq!(
+        local_configs_of(&stand_in)[0],
+        ("app".into(), Some(VALID.into()))
+    );
+}
+
+#[tokio::test]
 async fn a_registration_that_comes_to_be_shared_takes_the_hub_s_copy() {
     let root = tempfile::tempdir().unwrap();
     let registrations = vec![

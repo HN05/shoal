@@ -228,7 +228,8 @@ impl Hub {
     /// their origins, given the copies it `agreed` on with the hub and the
     /// edits it `sent` for them, telling the user of each edit a copy
     /// replaced; the copies it agrees on now, those of origins it shares
-    /// none of included.
+    /// none of included. A copy one of the registrations could not take
+    /// is not agreed on, and the next round reads it again.
     async fn take_local_config_copies(
         &self,
         daemon: &dyn Daemon,
@@ -244,11 +245,20 @@ impl Hub {
                 continue;
             }
             let sent = sent.iter().find(|sent| sent.key == copy.key);
-            for repository in shared.get(&copy.key).into_iter().flatten() {
-                let id = &repository.id;
-                kept.extend(take_local_config(daemon, id, &copy, agreed, sent).await?);
+            let registrations = shared.get(&copy.key).map(Vec::as_slice);
+            let written = take_into(
+                daemon,
+                registrations.unwrap_or_default(),
+                &copy,
+                agreed,
+                sent,
+            );
+            let written = written.await;
+            kept.extend(written.kept);
+            match written.all {
+                true => taken.push(copy),
+                false => self.shared_local_configs.sharing.missed(),
             }
-            taken.push(copy);
         }
         if !kept.is_empty() {
             self.tell_local_configs_kept(daemon, &kept).await;
@@ -326,6 +336,44 @@ impl Hub {
 fn problem(text: &str) -> Option<String> {
     let parsed = shoal_core::config::repo::parse(text);
     parsed.err().map(|error| format!("{error:#}"))
+}
+
+/// What writing a copy into the registrations of its origin came to.
+struct Written {
+    /// The backups of the edits it replaced.
+    kept: Vec<PathBuf>,
+    /// Whether every registration took it.
+    all: bool,
+}
+
+/// Write the hub's `copy` into the local config of each of
+/// `registrations`, given the copy this machine `agreed` on before and the
+/// edit it `sent` for this copy, logging each that could not take it.
+async fn take_into(
+    daemon: &dyn Daemon,
+    registrations: &[Repository],
+    copy: &Copy<SharedLocalConfigs>,
+    agreed: Option<&Copy<SharedLocalConfigs>>,
+    sent: Option<&Edit<SharedLocalConfigs>>,
+) -> Written {
+    let mut written = Written {
+        kept: Vec::new(),
+        all: true,
+    };
+    for repository in registrations {
+        let id = &repository.id;
+        match take_local_config(daemon, id, copy, agreed, sent).await {
+            Ok(kept) => written.kept.extend(kept),
+            Err(error) => {
+                log!(
+                    "hub: could not give {} the hub's copy of its local config: {error:#}",
+                    repository.display_name()
+                );
+                written.all = false;
+            }
+        }
+    }
+    written
 }
 
 /// Write the hub's `copy` into the local config of the registration `id`,

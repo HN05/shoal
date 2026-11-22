@@ -121,9 +121,15 @@ impl Sharing {
         self.changed.notify_one();
     }
 
+    /// Read the hub's copies again on the next round, since one of them
+    /// was not taken.
+    pub(crate) fn missed(&self) {
+        self.missed.store(true, Ordering::SeqCst);
+    }
+
     /// Read the hub's copies on the next round, which starts at once.
     pub(crate) fn reread(&self) {
-        self.missed.store(true, Ordering::SeqCst);
+        self.missed();
         self.changed();
     }
 
@@ -254,15 +260,17 @@ impl Hub {
         let items = S::items(self, &**daemon, &agreed).await?;
         let edits = items::edits::<S>(&items, &agreed, knows);
         let edits = S::sendable(self, &**daemon, edits).await;
-        let missed = sharing.missed.load(Ordering::SeqCst);
+        // Taken, so a copy the kind does not take in this round's
+        // exchange has the next round read the copies again.
+        let missed = sharing.missed.swap(false, Ordering::SeqCst);
         if edits.is_empty() && knows && !missed {
             return Ok(());
         }
         let shared = self.exchange_copies::<S>(daemon, hub, &key, agreed, edits);
         let shared = shared.await;
-        sharing.missed.store(shared.is_err(), Ordering::SeqCst);
-        if shared.is_ok() {
-            S::read_copies(self);
+        match &shared {
+            Ok(()) => S::read_copies(self),
+            Err(_) => sharing.missed(),
         }
         shared
     }
@@ -369,7 +377,7 @@ impl Hub {
         };
         let taken = taken.await;
         if taken.is_err() {
-            sharing.missed.store(true, Ordering::SeqCst);
+            sharing.missed();
         }
         taken
     }
