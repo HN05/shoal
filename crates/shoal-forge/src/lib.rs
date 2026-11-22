@@ -2,6 +2,33 @@
 //! through each forge's own CLI login or REST API. Callers choose the
 //! [`transport::account::Account`] a request acts as; this crate never decides
 //! who may act.
+
+/// Run `$body` with `$backend` bound to the backend `$kind` names. The
+/// traits of what forges do their own way forward their methods through it,
+/// so it comes before the modules that declare them.
+macro_rules! dispatch {
+    ($kind:expr, $backend:ident => $body:expr) => {
+        match $kind {
+            ::shoal_forge_types::backends::ForgeKind::GitHub => {
+                let $backend = ::shoal_forge_types::backends::github::GitHub;
+                $body
+            }
+            ::shoal_forge_types::backends::ForgeKind::Forgejo => {
+                let $backend = ::shoal_forge_types::backends::forgejo::Forgejo;
+                $body
+            }
+            ::shoal_forge_types::backends::ForgeKind::GitLab => {
+                let $backend = ::shoal_forge_types::backends::gitlab::GitLab;
+                $body
+            }
+            ::shoal_forge_types::backends::ForgeKind::Bitbucket => {
+                let $backend = ::shoal_forge_types::backends::bitbucket::Bitbucket;
+                $body
+            }
+        }
+    };
+}
+
 pub mod backends;
 pub mod branches;
 pub mod capability;

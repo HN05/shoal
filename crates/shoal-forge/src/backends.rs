@@ -40,31 +40,6 @@ impl ForgeKind {
     }
 }
 
-/// Run `$body` with `$backend` bound to the backend `$kind` names. Area
-/// modules below this one forward their traits' methods through it.
-macro_rules! dispatch {
-    ($kind:expr, $backend:ident => $body:expr) => {
-        match $kind {
-            ::shoal_forge_types::backends::ForgeKind::GitHub => {
-                let $backend = ::shoal_forge_types::backends::github::GitHub;
-                $body
-            }
-            ::shoal_forge_types::backends::ForgeKind::Forgejo => {
-                let $backend = ::shoal_forge_types::backends::forgejo::Forgejo;
-                $body
-            }
-            ::shoal_forge_types::backends::ForgeKind::GitLab => {
-                let $backend = ::shoal_forge_types::backends::gitlab::GitLab;
-                $body
-            }
-            ::shoal_forge_types::backends::ForgeKind::Bitbucket => {
-                let $backend = ::shoal_forge_types::backends::bitbucket::Bitbucket;
-                $body
-            }
-        }
-    };
-}
-
 mod area;
 pub(crate) use area::{
     Activity, Attachments, BranchFields, Branches, Checks, Conventions, Items, Merging, Reactions,
