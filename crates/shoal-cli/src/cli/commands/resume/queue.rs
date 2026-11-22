@@ -45,9 +45,7 @@ pub(super) async fn queue_below(
     queue_all(ctx, stopped, resumed, now).await
 }
 
-/// Executions stopped so their workspaces could move, by workspace.
-pub(in crate::cli::commands) type Stopped =
-    std::collections::BTreeMap<SpaceId, std::collections::BTreeSet<ExecutionId>>;
+pub(in crate::cli::commands) use shoal_workers::resume::queue::Stopped;
 
 /// Queue the restores of the agents among `stopped`; their workspaces'
 /// stopped commands go to them, and those of workspaces without one stay
@@ -56,16 +54,7 @@ pub(in crate::cli::commands) async fn queue_stopped(
     ctx: &Context,
     stopped: &Stopped,
 ) -> Result<Queued> {
-    let mut queued = Vec::new();
-    for (space, executions) in stopped {
-        let space = super::present_space(ctx, &SpaceSelector::id(space)).await?;
-        let mut saved = saved(ctx, &space).await?;
-        saved.retain(|id| executions.contains(id));
-        if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
-            queued.push((space, saved));
-        }
-    }
-    Ok(queue_each(ctx, queued, false).await)
+    shoal_workers::resume::queue::queue_stopped(&ctx.paths, stopped, &Reporting(ctx)).await
 }
 
 /// Queue the restores of the agents among `stopped`, warning when that

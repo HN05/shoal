@@ -4,6 +4,7 @@
 //! depends on this crate.
 
 pub mod agent_hooks;
+pub mod arrivals;
 pub mod attach;
 pub mod execution;
 pub mod following;
@@ -21,6 +22,7 @@ pub mod proxy;
 pub mod push_gate;
 pub mod queued_launches;
 pub mod queued_starts;
+pub mod reopening;
 pub mod resume;
 pub mod secrets;
 pub mod settings;

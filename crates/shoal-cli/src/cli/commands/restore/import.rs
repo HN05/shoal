@@ -27,11 +27,7 @@ use crate::{
 };
 
 use super::reopen;
-
-mod carried;
-mod moved;
-
-pub(in crate::cli::commands) use moved::import_moved;
+use shoal_workers::reopening;
 
 /// How `shoal restore --from` opens each space.
 pub(in crate::cli::commands) struct ImportOptions {
@@ -59,9 +55,10 @@ pub(in crate::cli::commands) async fn import(
         let imported = import_package(ctx, file, &options).await?;
         let restored = imported.restored;
         let reopened = reopen::finish_reopen(ctx, restored, "Imported", options.restore).await;
-        let failed = carried::open(ctx, imported.carried, options.restore).await;
+        let failed =
+            reopening::open_carried(&ctx.paths, ctx, imported.carried, options.restore).await;
         let code = reopened?;
-        carried::ensure_opened(failed)?;
+        reopening::ensure_carried_opened(failed)?;
         return Ok(code);
     }
     let files = import_files(files)?;
@@ -160,7 +157,7 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
         };
         let ImportedPackage { restored, carried } = imported;
         if import_one(ctx, file, restored, options, &mut report).await {
-            for error in carried::open(ctx, carried, options.restore).await {
+            for error in reopening::open_carried(&ctx.paths, ctx, carried, options.restore).await {
                 report.failed(ctx, file, &error);
             }
         }
@@ -178,16 +175,16 @@ async fn import_one(
     options: &ImportOptions,
     report: &mut ImportReport,
 ) -> bool {
-    let mut reopened = match reopen::prepare_set_up(ctx, restored).await {
+    let mut reopened = match reopening::prepare_set_up(&ctx.paths, ctx, restored).await {
         Ok(reopened) => reopened,
         Err(error) => {
             report.failed(ctx, file, &error);
             return false;
         }
     };
-    let post_setup = reopen::run_post_setup(ctx, &reopened).await;
+    let post_setup = reopening::run_post_setup(&ctx.paths, ctx, &reopened).await;
     if post_setup.is_ok() && options.restore {
-        reopened.queue_agents(ctx).await;
+        reopening::queue_agents(&ctx.paths, ctx, &mut reopened).await;
     }
     let message = reopened.message(ctx, "Imported");
     let name = reopened.space.name.clone();

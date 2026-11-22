@@ -131,7 +131,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::QueueStart { entry } => crate::queued_starts::run(&ctx.paths, entry).await,
         InternalCommand::Operation => crate::operations::run(&ctx.paths).await,
         InternalCommand::ImportMoved { ticket, no_resume } => {
-            super::super::restore::import::import_moved(&ctx, ticket, !no_resume).await
+            shoal_workers::arrivals::import_moved(&ctx.paths, &ctx, ticket, !no_resume).await
         }
         InternalCommand::PlaceSessions { repository } => {
             shoal_workers::launch::place_forked_sessions(&ctx.paths, repository).await

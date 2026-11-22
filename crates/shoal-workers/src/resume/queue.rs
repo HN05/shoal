@@ -2,7 +2,8 @@
 //! agent limits allow, or at once.
 use anyhow::{Context as _, Result};
 use shoal_core::execution::recovery::Saved;
-use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{Resuming, commands, stale};
 use crate::{
@@ -11,6 +12,29 @@ use crate::{
     protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
+
+/// Executions stopped so their spaces could move or be removed, by space.
+pub type Stopped = BTreeMap<SpaceId, BTreeSet<ExecutionId>>;
+
+/// Queue the restores of the agents among `stopped`, which `resuming`
+/// tells of; their workspaces' stopped commands go to them, and those of
+/// workspaces without one stay for `shoal resume`.
+pub async fn queue_stopped(
+    paths: &CommandPaths,
+    stopped: &Stopped,
+    resuming: &impl Resuming,
+) -> Result<Queued> {
+    let mut queued = Vec::new();
+    for (space, executions) in stopped {
+        let space = super::space::present_space(paths, &SpaceSelector::id(space)).await?;
+        let mut saved = crate::client::saved::read(paths, SpaceSelector::id(&space.id)).await?;
+        saved.retain(|id| executions.contains(id));
+        if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
+            queued.push((space, saved));
+        }
+    }
+    Ok(queue_each(paths, queued, false, resuming).await)
+}
 
 /// Refuse, before any is queued, the restores of `stopped` agents that the
 /// daemon would start from the background when no host can take them there;

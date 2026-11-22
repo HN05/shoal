@@ -6,30 +6,31 @@
 //! they stay when nothing was recorded here.
 use anyhow::Result;
 
-use super::{
-    super::reopen::{self, ReopenedExt},
-    carried,
-};
-use crate::{
-    cli::context::Context,
-    protocol::{ErrorCode, RemoteError},
+use shoal_core::{
     refusal::Reason,
     transfer::{
         Arrived, CarriedRecord, ImportedMove, ImportedPackage, PackageImport, PackageSource,
     },
+};
+
+use crate::{
+    client::connection::CommandPaths,
+    protocol::{ErrorCode, RemoteError},
+    reopening::{self, Reopening},
 };
 use shoal_ids::{move_tickets::MoveTicket, space_ids::SpaceId};
 
 /// Continue the package on standard input, claiming its spaces with
 /// `ticket`, which a copy lacks, queueing their agents' restores when
 /// `restore`, and print how it went as the last line of standard output.
-pub(in crate::cli::commands) async fn import_moved(
-    ctx: &Context,
+pub async fn import_moved(
+    paths: &CommandPaths,
+    reopening: &impl Reopening,
     ticket: Option<MoveTicket>,
     restore: bool,
 ) -> Result<i32> {
-    let imported = match receive(ctx, ticket).await {
-        Ok(imported) => match open(ctx, imported, restore).await {
+    let imported = match receive(paths, ticket).await {
+        Ok(imported) => match open(paths, reopening, imported, restore).await {
             Ok((arrived, carried)) => ImportedMove::Arrived {
                 arrived: Box::new(arrived),
                 carried,
@@ -41,13 +42,13 @@ pub(in crate::cli::commands) async fn import_moved(
         },
         Err(error) => failed(&error),
     };
-    outln!("{}", crate::client::output::json(&imported)?);
+    shoal_core::outln!("{}", crate::client::output::json(&imported)?);
     Ok(0)
 }
 
 /// Have the daemon import the package on standard input, claiming its
 /// spaces with `ticket`.
-async fn receive(ctx: &Context, ticket: Option<MoveTicket>) -> Result<ImportedPackage> {
+async fn receive(paths: &CommandPaths, ticket: Option<MoveTicket>) -> Result<ImportedPackage> {
     let import = PackageImport {
         package: PackageSource::Stream,
         repository: None,
@@ -55,7 +56,7 @@ async fn receive(ctx: &Context, ticket: Option<MoveTicket>) -> Result<ImportedPa
         ticket,
     };
     let mut input = tokio::io::stdin();
-    crate::client::transfer::import_streamed(&ctx.paths, import, &mut input).await
+    crate::client::transfer::import_streamed(paths, import, &mut input).await
 }
 
 /// Open the spaces `imported` recorded here, as `shoal restore --from`
@@ -63,7 +64,8 @@ async fn receive(ctx: &Context, ticket: Option<MoveTicket>) -> Result<ImportedPa
 /// succeeded, its agents' restores queued when `restore`, then the spaces
 /// it carries, whose IDs it returns with where its own arrived.
 async fn open(
-    ctx: &Context,
+    paths: &CommandPaths,
+    reopening: &impl Reopening,
     imported: ImportedPackage,
     restore: bool,
 ) -> Result<(Arrived, Vec<SpaceId>)> {
@@ -73,14 +75,14 @@ async fn open(
             CarriedRecord::Failed { .. } => None,
         })
         .collect();
-    let mut reopened = reopen::prepare_set_up(ctx, imported.restored).await?;
-    let post_setup = reopen::run_post_setup(ctx, &reopened).await;
+    let mut reopened = reopening::prepare_set_up(paths, reopening, imported.restored).await?;
+    let post_setup = reopening::run_post_setup(paths, reopening, &reopened).await;
     if post_setup.is_ok() && restore {
-        reopened.queue_agents(ctx).await;
+        reopening::queue_agents(paths, reopening, &mut reopened).await;
     }
-    let failed = carried::open(ctx, imported.carried, restore).await;
+    let failed = reopening::open_carried(paths, reopening, imported.carried, restore).await;
     post_setup?;
-    carried::ensure_opened(failed)?;
+    reopening::ensure_carried_opened(failed)?;
     let arrived = Arrived {
         space: reopened.space,
         queued: (reopened.queued).map_or_else(Vec::new, |queued| queued.queued),
