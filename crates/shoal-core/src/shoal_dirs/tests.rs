@@ -41,3 +41,16 @@ fn a_symlink_in_place_of_the_directory_is_not_its_own() {
     linked.remove().unwrap();
     assert!(dir.root().is_dir());
 }
+
+#[test]
+fn a_directory_holding_directories_the_owner_may_not_write_is_deleted() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("tmp");
+    let checkout = directory.join("run").join("checkout");
+    fs::create_dir_all(checkout.join("closed")).unwrap();
+    fs::write(checkout.join("tracked"), "file").unwrap();
+    fs::set_permissions(checkout.join("closed"), fs::Permissions::from_mode(0o000)).unwrap();
+    fs::set_permissions(&checkout, fs::Permissions::from_mode(0o500)).unwrap();
+    remove_dir_opening(&directory).unwrap();
+    assert!(!directory.exists());
+}

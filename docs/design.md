@@ -1265,7 +1265,8 @@ like a name. Outside the worktree it neither dirties it nor enters checkpoints,
 and its path stays short enough for the Unix sockets tools create in it on
 macOS. It is created only once its record exists and deleted with it, by
 the removal of its space; the cleanup sweep
-deletes any without a record, since nothing there is worth keeping. The
+deletes any without a record, with the directories in it the owner may not
+write, since nothing there is worth keeping. The
 post-remove hook runs after it is gone and keeps the inherited `TMPDIR`.
 A contribution is a URL clone registered for work in a repository the user does
 not maintain. `origin` stays the repository itself, so issues, PRs and syncs use

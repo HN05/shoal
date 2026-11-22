@@ -16,7 +16,7 @@ use anyhow::{Context, Result, ensure};
 
 use crate::{
     model::Repository,
-    shoal_dirs::{Contents, ShoalDir, remove_dir},
+    shoal_dirs::{Contents, ShoalDir, remove_dir_opening},
 };
 
 /// The directory of one repository's temporary directories, or of those of
@@ -119,7 +119,7 @@ impl Layout {
         if !self.dir.is_own() {
             return Ok(());
         }
-        remove_dir(&self.locate(id))
+        remove_dir_opening(&self.locate(id))
     }
 
     /// Delete every temporary directory with the directory itself, when the

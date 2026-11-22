@@ -5,7 +5,9 @@
 //! another's.
 use shoal_ids::repository_ids::RepositoryId;
 use std::{
+    fs::Permissions,
     io::{self, ErrorKind},
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 
@@ -68,6 +70,12 @@ impl Contents {
             Self::Imports => ".imports",
             Self::Seed => ".seed",
         }
+    }
+
+    /// Whether any process Shoal starts may leave anything in the
+    /// directory, so that deleting it opens what refuses the owner.
+    fn left_by_any_process(self) -> bool {
+        matches!(self, Self::TmpDirs)
     }
 
     fn description(self) -> &'static str {
@@ -175,7 +183,10 @@ impl ShoalDir {
         if !self.is_own() {
             return Ok(());
         }
-        remove_dir(&self.root)
+        match self.contents.left_by_any_process() {
+            true => remove_dir_opening(&self.root),
+            false => remove_dir(&self.root),
+        }
     }
 
     /// Delete the directory's mark, then the directory when nothing else is
@@ -188,12 +199,53 @@ impl ShoalDir {
 
 /// Delete `directory` with everything in it, when it exists.
 pub fn remove_dir(directory: &Path) -> Result<()> {
-    match std::fs::remove_dir_all(directory) {
+    deleted(directory, std::fs::remove_dir_all(directory))
+}
+
+/// [`remove_dir`] for a directory any process may leave anything in, such
+/// as a review's read-only checkout a test left in its temporary directory:
+/// the directories in it that refuse the owner are opened to it first.
+pub fn remove_dir_opening(directory: &Path) -> Result<()> {
+    deleted(directory, remove_opening(directory))
+}
+
+/// The outcome of deleting `directory`, which may already be gone.
+fn deleted(directory: &Path, result: io::Result<()>) -> Result<()> {
+    match result {
         Err(error) if error.kind() != ErrorKind::NotFound => {
             Err(error).with_context(|| format!("delete {}", directory.display()))
         }
         _ => Ok(()),
     }
+}
+
+/// Delete `directory` with everything in it, opening the directories in it
+/// to the owner when their permissions refuse that.
+fn remove_opening(directory: &Path) -> io::Result<()> {
+    match std::fs::remove_dir_all(directory) {
+        Err(error) if error.kind() == ErrorKind::PermissionDenied => {
+            open_to_owner(directory)?;
+            std::fs::remove_dir_all(directory)
+        }
+        result => result,
+    }
+}
+
+/// Give the owner read, write and search permission on `directory` and on
+/// every directory below it, without following symbolic links.
+fn open_to_owner(directory: &Path) -> io::Result<()> {
+    let metadata = std::fs::symlink_metadata(directory)?;
+    if !metadata.is_dir() {
+        return Ok(());
+    }
+    let mode = metadata.permissions().mode();
+    if mode & 0o700 != 0o700 {
+        std::fs::set_permissions(directory, Permissions::from_mode(mode | 0o700))?;
+    }
+    for entry in std::fs::read_dir(directory)? {
+        open_to_owner(&entry?.path())?;
+    }
+    Ok(())
 }
 
 /// Delete `file` when it exists.
