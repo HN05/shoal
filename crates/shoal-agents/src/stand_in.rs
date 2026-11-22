@@ -69,8 +69,8 @@ use crate::{
 /// The service over a stand-in daemon.
 pub(crate) struct Fixture {
     pub(crate) root: tempfile::TempDir,
-    pub(crate) agents: Agents,
-    pub(crate) daemon: StandIn,
+    pub(crate) agents: Arc<Agents>,
+    pub(crate) daemon: Arc<StandIn>,
     pub(crate) records: Arc<StandInRecords>,
 }
 
@@ -92,10 +92,12 @@ impl Fixture {
         let config = Arc::new(ConfigState::new(shoal_core::test_support::global_config(
             text,
         )));
+        let agents = Arc::new(service(paths, config, records.clone()).await);
+        daemon.use_store(&agents.store);
         Self {
             root,
-            agents: service(paths, config, records.clone()).await,
-            daemon,
+            agents,
+            daemon: Arc::new(daemon),
             records,
         }
     }
@@ -106,15 +108,38 @@ impl Fixture {
         let paths = self.agents.paths.clone();
         let config = self.agents.config.clone();
         drop(self.agents);
-        Self {
-            agents: service(paths, config, self.records.clone()).await,
-            ..self
-        }
+        let agents = Arc::new(service(paths, config, self.records.clone()).await);
+        self.daemon.use_store(&agents.store);
+        Self { agents, ..self }
     }
 
-    /// Record a ready workspace `name`, of a repository recorded with it.
+    /// The repository `repo` at the root's `repo`, registered with the
+    /// stand-in, which the fixture's workspaces belong to.
+    pub(crate) fn repository(&self) -> Repository {
+        let path = self.root.path().join("repo");
+        std::fs::create_dir_all(&path).unwrap();
+        let repository = Repository {
+            id: "repo".into(),
+            path: path.clone(),
+            source: path.display().to_string(),
+            last_used: 1,
+            name: None,
+            workspaces_dir: path.with_extension("workspaces"),
+            contribution: false,
+            shared_url: None,
+        };
+        let mut repositories = self.daemon.repositories.lock().unwrap();
+        if !repositories.iter().any(|known| known.id == repository.id) {
+            repositories.push(repository.clone());
+        }
+        repository
+    }
+
+    /// Record a ready workspace `name`, of the fixture's repository.
     pub(crate) async fn workspace(&self, name: &str) -> Workspace {
+        self.repository();
         let path = self.root.path().join(name);
+        std::fs::create_dir_all(&path).unwrap();
         let workspace = shoal_protocol::test_support::workspace(name, "repo", name, &path);
         let id = workspace.id.clone();
         (self.agents.store)
@@ -251,6 +276,8 @@ pub(crate) struct StandIn {
     pub(crate) notified: Mutex<Vec<(AlertKind, String)>>,
     /// The failed state reports, each with the space it named.
     pub(crate) state_failures: Mutex<Vec<(SpaceSelector, String)>>,
+    /// The service's store, which the workspaces' lifecycles live in.
+    store: Mutex<Option<shoal_store::Store>>,
 }
 
 impl StandIn {
@@ -259,9 +286,52 @@ impl StandIn {
         spaces.iter().find(|space| space.id == *id).cloned()
     }
 
+    /// Read and write the workspaces' lifecycles through `store`, the
+    /// service's, as the daemon does through its own.
+    fn use_store(&self, store: &shoal_store::Store) {
+        *self.store.lock().unwrap() = Some(store.clone());
+    }
+
+    /// The service's store.
+    fn store(&self) -> shoal_store::Store {
+        let store = self.store.lock().unwrap();
+        store
+            .clone()
+            .expect("the fixture gives the stand-in its store")
+    }
+
+    /// Where the lifecycle of the workspace `id` stands, while it exists.
+    async fn lifecycle(&self, id: &SpaceId) -> Result<Option<shoal_store::lifecycle::Lifecycle>> {
+        let id = id.to_owned();
+        let store = self.store();
+        store
+            .run(move |db| shoal_store::lifecycle::lifecycle(db, &id))
+            .await
+    }
+
+    /// Record `state` as the workspace `id`'s, with `error`.
+    async fn record_state(
+        &self,
+        id: &SpaceId,
+        state: WorkspaceState,
+        error: Option<String>,
+    ) -> Result<()> {
+        let id = id.to_owned();
+        let store = self.store();
+        store
+            .write(move |tx| {
+                tx.execute(
+                    "UPDATE workspaces SET state=?2,error=?3 WHERE id=?1",
+                    rusqlite::params![id, state, error],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
     fn selected(&self, selector: &SpaceSelector) -> Result<Space> {
-        let id = selector.given_id().context(NOT_HERE)?;
-        self.find(id).context(NOT_HERE)
+        let id = (selector.given_id()).with_context(|| format!("{NOT_HERE}: {selector}"))?;
+        self.find(id).with_context(|| format!("{NOT_HERE}: {id}"))
     }
 }
 
@@ -275,7 +345,7 @@ impl Spaces for StandIn {
     }
 
     fn space_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>> {
-        let space = self.find(id).context(NOT_HERE);
+        let space = self.find(id).with_context(|| format!("{NOT_HERE}: {id}"));
         Box::pin(async { space })
     }
 
@@ -328,14 +398,16 @@ impl Spaces for StandIn {
     }
 
     fn workspace_settings<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        let settings = self.config.resolve(&ConfigLayers::default());
+        Box::pin(async { settings })
     }
 
     fn workspace_settings_with_templates<'a>(
         &'a self,
         _: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        let settings = self.config.resolve(&ConfigLayers::default());
+        Box::pin(async { settings })
     }
 
     fn workspace_paths(&self) -> BoxFuture<'_, Result<Vec<PathBuf>>> {
@@ -343,7 +415,7 @@ impl Spaces for StandIn {
     }
 
     fn chat_workspace<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: chat_workspace")) })
     }
 
     fn chat_by_id<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Option<Chat>>> {
@@ -355,7 +427,7 @@ impl Spaces for StandIn {
     }
 
     fn chat_checkout_path<'a>(&'a self, _: &'a Chat) -> BoxFuture<'a, Result<PathBuf>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: chat_checkout_path")) })
     }
 
     fn chat_tmp_dir(&self, _: Option<&Repository>, _: &Chat) -> Result<Option<PathBuf>> {
@@ -453,15 +525,16 @@ impl Repositories for StandIn {
     }
 
     fn selected_repository<'a>(&'a self, _: &'a Selector) -> BoxFuture<'a, Result<Repository>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: selected_repository")) })
     }
 
     fn repository_settings<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        let settings = self.config.resolve(&ConfigLayers::default());
+        Box::pin(async { settings })
     }
 
     fn repository_layers<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<ConfigLayers>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Ok(ConfigLayers::default()) })
     }
 }
 
@@ -497,7 +570,8 @@ impl Alerts for StandIn {
         Box::pin(async {})
     }
 
-    fn notify_about(&self, _: About, _: AlertKind, _: String) -> BoxFuture<'_, ()> {
+    fn notify_about(&self, _: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
+        self.notified.lock().unwrap().push((kind, message));
         Box::pin(async {})
     }
 
@@ -532,31 +606,55 @@ impl Turns for StandIn {
 impl Lifecycles for StandIn {
     fn set_state<'a>(
         &'a self,
-        _: &'a SpaceId,
-        _: WorkspaceState,
-        _: Option<String>,
+        id: &'a SpaceId,
+        state: WorkspaceState,
+        error: Option<String>,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { Ok(()) })
+        Box::pin(self.record_state(id, state, error))
     }
 
     fn reserve_lifecycle<'a>(
         &'a self,
-        _: &'a SpaceId,
-        _: WorkspaceState,
+        id: &'a SpaceId,
+        state: WorkspaceState,
     ) -> BoxFuture<'a, Result<WorkspaceState>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        let id = id.to_owned();
+        let store = self.store();
+        Box::pin(async move {
+            store
+                .write(move |tx| {
+                    let lifecycle =
+                        shoal_store::lifecycle::lifecycle(tx, &id)?.context(NOT_HERE)?;
+                    let held = lifecycle.state;
+                    anyhow::ensure!(
+                        matches!(held, WorkspaceState::Ready | WorkspaceState::Failed),
+                        "workspace is {held}"
+                    );
+                    tx.execute(
+                        "UPDATE workspaces SET state=?2,error=NULL WHERE id=?1",
+                        rusqlite::params![id, state],
+                    )?;
+                    Ok(held)
+                })
+                .await
+        })
     }
 
     fn reserved_since<'a>(
         &'a self,
-        _: &'a SpaceId,
-        _: Option<Generation>,
+        id: &'a SpaceId,
+        seen: Option<Generation>,
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async { Ok(Default::default()) })
+        Box::pin(async move {
+            Ok(match self.lifecycle(id).await? {
+                Some(lifecycle) => lifecycle.state.passes() || seen != Some(lifecycle.generation),
+                None => seen.is_some(),
+            })
+        })
     }
 
-    fn lifecycle_generation<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Generation>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+    fn lifecycle_generation<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Generation>> {
+        Box::pin(async move { Ok(self.lifecycle(id).await?.context(NOT_HERE)?.generation) })
     }
 
     fn check_lifecycle<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
@@ -565,10 +663,20 @@ impl Lifecycles for StandIn {
 
     fn await_reservation_end<'a>(
         &'a self,
-        _: &'a SpaceId,
-        _: &'a (dyn Fn() -> Result<()> + Send + Sync),
+        id: &'a SpaceId,
+        wanted: &'a (dyn Fn() -> Result<()> + Send + Sync),
     ) -> BoxFuture<'a, Result<Generation>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async move {
+            let store = self.store();
+            let mut changed = store.watch_changes();
+            loop {
+                wanted()?;
+                match self.lifecycle(id).await?.context(NOT_HERE)? {
+                    lifecycle if lifecycle.state.passes() => changed.changed().await?,
+                    lifecycle => return Ok(lifecycle.generation),
+                }
+            }
+        })
     }
 
     fn ensure_no_pending_rename<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
@@ -583,7 +691,7 @@ impl Lifecycles for StandIn {
         &'a self,
         _: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<OpenedWorkspace>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: reopen_workspace")) })
     }
 
     fn refresh_admitted<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, ()> {
@@ -624,11 +732,11 @@ impl Merges for StandIn {
         _: &'a MergeOptions,
         _: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<MergePlan>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: prepare_merge")) })
     }
 
     fn prepare_unmerge<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<UnmergePlan>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: prepare_unmerge")) })
     }
 
     fn authorize_scoped_merge<'a>(
@@ -715,7 +823,7 @@ impl Links for StandIn {
     }
 
     fn current_head<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: current_head")) })
     }
 
     fn link_item<'a>(
@@ -782,7 +890,7 @@ impl Runner for StandIn {
         _: &'a RepositoryId,
         _: &'a QueuedJob,
     ) -> BoxFuture<'a, Result<JobCost>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: job_cost")) })
     }
 
     fn pass_over_job<'a>(
@@ -858,7 +966,7 @@ impl Memory for StandIn {
 
 impl Ranking for StandIn {
     fn ranking_snapshot(&self) -> BoxFuture<'_, Result<Snapshot>> {
-        Box::pin(async { Err(anyhow::anyhow!(NOT_HERE)) })
+        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: ranking_snapshot")) })
     }
 }
 

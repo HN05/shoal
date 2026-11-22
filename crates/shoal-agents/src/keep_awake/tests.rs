@@ -11,7 +11,7 @@ async fn report(fixture: &Fixture, id: &SpaceId, state: AgentState) {
     let space = SpaceSelector::id(id);
     (fixture
         .agents
-        .set_agent_state(&fixture.daemon, &space, state, None, None))
+        .set_agent_state(&*fixture.daemon, &space, state, None, None))
     .await
     .unwrap();
 }
@@ -51,16 +51,16 @@ async fn a_failed_inhibitor_is_retried_under_another_config() {
     let holds: &[&str] = &["sh", "-c", "$0"];
     let config = fixture.agents.config.current();
     let hold = Hold::Failed(config.clone());
-    let hold = update(&fixture.daemon, hold, true, &config, holds).await;
+    let hold = update(&*fixture.daemon, hold, true, &config, holds).await;
     assert!(matches!(hold, Hold::Failed(_)));
     let reloaded = Arc::new(Config::default());
-    let hold = update(&fixture.daemon, hold, true, &reloaded, holds).await;
+    let hold = update(&*fixture.daemon, hold, true, &reloaded, holds).await;
     assert!(matches!(hold, Hold::Held(_)));
-    let hold = update(&fixture.daemon, hold, false, &reloaded, holds).await;
+    let hold = update(&*fixture.daemon, hold, false, &reloaded, holds).await;
     assert!(matches!(hold, Hold::Released));
     // A failure to start notifies and waits for the next config.
     let missing: &[&str] = &["/nonexistent/shoal-inhibitor"];
-    let hold = update(&fixture.daemon, hold, true, &reloaded, missing).await;
+    let hold = update(&*fixture.daemon, hold, true, &reloaded, missing).await;
     assert!(matches!(hold, Hold::Failed(ref failed) if Arc::ptr_eq(failed, &reloaded)));
     let notified = fixture.daemon.notified.lock().unwrap();
     assert_eq!(notified[0].0, AlertKind::KeepAwakeFailed);

@@ -65,7 +65,7 @@ async fn fail(fixture: &Fixture, workspace: &Workspace, execution: &str, failure
     let status = fixture
         .agents
         .report_turn_failure(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             failure,
             Some(execution.into()),
@@ -82,7 +82,7 @@ async fn report(fixture: &Fixture, workspace: &Workspace, execution: &str, state
     fixture
         .agents
         .set_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             state,
             Some(execution.into()),
@@ -113,7 +113,7 @@ fn secs(seconds: u64) -> Duration {
 async fn messages(fixture: &Fixture, workspace: &Workspace) -> Vec<String> {
     fixture
         .agents
-        .agent_messages(&fixture.daemon, &SpaceSelector::id(&workspace.id))
+        .agent_messages(&*fixture.daemon, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .into_iter()

@@ -104,7 +104,7 @@ async fn a_reported_turn_end_counts_and_a_session_start_does_not() {
     let space = SpaceSelector::id(&id);
     let report = async |state| {
         (fixture.agents.set_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &space,
             state,
             Some(execution.clone()),
@@ -134,13 +134,13 @@ async fn a_coordinators_request_is_not_the_users_interaction() {
     let space = SpaceSelector::id(&id);
     (fixture
         .agents
-        .record_user_interaction(&fixture.daemon, Some(&coordinator), &space))
+        .record_user_interaction(&*fixture.daemon, Some(&coordinator), &space))
     .await;
     assert_eq!(engagement(&fixture, &id).await.interacted_at, None);
 
     fixture
         .agents
-        .record_user_interaction(&fixture.daemon, None, &space)
+        .record_user_interaction(&*fixture.daemon, None, &space)
         .await;
     assert!(engagement(&fixture, &id).await.interacted_at.is_some());
 }
@@ -226,13 +226,13 @@ async fn a_message_the_user_sends_every_agent_counts_for_each_it_reached() {
     let coordinator = Caller::of_space("parent".into());
     fixture
         .agents
-        .record_users_message(&fixture.daemon, Some(&coordinator), &reached)
+        .record_users_message(&*fixture.daemon, Some(&coordinator), &reached)
         .await;
     assert_eq!(engagement(&fixture, &id).await.interacted_at, None);
 
     fixture
         .agents
-        .record_users_message(&fixture.daemon, None, &reached)
+        .record_users_message(&*fixture.daemon, None, &reached)
         .await;
     assert!(engagement(&fixture, &id).await.interacted_at.is_some());
 }

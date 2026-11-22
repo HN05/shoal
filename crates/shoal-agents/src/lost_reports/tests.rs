@@ -43,7 +43,7 @@ async fn report(fixture: &Fixture, workspace: &Workspace, state: AgentState) {
     fixture
         .agents
         .set_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &selector,
             state,
             Some("agent".into()),
@@ -95,7 +95,7 @@ async fn a_lost_report_alerts_and_arrives_late() {
         "daemon protocol mismatch",
     );
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     let shown = state(&fixture, &workspace).await.unwrap();
     assert_eq!(shown.state, AgentState::Idle);
@@ -116,7 +116,7 @@ async fn a_lost_report_a_later_one_overtook_only_alerts() {
     // Repeating the state keeps its start, so only the arrival tells.
     report(&fixture, &workspace, AgentState::Working).await;
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,
@@ -144,7 +144,7 @@ async fn a_lost_report_of_an_ended_execution_only_alerts() {
     .unwrap()
     .failed("timed out".into());
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,
@@ -161,7 +161,7 @@ async fn the_reports_of_a_removed_space_go_with_it() {
         .unwrap()
         .failed("timed out".into());
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert!(failures(&fixture).await.is_empty());
     assert!(
@@ -177,7 +177,7 @@ async fn a_lost_report_waits_for_its_execution_to_reattach() {
     let workspace = workspace_in(&fixture, ExecutionState::Unknown).await;
     lose(&fixture, &workspace, ended_turn(), "timed out");
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
     assert!(failures(&fixture).await.is_empty());
     let id = workspace.id.clone();
     fixture
@@ -192,7 +192,7 @@ async fn a_lost_report_waits_for_its_execution_to_reattach() {
         })
         .await
         .unwrap();
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(failures(&fixture).await.len(), 1);
     assert_eq!(
@@ -221,7 +221,7 @@ async fn a_report_delivered_before_a_restart_overtakes_a_lost_one() {
     .unwrap()
     .delivered();
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(state(&fixture, &workspace).await, None);
     assert_eq!(failures(&fixture).await.len(), 1);
@@ -248,7 +248,7 @@ async fn a_lost_report_waits_for_its_agent_to_register() {
     };
     lose(&fixture, &workspace, failed, "timed out");
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert!(failures(&fixture).await.is_empty());
     assert_eq!(state(&fixture, &workspace).await, None);
@@ -281,10 +281,10 @@ async fn a_newer_lost_report_arrives_after_an_older_one_was_recovered() {
     .unwrap();
 
     // The earlier report waits for the later one, which may overtake it.
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
     assert_eq!(state(&fixture, &workspace).await, None);
     drop(sending);
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,
@@ -318,9 +318,9 @@ async fn a_lost_report_whose_record_failed_is_recovered_on_the_next_pass() {
     )
     .await;
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
     fail_writes("DROP TRIGGER full").await;
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,
@@ -342,9 +342,9 @@ async fn a_lost_report_whose_mark_fails_is_recorded_on_the_next_pass() {
         .join(".delivered");
     std::fs::create_dir(&mark).unwrap();
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
     std::fs::remove_dir(&mark).unwrap();
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,
@@ -364,7 +364,7 @@ async fn reports_are_ordered_by_when_their_hooks_made_them() {
     fixture
         .agents
         .report_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             AgentState::Working,
             Some("agent".into()),
@@ -375,7 +375,7 @@ async fn reports_are_ordered_by_when_their_hooks_made_them() {
         .await
         .unwrap();
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,
@@ -389,14 +389,14 @@ async fn a_live_report_made_before_a_recorded_one_changes_nothing() {
     let workspace = workspace(&fixture).await;
     let made = SystemTime::now();
     lose(&fixture, &workspace, ended_turn(), "timed out");
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     // A report made before the turn's end, which a stalled daemon answers
     // only now.
     let status = fixture
         .agents
         .report_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             AgentState::Working,
             Some("agent".into()),
@@ -443,7 +443,7 @@ async fn a_failed_turn_lost_before_a_later_idle_report_is_still_retried() {
         turn_end: None,
     });
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     let id = workspace.id.clone();
     let retry = fixture
@@ -481,10 +481,10 @@ async fn a_lost_report_waits_for_a_later_one_its_hook_still_sends() {
     .unwrap();
     let fixture = fixture.restart().await;
 
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
     assert!(failures(&fixture).await.is_empty());
     answered.delivered();
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,
@@ -519,7 +519,7 @@ async fn a_delayed_live_report_waits_behind_a_later_one_still_sent() {
     fixture
         .agents
         .report_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             Some("agent".into()),
@@ -550,7 +550,7 @@ async fn a_late_turns_prompt_cache_lives_from_when_the_turn_ended() {
     let status = fixture
         .agents
         .report_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             None,
@@ -587,11 +587,11 @@ async fn a_recovered_report_outlasts_a_restart() {
         turn_end: None,
     };
     lose(&fixture, &workspace, working, "timed out");
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
     drop(earlier);
 
     let fixture = fixture.restart().await;
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,
@@ -628,11 +628,11 @@ async fn a_report_whose_hook_died_after_its_answer_still_orders_a_restart() {
     .unwrap();
     report(&fixture, &workspace, AgentState::Working).await;
     drop(answered);
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
     drop(earlier);
 
     let fixture = fixture.restart().await;
-    fixture.agents.recover_lost_reports(&fixture.daemon).await;
+    fixture.agents.recover_lost_reports(&*fixture.daemon).await;
 
     assert_eq!(
         state(&fixture, &workspace).await.unwrap().state,

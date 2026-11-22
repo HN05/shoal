@@ -57,7 +57,10 @@ async fn a_message_for_the_next_turn_wakes_only_once_queued_to_wake() {
     queue(Delivery::NextTurn).await.unwrap();
     assert!(wakes().await);
     let space = SpaceSelector::id(&workspace.id);
-    let unread = fixture.agents.agent_messages(&fixture.daemon, &space).await;
+    let unread = fixture
+        .agents
+        .agent_messages(&*fixture.daemon, &space)
+        .await;
     assert_eq!(unread.unwrap().len(), 1);
 }
 
@@ -118,7 +121,7 @@ async fn a_backlog_beyond_the_limit_reaches_its_agent_over_several_deliveries() 
         let ids: Vec<i64> = unread.iter().map(|alert| alert.id).collect();
         (fixture
             .agents
-            .mark_agent_messages_delivered(&fixture.daemon, &to, ids.clone()))
+            .mark_agent_messages_delivered(&*fixture.daemon, &to, ids.clone()))
         .await
         .unwrap();
         delivered.extend(ids);

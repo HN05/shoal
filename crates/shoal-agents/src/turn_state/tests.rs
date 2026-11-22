@@ -37,7 +37,7 @@ async fn turn_generations_count_turn_starts_and_continue_after_the_state_goes() 
     let selected = SpaceSelector::id(&workspace.id);
     let report = |state, execution: &str| {
         fixture.agents.set_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &selected,
             state,
             Some(execution.into()),
@@ -86,12 +86,12 @@ async fn an_interrupt_stays_with_the_execution_whose_turn_it_ended() {
     let selected = SpaceSelector::id(&workspace.id);
     (fixture
         .agents
-        .end_interrupted_turn(&fixture.daemon, &selected, Some("first".into())))
+        .end_interrupted_turn(&*fixture.daemon, &selected, Some("first".into())))
     .await
     .unwrap();
     // A report that says nothing of an interrupt, from another execution.
     (fixture.agents.set_agent_state(
-        &fixture.daemon,
+        &*fixture.daemon,
         &selected,
         AgentState::Idle,
         Some("second".into()),
@@ -115,7 +115,7 @@ async fn a_failed_turn_leaves_the_agent_idle() {
     fixture
         .agents
         .set_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             AgentState::Working,
             None,
@@ -126,7 +126,7 @@ async fn a_failed_turn_leaves_the_agent_idle() {
     let status = fixture
         .agents
         .report_turn_failure(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             TurnFailure::Overloaded,
             None,
@@ -150,7 +150,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     let ended = fixture
         .agents
         .end_agent_turn(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             None,
             None,
@@ -167,7 +167,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     let repeated = fixture
         .agents
         .set_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             None,
@@ -181,7 +181,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
         let status = fixture
             .agents
             .set_agent_state(
-                &fixture.daemon,
+                &*fixture.daemon,
                 &SpaceSelector::id(&workspace.id),
                 state,
                 None,
@@ -196,7 +196,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     fixture
         .agents
         .set_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             AgentState::Working,
             None,
@@ -207,7 +207,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     let unknown = fixture
         .agents
         .end_agent_turn(
-            &fixture.daemon,
+            &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
             None,
             None,
@@ -233,7 +233,7 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
     };
     let space = SpaceSelector::id(&workspace.id);
     let ended = (fixture.agents)
-        .end_agent_turn(&fixture.daemon, &space, Some(execution), None, reported)
+        .end_agent_turn(&*fixture.daemon, &space, Some(execution), None, reported)
         .await
         .unwrap();
     assert_eq!(

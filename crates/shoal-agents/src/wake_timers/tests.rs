@@ -30,7 +30,7 @@ fn timer(minutes: u32, message: Option<&str>) -> WakeTimer {
 async fn messages(fixture: &Fixture, selector: &SpaceSelector) -> Vec<String> {
     (fixture
         .agents
-        .agent_messages(&fixture.daemon, selector)
+        .agent_messages(&*fixture.daemon, selector)
         .await
         .unwrap())
     .into_iter()
@@ -51,12 +51,12 @@ async fn a_timer_sends_its_message_once_due_and_a_new_one_replaces_it() {
     let first = timer(20, Some("Check whether CI finished"));
     (fixture
         .agents
-        .sleep(&fixture.daemon, &selector, Some(Sleep::Turn), Some(first)))
+        .sleep(&*fixture.daemon, &selector, Some(Sleep::Turn), Some(first)))
     .await
     .unwrap();
     let second = timer(40, Some("Check the review"));
     let slept = (fixture.agents.sleep(
-        &fixture.daemon,
+        &*fixture.daemon,
         &selector,
         Some(Sleep::Turn),
         Some(second.clone()),
@@ -68,7 +68,7 @@ async fn a_timer_sends_its_message_once_due_and_a_new_one_replaces_it() {
     // A plain sleep keeps the timer.
     let slept = (fixture
         .agents
-        .sleep(&fixture.daemon, &selector, Some(Sleep::Permanent), None))
+        .sleep(&*fixture.daemon, &selector, Some(Sleep::Permanent), None))
     .await
     .unwrap();
     assert_eq!(slept.wake_at, Some(second.at));
@@ -106,7 +106,7 @@ async fn a_failed_firing_holds_back_only_the_timer_that_failed() {
     ] {
         (fixture
             .agents
-            .sleep(&fixture.daemon, selector, Some(Sleep::Turn), Some(timer)))
+            .sleep(&*fixture.daemon, selector, Some(Sleep::Turn), Some(timer)))
         .await
         .unwrap();
     }

@@ -8,7 +8,7 @@ async fn idle_agent(fixture: &Fixture) -> (Workspace, ExecutionId) {
     let space = SpaceSelector::id(&workspace.id);
     (fixture.agents)
         .set_agent_state(
-            &fixture.daemon,
+            &*fixture.daemon,
             &space,
             AgentState::Idle,
             Some(id.clone()),
@@ -28,9 +28,13 @@ async fn report(
     at: UnixTime,
 ) {
     let space = SpaceSelector::id(&workspace.id);
-    (fixture
-        .agents
-        .report_subagent(&fixture.daemon, &space, Some(execution.clone()), change, at))
+    (fixture.agents.report_subagent(
+        &*fixture.daemon,
+        &space,
+        Some(execution.clone()),
+        change,
+        at,
+    ))
     .await
     .unwrap();
 }
@@ -83,14 +87,14 @@ async fn a_subagent_whose_stop_is_lost_counts_until_its_requests_stop() {
     let space = SpaceSelector::id(&workspace.id);
     (fixture
         .agents
-        .report_subagent_request(&fixture.daemon, &space, id.clone(), long_ago))
+        .report_subagent_request(&*fixture.daemon, &space, id.clone(), long_ago))
     .await
     .unwrap();
     assert_eq!(state(&fixture, &id).await, AgentState::Idle);
 
     (fixture
         .agents
-        .report_subagent_request(&fixture.daemon, &space, id.clone(), UnixTime::now()))
+        .report_subagent_request(&*fixture.daemon, &space, id.clone(), UnixTime::now()))
     .await
     .unwrap();
     assert_eq!(state(&fixture, &id).await, AgentState::Working);
@@ -144,7 +148,7 @@ async fn a_session_start_forgets_the_requests_its_proxy_passed_before() {
     let space = SpaceSelector::id(&workspace.id);
     (fixture
         .agents
-        .report_subagent_request(&fixture.daemon, &space, id.clone(), long_ago))
+        .report_subagent_request(&*fixture.daemon, &space, id.clone(), long_ago))
     .await
     .unwrap();
     // A restore in place started the session without the proxy.

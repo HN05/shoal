@@ -41,7 +41,7 @@ async fn idle_workers<const N: usize>(fixture: &Fixture, names: [&str; N]) -> [W
 async fn report(fixture: &Fixture, id: &SpaceId, state: AgentState) {
     (fixture
         .agents
-        .set_agent_state(&fixture.daemon, &SpaceSelector::id(id), state, None, None))
+        .set_agent_state(&*fixture.daemon, &SpaceSelector::id(id), state, None, None))
     .await
     .unwrap();
 }
@@ -50,7 +50,7 @@ async fn report(fixture: &Fixture, id: &SpaceId, state: AgentState) {
 async fn messages(fixture: &Fixture, id: &SpaceId) -> Vec<String> {
     (fixture
         .agents
-        .agent_messages(&fixture.daemon, &SpaceSelector::id(id))
+        .agent_messages(&*fixture.daemon, &SpaceSelector::id(id))
         .await
         .unwrap())
     .into_iter()
@@ -63,7 +63,7 @@ async fn sweep_later(fixture: &Fixture, woken: &mut Woken) {
     let later = UnixTime::now() + HOUR + Duration::from_secs(60);
     fixture
         .agents
-        .wake_idle_agents(&fixture.daemon, woken, later)
+        .wake_idle_agents(&*fixture.daemon, woken, later)
         .await
         .unwrap();
 }
@@ -78,7 +78,7 @@ async fn a_worker_idle_for_its_period_is_woken_unless_done_or_sleeping() {
     let slept = fixture
         .agents
         .sleep(
-            &fixture.daemon,
+            &*fixture.daemon,
             &selector(&sleeping),
             Some(Sleep::Turn),
             None,
@@ -90,7 +90,7 @@ async fn a_worker_idle_for_its_period_is_woken_unless_done_or_sleeping() {
         (Some(Sleep::Turn), Some(60))
     );
     (fixture.agents.sleep(
-        &fixture.daemon,
+        &*fixture.daemon,
         &selector(&permanent),
         Some(Sleep::Permanent),
         None,
@@ -101,7 +101,7 @@ async fn a_worker_idle_for_its_period_is_woken_unless_done_or_sleeping() {
     // Not yet idle for its period.
     fixture
         .agents
-        .wake_idle_agents(&fixture.daemon, &mut woken, UnixTime::now())
+        .wake_idle_agents(&*fixture.daemon, &mut woken, UnixTime::now())
         .await
         .unwrap();
     assert!(messages(&fixture, &idle.id).await.is_empty());
@@ -124,7 +124,7 @@ async fn a_worker_idle_for_its_period_is_woken_unless_done_or_sleeping() {
     // Undo ends a permanent sleep.
     let undone = (fixture
         .agents
-        .sleep(&fixture.daemon, &selector(&permanent), None, None))
+        .sleep(&*fixture.daemon, &selector(&permanent), None, None))
     .await
     .unwrap();
     assert_eq!(undone.sleep, None);
@@ -140,7 +140,7 @@ async fn a_sleep_lasts_through_its_turn_and_a_wait_for_the_user() {
     report(&fixture, &workspace.id, AgentState::Working).await;
     fixture
         .agents
-        .sleep(&fixture.daemon, &selector, Some(Sleep::Turn), None)
+        .sleep(&*fixture.daemon, &selector, Some(Sleep::Turn), None)
         .await
         .unwrap();
     // A permission prompt in the turn that slept starts no turn.
@@ -168,7 +168,7 @@ async fn a_wake_read_before_the_agent_worked_again_is_not_queued() {
     report(&fixture, &worked.id, AgentState::Idle).await;
     let later = UnixTime::now() + HOUR * 2;
     (fixture.agents.wake_if_due(
-        &fixture.daemon,
+        &*fixture.daemon,
         &idle.remove(0),
         &mut Woken::default(),
         later,
