@@ -1,5 +1,7 @@
 //! The spaces `shoal move` takes: those named, every space of a repository,
 //! or the current one or those the picker offers.
+use crate::cli::ui::Acting;
+use crate::transfer::{MoveDestination, MoveOrder};
 use anyhow::{Context as _, Result, ensure};
 
 use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
@@ -56,14 +58,22 @@ fn names_no_space(error: &anyhow::Error) -> bool {
 
 /// The IDs of the current space or those the user picks.
 async fn picked(ctx: &Context) -> Result<Vec<SpaceId>> {
+    // Its destination, which may be asked for next, decides nothing of
+    // which spaces the move reaches.
+    let moving = Acting::request(|_| {
+        crate::client::operations::move_request(MoveOrder {
+            spaces: Vec::new(),
+            destination: MoveDestination::Held,
+            recursive: true,
+            keep: false,
+            checkpoint: None,
+            consent: None,
+        })
+    });
     let mut ids = Vec::new();
-    for selector in
-        ui::select_spaces(ctx, Vec::new(), true, &crate::cli::ui::Acting::Unconverted).await?
-    {
-        let space = crate::client::spaces::present_space(&ctx.paths, &selector)
-            .await?
-            .with_context(|| format!("no space {selector}"))?;
-        ids.push(space.id);
+    for selector in ui::select_spaces(ctx, Vec::new(), true, &moving).await? {
+        let located = crate::client::spaces::locate(&ctx.paths, selector).await?;
+        ids.push(located.id().clone());
     }
     Ok(ids)
 }

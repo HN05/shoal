@@ -88,6 +88,15 @@ impl Following {
     }
 }
 
+/// The move `order` that [`Following::start_move`] starts, as the picker
+/// that chooses its spaces judges it.
+pub fn move_request(order: MoveOrder) -> connection::Prepared<Started> {
+    connection::Prepared::new(OperationMethod::StartMove {
+        order: Box::new(order),
+        env: None,
+    })
+}
+
 /// Start `spec` with `env`, returning the started operation's ID to follow.
 pub async fn start(
     daemon: &impl Daemon,
