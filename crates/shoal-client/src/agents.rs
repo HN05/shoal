@@ -5,7 +5,7 @@ use shoal_protocol::agents::GitCredential;
 
 use shoal_ids::execution_ids::ExecutionId;
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, Prepared, request};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
@@ -119,21 +119,14 @@ pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 
 /// Restart the agent of `space` as `restart` says, answering with what the
 /// daemon did: restarted it, took the restart for later or skipped it.
-pub async fn restart(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    restart: AgentRestart,
-) -> Result<RestartOutcome> {
-    request(daemon, AgentMethod::RestartAgent { space, restart }).await
+pub fn restart(space: SpaceSelector, restart: AgentRestart) -> Prepared<RestartOutcome> {
+    Prepared::new(AgentMethod::RestartAgent { space, restart })
 }
 
 /// Drop the restart the daemon recorded for the agent of `space`, returning
 /// how it would have restarted, if anything was recorded.
-pub async fn cancel_restart(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-) -> Result<Option<AgentRestart>> {
-    request(daemon, AgentMethod::CancelRestart { space }).await
+pub fn cancel_restart(space: SpaceSelector) -> Prepared<Option<AgentRestart>> {
+    Prepared::new(AgentMethod::CancelRestart { space })
 }
 
 /// The agents connected in `space`, a workspace or a running chat.

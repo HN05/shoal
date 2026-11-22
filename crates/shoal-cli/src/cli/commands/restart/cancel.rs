@@ -4,7 +4,7 @@
 use anyhow::Result;
 
 use super::{selection, target::on_machine};
-use crate::cli::{args::SpaceTargets, context::Context};
+use crate::cli::{args::SpaceTargets, context::Context, ui::Acting};
 use crate::client::output::{
     agents::{CancelledRestarts, RestartSpace},
     batch::Failure,
@@ -20,7 +20,9 @@ pub(in crate::cli::commands) async fn cancel(
     machines: &[String],
 ) -> Result<i32> {
     let selector = targets.all || !machines.is_empty();
-    let spaces = (selection::spaces(ctx, targets, machines).await?).into_targets();
+    let cancelling = Acting::request(crate::client::agents::cancel_restart);
+    let spaces = selection::spaces(ctx, targets, machines, &cancelling).await?;
+    let spaces = spaces.into_targets();
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         selection::ensure_below(&spaces)?;
     }
@@ -33,7 +35,8 @@ pub(in crate::cli::commands) async fn cancel(
         .into_iter()
         .filter(|space| !selector || space.may_keep_restart)
     {
-        let dropped = crate::client::agents::cancel_restart(&ctx.paths, space.selector()).await;
+        let dropped = crate::client::agents::cancel_restart(space.selector());
+        let dropped = dropped.send(&ctx.paths).await;
         let shown = space.shown();
         let reported = RestartSpace {
             machine: space.machine_name(),

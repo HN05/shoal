@@ -69,8 +69,8 @@ pub(super) async fn check_targets(
 ) -> Result<()> {
     let mut refusals = Vec::new();
     for (name, selector) in targets {
-        let checked = crate::client::stopping::check(&ctx.paths, selector);
-        if let Err(error) = checked.await {
+        let checked = crate::client::stopping::check(selector);
+        if let Err(error) = checked.send(&ctx.paths).await {
             refusals.push(format!("{name}: {error:#}"));
         }
     }

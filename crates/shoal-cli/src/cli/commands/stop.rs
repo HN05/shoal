@@ -7,7 +7,11 @@ use anyhow::{Result, ensure};
 use crate::client::output::agents::SpaceStopped;
 use crate::{
     cli::{
-        args::lifecycle::StopArgs, commands::queued_agents, context::Context, output::Style, ui,
+        args::lifecycle::StopArgs,
+        commands::queued_agents,
+        context::Context,
+        output::Style,
+        ui::{self, Acting},
     },
     model::{Space, StoppedSpace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError, UntrackedProcesses},
@@ -41,13 +45,9 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     {
         return Ok(code);
     }
-    let selected = ui::select_spaces(
-        ctx,
-        targets.space,
-        false,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
+    // What a stop asks first of each space it takes.
+    let checking = Acting::request(crate::client::stopping::check);
+    let selected = ui::select_spaces(ctx, targets.space, false, &checking).await?;
     // A process of a space that cleared its token is still that space's.
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         targets::ensure_scoped()?;

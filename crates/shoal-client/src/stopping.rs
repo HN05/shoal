@@ -2,7 +2,7 @@
 //! keeps to restore, and its untracked processes.
 use anyhow::Result;
 
-use crate::connection::{Daemon, request};
+use crate::connection::{Daemon, Prepared, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     model::{Space, StoppedSpace},
@@ -17,8 +17,8 @@ pub async fn targets(daemon: &impl Daemon) -> Result<Vec<Space>> {
 }
 
 /// Refuse a stop of the workspace or chat `space` the caller may not make.
-pub async fn check(daemon: &impl Daemon, space: SpaceSelector) -> Result<()> {
-    request(daemon, RemovalMethod::CheckStop { space }).await
+pub fn check(space: SpaceSelector) -> Prepared<()> {
+    Prepared::new(RemovalMethod::CheckStop { space })
 }
 
 /// Stop the agents and commands of `space`, a workspace or a chat, keeping

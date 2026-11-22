@@ -11,7 +11,11 @@ use super::target::Target;
 use crate::client::output::agents::Skipped;
 use crate::{
     agent::Agent,
-    cli::{args::SpaceTargets, context::Context, ui},
+    cli::{
+        args::SpaceTargets,
+        context::Context,
+        ui::{self, Acting},
+    },
     model::{RunningAgent, Space, Spaces},
     sessions::Origin,
     time::UnixTime,
@@ -43,12 +47,12 @@ pub(super) struct Chosen {
 /// other machines its scope reaches.
 pub(super) async fn load(
     ctx: &Context,
-    targets: SpaceTargets,
-    machines: &[String],
+    (targets, machines): (SpaceTargets, &[String]),
     agent: Option<&Agent>,
+    acting: &Acting,
 ) -> Result<Selection> {
     let named = !targets.all && !targets.space.is_empty();
-    let chosen = spaces(ctx, targets, machines).await?;
+    let chosen = spaces(ctx, targets, machines, acting).await?;
     let agents = crate::client::agents::all(&ctx.paths).await?;
     let mut selection = select(chosen.here, &agents, agent, named);
     select_elsewhere(&mut selection, chosen.elsewhere, agent, named);
@@ -63,6 +67,7 @@ pub(super) async fn spaces(
     ctx: &Context,
     targets: SpaceTargets,
     machines: &[String],
+    acting: &Acting,
 ) -> Result<Chosen> {
     if targets.all && machines.is_empty() {
         let spaces = crate::client::spaces::list(&ctx.paths).await?;
@@ -72,15 +77,7 @@ pub(super) async fn spaces(
         });
     }
     let selected = match machines.is_empty() {
-        true => {
-            ui::select_spaces(
-                ctx,
-                targets.space,
-                false,
-                &crate::cli::ui::Acting::Unconverted,
-            )
-            .await?
-        }
+        true => ui::select_spaces(ctx, targets.space, false, acting).await?,
         false => Vec::new(),
     };
     let located = crate::client::spaces::select(&ctx.paths, selected, machines.to_vec(), false);

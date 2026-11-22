@@ -9,7 +9,7 @@ use futures_util::{StreamExt, stream::FuturesUnordered};
 use crate::client::output::agents::Restarted;
 use crate::{
     agent::Agent,
-    cli::{args::SpaceTargets, context::Context},
+    cli::{args::SpaceTargets, context::Context, ui::Acting},
     config::permissions::PermissionChange,
     model::{AgentRestart, RestartOutcome},
 };
@@ -35,7 +35,12 @@ pub(super) async fn run(
     agent: Option<Agent>,
     restart: AgentRestart,
 ) -> Result<i32> {
-    let selection = selection::load(ctx, targets, machines, agent.as_ref()).await?;
+    let restarting = {
+        let restart = restart.clone();
+        Acting::request(move |space| crate::client::agents::restart(space, restart.clone()))
+    };
+    let selection = selection::load(ctx, (targets, machines), agent.as_ref(), &restarting);
+    let selection = selection.await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         selection::ensure_below(&selection.spaces)?;
     }
@@ -127,7 +132,10 @@ async fn restart_space(
     restart: &AgentRestart,
 ) -> Result<RestartOutcome> {
     let selector = space.selector();
-    match crate::client::agents::restart(&ctx.paths, selector, restart.clone()).await {
+    match (crate::client::agents::restart(selector, restart.clone()))
+        .send(&ctx.paths)
+        .await
+    {
         Err(error) => Err(with_restore(ctx, space, error).await),
         outcome => outcome,
     }
