@@ -25,5 +25,6 @@ outputs!(
     shoal_protocol::hub::Member,
     shoal_protocol::hub::Membership,
     shoal_protocol::hub::Overview,
+    shoal_protocol::hub::placement::Decision,
     shoal_protocol::hub::routing::Queued,
 );

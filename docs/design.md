@@ -29,8 +29,10 @@ firings carry a JSON input document, which filters, templates and keys read
 without knowing the source, and every firing launches through the operation
 `shoal start` uses, as the user, so the queue, `max_heavy_agents` and cleanup apply.
 A space starts on the caller's machine, or on the joined machine `shoal start
---machine` names, whose daemon starts it through the same launch; picking a
-machine for a start that names none is placement, a proposal. `shoal start` and `shoal open`
+--machine` names, whose daemon starts it through the same launch; a start
+that names none and runs its agent detached goes where the hub's placement
+policy puts it, decided once, where its worktree goes, while each machine's
+own queue and admission decide when its agent starts. `shoal start` and `shoal open`
 are thin launchers around the generic execution path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
@@ -399,7 +401,21 @@ overload warning threshold; the hub's own machine sends none, having
 nowhere else to keep them. These times are fixed, not settings. A machine also tells the hub which agent
 tools it has installed, when its link opens and as its config changes them,
 which the hub keeps for its open link alone, since only a connected machine
-starts work. Browser sessions are a later step.
+starts work. Placement is a policy in `shoal-schedule`, beside the queue's
+scheduler and under the same rule: it reads only a snapshot of the start and
+of each connected machine, never the hub's or a daemon's state, and ranks the
+machines with a reason each, so a start and an app can say why a space went
+where it did. Each machine reports its capacity with its spaces: its
+repositories by origin, its `max_heavy_agents`, the heavy agents its
+admission would start now, the memory new work may use and its waiting heavy
+agents, measured at most every 15 seconds and sent when it changes enough to
+place by; the hub places from the latest report, not a live query, and keeps
+it in memory alone. `balanced` sends lasting work to `always_on` machines
+with room and otherwise keeps it on the caller's machine, beside its parent
+and unpushed work; it never clones a repository onto a machine, which stays
+with `--machine`. Placement never moves a space after it is
+created; rebalancing running work is a move. Browser sessions are a later
+step.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup and accepts every connection,

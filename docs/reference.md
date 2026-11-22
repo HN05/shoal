@@ -1197,6 +1197,23 @@ else to the hub's
 [`[machine.hub] default_machine`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub),
 else to the machine the device sent it to.
 
+A start without `--machine` whose agent runs detached, such as a background
+chat, a child an agent starts or a trigger's launch, goes where the hub's
+[`[machine.hub] placement`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+policy puts it, and continues there as a start with `--machine` does; one
+that runs in your terminal, or needs your machine, as `--in`, `--copy`,
+`--fork`, `--path` and a repository your machine lacks or that has no origin
+do, stays on your machine. The hub places it from what each connected
+machine last reported with its spaces: the origins of its repositories, its
+`max_heavy_agents`, the heavy agents its admission would start now, the
+memory new work may use and the heavy agents waiting in its queue, which
+`hub ls --json` shows as `capacity`. A start that finds the machine full
+meanwhile waits in its queue there; placement never moves a space once it
+is created. `shoal start` names the machine with the policy's reason, and
+each connected machine it skipped for lacking the repository or the agent
+tool; `--json` prints that first as its own document, and a hub that cannot
+be asked leaves the start on your machine.
+
 The tree of spaces may span machines: a space that moves to another machine,
 or that `shoal start --machine` starts there, without the space above it stays below it there, once what the hub lists of
 that space takes it as a parent here would, and its permissions stay no wider

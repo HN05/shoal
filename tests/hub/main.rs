@@ -7,6 +7,7 @@ mod directory;
 mod following;
 mod moves;
 mod numbers;
+mod placement;
 mod routing;
 mod shared_config;
 mod starts;

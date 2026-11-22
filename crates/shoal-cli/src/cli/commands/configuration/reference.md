@@ -318,6 +318,7 @@ connect = ["ssh", "desk", "shoal", "daemon", "connect"]   # Overrides a joined m
 auto_update = true                       # The default
 escalate_after_minutes = 30              # The default
 default_machine = "desk"                 # Where a device's start goes when it names none
+placement = "balanced"                   # The default; or "local" or "external"
 
 [machine.hub.forward]
 "/quay/" = "127.0.0.1:8080"              # A path prefix and the local server it reaches
@@ -354,6 +355,21 @@ you.
 `shoal hub ls` shows, that a start from a device goes to when it names none
 with `machine`; without it, the start goes to the machine the device sent it
 to.
+
+`placement`, read on the hub, picks where a start that names no machine goes.
+Only a start that runs its agent detached, such as a background chat, a child
+an agent starts or a trigger's launch, is placed; one that runs in your
+terminal stays on its machine, and `--machine` always picks the machine.
+
+- `local` keeps every start on the machine it was made on.
+- `balanced` sends lasting work to an `always_on` machine with room, among
+  those that have the start's repository registered, matched by origin, and
+  its agent tool: a heavy start to the one whose admission starts a heavy
+  agent now with the most spare memory, a light one first to a machine with
+  `max_heavy_agents = 0`, then to one where no heavy work waits. Without such a
+  machine the start stays on the machine it was made on. Placement never
+  clones a repository; the start reports the machines it skipped and why.
+- `external` places by `balanced`, saying so.
 
 `forward` maps path prefixes, each starting and ending with `/`, to local
 addresses, such as an app's own server: the hub's listener forwards each

@@ -55,6 +55,9 @@ pub(in crate::cli::commands) async fn send(
     attach: Option<(Attach, &Effective)>,
 ) -> Result<i32> {
     let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
+    if let Some(decision) = &launched.placement {
+        super::reports::report_placement(ctx, decision)?;
+    }
     let Some(attach) = attach else {
         return match &launched.start {
             Started::Queued { .. } | Started::Detached(_) => {
