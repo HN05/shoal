@@ -203,7 +203,7 @@ impl Hub {
     ) -> Result<()> {
         let numbering = match sink {
             Sink::Hub(own) => {
-                self.capacities.keep(own, capacity);
+                self.capacities.keep(own, &report, capacity);
                 self.record_report(daemon, own, report, reserved).await?
             }
             Sink::Link(calls) => {

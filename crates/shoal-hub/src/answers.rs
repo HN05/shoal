@@ -102,7 +102,7 @@ impl Hub {
                 capacity,
             } => {
                 ensure_machine(member)?;
-                self.capacities.keep(&member.id, capacity);
+                self.capacities.keep(&member.id, &report, capacity);
                 Reply::Reported(
                     self.record_report(&**daemon, &member.id, report, reserved)
                         .await?,

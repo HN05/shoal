@@ -11,6 +11,7 @@ use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::{
     Member, MemberKind,
     availability::Availability,
+    directory::Report,
     link::{Call, Reply},
     placement::{Decision, Skipped, Unanswered},
 };
@@ -36,15 +37,21 @@ pub use placer::Registration;
 pub(crate) struct Capacities(Mutex<HashMap<MemberId, Capacity>>);
 
 impl Capacities {
-    /// Keep `capacity` as what the machine `member` reported last; a
-    /// report without one, as before the machine measured it, keeps what
-    /// the hub had.
-    pub fn keep(&self, member: &MemberId, capacity: Option<Capacity>) {
-        let Some(capacity) = capacity else {
-            return;
-        };
+    /// Keep `capacity` as what the machine `member` reported with
+    /// `report`: a whole report, which a machine sends as its link opens,
+    /// replaces what the hub had, so one that has not measured since has
+    /// none; a report of changes without one keeps it.
+    pub fn keep(&self, member: &MemberId, report: &Report, capacity: Option<Capacity>) {
         let mut capacities = self.0.lock().unwrap();
-        capacities.insert(member.clone(), capacity);
+        match (capacity, report) {
+            (Some(capacity), _) => {
+                capacities.insert(member.clone(), capacity);
+            }
+            (None, Report::Whole(_)) => {
+                capacities.remove(member);
+            }
+            (None, Report::Changes { .. }) => {}
+        }
     }
 
     /// What the machine `member` reported last, none before it reported.
