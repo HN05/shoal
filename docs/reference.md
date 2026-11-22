@@ -346,7 +346,8 @@ previous read.
 
 When space available to unprivileged processes on a filesystem holding
 workspaces or daemon state falls below `disk.cleanup_free_gib`, the daemon
-deletes the Xcode data there that removing a workspace of a repository using
+deletes the copies of [files](#attached-files) fetched from other machines
+there and the Xcode data there that removing a workspace of a repository using
 the [`xcode` preset](#build-tool-presets) deletes, for every worktree in the
 repository's directory that no longer exists,
 removes the workspaces there that idle cleanup would remove, without waiting for
@@ -7137,8 +7138,9 @@ keeps into `.fetched` beside the workspaces of its repository, where this
 machine has the repository, else in `root_dir`, replacing the copy an earlier
 Ctrl-O fetched. A fetched copy stays for `cleanup.restore.retention_days`
 after its fetch or last change, the repository's or else the global
-setting, and goes with its repository. Workspace processes cannot open
-files.
+setting, goes with its repository, and is the first thing
+[disk space](#overload-protection) cleanup deletes. Workspace processes
+cannot open files.
 `-p`/`--print`, like `--json`, `--path` or output that is not a
 terminal, lists them: each one's name, title, size,
 how it came (`message` for a file sent down with `shoal send --attach`,

@@ -1,5 +1,6 @@
 //! Keep free space on the filesystems holding workspaces and daemon state by
-//! deleting Xcode data that removed workspaces left, then removing
+//! deleting the copies of files fetched from other machines and Xcode data
+//! that removed workspaces left, then removing
 //! workspaces idle cleanup would remove, without their idle delay,
 //! then emptying shared caches nothing is using, then deleting the results
 //! removed workspaces handed back, then stopping tracked executions when
@@ -224,6 +225,7 @@ async fn clean_up(
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> bool {
     let cleaned = async {
+        delete_fetched(manager, filesystem, &available).await?;
         delete_xcode_leftovers(manager, filesystem, &available).await?;
         free_space(manager, settings, workspaces, filesystem, &available).await?;
         empty_caches(manager, settings, filesystem, &available).await?;
@@ -247,6 +249,22 @@ async fn clean_up(
             false
         }
     }
+}
+
+/// Delete the copies of files fetched from other machines on the
+/// filesystem, which those machines keep, so it goes before any workspace.
+async fn delete_fetched(
+    manager: &Manager,
+    filesystem: &mut Filesystem,
+    available: impl Fn(&Path) -> io::Result<u64>,
+) -> Result<()> {
+    if manager
+        .delete_fetched_in(|path| filesystem.holds(path))
+        .await
+    {
+        filesystem.free = available(&filesystem.path)?;
+    }
+    Ok(())
 }
 
 /// Delete the Xcode data that removed workspaces left on the filesystem,

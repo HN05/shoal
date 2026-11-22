@@ -1,7 +1,9 @@
 //! How long fetched copies stay: `cleanup.restore.retention_days` after
-//! their fetch, the longest their source stays once its space is removed;
-//! and every one goes with the repository it is kept beside.
-use std::time::SystemTime;
+//! their fetch, the longest their source stays once its space is removed,
+//! or until disk space cleanup needs their space, since the machine that
+//! keeps the source keeps them too; and every one goes with the repository
+//! it is kept beside.
+use std::{path::Path, time::SystemTime};
 
 use anyhow::{Result, ensure};
 use shoal_ids::repository_ids::RepositoryId;
@@ -46,6 +48,28 @@ impl Manager {
             log!("deleted the expired fetched copies of {name}");
         }
         Ok(())
+    }
+
+    /// Delete every fetched copy where `on` selects, as on a filesystem low
+    /// on space, returning whether any went. A failure is logged and keeps
+    /// the rest of that directory.
+    pub(crate) async fn delete_fetched_in(&self, on: impl Fn(&Path) -> bool) -> bool {
+        let homes = match self.fetched_homes().await {
+            Ok(homes) => homes,
+            Err(error) => {
+                log!("fetched copies kept: {error:#}");
+                return false;
+            }
+        };
+        let mut deleted = false;
+        for Fetched { name, dir, .. } in homes.into_iter().filter(|home| on(home.dir.root())) {
+            let now = SystemTime::now();
+            match off_runtime::run(move || remove_written_before(&dir, now)).await {
+                Ok(removed) => deleted |= removed,
+                Err(error) => log!("fetched copies of {name} kept: {error:#}"),
+            }
+        }
+        deleted
     }
 
     /// Delete the directory of fetched copies beside the repository's

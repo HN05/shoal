@@ -50,3 +50,16 @@ async fn copies_go_once_fetched_longer_ago_than_the_retention() {
     assert!(!expired.exists());
     assert!(kept.exists());
 }
+
+#[tokio::test]
+async fn disk_space_cleanup_deletes_every_copy_where_it_frees_space() {
+    let (temp, manager) = manager().await;
+    let low = fetched(temp.path(), &manager, "low", Duration::ZERO).await;
+    let elsewhere = fetched(temp.path(), &manager, "elsewhere", Duration::ZERO).await;
+    let low_dir = (low.ancestors().nth(3)).unwrap().to_owned();
+
+    assert!(manager.delete_fetched_in(|path| path == low_dir).await);
+
+    assert!(!low.exists());
+    assert!(elsewhere.exists());
+}
