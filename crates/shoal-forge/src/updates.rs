@@ -292,6 +292,18 @@ impl Snapshot {
             && next.finish != self.finish
     }
 
+    /// Whether `self`, a run read now, shows the finish `known` recorded.
+    pub(crate) fn same_finish(&self, known: &Self) -> bool {
+        known.run_finished() && self.finish.is_some() && known.finish == self.finish
+    }
+
+    /// Take how the run `known` recorded at the same finish stopped, and
+    /// its failed jobs.
+    pub(crate) fn keep_failure(&mut self, known: &Self) {
+        self.state = known.state;
+        self.failed_jobs = known.failed_jobs.clone();
+    }
+
     /// Whether the snapshot shows a finished run.
     pub fn run_finished(&self) -> bool {
         matches!(
@@ -601,16 +613,18 @@ pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
 /// Reading what changed on watched items.
 #[shoal_forge_derive::extension(pub UpdateRequests)]
 impl ForgeRepo {
-    /// The activity of `item`.
+    /// The activity of `item`, reading again only what `known`, the
+    /// activity already recorded of it, cannot have changed.
     pub async fn item_activity(
         &self,
         account: &Account,
         item: &shoal_forge_types::items::reference::ItemRef,
+        known: Option<&Snapshot>,
     ) -> Result<Snapshot> {
         match item.number() {
             ItemNumber::Issue(number) => self.issue_activity(account, number).await,
             ItemNumber::Pr(number) => self.activity(account, number).await,
-            ItemNumber::Run(_) => self.run_activity(account, item).await,
+            ItemNumber::Run(_) => self.run_activity(account, item, known).await,
         }
     }
 

@@ -22,6 +22,7 @@ use super::{
     branch_report::{BranchReport, branch_report},
     followed::{followed_items, opened_open_prs},
     merge_lookups::{MergeTarget, follow_merge},
+    reads::Lookup,
     starts::PollStart,
 };
 use crate::{
@@ -97,8 +98,8 @@ impl Links {
         }
         let start = self.poll_start();
         let report = branch_report(&items);
-        let items = self.items_to_look_up(space, items).await?;
-        let items = [items, opened].concat();
+        let mut items = self.items_to_look_up(space, items).await?;
+        items.extend(opened.into_iter().map(Lookup::from));
         let activity = (self.item_activity(daemon, items, &Selection::default())).await;
         let mut observations = Vec::new();
         observations.extend(

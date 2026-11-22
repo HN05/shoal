@@ -18,21 +18,36 @@ use crate::{Links, daemon::Daemon};
 /// processes.
 const ITEMS_READ_AT_ONCE: usize = 4;
 
+/// An item a poll reads, with the activity its space already recorded of
+/// it, which spares the read what that holds.
+pub struct Lookup {
+    pub item: ItemRef,
+    pub known: Option<Snapshot>,
+}
+
+impl From<ItemRef> for Lookup {
+    fn from(item: ItemRef) -> Self {
+        Self { item, known: None }
+    }
+}
+
 impl Links {
     /// The activity of `items`, each read from the forge its URL names, so
     /// a worktree Git cannot read holds none of it back.
     pub async fn item_activity(
         &self,
         daemon: &dyn Daemon,
-        items: Vec<ItemRef>,
+        items: Vec<Lookup>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
         let account = &self.user_account();
         let linked = selection.input.is_none();
         stream::iter(items)
-            .map(|url| async move {
-                let snapshot = (self.read_item_activity(daemon, account, &url, linked)).await?;
-                Ok((url.to_string(), snapshot))
+            .map(|lookup| async move {
+                let snapshot = self
+                    .read_item_activity(daemon, account, &lookup, linked)
+                    .await?;
+                Ok((lookup.item.to_string(), snapshot))
             })
             .buffered(ITEMS_READ_AT_ONCE)
             .try_collect()
@@ -47,14 +62,14 @@ impl Links {
         items: Vec<ItemRef>,
     ) -> Vec<(String, Snapshot)> {
         let account = &self.user_account();
-        stream::iter(items)
-            .map(|item| async move {
+        stream::iter(items.into_iter().map(Lookup::from))
+            .map(|lookup| async move {
                 let read = self
-                    .read_item_activity(daemon, account, &item, false)
+                    .read_item_activity(daemon, account, &lookup, false)
                     .await
                     .ok()?;
                 let complete = read.errors().next().is_none();
-                complete.then(|| (item.to_string(), read))
+                complete.then(|| (lookup.item.to_string(), read))
             })
             .buffered(ITEMS_READ_AT_ONCE)
             .filter_map(std::future::ready)
@@ -62,19 +77,24 @@ impl Links {
             .await
     }
 
-    /// The activity of `item`. The forge failing to read a `linked` item
-    /// leaves an unread snapshot, so a watch reports the failure as it
-    /// reports one of the item's sources; an item named on the command line
-    /// still fails, so a mistyped number does not wait silently.
+    /// The activity of `lookup`'s item. The forge failing to read a
+    /// `linked` item leaves an unread snapshot, so a watch reports the
+    /// failure as it reports one of the item's sources; an item named on
+    /// the command line still fails, so a mistyped number does not wait
+    /// silently.
     async fn read_item_activity(
         &self,
         daemon: &dyn Daemon,
         account: &Account,
-        item: &ItemRef,
+        lookup: &Lookup,
         linked: bool,
     ) -> Result<Snapshot> {
+        let item = &lookup.item;
         let forge = daemon.item_forge(item).await?;
-        match forge.item_activity(account, item).await {
+        match forge
+            .item_activity(account, item, lookup.known.as_ref())
+            .await
+        {
             Err(error) if linked && rate_limited(&error).is_none() => {
                 Ok(Snapshot::unread_item(item.kind(), &error))
             }

@@ -30,6 +30,7 @@ use super::{
         LOOKUP_WINDOW, MergeLookup, Merged, PushedMerge, UnseenPrs, awaits_merge_runs,
         merge_lookups, record_merge_runs, start_lookup, unseen_prs,
     },
+    reads::Lookup,
 };
 use crate::{Links, daemon::Daemon, space::LinkSpace};
 
@@ -170,6 +171,7 @@ impl Links {
         if prs.is_empty() {
             return Ok(false);
         }
+        let prs = prs.into_iter().map(Lookup::from).collect();
         let reads = (self.item_activity(daemon, prs, &Selection::default())).await?;
         let merged = |read: &Snapshot| read.state() == Some(SnapshotState::Merged);
         Ok(reads.iter().any(|(_, read)| merged(read)))

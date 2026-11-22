@@ -19,8 +19,9 @@ use super::{
     UpdatesExt,
     branch_report::{BranchReport, branch_conflicts, branch_report, watches_branch},
     delivery::receiving,
-    followed::activity_ended,
+    followed::recorded_activity,
     framing::own_batch,
+    reads::Lookup,
     starts::PollStart,
 };
 use crate::{Links, daemon::Daemon, space::LinkSpace};
@@ -170,22 +171,27 @@ impl Links {
     }
 
     /// The `items` whose activity is still to come, as
-    /// [`Snapshot::activity_ended`] decides: a merged PR has none, and once
-    /// the space's assignment is done neither has an item seen closed nor a
-    /// run seen finished, so a forge that cannot be reached fails no poll
-    /// for them.
+    /// [`Snapshot::activity_ended`] decides, each with the activity the
+    /// space's watch recorded of it: a merged PR has none, and once the
+    /// space's assignment is done neither has an item seen closed nor a run
+    /// seen finished, so a forge that cannot be reached fails no poll for
+    /// them.
     pub async fn items_to_look_up(
         &self,
         space: &LinkSpace,
         items: Vec<ItemRef>,
-    ) -> Result<Vec<ItemRef>> {
+    ) -> Result<Vec<Lookup>> {
         let (id, done) = (space.id.to_owned(), space.done());
         self.store
             .read(move |db| {
                 let mut open = Vec::new();
-                for url in items {
-                    if !activity_ended(db, &id, url.url(), done)? {
-                        open.push(url);
+                for item in items {
+                    let known = recorded_activity(db, &id, item.url())?;
+                    if !known
+                        .as_ref()
+                        .is_some_and(|known| known.activity_ended(done))
+                    {
+                        open.push(Lookup { item, known });
                     }
                 }
                 Ok(open)

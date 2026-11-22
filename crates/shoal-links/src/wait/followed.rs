@@ -118,16 +118,13 @@ pub(crate) fn observed_item(
         .transpose()?)
 }
 
-/// Whether the workspace's watch saw the item's activity end, as
-/// [`Snapshot::activity_ended`] decides.
-pub fn activity_ended(
+/// The item's activity as the space's watch cursor last recorded it.
+pub fn recorded_activity(
     db: &rusqlite::Connection,
     id: &SpaceId,
     url: &str,
-    done: bool,
-) -> Result<bool> {
-    let record = cursor_record(db, id, url)?;
-    Ok(record.is_some_and(|record| record.snapshot.activity_ended(done)))
+) -> Result<Option<Snapshot>> {
+    Ok(cursor_record(db, id, url)?.map(|record| record.snapshot))
 }
 
 /// Whether the space `id` follows the item at `url`.

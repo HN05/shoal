@@ -135,11 +135,14 @@ impl ForgeRepo {
     }
 
     /// The activity of the run `run`: its state and, once it failed, its
-    /// failed jobs with the steps that failed where their logs say.
+    /// failed jobs with the steps that failed where their logs say. A run
+    /// `known` already holds failed at the same finish keeps them from it,
+    /// without reading its jobs again.
     pub async fn run_activity(
         &self,
         account: &Account,
         run: &shoal_forge_types::items::reference::ItemRef,
+        known: Option<&Snapshot>,
     ) -> Result<Snapshot> {
         let run = self.view_run(account, run).await?;
         // A run held for approval has yet to run, whatever state the forge
@@ -151,11 +154,25 @@ impl ForgeRepo {
         let mut snapshot = Snapshot::of(SnapshotKind::Run, Some(state));
         snapshot.finish = run.finish.clone();
         if state == SnapshotState::Failed {
-            let jobs = self.jobs_of(account, &run).await?;
-            snapshot.state = Some(stopped_run_state(&jobs).into());
-            snapshot.failed_jobs = self.failed_jobs(account, &run, &jobs).await;
+            match known.filter(|known| snapshot.same_finish(known)) {
+                Some(known) => snapshot.keep_failure(known),
+                None => self.read_failure(account, &run, &mut snapshot).await?,
+            }
         }
         Ok(snapshot)
+    }
+
+    /// Record on `snapshot` how the failed `run` stopped and its failed jobs.
+    async fn read_failure(
+        &self,
+        account: &Account,
+        run: &Run,
+        snapshot: &mut Snapshot,
+    ) -> Result<()> {
+        let jobs = self.jobs_of(account, run).await?;
+        snapshot.state = Some(stopped_run_state(&jobs).into());
+        snapshot.failed_jobs = self.failed_jobs(account, run, &jobs).await;
+        Ok(())
     }
 
     /// The failed jobs of `run` among its `jobs`, with the failing steps of
