@@ -14,11 +14,7 @@ pub(in crate::cli::commands) async fn exec(
     workspace: Option<SpaceSelector>,
     command: Vec<OsString>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&Acting::request(shoal_workers::execution::running_command)),
-    )
-    .await?;
+    let workspace =
+        ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&Acting::here())).await?;
     shoal_workers::execution::run_command(&ctx.paths, workspace, command).await
 }

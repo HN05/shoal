@@ -22,9 +22,8 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 /// `shoal stop --interrupt`: cancel the running turns of the agents in the
 /// `selected` spaces, workspaces or chats, leaving agents without one alone.
 pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<i32> {
-    // Shoal types the interrupt key into a place on this machine, among
-    // the spaces it lists here, as a command `shoal exec` runs there would.
-    let typing = Acting::request(shoal_workers::execution::running_command);
+    // Shoal types the interrupt key into a place on this machine.
+    let typing = Acting::here();
     let selected = ui::select_spaces(ctx, selected, false, &typing).await?;
     let spaces = super::stop::resolve(ctx, selected, false).await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {

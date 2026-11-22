@@ -9,7 +9,6 @@ mod containers;
 mod demo;
 mod input;
 mod launch;
-pub use launch::running_command;
 mod link;
 mod mode;
 mod own_group;

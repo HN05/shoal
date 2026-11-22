@@ -34,10 +34,9 @@ pub(super) async fn list(
     listing: Listing,
 ) -> Result<i32> {
     let menu = listing == Listing::Menu && ctx.interactive_output();
-    // The menu prints and opens the kept copies from this machine's disk,
-    // as a command `shoal exec` runs there reads them.
+    // The menu prints and opens the kept copies from this machine's disk.
     let listing_files = match menu {
-        true => Acting::request(shoal_workers::execution::running_command),
+        true => Acting::here(),
         false => Acting::request(crate::client::files::list),
     };
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&listing_files)).await?;

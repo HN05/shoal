@@ -272,7 +272,8 @@ after the space above it, and lists every machine's spaces the caller sees
 for lists, the inbox and pickers. A command's selection is this machine's
 spaces, and a picker hands the daemon the request its command sends for
 the space it picks, which offers the other machines' spaces that request
-reaches after them; `--machine NAME|ID`,
+reaches after them, unless the command acts on the space itself, through
+this machine's worktree, terminal or files; `--machine NAME|ID`,
 which repeats, makes it the named machines' spaces, a selector that, as
 `--all` does, takes no named spaces, and narrows a picker to them, while a
 named space is selected wherever it runs.

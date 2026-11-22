@@ -33,7 +33,7 @@ pub(in crate::cli::commands) async fn open(
         ctx,
         space,
         // The app the space opens in runs on this machine.
-        Fallback::CurrentDirectory(&Acting::request(shoal_workers::execution::running_command)),
+        Fallback::CurrentDirectory(&Acting::here()),
     )
     .await?;
     let space = read(ctx, &selector).await?;

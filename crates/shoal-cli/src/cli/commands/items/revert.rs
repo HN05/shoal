@@ -40,8 +40,8 @@ use shoal_protocol::space_names::SpaceSelector;
 pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;
     // A revert is opened from a worktree it verifies here, or a chat's
-    // checkout here, as a command `shoal exec` runs there reads them.
-    let reverting = Acting::request(shoal_workers::execution::running_command);
+    // checkout here.
+    let reverting = Acting::here();
     let space = ui::select_space(
         ctx,
         selector.space,

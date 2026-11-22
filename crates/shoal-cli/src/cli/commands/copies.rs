@@ -48,9 +48,8 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     let selector = ui::select_workspace(
         ctx,
         args.copy.flatten(),
-        // The new space copies the worktree on this machine, as a command
-        // `shoal exec` runs there reads it.
-        Fallback::CurrentDirectory(&Acting::request(shoal_workers::execution::running_command)),
+        // The new space copies the worktree on this machine.
+        Fallback::CurrentDirectory(&Acting::here()),
     )
     .await?;
     let workspaces = crate::client::spaces::list(&ctx.paths)

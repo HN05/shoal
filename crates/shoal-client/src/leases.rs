@@ -258,8 +258,8 @@ pub async fn acquire_containers(
 }
 
 /// Stop the containers of `workspace`, keeping their volumes and ports.
-pub fn release_containers(workspace: SpaceSelector) -> Prepared<()> {
-    Prepared::new(ContainerMethod::ContainerRelease { workspace })
+pub async fn release_containers(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
+    request(daemon, ContainerMethod::ContainerRelease { workspace }).await
 }
 
 /// Start the containers of `workspace` after its setup command, where its

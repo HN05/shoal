@@ -17,9 +17,8 @@ pub(in crate::cli::commands) async fn processes(
     selection: Selection,
 ) -> Result<i32> {
     // Unlike what ends a space, a stop of its processes may take the chat it
-    // runs in. The spaces it takes are checked among this machine's, where
-    // their processes run, as a command `shoal exec` runs there does.
-    let stopping = Acting::request(shoal_workers::execution::running_command);
+    // runs in. The spaces it takes are checked among this machine's.
+    let stopping = Acting::here();
     let selectors = match ui::current_chat(&None) {
         Some(_) if selectors.is_empty() => {
             let fallback = ui::Fallback::CurrentDirectory(&stopping);

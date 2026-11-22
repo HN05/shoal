@@ -8,10 +8,13 @@ use crate::cli::{availability::Need, context::Context, everywhere, output::Palet
 
 /// The picker entries of the other machines' spaces `offered` names that
 /// `acting`, what the command does with the picked space, can act on; none
-/// on a machine in no hub, and none, with a warning, while the hub cannot
-/// be asked.
+/// for a command that acts here or on a machine in no hub, and none, with
+/// a warning, while the hub cannot be asked.
 pub(super) async fn elsewhere_entries(ctx: &Context, offered: Offered, acting: &Acting) -> Entries {
-    let offered_view = everywhere::offered(ctx, acting.operation(), "the other machines' spaces");
+    let Some(acting) = acting.operation() else {
+        return Entries::new();
+    };
+    let offered_view = everywhere::offered(ctx, acting, "the other machines' spaces");
     let Some(view) = offered_view.await else {
         return Entries::new();
     };

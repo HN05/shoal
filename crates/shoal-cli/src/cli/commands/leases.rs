@@ -147,11 +147,10 @@ async fn select_target(
             let holding = Acting::request(crate::client::leases::holds);
             ui::select_space(ctx, explicit, Fallback::CurrentDirectory(&holding)).await
         }
-        // Every other lease is taken and given back on the worktree's
-        // machine, as its containers are, and a port's or pool's name is
-        // picked once the workspace is.
+        // Every other lease is taken and given back on this machine, where
+        // the worktree is.
         false => {
-            let leasing = Acting::request(leases::release_containers);
+            let leasing = Acting::here();
             ui::select_workspace(ctx, explicit, Fallback::CurrentDirectory(&leasing)).await
         }
     }
@@ -330,11 +329,7 @@ async fn release_one(ctx: &Context, workspace: &SpaceSelector, held: &Held) -> R
         Held::Sim { name } => {
             leases::release_simulator(&ctx.paths, workspace.clone(), name.clone()).await
         }
-        Held::Containers => {
-            leases::release_containers(workspace.clone())
-                .send(&ctx.paths)
-                .await
-        }
+        Held::Containers => leases::release_containers(&ctx.paths, workspace.clone()).await,
         Held::Resource { pool, name } | Held::Repo { pool, name } => {
             leases::release_resource(&ctx.paths, workspace.clone(), pool.clone(), name.clone())
                 .await

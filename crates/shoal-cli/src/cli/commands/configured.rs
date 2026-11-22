@@ -198,7 +198,7 @@ async fn run_defined(
     args: Vec<OsString>,
 ) -> Result<i32> {
     // The configured command runs in the picked workspace.
-    let running = Acting::request(shoal_workers::execution::running_command);
+    let running = Acting::here();
     let workspace = match definition {
         Definition::Global(named) => {
             ui::select_workspace(ctx, named, Fallback::CurrentDirectory(&running)).await?

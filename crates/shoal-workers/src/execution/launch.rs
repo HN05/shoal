@@ -542,34 +542,6 @@ async fn ready_command(
     execution_command(paths, plan, command, mode)
 }
 
-/// What running a command in `workspace` asks the daemon, as the picker
-/// that chooses the workspace judges it: from this process, which stands in
-/// for the wrapper the run starts.
-pub fn running_command(workspace: SpaceSelector) -> connection::Prepared<()> {
-    let wrapper = Identity {
-        pid: std::process::id(),
-        birth: String::new(),
-        unique: None,
-    };
-    connection::Prepared::new(ExecutionMethod::Execute {
-        space: workspace,
-        wrapper,
-        kind: shoal_protocol::executions::ExecutionKind::Command,
-        queue_entry: None,
-        agent: None,
-        model: Default::default(),
-        mode: None,
-        narrowing: Default::default(),
-        new_session: false,
-        recover: false,
-        reattach: false,
-        demo: None,
-        origin: None,
-        source: None,
-        merge: None,
-    })
-}
-
 async fn open_execution(
     paths: &CommandPaths,
     workspace: SpaceSelector,
