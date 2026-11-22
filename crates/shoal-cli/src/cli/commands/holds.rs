@@ -1,4 +1,5 @@
 //! CLI access to the holds that keep spaces from cleanup.
+use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 
 use super::acquisition::Finish;
@@ -58,7 +59,8 @@ pub(super) async fn release(
 /// workspaces then the chats.
 pub(super) async fn list(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
     let Some(space) =
-        ui::select_space_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?
+        ui::select_space_filter(ctx, filter, &Acting::request(crate::client::leases::holds))
+            .await?
     else {
         let spaces = crate::client::spaces::list(&ctx.paths).await?;
         ctx.show(&spaces.0, |spaces| {
@@ -72,13 +74,13 @@ pub(super) async fn list(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
         })?;
         return Ok(0);
     };
-    let holds = leases::holds(&ctx.paths, space).await?;
+    let holds = leases::holds(space).send(&ctx.paths).await?;
     ctx.show(&holds, |holds| render(holds))?;
     Ok(0)
 }
 
 async fn pick(ctx: &Context, space: &SpaceSelector) -> Result<String> {
-    let holds = leases::holds(&ctx.paths, space.clone()).await?;
+    let holds = leases::holds(space.clone()).send(&ctx.paths).await?;
     ensure!(!holds.is_empty(), "no holds on this space");
     let entries = holds
         .into_iter()

@@ -1,4 +1,5 @@
 //! CLI requests and rendering for cooperative resources.
+use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 
 use super::{
@@ -121,7 +122,9 @@ pub(super) async fn fetch_overview(
     workspace: SpaceSelector,
     members: Members,
 ) -> Result<Overview> {
-    let mut overview = leases::resources(&ctx.paths, workspace.clone()).await?;
+    let mut overview = leases::resources(workspace.clone())
+        .send(&ctx.paths)
+        .await?;
     members.retain(&mut overview);
     Ok(overview)
 }
@@ -189,8 +192,12 @@ pub(super) async fn pick_pool(
 }
 
 pub(super) async fn overview(ctx: &Context, filter: SpaceFilter, members: Members) -> Result<i32> {
-    let Some(workspace) =
-        ui::select_workspace_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?
+    let Some(workspace) = ui::select_workspace_filter(
+        ctx,
+        filter,
+        &Acting::request(crate::client::leases::resources),
+    )
+    .await?
     else {
         return workspace_overviews(
             ctx,

@@ -509,7 +509,9 @@ impl Typed {
         let mut names = vec![];
         match target {
             Target::Pools | Target::Members | Target::ResourceNames => {
-                let overview = leases::resources(&paths, SpaceSelector::id(&workspace)).await?;
+                let overview = leases::resources(SpaceSelector::id(&workspace))
+                    .send(&paths)
+                    .await?;
                 match target {
                     Target::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
                     Target::Members => names.extend(
@@ -530,11 +532,14 @@ impl Typed {
             }
             Target::Ports | Target::ReservedPorts => {
                 if matches!(target, Target::Ports) {
-                    let catalog =
-                        leases::port_catalog(&paths, SpaceSelector::id(&workspace)).await?;
+                    let catalog = leases::port_catalog(SpaceSelector::id(&workspace))
+                        .send(&paths)
+                        .await?;
                     names.extend(catalog.configured.into_keys());
                 }
-                let overview = leases::ports(&paths, SpaceSelector::id(&workspace)).await?;
+                let overview = leases::ports(SpaceSelector::id(&workspace))
+                    .send(&paths)
+                    .await?;
                 names.extend(overview.reserved.into_iter().map(|p| p.name));
             }
             Target::SimNames => {

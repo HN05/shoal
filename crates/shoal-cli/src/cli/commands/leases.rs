@@ -1,6 +1,7 @@
 //! Typed acquisition and release across ports, simulators, containers and
 //! resources.
 
+use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -143,20 +144,12 @@ async fn select_target(
 ) -> Result<SpaceSelector> {
     match holds {
         true => {
-            ui::select_space(
-                ctx,
-                explicit,
-                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-            )
-            .await
+            let holding = Acting::request(crate::client::leases::holds);
+            ui::select_space(ctx, explicit, Fallback::CurrentDirectory(&holding)).await
         }
         false => {
-            ui::select_workspace(
-                ctx,
-                explicit,
-                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-            )
-            .await
+            let leasing = Acting::request(crate::client::leases::resources);
+            ui::select_workspace(ctx, explicit, Fallback::CurrentDirectory(&leasing)).await
         }
     }
 }
@@ -235,7 +228,9 @@ async fn select_held(
             }
         }
     });
-    let containers = leases::containers(&ctx.paths, Some(workspace.clone())).await?;
+    let containers = leases::containers(Some(workspace.clone()))
+        .send(&ctx.paths)
+        .await?;
     let containers = (containers.projects.into_iter())
         .filter(|containers| containers.project.state.active())
         .map(|_| Held::Containers);
@@ -356,9 +351,12 @@ pub(super) async fn show(
         Some(LeaseKind::Resource) => resources::overview(ctx, filter, Members::Locks).await,
         Some(LeaseKind::Repo) => resources::overview(ctx, filter, Members::Repositories).await,
         None => {
-            let Some(workspace) =
-                ui::select_workspace_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted)
-                    .await?
+            let Some(workspace) = ui::select_workspace_filter(
+                ctx,
+                filter,
+                &Acting::request(crate::client::leases::ports),
+            )
+            .await?
             else {
                 return workspace_overviews(
                     ctx,
@@ -377,8 +375,10 @@ pub(super) async fn show(
 }
 
 async fn fetch_leases(ctx: &Context, workspace: &SpaceSelector) -> Result<Leases> {
-    let ports = leases::ports(&ctx.paths, workspace.clone()).await?;
-    let simulators = leases::simulators(&ctx.paths, Some(workspace.clone())).await?;
+    let ports = leases::ports(workspace.clone()).send(&ctx.paths).await?;
+    let simulators = leases::simulators(Some(workspace.clone()))
+        .send(&ctx.paths)
+        .await?;
     let containers = containers::fetch_overview(ctx, workspace).await?;
     let resources = resources::fetch_overview(ctx, workspace.to_owned(), Members::All).await?;
     Ok(Leases {

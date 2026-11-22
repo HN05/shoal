@@ -1,4 +1,5 @@
 //! CLI port reservations and interactive conflict suggestions.
+use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 
 use crate::client::output::leases::Suggested;
@@ -94,16 +95,21 @@ fn describe(port: &PortReservation, palette: Palette) -> String {
 
 pub(super) async fn overview(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
     let Some(workspace) =
-        ui::select_workspace_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?
+        ui::select_workspace_filter(ctx, filter, &Acting::request(crate::client::leases::ports))
+            .await?
     else {
         return workspace_overviews(
             ctx,
-            async |workspace| leases::ports(&ctx.paths, SpaceSelector::id(&workspace.id)).await,
+            async |workspace| {
+                leases::ports(SpaceSelector::id(&workspace.id))
+                    .send(&ctx.paths)
+                    .await
+            },
             render_overview,
         )
         .await;
     };
-    let overview = leases::ports(&ctx.paths, workspace.clone()).await?;
+    let overview = leases::ports(workspace.clone()).send(&ctx.paths).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;
@@ -142,7 +148,9 @@ pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
 }
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &SpaceSelector) -> Result<PortCatalog> {
-    leases::port_catalog(&ctx.paths, workspace.clone()).await
+    leases::port_catalog(workspace.clone())
+        .send(&ctx.paths)
+        .await
 }
 
 pub(super) fn render_catalog(catalog: &PortCatalog, palette: Palette) {

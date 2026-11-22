@@ -1,4 +1,5 @@
 //! What each lease kind offers: its configuration and available inventory.
+use crate::cli::ui::Acting;
 use anyhow::Result;
 
 use super::{
@@ -23,7 +24,7 @@ pub(super) async fn show(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(crate::client::leases::port_catalog)),
     )
     .await?;
     match kind {

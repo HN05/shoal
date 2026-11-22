@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use tokio::time::sleep;
 
-use crate::connection::{Daemon, call, request};
+use crate::connection::{Daemon, Prepared, call, request};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     approvals::{ApprovalRequest, DecisionStatus},
@@ -166,13 +166,13 @@ pub async fn release_port(
 }
 
 /// The ports `workspace` reserved.
-pub async fn ports(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<PortOverview> {
-    request(daemon, PortMethod::PortOverview { workspace }).await
+pub fn ports(workspace: SpaceSelector) -> Prepared<PortOverview> {
+    Prepared::new(PortMethod::PortOverview { workspace })
 }
 
 /// The ports `workspace`'s repository configures, and the automatic range.
-pub async fn port_catalog(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<PortCatalog> {
-    request(daemon, PortMethod::PortCatalog { workspace }).await
+pub fn port_catalog(workspace: SpaceSelector) -> Prepared<PortCatalog> {
+    Prepared::new(PortMethod::PortCatalog { workspace })
 }
 
 pub async fn acquire_simulator(
@@ -192,11 +192,8 @@ pub async fn release_simulator(
 }
 
 /// The simulators `workspace` leases, or every workspace's.
-pub async fn simulators(
-    daemon: &impl Daemon,
-    workspace: Option<SpaceSelector>,
-) -> Result<SimulatorOverview> {
-    request(daemon, SimulatorMethod::SimOverview { workspace }).await
+pub fn simulators(workspace: Option<SpaceSelector>) -> Prepared<SimulatorOverview> {
+    Prepared::new(SimulatorMethod::SimOverview { workspace })
 }
 
 /// The simulator devices `workspace` sees, or every one.
@@ -287,11 +284,8 @@ pub async fn start_agent_containers(daemon: &impl Daemon, workspace: SpaceSelect
 }
 
 /// The containers of `workspace`, or of every workspace.
-pub async fn containers(
-    daemon: &impl Daemon,
-    workspace: Option<SpaceSelector>,
-) -> Result<ContainerOverview> {
-    request(daemon, ContainerMethod::ContainerOverview { workspace }).await
+pub fn containers(workspace: Option<SpaceSelector>) -> Prepared<ContainerOverview> {
+    Prepared::new(ContainerMethod::ContainerOverview { workspace })
 }
 
 /// What `workspace`'s repository configures for its containers, and the
@@ -330,8 +324,8 @@ pub async fn release_resource(
 }
 
 /// The resource pools `workspace` sees and the permits it holds.
-pub async fn resources(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Overview> {
-    request(daemon, ResourceMethod::ResourceOverview { workspace }).await
+pub fn resources(workspace: SpaceSelector) -> Prepared<Overview> {
+    Prepared::new(ResourceMethod::ResourceOverview { workspace })
 }
 
 /// The resource pools `workspace`'s configuration defines.
@@ -389,8 +383,8 @@ pub async fn release_hold(daemon: &impl Daemon, space: SpaceSelector, name: Stri
 }
 
 /// The holds on `space`.
-pub async fn holds(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<SpaceHold>> {
-    request(daemon, HoldMethod::HoldList { space }).await
+pub fn holds(space: SpaceSelector) -> Prepared<Vec<SpaceHold>> {
+    Prepared::new(HoldMethod::HoldList { space })
 }
 
 #[cfg(test)]

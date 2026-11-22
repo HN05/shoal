@@ -1,4 +1,5 @@
 //! CLI requests for a workspace's service containers, and their rendering.
+use crate::cli::ui::Acting;
 use anyhow::Result;
 
 use crate::client::output::leases::Suggested;
@@ -47,8 +48,12 @@ pub(super) async fn acquire(
 }
 
 pub(super) async fn overview(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
-    let Some(workspace) =
-        ui::select_workspace_filter(ctx, filter, &crate::cli::ui::Acting::Unconverted).await?
+    let Some(workspace) = ui::select_workspace_filter(
+        ctx,
+        filter,
+        &Acting::request(|space| crate::client::leases::containers(Some(space))),
+    )
+    .await?
     else {
         return workspace_overviews(
             ctx,
@@ -68,7 +73,9 @@ pub(super) async fn fetch_overview(
     ctx: &Context,
     workspace: &SpaceSelector,
 ) -> Result<ContainerOverview> {
-    leases::containers(&ctx.paths, Some(workspace.clone())).await
+    leases::containers(Some(workspace.clone()))
+        .send(&ctx.paths)
+        .await
 }
 
 pub(super) fn render_overview(overview: &ContainerOverview, palette: Palette) {
