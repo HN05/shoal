@@ -175,12 +175,12 @@ impl Hub {
         let receiver = daemon.receiver_from(&told.above).await?;
         let kind = told.record.kind();
         let (agent, user) = told.record.texts();
-        let files = self.files_here(daemon, told.record.files()).await?;
         match (receiver, told.about) {
             (Some(Receiver::Here(coordinator)), about) => {
                 let about = about.map_or_else(About::default, |about| {
                     About::space(&about.name, &about.space)
                 });
+                let files = self.files_here(daemon, told.record.files()).await?;
                 let alert = told_alert(kind, about, agent, files);
                 (daemon.alert(&coordinator, alert, told.for_user)).await
             }
@@ -195,6 +195,7 @@ impl Hub {
             (None, Some(about)) => {
                 if told.for_user {
                     let about = About::space(&about.name, &about.space);
+                    let files = self.files_here(daemon, told.record.files()).await?;
                     let alert = told_alert(kind, about, user, files);
                     self.notifications.notify_user(alert).await;
                 }
