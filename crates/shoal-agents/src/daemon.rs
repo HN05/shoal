@@ -5,7 +5,7 @@
 //! spaces, the merges an execution runs, the demos and viewers of
 //! executions, the links, CI jobs, leases and reviews that follow an
 //! agent's work, the conversions that hand an agent over, the snapshot the
-//! queue ranks, and the records of other subsystems they read and write in
+//! queue ranks, the hub a shutdown hands spaces over through, and the records of other subsystems they read and write in
 //! their own transactions.
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -36,6 +36,7 @@ use shoal_protocol::{
         modes::ModeName,
         permissions::{PermissionChange, PermissionsConfig},
     },
+    hub::packages::Handed,
     item_numbers::ItemNumber,
     model::{
         Chat, Completion, MergeOptions, MergePlan, OpenedWorkspace, PortReservation,
@@ -617,6 +618,15 @@ pub trait Memory: Send + Sync {
     fn work_limit(&self) -> Option<WorkLimit>;
 }
 
+/// The hub, through which a machine joined to one hands its spaces over
+/// as it shuts down.
+pub trait Handovers: Send + Sync {
+    /// Hand this machine's spaces over through the hub by `deadline`, and
+    /// where each went; none on a machine that hands nothing over, as one
+    /// in no hub.
+    fn hand_over(&self, deadline: tokio::time::Instant) -> BoxFuture<'_, Vec<(Space, Handed)>>;
+}
+
 /// The snapshot the agent queue ranks.
 pub trait Ranking: Send + Sync {
     /// What ranking reads now.
@@ -640,6 +650,7 @@ pub trait Daemon:
     + Conversions
     + Memory
     + Ranking
+    + Handovers
 {
 }
 
@@ -659,6 +670,7 @@ impl<T> Daemon for T where
         + Conversions
         + Memory
         + Ranking
+        + Handovers
 {
 }
 

@@ -7,6 +7,7 @@
 mod alerts;
 mod conversions;
 mod demos;
+mod handovers;
 mod leases;
 mod lifecycles;
 mod links;

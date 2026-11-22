@@ -1273,7 +1273,10 @@ async fn daemon_exit_with_runner(job: Value, cancelling: Cancelling) -> Fixture 
                     manager.end_work(Ending::Stop).await;
                 }
                 Cancelling::SystemShutdown => {
-                    manager.agents.stop_for_system_shutdown(&*manager).await
+                    let window = std::time::Duration::from_secs(60);
+                    (manager.agents)
+                        .stop_for_system_shutdown(&*manager, window)
+                        .await
                 }
             }
         }

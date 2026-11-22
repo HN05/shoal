@@ -250,7 +250,28 @@ copy through the removal path once its link opens, alerting the user when
 its copy changed after the package. Silence alone never starts a second
 copy: a machine that lost only the hub keeps working, so the hub only
 alerts the user once an intermittent machine has been unreachable for 30
-minutes while its spaces had something to do. Space numbers form
+minutes while its spaces had something to do. A shutdown is no silence:
+every machine joined to a hub, whatever its availability, hands its spaces
+over as it shuts down, which is not a setting. Once the save-first
+shutdown stop below ends, it sends the final package of every space at
+once, one stream each, with the start its agent would make, and only the
+sending has to fit in the shutdown's window, logind's delay limit or the
+service's stop timeout. The hub keeps each package that arrives whole as
+it keeps any, places its space among the other connected machines, its own
+as the caller's, so `always_on` machines with room come first and the hub
+takes the rest, and writes the placement back before that machine imports
+the package under the space's ID and queues its agents' restores; nothing
+waits for an import. That machine's takeover claim stands though the
+machine it came from may still be connected, which forgets the space's
+restores so it does not come back at boot, and retires its copy once its
+link opens, as after any takeover; work a reboot moved away stays where it
+went. A space whose package did not arrive, or that no machine took, keeps
+its place and restores at boot as before, and the stop's notification
+names where each space went or why it stayed. On macOS the daemon cannot
+tell a shutdown's signal from a logout's or a service stop's, so every
+signal Shoal did not send itself hands work over, as its agents stop
+anyway; Shoal's own restart, stop and upgrades go through its control path
+and hand nothing over. Space numbers form
 one sequence across the hub's machines, which the hub holds: it answers
 each report with a few spares it keeps for that machine, which numbers a
 new space from them without waiting for the hub, and once none is left, as

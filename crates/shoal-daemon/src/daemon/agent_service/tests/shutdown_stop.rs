@@ -103,7 +103,12 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
 
     let stopping = tokio::spawn({
         let manager = manager.clone();
-        async move { manager.agents.stop_for_system_shutdown(&*manager).await }
+        async move {
+            let window = Duration::from_secs(60);
+            (manager.agents)
+                .stop_for_system_shutdown(&*manager, window)
+                .await
+        }
     });
     assert!(matches!(
         read(&mut connection).await,

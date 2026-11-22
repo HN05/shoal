@@ -6,7 +6,7 @@ use tokio::process::Command;
 
 pub(super) const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 /// Give the OS time to finish a daemon drain before forcing termination.
-pub(super) const SERVICE_STOP_TIMEOUT: Duration =
+pub const SERVICE_STOP_TIMEOUT: Duration =
     timing::WORKSPACE_STOP_TIMEOUT.saturating_add(COMMAND_TIMEOUT);
 /// A synchronous stop must also allow the service manager to finish its job.
 const STOP_COMMAND_TIMEOUT: Duration = SERVICE_STOP_TIMEOUT.saturating_add(COMMAND_TIMEOUT);

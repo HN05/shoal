@@ -1,5 +1,7 @@
 //! Platforms without a login manager that announces shutdowns, such as
 //! macOS, where the signals of the shutdown itself stop the work.
+use std::time::Duration;
+
 use anyhow::Result;
 
 use super::LoginManager;
@@ -14,6 +16,10 @@ impl LoginManager for Unsupported {
     type Lock = ();
 
     async fn delay_shutdown(&self) -> Result<()> {
+        match *self {}
+    }
+
+    async fn delay_limit(&self) -> Duration {
         match *self {}
     }
 

@@ -972,6 +972,15 @@ impl Ranking for StandIn {
     }
 }
 
+impl crate::daemon::Handovers for StandIn {
+    fn hand_over(
+        &self,
+        _: tokio::time::Instant,
+    ) -> BoxFuture<'_, Vec<(Space, shoal_protocol::hub::packages::Handed)>> {
+        Box::pin(async { Vec::new() })
+    }
+}
+
 /// What [`space_facts`] reads of a space, before its condition.
 const SPACE_FACTS: &str = "SELECT s.id,s.kind,s.repository_id,s.name,w.state,
     COALESCE(w.setup_finished,0),

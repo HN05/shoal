@@ -1,9 +1,10 @@
 //! Hold off a system shutdown until tracked work is stopped. The daemon holds
 //! the login manager's shutdown delay lock while it runs; once a shutdown
 //! starts, it stops what `shoal stop --all` stops while the wrappers can still
-//! save it, then releases the lock so the shutdown continues. Without a login
-//! manager the signals of the shutdown itself stop the work.
-use std::sync::Arc;
+//! save it and hands the spaces over within the lock's delay limit, then
+//! releases the lock so the shutdown continues. Without a login manager the
+//! signals of the shutdown itself stop the work.
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 
@@ -27,6 +28,9 @@ pub(super) trait LoginManager {
 
     async fn delay_shutdown(&self) -> Result<Self::Lock>;
 
+    /// How long the login manager holds a shutdown off for a delay lock.
+    async fn delay_limit(&self) -> Duration;
+
     /// The next announcement, `true` as a shutdown starts and `false` when
     /// one is cancelled; `None` once announcements end.
     async fn announcement(&mut self) -> Option<bool>;
@@ -47,7 +51,10 @@ async fn hold(manager: &Manager, mut login: impl LoginManager) {
         if !announced(&mut login, true).await {
             return;
         }
-        manager.agents.stop_for_system_shutdown(manager).await;
+        let window = login.delay_limit().await;
+        (manager.agents)
+            .stop_for_system_shutdown(manager, window)
+            .await;
         drop(lock);
         if !announced(&mut login, false).await {
             return;

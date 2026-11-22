@@ -54,8 +54,10 @@ impl Manager {
             }
             Ending::Save => {
                 self.agents.executions().close().await;
-                self.agents
-                    .stop_for_shutdown_of(self, Shutdown::Daemon)
+                // The service manager's stop timeout bounds what follows.
+                let window = crate::service::SERVICE_STOP_TIMEOUT;
+                (self.agents)
+                    .stop_for_shutdown_of(self, Shutdown::Daemon, window)
                     .await
             }
         }

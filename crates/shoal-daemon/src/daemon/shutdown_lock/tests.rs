@@ -32,6 +32,10 @@ impl LoginManager for Fake {
         Ok(Held(self.locks.clone()))
     }
 
+    async fn delay_limit(&self) -> Duration {
+        Duration::from_secs(5)
+    }
+
     async fn announcement(&mut self) -> Option<bool> {
         self.announcements.recv().await
     }

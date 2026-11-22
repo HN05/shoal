@@ -1,11 +1,14 @@
 //! Stopping tracked work before the system or the daemon shuts down, as
-//! `shoal stop --all` does, while the daemon and wrappers still run to save it.
+//! `shoal stop --all` does, while the daemon and wrappers still run to save
+//! it, then handing the spaces over to other machines of the hub.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use anyhow::Result;
 use futures_util::future::join_all;
+use shoal_protocol::hub::packages::Handed;
+use tokio::time::Instant;
 
 use crate::Agents;
 use crate::daemon::Daemon;
@@ -90,24 +93,30 @@ impl Shutdown {
 
 impl Agents {
     /// Stop the spaces `shoal stop --all` stops before the system shuts
-    /// down. See [`Manager::stop_for_shutdown_of`].
-    pub async fn stop_for_system_shutdown(&self, daemon: &dyn Daemon) {
-        self.stop_for_shutdown_of(daemon, Shutdown::System).await;
+    /// down, and hand them over within the shutdown's `window`. See
+    /// [`Self::stop_for_shutdown_of`].
+    pub async fn stop_for_system_shutdown(&self, daemon: &dyn Daemon, window: Duration) {
+        (self.stop_for_shutdown_of(daemon, Shutdown::System, window)).await;
     }
 
     /// Stop the spaces `shoal stop --all` stops, each wrapper saving its
     /// agent before the stop and requesting restores that need no user,
     /// which the stop keeps with those already waiting, and leaving CI jobs
     /// running unless `shutdown` ends them. Hold the agent queue until a
-    /// system shutdown is cancelled, so nothing starts again before it. The
-    /// user learns what to continue. An update waits for the stop. Once a
-    /// stop before a shutdown finished, later ones wait for it and leave the
-    /// work alone. Returns the spaces stopped.
+    /// system shutdown is cancelled, so nothing starts again before it.
+    /// Then, on a machine joined to a hub, hand every space over to the
+    /// machines the hub places them on, sending what fits in the
+    /// shutdown's `window`. The user learns where each space went and what
+    /// to continue. An update waits for the stop. Once a stop before a
+    /// shutdown finished, later ones wait for it and leave the work alone.
+    /// Returns the spaces stopped.
     pub async fn stop_for_shutdown_of(
         &self,
         daemon: &dyn Daemon,
         shutdown: Shutdown,
+        window: Duration,
     ) -> StoppedSpaces {
+        let started = Instant::now();
         let mut finished = self.shutdown_stopped.lock().await;
         if *finished {
             return StoppedSpaces::default();
@@ -126,8 +135,8 @@ impl Agents {
                     .await
             })
             .await;
-        self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces)
-            .await;
+        let handed = (self.hand_over(daemon, handover_deadline(started, window))).await;
+        (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
         *finished = true;
         stopped
     }
@@ -198,28 +207,68 @@ impl Agents {
             .await;
     }
 
-    /// Tell the user what the stop of `stopped` saved and how it continues.
+    /// Hand this machine's spaces over through the hub by `deadline`, and
+    /// where each went. A space that went keeps no restore here, so it
+    /// does not come back at boot, where this machine retires it once the
+    /// hub names it, as after any takeover.
+    async fn hand_over(&self, daemon: &dyn Daemon, deadline: Instant) -> Vec<(Space, Handed)> {
+        let handed = daemon.hand_over(deadline).await;
+        for (space, handed) in &handed {
+            if let Handed::Went(_) = handed
+                && let Err(error) = self.cancel_stopped_restores(daemon, &space.id).await
+            {
+                log!(
+                    "{} went to another machine, but its restores here stay: {error:#}",
+                    space.name
+                );
+            }
+        }
+        handed
+    }
+
+    /// Tell the user what the stop of `stopped` saved, where the spaces
+    /// `handed` over went, and how the work that stays here continues.
     async fn notify_shutdown_stop(
         &self,
         daemon: &dyn Daemon,
         shutdown: Shutdown,
         stopped: &[Space],
+        handed: &[(Space, Handed)],
     ) {
-        if stopped.is_empty() {
+        let moment = shutdown.moment();
+        let stopped = self.stopped_report(moment, stopped, handed).await;
+        let handed =
+            (!handed.is_empty()).then(|| format!("Handed over {moment}: {}", handovers(handed)));
+        let told: Vec<String> = stopped.into_iter().chain(handed).collect();
+        if told.is_empty() {
             return;
         }
-        let waiting = self.awaiting_restore(stopped).await;
-        let continues = continuation(&waiting);
+        let message = told.join(". ");
+        (daemon.notify(None, shutdown.notification(), message)).await;
+    }
+
+    /// What the user reads of the work stopped in the `stopped` spaces
+    /// `moment`, and how the work of those that `handed` does not say went
+    /// elsewhere continues here; none without any.
+    async fn stopped_report(
+        &self,
+        moment: &str,
+        stopped: &[Space],
+        handed: &[(Space, Handed)],
+    ) -> Option<String> {
+        if stopped.is_empty() {
+            return None;
+        }
         let count = stopped.len();
         let spaces = if count == 1 { "space" } else { "spaces" };
-        let moment = shutdown.moment();
-        daemon
-            .notify(
-                None,
-                shutdown.notification(),
-                format!("Stopped work in {count} {spaces} {moment}; {continues}"),
-            )
-            .await;
+        let here = staying(stopped, handed);
+        if here.is_empty() {
+            return Some(format!("Stopped work in {count} {spaces} {moment}"));
+        }
+        let continues = continuation(&self.awaiting_restore(&here).await);
+        Some(format!(
+            "Stopped work in {count} {spaces} {moment}; {continues}"
+        ))
     }
 
     /// Those of the `stopped` spaces whose saved work only `shoal resume`
@@ -266,6 +315,43 @@ pub fn waits_for_resume(
     Ok(!saved.commands.is_empty()
         || (saved.agents.iter().chain(&saved.sessions))
             .any(|agent| !requested.contains(&agent.id) && !queued.contains(&agent.id)))
+}
+
+/// The latest a hand-over that starts once work stopped may send, of a
+/// stop that `started` with a shutdown's `window`: a moment before the
+/// window ends, so the user's notification is written before it does.
+fn handover_deadline(started: Instant, window: Duration) -> Instant {
+    started + window.saturating_sub(HANDOVER_MARGIN)
+}
+
+/// What a stop before a shutdown keeps of its window after a hand-over.
+const HANDOVER_MARGIN: Duration = Duration::from_secs(1);
+
+/// Those of the `stopped` spaces that stay here, which `handed` does not
+/// say went to another machine.
+fn staying(stopped: &[Space], handed: &[(Space, Handed)]) -> Vec<Space> {
+    let went: HashSet<&SpaceId> = (handed.iter())
+        .filter(|(_, handed)| matches!(handed, Handed::Went(_)))
+        .map(|(space, _)| &space.id)
+        .collect();
+    (stopped.iter())
+        .filter(|space| !went.contains(&space.id))
+        .cloned()
+        .collect()
+}
+
+/// Where each space `handed` over went, or why it stays here.
+fn handovers(handed: &[(Space, Handed)]) -> String {
+    let each = handed.iter().map(|(space, handed)| {
+        let (name, number) = (&space.name, space.number);
+        match handed {
+            Handed::Went(decision) => {
+                format!("{name} ({number}) went to machine {}", decision.name)
+            }
+            Handed::Stayed(why) => format!("{name} ({number}) stays here: {why}"),
+        }
+    });
+    each.collect::<Vec<_>>().join("; ")
 }
 
 /// How the work of the `waiting` spaces continues. `shoal resume --all`

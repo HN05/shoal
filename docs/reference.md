@@ -465,7 +465,9 @@ names the `shoal resume` command the work needs, naming done workspaces, which
 `--all` skips, or says the agent queue restores it; a workspace that does not
 stop records `stop_failed`, and a refused lock `environment_problem`. A signal
 to the daemon stops work the same way unless a shutdown's stop already did, and
-records `daemon_stopped` instead of `system_shutdown`. An
+records `daemon_stopped` instead of `system_shutdown`. On a machine joined
+to a hub, the stop then [hands its spaces over](#hub) and
+the alert names where each went. An
 agent that was idle comes back only when an update arrives for it, unless
 processes it started outside its process group were still running. An
 agent whose restore needs a session picker, or whose assignment is done, waits
@@ -1152,8 +1154,35 @@ checkpoint its removal kept, and for a chat its agents' sessions. A copy the
 machine cannot remove raises a `space_conflict` alert naming the error and
 `shoal rm <id>`, and the hub asks it again the next time it connects.
 
-The hub never takes a space over on its own: a machine that is awake but
-lost only the hub keeps working. Once an `intermittent` machine has been
+A machine joined to a hub hands its spaces over as it shuts down, whether
+it is `always_on` or `intermittent`; the hub's own machine and a machine in
+no hub keep theirs. Once the stop before the shutdown saved its agents, it
+sends the hub the final package of every workspace whose worktree is ready,
+but one a CI job runs in, and every chat, all at once, until a second before the shutdown's window
+ends: logind's `InhibitDelayMaxSec`, or for a signal the service
+definition's stop timeout. For each package that arrives whole, the hub
+chooses a machine by its
+[`[machine.hub] placement`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+policy among the other
+connected machines, its own taking the place of the caller's, from the
+space's repository, its agent's tool and its mode, and that machine imports
+the package under the space's ID, as `shoal restore` of a kept package
+does, and queues its agents' restores, which continue their sessions. The
+`system_shutdown` or `daemon_stopped` alert names, for each space, the
+machine it went to, or that it stays and why: its package did not reach the
+hub in time, no machine can take it, or the hub cannot be reached. A space
+that stays restores here at boot as before. One that went keeps no restore
+here, and once this machine's link opens again it retires its copy as after
+any takeover; work a reboot moved does not come back on its own. A space
+the chosen machine fails to continue stays here too, and the hub raises a
+`handover_failed` alert naming `shoal resume <id>` here and
+`shoal restore <id>`, which takes it over from the hub's package. On macOS
+every terminating signal Shoal did not send itself counts as a shutdown, so
+a logout hands work over too; `shoal daemon restart`, `shoal daemon stop`
+and upgrades hand nothing over.
+
+The hub never takes a space over on its own otherwise: a machine that is
+awake but lost only the hub keeps working. Once an `intermittent` machine has been
 unreachable for 30 minutes, the hub records one `machine_unreachable` alert
 for that drop, naming its spaces that had something to do (an agent working
 when its link dropped, a queued agent, or an event the hub holds for one
