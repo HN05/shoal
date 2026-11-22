@@ -56,23 +56,13 @@ impl Hub {
     /// the takeover went by, and to each it could not end, which then runs
     /// on both machines; the spaces it no longer has.
     pub(crate) async fn retire(&self, daemon: &dyn Daemon, spaces: Vec<SpaceId>) -> Vec<SpaceId> {
-        let mut retired = Vec::new();
-        for id in spaces {
-            let space = match daemon.find_space(&id).await {
-                Ok(Some(space)) => space,
-                Ok(None) => {
-                    retired.push(id);
-                    continue;
-                }
-                Err(error) => {
-                    log!(
-                        "hub: could not read space {id}, which another machine took over: {error:#}"
-                    );
-                    continue;
-                }
-            };
+        let (mut found, mut retired) = found_spaces(daemon, spaces).await;
+        // A chat in a workspace's worktree goes first, since the removal of
+        // that workspace would take it along unconfirmed.
+        found.sort_by_key(|space| space.worktree().is_some());
+        for space in found {
             match self.retire_one(daemon, &space).await {
-                Ok(()) => retired.push(id),
+                Ok(()) => retired.push(space.id),
                 Err(error) => {
                     let about = About::space(&space.name, &space.id);
                     let message = unretired_message(&space, &error);
@@ -106,6 +96,22 @@ impl Hub {
             _ => true,
         }
     }
+}
+
+/// The spaces of `ids` this machine has, and the IDs of those it no longer
+/// has; one it cannot read is in neither, for the hub to name again.
+async fn found_spaces(daemon: &dyn Daemon, ids: Vec<SpaceId>) -> (Vec<Space>, Vec<SpaceId>) {
+    let (mut found, mut gone) = (Vec::new(), Vec::new());
+    for id in ids {
+        match daemon.find_space(&id).await {
+            Ok(Some(space)) => found.push(space),
+            Ok(None) => gone.push(id),
+            Err(error) => {
+                log!("hub: could not read space {id}, which another machine took over: {error:#}")
+            }
+        }
+    }
+    (found, gone)
 }
 
 /// What the user reads of `space`, which another machine took over and
