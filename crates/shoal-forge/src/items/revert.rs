@@ -4,13 +4,15 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    backends::{Items, Merging, rest::commit_shas},
+    backends::rest::commit_shas,
     capability::CapabilityRequests,
     items::{
+        Items,
         action::ActionRequests,
         attach::{AttachRequests, AttachSteps},
         create::{CreateSteps, Created, pending_edit},
         item::ItemRequests,
+        merging::Merging,
     },
     transport::{account::Account, api::TransportRequests},
 };

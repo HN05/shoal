@@ -9,11 +9,7 @@ use serde_json::Value;
 
 use super::Forgejo;
 use crate::{
-    backends::{
-        Attachments,
-        area::{image, link, served_at},
-    },
-    items::attach::Holder,
+    items::attach::{Attachments, Holder, image, link, served_at},
     transport::{
         account::Account,
         api::{Request, TransportRequests, Upload, encode},
@@ -21,8 +17,10 @@ use crate::{
         response::Fetched,
     },
 };
-use shoal_forge_types::ForgeRepo;
-use shoal_forge_types::items::attach::{Attachment, Media};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::attach::{Attachment, Media},
+};
 
 mod sniff;
 

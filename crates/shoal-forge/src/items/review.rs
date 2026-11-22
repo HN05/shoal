@@ -10,7 +10,8 @@ use serde_json::Value;
 use shoal_refs::CommitId;
 
 use crate::{
-    backends::{Items as _, Reviews},
+    backends::Reviews,
+    items::Items as _,
     items::action::{Acted, ActionRequests, after_post},
     review::diff::{Bases, Diff, DiffRequests, Placed},
     transport::account::Account,

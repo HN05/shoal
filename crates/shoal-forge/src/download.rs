@@ -5,8 +5,8 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    backends::Attachments,
     capability::CapabilityRequests,
+    items::attach::Attachments,
     transport::{
         account::Account,
         api::{TransportRequests, http_body},

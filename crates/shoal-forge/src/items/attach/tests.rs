@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::*;
-use crate::backends::Attachments;
+use crate::items::attach::Attachments;
 
 fn attachment(path: &str, alt: Option<&str>) -> Attachment {
     Attachment {

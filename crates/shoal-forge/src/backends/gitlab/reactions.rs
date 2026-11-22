@@ -5,10 +5,9 @@ use serde_json::{Value, json};
 
 use super::{GitLab, username};
 use crate::{
-    backends::Reactions,
     items::{
         item::{ItemRequests, text},
-        reaction::{Listed, Subject},
+        reaction::{Listed, Reactions, Subject},
     },
     transport::{
         account::Account,

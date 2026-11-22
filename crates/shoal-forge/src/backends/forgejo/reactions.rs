@@ -4,8 +4,8 @@ use serde_json::{Value, json};
 
 use super::Forgejo;
 use crate::{
-    backends::{Reactions, github_rest},
-    items::reaction::{Listed, Subject},
+    backends::github_rest,
+    items::reaction::{Listed, Reactions, Subject},
     transport::{
         account::Account,
         api::{Request, TransportRequests},

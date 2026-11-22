@@ -6,13 +6,15 @@ use anyhow::{Context, Result, ensure};
 use shoal_refs::CommitId;
 
 use crate::{
-    backends::{Conventions, Items, Merging},
+    backends::Conventions,
     capability::CapabilityRequests,
     conventions::labels::LabelRequests,
     items::{
+        Items,
         attach::{AttachRequests, AttachSteps, Holder, Pending},
         comment::CommentRequests,
         item::ItemRequests,
+        merging::Merging,
         milestone::MilestoneRequests,
         reaction::{ReactionRequests, Subject},
         review::SubmitSteps,

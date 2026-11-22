@@ -5,8 +5,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::GitLab;
 use crate::{
-    backends::Attachments,
-    items::attach::Holder,
+    items::attach::{Attachments, Holder},
     transport::{
         account::Account,
         api::{Request, TransportRequests, Upload, encode},
@@ -14,8 +13,7 @@ use crate::{
         response::Fetched,
     },
 };
-use shoal_forge_types::ForgeRepo;
-use shoal_forge_types::items::attach::Attachment;
+use shoal_forge_types::{ForgeRepo, items::attach::Attachment};
 
 impl Attachments for GitLab {
     async fn check_uploads(

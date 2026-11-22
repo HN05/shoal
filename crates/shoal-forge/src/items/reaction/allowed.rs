@@ -2,7 +2,9 @@
 //! before it reacts.
 use anyhow::Result;
 
-use crate::{backends::Reactions, capability::CapabilityRequests, transport::account::Account};
+use crate::{
+    capability::CapabilityRequests, items::reaction::Reactions, transport::account::Account,
+};
 use shoal_forge_types::{
     ForgeRepo, capability::Capability, items::reaction::allowed::AllowedReactions,
 };

@@ -7,7 +7,6 @@ use futures_util::{StreamExt as _, TryStreamExt as _};
 use serde_json::Value;
 
 use crate::{
-    backends::Reactions,
     items::{
         action::{Acted, ActionRequests},
         comment::{self, CommentRequests},
@@ -21,13 +20,59 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    backends::ForgeKind,
     items::{
         link::ItemKind,
-        reaction::{Reaction, ReactionChange},
+        reaction::{Reaction, ReactionChange, allowed::AllowedReactions},
     },
     numbers::CommentId,
     review::view::Details,
 };
+
+/// How the forge lists, adds and removes reactions.
+#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
+pub(crate) trait Reactions {
+    /// The endpoint that lists the reactions on `subject` of item `number`.
+    fn reactions_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+    ) -> Result<String>;
+
+    /// Whether the forge lists the reactions on `subject` in pages; by
+    /// default it does.
+    fn pages_reactions(&self, _subject: Subject) -> bool {
+        true
+    }
+
+    /// A reaction as the forge lists it, with GitHub's name for its content.
+    fn listed_reaction(&self, reaction: &Value) -> Result<Listed>;
+
+    /// The content [`Self::listed_reaction`] reports for a reaction the
+    /// forge names `name`; by default the name itself.
+    fn reaction_content(&self, name: &str) -> String {
+        name.to_owned()
+    }
+
+    /// The request that adds a reaction of `content` to the reactions at
+    /// `endpoint`.
+    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request>;
+
+    /// The request that removes `own`, the account's reaction, from the
+    /// reactions at `endpoint`.
+    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request>;
+
+    /// The reactions the forge allows; by default GitHub's, and only those.
+    async fn allowed_reactions(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+    ) -> Result<AllowedReactions> {
+        Ok(AllowedReactions::github(false))
+    }
+}
 
 /// Reaction lists read at once for a view.
 const CONCURRENT_READS: usize = 8;

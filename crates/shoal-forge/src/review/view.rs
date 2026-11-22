@@ -4,9 +4,9 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    backends::{Activity, Merging},
+    backends::Activity,
     capability::CapabilityRequests,
-    items::reaction::ReactionRequests,
+    items::{merging::Merging, reaction::ReactionRequests},
     review::status::StatusRequests,
     transport::account::Account,
 };

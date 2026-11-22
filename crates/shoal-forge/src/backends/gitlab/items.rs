@@ -6,9 +6,10 @@ use shoal_refs::BranchName;
 
 use super::GitLab;
 use crate::{
-    backends::{Items, rest},
+    backends::rest,
     conventions::draft::DraftMarker,
     items::{
+        Items,
         create::Head,
         item::{ItemRequests, text},
         reaction::Subject,

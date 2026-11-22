@@ -8,8 +8,7 @@ use serde_json::Value;
 use shoal_refs::CommitId;
 
 use crate::{
-    backends::Items,
-    items::{action::ActionRequests, item::ItemRequests},
+    items::{Items, action::ActionRequests, item::ItemRequests},
     review::status::{StatusRecords, Verdict},
     transport::{
         account::Account,

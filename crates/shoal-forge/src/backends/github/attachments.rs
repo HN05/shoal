@@ -3,11 +3,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::GitHub;
 use crate::{
-    backends::{
-        Attachments,
-        area::{image, link},
-    },
-    items::attach::Holder,
+    items::attach::{Attachments, Holder, image, link},
     transport::{
         account::Account,
         api::{Request, TransportRequests, Upload, encode},
@@ -15,8 +11,10 @@ use crate::{
         response::Fetched,
     },
 };
-use shoal_forge_types::ForgeRepo;
-use shoal_forge_types::items::attach::{Attachment, Media};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::attach::{Attachment, Media},
+};
 
 impl Attachments for GitHub {
     /// GitHub uploads name the repository by its numeric ID.

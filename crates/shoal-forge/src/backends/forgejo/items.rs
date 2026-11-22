@@ -7,12 +7,11 @@ use shoal_refs::BranchName;
 use super::{Forgejo, actions};
 use crate::{
     backends::{
-        Items,
         github_rest::{self, GitHubShapes},
         rest,
     },
     conventions::{draft::DraftMarker, labels::LabelRequests},
-    items::{create::Head, item::text, reaction::Subject},
+    items::{Items, create::Head, item::text, reaction::Subject},
     transport::{
         account::Account,
         api::{Request, TransportRequests, encode},

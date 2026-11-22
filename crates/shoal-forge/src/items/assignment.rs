@@ -3,8 +3,11 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    RepoRequests, backends::Items, capability::CapabilityRequests, items::action::ActionRequests,
-    transport::account::Account, updates::Edited,
+    RepoRequests,
+    capability::CapabilityRequests,
+    items::{Items, action::ActionRequests},
+    transport::account::Account,
+    updates::Edited,
 };
 use shoal_forge_types::{
     ForgeRepo,

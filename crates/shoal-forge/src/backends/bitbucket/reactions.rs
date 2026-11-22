@@ -4,9 +4,8 @@ use serde_json::Value;
 
 use super::Bitbucket;
 use crate::{
-    backends::Reactions,
     capability,
-    items::reaction::{Listed, Subject},
+    items::reaction::{Listed, Reactions, Subject},
     transport::{account::Account, api::Request},
 };
 use shoal_forge_types::{

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    backends::Items,
     capability::CapabilityRequests,
+    items::Items,
     test_support::{Server, agent_on, repo_on},
     transport::memory::Memory,
 };

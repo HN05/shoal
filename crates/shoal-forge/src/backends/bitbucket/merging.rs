@@ -3,7 +3,11 @@ use anyhow::Result;
 use serde_json::json;
 
 use super::Bitbucket;
-use crate::{backends::Merging, capability, items::item::ItemRequests, transport::api::Request};
+use crate::{
+    capability,
+    items::{item::ItemRequests, merging::Merging},
+    transport::api::Request,
+};
 use shoal_forge_types::{
     ForgeRepo,
     capability::Capability,

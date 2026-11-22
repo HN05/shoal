@@ -6,9 +6,10 @@ use shoal_refs::BranchName;
 
 use super::{Bitbucket, literal};
 use crate::{
-    backends::{Items, rest},
+    backends::rest,
     capability,
     items::{
+        Items,
         comment::Found,
         create::Head,
         item::{ItemRequests, text},

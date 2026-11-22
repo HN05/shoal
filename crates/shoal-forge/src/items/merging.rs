@@ -7,7 +7,7 @@ use crate::{
     backends::rest,
     capability::{self, Supports},
     items::revert::NewRevert,
-    transport::{account::Account, api::Request, backend::Backend},
+    transport::{account::Account, api::Request},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -22,7 +22,7 @@ use shoal_forge_types::{
 
 /// How the forge merges and reverts PRs.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Merging: Backend + Supports {
+pub(crate) trait Merging: Supports {
     /// Fail closed on changed output: only commits the merged PR lists can
     /// authorize cleanup, including squash and rebase merges. None while the
     /// PR is unmerged.

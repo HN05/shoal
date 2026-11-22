@@ -4,9 +4,8 @@ use serde_json::json;
 
 use super::GitLab;
 use crate::{
-    backends::Merging,
     capability,
-    items::item::ItemRequests,
+    items::{item::ItemRequests, merging::Merging},
     transport::{
         account::Account,
         api::{Request, TransportRequests},

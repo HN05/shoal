@@ -57,9 +57,9 @@ use shoal_refs::CommitId;
 
 use crate::{
     hosts::{HostType, HostTypes},
+    items::{Items, merging::Merging},
     transport::account::Account,
 };
-use backends::{Items, Merging};
 
 /// Reading a repository's PRs and resolving the forge a host serves.
 #[shoal_forge_derive::extension(pub RepoRequests, pub(crate) RepoSteps)]

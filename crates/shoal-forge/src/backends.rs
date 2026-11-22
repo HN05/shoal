@@ -13,6 +13,5 @@ pub(crate) mod rest;
 
 mod area;
 pub(crate) use area::{
-    Activity, Attachments, BranchFields, Branches, Checks, Conventions, Items, Merging, Reactions,
-    Reviews, Runners, Runs, subject_and_body,
+    Activity, BranchFields, Branches, Checks, Conventions, Reviews, Runners, Runs,
 };

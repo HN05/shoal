@@ -4,8 +4,8 @@ use serde_json::Value;
 
 use super::GitHub;
 use crate::{
-    backends::{Reactions, github_rest},
-    items::reaction::{Listed, Subject},
+    backends::github_rest,
+    items::reaction::{Listed, Reactions, Subject},
     transport::api::Request,
 };
 use shoal_forge_types::{ForgeRepo, items::link::ItemKind, raw::HttpMethod};

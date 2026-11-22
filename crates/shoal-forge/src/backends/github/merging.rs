@@ -5,9 +5,10 @@ use shoal_refs::BranchName;
 
 use super::GitHub;
 use crate::{
-    backends::{Merging, github_rest, subject_and_body},
+    backends::github_rest,
     items::{
         item::{ItemRequests, text},
+        merging::{Merging, subject_and_body},
         revert::NewRevert,
     },
     transport::{

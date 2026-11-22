@@ -4,8 +4,10 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::{
-    backends::Items,
-    items::review::{PlacedReview, Submission},
+    items::{
+        Items,
+        review::{PlacedReview, Submission},
+    },
     review::diff::Diff,
     transport::{account::Account, api::Request},
 };

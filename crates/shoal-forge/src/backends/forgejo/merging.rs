@@ -4,8 +4,11 @@ use serde_json::json;
 
 use super::Forgejo;
 use crate::{
-    backends::{Merging, github_rest, subject_and_body},
-    items::item::ItemRequests,
+    backends::github_rest,
+    items::{
+        item::ItemRequests,
+        merging::{Merging, subject_and_body},
+    },
     transport::{
         account::Account,
         api::{Request, TransportRequests},
