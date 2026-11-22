@@ -30,10 +30,14 @@ impl Manager {
         let light = self.light().await?;
         let slots = self.occupied_slots(&HashSet::new(), &light).await?;
         let jobs = self.job_activities().await?;
-        let limits = self.agent_limits(Vec::new(), &slots, &jobs).await?;
+        let mut limits = self.agent_limits(Vec::new(), &slots, &jobs).await?;
         let (activities, _) = self.activities(&slots, &jobs);
         let overload = &config.machine.overload;
         let (sample, room) = self.measure(overload, &activities).await?;
+        // The heavy slot and the memory free go by one reading.
+        if limits.room.is_some() {
+            limits.room = Some(room);
+        }
         let occupied: Vec<_> = slots.into_iter().map(|slot| slot.repository).collect();
         Ok(Capacity {
             repositories: Vec::new(),
