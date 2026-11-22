@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::client::files::FileRead;
+use crate::fetched_copies;
 use anyhow::{Context as _, Result, ensure};
 
 use super::{add, cells, remove};
@@ -144,18 +145,19 @@ async fn fetch(ctx: &Context, file: &AttachedFile) -> Result<PathBuf> {
 }
 
 /// Write what `read` brings to `path`, which takes it only once it has
-/// come whole.
+/// come whole, stamped as fetched.
 async fn write_whole(path: &Path, mut read: FileRead) -> Result<()> {
     let parent = path.parent().context("a fetched file has a directory")?;
     std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    let partial = parent.join(shoal_core::shoal_dirs::FETCHING);
+    let partial = parent.join(fetched_copies::FETCHING);
     let mut out =
         std::fs::File::create(&partial).with_context(|| format!("create {}", partial.display()))?;
     while let Some(bytes) = read.next().await? {
         out.write_all(&bytes)
             .with_context(|| format!("write {}", partial.display()))?;
     }
-    std::fs::rename(&partial, path).with_context(|| format!("write {}", path.display()))
+    std::fs::rename(&partial, path).with_context(|| format!("write {}", path.display()))?;
+    fetched_copies::stamp(path).with_context(|| format!("stamp {}", path.display()))
 }
 
 /// The path of the file's copy, which this machine keeps.

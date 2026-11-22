@@ -20,10 +20,6 @@ use crate::{
     model::Repository,
 };
 
-/// The file in a fetched copy's directory that a fetch writes until the
-/// whole copy has come, then renames to the copy.
-pub const FETCHING: &str = ".partial";
-
 /// What a directory Shoal keeps beside workspaces holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Contents {

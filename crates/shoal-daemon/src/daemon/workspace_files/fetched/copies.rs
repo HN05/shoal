@@ -9,8 +9,9 @@ use std::{
 use anyhow::{Context as _, Result};
 
 use crate::{
+    fetched_copies::is_as_fetched,
     fsutil::marked_dirs::OWNER_MARKER,
-    shoal_dirs::{FETCHING, ShoalDir, remove_dir, remove_file, remove_if_empty},
+    shoal_dirs::{ShoalDir, remove_dir, remove_file, remove_if_empty},
 };
 
 /// Delete the copies in `dir` last written before `cutoff`, and the
@@ -26,7 +27,8 @@ pub(super) fn remove_written_before(dir: &ShoalDir, cutoff: SystemTime) -> Resul
 /// the machine that keeps its source can give again.
 pub(super) fn remove_unchanged(dir: &ShoalDir) -> Result<bool> {
     remove_copies(dir, |path| {
-        Ok(!is_fetching(path) && !changed_since_fetch(path)?)
+        Ok(is_real_dir(path)?
+            && is_as_fetched(path).with_context(|| format!("read {}", path.display()))?)
     })
 }
 
@@ -64,27 +66,6 @@ fn remove_if(path: &Path, goes: impl Fn(&Path) -> Result<bool>) -> Result<bool> 
         false => remove_file(path)?,
     }
     Ok(true)
-}
-
-/// Whether a fetch is writing into the copy's directory `path`.
-fn is_fetching(path: &Path) -> bool {
-    path.join(FETCHING).symlink_metadata().is_ok()
-}
-
-/// Whether something in the copy's directory `path` changed after the fetch
-/// that wrote the copy last changed the directory, as when the user edits
-/// the copy in place.
-fn changed_since_fetch(path: &Path) -> Result<bool> {
-    if !is_real_dir(path)? {
-        return Ok(false);
-    }
-    let fetched = modified(path)?;
-    for entry in entries(path)? {
-        if modified(&entry)? > fetched {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 /// When `path`, or anything directly in it, last changed, as a copy's

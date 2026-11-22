@@ -16,6 +16,7 @@ pub mod daemon_handoff;
 pub mod daemon_owner;
 pub mod env;
 pub mod execution;
+pub mod fetched_copies;
 pub mod fsutil;
 pub mod git;
 pub mod git_profile;

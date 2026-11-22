@@ -1,6 +1,6 @@
 use std::{
     path::{Path, PathBuf},
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use crate::daemon::{
@@ -11,7 +11,8 @@ use shoal_protocol::space_names::SpaceSelector;
 
 const DAY: Duration = Duration::from_secs(24 * 3600);
 
-/// A copy fetched `age` ago of a file of a workspace of a new repository.
+/// A copy fetched `age` ago, and stamped then, of a file of a workspace of a
+/// new repository.
 async fn fetched(temp: &Path, manager: &Manager, name: &str, age: Duration) -> PathBuf {
     let checkout = repository(temp, name);
     let repo = (manager.repositories)
@@ -28,7 +29,10 @@ async fn fetched(temp: &Path, manager: &Manager, name: &str, age: Duration) -> P
     std::fs::create_dir(&file).unwrap();
     let path = file.join("chart.html");
     std::fs::write(&path, "<html>").unwrap();
-    let at = SystemTime::now() - age;
+    let since = (SystemTime::now() - age)
+        .duration_since(UNIX_EPOCH)
+        .unwrap();
+    let at = UNIX_EPOCH + Duration::from_secs(since.as_secs());
     for written in [&path, &file] {
         std::fs::File::open(written)
             .unwrap()
