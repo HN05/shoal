@@ -23,7 +23,7 @@ pub(super) async fn remove(
     machines: Machines,
     confirmed: bool,
 ) -> Result<i32> {
-    let targets = targets(ctx, repository, &machines).await?;
+    let targets = targets(ctx, repository, machines).await?;
     confirm(ctx, &targets, confirmed).await?;
     let removed = remove_each(ctx, targets).await?;
     ctx.show(&removed, |_| {})?;
@@ -32,21 +32,16 @@ pub(super) async fn remove(
 
 /// Where removing the repository `named`, or the current or a picked one,
 /// acts on `machines`.
-async fn targets(ctx: &Context, named: Option<String>, machines: &Machines) -> Result<Vec<Target>> {
+async fn targets(ctx: &Context, named: Option<String>, machines: Machines) -> Result<Vec<Target>> {
     let here = crate::client::repositories::list(&ctx.paths).await?;
-    let (named, local, not_here) = match named {
-        Some(named) => named_here(&here, named).await?,
+    let (named, local, not_here, machines) = match named {
+        Some(named) => named_here(&here, named, machines).await?,
         None => match chosen(ctx, &here).await? {
-            Chosen::Named(named) => named_here(&here, named).await?,
-            // Named by its ID there, and here by its origin, which the
-            // machines it names, or every one, match it by.
-            Chosen::Elsewhere(other) => {
-                let origin = other.registered.repository.origin.as_deref();
-                let local = of_origin(&here, origin).await;
-                (other.registered.id.to_string(), local, None)
-            }
+            Chosen::Named(named) => named_here(&here, named, machines).await?,
+            Chosen::Elsewhere(other) => picked(&here, other, machines).await,
         },
     };
+    let machines = &machines;
     // A repository registered here is removed here, without asking the hub.
     if let (Some(local), Machines::Found) = (local, machines) {
         return Ok(vec![Target::Here(local.clone())]);
@@ -142,20 +137,40 @@ fn label(other: &RepositoryElsewhere) -> String {
     format!("{}  {}  on {}", other.name(), other.source(), other.machine)
 }
 
+/// What a removal resolves: the text that names the repository, this
+/// machine's repository of it, if any, why there is none, and the machines
+/// it acts on.
+type Named<'a> = (
+    String,
+    Option<&'a Repository>,
+    Option<anyhow::Error>,
+    Machines,
+);
+
 /// `named`, with the repository among `here` it names, or why none is,
-/// when it names none here.
-async fn named_here(
-    here: &[Repository],
-    named: String,
-) -> Result<(String, Option<&Repository>, Option<anyhow::Error>)> {
+/// when it names none here, on `machines`.
+async fn named_here(here: &[Repository], named: String, machines: Machines) -> Result<Named<'_>> {
     let selector = ui::repository_selector(named.clone())?;
     match repository::select(here, selector).await {
-        Ok(local) => Ok((named, Some(local), None)),
+        Ok(local) => Ok((named, Some(local), None, machines)),
         Err(error) if Reason::of(&error) == Some(Reason::NotFound) => {
-            Ok((named, None, Some(error)))
+            Ok((named, None, Some(error), machines))
         }
         Err(error) => Err(error),
     }
+}
+
+/// `other`, another machine's registration the user picked, named by its
+/// ID there and here by its origin, which the `machines` a removal names
+/// match it by; with none named, it acts on that machine alone.
+async fn picked(here: &[Repository], other: RepositoryElsewhere, machines: Machines) -> Named<'_> {
+    let origin = other.registered.repository.origin.as_deref();
+    let local = of_origin(here, origin).await;
+    let machines = match machines {
+        Machines::Found => Machines::Named(vec![other.machine_id.clone()]),
+        named => named,
+    };
+    (other.registered.id.to_string(), local, None, machines)
 }
 
 /// The repository among `here` of `origin`, a key as [`identity`] reads
@@ -261,3 +276,6 @@ fn where_removed(removed: &RemovedRepository) -> String {
         None => "here".to_owned(),
     }
 }
+
+#[cfg(test)]
+mod tests;
