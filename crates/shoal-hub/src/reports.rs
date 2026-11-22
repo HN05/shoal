@@ -60,47 +60,61 @@ type Sent = HashMap<SpaceId, (SpaceSummary, String)>;
 
 impl Hub {
     /// Report this machine's spaces to `sink` until a report fails: all of
-    /// them, then each change, and at least every [`QUIET`].
+    /// them, then each change, and at least every [`QUIET`], each with the
+    /// capacity this machine measures meanwhile.
     async fn report_spaces(&self, daemon: &dyn Daemon, sink: Sink<'_>) -> Result<()> {
+        let (measuring, measured) = watch::channel(Capacity::default());
+        tokio::select! {
+            reported = self.report_changes(daemon, sink, measured) => reported,
+            never = self.keep_measuring(daemon, measuring) => match never {},
+        }
+    }
+
+    /// Report this machine's spaces to `sink` as [`Self::report_spaces`]
+    /// does, with the latest capacity `measured` holds, and again whenever
+    /// it changes.
+    async fn report_changes(
+        &self,
+        daemon: &dyn Daemon,
+        sink: Sink<'_>,
+        mut measured: watch::Receiver<Capacity>,
+    ) -> Result<()> {
         // Watch before reading, so a change in between still reports.
         let mut stored = self.store.watch_changes();
         let mut agents = daemon.watch_agents();
         let mut origins = summaries::Origins::default();
         let mut sent = comparable(self.space_summaries(daemon, &mut origins).await?)?;
         let mut reserved = self.reserved_numbers().await?;
-        let mut measured = self.measure_capacity(daemon, &mut origins, None).await;
         let whole = sent.values().map(|(summary, _)| summary.clone()).collect();
-        let report = (Report::Whole(whole), measured.capacity.clone());
+        let report = (Report::Whole(whole), measured.borrow_and_update().clone());
         self.report(daemon, &sink, report, reserved.clone()).await?;
         self.reported.0.send_replace(sent.keys().cloned().collect());
         // Counted from the last report, so changes that report nothing do
         // not put the next one off.
         let mut reported = Instant::now();
-        let mut capacity = measured.capacity.clone();
         loop {
+            let mut moved = false;
             tokio::select! {
                 changed = stored.changed() => changed?,
                 changed = agents.changed() => changed?,
+                changed = measured.changed() => {
+                    changed?;
+                    moved = true;
+                }
                 () = tokio::time::sleep_until(reported + QUIET) => {}
-                () = tokio::time::sleep_until(measured.due()) => {}
             }
             tokio::time::sleep(SETTLE).await;
             stored.borrow_and_update();
             agents.borrow_and_update();
             let current = comparable(self.space_summaries(daemon, &mut origins).await?)?;
             let held = self.reserved_numbers().await?;
-            if Instant::now() >= measured.due() {
-                measured = (self.measure_capacity(daemon, &mut origins, Some(&measured))).await;
-            }
             let changes = changes(&sent, &current);
-            let moved = capacity::moved(&capacity, &measured.capacity);
             if reported.elapsed() >= QUIET || changes.is_some() || held != reserved || moved {
                 let changes = changes.unwrap_or_else(|| Report::Changes {
                     changed: Vec::new(),
                     removed: Vec::new(),
                 });
-                capacity = measured.capacity.clone();
-                let report = (changes, capacity.clone());
+                let report = (changes, measured.borrow_and_update().clone());
                 self.report(daemon, &sink, report, held.clone()).await?;
                 self.reported
                     .0

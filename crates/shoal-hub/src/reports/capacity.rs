@@ -1,49 +1,58 @@
 //! What a machine's reports carry of its capacity, which the hub places
 //! new spaces by: the origins of its repositories and its queue's room,
-//! measured again at most every [`MEASURE_EVERY`]. A report carries the
-//! latest whenever it goes, and a change enough to place by sends one.
-use std::time::Duration;
+//! which the machine measures every [`MEASURE_EVERY`] beside its reports,
+//! so a report never waits for a measurement, and a change enough to place
+//! by sends one.
+use std::{convert::Infallible, time::Duration};
 
 use shoal_schedule::placement::snapshot::Capacity;
-use tokio::time::Instant;
+use tokio::sync::watch;
 
 use super::summaries::Origins;
 use crate::{Hub, daemon::Daemon, log};
 
-/// How often a machine measures its capacity again.
-pub(super) const MEASURE_EVERY: Duration = Duration::from_secs(15);
+/// How often a machine measures its capacity.
+const MEASURE_EVERY: Duration = Duration::from_secs(15);
 
 /// How far the memory new work may use moves before a report goes.
 const MEMORY_STEP: u64 = 1 << 30;
 
-/// A machine's capacity as it last measured it, and when.
-pub(super) struct Measured {
-    pub capacity: Capacity,
-    at: Instant,
-}
-
-impl Measured {
-    /// When it is measured again.
-    pub fn due(&self) -> Instant {
-        self.at + MEASURE_EVERY
-    }
-}
-
 impl Hub {
+    /// Measure this machine's capacity every [`MEASURE_EVERY`] into
+    /// `measured`, whose receivers hear of it once it moved enough to place
+    /// by.
+    pub(super) async fn keep_measuring(
+        &self,
+        daemon: &dyn Daemon,
+        measured: watch::Sender<Capacity>,
+    ) -> Infallible {
+        let mut origins = Origins::default();
+        loop {
+            let before = measured.borrow().clone();
+            let capacity = self.measure_capacity(daemon, &mut origins, before).await;
+            measured.send_if_modified(|current| {
+                let moved = moved(current, &capacity);
+                *current = capacity;
+                moved
+            });
+            tokio::time::sleep(MEASURE_EVERY).await;
+        }
+    }
+
     /// This machine's capacity now, its queue's room as `daemon` reads it,
     /// or as `before` had it when that fails, with the origins of its
     /// repositories.
-    pub(super) async fn measure_capacity(
+    async fn measure_capacity(
         &self,
         daemon: &dyn Daemon,
         origins: &mut Origins,
-        before: Option<&Measured>,
-    ) -> Measured {
+        before: Capacity,
+    ) -> Capacity {
         let room = match daemon.queue_room().await {
             Ok(room) => room,
             Err(error) => {
                 log!("hub: could not measure this machine's queue for placement: {error:#}");
-                (before.map(|measured| measured.capacity.clone())).unwrap_or_default()
+                before
             }
         };
         let mut repositories = Vec::new();
@@ -52,19 +61,16 @@ impl Hub {
         }
         repositories.sort();
         repositories.dedup();
-        Measured {
-            capacity: Capacity {
-                repositories,
-                ..room
-            },
-            at: Instant::now(),
+        Capacity {
+            repositories,
+            ..room
         }
     }
 }
 
 /// Whether `after` differs from `before` enough to place by: in anything
 /// but the memory new work may use, or in that by [`MEMORY_STEP`].
-pub(super) fn moved(before: &Capacity, after: &Capacity) -> bool {
+fn moved(before: &Capacity, after: &Capacity) -> bool {
     let memory = |capacity: &Capacity| capacity.memory_free.map(|memory| memory / MEMORY_STEP);
     let without_memory = |capacity: &Capacity| Capacity {
         memory_free: None,
