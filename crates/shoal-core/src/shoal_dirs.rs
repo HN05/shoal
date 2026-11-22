@@ -72,10 +72,11 @@ impl Contents {
         }
     }
 
-    /// Whether any process Shoal starts may leave anything in the
-    /// directory, so that deleting it opens what refuses the owner.
-    fn left_by_any_process(self) -> bool {
-        matches!(self, Self::TmpDirs)
+    /// Whether the directory may hold directories closed to its owner,
+    /// such as what any process leaves in a temporary directory or a
+    /// review's read-only checkout, so that deleting it opens them.
+    fn may_hold_closed_dirs(self) -> bool {
+        matches!(self, Self::TmpDirs | Self::ReviewRuns)
     }
 
     fn description(self) -> &'static str {
@@ -183,7 +184,7 @@ impl ShoalDir {
         if !self.is_own() {
             return Ok(());
         }
-        match self.contents.left_by_any_process() {
+        match self.contents.may_hold_closed_dirs() {
             true => remove_dir_opening(&self.root),
             false => remove_dir(&self.root),
         }
@@ -202,9 +203,9 @@ pub fn remove_dir(directory: &Path) -> Result<()> {
     deleted(directory, std::fs::remove_dir_all(directory))
 }
 
-/// [`remove_dir`] for a directory any process may leave anything in, such
-/// as a review's read-only checkout a test left in its temporary directory:
-/// the directories in it that refuse the owner are opened to it first.
+/// [`remove_dir`] for a directory that may hold directories closed to the
+/// owner, such as a review's read-only checkout a test left in its
+/// temporary directory: they are opened to the owner first.
 pub fn remove_dir_opening(directory: &Path) -> Result<()> {
     deleted(directory, remove_opening(directory))
 }
