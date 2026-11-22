@@ -10,7 +10,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    forge::items::reference::ItemInput,
+    forge::items::{link::ItemKind, reference::ItemInput},
     model::MergePath,
     protocol::{ItemContext, RepoTarget, operations::OperationSpec},
 };
@@ -34,10 +34,13 @@ async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -
     };
     args.ensure_pull_flags(&named)?;
     let (space, repo) = (args.space.clone(), args.repo.name.clone());
-    let reading = crate::cli::commands::items::in_context(|target| {
-        crate::client::forge_reads::number_kind(target, 1)
-    });
-    let target = select_item_target(ctx, space, repo, item.as_ref(), &reading).await?;
+    let merging = {
+        let (item, action) = (item.clone(), pull::action(args).0);
+        crate::cli::commands::items::in_context(move |target| {
+            crate::client::items::act(target, ItemKind::Pr, item.clone(), action.clone())
+        })
+    };
+    let target = select_item_target(ctx, space, repo, item.as_ref(), &merging).await?;
     pull::merge(ctx, target, item, args).await
 }
 

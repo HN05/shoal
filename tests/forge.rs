@@ -504,11 +504,10 @@ fn apps_read_forge_items_through_the_daemon() {
             ["bug"]
         );
         let reviewers = runtime
-            .block_on(forge_reads::reviewers(
-                &app,
-                context.clone().into(),
-                Some("8".parse().unwrap()),
-            ))
+            .block_on(
+                forge_reads::reviewers(context.clone().into(), Some("8".parse().unwrap()))
+                    .send(&app),
+            )
             .unwrap();
         assert_eq!(
             reviewers

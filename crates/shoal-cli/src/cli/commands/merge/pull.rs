@@ -40,7 +40,7 @@ pub(super) async fn merge(
 }
 
 /// The merge `args` ask for, or the withdrawal of an automatic merge.
-fn action(args: &MergeArgs) -> (Action, &'static str) {
+pub(super) fn action(args: &MergeArgs) -> (Action, &'static str) {
     let (method, message, delete_branch) = (args.method, args.message.clone(), args.delete_branch);
     if args.cancel_auto {
         return (Action::CancelAutoMerge, "Auto-merge canceled");

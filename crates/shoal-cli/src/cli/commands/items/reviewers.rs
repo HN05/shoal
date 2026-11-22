@@ -9,9 +9,12 @@ use crate::{
 };
 
 pub(super) async fn reviewers(ctx: &Context, selector: &ItemSelector) -> Result<i32> {
-    let reading = super::in_context(|target| crate::client::forge_reads::number_kind(target, 1));
+    let reading = {
+        let item = selector.item.clone();
+        super::in_context(move |target| client::reviewers(target, item.clone()))
+    };
     let target = item_target(ctx, selector, &reading).await?;
-    let read = client::reviewers(&ctx.paths, target, selector.item.clone());
+    let read = client::reviewers(target, selector.item.clone()).send(&ctx.paths);
     let reviewers = ctx.progress("Reading reviewers", read).await?;
     ctx.show(&reviewers, |reviewers| render(reviewers))?;
     Ok(0)

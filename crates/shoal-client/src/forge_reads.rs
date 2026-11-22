@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use shoal_protocol::progress::Blocker;
 
 use crate::{
-    connection::{Daemon, Prepared, joined, pages, request},
+    connection::{Daemon, Prepared, PreparedPages, joined, pages, request},
     forge::{
         PullRequest,
         capability::Capabilities,
@@ -162,28 +162,22 @@ pub async fn pull_request(
 
 /// Who the PR `item` names in the `target` repository, or the space's
 /// linked PR, can ask for a review.
-pub async fn reviewers(
-    daemon: &impl Daemon,
-    target: RepoTarget,
-    item: Option<ItemInput>,
-) -> Result<Vec<Reviewer>> {
-    pages(daemon, ItemMethod::Reviewers { target, item }).await
+pub fn reviewers(target: RepoTarget, item: Option<ItemInput>) -> PreparedPages<Reviewer> {
+    PreparedPages::new(ItemMethod::Reviewers { target, item })
 }
 
 /// The review thread of `comment` on the PR `item` names in the `target`
 /// repository, or on the space's linked PR.
-pub async fn review_thread(
-    daemon: &impl Daemon,
+pub fn review_thread(
     target: RepoTarget,
     item: Option<ItemInput>,
     comment: CommentId,
-) -> Result<Thread> {
-    let method = ItemMethod::ReviewThread {
+) -> Prepared<Thread> {
+    Prepared::new(ItemMethod::ReviewThread {
         target,
         item,
         comment,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// The sensitive files merging the PR `item`, by default the linked one,

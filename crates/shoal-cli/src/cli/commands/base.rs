@@ -1,5 +1,5 @@
 //! CLI access to a stacked workspace's base workspace.
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 
 use crate::client::output::workspaces::Bases;
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
         context::Context,
         ui::{self, Acting, Fallback},
     },
-    model::{RefPart, SpaceRef, Workspace, WorkspaceRef},
+    model::{Located, RefPart, SpaceRef, Workspace, WorkspaceRef},
     refusal::{Reason, Refusal},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -66,11 +66,22 @@ enum Change {
 
 /// The workspace `selector` selects among this machine's `workspaces`,
 /// which a picked base is one of.
-fn find<'a>(workspaces: &'a [Workspace], selector: &SpaceSelector) -> Result<&'a Workspace> {
-    let message = format!("{selector} runs on another machine, so name its base workspace");
-    (workspaces.iter())
-        .find(|w| selector.selects(&w.id, w.number))
-        .ok_or_else(|| Refusal::new(Reason::NotFound, message).into())
+async fn find<'a>(
+    ctx: &Context,
+    workspaces: &'a [Workspace],
+    selector: &SpaceSelector,
+) -> Result<&'a Workspace> {
+    if let Some(workspace) = (workspaces.iter()).find(|w| selector.selects(&w.id, w.number)) {
+        return Ok(workspace);
+    }
+    match crate::client::spaces::locate(&ctx.paths, selector.clone()).await? {
+        Located::Elsewhere { .. } => {
+            bail!("{selector} runs on another machine, so name its base workspace")
+        }
+        Located::Here(_) => {
+            Err(Refusal::new(Reason::NotFound, format!("no workspace {selector}")).into())
+        }
+    }
 }
 
 /// Choose another workspace of the same repository as the base.
@@ -78,7 +89,7 @@ async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
     let workspaces = crate::client::spaces::list(&ctx.paths)
         .await?
         .into_workspaces();
-    let workspace = find(&workspaces, selector)?;
+    let workspace = find(ctx, &workspaces, selector).await?;
     let candidates: Vec<_> = workspaces
         .iter()
         .filter(|w| w.repository_id == workspace.repository_id && w.id != workspace.id)
