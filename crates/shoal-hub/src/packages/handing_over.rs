@@ -19,7 +19,13 @@ use shoal_protocol::{
 use tokio::time::Instant;
 
 use super::sending::packageable;
-use crate::{Hub, daemon::Daemon, log, membership, session::Calls, time::UnixTime};
+use crate::{
+    Hub,
+    daemon::Daemon,
+    log, membership,
+    session::{Calls, Unanswered},
+    time::UnixTime,
+};
 
 impl Hub {
     /// Hand each of this machine's spaces but those `kept` here over
@@ -84,19 +90,17 @@ impl Hub {
                 return Handed::Stayed(why.into());
             }
         };
-        let leave = calls.call(Call::Release {
+        let release = calls.call(Call::Release {
             space: space.id.clone(),
         });
-        match tokio::time::timeout_at(deadline, leave).await {
-            Ok(Ok(Reply::Delivered)) => Handed::Went(decision),
-            left => {
-                log!(
-                    "hub: the hub did not take space {} as left: {left:?}",
-                    space.name
-                );
-                Handed::Unconfirmed(decision)
-            }
+        let released = tokio::time::timeout_at(deadline, release).await.ok();
+        if !matches!(released, Some(Ok(Reply::Delivered))) {
+            log!(
+                "hub: the hub did not take space {} as released: {released:?}",
+                space.name
+            );
         }
+        released_as(released, decision)
     }
 
     /// Tell the hub that this machine stays after all, as once its shutdown
@@ -142,3 +146,21 @@ impl Hub {
         Ok(serde_json::from_slice(&written)?)
     }
 }
+
+/// Where a space this machine released to the hub, which sends it as
+/// `decision`, went, as the hub's answer to the release says, none when it
+/// did not come in time: the hub continues it once it took the release,
+/// and may have when its answer never came; it surely did not when it
+/// refused the release or the release never left this machine.
+fn released_as(released: Option<Result<Reply>>, decision: Decision) -> Handed {
+    match released {
+        Some(Ok(Reply::Delivered)) => Handed::Went(decision),
+        None => Handed::Unconfirmed(decision),
+        Some(Err(error)) if error.is::<Unanswered>() => Handed::Unconfirmed(decision),
+        Some(Err(error)) => Handed::Stayed(format!("the hub refused it: {error:#}")),
+        Some(Ok(reply)) => Handed::Stayed(format!("the hub answered with {reply:?}")),
+    }
+}
+
+#[cfg(test)]
+mod tests;
