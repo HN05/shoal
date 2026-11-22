@@ -32,6 +32,7 @@ mod consumed_upgrades;
 mod event_tests;
 mod frozen;
 mod item_numbers;
+pub mod lifecycle;
 mod migrations;
 pub use migrations::SCHEMA_VERSION;
 mod place_owners;

@@ -10,7 +10,7 @@ use super::{
     gates::{GuardMode, ResourceGuard},
     manager::Manager,
     places::ExecutionPlace,
-    workspace::reservation::{self, Generation, Reserved},
+    workspace::reservation::Generation,
 };
 use crate::daemon::log;
 use crate::refusal::{Reason, Refusal};
@@ -37,6 +37,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::lifecycle::Reserved;
 use std::{
     collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},
@@ -189,7 +190,7 @@ impl ExecutionKindExt for ExecutionKind {
         store::ensure_no_pending_move(tx, workspace_id)?;
         match self {
             Self::Command | Self::Merge | Self::Unmerge => {
-                reservation::ensure_unreserved(tx, workspace_id)?;
+                shoal_store::lifecycle::ensure_unreserved(tx, workspace_id)?;
                 store::require_ready(tx, workspace_id)?
             }
             Self::Setup => {

@@ -6,56 +6,11 @@
 use super::super::{gates::GuardMode, manager::Manager};
 use crate::{daemon::store, state::WorkspaceState};
 use anyhow::{Result, bail};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 
-/// The refusal of a workspace held in a lifecycle state that passes, which
-/// [`Manager::await_reservation_end`] waits out.
-#[derive(Debug)]
-pub(crate) struct Reserved(WorkspaceState);
-
-impl std::fmt::Display for Reserved {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "workspace is {}", self.0)
-    }
-}
-
-impl std::error::Error for Reserved {}
-
-/// How many times a workspace's lifecycle state has changed, which the
-/// store counts on each change.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Generation(i64);
-
-/// Where a workspace's lifecycle stands.
-struct Lifecycle {
-    state: WorkspaceState,
-    generation: Generation,
-}
-
-/// Refuse the workspace with [`Reserved`] while a lifecycle operation that
-/// passes holds it.
-pub(crate) fn ensure_unreserved(db: &Connection, id: &SpaceId) -> Result<()> {
-    match lifecycle(db, id)? {
-        Some(Lifecycle { state, .. }) if state.passes() => Err(Reserved(state).into()),
-        _ => Ok(()),
-    }
-}
-
-fn lifecycle(db: &Connection, id: &SpaceId) -> Result<Option<Lifecycle>> {
-    Ok(db
-        .query_row(
-            "SELECT state, lifecycle_generation FROM workspaces WHERE id=?1",
-            [id],
-            |row| {
-                Ok(Lifecycle {
-                    state: row.get(0)?,
-                    generation: Generation(row.get(1)?),
-                })
-            },
-        )
-        .optional()?)
-}
+pub(crate) use shoal_store::lifecycle::Generation;
+use shoal_store::lifecycle::{Lifecycle, lifecycle};
 
 impl Manager {
     pub async fn set_state(
