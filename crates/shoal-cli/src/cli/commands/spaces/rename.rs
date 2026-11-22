@@ -6,7 +6,7 @@ use crate::{
     cli::{
         context::Context,
         terminal,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     model::{RenamedSpace, SpacePlaces},
     protocol::ConfigTarget,
@@ -29,21 +29,30 @@ pub(in crate::cli::commands) async fn rename(
 ) -> Result<i32> {
     // Refuse a name before a picker asks for the space.
     let name = SpaceName::parse(&name)?;
-    let space = chosen_space(ctx, space).await?;
+    let space = chosen_space(ctx, space, &renaming(name.clone())).await?;
     rename_space(ctx, space, name).await
 }
 
 /// Rename a picked workspace or chat with what the user types next.
 pub(in crate::cli::commands) async fn rename_picked(ctx: &Context) -> Result<i32> {
-    let space = ui::pick_any_space(ctx, &crate::cli::ui::Acting::Unconverted).await?;
+    // The name, typed once the space is picked, decides nothing of which
+    // spaces the rename reaches.
+    let space = ui::pick_any_space(ctx, &renaming(String::from("name").into())).await?;
     let name = ask_name(ctx).await?;
     rename_space(ctx, space, name).await
+}
+
+/// What renaming a space to `name` sends, for its pickers.
+fn renaming(name: SpaceName) -> Acting {
+    Acting::request(move |space| crate::client::spaces::rename_space(space, name.clone()))
 }
 
 /// Give the space `space` selects the name `name`, and show it on the
 /// places that still show its previous one.
 async fn rename_space(ctx: &Context, space: SpaceSelector, name: SpaceName) -> Result<i32> {
-    let renamed = crate::client::spaces::rename_space(&ctx.paths, space, name).await?;
+    let renamed = (crate::client::spaces::rename_space(space, name))
+        .send(&ctx.paths)
+        .await?;
     // The name is recorded; a place left with its old label only warns.
     if let Err(error) = relabel(ctx, &renamed).await {
         eprintln!(
@@ -112,7 +121,11 @@ pub(in crate::cli::commands) async fn request_name(
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
     super::super::start::ensure_scope_token(ctx)?;
-    let selector = chosen_space(ctx, space).await?;
+    let asking = Acting::request(|space| {
+        let to = shoal_protocol::protocol::AlertTarget::Space { space };
+        crate::client::alerts::send(to, None, NAME_REQUEST.into(), Vec::new())
+    });
+    let selector = chosen_space(ctx, space, &asking).await?;
     let asked = asked_space(ctx, &selector).await?;
     ensure!(
         asked.running,
@@ -124,7 +137,9 @@ pub(in crate::cli::commands) async fn request_name(
         space: asked.selector,
     };
     let request = NAME_REQUEST.into();
-    crate::client::alerts::send(&ctx.paths, to, None, request, Vec::new()).await?;
+    (crate::client::alerts::send(to, None, request, Vec::new()))
+        .send(&ctx.paths)
+        .await?;
     ctx.emit("Asked the space's agent to choose its name.", ())?;
     Ok(0)
 }
@@ -168,7 +183,11 @@ async fn asked_space(ctx: &Context, selector: &SpaceSelector) -> Result<AskedSpa
 /// The space `space` names, else the current workspace or the chat this runs
 /// in, else the current checkout's only running chat, else the current
 /// workspace or a picked space.
-async fn chosen_space(ctx: &Context, space: Option<SpaceSelector>) -> Result<SpaceSelector> {
+async fn chosen_space(
+    ctx: &Context,
+    space: Option<SpaceSelector>,
+    acting: &Acting,
+) -> Result<SpaceSelector> {
     if space.is_none() && ui::current_chat(&None).is_none() {
         let chats = crate::client::spaces::list(&ctx.paths)
             .await?
@@ -177,11 +196,5 @@ async fn chosen_space(ctx: &Context, space: Option<SpaceSelector>) -> Result<Spa
             return Ok(SpaceSelector::Id(chat.id));
         }
     }
-    ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await
+    ui::select_space(ctx, space, Fallback::CurrentDirectory, acting).await
 }

@@ -14,7 +14,7 @@ use crate::cli::args::threads::PostArgs;
 use crate::{
     cli::{
         context::Context,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     client::alerts,
     forge::items::attach::Attachment,
@@ -116,9 +116,18 @@ pub(super) async fn send(
 ) -> Result<i32> {
     let message = message_text(message, body_file, !attach.is_empty())?;
     let attachments = attachments(&attach)?;
-    let to = target(ctx, recipients).await?;
     let from = super::alerts::sending_space(ctx).await?;
-    let sent = alerts::send(&ctx.paths, to, from, message, attachments).await?;
+    let sending = {
+        let (from, message, attachments) = (from.clone(), message.clone(), attachments.clone());
+        Acting::request(move |space| {
+            let to = AlertTarget::Space { space };
+            alerts::send(to, from.clone(), message.clone(), attachments.clone())
+        })
+    };
+    let to = target(ctx, recipients, &sending).await?;
+    let sent = (alerts::send(to, from, message, attachments))
+        .send(&ctx.paths)
+        .await?;
     show_sent(ctx, &sent)
 }
 
@@ -139,24 +148,27 @@ pub(super) async fn send_in_chat(
     );
     let attachments = attachments(&attach)?;
     shoal_protocol::files::check_sent(&attachments)?;
-    let to = target(ctx, recipients).await?;
-    let marked = alerts::send_in_chat(&ctx.paths, to, attachments).await?;
+    let marking = {
+        let attachments = attachments.clone();
+        Acting::request(move |space| {
+            alerts::send_in_chat(AlertTarget::Space { space }, attachments.clone())
+        })
+    };
+    let to = target(ctx, recipients, &marking).await?;
+    let marked = (alerts::send_in_chat(to, attachments))
+        .send(&ctx.paths)
+        .await?;
     in_chat::show(ctx, &marked)
 }
 
 /// Where `recipients` sends: a process in a space of its own sends up
-/// without a space.
-async fn target(ctx: &Context, recipients: Recipients) -> Result<AlertTarget> {
+/// without a space; a picker offers the spaces `acting`, what the alert
+/// sends to the picked one, reaches.
+async fn target(ctx: &Context, recipients: Recipients, acting: &Acting) -> Result<AlertTarget> {
     Ok(match recipients {
         Recipients::Space(None) if super::alerts::in_own_space() => AlertTarget::Up,
         Recipients::Space(space) => AlertTarget::Space {
-            space: ui::select_space(
-                ctx,
-                space,
-                Fallback::CurrentDirectory,
-                &crate::cli::ui::Acting::Unconverted,
-            )
-            .await?,
+            space: ui::select_space(ctx, space, Fallback::CurrentDirectory, acting).await?,
         },
         Recipients::All => AlertTarget::All { repository: None },
         Recipients::Repository(repository) => AlertTarget::All {

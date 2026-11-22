@@ -6,7 +6,9 @@ use anyhow::{Context, Result};
 
 use tokio::{io::BufReader, net::UnixStream};
 
-use crate::connection::{Daemon, open_buffered, pages, reconnect, request, stream_closed};
+use crate::connection::{
+    Daemon, Prepared, open_buffered, pages, reconnect, request, stream_closed,
+};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     chat_marks::ChatMarked,
@@ -42,30 +44,24 @@ pub async fn clear(daemon: &impl Daemon) -> Result<Cleared> {
 
 /// Send `message` with `attachments` to `to`, as the space `from` names
 /// when the user acts as one.
-pub async fn send(
-    daemon: &impl Daemon,
+pub fn send(
     to: AlertTarget,
     from: Option<SpaceSelector>,
     message: String,
     attachments: Vec<NewFile>,
-) -> Result<Sent> {
-    let method = AlertMethod::SendAlert {
+) -> Prepared<Sent> {
+    Prepared::new(AlertMethod::SendAlert {
         to,
         from,
         message,
         attachments,
-    };
-    request(daemon, method).await
+    })
 }
 
 /// Mark the calling agent's turn as sending its final message to `to`
 /// with `attachments` once it ends, with the mark it replaced.
-pub async fn send_in_chat(
-    daemon: &impl Daemon,
-    to: AlertTarget,
-    attachments: Vec<NewFile>,
-) -> Result<ChatMarked> {
-    request(daemon, AlertMethod::AlertInChat { to, attachments }).await
+pub fn send_in_chat(to: AlertTarget, attachments: Vec<NewFile>) -> Prepared<ChatMarked> {
+    Prepared::new(AlertMethod::AlertInChat { to, attachments })
 }
 
 /// Take back the unread alert `id` the caller sent, or the space `from`

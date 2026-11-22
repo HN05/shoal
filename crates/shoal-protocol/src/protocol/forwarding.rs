@@ -11,8 +11,8 @@ use crate::{
 };
 
 use super::{
-    ApprovalMethod, ConversionMethod, ItemContext, LaunchMethod, Operation, OperationMethod,
-    RemovalMethod, RepoTarget,
+    AlertMethod, ApprovalMethod, ConversionMethod, ItemContext, LaunchMethod, Operation,
+    OperationMethod, RemovalMethod, RepoTarget,
 };
 
 /// What a daemon does with a request for another machine's space.
@@ -153,7 +153,10 @@ impl Operation {
     /// machine cannot read.
     pub fn reaches_other_machines(&self) -> bool {
         let attaches = serde_json::to_value(self).is_ok_and(|method| attaches_files(&method));
-        self.forwarding() != Forwarding::Never && !attaches
+        // A turn's in-chat alert stays with the caller's execution, and the
+        // daemon sends it to a space of another machine once the turn ends.
+        let through_daemon = matches!(self, Self::Alert(AlertMethod::AlertInChat { .. }));
+        (self.forwarding() != Forwarding::Never || through_daemon) && !attaches
     }
 
     /// Where the request runs when the space it acts on is another

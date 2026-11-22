@@ -2,7 +2,7 @@
 //! runs, its status and environment, and its scope tokens.
 use anyhow::Result;
 
-use crate::connection::{Daemon, pages, request};
+use crate::connection::{Daemon, Prepared, pages, request};
 use shoal_protocol::{
     model::{Everywhere, Located, RenamedSpace, Space, SpaceTarget, Spaces},
     protocol::{Operation, SpaceMethod},
@@ -99,12 +99,8 @@ pub async fn environment(
 }
 
 /// Give the workspace or chat `space` the name `name`.
-pub async fn rename_space(
-    daemon: &impl Daemon,
-    space: SpaceSelector,
-    name: SpaceName,
-) -> Result<RenamedSpace> {
-    request(daemon, SpaceMethod::RenameSpace { space, name }).await
+pub fn rename_space(space: SpaceSelector, name: SpaceName) -> Prepared<RenamedSpace> {
+    Prepared::new(SpaceMethod::RenameSpace { space, name })
 }
 
 /// Where the space `space` names runs: here, with its record, or on the
