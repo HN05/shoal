@@ -20,6 +20,7 @@ mod create;
 mod elsewhere;
 mod labels;
 mod placement;
+pub(crate) use placement::heavy;
 mod setup;
 mod shape;
 mod space;

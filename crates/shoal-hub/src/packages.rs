@@ -5,6 +5,7 @@
 //! until the space ends on that machine. A machine shutting down hands its
 //! spaces over the same way, and the hub continues each elsewhere.
 mod drops;
+mod handing_over;
 mod handovers;
 mod keeping;
 mod retiring;

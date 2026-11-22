@@ -254,15 +254,23 @@ impl Packages for Manager {
         &'a self,
         space: &'a Space,
         file: &'a std::path::Path,
-    ) -> BoxFuture<'a, Result<()>> {
+    ) -> BoxFuture<'a, Result<crate::model::RemovedSpace>> {
         Box::pin(async move {
-            self.write_kept_package(space, file.to_owned()).await?;
-            Ok(())
+            let exported = self.write_kept_package(space, file.to_owned()).await?;
+            Ok(exported.manifest.space.record)
         })
     }
 
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>> {
         Box::pin(Manager::retire_space(self, space))
+    }
+
+    fn handover_start<'a>(
+        &'a self,
+        space: &'a Space,
+        packaged: &'a crate::model::RemovedSpace,
+    ) -> BoxFuture<'a, Result<shoal_schedule::placement::snapshot::Request>> {
+        Box::pin(Manager::handover_start(self, space, packaged))
     }
 
     fn continue_handed_over<'a>(

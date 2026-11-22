@@ -255,7 +255,7 @@ fn placeable(launch: &Launch) -> bool {
 }
 
 /// Whether `mode`'s agent holds a heavy slot under `settings`.
-fn heavy(settings: &Effective, mode: &crate::config::modes::ModeName) -> bool {
+pub(crate) fn heavy(settings: &Effective, mode: &crate::config::modes::ModeName) -> bool {
     (settings.modes.get(mode.as_str())).is_none_or(|mode| mode.weight != Weight::Light)
 }
 

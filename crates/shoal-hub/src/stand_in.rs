@@ -361,12 +361,20 @@ impl Packages for StandIn {
         &'a self,
         _: &'a Space,
         _: &'a std::path::Path,
-    ) -> BoxFuture<'a, Result<()>> {
+    ) -> BoxFuture<'a, Result<shoal_protocol::model::RemovedSpace>> {
         Box::pin(async { bail!("the stand-in daemon has no spaces to package") })
     }
 
     fn retire_space<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<String>> {
         Box::pin(async { bail!("the stand-in daemon has no spaces to retire") })
+    }
+
+    fn handover_start<'a>(
+        &'a self,
+        _: &'a Space,
+        _: &'a shoal_protocol::model::RemovedSpace,
+    ) -> BoxFuture<'a, Result<shoal_schedule::placement::snapshot::Request>> {
+        Box::pin(async { bail!("the stand-in daemon hands no spaces over") })
     }
 
     fn continue_handed_over<'a>(&'a self, _: &'a SpaceId, _: &'a str) -> BoxFuture<'a, Result<()>> {

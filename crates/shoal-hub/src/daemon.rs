@@ -20,7 +20,7 @@ use shoal_protocol::{
     approvals::ApprovalRequest,
     config::permissions::Permissions,
     hub::{Member, routing::ChainedMode},
-    model::{QueueEntry, Repository, RunningAgent, Space},
+    model::{QueueEntry, RemovedSpace, Repository, RunningAgent, Space},
     protocol::{AppMethod, Request},
     saved::SavedSummary,
     space_names::{SpaceName, SpaceSelector},
@@ -219,14 +219,27 @@ pub trait Packages: Send + Sync {
     fn package_state<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>>;
 
     /// Write a package of `space`, which keeps running here, under its own
-    /// ID, to the new file `file`.
-    fn write_package<'a>(&'a self, space: &'a Space, file: &'a Path) -> BoxFuture<'a, Result<()>>;
+    /// ID, to the new file `file`, and the space as the package records it.
+    fn write_package<'a>(
+        &'a self,
+        space: &'a Space,
+        file: &'a Path,
+    ) -> BoxFuture<'a, Result<RemovedSpace>>;
 
     /// End `space` here, which another machine took over from the hub's
     /// package of it while this one was offline, keeping its work in its
     /// removal record and its branch, and leaving the spaces below it;
     /// what then opens that work, for the user to read.
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>>;
+
+    /// How placement reads a start of the agent of `space`, which this
+    /// machine hands over as it shuts down in a package that records it as
+    /// `packaged`; the hub names the caller.
+    fn handover_start<'a>(
+        &'a self,
+        space: &'a Space,
+        packaged: &'a RemovedSpace,
+    ) -> BoxFuture<'a, Result<shoal_schedule::placement::snapshot::Request>>;
 
     /// Continue here the space `id`, which the machine named `from` handed
     /// over as it shut down, from the package the hub keeps of it: import

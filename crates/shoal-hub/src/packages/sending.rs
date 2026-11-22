@@ -261,7 +261,7 @@ fn next_due(due: Option<Instant>, found: Option<Instant>, every_space: bool) -> 
 
 /// Whether a package can hold `space`: a chat, or a workspace whose
 /// worktree is ready.
-fn packageable(space: &Space) -> bool {
+pub(super) fn packageable(space: &Space) -> bool {
     space
         .worktree()
         .is_none_or(|worktree| worktree.state == WorkspaceState::Ready)
