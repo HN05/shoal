@@ -1158,10 +1158,10 @@ A machine joined to a hub hands its spaces over as it shuts down, whether
 it is `always_on` or `intermittent`; the hub's own machine and a machine in
 no hub keep theirs. Once the stop before the shutdown saved its agents, it
 sends the hub the final package of every workspace whose worktree is ready,
-but one a CI job runs in, and every chat, all at once, until a second before the shutdown's window
-ends: logind's `InhibitDelayMaxSec`, or for a signal the service
-definition's stop timeout. For each package that arrives whole, the hub
-chooses a machine by its
+but one a CI job runs in, and every chat, all at once, until a second
+before logind's `InhibitDelayMaxSec` ends, or for a signal for 15 seconds,
+which the service definition's stop timeout adds to the daemon's own. For
+each package that arrives whole, the hub chooses a machine by its
 [`[machine.hub] placement`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 policy among the other
 connected machines, its own taking the place of the caller's, from the

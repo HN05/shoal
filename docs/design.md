@@ -255,8 +255,9 @@ every machine joined to a hub, whatever its availability, hands its spaces
 over as it shuts down, which is not a setting. Once the save-first
 shutdown stop below ends, it sends the final package of every space at
 once, one stream each, with the start its agent would make, and only the
-sending has to fit in the shutdown's window, logind's delay limit or the
-service's stop timeout. The hub keeps each package that arrives whole as
+sending has to fit in the shutdown's window: logind's delay limit, or for a
+signal a budget of its own that the service's stop timeout adds to the
+drain's, so a slow hub never cuts the daemon's drain short. The hub keeps each package that arrives whole as
 it keeps any, places its space among the other connected machines, its own
 as the caller's, so `always_on` machines with room come first and the hub
 takes the rest, and writes the placement back; only once the machine,

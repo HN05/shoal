@@ -11,7 +11,7 @@ mod replacement;
 mod scope;
 mod shutdown;
 pub mod work;
-pub use control::SERVICE_STOP_TIMEOUT;
+pub use control::HANDOVER_TIMEOUT;
 use control::{command, domain};
 use definition::{check_state_dir, text, write_definition};
 pub use definition::{definition, executable, file};

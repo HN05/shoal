@@ -96,6 +96,7 @@ impl Agents {
     /// down, and hand them over within the shutdown's `window`. See
     /// [`Self::stop_for_shutdown_of`].
     pub async fn stop_for_system_shutdown(&self, daemon: &dyn Daemon, window: Duration) {
+        let window = HandoverWindow::Shared(window);
         (self.stop_for_shutdown_of(daemon, Shutdown::System, window)).await;
     }
 
@@ -105,8 +106,7 @@ impl Agents {
     /// running unless `shutdown` ends them. Hold the agent queue until a
     /// system shutdown is cancelled, so nothing starts again before it.
     /// Then, on a machine joined to a hub, hand every space over to the
-    /// machines the hub places them on, sending what fits in the
-    /// shutdown's `window`. The user learns where each space went and what
+    /// machines the hub places them on, sending what fits in `window`. The user learns where each space went and what
     /// to continue. An update waits for the stop. Once a stop before a
     /// shutdown finished, later ones wait for it and leave the work alone.
     /// Returns the spaces stopped.
@@ -114,7 +114,7 @@ impl Agents {
         &self,
         daemon: &dyn Daemon,
         shutdown: Shutdown,
-        window: Duration,
+        window: HandoverWindow,
     ) -> StoppedSpaces {
         let started = Instant::now();
         let mut finished = self.shutdown_stopped.lock().await;
@@ -135,7 +135,7 @@ impl Agents {
                     .await
             })
             .await;
-        let handed = (self.hand_over(daemon, handover_deadline(started, window))).await;
+        let handed = (self.hand_over(daemon, window.deadline(started))).await;
         (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
         *finished = true;
         stopped
@@ -319,11 +319,26 @@ pub fn waits_for_resume(
             .any(|agent| !requested.contains(&agent.id) && !queued.contains(&agent.id)))
 }
 
-/// The latest a hand-over that starts once work stopped may send, of a
-/// stop that `started` with a shutdown's `window`: a moment before the
-/// window ends, so the user's notification is written before it does.
-fn handover_deadline(started: Instant, window: Duration) -> Instant {
-    started + window.saturating_sub(HANDOVER_MARGIN)
+/// How long the hand-over after a stop before a shutdown may send.
+#[derive(Clone, Copy, Debug)]
+pub enum HandoverWindow {
+    /// What a window that began with the stop leaves, as logind's delay
+    /// limit does, but a moment for the user's notification.
+    Shared(Duration),
+    /// This long once the stop ended, which the service manager's stop
+    /// timeout leaves it besides the daemon's own drain.
+    Own(Duration),
+}
+
+impl HandoverWindow {
+    /// The latest a hand-over that starts now, once the stop that
+    /// `started` ended, may send.
+    fn deadline(self, started: Instant) -> Instant {
+        match self {
+            Self::Shared(window) => started + window.saturating_sub(HANDOVER_MARGIN),
+            Self::Own(budget) => Instant::now() + budget,
+        }
+    }
 }
 
 /// What a stop before a shutdown keeps of its window after a hand-over.

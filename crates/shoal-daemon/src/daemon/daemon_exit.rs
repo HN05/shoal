@@ -8,7 +8,7 @@
 use super::{
     executions::{Save, StopRequest},
     manager::Manager,
-    shutdown_stop::{Shutdown, StoppedSpaces},
+    shutdown_stop::{HandoverWindow, Shutdown, StoppedSpaces},
 };
 use crate::daemon::{log, runner::JobStop};
 use crate::protocol::{Exit, QueuedLaunches};
@@ -54,8 +54,7 @@ impl Manager {
             }
             Ending::Save => {
                 self.agents.executions().close().await;
-                // The service manager's stop timeout bounds what follows.
-                let window = crate::service::SERVICE_STOP_TIMEOUT;
+                let window = HandoverWindow::Own(crate::service::HANDOVER_TIMEOUT);
                 (self.agents)
                     .stop_for_shutdown_of(self, Shutdown::Daemon, window)
                     .await

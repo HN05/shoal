@@ -5,9 +5,15 @@ use std::{process::Output, time::Duration};
 use tokio::process::Command;
 
 pub(super) const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
-/// Give the OS time to finish a daemon drain before forcing termination.
-pub const SERVICE_STOP_TIMEOUT: Duration =
-    timing::WORKSPACE_STOP_TIMEOUT.saturating_add(COMMAND_TIMEOUT);
+/// How long a joined machine's daemon that a signal ends may hand its
+/// spaces over once its work stopped, which the service's stop timeout
+/// leaves it besides the drain.
+pub const HANDOVER_TIMEOUT: Duration = Duration::from_secs(15);
+/// Give the OS time to finish a daemon drain, and a hand-over before it,
+/// before forcing termination.
+pub(super) const SERVICE_STOP_TIMEOUT: Duration = timing::WORKSPACE_STOP_TIMEOUT
+    .saturating_add(COMMAND_TIMEOUT)
+    .saturating_add(HANDOVER_TIMEOUT);
 /// A synchronous stop must also allow the service manager to finish its job.
 const STOP_COMMAND_TIMEOUT: Duration = SERVICE_STOP_TIMEOUT.saturating_add(COMMAND_TIMEOUT);
 
