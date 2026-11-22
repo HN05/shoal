@@ -67,7 +67,7 @@ impl Manager {
         files: &[SentFile],
     ) {
         let alert = NewAlert {
-            attachments: files.iter().map(|file| file.path.clone()).collect(),
+            attachments: shoal_protocol::files::paths_here(files),
             ..NewAlert::shoal(kind, about, message)
         };
         self.notifications.notify(self, alert).await;

@@ -256,12 +256,8 @@ fn an_offline_machine_s_last_report_reaches_only_a_caller_whose_scope_reaches_it
 }
 
 #[test]
-fn a_space_s_files_list_from_its_machine_and_attaching_one_from_here_names_it() {
-    let (hub, laptop, there) = laptop_space();
-    let note = laptop.root.path().join("note.md");
-    std::fs::write(&note, "kept on the laptop").unwrap();
-    let added = laptop.ok(&["files", "add", note.to_str().unwrap(), "--space", &there]);
-    assert_eq!(hub.ok(&["files", &there]), added);
+fn attaching_a_file_to_a_space_on_another_machine_names_that_machine() {
+    let (hub, _laptop, there) = laptop_space();
     // Attaching reads the file where the command runs.
     let here = hub.root.path().join("here.md");
     std::fs::write(&here, "kept on the hub").unwrap();

@@ -9,9 +9,12 @@ fn attached_files_follow_the_message_text() {
         message: text.into(),
         files: vec![shoal_protocol::files::SentFile {
             id: 3,
+            space: "w".into(),
             name: "shot.png".into(),
             title: None,
-            path: "/repo/.attachments/w/k/0/shot.png".into(),
+            copy: shoal_protocol::files::KeptCopy::Here {
+                path: "/repo/.attachments/w/k/0/shot.png".into(),
+            },
         }],
         ..alert("")
     };

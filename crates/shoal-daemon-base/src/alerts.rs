@@ -94,7 +94,7 @@ pub const COLUMNS: &str = concat!(
     "a.id,a.created_at,a.kind,a.sender,a.recipient_id,r.number AS recipient_number,
     r.name AS recipient_name,a.space,a.space_id,s.number AS number,a.message,a.read,",
     "(SELECT json_group_array(json(file)) FROM (
-        SELECT json_object('id',f.id,'name',f.name,'title',f.title,'path',f.path) AS file
+        SELECT json_object('id',f.id,'space',f.space_id,'name',f.name,'title',f.title,'path',f.path) AS file
         FROM json_each(a.attachments) j JOIN space_files f ON f.path=j.value
         ORDER BY j.key)) AS files"
 );

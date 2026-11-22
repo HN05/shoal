@@ -161,7 +161,7 @@ fn post_lines(number: u32, post: &Post, palette: Palette) -> Vec<String> {
         lines.push(format!("    Chose {choice}"));
     }
     for file in &post.files {
-        lines.push(format!("    Attached file: {}", file.path.display()));
+        lines.push(format!("    Attached file: {}", file.shown()));
     }
     lines.extend(post.code.iter().flat_map(code_lines));
     lines.extend(post.changes.iter().flat_map(change_lines));

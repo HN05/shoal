@@ -153,6 +153,8 @@ impl Manager {
     async fn kept_copies(&self, space_id: &SpaceId) -> Result<Vec<std::path::PathBuf>> {
         let id = space_id.clone();
         let files = self.store.read(move |db| records::list(db, &id)).await?;
-        Ok(files.into_iter().map(|file| file.path).collect())
+        Ok((files.iter())
+            .filter_map(|file| file.copy.path().map(Path::to_path_buf))
+            .collect())
     }
 }

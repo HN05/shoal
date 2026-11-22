@@ -35,9 +35,12 @@ fn listed_alerts_name_the_files_sent_with_them() {
         read: false,
         files: vec![shoal_protocol::files::SentFile {
             id: 3,
+            space: "w".into(),
             name: "a.png".into(),
             title: None,
-            path: "/shoal/repo/.attachments/results/w/a.png".into(),
+            copy: shoal_protocol::files::KeptCopy::Here {
+                path: "/shoal/repo/.attachments/results/w/a.png".into(),
+            },
         }],
     };
     assert_eq!(

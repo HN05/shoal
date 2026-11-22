@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{AttachedFile, AttachedTo, Attacher, FileSource, HomeKey, Space, layout::Copy};
+use super::{
+    AttachedFile, AttachedTo, Attacher, FileSource, HomeKey, KeptCopy, Space, layout::Copy,
+};
 use shoal_protocol::model::SpaceKind;
 
 const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
@@ -36,7 +38,9 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
         source: row.get(2)?,
         name: row.get(3)?,
         title: row.get(4)?,
-        path: PathBuf::from(row.get::<_, String>(5)?),
+        copy: KeptCopy::Here {
+            path: PathBuf::from(row.get::<_, String>(5)?),
+        },
         bytes: row.get::<_, i64>(6)?.try_into().unwrap_or_default(),
         created_at: row.get(7)?,
         attached_by: serde_json::from_str(&row.get::<_, String>(8)?).map_err(|error| {

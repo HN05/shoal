@@ -560,8 +560,8 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     let files = manager
         .attached_files(&SpaceSelector::id(&workspace.id))
         .await?;
-    assert_eq!(files[0].path, *copy);
-    let result = &files[1].path;
+    assert_eq!(files[0].path().unwrap(), *copy);
+    let result = &files[1].path().unwrap();
     assert!(result.starts_with(root.join("origin")), "{result:?}");
     assert_eq!(fs::read_to_string(result)?, "panic");
     Ok(())
@@ -819,11 +819,11 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
         anyhow::bail!("expected one deleted file: {deleted:?}");
     };
     assert!(
-        gone.path.starts_with(root.join("origin")),
+        gone.path().unwrap().starts_with(root.join("origin")),
         "{:?}",
-        gone.path
+        gone.path().unwrap()
     );
-    assert!(!gone.path.exists());
+    assert!(!gone.path().unwrap().exists());
     assert!(
         manager
             .attached_files(&SpaceSelector::id(&workspace.id))
@@ -896,8 +896,11 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     let kept = manager
         .attached_files(&SpaceSelector::id(&workspace.id))
         .await?;
-    assert!(kept[0].path.starts_with(root.join("origin")), "{kept:?}");
-    assert!(kept[0].path.exists());
+    assert!(
+        kept[0].path().unwrap().starts_with(root.join("origin")),
+        "{kept:?}"
+    );
+    assert!(kept[0].path().unwrap().exists());
     Ok(())
 }
 
@@ -989,7 +992,7 @@ async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> 
 
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
     let kept = manager.attached_files(&selector).await?;
-    assert_eq!(fs::read_to_string(&kept[0].path)?, "Plan");
+    assert_eq!(fs::read_to_string(kept[0].path().unwrap())?, "Plan");
     Ok(())
 }
 

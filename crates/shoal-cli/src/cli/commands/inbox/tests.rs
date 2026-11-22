@@ -30,9 +30,12 @@ fn a_lone_sync_failure_names_its_repository() {
 fn a_thread_notes_its_latest_recommendation_and_files() {
     let file = |id, name: &str| shoal_protocol::files::SentFile {
         id,
+        space: "w1".into(),
         name: name.into(),
         title: None,
-        path: format!("/files/{name}").into(),
+        copy: shoal_protocol::files::KeptCopy::Here {
+            path: format!("/files/{name}").into(),
+        },
     };
     let thread: shoal_protocol::threads::Thread = serde_json::from_value(serde_json::json!({
         "id": 1, "space_number": 2, "item": 3, "space_id": "w1", "space": "cache",

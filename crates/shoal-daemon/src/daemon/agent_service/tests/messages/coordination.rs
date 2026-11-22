@@ -709,8 +709,11 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     let [file] = notification.files.as_slice() else {
         panic!("{notification:?}");
     };
-    assert_eq!(file.path, *moved);
-    assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "png");
+    assert_eq!(file.path().unwrap(), *moved);
+    assert_eq!(
+        std::fs::read_to_string(file.path().unwrap()).unwrap(),
+        "png"
+    );
 }
 
 #[tokio::test]

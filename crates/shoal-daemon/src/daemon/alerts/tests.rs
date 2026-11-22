@@ -493,7 +493,10 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         (file.name.as_str(), file.title.as_deref()),
         ("layout.png", Some("Layout"))
     );
-    assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "png");
+    assert_eq!(
+        std::fs::read_to_string(file.path().unwrap()).unwrap(),
+        "png"
+    );
     let attached = manager
         .attached_files(&SpaceSelector::id(&child.id))
         .await
@@ -570,7 +573,7 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         .find(|n| n.message == "Which layout?")
         .unwrap();
     assert_eq!(kept.files.len(), 1, "{kept:?}");
-    assert!(kept.files[0].path.exists());
+    assert!(kept.files[0].path().unwrap().exists());
     assert!(copy.exists());
 }
 

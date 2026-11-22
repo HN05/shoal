@@ -1020,7 +1020,10 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
     let [file] = files.as_slice() else {
         panic!("{files:?}");
     };
-    assert_eq!((&file.path, file.expires_at), (&added.path, None));
+    assert_eq!(
+        (&file.path().unwrap(), file.expires_at),
+        (&added.path().unwrap(), None)
+    );
     // The restored workspace goes below its parent again, which reaches
     // them as before.
     let parents: Vec<Option<String>> = manager
@@ -1038,7 +1041,7 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         panic!("{listed:?}");
     };
     assert!(!manager.delete_results_in(listed, |_| true).await.unwrap());
-    assert!(added.path.exists());
+    assert!(added.path().unwrap().exists());
 
     // Removed again, they expire with it.
     manager
@@ -1054,8 +1057,8 @@ async fn restore_gives_the_workspace_the_files_the_removed_one_kept() {
         .await
         .unwrap();
     manager.expire_results().await.unwrap();
-    assert!(!added.path.exists());
-    let removed_id = added.path.ancestors().nth(3).unwrap();
+    assert!(!added.path().unwrap().exists());
+    let removed_id = added.path().unwrap().ancestors().nth(3).unwrap();
     assert!(removed_id.ends_with(workspace.id.as_str()));
     assert!(!removed_id.exists());
 }

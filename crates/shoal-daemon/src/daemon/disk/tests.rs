@@ -283,8 +283,9 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         .attached_files(&SpaceSelector::id(&audit.id))
         .await
         .unwrap()[0]
-        .path
-        .clone();
+        .path()
+        .unwrap()
+        .to_path_buf();
     manager
         .remove_selected(
             &SpaceSelector::id(&audit.id),

@@ -46,7 +46,7 @@ pub(super) async fn choose(
         }
         FileAction::Print => print(picked_file(files, &picked.id)?),
         FileAction::PrintPath => {
-            outln!("{}", picked_file(files, &picked.id)?.path.display());
+            outln!("{}", kept_here(picked_file(files, &picked.id)?)?.display());
             Ok(0)
         }
         FileAction::Open => open(ctx, picked_file(files, &picked.id)?),
@@ -89,8 +89,8 @@ fn resolve_action(action: FileAction, id: &str) -> Result<FileAction> {
 
 /// Print the file's text; other files would garble the terminal.
 fn print(file: &AttachedFile) -> Result<i32> {
-    let bytes =
-        std::fs::read(&file.path).with_context(|| format!("read {}", file.path.display()))?;
+    let path = kept_here(file)?;
+    let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
     let text = String::from_utf8(bytes).ok().with_context(|| {
         format!(
             "{} is not text; open it with ctrl-o or print its path with ctrl-y",
@@ -108,9 +108,16 @@ fn open(ctx: &Context, file: &AttachedFile) -> Result<i32> {
         !crate::process::scoped::inherits_scope(&ctx.paths.state),
         "workspace processes cannot open files on the user's screen; ask the user"
     );
-    outln!("{}", file.path.display());
-    crate::cli::desktop::open(&file.path)?;
+    let path = kept_here(file)?;
+    outln!("{}", path.display());
+    crate::cli::desktop::open(path)?;
     Ok(0)
+}
+
+/// The path of the file's copy, which this machine keeps.
+fn kept_here(file: &AttachedFile) -> Result<&std::path::Path> {
+    file.path()
+        .with_context(|| format!("{} is kept {}", file.name, file.copy.label()))
 }
 
 fn picked_file<'a>(files: &'a [AttachedFile], id: &str) -> Result<&'a AttachedFile> {

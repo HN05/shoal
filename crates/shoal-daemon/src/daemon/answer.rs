@@ -72,6 +72,23 @@ impl Answer {
         }))
     }
 
+    /// The answer as the machine that forwarded its request reads it: the
+    /// attached files it lists are kept on `machine`, this one.
+    pub(super) fn files_kept_on(self, machine: String) -> Self {
+        let kept = move |mut body: Body| {
+            body.files_kept_on(&machine);
+            body
+        };
+        match self {
+            Self::Body(body) => Self::Body(kept(body)),
+            Self::Pages(pages) => {
+                Self::Pages(pages.map(|pages| pages.into_iter().map(kept).collect()))
+            }
+            Self::Wait(wait) => Self::wait(async move { wait.await.map(kept) }),
+            answer @ (Self::Connection(_) | Self::Failed(_)) => answer,
+        }
+    }
+
     /// Send the answer to `request_id`. The guard is held until the reply is
     /// written, except by a wait.
     pub(super) async fn send(

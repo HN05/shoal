@@ -315,7 +315,7 @@ pub(crate) fn sent_alert(about: About, message: String, files: &[SentFile]) -> N
         sender: Sender::Space,
         about,
         message,
-        attachments: files.iter().map(|file| file.path.clone()).collect(),
+        attachments: shoal_protocol::files::paths_here(files),
     }
 }
 

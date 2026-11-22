@@ -45,8 +45,8 @@ pub(super) async fn list(
     let paths = listing == Listing::Paths;
     ctx.show(&files, |files| {
         if paths {
-            for file in files {
-                outln!("{}", file.path.display());
+            for path in files.iter().filter_map(AttachedFile::path) {
+                outln!("{}", path.display());
             }
             return;
         }
@@ -177,7 +177,7 @@ async fn running_space(ctx: &Context, selector: &SpaceSelector) -> Result<Option
 }
 
 /// The file's name, title, size, how it came, when, read at `now`, when a
-/// removed workspace's file is deleted, and Shoal's copy.
+/// removed workspace's file is deleted, and where Shoal's copy is.
 fn cells(file: &AttachedFile, now: crate::time::UnixTime) -> [ui::Cell; 7] {
     let expiry = file
         .expires_at
@@ -189,7 +189,7 @@ fn cells(file: &AttachedFile, now: crate::time::UnixTime) -> [ui::Cell; 7] {
         (source_label(file.source).into(), None),
         (file.created_at.local_ago(now), Some(Style::Muted)),
         (expiry.unwrap_or_default(), Some(Style::Warning)),
-        (file.path.display().to_string(), Some(Style::Muted)),
+        (file.copy.label(), Some(Style::Muted)),
     ]
 }
 

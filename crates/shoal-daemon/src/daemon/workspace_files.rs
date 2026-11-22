@@ -6,7 +6,7 @@
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, ensure};
 use tokio::sync::OwnedMutexGuard;
@@ -27,8 +27,8 @@ pub(crate) use records::{claim, count, keep_removed, rebase, record, restore};
 use layout::{Kept, Layout};
 
 pub(crate) use shoal_protocol::files::{
-    AttachedFile, AttachedTo, Attacher, FileSource, NewFile, SentFile, check_path, check_sent,
-    missing_selection,
+    AttachedFile, AttachedTo, Attacher, FileSource, KeptCopy, NewFile, SentFile, check_path,
+    check_sent, missing_selection,
 };
 #[cfg(test)]
 mod tests;
@@ -333,8 +333,12 @@ impl Manager {
         let (from, to) = (SpaceSelector::id(from), SpaceSelector::id(to));
         let mut copied = Vec::new();
         for file in self.attached_files(&from).await? {
+            // Every record of this machine's store names its copy here.
+            let Some(path) = file.copy.path() else {
+                continue;
+            };
             let new = NewFile {
-                path: file.path.clone(),
+                path: path.to_path_buf(),
                 title: file.title.clone(),
             };
             let added = self.add_attached_files(&to, vec![new], &file.attached_by);
@@ -407,7 +411,9 @@ impl Manager {
         files: Vec<AttachedFile>,
     ) -> Result<Vec<AttachedFile>> {
         let layout = home.layout();
-        let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
+        let paths: Vec<PathBuf> = (files.iter())
+            .filter_map(|file| file.copy.path().map(Path::to_path_buf))
+            .collect();
         tokio::task::spawn_blocking(move || {
             paths.iter().try_for_each(|path| layout.delete_copy(path))
         })

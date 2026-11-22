@@ -225,7 +225,7 @@ fn render(alert: &Alert, palette: Palette, now: crate::time::UnixTime) -> String
 /// The alert's row `line`, then a line for each file sent with it.
 fn with_files(line: &str, alert: &Alert) -> String {
     std::iter::once(line.to_owned())
-        .chain((alert.files.iter()).map(|file| format!("  Attached file: {}", file.path.display())))
+        .chain((alert.files.iter()).map(|file| format!("  Attached file: {}", file.shown())))
         .collect::<Vec<_>>()
         .join("\n")
 }

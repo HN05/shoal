@@ -5,8 +5,7 @@ use shoal_protocol::alerts::Alert;
 /// The alert's text, after the space that sent it or that it is about,
 /// followed by a line for each file attached to it.
 pub fn shown(alert: &Alert) -> String {
-    let attached =
-        (alert.attachments().into_iter()).map(|path| format!("Attached file: {}", path.display()));
+    let attached = (alert.files.iter()).map(|file| format!("Attached file: {}", file.shown()));
     std::iter::once(alert.text())
         .filter(|text| !text.is_empty())
         .chain(attached)

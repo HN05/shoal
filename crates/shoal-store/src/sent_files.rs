@@ -11,7 +11,7 @@ macro_rules! sent_files {
     ($column:literal) => {
         concat!(
             "(SELECT json_group_array(json(file)) FROM (
-                SELECT json_object('id',f.id,'name',f.name,'title',f.title,'path',f.path) AS file
+                SELECT json_object('id',f.id,'space',f.space_id,'name',f.name,'title',f.title,'path',f.path) AS file
                 FROM json_each(",
             $column,
             ") j JOIN space_files f ON f.id=j.value ORDER BY j.key)) AS files"

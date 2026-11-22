@@ -32,7 +32,9 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
         source: shoal_protocol::files::FileSource::Result,
         name: "report.md".into(),
         title: Some("Audit findings".into()),
-        path: "/repo/.attachments/results/id/key/0/report.md".into(),
+        copy: shoal_protocol::files::KeptCopy::Here {
+            path: "/repo/.attachments/results/id/key/0/report.md".into(),
+        },
         bytes: 960,
         created_at: UnixTime::from_seconds(0),
         attached_by: shoal_protocol::files::Attacher::User,

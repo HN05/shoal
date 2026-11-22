@@ -213,9 +213,17 @@ pub struct Alert {
 }
 
 impl Alert {
-    /// The paths of Shoal's copies of its files.
+    /// Its files as a machine other than `machine`, which keeps them, sees
+    /// them.
+    pub fn files_kept_on(&mut self, machine: &str) {
+        for file in &mut self.files {
+            file.copy.kept_on(machine);
+        }
+    }
+
+    /// The paths of Shoal's copies of its files that this machine keeps.
     pub fn attachments(&self) -> Vec<PathBuf> {
-        self.files.iter().map(|file| file.path.clone()).collect()
+        crate::files::paths_here(&self.files)
     }
 
     /// Its text as an agent reads it, after the space it names.

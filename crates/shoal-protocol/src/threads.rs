@@ -472,6 +472,14 @@ pub struct Thread {
 }
 
 impl Thread {
+    /// Its posts' files as a machine other than `machine`, which keeps
+    /// them, sees them.
+    pub fn files_kept_on(&mut self, machine: &str) {
+        for file in self.posts.iter_mut().flat_map(|post| &mut post.files) {
+            file.copy.kept_on(machine);
+        }
+    }
+
     pub fn is_open(&self) -> bool {
         self.resolution.is_none()
     }

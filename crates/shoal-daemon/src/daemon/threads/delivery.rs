@@ -93,7 +93,7 @@ fn alert(thread: &Thread, post: Option<&Post>, kind: AlertKind, message: String)
         },
         message,
         attachments: post
-            .map(|post| post.files.iter().map(|file| file.path.clone()).collect())
+            .map(|post| shoal_protocol::files::paths_here(&post.files))
             .unwrap_or_default(),
     }
 }

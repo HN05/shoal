@@ -494,6 +494,27 @@ impl std::fmt::Display for RemoteError {
 impl std::error::Error for RemoteError {}
 
 impl Body {
+    /// The answer as a machine other than `machine`, which answered it,
+    /// reads it: the attached files it lists are kept there, so it names
+    /// that machine where it named their copies' paths.
+    pub fn files_kept_on(&mut self, machine: &str) {
+        match self {
+            Self::AttachedFiles(files) => {
+                (files.iter_mut()).for_each(|file| file.copy.kept_on(machine));
+            }
+            Self::Alerts(alerts) => {
+                (alerts.iter_mut()).for_each(|alert| alert.files_kept_on(machine));
+            }
+            Self::SpaceThread(thread) | Self::CurrentThread(Some(thread)) => {
+                thread.files_kept_on(machine);
+            }
+            Self::SpaceThreads(listing) => {
+                (listing.threads.iter_mut()).for_each(|thread| thread.files_kept_on(machine));
+            }
+            _ => {}
+        }
+    }
+
     /// Preserve remote errors even when the caller expected a different variant.
     pub fn unexpected(self, expected: &str) -> anyhow::Error {
         match self.into_result() {

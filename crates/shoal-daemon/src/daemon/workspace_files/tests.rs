@@ -283,7 +283,10 @@ async fn files_sent_with_messages_are_listed_until_they_expire() {
     assert_eq!(listed.bytes, 5);
     assert_eq!(listed.source, FileSource::Message);
     assert_eq!(listed.space.name, "receiver");
-    assert_eq!(std::fs::read_to_string(&listed.path).unwrap(), "panic");
+    assert_eq!(
+        std::fs::read_to_string(listed.path().unwrap()).unwrap(),
+        "panic"
+    );
 
     manager
         .remove_selected(
@@ -302,10 +305,10 @@ async fn files_sent_with_messages_are_listed_until_they_expire() {
         panic!("{kept:?}");
     };
     assert_eq!(
-        (&kept.path, kept.expires_at.is_some()),
-        (&listed.path, true)
+        (&kept.path().unwrap(), kept.expires_at.is_some()),
+        (&listed.path().unwrap(), true)
     );
-    assert!(listed.path.exists());
+    assert!(listed.path().unwrap().exists());
     manager
         .store
         .run(|db| {
@@ -315,7 +318,7 @@ async fn files_sent_with_messages_are_listed_until_they_expire() {
         .await
         .unwrap();
     manager.expire_results().await.unwrap();
-    assert!(!listed.path.exists());
+    assert!(!listed.path().unwrap().exists());
     let left = manager
         .store
         .run(|db| {
@@ -346,7 +349,10 @@ async fn added_files_need_no_message() {
         panic!("{added:?}");
     };
     assert_eq!(copy.source, FileSource::Added);
-    assert_eq!(std::fs::read_to_string(&copy.path).unwrap(), "port = 1");
+    assert_eq!(
+        std::fs::read_to_string(copy.path().unwrap()).unwrap(),
+        "port = 1"
+    );
     // Adding it again keeps the copy; sending it is a separate copy.
     manager
         .add_attached_files(
@@ -530,7 +536,7 @@ async fn deleting_by_name_keeps_the_other_files() {
         )
         .await
         .unwrap();
-    assert!(!deleted[0].path.exists());
+    assert!(!deleted[0].path().unwrap().exists());
     let left = manager
         .attached_files(&SpaceSelector::id(&workspace.id))
         .await
@@ -539,7 +545,7 @@ async fn deleting_by_name_keeps_the_other_files() {
         panic!("{left:?}");
     };
     assert_eq!(kept.name, "shot.png");
-    assert!(kept.path.exists());
+    assert!(kept.path().unwrap().exists());
 
     // Sending the same files again copies the deleted one anew.
     manager
@@ -551,7 +557,7 @@ async fn deleting_by_name_keeps_the_other_files() {
         )
         .await
         .unwrap();
-    assert!(deleted[0].path.exists());
+    assert!(deleted[0].path().unwrap().exists());
     assert_eq!(
         manager
             .attached_files(&SpaceSelector::id(&workspace.id))
@@ -601,7 +607,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
         panic!("{deleted:?}");
     };
     assert_eq!(gone.space.name, "receiver");
-    assert!(!gone.path.exists());
+    assert!(!gone.path().unwrap().exists());
     for spared in [&active, &unresolved] {
         assert_eq!(
             manager
@@ -650,8 +656,9 @@ async fn results_outlive_removal_as_long_as_its_record() {
         .attached_files(&SpaceSelector::id(&child.id))
         .await
         .unwrap()[0]
-        .path
-        .clone();
+        .path()
+        .unwrap()
+        .to_path_buf();
     assert_eq!(std::fs::read_to_string(&result).unwrap(), "No leaks");
     assert!(
         manager
@@ -816,7 +823,7 @@ async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
     let elsewhere = temp.path().join("elsewhere");
     std::fs::create_dir(&elsewhere).unwrap();
     std::fs::write(elsewhere.join("notes.md"), "keep me").unwrap();
-    let directory = added[0].path.parent().unwrap();
+    let directory = added[0].path().unwrap().parent().unwrap();
     std::fs::remove_dir_all(directory).unwrap();
     std::os::unix::fs::symlink(&elsewhere, directory).unwrap();
     assert!(
@@ -852,8 +859,9 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
         .attached_files(&SpaceSelector::id(&audit.id))
         .await
         .unwrap()[0]
-        .path
-        .clone();
+        .path()
+        .unwrap()
+        .to_path_buf();
     manager
         .remove_selected(
             &SpaceSelector::id(&audit.id),
@@ -966,12 +974,21 @@ async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
         .await
         .unwrap();
     // The workspace's directory now leads elsewhere, where a copy is gone.
-    let directory = added[0].path.ancestors().nth(3).unwrap().to_owned();
+    let directory = added[0]
+        .path()
+        .unwrap()
+        .ancestors()
+        .nth(3)
+        .unwrap()
+        .to_owned();
     let elsewhere = temp.path().join("elsewhere");
     std::fs::rename(&directory, &elsewhere).unwrap();
     std::os::unix::fs::symlink(&elsewhere, &directory).unwrap();
-    let inside = added[1].path.strip_prefix(&directory).unwrap();
-    std::fs::remove_file(elsewhere.join(added[0].path.strip_prefix(&directory).unwrap())).unwrap();
+    let inside = added[1].path().unwrap().strip_prefix(&directory).unwrap();
+    std::fs::remove_file(
+        elsewhere.join(added[0].path().unwrap().strip_prefix(&directory).unwrap()),
+    )
+    .unwrap();
     assert!(
         manager
             .add_attached_files(&SpaceSelector::id(&workspace.id), files, &Attacher::User)
@@ -1017,7 +1034,7 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
         panic!("{left:?}");
     };
     assert_eq!(sent.source, FileSource::Message);
-    assert!(sent.path.exists());
+    assert!(sent.path().unwrap().exists());
 }
 
 #[tokio::test]
@@ -1084,7 +1101,7 @@ async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
         .await
         .unwrap();
     // The copy's directory refuses to give it up.
-    let directory = added[0].path.parent().unwrap().to_owned();
+    let directory = added[0].path().unwrap().parent().unwrap().to_owned();
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o500)).unwrap();
     let repo = manager
         .repositories
@@ -1094,7 +1111,7 @@ async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
     let deleted = manager.delete_repository_files(&repo).await;
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
     assert!(deleted.is_err(), "the copy could not be deleted");
-    assert!(added[0].path.exists());
+    assert!(added[0].path().unwrap().exists());
     assert_eq!(
         manager
             .attached_files(&SpaceSelector::id(&workspace.id))
@@ -1141,7 +1158,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         )
         .await
         .unwrap();
-    let copy = added[0].path.clone();
+    let copy = added[0].path().unwrap().to_path_buf();
     let attachments = workspace.path.parent().unwrap().join(".attachments");
     assert!(copy.starts_with(attachments.join(&chat.id)));
     let files = manager
@@ -1288,7 +1305,7 @@ async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
         )
         .await
         .unwrap();
-    let copy = added[0].path.clone();
+    let copy = added[0].path().unwrap().to_path_buf();
     let root_dir = manager.config().root_dir(&manager.paths).unwrap();
     assert!(
         copy.starts_with(root_dir.join(".attachments")),
@@ -1355,12 +1372,18 @@ async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_
         std::fs::write(&file, name).unwrap();
         manager.add_attached_files(&space, vec![file.into()], &Attacher::User)
     };
-    let early = attach("early.md").await.unwrap()[0].path.clone();
+    let early = attach("early.md").await.unwrap()[0]
+        .path()
+        .unwrap()
+        .to_path_buf();
     // root_dir changes while the chat runs, as an edit and a reload change it.
     let moved = std::fs::canonicalize(temp.path()).unwrap().join("moved");
     let config = format!("[machine]\nroot_dir = {moved:?}\n");
     crate::daemon::test_support::configure(&manager, &config).await;
-    let late = attach("late.md").await.unwrap()[0].path.clone();
+    let late = attach("late.md").await.unwrap()[0]
+        .path()
+        .unwrap()
+        .to_path_buf();
     for copy in [&early, &late] {
         assert!(
             copy.starts_with(root_dir.join(".attachments")),
@@ -1495,10 +1518,10 @@ async fn a_disposable_workspaces_files_outlive_it_for_the_retention_period() {
     let [kept] = kept.as_slice() else {
         panic!("{kept:?}");
     };
-    assert_eq!(kept.path, added.path);
+    assert_eq!(kept.path().unwrap(), added.path().unwrap());
     assert_eq!(kept.space.name, "scratch");
     assert!(kept.expires_at.is_some());
-    assert!(added.path.exists());
+    assert!(added.path().unwrap().exists());
 }
 
 #[tokio::test]
@@ -1522,7 +1545,7 @@ async fn removal_deletes_the_directories_of_files_already_deleted() {
         .remove_attached_files(&SpaceSelector::id(&workspace.id), vec![], vec![])
         .await
         .unwrap();
-    let directory = added.path.ancestors().nth(3).unwrap().to_owned();
+    let directory = added.path().unwrap().ancestors().nth(3).unwrap().to_owned();
     assert!(directory.ends_with(workspace.id.as_str()));
     assert!(!directory.exists(), "deleting its last copy empties it");
     // A leftover no record names, as a failed discard leaves.
