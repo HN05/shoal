@@ -5,6 +5,8 @@
 //! by sends one.
 use std::{convert::Infallible, time::Duration};
 
+use anyhow::Result;
+
 use shoal_schedule::placement::snapshot::Capacity;
 use tokio::sync::watch;
 
@@ -20,51 +22,51 @@ const MEMORY_STEP: u64 = 1 << 30;
 impl Hub {
     /// Measure this machine's capacity every [`MEASURE_EVERY`] into
     /// `measured`, whose receivers hear of it once it moved enough to place
-    /// by.
+    /// by, first once it is measured at all. A failed measurement keeps
+    /// the one before.
     pub(super) async fn keep_measuring(
         &self,
         daemon: &dyn Daemon,
-        measured: watch::Sender<Capacity>,
+        measured: watch::Sender<Option<Capacity>>,
     ) -> Infallible {
         let mut origins = Origins::default();
         loop {
-            let before = measured.borrow().clone();
-            let capacity = self.measure_capacity(daemon, &mut origins, before).await;
-            measured.send_if_modified(|current| {
-                let moved = moved(current, &capacity);
-                *current = capacity;
-                moved
-            });
+            match self.measure_capacity(daemon, &mut origins).await {
+                Ok(capacity) => {
+                    measured.send_if_modified(|current| {
+                        let moved = current
+                            .as_ref()
+                            .is_none_or(|current| moved(current, &capacity));
+                        *current = Some(capacity);
+                        moved
+                    });
+                }
+                Err(error) => {
+                    log!("hub: could not measure this machine's queue for placement: {error:#}");
+                }
+            }
             tokio::time::sleep(MEASURE_EVERY).await;
         }
     }
 
-    /// This machine's capacity now, its queue's room as `daemon` reads it,
-    /// or as `before` had it when that fails, with the origins of its
-    /// repositories.
+    /// This machine's capacity now: its queue's room as `daemon` reads it,
+    /// with the origins of its repositories.
     async fn measure_capacity(
         &self,
         daemon: &dyn Daemon,
         origins: &mut Origins,
-        before: Capacity,
-    ) -> Capacity {
-        let room = match daemon.queue_room().await {
-            Ok(room) => room,
-            Err(error) => {
-                log!("hub: could not measure this machine's queue for placement: {error:#}");
-                before
-            }
-        };
+    ) -> Result<Capacity> {
+        let room = daemon.queue_room().await?;
         let mut repositories = Vec::new();
-        for repository in daemon.repositories().await.unwrap_or_default() {
+        for repository in daemon.repositories().await? {
             repositories.extend(origins.of(&repository).await.origin);
         }
         repositories.sort();
         repositories.dedup();
-        Capacity {
+        Ok(Capacity {
             repositories,
             ..room
-        }
+        })
     }
 }
 

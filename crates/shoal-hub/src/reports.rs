@@ -63,7 +63,7 @@ impl Hub {
     /// them, then each change, and at least every [`QUIET`], each with the
     /// capacity this machine measures meanwhile.
     async fn report_spaces(&self, daemon: &dyn Daemon, sink: Sink<'_>) -> Result<()> {
-        let (measuring, measured) = watch::channel(Capacity::default());
+        let (measuring, measured) = watch::channel(None);
         tokio::select! {
             reported = self.report_changes(daemon, sink, measured) => reported,
             never = self.keep_measuring(daemon, measuring) => match never {},
@@ -77,7 +77,7 @@ impl Hub {
         &self,
         daemon: &dyn Daemon,
         sink: Sink<'_>,
-        mut measured: watch::Receiver<Capacity>,
+        mut measured: watch::Receiver<Option<Capacity>>,
     ) -> Result<()> {
         // Watch before reading, so a change in between still reports.
         let mut stored = self.store.watch_changes();
@@ -190,14 +190,15 @@ impl Hub {
         }
     }
 
-    /// Send `report` to `sink`, with this machine's capacity and
+    /// Send `report` to `sink`, with this machine's capacity, none before
+    /// it measured it, and
     /// `reserved`, the numbers it holds without a space, and number this
     /// machine's spaces from what the hub answers.
     async fn report(
         &self,
         daemon: &dyn Daemon,
         sink: &Sink<'_>,
-        (report, capacity): (Report, Capacity),
+        (report, capacity): (Report, Option<Capacity>),
         reserved: Vec<SpaceNumber>,
     ) -> Result<()> {
         let numbering = match sink {

@@ -36,8 +36,13 @@ pub use placer::Registration;
 pub(crate) struct Capacities(Mutex<HashMap<MemberId, Capacity>>);
 
 impl Capacities {
-    /// Keep `capacity` as what the machine `member` reported last.
-    pub fn keep(&self, member: &MemberId, capacity: Capacity) {
+    /// Keep `capacity` as what the machine `member` reported last; a
+    /// report without one, as before the machine measured it, keeps what
+    /// the hub had.
+    pub fn keep(&self, member: &MemberId, capacity: Option<Capacity>) {
+        let Some(capacity) = capacity else {
+            return;
+        };
         let mut capacities = self.0.lock().unwrap();
         capacities.insert(member.clone(), capacity);
     }
