@@ -74,6 +74,18 @@ async fn files_relayed_back_to_the_machine_keeping_them_show_their_path() {
     };
     let kept = file(7, "kept.md", json!({"path": "/shoal/kept.md"}));
     let daemon = crate::stand_in::StandIn::keeping(vec![kept]);
+    // The record the daemon keeps of it, by which the user's alerts list it.
+    (hub.store)
+        .write(|tx| {
+            tx.execute(
+                "INSERT INTO space_files(id,space_id,space,source,name,path,bytes,created_at)
+                    VALUES (7,'child','child','alert','kept.md','/shoal/kept.md',1,1)",
+                [],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     // The event this machine passed up, back with its files: one it keeps,
     // one whose record it removed since, and one another machine keeps.
     let mut event = told(&[]);
