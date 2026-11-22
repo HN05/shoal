@@ -135,3 +135,25 @@ fn a_space_reference_keeps_its_json() {
         assert_eq!(serde_json::to_string(&reference).unwrap(), wire);
     }
 }
+
+#[test]
+fn a_listing_carries_each_spaces_offer_through_its_pages() {
+    let offers = [
+        (SpaceId::from("w1"), Offer::Accepted),
+        (
+            SpaceId::from("w2"),
+            Offer::Refused {
+                reason: "workspace w2 is preparing".into(),
+            },
+        ),
+        (SpaceId::from("w3"), Offer::Lacking),
+    ];
+    let everywhere = Everywhere {
+        offers: offers.iter().cloned().collect(),
+        ..Everywhere::default()
+    };
+    let parts: Vec<EverywherePart> =
+        serde_json::from_value(serde_json::to_value(everywhere.into_parts()).unwrap()).unwrap();
+    let read = Everywhere::from_parts(parts).unwrap();
+    assert_eq!(read.offers, offers.into_iter().collect());
+}

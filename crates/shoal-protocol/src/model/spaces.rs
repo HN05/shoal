@@ -32,12 +32,38 @@ impl Located {
 
 /// The spaces the caller sees on every machine: this machine's, and the
 /// other joined machines' as the hub lists them, none on a machine in no
-/// hub, or why the hub could not be asked.
+/// hub, or why the hub could not be asked; with how the request a picker
+/// offers them for judges each, by the machine it runs on, where that
+/// machine could be asked.
 #[derive(Debug, Default)]
 pub struct Everywhere {
     pub here: Spaces,
     pub elsewhere: Option<crate::hub::directory::HubView>,
     pub unreachable: Option<String>,
+    pub offers: std::collections::HashMap<SpaceId, Offer>,
+}
+
+/// How the request a picker offers spaces for judges one of them, as the
+/// daemon of the machine it runs on decides with the check the request
+/// declares.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "offer", rename_all = "snake_case")]
+pub enum Offer {
+    /// The request acts on it.
+    Accepted,
+    /// The request refuses it with `reason`, which the command prints.
+    Refused { reason: String },
+    /// It lacks what the request acts on, such as an agent to stop, so a
+    /// picker leaves it out.
+    Lacking,
+}
+
+/// How the request a picker offers spaces for judges the space `space`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpaceOffer {
+    pub space: SpaceId,
+    #[serde(flatten)]
+    pub offer: Offer,
 }
 
 /// A piece of [`Everywhere`], which a response carries in pages: this
@@ -50,23 +76,29 @@ pub enum EverywherePart {
     Here(Space),
     Elsewhere(crate::hub::directory::ViewPart),
     Unreachable(String),
+    Offer(SpaceOffer),
 }
 
 impl Everywhere {
     /// The spaces of `parts`, in the order [`Self::into_parts`] gives them.
     pub fn from_parts(parts: Vec<EverywherePart>) -> anyhow::Result<Self> {
         let (mut here, mut view, mut unreachable) = (Vec::new(), Vec::new(), None);
+        let mut offers = std::collections::HashMap::new();
         for part in parts {
             match part {
                 EverywherePart::Here(space) => here.push(space),
                 EverywherePart::Elsewhere(part) => view.push(part),
                 EverywherePart::Unreachable(error) => unreachable = Some(error),
+                EverywherePart::Offer(offer) => {
+                    offers.insert(offer.space, offer.offer);
+                }
             }
         }
         Ok(Self {
             here: Spaces(here),
             elsewhere: crate::hub::directory::HubView::from_parts(view)?,
             unreachable,
+            offers,
         })
     }
 
@@ -77,8 +109,10 @@ impl Everywhere {
             .elsewhere
             .into_iter()
             .flat_map(|view| view.into_parts());
+        let offers = (self.offers.into_iter()).map(|(space, offer)| SpaceOffer { space, offer });
         here.chain(view.map(EverywherePart::Elsewhere))
             .chain(self.unreachable.map(EverywherePart::Unreachable))
+            .chain(offers.map(EverywherePart::Offer))
             .collect()
     }
 }

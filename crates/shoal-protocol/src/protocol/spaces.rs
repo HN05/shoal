@@ -11,6 +11,9 @@ pub enum SpaceMethod {
     /// Every space the caller sees, workspaces and chats, running or
     /// stopped.
     ListSpaces,
+    /// How `acting`, the request a picker offers spaces for, judges each
+    /// space of this machine the caller sees, in pages.
+    JudgeSpaces { acting: Box<super::Operation> },
     /// The spaces the caller sees on every machine: this machine's, unless
     /// `here` is false, then the other joined machines' as the hub lists
     /// them, in pages; with `acting`, the request a picker offers them for,
@@ -115,7 +118,10 @@ impl SpaceMethod {
             Self::SpaceStatus { .. } => Forwarding::Reported,
             Self::FollowSession { .. } => Forwarding::Streamed,
             Self::AttachSession { .. } => Forwarding::Duplex,
+            // Each machine judges its own spaces, which a caller's daemon
+            // asks every joined machine for.
             Self::ListSpaces
+            | Self::JudgeSpaces { .. }
             | Self::ListSpacesEverywhere { .. }
             | Self::FindSpaces { .. }
             | Self::LocateSpace { .. }
@@ -142,6 +148,7 @@ impl SpaceMethod {
             // A location is this machine's view of where a space runs.
             Self::LocateSpace { .. } | Self::SelectSpaces { .. } => None,
             Self::ListSpaces
+            | Self::JudgeSpaces { .. }
             | Self::ListSpacesEverywhere { .. }
             | Self::FindSpaces { .. }
             | Self::WatchSpaceEvents { .. } => None,

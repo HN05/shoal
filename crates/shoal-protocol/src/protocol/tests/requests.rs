@@ -43,6 +43,7 @@ const REQUESTS: &[&str] = &[
     r#"{"rename_branch":{"workspace":"fix","branch":"fix-2"}}"#,
     r#""untracked_worktrees""#,
     r#""list_spaces""#,
+    r#"{"judge_spaces":{"acting":{"inspect_workspace":{"workspace":"0"}}}}"#,
     r#"{"list_spaces_everywhere":{"here":true}}"#,
     r#"{"find_spaces":{"target":{"item":{"kind":"pr","input":"7"}}}}"#,
     r#"{"locate_space":{"space":"3"}}"#,

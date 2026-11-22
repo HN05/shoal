@@ -38,6 +38,10 @@ pub(super) async fn handle(
             return Ok(Answer::pages(log, Body::LogEntries));
         }
         SpaceMethod::ListSpaces => Body::Spaces(manager.listed_spaces(caller).await?),
+        SpaceMethod::JudgeSpaces { acting } => {
+            let offers = manager.offers_here(caller, &acting).await;
+            return Ok(Answer::pages(offers, Body::SpaceOffers));
+        }
         SpaceMethod::ListSpacesEverywhere { here, acting } => {
             let acting = acting.as_deref();
             let everywhere = manager.spaces_everywhere(caller, here, acting).await;
@@ -129,6 +133,7 @@ impl Checked for SpaceMethod {
             | Self::AttachSession { .. }
             | Self::SpaceLog { .. } => Some(TargetCheck::Space),
             Self::ListSpaces
+            | Self::JudgeSpaces { .. }
             | Self::ListSpacesEverywhere { .. }
             | Self::FindSpaces { .. }
             | Self::LocateSpace { .. }
@@ -152,6 +157,7 @@ impl Scoped for SpaceMethod {
             }
             // It finds only the spaces the caller sees.
             SpaceMethod::ListSpaces
+            | SpaceMethod::JudgeSpaces { .. }
             | SpaceMethod::ListSpacesEverywhere { .. }
             | SpaceMethod::FindSpaces { .. }
             | SpaceMethod::LocateSpace { .. }

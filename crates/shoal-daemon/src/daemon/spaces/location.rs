@@ -19,8 +19,10 @@ use crate::daemon::{log, manager::Manager, scope::Caller};
 impl Manager {
     /// The spaces `caller` sees on every machine: this machine's as a
     /// listing shows them, unless not `here`, and the other machines' as
-    /// the hub lists them, or why the hub could not be asked; none of the
-    /// other machines' for `acting`, a request that stays on this one.
+    /// the hub lists them, or why the hub could not be asked. With `acting`,
+    /// the request a picker offers them for, each is judged by the daemon
+    /// of the machine it runs on, and none of the other machines' are
+    /// listed for a request that stays on this one.
     pub(crate) async fn spaces_everywhere(
         &self,
         caller: Option<&Caller>,
@@ -31,25 +33,26 @@ impl Manager {
             true => Spaces(self.listed_spaces(caller).await?),
             false => Spaces::default(),
         };
+        let offers = acting.map(|acting| super::offers::judged(acting, &here.0));
+        let mut everywhere = Everywhere {
+            here,
+            offers: (offers.into_iter().flatten())
+                .map(|judged| (judged.space, judged.offer))
+                .collect(),
+            ..Everywhere::default()
+        };
         if acting.is_some_and(|acting| !acting.reaches_other_machines()) {
-            return Ok(Everywhere {
-                here,
-                elsewhere: None,
-                unreachable: None,
-            });
+            return Ok(everywhere);
         }
-        Ok(match self.hub.hub_view(self, caller).await {
-            Ok(elsewhere) => Everywhere {
-                here,
-                elsewhere,
-                unreachable: None,
-            },
-            Err(error) => Everywhere {
-                here,
-                elsewhere: None,
-                unreachable: Some(format!("{error:#}")),
-            },
-        })
+        match self.hub.hub_view(self, caller).await {
+            Ok(elsewhere) => everywhere.elsewhere = elsewhere,
+            Err(error) => everywhere.unreachable = Some(format!("{error:#}")),
+        }
+        if let (Some(acting), Some(view)) = (acting, &everywhere.elsewhere) {
+            let judged = self.offers_elsewhere(caller, acting, view).await;
+            everywhere.offers.extend(judged);
+        }
+        Ok(everywhere)
     }
 
     /// Where the space `selector` names runs, among those `caller` sees:

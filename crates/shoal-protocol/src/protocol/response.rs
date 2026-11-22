@@ -283,6 +283,7 @@ response_bodies! {
     LocatedSpace(Box<crate::model::Located>),
     LocatedSpaces(Vec<crate::model::Located>),
     SpacesEverywhere(Vec<crate::model::EverywherePart>),
+    SpaceOffers(Vec<crate::model::SpaceOffer>),
     SpaceSessions(crate::transcripts::SpaceSessions),
     FollowedSession(crate::transcripts::FollowedSession),
     SessionBytes(crate::transcripts::SessionBytes),
@@ -415,6 +416,7 @@ macro_rules! paged_bodies {
 paged_bodies!(
     LocatedSpaces,
     SpacesEverywhere,
+    SpaceOffers,
     Repositories,
     MovedRepositories,
     QueueEntries,

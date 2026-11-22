@@ -50,8 +50,8 @@ pub use repositories::{
 };
 pub use restarts::{AgentRestart, RestartOutcome, RestartWait};
 pub use spaces::{
-    ByKind, Everywhere, EverywherePart, Located, Part, RefPart, RenamedSpace, Space, SpaceKind,
-    SpaceMode, SpacePart, SpaceRef, SpaceTarget, Spaces, Workdir,
+    ByKind, Everywhere, EverywherePart, Located, Offer, Part, RefPart, RenamedSpace, Space,
+    SpaceKind, SpaceMode, SpaceOffer, SpacePart, SpaceRef, SpaceTarget, Spaces, Workdir,
 };
 pub use sync::{CheckoutSync, SyncedRepository};
 pub use workspaces::{

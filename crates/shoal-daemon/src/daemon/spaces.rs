@@ -57,6 +57,7 @@ mod listing;
 mod location;
 pub(crate) use listing::worktrees_mut;
 mod naming;
+mod offers;
 pub(crate) mod priority;
 pub(crate) mod records;
 pub(crate) mod removal_notices;

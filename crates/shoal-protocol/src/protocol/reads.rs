@@ -109,6 +109,7 @@ impl Operation {
                 )
                 | Self::Space(
                     SpaceMethod::ListSpaces
+                        | SpaceMethod::JudgeSpaces { .. }
                         | SpaceMethod::ListSpacesEverywhere { .. }
                         | SpaceMethod::LocateSpace { .. }
                         | SpaceMethod::SelectSpaces { .. }
