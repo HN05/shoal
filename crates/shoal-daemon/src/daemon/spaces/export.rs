@@ -104,7 +104,7 @@ impl Manager {
         let staging = self.paths.move_packages();
         std::fs::create_dir_all(&staging)
             .with_context(|| format!("create {}", staging.display()))?;
-        let file = staging.join(crate::transfer::package_name(id));
+        let file = self.staged_package(id);
         // Its caller holds the space's move lock, so a move that stopped
         // left this one.
         if let Err(error) = std::fs::remove_file(&file)

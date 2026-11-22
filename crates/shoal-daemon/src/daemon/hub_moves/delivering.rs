@@ -107,7 +107,7 @@ impl Manager {
 
     /// The file the package of the space `id` waits in among those
     /// delivered from here.
-    fn staged_package(&self, id: &SpaceId) -> std::path::PathBuf {
+    pub(crate) fn staged_package(&self, id: &SpaceId) -> std::path::PathBuf {
         (self.paths.move_packages()).join(crate::transfer::package_name(id))
     }
 
