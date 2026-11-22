@@ -7,7 +7,7 @@ use crate::{
     cli::{
         args::coordination::SleepTimerArgs,
         context::Context,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     client::sleep,
     state::Sleep,
@@ -27,14 +27,12 @@ pub(super) async fn run(
     sleep: Option<Sleep>,
     timer: Option<WakeTimer>,
 ) -> Result<i32> {
-    let space = ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
-    let slept = sleep::set(&ctx.paths, space, sleep, timer).await?;
+    let sleeping = {
+        let timer = timer.clone();
+        Acting::request(move |space| sleep::set(space, sleep, timer.clone()))
+    };
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory, &sleeping).await?;
+    let slept = sleep::set(space, sleep, timer).send(&ctx.paths).await?;
     ctx.show(&slept, |slept| outln!("{}", summary(slept)))?;
     Ok(0)
 }

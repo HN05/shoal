@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::{
     cli::{
         context::Context,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     client::priority,
 };
@@ -18,14 +18,9 @@ pub(super) async fn run(
     space: Option<SpaceSelector>,
     value: Priority,
 ) -> Result<i32> {
-    let space = ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
-    let set = priority::set(&ctx.paths, space, value).await?;
+    let setting = Acting::request(move |space| priority::set(space, value));
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory, &setting).await?;
+    let set = priority::set(space, value).send(&ctx.paths).await?;
     ctx.show(&set, |set| {
         outln!("{}: priority {}.", set.space, set.priority)
     })?;

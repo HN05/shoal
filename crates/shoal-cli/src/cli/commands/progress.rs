@@ -8,7 +8,7 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     client::progress,
 };
@@ -39,15 +39,13 @@ pub(super) async fn run(
 ) -> Result<i32> {
     let mut changes = changes(status, steps)?;
     changes.extend(blocker_change(blocker)?);
-    let space = ui::select_space(
-        ctx,
-        space,
-        Fallback::CurrentDirectory,
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?;
+    let acting = match changes.first().cloned() {
+        Some(change) => Acting::request(move |space| progress::set(space, change.clone())),
+        None => Acting::request(progress::get),
+    };
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory, &acting).await?;
     let progress = match changes.is_empty() {
-        true => progress::get(&ctx.paths, space).await?,
+        true => progress::get(space).send(&ctx.paths).await?,
         false => apply(ctx, space, changes).await?,
     };
     ctx.show(&progress, |progress| {
@@ -116,7 +114,9 @@ async fn apply(
 ) -> Result<Option<Progress>> {
     let mut progress = None;
     for change in changes {
-        progress = progress::set(&ctx.paths, space.clone(), change).await?;
+        progress = (progress::set(space.clone(), change))
+            .send(&ctx.paths)
+            .await?;
     }
     Ok(progress)
 }

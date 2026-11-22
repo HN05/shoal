@@ -22,7 +22,9 @@ pub async fn report(
         return Ok(0);
     };
     let space = super::own_space(paths, space).await?;
-    crate::client::progress::set(paths, space, change).await?;
+    crate::client::progress::set(space, change)
+        .send(paths)
+        .await?;
     Ok(0)
 }
 
