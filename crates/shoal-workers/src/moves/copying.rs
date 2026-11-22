@@ -79,5 +79,8 @@ async fn deliver_copy(
         ImportedMove::Failed { error } => {
             bail!("the copy is on machine {machine}, but opening it there failed: {error}")
         }
+        ImportedMove::Recorded { .. } => {
+            bail!("the copy is on machine {machine}, recorded as removed without opening")
+        }
     }
 }

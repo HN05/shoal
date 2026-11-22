@@ -24,7 +24,8 @@ pub use shoal_protocol::transfer::{
     Arrived, CarriedRecord, CarriedSpace, Carrying, Consent, DeferredMove, ExportedSpace,
     ImportedMove, ImportedPackage, MachineDestination, Manifest, MoveDestination, MoveFailure,
     MoveOrder, MovePhase, MoveRecord, MoveReport, MoveSettled, PackageImport, PackageSource,
-    PackagedSpace, Sessions, SpaceMoved, SshDestination, StoppedExecutions, package_name,
+    PackagedSpace, RecordArrival, RemovedDelivery, Sessions, SpaceMoved, SshDestination,
+    StoppedExecutions, package_name,
 };
 
 mod carried;

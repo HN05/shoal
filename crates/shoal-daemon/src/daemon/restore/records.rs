@@ -248,6 +248,20 @@ impl Manager {
             .await
     }
 
+    /// Forget the removal records of the spaces `ids`, which another joined
+    /// machine keeps now; their checkpoints and kept session files go as
+    /// those no record owns do.
+    pub(in crate::daemon) async fn forget_moved_records(&self, ids: Vec<SpaceId>) -> Result<()> {
+        self.store
+            .write(move |tx| {
+                for id in &ids {
+                    tx.execute("DELETE FROM removed_spaces WHERE space_id=?1", [id])?;
+                }
+                Ok(())
+            })
+            .await
+    }
+
     /// The removal record to reopen, kept with its checkpoints for at least
     /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
     /// them while the restore runs.

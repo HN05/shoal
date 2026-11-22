@@ -35,6 +35,9 @@ pub(super) async fn deliver(
             return Err(moving::stays_here(paths, id, refused).await);
         }
         Ok(ImportedMove::Failed { error }) => anyhow!("its import on {machine} failed: {error}"),
+        Ok(ImportedMove::Recorded { .. }) => {
+            anyhow!("{machine} recorded it as removed without opening it")
+        }
         Err(error) => error.context(format!("{machine} did not say whether it took the space")),
     };
     settle(paths, id, &machine, error, steps)

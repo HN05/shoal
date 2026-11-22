@@ -1,7 +1,7 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
 use shoal_protocol::transfer::{
     Carrying, ExportedSpace, ImportedMove, ImportedPackage, MachineDestination, MoveDestination,
-    MoveSettled, PackageImport, StoppedExecutions,
+    MoveSettled, PackageImport, RemovedDelivery, StoppedExecutions,
 };
 use std::path::PathBuf;
 
@@ -18,6 +18,7 @@ use shoal_protocol::{
 };
 
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
+use shoal_ids::move_tickets::MoveTicket;
 
 /// Package the removal record of the removed space `space` names by ID,
 /// which stays, with the records of the spaces its removal took that
@@ -143,6 +144,44 @@ pub async fn deliver_copy(
 /// asked.
 pub async fn settle_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<MoveSettled> {
     request(daemon, RemovalMethod::SettleMove { space }).await
+}
+
+/// Deliver the removal record of `space`, with those of the spaces its
+/// removal took that `carrying` carries, to the joined machine
+/// `destination` names, its claims there carrying `ticket`, returning the
+/// package and how it arrived, which forgot here what that machine recorded.
+pub async fn deliver_removed(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    destination: MachineDestination,
+    carrying: Carrying,
+    ticket: MoveTicket,
+) -> Result<RemovedDelivery> {
+    let method = RemovalMethod::DeliverRemovedSpace {
+        space,
+        destination,
+        carrying,
+        ticket,
+    };
+    request(daemon, method).await
+}
+
+/// Settle at the hub the move `ticket` of the removal record of `space` to
+/// the joined machine named `machine`, whose arrival it could not report,
+/// forgetting the record here once that machine claimed it; fails while
+/// the hub cannot be asked.
+pub async fn settle_removed_move(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    machine: String,
+    ticket: MoveTicket,
+) -> Result<MoveSettled> {
+    let method = RemovalMethod::SettleRemovedMove {
+        space,
+        machine,
+        ticket,
+    };
+    request(daemon, method).await
 }
 
 /// Package a copy of `space`, with copies of the spaces below it that

@@ -15,11 +15,12 @@ use crate::{
     model::RemovedSpace,
     refusal::{Reason, Refusal},
     transfer::{
-        CarriedRecord, ImportedPackage, Manifest, ManifestExt, PackageImport, PackagedSpace,
-        PackagedSpaceExt, Parts, Sessions,
+        CarriedRecord, ImportedPackage, Manifest, ManifestExt, PackageImport, PackageSource,
+        PackagedSpace, PackagedSpaceExt, Parts, Sessions,
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
+use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::transcripts::CarriedSessionFile;
 
@@ -83,6 +84,42 @@ impl Manager {
         let opened = (original, restored.id().clone());
         let carried = self.record_carried(carried, opened).await;
         Ok(ImportedPackage { restored, carried })
+    }
+
+    /// Record the spaces of the package `input` holds, a removed space's
+    /// that another joined machine moves here with the move `ticket`, as
+    /// removed here, opening none, and return the IDs of those it carries
+    /// that it recorded. An error before its own space is recorded says so.
+    pub(crate) async fn import_removed(
+        &self,
+        input: PackageInput,
+        ticket: MoveTicket,
+    ) -> Result<Vec<SpaceId>> {
+        let import = PackageImport {
+            package: PackageSource::Stream,
+            repository: None,
+            sessions: None,
+            ticket: Some(ticket.clone()),
+        };
+        let package = (self
+            .read_package(&import, input, None, Claim::Move(ticket))
+            .await)
+            .map_err(|error| Refusal::wrap(Reason::NotImported, error))?;
+        let Package {
+            own,
+            carried,
+            _parts,
+            ..
+        } = package;
+        let (removed, _) = self.record_import(own).await?;
+        let opened = (removed.space_id.clone(), removed.space_id);
+        let recorded = self.record_carried(carried, opened).await;
+        Ok((recorded.into_iter())
+            .filter_map(|record| match record {
+                CarriedRecord::Recorded { space, .. } => Some(space),
+                CarriedRecord::Failed { .. } => None,
+            })
+            .collect())
     }
 
     /// Read the package `input` holds as `import` says, for `caller`, into

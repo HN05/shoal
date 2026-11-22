@@ -57,7 +57,9 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::AbandonMove { .. }
         | RemovalMethod::DeliverMove { .. }
         | RemovalMethod::DeliverCopy { .. }
-        | RemovalMethod::SettleMove { .. } => false,
+        | RemovalMethod::SettleMove { .. }
+        | RemovalMethod::DeliverRemovedSpace { .. }
+        | RemovalMethod::SettleRemovedMove { .. } => false,
     }
 }
 
@@ -202,6 +204,25 @@ pub(super) async fn handle(
         RemovalMethod::SettleMove { space } => {
             Body::MoveSettled(manager.settle_move(&space).await?)
         }
+        RemovalMethod::DeliverRemovedSpace {
+            space,
+            destination,
+            carrying,
+            ticket,
+        } => Body::RemovedDelivered(
+            manager
+                .deliver_removed(&space, &destination, &carrying, &ticket)
+                .await?,
+        ),
+        RemovalMethod::SettleRemovedMove {
+            space,
+            machine,
+            ticket,
+        } => Body::MoveSettled(
+            manager
+                .settle_removed_move(&space, &machine, &ticket)
+                .await?,
+        ),
         RemovalMethod::ReleaseHeldMove { space } => {
             manager.release_held_move(&space).await?;
             Body::Ok
@@ -220,12 +241,14 @@ pub(super) async fn handle(
             ticket,
             resume,
             from,
+            removed,
         } => {
             let manager = manager.clone();
             let receiving = Receiving {
                 ticket,
                 resume,
                 from,
+                removed,
             };
             return Ok(Answer::connection(move |stream, request_id, guard| {
                 manager.receive_move(stream, request_id, receiving, guard)
@@ -359,6 +382,8 @@ impl Checked for RemovalMethod {
             | Self::RestoreSpace { .. }
             | Self::DropRestoredSessions { .. }
             | Self::ExportRemovedSpace { .. }
+            | Self::DeliverRemovedSpace { .. }
+            | Self::SettleRemovedMove { .. }
             | Self::ImportPackage(..)
             | Self::ReceiveMove { .. } => None,
         }
@@ -416,8 +441,13 @@ impl Scoped for RemovalMethod {
             RemovalMethod::CheckStop { space } => Ok(Some(space)),
             // Its answer lists only the spaces the caller may restore.
             RemovalMethod::RemovedSpaces => Ok(None),
-            // Below its recorded parent, within the caller's scope.
-            RemovalMethod::RestoreSpace { space } | RemovalMethod::RemovedSpace { space } => {
+            // Below its recorded parent, within the caller's scope; a
+            // removed space's record moves to a joined machine with no
+            // permission key, as a live space does.
+            RemovalMethod::RestoreSpace { space }
+            | RemovalMethod::RemovedSpace { space }
+            | RemovalMethod::DeliverRemovedSpace { space, .. }
+            | RemovalMethod::SettleRemovedMove { space, .. } => {
                 manager.ensure_restorable_by(space, caller).await?;
                 Ok(None)
             }

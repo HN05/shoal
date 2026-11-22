@@ -2,6 +2,8 @@
 //! to the destination's daemon over a duplex stream of the hub's links,
 //! with the ticket the destination's claims of its spaces carry, and a
 //! move whose arrival the destination could not report settles at the hub.
+//! A removed space's record moves the same way, and this machine forgets
+//! it once the destination's claim stands.
 use anyhow::{Result, bail, ensure};
 use shoal_ids::{move_tickets::MoveTicket, space_ids::SpaceId};
 use shoal_protocol::{
@@ -16,7 +18,10 @@ use crate::{
         manager::Manager,
     },
     time::UnixTime,
-    transfer::{ImportedMove, MachineDestination, MoveDestination, MoveRecord, MoveSettled},
+    transfer::{
+        Carrying, ImportedMove, MachineDestination, MoveDestination, MoveRecord, MoveSettled,
+        RecordArrival, RemovedDelivery,
+    },
 };
 
 impl Manager {
@@ -29,7 +34,8 @@ impl Manager {
         let record = self.recorded_move(&space.id).await?;
         let destination = machine_destination(&record)?;
         let ticket = Some(&record.ticket);
-        self.deliver_package(&space.id, destination, ticket).await
+        self.deliver_package(&space.id, destination, (ticket, false))
+            .await
     }
 
     /// Deliver the package of a copy of the space `selector` names to the
@@ -41,7 +47,74 @@ impl Manager {
         destination: &MachineDestination,
     ) -> Result<ImportedMove> {
         let space = self.space(selector).await?;
-        self.deliver_package(&space.id, destination, None).await
+        self.deliver_package(&space.id, destination, (None, false))
+            .await
+    }
+
+    /// Deliver the removal record of the space `selector` names by ID, with
+    /// those of the spaces its removal took that `carrying` carries, to the
+    /// joined machine `destination` names, which records them as removed
+    /// there, its claims carrying `ticket`, and forget here those it
+    /// recorded; the records stay while its claim is unknown.
+    pub(crate) async fn deliver_removed(
+        &self,
+        selector: &SpaceSelector,
+        destination: &MachineDestination,
+        carrying: &Carrying,
+        ticket: &MoveTicket,
+    ) -> Result<RemovedDelivery> {
+        let exported = self.export_removed_moving(selector, carrying).await?;
+        let id = exported.manifest.space.record.space_id.clone();
+        let delivered = (self.deliver_package(&id, destination, (Some(ticket), true))).await;
+        let _ = std::fs::remove_file(self.staged_package(&id));
+        let machine = &destination.machine;
+        let arrival = self.record_arrival(&id, machine, delivered).await?;
+        Ok(RemovedDelivery { exported, arrival })
+    }
+
+    /// Settle at the hub the move `ticket` of the removal record of the
+    /// space `selector` names to the joined machine named `machine`, whose
+    /// arrival that machine could not report, and forget the record here
+    /// once that machine claimed it. Fails while the hub cannot be asked.
+    pub(crate) async fn settle_removed_move(
+        &self,
+        selector: &SpaceSelector,
+        machine: &str,
+        ticket: &MoveTicket,
+    ) -> Result<MoveSettled> {
+        let removed = self.removed_space(selector).await?;
+        let Named { machine, .. } = self.hub.named_machine(self, machine).await?;
+        let id = removed.space_id;
+        if !(self.hub.settle_move(self, &id, &machine.id, ticket)).await? {
+            return Ok(MoveSettled::Kept);
+        }
+        self.forget_moved_records(vec![id]).await?;
+        Ok(MoveSettled::Arrived)
+    }
+
+    /// How the removal record of the space `id` arrived on the joined
+    /// machine named `machine`, as `delivered` says, once this machine
+    /// forgot the records that machine recorded.
+    async fn record_arrival(
+        &self,
+        id: &SpaceId,
+        machine: &str,
+        delivered: Result<ImportedMove>,
+    ) -> Result<RecordArrival> {
+        Ok(match delivered {
+            Ok(ImportedMove::Recorded { carried } | ImportedMove::Arrived { carried, .. }) => {
+                let recorded = std::iter::once(id.clone()).chain(carried).collect();
+                self.forget_moved_records(recorded).await?;
+                RecordArrival::Recorded
+            }
+            Ok(ImportedMove::Refused { error }) => RecordArrival::Refused { error },
+            Ok(ImportedMove::Failed { error }) => RecordArrival::Unknown {
+                error: format!("recording it on machine {machine} failed: {error}"),
+            },
+            Err(error) => RecordArrival::Unknown {
+                error: format!("machine {machine} did not say whether it took it: {error:#}"),
+            },
+        })
     }
 
     /// Settle at the hub the recorded move of the space `selector` names,
@@ -79,20 +152,21 @@ impl Manager {
 
     /// Deliver the package of the space `id`, waiting among the packages
     /// delivered from here, to the joined machine `destination` names,
-    /// its spaces' claims there carrying `ticket`, and return how the
-    /// import there went.
+    /// its spaces' claims there carrying `ticket`, recorded only as
+    /// removed there when `removed`, and return how the import there went.
     async fn deliver_package(
         &self,
         id: &SpaceId,
         destination: &MachineDestination,
-        ticket: Option<&MoveTicket>,
+        (ticket, removed): (Option<&MoveTicket>, bool),
     ) -> Result<ImportedMove> {
         let machine = self.receiving_machine(&destination.machine).await?;
-        let file = (self.paths.move_packages()).join(crate::transfer::package_name(id));
+        let file = self.staged_package(id);
         let receive = RemovalMethod::ReceiveMove {
             ticket: ticket.cloned(),
             resume: destination.resume,
             from: self.hub.machine_name(self).await,
+            removed,
         };
         let operation = Operation::Removal(receive);
         let (incoming, outgoing) = self
@@ -100,6 +174,12 @@ impl Manager {
             .open_duplex(self, &machine, operation, None)
             .await?;
         ImportedMove::try_from(deliver_file(&file, incoming, outgoing).await?)
+    }
+
+    /// The file the package of the space `id` waits in among those
+    /// delivered from here.
+    fn staged_package(&self, id: &SpaceId) -> std::path::PathBuf {
+        (self.paths.move_packages()).join(crate::transfer::package_name(id))
     }
 }
 

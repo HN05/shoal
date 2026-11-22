@@ -418,12 +418,41 @@ pub enum ImportedMove {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         carried: Vec<SpaceId>,
     },
+    /// Its removed spaces were recorded as removed here, for
+    /// `shoal restore` to open: its own, and of those it carries, the ones
+    /// with the IDs `carried`.
+    Recorded {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        carried: Vec<SpaceId>,
+    },
     /// Nothing was recorded, for `error`, so the spaces stay where they
     /// were.
     Refused { error: String },
     /// The hub took this machine's claim, so the spaces are here, but
     /// opening them failed after it, for `error`.
     Failed { error: String },
+}
+
+/// The package of a removed space's record that a move delivered to a
+/// joined machine, and how that went.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RemovedDelivery {
+    pub exported: ExportedSpace,
+    pub arrival: RecordArrival,
+}
+
+/// How a removed space's record arrived on a joined machine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum RecordArrival {
+    /// That machine recorded it, so this one forgot it, with the records it
+    /// carried that that machine recorded too.
+    Recorded,
+    /// That machine recorded none of it, for `error`, so it stays here.
+    Refused { error: String },
+    /// Whether that machine claimed it is unknown, for `error`, until the
+    /// hub settles that.
+    Unknown { error: String },
 }
 
 /// A move to a joined machine that would stop the agent that asked for

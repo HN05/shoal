@@ -184,18 +184,42 @@ pub enum RemovalMethod {
     /// goes to claimed the space, which then no longer can when it did
     /// not; answered with how the hub settled it.
     SettleMove { space: SpaceSelector },
+    /// Deliver the removal record of `space`, with those of the spaces its
+    /// removal took that `carrying` carries, to the joined machine
+    /// `destination` names, which records them as removed there, their
+    /// claims at the hub carrying `ticket`, and forget here those it
+    /// recorded; answered with their package and how its delivery went.
+    DeliverRemovedSpace {
+        space: SpaceSelector,
+        destination: crate::transfer::MachineDestination,
+        #[serde(default)]
+        carrying: crate::transfer::Carrying,
+        ticket: shoal_ids::move_tickets::MoveTicket,
+    },
+    /// Settle at the hub the move `ticket` of the removal record of
+    /// `space` to the joined machine `machine` names, whose arrival that
+    /// machine could not report, and forget the record here once that
+    /// machine claimed it; answered with how the hub settled it.
+    SettleRemovedMove {
+        space: SpaceSelector,
+        machine: String,
+        ticket: shoal_ids::move_tickets::MoveTicket,
+    },
     /// Take the package of a move another joined machine sends on the
     /// request's connection once the first reply asks for it, and continue
     /// its spaces here as `shoal restore --from -` does, their claims at
     /// the hub carrying `ticket`, which a copy lacks, with their agents'
     /// restores queued when `resume`, and tell their agents that the spaces
-    /// moved here from the machine named `from`; answered with how the
-    /// import went.
+    /// moved here from the machine named `from`, or when `removed`, a
+    /// removed space's package, only record them as removed here; answered
+    /// with how the import went.
     ReceiveMove {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ticket: Option<shoal_ids::move_tickets::MoveTicket>,
         resume: bool,
         from: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        removed: bool,
     },
 }
 
@@ -232,7 +256,9 @@ impl RemovalMethod {
             | Self::ImportPackage(_)
             | Self::DeliverMove { .. }
             | Self::DeliverCopy { .. }
-            | Self::SettleMove { .. } => Forwarding::Never,
+            | Self::SettleMove { .. }
+            | Self::DeliverRemovedSpace { .. }
+            | Self::SettleRemovedMove { .. } => Forwarding::Never,
         }
     }
 
@@ -259,7 +285,9 @@ impl RemovalMethod {
             Self::RemovedSpace { .. }
             | Self::RestoreSpace { .. }
             | Self::DropRestoredSessions { .. }
-            | Self::ExportRemovedSpace { .. } => None,
+            | Self::ExportRemovedSpace { .. }
+            | Self::DeliverRemovedSpace { .. }
+            | Self::SettleRemovedMove { .. } => None,
             // The hub sends it to the machine a move goes to.
             Self::ReceiveMove { .. }
             | Self::StopTargets

@@ -84,6 +84,37 @@ impl Manager {
         self.write_prepared(prepared, file).await
     }
 
+    /// Write the removal record of the space with the ID `selector` gives,
+    /// with the records of the spaces its removal took that `carrying`
+    /// carries, to the package its move to a joined machine delivers from
+    /// here, in place of one an earlier move of it left.
+    pub(crate) async fn export_removed_moving(
+        &self,
+        selector: &SpaceSelector,
+        carrying: &Carrying,
+    ) -> Result<ExportedSpace> {
+        let prepared = self.prepare_kept_record(selector, carrying).await?;
+        let file = self.new_staged_package(&prepared.manifest.space.record.space_id)?;
+        self.write_prepared(prepared, file).await
+    }
+
+    /// The file the package of the space `id` waits in among those
+    /// delivered from here, which holds none.
+    fn new_staged_package(&self, id: &SpaceId) -> Result<std::path::PathBuf> {
+        let staging = self.paths.move_packages();
+        std::fs::create_dir_all(&staging)
+            .with_context(|| format!("create {}", staging.display()))?;
+        let file = staging.join(crate::transfer::package_name(id));
+        // Its caller holds the space's move lock, so a move that stopped
+        // left this one.
+        if let Err(error) = std::fs::remove_file(&file)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(error).with_context(|| format!("remove {}", file.display()));
+        }
+        Ok(file)
+    }
+
     /// Prepare the package of the removal record of the space `selector`
     /// names by ID, which stays, with the records of the spaces its removal
     /// took that `carrying` carries.

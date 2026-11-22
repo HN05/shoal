@@ -325,6 +325,7 @@ response_bodies! {
     ImportedPackage(crate::transfer::ImportedPackage),
     ImportedMove(crate::transfer::ImportedMove),
     MoveSettled(crate::transfer::MoveSettled),
+    RemovedDelivered(crate::transfer::RemovedDelivery),
     HeldPackage(u64),
     MoveAfterTurn(crate::transfer::DeferredMove),
     MoveAbandoned(crate::transfer::StoppedExecutions),

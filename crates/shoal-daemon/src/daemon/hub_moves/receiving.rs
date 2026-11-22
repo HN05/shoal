@@ -1,7 +1,9 @@
 //! The destination's side of a move between joined machines: the package
 //! the other machine writes on the request's stream goes into
 //! `shoal internal import-moved`, which continues its spaces here, their
-//! claims at the hub carrying the move's ticket, and reports how it went.
+//! claims at the hub carrying the move's ticket, and reports how it went;
+//! a removed space's package the daemon records as removed itself, since
+//! nothing of it opens.
 use std::{process::Stdio, sync::Arc};
 
 use anyhow::{Context as _, Result, bail};
@@ -15,8 +17,10 @@ use crate::{
         answer::{self, OperationGuard},
         log,
         manager::Manager,
+        restore::PackageInput,
     },
     model::Space,
+    refusal::Reason,
     transfer::ImportedMove,
     workers::{Worker, detached_command, internal_command},
 };
@@ -31,13 +35,15 @@ pub(crate) struct Receiving {
     pub(crate) resume: bool,
     /// The name of the machine it moves from.
     pub(crate) from: String,
+    /// Whether it moves a removed space's record, which stays removed here.
+    pub(crate) removed: bool,
 }
 
 impl Manager {
     /// Continue the package of the move `receiving` that another joined
     /// machine writes on `stream` once this daemon answered `request_id`,
     /// telling the agents of the spaces a move, not a copy, brought where
-    /// they are now,
+    /// they are now, or record a removed space's package as removed here,
     /// then answer again with how that went, holding `guard` until then.
     pub(crate) async fn receive_move(
         self: Arc<Self>,
@@ -47,6 +53,11 @@ impl Manager {
         guard: OperationGuard,
     ) -> Result<()> {
         protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
+        if receiving.removed {
+            return self
+                .receive_removed(stream, request_id, receiving.ticket, guard)
+                .await;
+        }
         let ticket = receiving.ticket.as_ref();
         let body = match self
             .import_moved(&mut stream, ticket, receiving.resume)
@@ -67,6 +78,54 @@ impl Manager {
         protocol::write(&mut stream, &Response::new(request_id, body)).await?;
         drop(guard);
         Ok(())
+    }
+
+    /// Record the package of a removed space that another joined machine
+    /// writes on `stream` as removed here, its claims at the hub carrying
+    /// `ticket`, then answer `request_id` with how that went, holding
+    /// `guard` until then.
+    async fn receive_removed(
+        &self,
+        stream: UnixStream,
+        request_id: u64,
+        ticket: Option<MoveTicket>,
+        guard: OperationGuard,
+    ) -> Result<()> {
+        let replying = stream.into_std()?;
+        let input = PackageInput::Connection(replying.try_clone()?);
+        let imported = self.record_removed(input, ticket).await;
+        replying.set_nonblocking(true)?;
+        let mut stream = UnixStream::from_std(replying)?;
+        let body = Body::ImportedMove(imported);
+        protocol::write(&mut stream, &Response::new(request_id, body)).await?;
+        drop(guard);
+        Ok(())
+    }
+
+    /// How recording the removed spaces of the package `input` holds as
+    /// removed here went, their claims at the hub carrying `ticket`.
+    async fn record_removed(
+        &self,
+        input: PackageInput,
+        ticket: Option<MoveTicket>,
+    ) -> ImportedMove {
+        // Only its claim at the hub lets its source forget it.
+        let Some(ticket) = ticket else {
+            return ImportedMove::Refused {
+                error: "a removed space moves with a ticket".to_owned(),
+            };
+        };
+        match self.import_removed(input, ticket).await {
+            Ok(carried) => ImportedMove::Recorded { carried },
+            Err(error) if Reason::of(&error) == Some(Reason::NotImported) => {
+                ImportedMove::Refused {
+                    error: format!("{error:#}"),
+                }
+            }
+            Err(error) => ImportedMove::Failed {
+                error: format!("{error:#}"),
+            },
+        }
     }
 
     /// How `shoal internal import-moved` continued the package `stream`
