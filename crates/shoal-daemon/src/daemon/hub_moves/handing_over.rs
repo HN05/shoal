@@ -28,17 +28,14 @@ impl Manager {
             .or_else(|| settings.agent.default.clone())
             .context("it saved no agent and its settings name no default agent")?;
         let mode = space.mode.clone().unwrap_or(ModeName::DEFAULT);
-        let caller = match self.hub.this_machine(self).await? {
-            Some(this) => this.id,
-            None => MemberId::from(String::new()),
-        };
         Ok(Request {
             origin,
             base: None,
             agent: agent.name().to_owned(),
             heavy: heavy(&settings, &mode),
             mode: mode.to_string(),
-            caller,
+            // The hub, which places it, names its caller.
+            caller: MemberId::from(String::new()),
             parent: None,
         })
     }
