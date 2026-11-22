@@ -22,6 +22,7 @@ fn rows_name_where_each_trigger_is_and_what_its_last_run_did() {
         name: Some("app".into()),
         workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
+        shared_url: None,
     }];
     let queued = TriggerRun {
         at: UnixTime::now(),

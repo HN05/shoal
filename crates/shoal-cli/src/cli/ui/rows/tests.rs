@@ -415,6 +415,7 @@ fn repository(id: &str, source: &str) -> Repository {
         name: None,
         workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
+        shared_url: None,
     }
 }
 

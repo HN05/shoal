@@ -7,6 +7,7 @@ mod naming;
 mod registration;
 mod removal;
 mod selection;
+mod sharing;
 mod sync;
 
 pub(super) use configuration::local_config_path;
@@ -22,9 +23,16 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         RepoCommand::Labels(repository) => super::labels::labels(ctx, repository).await,
         RepoCommand::Sync { repository } => sync::sync(ctx, repository).await,
         RepoCommand::Config { repository } => configuration::show(ctx, repository).await,
-        RepoCommand::Add { source, name, path } => registration::add(ctx, source, name, path).await,
+        RepoCommand::Add {
+            source,
+            name,
+            path,
+            shared,
+        } => registration::add(ctx, source, name, path, shared).await,
         RepoCommand::Ls => listing::list(ctx).await,
         RepoCommand::Rename { repository, name } => naming::rename(ctx, repository, name).await,
+        RepoCommand::Share { repository } => sharing::share(ctx, repository, true).await,
+        RepoCommand::Unshare { repository } => sharing::share(ctx, repository, false).await,
         RepoCommand::Setup {
             repository,
             here,

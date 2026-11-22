@@ -1,7 +1,7 @@
 //! The records of registered repositories: listing them, finding the one a
-//! selector names, naming one, and whether one is free of a removal or
-//! move.
-use anyhow::{Result, ensure};
+//! selector names, naming and sharing one, and whether one is free of a
+//! removal or move.
+use anyhow::{Context as _, Result, ensure};
 use rusqlite::params;
 use shoal_core::repository::{self, Selector};
 use shoal_ids::repository_ids::RepositoryId;
@@ -68,6 +68,47 @@ impl Repositories {
             .await
     }
 
+    /// Share the repository `selector` names with the other machines of the
+    /// hub, under the URL of its origin, which they clone, or stop sharing
+    /// it.
+    pub async fn share(&self, selector: impl Into<Selector>, shared: bool) -> Result<Repository> {
+        let repo = self.repository(selector).await?;
+        let url = match shared {
+            true => Some(
+                (repository::remote_url_from_source(&repo.source).await?).with_context(|| {
+                    format!(
+                        "{} has no origin for other machines to clone it from; add one with git remote add origin <url>",
+                        repo.display_name()
+                    )
+                })?,
+            ),
+            false => None,
+        };
+        self.share_as(&repo.id, url).await
+    }
+
+    /// Record that the repository `id` is shared under the clone URL `url`,
+    /// or with none, that it is not.
+    pub async fn share_as(&self, id: &RepositoryId, url: Option<String>) -> Result<Repository> {
+        let id = id.clone();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE repositories SET shared_url=?2 WHERE id=?1",
+                    params![id, url],
+                )?;
+                Ok(db.query_row(
+                    &format!(
+                        "SELECT {} FROM repositories WHERE id=?1",
+                        store::REPOSITORY_COLUMNS
+                    ),
+                    [id],
+                    store::repository,
+                )?)
+            })
+            .await
+    }
+
     /// Refuse the repository `id` while a removal or move of it is under
     /// way or unfinished.
     pub async fn ensure_available(&self, id: &RepositoryId) -> Result<()> {
@@ -111,3 +152,6 @@ impl Repositories {
             .collect())
     }
 }
+
+#[cfg(test)]
+mod tests;

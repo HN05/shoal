@@ -65,6 +65,7 @@ impl Fixture {
             name: None,
             workspaces_dir: root.path().join("workspaces"),
             contribution: false,
+            shared_url: None,
         };
         let config = shoal_core::test_support::global_config("");
         let daemon = Arc::new(StandIn {

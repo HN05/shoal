@@ -11,6 +11,7 @@ async fn reading_the_branches_of_a_repository_removed_meanwhile_says_so() {
         name: Some("repo".into()),
         workspaces_dir: root.path().join("workspaces"),
         contribution: false,
+        shared_url: None,
     };
     let error = branches(&repo, "racing").await.unwrap_err();
     let reason = crate::refusal::Reason::of(&error);
@@ -34,6 +35,7 @@ async fn a_failed_read_of_a_repository_s_branches_names_it_by_its_id() {
         name: Some("repo".into()),
         workspaces_dir: root.path().join("workspaces"),
         contribution: false,
+        shared_url: None,
     };
     let error = branches(&repo, "racing").await.unwrap_err();
     let error = format!("{error:#}");

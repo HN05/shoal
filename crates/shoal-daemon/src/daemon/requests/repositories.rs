@@ -29,8 +29,17 @@ pub(super) async fn handle(
         RepositoryMethod::ListRepositories => {
             Body::Repositories(manager.visible_repositories(caller).await?)
         }
-        RepositoryMethod::RegisterRepository { source, name, path } => {
-            Body::Repository(manager.repositories.register(source, name, path).await?)
+        RepositoryMethod::RegisterRepository {
+            source,
+            name,
+            path,
+            shared,
+        } => {
+            let repository = manager.repositories.register(source, name, path).await?;
+            Body::Repository(match shared {
+                true => manager.share_repository(&repository.id, true).await?,
+                false => repository,
+            })
         }
         RepositoryMethod::RegisterContribution { source, name } => {
             let manager = manager.clone();
@@ -59,6 +68,9 @@ pub(super) async fn handle(
         }
         RepositoryMethod::RenameRepository { repository, name } => {
             Body::Repository(manager.repositories.rename(&repository, name).await?)
+        }
+        RepositoryMethod::ShareRepository { repository, shared } => {
+            Body::Repository(manager.share_repository(&repository, shared).await?)
         }
         RepositoryMethod::LocalConfigPath { repository } => {
             Body::LocalConfigPath(manager.repositories.local_config_path(&repository).await?)
@@ -135,6 +147,7 @@ async fn administered_repository(
     };
     Ok(match method {
         RepositoryMethod::RenameRepository { repository, .. }
+        | RepositoryMethod::ShareRepository { repository, .. }
         | RepositoryMethod::LocalConfigPath { repository }
         | RepositoryMethod::EditLocalConfig { repository, .. }
         | RepositoryMethod::RemoveRepository { repository }
@@ -178,6 +191,7 @@ impl Checked for RepositoryMethod {
             | Self::RegisterContribution { .. }
             | Self::HoldContribution { .. }
             | Self::RenameRepository { .. }
+            | Self::ShareRepository { .. }
             | Self::LocalConfigPath { .. }
             | Self::EditLocalConfig { .. }
             | Self::RemoveRepository { .. }

@@ -14,6 +14,7 @@ fn repository(id: &str, name: &str) -> (RecordKey, (Record, serde_json::Value)) 
         name: Some(name.into()),
         workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
+        shared_url: None,
     });
     let value = serde_json::to_value(&record).unwrap();
     (record.key(), (record, value))

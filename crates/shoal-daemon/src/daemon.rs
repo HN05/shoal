@@ -89,6 +89,7 @@ pub(crate) mod reviews;
 pub(crate) mod runner;
 pub mod scope;
 mod sessions;
+mod shared_repositories;
 mod shutdown_lock;
 mod shutdown_stop;
 pub(crate) mod space_processes;

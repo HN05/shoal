@@ -451,7 +451,8 @@ pub fn repository_removing(db: &Connection, repository_id: &RepositoryId) -> Res
     )
 }
 
-pub const REPOSITORY_COLUMNS: &str = "id,path,source,last_used,name,workspaces_dir,contribution";
+pub const REPOSITORY_COLUMNS: &str =
+    "id,path,source,last_used,name,workspaces_dir,contribution,shared_url";
 
 pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     Ok(Repository {
@@ -462,6 +463,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
         name: row.get("name")?,
         workspaces_dir: PathBuf::from(row.get::<_, String>("workspaces_dir")?),
         contribution: row.get("contribution")?,
+        shared_url: row.get("shared_url")?,
     })
 }
 

@@ -4,7 +4,7 @@
 
 CREATE TABLE repositories (
             id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, source TEXT NOT NULL, last_used INTEGER NOT NULL
-        , name TEXT, workspaces_dir TEXT, contribution INTEGER NOT NULL DEFAULT 0 CHECK(contribution IN (0,1)));
+        , name TEXT, workspaces_dir TEXT, contribution INTEGER NOT NULL DEFAULT 0 CHECK(contribution IN (0,1)), shared_url TEXT);
 
 CREATE TABLE executions (
             id TEXT PRIMARY KEY, space_id TEXT NOT NULL, state TEXT NOT NULL

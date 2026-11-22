@@ -166,6 +166,7 @@ fn repository(path: PathBuf, workspaces_dir: PathBuf) -> Repository {
         name: None,
         workspaces_dir,
         contribution: false,
+        shared_url: None,
     }
 }
 

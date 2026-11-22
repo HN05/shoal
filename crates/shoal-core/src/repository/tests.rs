@@ -9,6 +9,7 @@ fn repository(id: &str, path: &str, name: Option<&str>) -> Repository {
         name: name.map(str::to_owned),
         workspaces_dir: format!("/tmp/shoal/{id}").into(),
         contribution: false,
+        shared_url: None,
     }
 }
 

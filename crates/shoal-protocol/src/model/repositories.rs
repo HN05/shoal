@@ -20,6 +20,10 @@ pub struct Repository {
     /// Registered by `shoal contribute`: removed once nothing of it is left.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub contribution: bool,
+    /// The URL the other machines of the hub clone it from, while it is
+    /// shared with them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_url: Option<String>,
 }
 
 impl Repository {

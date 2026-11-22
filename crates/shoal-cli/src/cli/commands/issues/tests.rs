@@ -47,6 +47,7 @@ async fn issue_urls_select_exactly_one_registered_repository() {
         name: None,
         workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
+        shared_url: None,
     };
     let repos = [
         repo("a", "https://github.com/team/repo.git"),

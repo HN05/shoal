@@ -15,10 +15,11 @@ pub(super) async fn add(
     source: String,
     name: Option<String>,
     path: Option<PathBuf>,
+    shared: bool,
 ) -> Result<i32> {
     let source = ui::repository_selector(source)?;
     let path = path.map(|path| absolute(ctx, path)).transpose()?;
-    let repo = register(ctx, source, name, path).await?;
+    let repo = register(ctx, source, name, path, shared).await?;
     ctx.emit(
         &format!(
             "Registered {}",
@@ -34,10 +35,11 @@ async fn register(
     source: repository::Selector,
     name: Option<String>,
     path: Option<PathBuf>,
+    shared: bool,
 ) -> Result<Repository> {
     ctx.progress(
         "Registering repository",
-        crate::client::repositories::register(&ctx.paths, source, name, path),
+        crate::client::repositories::register(&ctx.paths, source, name, path, shared),
     )
     .await
 }
@@ -50,7 +52,14 @@ pub(in crate::cli::commands) async fn offer_registration(
     if !ui::offer(ctx, &format!("Register {source} with Shoal?"))? {
         return Ok(None);
     }
-    let repo = register(ctx, ui::repository_selector(source.to_owned())?, None, None).await?;
+    let repo = register(
+        ctx,
+        ui::repository_selector(source.to_owned())?,
+        None,
+        None,
+        false,
+    )
+    .await?;
     eprintln!(
         "Registered {}",
         ui::repository_label(&repo, Palette::stderr(ctx.json))

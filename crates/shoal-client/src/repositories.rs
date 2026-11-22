@@ -26,18 +26,22 @@ pub async fn list(daemon: &impl Daemon) -> Result<Vec<Repository>> {
     request(daemon, RepositoryMethod::ListRepositories).await
 }
 
-/// Register `source`, a path or URL, as `name`, cloning a URL to `path`.
+/// Register `source`, a path or URL, as `name`, cloning a URL to `path`,
+/// and share it with the other machines of the hub when `shared`.
 pub async fn register(
     daemon: &impl Daemon,
     source: Selector,
     name: Option<String>,
     path: Option<PathBuf>,
+    shared: bool,
 ) -> Result<Repository> {
-    request(
-        daemon,
-        RepositoryMethod::RegisterRepository { source, name, path },
-    )
-    .await
+    let method = RepositoryMethod::RegisterRepository {
+        source,
+        name,
+        path,
+        shared,
+    };
+    request(daemon, method).await
 }
 
 /// Register a fork of `source` to contribute to, or the repository already
@@ -91,6 +95,16 @@ pub async fn rename(
     request(
         daemon,
         RepositoryMethod::RenameRepository { repository, name },
+    )
+    .await
+}
+
+/// Share `repository` with the other machines of the hub, or stop sharing
+/// it.
+pub async fn share(daemon: &impl Daemon, repository: Selector, shared: bool) -> Result<Repository> {
+    request(
+        daemon,
+        RepositoryMethod::ShareRepository { repository, shared },
     )
     .await
 }

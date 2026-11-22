@@ -33,6 +33,7 @@ async fn a_contribution_hold_resumes_after_the_daemon_closes_the_registration() 
         name: None,
         workspaces_dir: "/work/b".into(),
         contribution: true,
+        shared_url: None,
     };
     let body = Body::Repository(repo);
     protocol::write(&mut stream, &Response::new(request.id, body)).await?;

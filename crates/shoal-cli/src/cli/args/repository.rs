@@ -117,12 +117,25 @@ pub enum RepoCommand {
         /// Clone this URL into this exact directory instead of root_dir/<name>/.checkout.
         #[arg(long)]
         path: Option<PathBuf>,
+        /// Share it with the other machines of the hub, which register and clone it.
+        #[arg(long)]
+        shared: bool,
     },
     Rename {
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
         /// New name; omit to enter one.
         name: Option<String>,
+    },
+    /// Share a repository with the other machines of the hub, which register and clone it.
+    Share {
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
+        repository: Option<String>,
+    },
+    /// Stop sharing a repository; the other machines keep their registrations.
+    Unshare {
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
+        repository: Option<String>,
     },
     /// Have an agent write the repository's Shoal config in a workspace on
     /// shoal-setup, then commit it or save it locally, as you choose.

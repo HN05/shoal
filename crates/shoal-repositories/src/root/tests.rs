@@ -64,6 +64,7 @@ async fn an_excluded_root_refuses_a_recorded_repository_directory() {
         name: None,
         workspaces_dir: root.path.clone(),
         contribution: false,
+        shared_url: None,
     };
     let prepared = prepare_root(
         &root,
@@ -91,6 +92,7 @@ fn the_destination_avoids_a_missing_checkout_recorded_inside_it() -> anyhow::Res
         name: None,
         workspaces_dir: root.join("elsewhere"),
         contribution: false,
+        shared_url: None,
     };
     let reserved = reserve_directory(&root, "project", std::slice::from_ref(&clone), &[])?;
     assert_eq!(reserved, root.join("project-2"));

@@ -12,6 +12,9 @@ pub enum RepositoryMethod {
         source: crate::repository::Selector,
         name: Option<String>,
         path: Option<std::path::PathBuf>,
+        /// Share it with the other machines of the hub.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        shared: bool,
     },
     /// Clone a repository URL for `shoal contribute`, then keep the
     /// contribution from cleanup while the connection stays open.
@@ -27,6 +30,12 @@ pub enum RepositoryMethod {
     RenameRepository {
         repository: crate::repository::Selector,
         name: String,
+    },
+    /// Share the repository with the other machines of the hub, which
+    /// register and clone it, or stop sharing it.
+    ShareRepository {
+        repository: crate::repository::Selector,
+        shared: bool,
     },
     /// The repository's local config file, reserving its directory.
     LocalConfigPath {
@@ -117,6 +126,7 @@ impl RepositoryMethod {
             | Self::RegisterContribution { .. }
             | Self::HoldContribution { .. }
             | Self::RenameRepository { .. }
+            | Self::ShareRepository { .. }
             | Self::LocalConfigPath { .. }
             | Self::EditLocalConfig { .. }
             | Self::RemoveRepository { .. }
@@ -139,6 +149,7 @@ impl RepositoryMethod {
             | Self::RegisterContribution { .. }
             | Self::HoldContribution { .. }
             | Self::RenameRepository { .. }
+            | Self::ShareRepository { .. }
             | Self::LocalConfigPath { .. }
             | Self::EditLocalConfig { .. }
             | Self::RemoveRepository { .. }

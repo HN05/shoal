@@ -93,6 +93,7 @@ async fn a_changed_origin_reaches_reports_once_the_read_one_goes_stale() {
         name: Some("app".into()),
         workspaces_dir: "/shoal/app".into(),
         contribution: false,
+        shared_url: None,
     };
     let mut origins = Origins::default();
     let first = origins.of(&repository).await.origin;

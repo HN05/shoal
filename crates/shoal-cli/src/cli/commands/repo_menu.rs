@@ -46,6 +46,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             source: ui::input(ctx, "Repository path or URL")?,
             name: None,
             path: None,
+            shared: false,
         }),
         RepoMenuAction::AddWorkspace => {
             Command::Create(CreateCommand::Start(Box::new(StartArgs {

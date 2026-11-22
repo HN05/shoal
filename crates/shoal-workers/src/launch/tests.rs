@@ -10,6 +10,7 @@ fn chat_in_checkout() -> (crate::model::Chat, crate::model::Repository) {
         name: Some("shoal".into()),
         workspaces_dir: "/tmp/shoal/repo".into(),
         contribution: false,
+        shared_url: None,
     };
     let chat = crate::model::Chat {
         narrowing: Default::default(),
