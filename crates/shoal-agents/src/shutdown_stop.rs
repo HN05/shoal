@@ -142,10 +142,12 @@ impl Agents {
     }
 
     /// Admit queued agents again once the shutdown was cancelled, and stop
-    /// work again before the next one.
-    pub async fn system_shutdown_cancelled(&self) {
+    /// work again before the next one. The spaces handed over meanwhile run
+    /// on other machines, so this one retires its copies.
+    pub async fn system_shutdown_cancelled(&self, daemon: &dyn Daemon) {
         *self.shutdown_stopped.lock().await = false;
         self.agent_queue.suspend(false).await;
+        daemon.stay().await;
     }
 
     /// Stop each space `shoal stop --all` stops but those `left`, with

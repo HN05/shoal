@@ -376,6 +376,11 @@ pub enum Call {
         stream: u64,
         start: shoal_schedule::placement::snapshot::Request,
     },
+    /// A machine's word that the shutdown it handed its spaces over for was
+    /// cancelled, so it stays: the hub has it retire the spaces taken over
+    /// from it now, and those claimed later as each is. Answered with
+    /// [`Reply::Delivered`].
+    Stay,
     /// The hub's call to the machine its placement chose for the space
     /// `space`, which the machine named `from` handed over as it shut
     /// down: it continues the space from the package the hub keeps of it.

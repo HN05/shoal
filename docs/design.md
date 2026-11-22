@@ -267,11 +267,13 @@ restores so it does not come back at boot, and retires its copy once its
 link opens, as after any takeover; work a reboot moved away stays where it
 went. A space whose package did not arrive, or that no machine took, keeps
 its place and restores at boot as before, and the stop's notification
-names where each space went or why it stayed. On macOS the daemon cannot
-tell a shutdown's signal from a logout's or a service stop's, so every
-signal Shoal did not send itself hands work over, as its agents stop
-anyway; Shoal's own restart, stop and upgrades go through its control path
-and hand nothing over. Space numbers form
+names where each space went or why it stayed. The daemon cannot tell a
+shutdown's signal from a logout's or a service stop's, and on macOS has no
+announcement of a shutdown at all, so on every platform every signal Shoal
+did not send itself hands work over, as its agents stop anyway; Shoal's own
+restart, stop and upgrades go through its control path and hand nothing
+over. A cancelled shutdown tells the hub the machine stays, so it retires
+the copies of what went at once rather than at its next link. Space numbers form
 one sequence across the hub's machines, which the hub holds: it answers
 each report with a few spares it keeps for that machine, which numbers a
 new space from them without waiting for the hub, and once none is left, as

@@ -103,4 +103,10 @@ async fn the_hub_keeps_a_handed_over_package_and_answers_where_its_space_goes() 
         !hub.handovers
             .handed_to(&SpaceId::from("plan".to_owned()), &own)
     );
+    // The laptop is shutting down, so it retires nothing until it says it
+    // stays, as once its shutdown was cancelled.
+    let laptop = MemberId::from("laptop".to_owned());
+    assert!(hub.handovers.is_leaving(&laptop));
+    hub.hear_stay(&laptop);
+    assert!(!hub.handovers.is_leaving(&laptop));
 }

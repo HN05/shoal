@@ -5,9 +5,10 @@
 //! with where it goes, and asks that machine to continue the space from
 //! the package. That machine's claim takes the space over even while the
 //! machine it came from is still connected, and the machine it came from
-//! retires its copy once its link opens again, as after any takeover.
+//! retires its copy once its link opens again, as after any takeover, or
+//! at once when its shutdown was cancelled and it stays.
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -37,24 +38,44 @@ use crate::{
 /// which may clone its repository and set its worktree up first.
 const CONTINUE_WITHIN: Duration = Duration::from_secs(30 * 60);
 
-/// The spaces handed over whose new machine has not claimed them yet,
-/// each with that machine.
+/// What the hub keeps of the hand-overs under way.
 #[derive(Default)]
-pub(crate) struct Handovers(Mutex<HashMap<SpaceId, MemberId>>);
+pub(crate) struct Handovers {
+    /// The spaces handed over whose new machine has not claimed them yet,
+    /// each with that machine.
+    claims: Mutex<HashMap<SpaceId, MemberId>>,
+    /// The machines that handed spaces over for a shutdown that has not
+    /// ended their link, nor been cancelled.
+    leaving: Mutex<HashSet<MemberId>>,
+}
 
 impl Handovers {
     /// Whether the space `id` was handed over to `taker`, which may then
     /// take it over while the machine it comes from is still connected.
     pub(crate) fn handed_to(&self, id: &SpaceId, taker: &MemberId) -> bool {
-        self.0.lock().unwrap().get(id) == Some(taker)
+        self.claims.lock().unwrap().get(id) == Some(taker)
+    }
+
+    /// Record that `member`, whose link opened again or whose shutdown was
+    /// cancelled, is no longer shutting down.
+    pub(crate) fn stays(&self, member: &MemberId) {
+        self.leaving.lock().unwrap().remove(member);
     }
 
     fn start(&self, id: &SpaceId, to: &MemberId) {
-        self.0.lock().unwrap().insert(id.clone(), to.clone());
+        self.claims.lock().unwrap().insert(id.clone(), to.clone());
     }
 
     fn end(&self, id: &SpaceId) {
-        self.0.lock().unwrap().remove(id);
+        self.claims.lock().unwrap().remove(id);
+    }
+
+    fn leaves(&self, member: &MemberId) {
+        self.leaving.lock().unwrap().insert(member.clone());
+    }
+
+    fn is_leaving(&self, member: &MemberId) -> bool {
+        self.leaving.lock().unwrap().contains(member)
     }
 }
 
@@ -73,6 +94,7 @@ impl Hub {
         streams: (&Streams, u64),
     ) -> Result<()> {
         let (out, up) = self.accept_package(&**daemon, &sent, streams).await?;
+        self.handovers.leaves(&sent.member);
         let (hub, daemon) = (self.clone(), daemon.clone());
         tokio::spawn(async move {
             let (space, from) = (sent.space.clone(), sent.member.clone());
@@ -107,9 +129,10 @@ impl Hub {
 
     /// Have the machine `decision` names continue the space `id`, which
     /// the machine `from` handed over, alerting the user when it does not,
-    /// as the space then stays on `from`.
+    /// as the space then stays on `from`, and having `from` retire its
+    /// copy when it did while `from` stays.
     async fn continue_handover(
-        &self,
+        self: &Arc<Self>,
         daemon: &dyn Daemon,
         id: &SpaceId,
         from: &MemberId,
@@ -119,6 +142,9 @@ impl Hub {
         let continued = self.ask_to_continue(daemon, id, from, &decision.machine);
         let continued = continued.await;
         self.handovers.end(id);
+        if continued.is_ok() {
+            self.retire_while_staying(from);
+        }
         if let Err(error) = continued {
             log!("hub: space {id} handed over did not continue: {error:#}");
             let message = self
@@ -126,6 +152,26 @@ impl Hub {
                 .await;
             let about = About::named(None);
             (self.notify(daemon, about, AlertKind::HandoverFailed, message)).await;
+        }
+    }
+
+    /// As the hub: take `member`'s word that the shutdown it handed spaces
+    /// over for was cancelled, so it stays and retires the spaces taken
+    /// over from it now, and those claimed later as each is.
+    pub(crate) fn hear_stay(self: &Arc<Self>, member: &MemberId) {
+        self.handovers.stays(member);
+        self.retire_while_staying(member);
+    }
+
+    /// Have `member` retire the spaces taken over from it now, unless a
+    /// shutdown of it is under way or its link is down, when it retires
+    /// them once its link opens.
+    fn retire_while_staying(self: &Arc<Self>, member: &MemberId) {
+        if self.handovers.is_leaving(member) {
+            return;
+        }
+        if let Some(calls) = self.links.calls(member) {
+            tokio::spawn((self.clone()).retire_taken_over(member.clone(), calls));
         }
     }
 

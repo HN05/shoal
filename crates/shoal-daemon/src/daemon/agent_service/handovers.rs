@@ -15,4 +15,8 @@ impl Handovers for Manager {
             handed.unwrap_or_default()
         })
     }
+
+    fn stay(&self) -> BoxFuture<'_, ()> {
+        Box::pin(self.hub.stay(self))
+    }
 }

@@ -625,6 +625,11 @@ pub trait Handovers: Send + Sync {
     /// where each went; none on a machine that hands nothing over, as one
     /// in no hub.
     fn hand_over(&self, deadline: tokio::time::Instant) -> BoxFuture<'_, Vec<(Space, Handed)>>;
+
+    /// Tell the hub this machine stays after all, as once its shutdown was
+    /// cancelled, so it retires the spaces it handed over that other
+    /// machines took.
+    fn stay(&self) -> BoxFuture<'_, ()>;
 }
 
 /// The snapshot the agent queue ranks.

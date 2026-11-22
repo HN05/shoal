@@ -1176,10 +1176,13 @@ here, and once this machine's link opens again it retires its copy as after
 any takeover; work a reboot moved does not come back on its own. A space
 the chosen machine fails to continue stays here too, and the hub raises a
 `handover_failed` alert naming `shoal resume <id>` here and
-`shoal restore <id>`, which takes it over from the hub's package. On macOS
-every terminating signal Shoal did not send itself counts as a shutdown, so
-a logout hands work over too; `shoal daemon restart`, `shoal daemon stop`
-and upgrades hand nothing over.
+`shoal restore <id>`, which takes it over from the hub's package. Every
+SIGTERM or SIGINT the daemon receives counts as a shutdown, on any
+platform, so a logout that ends the daemon, a service manager's stop and
+Ctrl-C of a foreground daemon hand work over too; `shoal daemon restart`,
+`shoal daemon stop` and upgrades hand nothing over. When a shutdown is
+cancelled after the hand-over, the machine has the hub retire its copies
+of the spaces that went, as it does once its link opens again.
 
 The hub never takes a space over on its own otherwise: a machine that is
 awake but lost only the hub keeps working. Once an `intermittent` machine has been

@@ -77,6 +77,19 @@ impl Hub {
         }
     }
 
+    /// Tell the hub that this machine stays after all, as once its shutdown
+    /// was cancelled, so it retires the spaces it handed over that other
+    /// machines took; nothing on the hub's own machine and on one in no hub.
+    pub async fn stay(&self, daemon: &dyn Daemon) {
+        if self.is_hub(daemon) || !matches!(self.store.read(membership::load).await, Ok(Some(_))) {
+            return;
+        }
+        // While the link is down, the hub has it retire them once it opens.
+        if let Err(error) = self.through_hub(Call::Stay).await {
+            log!("hub: could not tell the hub this machine stays: {error:#}");
+        }
+    }
+
     /// Send the hub the final package of `space` over a stream of
     /// `calls`, and where the hub sends the space, none where no machine
     /// can take it.

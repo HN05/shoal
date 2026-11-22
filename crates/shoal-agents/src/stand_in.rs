@@ -979,6 +979,10 @@ impl crate::daemon::Handovers for StandIn {
     ) -> BoxFuture<'_, Vec<(Space, shoal_protocol::hub::packages::Handed)>> {
         Box::pin(async { Vec::new() })
     }
+
+    fn stay(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
 }
 
 /// What [`space_facts`] reads of a space, before its condition.

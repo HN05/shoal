@@ -198,6 +198,11 @@ impl Hub {
                 self.take_handover(daemon, sent, start, streams).await?;
                 Reply::Streaming
             }
+            Call::Stay => {
+                ensure_machine(member)?;
+                self.hear_stay(&member.id);
+                Reply::Delivered
+            }
             Call::Kept { space } => {
                 ensure_machine(member)?;
                 Reply::Kept(self.local_kept_package(&space).await?.map(Box::new))
