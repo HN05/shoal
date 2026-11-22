@@ -94,10 +94,7 @@ fn describe(port: &PortReservation, palette: Palette) -> String {
 }
 
 pub(super) async fn overview(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
-    let Some(workspace) =
-        ui::select_workspace_filter(ctx, filter, &Acting::request(crate::client::leases::ports))
-            .await?
-    else {
+    let Some(workspace) = ui::select_workspace_filter(ctx, filter, &listing()).await? else {
         return workspace_overviews(
             ctx,
             async |workspace| {
@@ -177,4 +174,9 @@ pub(super) fn render_catalog(catalog: &PortCatalog, palette: Palette) {
             }
         );
     }
+}
+
+/// What listing a workspace's ports sends for the workspace a picker picks.
+pub(super) fn listing() -> Acting {
+    Acting::request(crate::client::leases::ports)
 }

@@ -21,7 +21,7 @@ pub(in crate::cli::commands) async fn refresh(
     if ui::current_chat(&workspace).is_some() {
         bail!("a chat has no worktree to refresh");
     }
-    let refreshing = Acting::request(crate::client::workspaces::refresh);
+    let refreshing = refreshing();
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&refreshing));
     let workspace = workspace.await?;
     let mut refreshed = (crate::client::workspaces::refresh(workspace))
@@ -55,4 +55,9 @@ fn summary(refreshed: &Refreshed) -> String {
         true => format!("Refreshed {name} with the files of {target}"),
         false => format!("Refreshed {name} to {target} at {to}, from {from}"),
     }
+}
+
+/// What refreshing a workspace sends for the workspace a picker picks.
+pub(super) fn refreshing() -> Acting {
+    Acting::request(crate::client::workspaces::refresh)
 }

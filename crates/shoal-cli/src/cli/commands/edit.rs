@@ -24,7 +24,7 @@ pub(in crate::cli::commands) async fn edit(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&Acting::here(crate::client::executions::command_run)),
+        Fallback::CurrentDirectory(&editing()),
     )
     .await?;
     let settings =
@@ -58,6 +58,12 @@ fn editor(values: [Option<OsString>; 2]) -> Result<Vec<OsString>> {
         Some(value) => value.split_whitespace().map(OsString::from).collect(),
         None => vec![value],
     })
+}
+
+/// What editing in a workspace sends for the workspace a picker picks: the
+/// editor's run there, on this machine.
+pub(super) fn editing() -> Acting {
+    Acting::here(crate::client::executions::command_run)
 }
 
 #[cfg(test)]

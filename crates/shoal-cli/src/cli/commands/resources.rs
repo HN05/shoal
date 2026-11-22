@@ -196,13 +196,7 @@ pub(super) async fn pick_pool(
 }
 
 pub(super) async fn overview(ctx: &Context, filter: SpaceFilter, members: Members) -> Result<i32> {
-    let Some(workspace) = ui::select_workspace_filter(
-        ctx,
-        filter,
-        &Acting::request(crate::client::leases::resources),
-    )
-    .await?
-    else {
+    let Some(workspace) = ui::select_workspace_filter(ctx, filter, &listing()).await? else {
         return workspace_overviews(
             ctx,
             async |workspace| {
@@ -276,4 +270,10 @@ pub(super) fn render_overview(overview: &Overview, palette: Palette) {
     if overview.pools.is_empty() && overview.leases.is_empty() {
         outln!("No configured resources or leases");
     }
+}
+
+/// What listing a workspace's resource leases sends for the workspace a
+/// picker picks.
+pub(super) fn listing() -> Acting {
+    Acting::request(crate::client::leases::resources)
 }

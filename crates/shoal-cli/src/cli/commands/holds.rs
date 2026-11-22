@@ -60,10 +60,7 @@ pub(super) async fn release(
 /// The holds of the space `filter` selects, or of every space, the
 /// workspaces then the chats.
 pub(super) async fn list(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
-    let Some(space) =
-        ui::select_space_filter(ctx, filter, &Acting::request(crate::client::leases::holds))
-            .await?
-    else {
+    let Some(space) = ui::select_space_filter(ctx, filter, &listing()).await? else {
         let spaces = crate::client::spaces::list(&ctx.paths).await?;
         ctx.show(&spaces.0, |spaces| {
             for space in spaces {
@@ -130,4 +127,9 @@ fn render(holds: &[SpaceHold]) {
             }
         );
     }
+}
+
+/// What listing a space's holds sends for the space a picker picks.
+pub(super) fn listing() -> Acting {
+    Acting::request(crate::client::leases::holds)
 }

@@ -29,22 +29,31 @@ pub(in crate::cli::commands) async fn rename(
 ) -> Result<i32> {
     // Refuse a name before a picker asks for the space.
     let name = SpaceName::parse(&name)?;
-    let space = chosen_space(ctx, space, &renaming(name.clone())).await?;
+    let space = chosen_space(ctx, space, &renaming()).await?;
     rename_space(ctx, space, name).await
 }
 
 /// Rename a picked workspace or chat with what the user types next.
 pub(in crate::cli::commands) async fn rename_picked(ctx: &Context) -> Result<i32> {
-    // The name, typed once the space is picked, decides nothing of which
-    // spaces the rename reaches.
-    let space = ui::pick_any_space(ctx, &renaming(String::from("name").into())).await?;
+    let space = ui::pick_any_space(ctx, &renaming()).await?;
     let name = ask_name(ctx).await?;
     rename_space(ctx, space, name).await
 }
 
-/// What renaming a space to `name` sends, for its pickers.
-fn renaming(name: SpaceName) -> Acting {
+/// What renaming a space sends, for its pickers; the name, which may be
+/// typed once the space is picked, decides nothing of which spaces the
+/// rename reaches.
+pub(in crate::cli::commands) fn renaming() -> Acting {
+    let name = SpaceName::from(String::from("name"));
     Acting::request(move |space| crate::client::spaces::rename_space(space, name.clone()))
+}
+
+/// What asking a space's agent to name its space sends, for its pickers.
+pub(in crate::cli::commands) fn asking() -> Acting {
+    Acting::request(|space| {
+        let to = shoal_protocol::protocol::AlertTarget::Space { space };
+        crate::client::alerts::send(to, None, NAME_REQUEST.into(), Vec::new())
+    })
 }
 
 /// Give the space `space` selects the name `name`, and show it on the
@@ -121,11 +130,7 @@ pub(in crate::cli::commands) async fn request_name(
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
     super::super::start::ensure_scope_token(ctx)?;
-    let asking = Acting::request(|space| {
-        let to = shoal_protocol::protocol::AlertTarget::Space { space };
-        crate::client::alerts::send(to, None, NAME_REQUEST.into(), Vec::new())
-    });
-    let selector = chosen_space(ctx, space, &asking).await?;
+    let selector = chosen_space(ctx, space, &asking()).await?;
     let asked = asked_space(ctx, &selector).await?;
     ensure!(
         asked.running,

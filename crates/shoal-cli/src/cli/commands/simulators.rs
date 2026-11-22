@@ -81,12 +81,7 @@ pub(super) async fn history(
     limit: u32,
     before: Option<i64>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace_filter(
-        ctx,
-        filter,
-        &Acting::request(|space| crate::client::leases::simulators(Some(space))),
-    )
-    .await?;
+    let workspace = ui::select_workspace_filter(ctx, filter, &listing()).await?;
     let entries = leases::simulator_history(&ctx.paths, workspace.clone(), limit, before).await?;
     ctx.show(&entries, |entries| {
         for entry in entries {
@@ -120,12 +115,7 @@ pub(super) async fn acquire(
 }
 
 pub(super) async fn overview(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
-    let workspace = ui::select_workspace_filter(
-        ctx,
-        filter,
-        &Acting::request(|space| crate::client::leases::simulators(Some(space))),
-    )
-    .await?;
+    let workspace = ui::select_workspace_filter(ctx, filter, &listing()).await?;
     let overview = leases::simulators(workspace.clone())
         .send(&ctx.paths)
         .await?;
@@ -200,4 +190,10 @@ fn render_history_entry(entry: &AuditEntry) {
                 .unwrap_or_else(|| "unknown".into())
         );
     }
+}
+
+/// What listing a workspace's simulators, or their history, sends for the
+/// workspace a picker picks.
+pub(super) fn listing() -> Acting {
+    Acting::request(|space| crate::client::leases::simulators(Some(space)))
 }

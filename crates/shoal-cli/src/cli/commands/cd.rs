@@ -17,7 +17,7 @@ pub(in crate::cli::commands) async fn cd(
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
         // The shell goes on in the worktree on this machine.
         None => SpaceSelector::Id(
-            ui::workspace_picker(ctx, &Acting::here(crate::client::spaces::enter)).await?,
+            ui::workspace_picker(ctx, &entering()).await?,
         ),
     };
     let workspace = crate::client::spaces::enter(workspace)
@@ -35,4 +35,10 @@ fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
     };
     ctx.emit(&path.display().to_string(), directory)?;
     shell::navigate(ctx, path)
+}
+
+/// What entering a workspace sends for the workspace a picker picks, whose
+/// directory only this machine has.
+pub(super) fn entering() -> Acting {
+    Acting::here(crate::client::spaces::enter)
 }

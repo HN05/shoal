@@ -153,7 +153,7 @@ async fn select_target(
 
 /// What acquiring `kind` sends for the space a picker picks. Every lease
 /// but a hold is taken on this machine, where the worktree is.
-fn acquiring(kind: &AcquireKind) -> Acting {
+pub(super) fn acquiring(kind: &AcquireKind) -> Acting {
     match kind {
         AcquireKind::Hold { .. } => {
             Acting::request(|space| leases::acquire_hold(space, String::new(), None))
@@ -180,7 +180,7 @@ fn acquiring(kind: &AcquireKind) -> Acting {
 /// any kind sends a port's, which needs what every release but a hold's
 /// needs. Every lease but a hold is given back on this machine, where the
 /// worktree is.
-fn releasing(kind: Option<&ReleaseKind>) -> Acting {
+pub(super) fn releasing(kind: Option<&ReleaseKind>) -> Acting {
     match kind {
         Some(ReleaseKind::Hold { .. }) => {
             Acting::request(|space| leases::release_hold(space, String::new()))
@@ -409,12 +409,8 @@ pub(super) async fn show(
         Some(LeaseKind::Resource) => resources::overview(ctx, filter, Members::Locks).await,
         Some(LeaseKind::Repo) => resources::overview(ctx, filter, Members::Repositories).await,
         None => {
-            let Some(workspace) = ui::select_workspace_filter(
-                ctx,
-                filter,
-                &Acting::request(crate::client::leases::ports),
-            )
-            .await?
+            let Some(workspace) =
+                ui::select_workspace_filter(ctx, filter, &ports::listing()).await?
             else {
                 return workspace_overviews(
                     ctx,

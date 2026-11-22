@@ -33,7 +33,7 @@ pub(in crate::cli::commands) async fn open(
         ctx,
         space,
         // The app the space opens in runs on this machine.
-        Fallback::CurrentDirectory(&Acting::here(crate::client::spaces::enter)),
+        Fallback::CurrentDirectory(&opening()),
     )
     .await?;
     let space = crate::client::spaces::enter(selector)
@@ -93,4 +93,10 @@ fn choose(ctx: &Context) -> Result<DesktopApp> {
             ui::pick_choice(ctx, "App> ", &installed)
         }
     }
+}
+
+/// What opening a space in an app sends for the space a picker picks, on
+/// this machine, where the app runs.
+pub(in crate::cli::commands) fn opening() -> Acting {
+    Acting::here(crate::client::spaces::enter)
 }

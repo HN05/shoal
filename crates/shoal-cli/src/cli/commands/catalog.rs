@@ -21,12 +21,8 @@ pub(super) async fn show(
     kind: Option<CatalogKind>,
     workspace: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&Acting::request(crate::client::leases::port_catalog)),
-    )
-    .await?;
+    let workspace =
+        ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&reading())).await?;
     match kind {
         Some(CatalogKind::Port) => {
             let catalog = ports::fetch_catalog(ctx, &workspace).await?;
@@ -83,4 +79,10 @@ fn render_catalog(catalog: &Catalog, palette: Palette) {
     resources::render_catalog(&catalog.resources, palette);
     outln!("{}", palette.paint(Style::Heading, "Secrets"));
     secrets::render_catalog(&catalog.secrets, palette);
+}
+
+/// What reading a workspace's catalog sends for the workspace a picker
+/// picks.
+pub(super) fn reading() -> Acting {
+    Acting::request(crate::client::leases::port_catalog)
 }

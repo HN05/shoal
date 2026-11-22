@@ -21,10 +21,7 @@ pub(in crate::cli::commands) async fn checkpoint(
     workspace: Option<SpaceSelector>,
     name: Option<String>,
 ) -> Result<i32> {
-    let taking = {
-        let name = name.clone();
-        Acting::request(move |space| recovery::checkpoint(space, name.clone()))
-    };
+    let taking = taking();
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&taking));
     let workspace = workspace.await?;
     let taking = recovery::checkpoint(workspace.clone(), name).send(&ctx.paths);
@@ -51,16 +48,26 @@ pub(super) async fn run(
 ) -> Result<i32> {
     ensure!(spaces.len() <= 1, "--checkpoint takes one workspace");
     let workspace = spaces.into_iter().next();
-    // The checkpoint, which may be picked next, decides nothing of which
-    // spaces a return reaches.
-    let returning =
-        Acting::request(|space| recovery::restore_checkpoint(space, CheckpointNumber::new(1)));
+    let returning = returning();
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&returning));
     let workspace = workspace.await?;
     match checkpoint {
         Some(checkpoint) => restore(ctx, workspace, checkpoint).await,
         None => choose(ctx, workspace).await,
     }
+}
+
+/// What taking a checkpoint sends for the workspace a picker picks; its
+/// name decides nothing of which workspaces it reaches.
+pub(in crate::cli::commands) fn taking() -> Acting {
+    Acting::request(|space| recovery::checkpoint(space, None))
+}
+
+/// What returning to a checkpoint sends for the workspace a picker picks;
+/// the checkpoint, which may be picked next, decides nothing of which
+/// workspaces it reaches.
+pub(in crate::cli::commands) fn returning() -> Acting {
+    Acting::request(|space| recovery::restore_checkpoint(space, CheckpointNumber::new(1)))
 }
 
 /// Return the workspace to the checkpoint the user picks, or list its

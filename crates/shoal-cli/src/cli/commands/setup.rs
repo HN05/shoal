@@ -26,11 +26,7 @@ pub(in crate::cli::commands) async fn setup(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&preparing(Preparation {
-            setup: true,
-            post_setup: true,
-            ..Default::default()
-        })),
+        Fallback::CurrentDirectory(&setting_up(false)),
     )
     .await?;
     let inspection = crate::client::workspaces::inspect(workspace.clone())
@@ -58,10 +54,7 @@ pub(in crate::cli::commands) async fn skip_setup(
     let workspace = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&preparing(Preparation {
-            post_setup: true,
-            ..Default::default()
-        })),
+        Fallback::CurrentDirectory(&setting_up(true)),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(workspace.clone())
@@ -86,6 +79,17 @@ pub(in crate::cli::commands) async fn skip_setup(
         &workspace,
     )?;
     Ok(0)
+}
+
+/// What setup sends for the workspace it picks: an operation that runs its
+/// setup and post-setup there, or with `skip` only its post-setup, which
+/// accepts a failed setup.
+pub(super) fn setting_up(skip: bool) -> Acting {
+    preparing(Preparation {
+        setup: !skip,
+        post_setup: true,
+        ..Default::default()
+    })
 }
 
 /// What setup sends for the workspace it picks: an operation that takes
