@@ -66,7 +66,7 @@ impl Manager {
         let exported = self.export_removed_moving(selector, carrying).await?;
         let id = exported.manifest.space.record.space_id.clone();
         let delivered = (self.deliver_package(&id, destination, (Some(ticket), true))).await;
-        let _ = std::fs::remove_file(self.staged_package(&id));
+        self.discard_staged_package(&id);
         let machine = &destination.machine;
         let arrival = self.record_arrival(&id, machine, delivered).await?;
         Ok(RemovedDelivery { exported, arrival })
@@ -180,6 +180,13 @@ impl Manager {
     /// delivered from here.
     fn staged_package(&self, id: &SpaceId) -> std::path::PathBuf {
         (self.paths.move_packages()).join(crate::transfer::package_name(id))
+    }
+
+    /// Delete the package of the space `id` that waited among those
+    /// delivered from here, once delivered or not; one left behind goes
+    /// with the next move of the space.
+    fn discard_staged_package(&self, id: &SpaceId) {
+        let _ = std::fs::remove_file(self.staged_package(id));
     }
 }
 
