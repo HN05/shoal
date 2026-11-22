@@ -52,9 +52,14 @@ fn summary(id: &str) -> SpaceSummary {
 pub(crate) async fn report(hub: &Hub, member: &str, ids: &[&str]) {
     let spaces = ids.iter().map(|id| summary(id)).collect();
     let member = MemberId::from(member.to_owned());
-    (hub.record_report(&StandIn, &member, Report::Whole(spaces), Vec::new()))
-        .await
-        .unwrap();
+    (hub.record_report(
+        &StandIn::default(),
+        &member,
+        Report::Whole(spaces),
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
 }
 
 /// What the hub answers `member` sending `bytes` as its package of `space`,
@@ -68,7 +73,7 @@ pub(crate) async fn send(hub: &Arc<Hub>, member: &str, space: &str, bytes: &[u8]
         built_at: UnixTime::now(),
     };
     let streams = (link.writer.streams(), answer.number());
-    hub.keep_package(&StandIn, sent, streams).await?;
+    hub.keep_package(&StandIn::default(), sent, streams).await?;
     package.write(bytes).await.unwrap();
     package.end(None).await;
     while answer.next().await?.is_some() {}

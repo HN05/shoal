@@ -69,7 +69,7 @@ async fn respond(hub: &Arc<Hub>, request: String) -> String {
     tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let permit = Arc::new(Arc::new(Semaphore::new(1)).acquire_owned().await.unwrap());
-        listener::serve(hub, Arc::new(StandIn), stream, permit).await;
+        listener::serve(hub, Arc::new(StandIn::default()), stream, permit).await;
     });
     let mut client = TcpStream::connect(address).await.unwrap();
     client.write_all(request.as_bytes()).await.unwrap();
@@ -200,7 +200,7 @@ async fn an_upgrade_carries_bytes_both_ways_and_holds_its_connection_s_permit() 
     let permit = Arc::new(connections.clone().acquire_owned().await.unwrap());
     tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
-        listener::serve(hub, Arc::new(StandIn), stream, permit).await;
+        listener::serve(hub, Arc::new(StandIn::default()), stream, permit).await;
     });
     let mut client = TcpStream::connect(address).await.unwrap();
     let request = signed(&member, &device, "/quay/live", &nonce().to_string())

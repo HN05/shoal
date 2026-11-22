@@ -71,7 +71,8 @@ async fn the_registered_placer_decides_under_the_external_policy() {
         let asked = registration.asked.recv().await.unwrap();
         assert!(hub.placers.answer(asked.number, on(own.as_str())));
     };
-    let (decision, ()) = tokio::join!(hub.place_for(&StandIn, request), answering);
+    let daemon = StandIn::default();
+    let (decision, ()) = tokio::join!(hub.place_for(&daemon, request), answering);
     let decision = decision.unwrap().unwrap();
     assert_eq!(decision.machine, own);
     assert_eq!(decision.policy, Policy::External);

@@ -66,7 +66,7 @@ impl Kind for SharedRepositories {
     fn of(copies: Copies) -> Option<Vec<Copy<Self>>> {
         match copies {
             Copies::Repositories(copies) => Some(copies),
-            Copies::Files(_) => None,
+            Copies::Files(_) | Copies::LocalConfigs(_) => None,
         }
     }
 
@@ -126,6 +126,9 @@ pub(crate) enum Applying {
     /// Share these registrations of its origin under its URL, or with
     /// none, stop sharing them.
     Share(Vec<RepositoryId>, Option<String>),
+    /// Share this registration of its origin, which was not shared, under
+    /// its URL.
+    Join(RepositoryId, String),
     /// Register a clone of it, which no registration here has.
     Clone,
 }
@@ -151,7 +154,7 @@ pub(crate) async fn applying(
         return Applying::Share(shared, Some(value.url.clone()));
     }
     match shoal_core::repository::with_origin(repositories, copy.key.as_str()).await {
-        Some(registered) => Applying::Share(vec![registered.id.clone()], Some(value.url.clone())),
+        Some(registered) => Applying::Join(registered.id.clone(), value.url.clone()),
         None => Applying::Clone,
     }
 }
@@ -196,8 +199,9 @@ impl Hub {
     }
 
     /// Change this machine's registrations as `applied` says, for the
-    /// hub's `copy`; whether the machine agrees on it now, or later, once
-    /// the clone it starts is registered.
+    /// hub's `copy`, a registration that comes to be shared taking the
+    /// hub's copy of its local config; whether the machine agrees on it
+    /// now, or later, once the clone it starts is registered.
     async fn apply(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
@@ -210,6 +214,11 @@ impl Hub {
                 for id in &ids {
                     daemon.share_repository_as(id, url.clone()).await?;
                 }
+                Ok(true)
+            }
+            Applying::Join(id, url) => {
+                daemon.share_repository_as(&id, Some(url)).await?;
+                (self.shared_registration_joined(&**daemon, &id, &copy.key)).await;
                 Ok(true)
             }
             Applying::Clone => {
@@ -265,8 +274,9 @@ impl Hub {
     }
 
     /// Share `repository`, a clone of the shared repository `copy` names,
-    /// and agree on the copy with the hub whose key is `key`, unless the
-    /// machine agreed on a later copy meanwhile, as one that unshares it.
+    /// with the hub's copy of its local config, and agree on the copy with
+    /// the hub whose key is `key`, unless the machine agreed on a later
+    /// copy meanwhile, as one that unshares it.
     async fn share_clone(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -279,7 +289,11 @@ impl Hub {
             return Ok(());
         }
         let url = copy.value.as_ref().map(|value| value.url.clone());
+        let joined = url.is_some();
         daemon.share_repository_as(&repository.id, url).await?;
+        if joined {
+            (self.shared_registration_joined(&**daemon, &repository.id, &copy.key)).await;
+        }
         self.agree::<SharedRepositories>(key, vec![copy]).await
     }
 

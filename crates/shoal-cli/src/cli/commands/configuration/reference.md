@@ -13,7 +13,9 @@ its own from the first file that sets it:
    directory, beside its workspaces and `.checkout`
    (`~/shoal/my-project/.shoal/config.toml`). It is outside every Git tree, for
    a repository that won't accept a committed file or for settings only you
-   want, and Shoal reads it in place on every request.
+   want, and Shoal reads it in place on every request. A
+   [shared repository](../../../../../../docs/reference.md#hub)'s is the same
+   on every machine of its hub.
 2. The **repository file** in a workspace's worktree, `.shoal.toml` or
    `.shoal/config.toml`; both together is an error. Where no workspace applies,
    such as for the seed build or a repository's agent limit, the registered

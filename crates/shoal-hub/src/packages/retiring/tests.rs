@@ -37,5 +37,8 @@ async fn a_space_the_returning_machine_no_longer_has_counts_as_retired() {
     let root = tempfile::tempdir().unwrap();
     let hub = hub(&root, "", &[]).await;
     let spaces = vec![SpaceId::from("plan".to_owned())];
-    assert_eq!(hub.retire(&StandIn, spaces.clone()).await, spaces);
+    assert_eq!(
+        hub.retire(&StandIn::default(), spaces.clone()).await,
+        spaces
+    );
 }

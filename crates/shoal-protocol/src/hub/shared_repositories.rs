@@ -1,5 +1,6 @@
-//! The repositories joined machines share through the hub, each by its
-//! origin, which every machine matches its registrations by.
+//! The repositories joined machines share through the hub, with their
+//! local configs, each by its origin, which every machine matches its
+//! registrations by.
 use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
@@ -49,3 +50,10 @@ pub type Edit = super::sharing::Edit<Origin, SharedRepository>;
 
 /// The hub's copy of a shared repository.
 pub type Copy = super::sharing::Copy<Origin, SharedRepository>;
+
+/// A machine's edit of a shared repository's local config: its new text,
+/// none for a file it removed.
+pub type ConfigEdit = super::sharing::Edit<Origin, String>;
+
+/// The hub's copy of a shared repository's local config.
+pub type ConfigCopy = super::sharing::Copy<Origin, String>;

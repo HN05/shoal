@@ -83,7 +83,9 @@ async fn the_hub_signs_its_version_over_the_refused_members_nonce() {
     let hub = stand_in::hub(&root, shoal_core::config::Config::from_toml("").unwrap()).await;
     let (theirs, other) = (nonce(), nonce());
     let opening = json!({ "version": "0.0.1", "nonce": theirs });
-    let refusal = hub.refuse_version(&StandIn, &opening, VERSION).await;
+    let refusal = hub
+        .refuse_version(&StandIn::default(), &opening, VERSION)
+        .await;
     let signed = refusal.version.unwrap();
     assert_eq!(signed.version, OWN_VERSION);
     assert_eq!(signed.key, hub.hub_identity().await.unwrap().public);

@@ -41,6 +41,11 @@ pub(crate) enum Taking {
     Write { keep: bool },
 }
 
+/// Whether the hub's `copy` is one the machine `agreed` on, or older.
+pub(crate) fn stale<S: Kind>(copy: &Copy<S>, agreed: Option<&Copy<S>>) -> bool {
+    agreed.is_some_and(|agreed| agreed.revision >= copy.revision)
+}
+
 /// What the hub's `copy` does to the item that holds `item` here, given the
 /// copy of it the machine `agreed` on before and the edit of it the
 /// machine `sent` for this copy, if any.
@@ -50,7 +55,7 @@ pub(crate) fn taking<S: Kind>(
     agreed: Option<&Copy<S>>,
     sent: Option<&Edit<S>>,
 ) -> Taking {
-    if agreed.is_some_and(|agreed| agreed.revision >= copy.revision) {
+    if stale::<S>(copy, agreed) {
         return Taking::Stale;
     }
     // An item edited again since it was sent keeps that edit for the next

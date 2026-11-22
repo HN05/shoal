@@ -1,8 +1,8 @@
 //! Shared repositories across the hub: sharing a repository on one machine
 //! registers and clones it on every other, a machine that joins later
-//! included, and unsharing it leaves their registrations, no longer
-//! shared.
-use std::path::Path;
+//! included, with its local config, and unsharing it leaves their
+//! registrations, no longer shared.
+use std::{fs, path::Path};
 
 use serde_json::Value;
 
@@ -46,4 +46,42 @@ fn a_shared_repository_is_cloned_on_every_machine_and_unsharing_it_leaves_their_
         let kept = registration(machine, &origin, false);
         assert_eq!(kept["id"], registered["id"]);
     }
+}
+
+/// Wait until the local config of the repository at `path` on `machine`
+/// reads `text`.
+fn local_config_reads(machine: &Base, path: &str, text: &str) {
+    wait_for(
+        &format!("the local config of {path} to read {text:?}"),
+        || (machine.ok(&["repo", "config", path])["toml"] == text).then_some(()),
+    );
+}
+
+const MAKE: &str = "[setup]\ncommand = \"make\"\n";
+
+#[test]
+fn an_edit_of_a_shared_repository_s_local_config_reaches_every_machine() {
+    let hub = machine(true, "app");
+    let desk = machine(false, "app");
+    join(&desk, &hub, "desk");
+    let origin = give_origin(&desk);
+    let repo = desk.repo.to_str().unwrap();
+    let desks = desk.ok(&["repo", "config", repo])["path"].clone();
+    let desks = desks.as_str().unwrap();
+    fs::create_dir_all(Path::new(desks).parent().unwrap()).unwrap();
+    fs::write(desks, MAKE).unwrap();
+    desk.ok(&["repo", "share", repo]);
+    let cloned = registration(&hub, &origin, true);
+    let cloned = cloned["path"].as_str().unwrap();
+    local_config_reads(&hub, cloned, MAKE);
+    hub.ok(&[
+        "config",
+        "set",
+        "--repo",
+        cloned,
+        "setup.command",
+        "make all",
+    ]);
+    let edited = hub.ok(&["repo", "config", cloned])["toml"].clone();
+    local_config_reads(&desk, repo, edited.as_str().unwrap());
 }

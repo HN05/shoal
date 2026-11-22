@@ -3858,7 +3858,19 @@ when the link next opens, or on the hub's own machine when its daemon
 restarts, rather than every round, which would alert every ten seconds. A copy
 without a value, from `repo unshare` or a removal anywhere, leaves every
 registration, no longer shared. Machines clone from the origin; the hub
-carries no Git data. A worktree file the current format rejects counts as absent,
+carries no Git data. A shared repository's local config syncs the same way,
+keyed by its origin, under the shared files' rules: its text is checked as key
+edits check it, file by file, so one invalid file holds back no other, and a
+replaced edit stays as `config.toml.backup` with one alert. A machine agrees on
+the copy of every origin but writes it only into its shared registrations of
+it, so a registration that comes to be shared, by `repo share`, by taking a
+shared copy or as a clone, takes the copy it agreed on as a joining machine
+takes the shared files; without one, its file goes only after the machine has
+read the hub's copies, since one may be on its way. An origin it shares no registration of holds the copy
+it agreed on, so neither unsharing nor removal is an edit and every machine's
+file stays as it is. Writes go through the registrations, under the gate and
+lock key edits take, and only while the file still reads what the sync
+compared. A worktree file the current format rejects counts as absent,
 since a branch from before a format change keeps its old file and must not stop
 cleanup or anything else the other layers settle. The layers name the
 rejection, which `config show` warns about, and the daemon tells the log and the

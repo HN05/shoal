@@ -13,7 +13,7 @@ use crate::{
 /// daemon.
 async fn hub(root: &tempfile::TempDir) -> (Arc<crate::Hub>, Arc<dyn Daemon>) {
     let hub = stand_in::hub(root, Config::default()).await;
-    (hub, Arc::new(StandIn))
+    (hub, Arc::new(StandIn::default()))
 }
 
 fn member(name: &str) -> MemberId {

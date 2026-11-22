@@ -26,7 +26,7 @@ use shoal_protocol::hub::{
 
 use crate::{
     Hub, daemon::Daemon, log, membership, session::Calls, shared_config::SharedFiles,
-    shared_repositories::SharedRepositories,
+    shared_local_configs::SharedLocalConfigs, shared_repositories::SharedRepositories,
 };
 
 mod agreed;
@@ -84,6 +84,9 @@ pub(crate) trait Kind: Sized + Send + Sync + 'static {
         agreed: &'a Agreed<Self>,
         sent: &'a [Edit<Self>],
     ) -> BoxFuture<'a, Result<Vec<Copy<Self>>>>;
+
+    /// This machine has just read and taken every copy of the hub.
+    fn read_copies(_: &Hub) {}
 }
 
 /// A machine's edit of an item of `S`.
@@ -116,6 +119,12 @@ impl Sharing {
     /// Look at the items at once, since they changed.
     pub(crate) fn changed(&self) {
         self.changed.notify_one();
+    }
+
+    /// Read the hub's copies on the next round, which starts at once.
+    pub(crate) fn reread(&self) {
+        self.missed.store(true, Ordering::SeqCst);
+        self.changed();
     }
 
     /// Hold off every round, which compares the items with the hub's
@@ -193,6 +202,7 @@ impl Hub {
         tokio::select! {
             never = self.keep_sharing_with::<SharedFiles>(daemon, hub) => never,
             never = self.keep_sharing_with::<SharedRepositories>(daemon, hub) => never,
+            never = self.keep_sharing_with::<SharedLocalConfigs>(daemon, hub) => never,
         }
     }
 
@@ -251,6 +261,9 @@ impl Hub {
         let shared = self.exchange_copies::<S>(daemon, hub, &key, agreed, edits);
         let shared = shared.await;
         sharing.missed.store(shared.is_err(), Ordering::SeqCst);
+        if shared.is_ok() {
+            S::read_copies(self);
+        }
         shared
     }
 
@@ -306,6 +319,15 @@ impl Hub {
         Ok(joined.hub_key)
     }
 
+    /// The key of the hub this machine shares with, none in no hub.
+    pub(crate) async fn sharing_hub_key(&self, daemon: &dyn Daemon) -> Result<Option<PublicKey>> {
+        if self.is_hub(daemon) {
+            return self.shared_hub_key(true).await.map(Some);
+        }
+        let joined = self.store.read(membership::load).await?;
+        Ok(joined.map(|joined| joined.hub_key))
+    }
+
     /// Take the `copies` the hub sends this machine, or its own machine
     /// when `own`; once that fails, the next round of their kind reads the
     /// hub's copies again.
@@ -322,6 +344,9 @@ impl Hub {
             Copies::Files(copies) => {
                 self.take_sent_copies::<SharedFiles>(daemon, own, copies)
                     .await
+            }
+            Copies::LocalConfigs(copies) => {
+                (self.take_sent_copies::<SharedLocalConfigs>(daemon, own, copies)).await
             }
         }
     }
@@ -394,6 +419,9 @@ impl Hub {
             ),
             Edits::Repositories(edits) => Copies::Repositories(
                 (self.take_shared_edits::<SharedRepositories>(daemon, from, edits)).await?,
+            ),
+            Edits::LocalConfigs(edits) => Copies::LocalConfigs(
+                (self.take_shared_edits::<SharedLocalConfigs>(daemon, from, edits)).await?,
             ),
         })
     }

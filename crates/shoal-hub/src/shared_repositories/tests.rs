@@ -59,7 +59,7 @@ async fn a_copy_shares_the_registration_of_its_origin_or_clones_one_where_there_
     let registered = [repository("mine", URL, None)];
     assert_eq!(
         applying(&shared_copy, &registered).await,
-        Applying::Share(vec!["mine".into()], Some(URL.into()))
+        Applying::Join("mine".into(), URL.into())
     );
     let elsewhere = [repository(
         "other",

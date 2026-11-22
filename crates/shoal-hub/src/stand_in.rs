@@ -1,7 +1,8 @@
 //! A stand-in for the rest of the daemon, which the tests of the hub's own
 //! operations build the service over: a daemon with no spaces, agents,
-//! approvals or app store, acting on the global config a test gives the
-//! service, and a temporary store with no spaces in it.
+//! approvals or app store, with the repositories a test registers, acting
+//! on the global config a test gives the service, and a temporary store
+//! with no spaces in it.
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
@@ -62,8 +63,54 @@ pub(crate) async fn hub(root: &tempfile::TempDir, config: Config) -> Arc<Hub> {
     ))
 }
 
-/// A daemon with no spaces, agents, approvals or app store.
-pub(crate) struct StandIn;
+/// A daemon with no spaces, agents, approvals or app store, and the
+/// repositories a test registers.
+#[derive(Default)]
+pub(crate) struct StandIn {
+    registered: std::sync::Mutex<Vec<Registered>>,
+}
+
+/// A repository a test registers with the stand-in, with the text of its
+/// local config.
+#[derive(Clone)]
+pub(crate) struct Registered {
+    pub repository: Repository,
+    pub local_config: Option<String>,
+}
+
+impl StandIn {
+    /// A stand-in with `registered` repositories.
+    pub(crate) fn registering(registered: Vec<Registered>) -> Self {
+        let registered = std::sync::Mutex::new(registered);
+        Self { registered }
+    }
+
+    /// The repositories registered now.
+    pub(crate) fn registered(&self) -> Vec<Registered> {
+        self.registered.lock().unwrap().clone()
+    }
+
+    /// Change the registration `id` as `change` does.
+    fn change(&self, id: &RepositoryId, change: impl FnOnce(&mut Registered)) -> Result<()> {
+        let mut registered = self.registered.lock().unwrap();
+        let found = registered.iter_mut().find(|r| &r.repository.id == id);
+        let Some(found) = found else {
+            bail!("the stand-in daemon has no repository {id}");
+        };
+        change(found);
+        Ok(())
+    }
+
+    /// The text of the local config of the registration `id`.
+    fn local_config(&self, id: &RepositoryId) -> Result<Option<String>> {
+        let registered = self.registered.lock().unwrap();
+        let found = registered.iter().find(|r| &r.repository.id == id);
+        match found {
+            Some(found) => Ok(found.local_config.clone()),
+            None => bail!("the stand-in daemon has no repository {id}"),
+        }
+    }
+}
 
 /// What a stand-in that has none of it answers when asked for `what`.
 fn none<T>(what: &str) -> BoxFuture<'static, Result<T>> {
@@ -78,27 +125,42 @@ impl Registrations for StandIn {
 
     fn share_repository_as<'a>(
         &'a self,
-        _: &'a RepositoryId,
-        _: Option<String>,
+        id: &'a RepositoryId,
+        url: Option<String>,
     ) -> BoxFuture<'a, Result<()>> {
-        none("repositories to share")
+        let shared = self.change(id, |found| found.repository.shared_url = url);
+        Box::pin(async move { shared })
     }
 
     fn local_config_text<'a>(
         &'a self,
-        _: &'a RepositoryId,
+        id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<Option<String>>> {
-        none("local configs")
+        let text = self.local_config(id);
+        Box::pin(async move { text })
     }
 
+    /// Keeps a replaced file at `<repository directory>/config.toml.backup`.
     fn take_local_config_copy<'a>(
         &'a self,
-        _: &'a RepositoryId,
-        _: Option<String>,
-        _: Option<String>,
-        _: bool,
+        id: &'a RepositoryId,
+        expected: Option<String>,
+        text: Option<String>,
+        keep: bool,
     ) -> BoxFuture<'a, Result<Option<std::path::PathBuf>>> {
-        none("local configs")
+        let taken = (|| {
+            if self.local_config(id)? != expected {
+                bail!("the local config of {id} changed");
+            }
+            let mut kept = None;
+            self.change(id, |found| {
+                let backup = found.repository.workspaces_dir.join("config.toml.backup");
+                kept = (keep && found.local_config.is_some()).then_some(backup);
+                found.local_config = text;
+            })?;
+            Ok(kept)
+        })();
+        Box::pin(async move { taken })
     }
 }
 
@@ -152,7 +214,9 @@ impl Spaces for StandIn {
     }
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
-        Box::pin(async { Ok(Vec::new()) })
+        let registered = self.registered().into_iter();
+        let repositories = registered.map(|r| r.repository).collect();
+        Box::pin(async { Ok(repositories) })
     }
 
     fn acts_on_global_config(&self) -> bool {

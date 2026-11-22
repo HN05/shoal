@@ -1034,6 +1034,15 @@ sharing it on every machine, which keeps its registration. Machines clone
 from the origin, never through the hub. A repository that is not shared stays
 on its machine, and `shoal start --machine` clones it there on demand.
 
+A shared repository's local config, `.shoal/config.toml` in its repository
+directory, is shared by the shared config's rules: an edit reaches every other
+machine within ten seconds, or at once on `shoal config set --repo`, once it
+parses; an invalid file stays on its machine, and an alert says why. A
+repository that becomes shared on a machine, cloned or registered there
+before, takes the hub's copy, and a replaced edit stays as
+`config.toml.backup`, with an alert naming it. Once a repository is no longer
+shared, each machine keeps its local config as it is.
+
 A machine can also reach the hub through a command, whose standard input and
 output its daemon uses as the link, restarting it with backoff and logging its
 standard error: `shoal daemon connect` on the hub relays them to its daemon's

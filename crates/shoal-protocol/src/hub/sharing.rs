@@ -30,6 +30,7 @@ pub struct Copy<K, V> {
 pub enum Edits {
     Files(Vec<shared_config::Edit>),
     Repositories(Vec<shared_repositories::Edit>),
+    LocalConfigs(Vec<shared_repositories::ConfigEdit>),
 }
 
 /// The hub's copies of one kind of shared item.
@@ -38,4 +39,5 @@ pub enum Edits {
 pub enum Copies {
     Files(Vec<shared_config::Copy>),
     Repositories(Vec<shared_repositories::Copy>),
+    LocalConfigs(Vec<shared_repositories::ConfigCopy>),
 }

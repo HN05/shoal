@@ -46,7 +46,7 @@ async fn a_message_no_coordinator_takes_reaches_the_user_from_its_space() {
         message: "from elsewhere".into(),
         files: Vec::new(),
     };
-    (hub.deliver_told(&crate::stand_in::StandIn, event))
+    (hub.deliver_told(&crate::stand_in::StandIn::default(), event))
         .await
         .unwrap();
     let alerts = hub.notifications.list(true, 10).await.unwrap();

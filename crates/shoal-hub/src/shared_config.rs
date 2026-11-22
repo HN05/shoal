@@ -58,7 +58,7 @@ impl Kind for SharedFiles {
     fn of(copies: Copies) -> Option<Vec<Copy<Self>>> {
         match copies {
             Copies::Files(copies) => Some(copies),
-            Copies::Repositories(_) => None,
+            Copies::Repositories(_) | Copies::LocalConfigs(_) => None,
         }
     }
 
