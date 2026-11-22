@@ -34,16 +34,18 @@ pub(super) async fn remove(
 /// acts on `machines`.
 async fn targets(ctx: &Context, named: Option<String>, machines: &Machines) -> Result<Vec<Target>> {
     let here = crate::client::repositories::list(&ctx.paths).await?;
-    let named = match named {
-        Some(named) => named,
+    let (named, local, not_here) = match named {
+        Some(named) => named_here(&here, named).await?,
         None => match chosen(ctx, &here).await? {
-            Chosen::Named(named) => named,
-            Chosen::Elsewhere(other) => return Ok(vec![Target::Elsewhere(other)]),
+            Chosen::Named(named) => named_here(&here, named).await?,
+            // Named by its ID there, and here by its origin, which the
+            // machines it names, or every one, match it by.
+            Chosen::Elsewhere(other) => {
+                let origin = other.registered.repository.origin.as_deref();
+                let local = of_origin(&here, origin).await;
+                (other.registered.id.to_string(), local, None)
+            }
         },
-    };
-    let (local, not_here) = match registered_here(&here, &named).await? {
-        Ok(local) => (Some(local), None),
-        Err(error) => (None, Some(error)),
     };
     // A repository registered here is removed here, without asking the hub.
     if let (Some(local), Machines::Found) = (local, machines) {
@@ -58,7 +60,7 @@ async fn targets(ctx: &Context, named: Option<String>, machines: &Machines) -> R
     let registered = Registered {
         here: local,
         here_origin: match local {
-            Some(local) => origin_key(local).await,
+            Some(local) => identity(local).await,
             None => None,
         },
         elsewhere: &elsewhere,
@@ -140,27 +142,40 @@ fn label(other: &RepositoryElsewhere) -> String {
     format!("{}  {}  on {}", other.name(), other.source(), other.machine)
 }
 
-/// This machine's repository `named` names, or why none is, when it names
-/// none here.
-async fn registered_here<'a>(
-    here: &'a [Repository],
-    named: &str,
-) -> Result<Result<&'a Repository, anyhow::Error>> {
-    let selector = ui::repository_selector(named.to_owned())?;
+/// `named`, with the repository among `here` it names, or why none is,
+/// when it names none here.
+async fn named_here(
+    here: &[Repository],
+    named: String,
+) -> Result<(String, Option<&Repository>, Option<anyhow::Error>)> {
+    let selector = ui::repository_selector(named.clone())?;
     match repository::select(here, selector).await {
-        Ok(local) => Ok(Ok(local)),
-        Err(error) if Reason::of(&error) == Some(Reason::NotFound) => Ok(Err(error)),
+        Ok(local) => Ok((named, Some(local), None)),
+        Err(error) if Reason::of(&error) == Some(Reason::NotFound) => {
+            Ok((named, None, Some(error)))
+        }
         Err(error) => Err(error),
     }
 }
 
-/// The key of the origin of `local`, which other machines' registrations of
-/// it share; none for a checkout without one.
-async fn origin_key(local: &Repository) -> Option<String> {
-    let url = crate::repository::remote_url_from_path(&local.path).await;
-    url.ok()
+/// The repository among `here` of `origin`, a key as [`identity`] reads
+/// it; none for no origin.
+async fn of_origin<'a>(here: &'a [Repository], origin: Option<&str>) -> Option<&'a Repository> {
+    let origin = origin?;
+    for local in here {
+        if identity(local).await.as_deref() == Some(origin) {
+            return Some(local);
+        }
+    }
+    None
+}
+
+/// The key of the origin of `local`, as the hub's reports give the other
+/// machines' registrations of it; none for a checkout without one.
+async fn identity(local: &Repository) -> Option<String> {
+    (crate::repository::identity(&local.source).await)
+        .ok()
         .flatten()
-        .map(|url| shoal_protocol::repository::url_key(&url))
 }
 
 /// Have the user confirm removing `targets`, unless `confirmed`; refused
