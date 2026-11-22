@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use crate::{
     cli::{
         context::Context,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     demos,
     model::Workspace,
@@ -21,7 +21,7 @@ pub(super) async fn named(
     let id = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(crate::client::workspaces::inspect)),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(id.clone())

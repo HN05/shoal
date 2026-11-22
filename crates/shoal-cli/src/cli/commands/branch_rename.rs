@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use crate::cli::{
     context::Context,
-    ui::{self, Fallback},
+    ui::{self, Acting, Fallback},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -12,14 +12,17 @@ pub(in crate::cli::commands) async fn rename_branch(
     workspace: Option<SpaceSelector>,
     branch: String,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
-    let renamed =
-        crate::client::workspaces::rename_branch(&ctx.paths, workspace.clone(), branch).await?;
+    let renaming = {
+        let branch = branch.clone();
+        Acting::request(move |space| {
+            crate::client::workspaces::rename_branch(space, branch.clone())
+        })
+    };
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&renaming));
+    let workspace = workspace.await?;
+    let renamed = (crate::client::workspaces::rename_branch(workspace.clone(), branch))
+        .send(&ctx.paths)
+        .await?;
     ctx.show(&renamed, |workspace| {
         outln!(
             "Renamed the branch of {} to {}",

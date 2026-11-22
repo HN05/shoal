@@ -11,7 +11,7 @@ use crate::{
         context::Context,
         output::Style,
         terminal,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     demos,
     model::Workspace,
@@ -78,7 +78,7 @@ pub(super) async fn start(
     let id = ui::select_workspace(
         ctx,
         workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
+        Fallback::CurrentDirectory(&Acting::request(shoal_workers::execution::running_command)),
     )
     .await?;
     let workspace = crate::client::workspaces::inspect(id.clone())

@@ -8,7 +8,7 @@ use crate::{
     cli::{
         context::Context,
         output::Style,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     model::Refreshed,
 };
@@ -22,13 +22,12 @@ pub(in crate::cli::commands) async fn refresh(
     if ui::current_chat(&workspace).is_some() {
         bail!("a chat has no worktree to refresh");
     }
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
-    let mut refreshed = crate::client::workspaces::refresh(&ctx.paths, workspace).await?;
+    let refreshing = Acting::request(crate::client::workspaces::refresh);
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&refreshing));
+    let workspace = workspace.await?;
+    let mut refreshed = (crate::client::workspaces::refresh(workspace))
+        .send(&ctx.paths)
+        .await?;
     if refreshed.setup {
         let Some(set_up) = setup_workspace(ctx, &refreshed.workspace, true).await? else {
             return Ok(1);

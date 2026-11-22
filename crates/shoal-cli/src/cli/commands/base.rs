@@ -6,7 +6,7 @@ use crate::{
     cli::{
         args::changes::BaseCommand,
         context::Context,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     model::{RefPart, SpaceRef, Workspace, WorkspaceRef},
     refusal::{Reason, Refusal},
@@ -23,12 +23,9 @@ pub(super) async fn run(
         Some(BaseCommand::Clear { workspace }) => (workspace, Some(Change::Clear)),
         None => (workspace, None),
     };
-    let workspace = ui::select_workspace(
-        ctx,
-        workspace,
-        Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-    )
-    .await?;
+    let setting = Acting::request(|space| crate::client::workspaces::set_base(space, None));
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory(&setting));
+    let workspace = workspace.await?;
     let workspace = match change {
         Some(change) => {
             let base = match change {
@@ -36,7 +33,9 @@ pub(super) async fn run(
                 Change::Set(None) => Some(pick(ctx, &workspace).await?),
                 Change::Clear => None,
             };
-            crate::client::workspaces::set_base(&ctx.paths, workspace.clone(), base).await?
+            (crate::client::workspaces::set_base(workspace.clone(), base))
+                .send(&ctx.paths)
+                .await?
         }
         None => find(
             &crate::client::spaces::list(&ctx.paths)
@@ -89,14 +88,9 @@ async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
         !candidates.is_empty(),
         "no other workspace in this repository"
     );
-    Ok(ui::pick_workspace(
-        ctx,
-        candidates,
-        "base",
-        &crate::cli::ui::Acting::Unconverted,
-    )
-    .await?
-    .into())
+    Ok(ui::pick_listed_workspace(ctx, candidates, "base")
+        .await?
+        .into())
 }
 
 /// The base and stacked workspaces, when the workspace has any.

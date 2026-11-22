@@ -14,7 +14,7 @@ use crate::{
         agents, client,
         context::Context,
         recent,
-        ui::{self, Fallback},
+        ui::{self, Acting, Fallback},
     },
     client::connection::CommandPaths,
     config::{Config, named_commands::Commands, repo::ConfigLayers, resolve::Stack},
@@ -197,25 +197,16 @@ async fn run_defined(
     definition: Definition,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    // The configured command runs in the picked workspace.
+    let running = Acting::request(shoal_workers::execution::running_command);
     let workspace = match definition {
         Definition::Global(named) => {
-            ui::select_workspace(
-                ctx,
-                named,
-                Fallback::CurrentDirectory(&crate::cli::ui::Acting::Unconverted),
-            )
-            .await?
+            ui::select_workspace(ctx, named, Fallback::CurrentDirectory(&running)).await?
         }
         Definition::Workspace(workspace) => SpaceSelector::Id(workspace),
-        Definition::Elsewhere(defining) => SpaceSelector::Id(
-            ui::pick_workspace(
-                ctx,
-                defining,
-                "workspace",
-                &crate::cli::ui::Acting::Unconverted,
-            )
-            .await?,
-        ),
+        Definition::Elsewhere(defining) => {
+            SpaceSelector::Id(ui::pick_workspace(ctx, defining, "workspace", &running).await?)
+        }
     };
     ui::record_workspace(ctx, &workspace).await;
     let settings =

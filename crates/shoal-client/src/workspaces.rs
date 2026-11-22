@@ -56,26 +56,14 @@ pub async fn adopt(
 }
 
 /// Rename `workspace`'s branch to `branch`.
-pub async fn rename_branch(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    branch: String,
-) -> Result<Workspace> {
-    request(daemon, WorkspaceMethod::RenameBranch { workspace, branch }).await
+pub fn rename_branch(workspace: SpaceSelector, branch: String) -> Prepared<Workspace> {
+    Prepared::new(WorkspaceMethod::RenameBranch { workspace, branch })
 }
 
 /// Build `workspace` on the workspace `base`, or on the default branch
 /// without one.
-pub async fn set_base(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    base: Option<String>,
-) -> Result<Workspace> {
-    request(
-        daemon,
-        WorkspaceMethod::SetBaseWorkspace { workspace, base },
-    )
-    .await
+pub fn set_base(workspace: SpaceSelector, base: Option<String>) -> Prepared<Workspace> {
+    Prepared::new(WorkspaceMethod::SetBaseWorkspace { workspace, base })
 }
 
 /// `workspace`, once its worktree is verified as its own, and on its branch
@@ -112,8 +100,8 @@ pub async fn fast_forward(
 }
 
 /// Bring `workspace` up to date with what it was made from.
-pub async fn refresh(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Refreshed> {
-    request(daemon, WorkspaceMethod::RefreshWorkspace { workspace }).await
+pub fn refresh(workspace: SpaceSelector) -> Prepared<Refreshed> {
+    Prepared::new(WorkspaceMethod::RefreshWorkspace { workspace })
 }
 
 /// The worktrees of registered repositories that no workspace owns.

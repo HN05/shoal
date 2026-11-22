@@ -199,6 +199,20 @@ pub async fn pick_workspace(
     Ok(SpaceId::from(pick(ctx, "Workspace> ", entries)?))
 }
 
+/// Pick one of `workspaces`, which a command chose from this machine's
+/// records, such as the workspaces another can build on, for the command's
+/// `argument`.
+pub async fn pick_listed_workspace(
+    ctx: &Context,
+    workspaces: Vec<Workspace>,
+    argument: &str,
+) -> Result<SpaceId> {
+    let entries = workspace_entries(ctx, workspaces, true).await;
+    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    require_argument(ctx, "workspace", argument)?;
+    Ok(SpaceId::from(pick(ctx, "Workspace> ", entries)?))
+}
+
 /// The picker entries for `workspaces`, judged against what the command
 /// needs, starting with their state markers when `markers` says.
 pub(super) async fn workspace_entries(
