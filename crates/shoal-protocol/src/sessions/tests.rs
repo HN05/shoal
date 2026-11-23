@@ -30,11 +30,17 @@ fn unknown_hosts_are_rejected() {
 }
 
 #[test]
-fn a_place_lists_the_session_nested_in_it_after_itself() {
+fn a_place_lists_and_types_into_the_session_nested_in_it() {
     let pane = Origin {
         nested: Some(Box::new(Origin::created(HostName::Zmx, "work".into()))),
         ..Origin::created(HostName::Herdr, "pane:1".into())
     };
     let places: Vec<_> = pane.with_nested().map(|place| place.host).collect();
     assert_eq!(places, [HostName::Herdr, HostName::Zmx]);
+    assert_eq!(pane.clone().into_typed().host, HostName::Zmx);
+    let bare = Origin {
+        nested: None,
+        ..pane
+    };
+    assert_eq!(bare.into_typed().host, HostName::Herdr);
 }

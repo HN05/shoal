@@ -79,6 +79,16 @@ impl Origin {
         self.place.as_deref().unwrap_or_default()
     }
 
+    /// Where the work in the place runs, which takes the keys Shoal types
+    /// for it: the session nested in it, which takes them whether or not
+    /// the place still shows it, else the place itself.
+    pub fn into_typed(self) -> Origin {
+        match self.nested {
+            Some(nested) => *nested,
+            None => self,
+        }
+    }
+
     /// The place itself and the session nested in it, which closing the
     /// place closes too.
     pub fn with_nested(&self) -> impl Iterator<Item = &Origin> {

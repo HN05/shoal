@@ -189,6 +189,7 @@ struct Target {
     agent: Option<crate::agent::Agent>,
     space_id: SpaceId,
     execution: ExecutionId,
+    /// Where keys for the agent go: its place, or the session nested there.
     place: Origin,
 }
 
@@ -207,7 +208,7 @@ impl Target {
             agent: agent.agent,
             space_id: space.id.clone(),
             execution: agent.execution,
-            place,
+            place: place.into_typed(),
         })
     }
 

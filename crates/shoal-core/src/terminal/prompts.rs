@@ -59,10 +59,7 @@ pub struct PromptSession {
 impl PromptSession {
     pub fn current() -> Option<Self> {
         let place = current_origin().filter(|place| place.place.is_some())?;
-        let place = match place.nested {
-            Some(nested) => *nested,
-            None => place,
-        };
+        let place = place.into_typed();
         named(place.host).types()?;
         Some(Self { place })
     }
