@@ -276,6 +276,13 @@ pub(crate) fn status_waits(status: &Value) -> bool {
     )
 }
 
+/// Whether a failed commit status reports a Forgejo Actions job that was
+/// cancelled, which Forgejo reports as failed and only its description
+/// tells apart.
+pub(crate) fn status_cancelled(status: &Value) -> bool {
+    status["description"].as_str() == Some("Has been cancelled")
+}
+
 /// The one run a list filtered by `number` holds.
 pub(crate) fn numbered_run(runs: &Value, number: RunNumber) -> Result<&Value> {
     let runs = runs["workflow_runs"]

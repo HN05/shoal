@@ -4,10 +4,12 @@ use super::*;
 
 #[test]
 fn forgejo_statuses_need_every_status_and_known_states() {
-    let combined = json!({"total_count": 3, "statuses": [
+    let combined = json!({"total_count": 5, "statuses": [
         {"context": "ci / rust", "status": "success"},
         {"context": "review", "status": "pending", "description": "Has started running"},
-        {"context": "ci / docs", "status": "pending", "description": "Waiting to run"}
+        {"context": "ci / docs", "status": "pending", "description": "Waiting to run"},
+        {"context": "ci / musl", "status": "failure", "description": "Has been cancelled"},
+        {"context": "ci / crates", "status": "failure", "description": "Failing after 2m"}
     ]});
     assert_eq!(
         statuses(&combined).unwrap(),
@@ -23,6 +25,14 @@ fn forgejo_statuses_need_every_status_and_known_states() {
             HeadCheck {
                 name: "ci / docs".into(),
                 state: CheckState::Waiting
+            },
+            HeadCheck {
+                name: "ci / musl".into(),
+                state: CheckState::Cancelled
+            },
+            HeadCheck {
+                name: "ci / crates".into(),
+                state: CheckState::Failure
             },
         ]
     );

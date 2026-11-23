@@ -181,6 +181,7 @@ fn statuses(combined: &Value) -> Result<Vec<HeadCheck>> {
                 Some("pending") if actions::status_waits(status) => CheckState::Waiting,
                 Some("pending") => CheckState::Pending,
                 Some("success") => CheckState::Success,
+                Some("failure") if actions::status_cancelled(status) => CheckState::Cancelled,
                 Some("failure") => CheckState::Failure,
                 Some("warning") => CheckState::Warning,
                 Some("skipped") => CheckState::Skipped,
