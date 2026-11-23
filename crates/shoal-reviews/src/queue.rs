@@ -68,29 +68,54 @@ impl Reviews {
         }
     }
 
+    /// Cancel, for a command run in the workspace `selector` names, its
+    /// review as [`Self::cancel`] picks it, else, with nothing to cancel
+    /// there, the only pending review the space `by`, or the user without
+    /// one, writes.
+    pub async fn cancel_here(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        by: Option<SpaceId>,
+    ) -> Result<Review> {
+        let writer = Writer::of(by.as_ref());
+        let id = match self.to_cancel(daemon, selector, &writer).await? {
+            Some(id) => id,
+            None => {
+                let only = self.only_pending(&writer).await?;
+                only.context("nothing here to cancel, nor is any one review of yours pending")?
+            }
+        };
+        self.cancel(daemon, None, Some(id), by).await
+    }
+
     /// The review a cancel without an ID ends, of the workspace `selector`
-    /// names: `writer`'s pending one, else its queued or running one, else,
-    /// with neither, `writer`'s only pending review of any workspace.
+    /// names: `writer`'s pending one, else its queued or running one.
     async fn cancelled_of(
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
         writer: &Writer,
     ) -> Result<ReviewId> {
+        let found = self.to_cancel(daemon, selector, writer).await?;
+        found.with_context(|| {
+            format!("{selector} has no queued or running review, nor one of yours pending")
+        })
+    }
+
+    /// `writer`'s pending review of the workspace `selector` names, else
+    /// its queued or running one.
+    async fn to_cancel(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        writer: &Writer,
+    ) -> Result<Option<ReviewId>> {
         if let Some(id) = self.pending_of(daemon, selector, writer).await? {
-            return Ok(id);
+            return Ok(Some(id));
         }
         let workspace = daemon.workspace(selector).await?;
-        if let Some(id) = self.active(&workspace.id).await? {
-            return Ok(id);
-        }
-        let only = self.only_pending(writer).await?;
-        only.with_context(|| {
-            format!(
-                "{} has no queued or running review, nor is any one review of yours pending",
-                workspace.name
-            )
-        })
+        self.active(&workspace.id).await
     }
 
     /// Cancel the run of Shoal's review `id`, queued or running, for a

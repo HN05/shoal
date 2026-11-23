@@ -349,6 +349,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     let cancel = |review: &Review| ReviewMethod::CancelReview {
         workspace: None,
         id: Some(review.id),
+        here: false,
     };
     // The parent's agent reaches its own and its child's reviews.
     for review in [&parent_review, &child_review] {

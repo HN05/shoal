@@ -36,13 +36,19 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         summary: Option<String>,
     },
-    /// Cancel review `id`, else the workspace's queued or running one; a
-    /// pending review goes with its threads.
+    /// Cancel review `id`, else the caller's pending review of the
+    /// workspace or its queued or running one; a pending review goes with
+    /// its threads.
     CancelReview {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<ReviewId>,
+        /// Whether the workspace is the one the command runs in, rather than
+        /// one it names: with nothing to cancel there, the caller's only
+        /// pending review goes.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        here: bool,
     },
     /// Reviews of the workspaces, newest first: of one workspace, of a
     /// repository's, or of all, in as many frames as they need.

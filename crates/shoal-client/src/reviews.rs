@@ -51,9 +51,25 @@ pub fn submit(
     })
 }
 
-/// Cancel the review `id`, or `workspace`'s queued or running one.
+/// Cancel the review `id`, or the caller's pending review of `workspace`
+/// or its queued or running one.
 pub fn cancel(workspace: Option<SpaceSelector>, id: Option<ReviewId>) -> PreparedReview<Review> {
-    PreparedReview::new(ReviewMethod::CancelReview { workspace, id })
+    PreparedReview::new(ReviewMethod::CancelReview {
+        workspace,
+        id,
+        here: false,
+    })
+}
+
+/// Cancel as [`cancel`] does `workspace`'s review, the one the command
+/// runs in, else, with nothing to cancel there, the caller's only pending
+/// review.
+pub fn cancel_here(workspace: SpaceSelector) -> PreparedReview<Review> {
+    PreparedReview::new(ReviewMethod::CancelReview {
+        workspace: Some(workspace),
+        id: None,
+        here: true,
+    })
 }
 
 /// The reviews of `workspace` or `repository`, or every review, newest first.

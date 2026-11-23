@@ -62,9 +62,16 @@ pub(super) async fn handle(
             pieces(submitted.await)
         }
         ReviewMethod::PendingReviews => pieces(reviews.pending_reviews(daemon, viewer).await),
-        ReviewMethod::CancelReview { workspace, id } => {
+        ReviewMethod::CancelReview {
+            workspace,
+            id,
+            here,
+        } => {
             let by = caller.map(|caller| caller.space_id.clone());
-            pieces(reviews.cancel(daemon, workspace.as_ref(), id, by).await)
+            pieces(match (workspace, id, here) {
+                (Some(workspace), None, true) => reviews.cancel_here(daemon, &workspace, by).await,
+                (workspace, id, _) => reviews.cancel(daemon, workspace.as_ref(), id, by).await,
+            })
         }
         ReviewMethod::ListReviews {
             workspace,
@@ -155,7 +162,7 @@ impl Scoped for ReviewMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             // A review named by ID is checked as its own workspace's.
-            ReviewMethod::CancelReview { workspace, id }
+            ReviewMethod::CancelReview { workspace, id, .. }
             | ReviewMethod::ShowReview { workspace, id }
             | ReviewMethod::AwaitReview { workspace, id } => {
                 if let Some(id) = id {
