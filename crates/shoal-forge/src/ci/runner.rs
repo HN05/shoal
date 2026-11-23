@@ -25,7 +25,7 @@ use shoal_forge_types::{
     backends::ForgeKind,
     capability::Capability,
     ci::runner::{JobRun, WaitingJob},
-    numbers::{RunId, RunnerId},
+    numbers::{JobId, RunId, RunnerId},
     raw::HttpMethod,
 };
 
@@ -103,6 +103,20 @@ pub(crate) trait Runners: Supports {
         _runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
         Err(capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// Report the job `job`, which the repository's runner `runner` runs,
+    /// cancelled as that runner, returning whether the forge has it
+    /// cancelled. A forge whose runner protocol Shoal does not speak
+    /// cancels none, and fails the job once its runner reports the stop.
+    async fn cancel_runner_job(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _runner: Option<&RegisteredRunner>,
+        _job: JobId,
+    ) -> Result<bool> {
+        Ok(false)
     }
 }
 
@@ -262,6 +276,21 @@ impl ForgeRepo {
         runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
         self.kind().runner_job(self, account, run, runner).await
+    }
+
+    /// Have the forge cancel the job `job`, which the repository's runner
+    /// `runner` runs, before that runner is stopped, so its report of the
+    /// stop does not fail the job, returning whether the forge has it
+    /// cancelled; the job's run goes on.
+    pub async fn cancel_runner_job(
+        &self,
+        account: &Account,
+        runner: Option<&RegisteredRunner>,
+        job: JobId,
+    ) -> Result<bool> {
+        self.kind()
+            .cancel_runner_job(self, account, runner, job)
+            .await
     }
 }
 

@@ -1,5 +1,6 @@
 //! Forgejo's runner API and `forgejo-runner`: the job search, a run's event,
-//! repository runners, and `forgejo-runner one-job` on the host backend.
+//! repository runners, `forgejo-runner one-job` on the host backend, and
+//! the runner protocol Shoal speaks as the repository's runner.
 use shoal_forge_types::{
     ForgeRepo,
     ci::runner::{JobRun, Trigger, WaitingJob},
@@ -66,7 +67,20 @@ impl Runners for Forgejo {
     ) -> Result<JobCommand> {
         job_command(repo, launch)
     }
+
+    async fn cancel_runner_job(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        runner: Option<&RegisteredRunner>,
+        job: JobId,
+    ) -> Result<bool> {
+        let runner = runner.context("Forgejo runs a job only on the repository's runner")?;
+        protocol::cancel_job(repo, account, runner, job).await
+    }
 }
+
+mod protocol;
 
 /// The program that runs one job.
 const PROGRAM: &str = "forgejo-runner";

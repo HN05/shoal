@@ -15,6 +15,16 @@ fn local_times_use_a_fixed_width_date_and_time() {
 }
 
 #[test]
+fn utc_times_are_rfc_3339() {
+    assert_eq!(
+        UnixTime::from_seconds(1_795_393_559)
+            .utc_rfc3339()
+            .as_deref(),
+        Some("2026-11-23T00:25:59Z")
+    );
+}
+
+#[test]
 fn calendar_days_count_from_the_epoch() {
     // SAFETY: libc::tm holds integers and a pointer, all valid when zeroed.
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };

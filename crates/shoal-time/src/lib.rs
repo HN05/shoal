@@ -85,6 +85,26 @@ impl UnixTime {
         }
     }
 
+    /// `YYYY-MM-DDTHH:MM:SSZ`, RFC 3339 in UTC, as protocols that read a
+    /// timestamp as text take it, or `None` when libc cannot convert it.
+    pub fn utc_rfc3339(self) -> Option<String> {
+        let time = self.0 as _;
+        // SAFETY: gmtime_r writes only into the zeroed `tm` passed to it.
+        let tm = unsafe {
+            let mut tm: libc::tm = std::mem::zeroed();
+            (!libc::gmtime_r(&time, &mut tm).is_null()).then_some(tm)
+        }?;
+        Some(format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+            tm.tm_year + 1900,
+            tm.tm_mon + 1,
+            tm.tm_mday,
+            tm.tm_hour,
+            tm.tm_min,
+            tm.tm_sec
+        ))
+    }
+
     fn local(self, with_seconds: bool) -> String {
         let Some(tm) = self.local_tm() else {
             return self.to_string();
