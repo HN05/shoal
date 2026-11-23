@@ -344,3 +344,6 @@ fn action_request(caller: &Caller, action: Action) -> ApprovalRequest {
         Some(&reason),
     )
 }
+
+#[cfg(test)]
+mod tests;

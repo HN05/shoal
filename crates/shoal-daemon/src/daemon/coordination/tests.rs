@@ -1,6 +1,7 @@
-//! The tests of coordination that drive a whole daemon: alerts, approvals,
-//! threads, changes, permissions and scope across the spaces, agents and
-//! hub they route between.
+//! The tests of coordination across subsystems, which drive a whole
+//! daemon: the worktrees changes and code references follow, chats' marked
+//! turns, holds and leases approvals decide, the removal, restore and
+//! rename of spaces, request dispatch, attached files and the hub.
 mod alerts;
 mod alerts_sending;
 mod approvals;

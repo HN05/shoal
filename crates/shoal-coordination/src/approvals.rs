@@ -17,3 +17,6 @@ pub use store::{
     by_key, by_number, list_of_space, oldest_for_user, pending_count, release_decided_by, renumber,
 };
 pub use store::{check, current, release, request_action, retire};
+
+#[cfg(test)]
+mod tests;

@@ -117,3 +117,6 @@ impl Coordination {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

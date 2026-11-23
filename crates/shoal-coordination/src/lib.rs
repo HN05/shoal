@@ -78,3 +78,6 @@ impl Coordination {
         self.store.read(move |db| tree::ancestors(db, &id)).await
     }
 }
+
+#[cfg(test)]
+mod stand_in;

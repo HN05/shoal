@@ -310,3 +310,6 @@ fn recorded_agent(space: &Space) -> Option<RecordedAgent<'_>> {
 mod actions;
 
 pub use actions::Grants;
+
+#[cfg(test)]
+mod tests;

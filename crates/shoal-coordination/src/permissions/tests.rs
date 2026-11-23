@@ -1,0 +1,415 @@
+//! Effective permissions in a tree of chats and workspaces.
+use std::sync::Arc;
+
+use shoal_ids::repository_ids::RepositoryId;
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
+
+use crate::{
+    config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
+    model::{Space, Workspace},
+    scope::Caller,
+    stand_in::Fixture,
+};
+
+/// A registered repository.
+struct Registered {
+    id: RepositoryId,
+}
+
+async fn manager() -> ((), Arc<Fixture>) {
+    ((), Arc::new(Fixture::new().await))
+}
+
+async fn register(_: &(), manager: &Fixture, name: &str) -> Registered {
+    Registered {
+        id: manager.repository(name).await,
+    }
+}
+
+async fn chat(
+    manager: &Fixture,
+    name: &str,
+    mode: &str,
+    repository: Option<&Registered>,
+    parent: Option<&SpaceId>,
+) -> Space {
+    let repository = repository.map(|repository| &repository.id);
+    manager.chat(name, mode, repository, parent).await
+}
+
+async fn workspace(
+    manager: &Fixture,
+    repository: &Registered,
+    name: &str,
+    parent: &SpaceId,
+    mode: Option<String>,
+) -> Workspace {
+    let repository = repository.id.as_str();
+    (manager.workspace_in(repository, name, Some(parent), mode.as_deref())).await
+}
+
+/// Record `assignments` as the `--permission` given to the agent of the
+/// space `id`.
+async fn give(manager: &Fixture, id: &SpaceId, assignments: &[&str]) {
+    manager.give(id, assignments);
+}
+
+#[tokio::test]
+async fn a_space_never_has_more_than_the_space_above_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker".into())).await;
+    let split = workspace(&manager, &repo, "split", &worker.id, None).await;
+    let of = |id: SpaceId| {
+        let manager = manager.clone();
+        let repository = repo.id.clone();
+        async move {
+            (manager
+                .coordination
+                .space_permissions(&**manager, &id, Some(&repository)))
+            .await
+            .unwrap()
+        }
+    };
+
+    // A top-level chat opens issues elsewhere directly; the worker below it
+    // keeps its own.
+    let chat = of(top.id.clone()).await;
+    assert_eq!(
+        chat.issue_other_repositories.value,
+        OtherRepositories::Direct
+    );
+    let below = of(worker.id.clone()).await;
+    assert_eq!(below.merge.value, Opening::Propose);
+    assert_eq!(below.merge.from, PermissionSource::Mode);
+    assert_eq!(
+        below.issue_other_repositories.value,
+        OtherRepositories::Propose
+    );
+
+    // A config change narrowing the chat reaches every space below it.
+    let config = "[modes.chat.permissions]\npush = 'propose'\n";
+    manager.set_local_config(&repo.id, config);
+    for id in [worker.id.clone(), split.id.clone()] {
+        let push = of(id).await.push;
+        assert_eq!(push.value, Pushes::Propose);
+        assert_eq!(push.from, PermissionSource::Parent);
+    }
+    // A wider mode below a narrower one is narrowed, a narrower one kept.
+    let config = "[modes.chat.permissions]\npush = 'propose'\nmerge = 'direct'\n\
+                  [modes.worker.permissions]\npush = 'deny'\nmerge = 'direct'\n";
+    manager.set_local_config(&repo.id, config);
+    let below = of(worker.id.clone()).await;
+    assert_eq!(below.push.value, Pushes::Deny);
+    assert_eq!(below.push.from, PermissionSource::Mode);
+    assert_eq!(below.merge.value, Opening::Direct);
+    let split = of(split.id.clone()).await;
+    assert_eq!(split.push.value, Pushes::Deny);
+    assert_eq!(split.push.from, PermissionSource::Parent);
+    // Without a mode of its own, the split has [permissions]'s merge.
+    assert_eq!(split.merge.value, Opening::Propose);
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_resolves_in_the_repository_of_the_action() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let other = register(&temp, &manager, "other").await;
+    let config = "[modes.orchestrate.permissions]\nmerge = 'propose'\n\
+                  [modes.chat.permissions]\nmerge = 'direct'\n";
+    manager.set_local_config(&repo.id, config);
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let child = chat(&manager, "child", "chat", Some(&repo), Some(&master.id)).await;
+    let merge = |id: SpaceId, repository: Option<RepositoryId>| {
+        let manager = manager.clone();
+        async move {
+            let permissions =
+                manager
+                    .coordination
+                    .space_permissions(&**manager, &id, repository.as_ref());
+            permissions.await.unwrap().merge
+        }
+    };
+    assert_eq!(
+        merge(master.id.clone(), Some(repo.id.clone())).await.value,
+        Opening::Propose
+    );
+    assert_eq!(
+        merge(master.id.clone(), Some(other.id.clone())).await.value,
+        Opening::Direct
+    );
+    // Without a repository, the global config applies.
+    assert_eq!(merge(master.id.clone(), None).await.value, Opening::Direct);
+    // The chat below resolves the master's mode in its own repository.
+    let below = merge(child.id.clone(), Some(repo.id.clone())).await;
+    assert_eq!(below.value, Opening::Propose);
+    assert_eq!(below.from, PermissionSource::Parent);
+}
+
+#[tokio::test]
+async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let config = "[modes.review.permissions]\npush = 'propose'\n\
+                  [modes.chat.permissions]\npush = 'deny'\n";
+    manager.set_local_config(&repo.id, config);
+    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let child = workspace(&manager, &repo, "child", &top.id, None).await;
+    let launch = |mode: &'static str| {
+        let (manager, child) = (manager.clone(), child.clone());
+        async move {
+            let mode = mode.into();
+            let permissions = manager.coordination.launch_permissions(
+                &**manager,
+                child,
+                &mode,
+                Default::default(),
+            );
+            permissions.await.unwrap().push
+        }
+    };
+    let review = launch("review").await;
+    assert_eq!(review.value, Pushes::Deny);
+    assert_eq!(review.from, PermissionSource::Parent);
+    let config = "[modes.review.permissions]\npush = 'propose'\n";
+    manager.set_local_config(&repo.id, config);
+    assert_eq!(launch("review").await.value, Pushes::Propose);
+    assert_eq!(launch("worker").await.value, Pushes::Direct);
+    // Nothing is recorded: the workspace has no mode of its own yet, so
+    // its push is the key's default rather than the review mode's.
+    let recorded = manager
+        .coordination
+        .space_permissions(&**manager, &child.id, Some(&repo.id))
+        .await
+        .unwrap();
+    assert_eq!(recorded.push.value, Pushes::Direct);
+}
+
+#[tokio::test]
+async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker".into())).await;
+    let split = workspace(&manager, &repo, "split", &worker.id, None).await;
+    give(&manager, &top.id, &["merge=propose"]).await;
+    // Wider than the worker mode's merge and the chat's above it.
+    let assignments = ["push=propose", "merge=direct"];
+    give(&manager, &worker.id, &assignments).await;
+    let of = |id: SpaceId| {
+        let manager = manager.clone();
+        let repository = repo.id.clone();
+        async move {
+            let permissions =
+                manager
+                    .coordination
+                    .space_permissions(&**manager, &id, Some(&repository));
+            permissions.await.unwrap()
+        }
+    };
+    let chat = of(top.id.clone()).await;
+    assert_eq!(chat.merge.value, Opening::Propose);
+    assert_eq!(chat.merge.from, PermissionSource::Given);
+    let below = of(worker.id.clone()).await;
+    assert_eq!(below.push.value, Pushes::Propose);
+    assert_eq!(below.push.from, PermissionSource::Given);
+    assert_eq!(below.merge.value, Opening::Direct);
+    assert_eq!(below.merge.from, PermissionSource::Given);
+    let split = of(split.id.clone()).await;
+    assert_eq!(split.push.value, Pushes::Propose);
+    assert_eq!(split.push.from, PermissionSource::Parent);
+}
+
+#[tokio::test]
+async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let worker = manager
+        .workspace_in(repo.id.as_str(), "worker", None, None)
+        .await;
+    let child = workspace(&manager, &repo, "child", &worker.id, Some("worker".into())).await;
+    let talk = chat(&manager, "talk", "chat", Some(&repo), Some(&worker.id)).await;
+    // The user gave both a merge the worker does not hold.
+    give(&manager, &child.id, &["merge=direct"]).await;
+    give(&manager, &talk.id, &["merge=direct"]).await;
+    let talk = manager.space_of(&talk.id);
+    let assigned = |assignments: &[&str]| {
+        let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
+        crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap()
+    };
+    let worker = Caller::of_space(worker.id.clone());
+    let (giver, child) = (Some(&worker), SpaceSelector::id(&child.id));
+
+    // What the space recorded comes back, with what the giver holds.
+    let recorded = assigned(&["merge=direct", "push=propose"]);
+    let registered = manager
+        .coordination
+        .ensure_agent_held(&**manager, giver, &child, &WORKER, &recorded);
+    registered.await.unwrap();
+    manager
+        .coordination
+        .ensure_agent_held(
+            &**manager,
+            giver,
+            &SpaceSelector::id(&talk.id),
+            &CHAT,
+            &recorded,
+        )
+        .await
+        .unwrap();
+    // A value the giver does not hold, recorded nowhere, is refused.
+    let wider = assigned(&["merge=direct", "api_writes=direct"]);
+    let registered = manager
+        .coordination
+        .ensure_agent_held(&**manager, giver, &child, &WORKER, &wider);
+    assert!(registered.await.is_err());
+    assert!(
+        manager
+            .coordination
+            .ensure_agent_held(
+                &**manager,
+                giver,
+                &SpaceSelector::id(&talk.id),
+                &CHAT,
+                &wider
+            )
+            .await
+            .is_err()
+    );
+    // A restart takes nothing as recorded.
+    let change = crate::config::permissions::PermissionChange {
+        set: recorded,
+        dropped: Vec::new(),
+    };
+    let restarted =
+        manager
+            .coordination
+            .ensure_change_held(&**manager, giver, &talk, &change, Some(&repo.id));
+    assert!(restarted.await.is_err());
+    // The user gives any.
+    let registered = manager
+        .coordination
+        .ensure_agent_held(&**manager, None, &child, &WORKER, &wider);
+    registered.await.unwrap();
+    manager
+        .coordination
+        .ensure_agent_held(
+            &**manager,
+            None,
+            &SpaceSelector::id(&talk.id),
+            &CHAT,
+            &wider,
+        )
+        .await
+        .unwrap();
+    let restarted =
+        manager
+            .coordination
+            .ensure_change_held(&**manager, None, &talk, &change, Some(&repo.id));
+    restarted.await.unwrap();
+}
+
+#[tokio::test]
+async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
+    let (temp, manager) = manager().await;
+    let repo = register(&temp, &manager, "repo").await;
+    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
+    let parent = workspace(&manager, &repo, "parent", &top.id, Some("worker".into())).await;
+    let child = workspace(&manager, &repo, "child", &parent.id, Some("worker".into())).await;
+    // The user gave the chat less push than the spaces below it.
+    give(&manager, &top.id, &["push=propose"]).await;
+    give(&manager, &parent.id, &["push=direct"]).await;
+    give(&manager, &child.id, &["push=propose"]).await;
+    let child = manager.space_of(&child.id);
+    let space = child;
+    let dropped = |assignment: &str| {
+        crate::config::permissions::PermissionChange::assigned(assignment).unwrap()
+    };
+    let check = |giver: Option<SpaceId>, change| {
+        let (manager, space, repository) = (manager.clone(), space.clone(), repo.id.clone());
+        async move {
+            let giver = giver.map(Caller::of_space);
+            let held = manager.coordination.ensure_change_held(
+                &**manager,
+                giver.as_ref(),
+                &space,
+                &change,
+                Some(&repository),
+            );
+            held.await
+        }
+    };
+    // Without its push, the child would push directly, as its parent does,
+    // which the chat does not hold.
+    let refused = check(Some(top.id.clone()), dropped("push=mode")).await;
+    assert!(format!("{:#}", refused.unwrap_err()).contains("push=mode would give push=direct"));
+    // A key the chat holds as much of drops, and the user drops any.
+    check(Some(top.id.clone()), dropped("merge=mode"))
+        .await
+        .unwrap();
+    check(None, dropped("push=mode")).await.unwrap();
+
+    // A queued or registered agent or a restore that leaves a recorded key
+    // out drops it.
+    let talk = chat(&manager, "talk", "chat", Some(&repo), Some(&parent.id)).await;
+    give(&manager, &talk.id, &["push=propose"]).await;
+    let talk = manager.space_of(&talk.id);
+    let none = crate::config::permissions::PermissionsConfig::default();
+    let top = Caller::of_space(top.id.clone());
+    let (giver, child) = (Some(&top), SpaceSelector::id(&space.id));
+    let registered = manager
+        .coordination
+        .ensure_agent_held(&**manager, giver, &child, &WORKER, &none);
+    assert!(registered.await.is_err());
+    assert!(
+        manager
+            .coordination
+            .ensure_agent_held(
+                &**manager,
+                giver,
+                &SpaceSelector::id(&talk.id),
+                &CHAT,
+                &none
+            )
+            .await
+            .is_err()
+    );
+    let recorded = talk.narrowing;
+    let registered = manager
+        .coordination
+        .ensure_agent_held(&**manager, giver, &child, &WORKER, &recorded);
+    registered.await.unwrap();
+    manager
+        .coordination
+        .ensure_agent_held(
+            &**manager,
+            giver,
+            &SpaceSelector::id(&talk.id),
+            &CHAT,
+            &recorded,
+        )
+        .await
+        .unwrap();
+
+    // A dropped key falls back in the mode of the agent that drops it.
+    let config = "[modes.review.permissions]\npush = 'deny'\n";
+    manager.set_local_config(&repo.id, config);
+    let quiet = workspace(&manager, &repo, "quiet", &parent.id, Some("review".into())).await;
+    give(&manager, &quiet.id, &["push=deny"]).await;
+    let quiet = SpaceSelector::id(&quiet.id);
+    let review = "review".into();
+    let registered = manager
+        .coordination
+        .ensure_agent_held(&**manager, giver, &quiet, &review, &none);
+    registered.await.unwrap();
+    let registered = manager
+        .coordination
+        .ensure_agent_held(&**manager, giver, &quiet, &WORKER, &none);
+    assert!(registered.await.is_err());
+}
+
+/// The mode the workspaces here record.
+static WORKER: crate::config::modes::ModeName = crate::config::modes::ModeName::DEFAULT;
+static CHAT: crate::config::modes::ModeName = crate::config::modes::ModeName::CHAT;

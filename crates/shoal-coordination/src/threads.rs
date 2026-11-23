@@ -168,3 +168,6 @@ fn ensure_open(thread: &Thread) -> Result<()> {
         ),
     }
 }
+
+#[cfg(test)]
+mod tests;
