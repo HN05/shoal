@@ -327,7 +327,7 @@ async fn threads_asked_after_done_retain_completion_and_pr_cleanup() {
     assert_eq!(
         manager
             .coordination
-            .waiting_threads(&*manager, &workspace.id)
+            .waiting_here(&workspace.id)
             .await
             .unwrap(),
         1

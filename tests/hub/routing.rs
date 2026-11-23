@@ -633,9 +633,14 @@ fn an_offline_machine_closes_a_finished_writer_s_comment_once_it_connects() {
     });
     hub.ok(&["done", &tree.coordinator]);
     // The hub still lists the comment waiting, but `done` closed it, so it
-    // keeps the finished writer no longer, even should the close never
-    // reach the laptop.
-    assert_ne!(reason(), "waiting_thread");
+    // neither counts nor keeps the finished writer, even should the close
+    // never reach the laptop.
+    let status = hub.ok(&["status", &tree.coordinator]);
+    assert_ne!(
+        status["cleanup_reason"]["reason"], "waiting_thread",
+        "{status}"
+    );
+    assert_eq!(status["waiting_threads"], 0, "{status}");
     reroute(laptop, None);
     wait_for("the laptop to close the comment", || {
         (outcome_on(laptop, &number) == "closed").then_some(())

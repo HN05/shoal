@@ -220,7 +220,7 @@ async fn a_space_being_removed_starts_no_wait() {
     assert_eq!(
         manager
             .coordination
-            .waiting_threads(&**manager, &tree.child.id)
+            .waiting_here(&tree.child.id)
             .await
             .unwrap(),
         0

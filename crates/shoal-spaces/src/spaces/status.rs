@@ -109,8 +109,7 @@ impl Spaces {
     /// What awaits the user about `space`.
     async fn attention(&self, daemon: &dyn Daemon, space: &SpaceDetail) -> Result<Attention> {
         let unread_notifications = self.notifications.unread_of_space(space.id()).await?;
-        let coordination = daemon.coordination();
-        let waiting_threads = coordination.waiting_threads(daemon, space.id()).await?;
+        let waiting_threads = self.waiting_threads(daemon, space.id()).await?;
         let id = space.id().to_owned();
         self.store
             .run(move |db| {

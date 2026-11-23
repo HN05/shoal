@@ -181,7 +181,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
     assert_eq!(
         manager
             .coordination
-            .waiting_threads(&*manager, &workspace.id)
+            .waiting_here(&workspace.id)
             .await
             .unwrap(),
         0

@@ -116,7 +116,7 @@ async fn an_empty_thread_reaches_its_holder_with_its_first_post() {
     assert_eq!(
         fixture
             .coordination
-            .waiting_threads(&**fixture, &tree.child.id)
+            .waiting_here(&tree.child.id)
             .await
             .unwrap(),
         0
@@ -129,7 +129,7 @@ async fn an_empty_thread_reaches_its_holder_with_its_first_post() {
     assert_eq!(
         fixture
             .coordination
-            .waiting_threads(&**fixture, &tree.child.id)
+            .waiting_here(&tree.child.id)
             .await
             .unwrap(),
         1
@@ -140,7 +140,7 @@ async fn an_empty_thread_reaches_its_holder_with_its_first_post() {
     assert_eq!(
         fixture
             .coordination
-            .waiting_threads(&**fixture, &tree.child.id)
+            .waiting_here(&tree.child.id)
             .await
             .unwrap(),
         0
@@ -426,7 +426,7 @@ async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     assert_eq!(
         fixture
             .coordination
-            .waiting_threads(&**fixture, &tree.child.id)
+            .waiting_here(&tree.child.id)
             .await
             .unwrap(),
         1

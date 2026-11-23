@@ -1,6 +1,5 @@
 //! Reading threads: listing and showing them, waiting for a reply,
-//! linking one to receive its new posts, and which threads wait, here
-//! and on other machines.
+//! linking one to receive its new posts, and which threads wait.
 use crate::{Coordination, daemon::Daemon};
 use std::time::Duration;
 
@@ -110,13 +109,6 @@ impl Coordination {
     /// would make a background pass over the worktrees.
     pub async fn open_threads(&self) -> Result<Vec<Thread>> {
         self.store.run(records::open_with_posts).await
-    }
-
-    /// How many threads the space `id` opened wait for their holder: here,
-    /// and on other machines, which keep its comments of their reviews.
-    pub async fn waiting_threads(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<usize> {
-        let here = self.waiting_here(id).await?;
-        Ok(here + daemon.waiting_elsewhere(id).await)
     }
 
     /// How many threads the space `id` opened here wait for their holder.
