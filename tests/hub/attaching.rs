@@ -23,7 +23,8 @@ use super::{
 
 /// A laptop joined to `hub` whose new workspace's agent runs in the fake
 /// zmx session `persist`, with the workspace's ID; the agent runs until the
-/// returned process is killed.
+/// returned process is killed, a SIGKILL it outlives only until its next
+/// look at its parent.
 fn laptop_agent(hub: &Base) -> (Base, String, std::process::Child) {
     let laptop = machine(false, "app");
     let laptop_id = join(&laptop, hub, "laptop");
@@ -31,7 +32,7 @@ fn laptop_agent(hub: &Base) -> (Base, String, std::process::Child) {
     install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
     install_test_script(
         bin.join("claude"),
-        "#!/bin/sh\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        "#!/bin/sh\ntrap 'exit 0' TERM\nwhile kill -0 \"$PPID\" 2>/dev/null; do sleep 1; done\n",
     );
     // Debug builds only open an existing ownership lock of the host.
     fs::write(laptop.root.path().join("zmx.shoal-ownership.lock"), "").unwrap();
