@@ -205,7 +205,8 @@ async fn open_at(
 /// `places` without repeats of a place: the same ID in the same host, its
 /// data, which tells servers of one host apart, and its instance, which tells
 /// a later place under a reused ID apart. A place keeps the agent any of its
-/// repeats records there, and a session another of them nests is that one's.
+/// repeats records there and the session one of them nests there, and a
+/// session another of them nests is that one's.
 fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
     let key = |place: &'a Origin| (place.host, place.id(), &place.data, &place.instance);
     let nested: Vec<_> = (places.iter())
@@ -222,6 +223,9 @@ fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
             .find(|kept| key(kept.place) == key(recorded.place))
         {
             Some(kept) => {
+                if kept.place.nested.is_none() && recorded.place.nested.is_some() {
+                    kept.place = recorded.place;
+                }
                 kept.agent = kept.agent.or(recorded.agent);
                 kept.execution = kept.execution.or(recorded.execution);
                 kept.stopped = kept.stopped.or(recorded.stopped);

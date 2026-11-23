@@ -362,3 +362,15 @@ fn a_terminal_its_host_does_not_serve_attaches_to_the_nested_session() {
     assert_eq!(shown_elsewhere(&pane, &viewer(Some("Rex"))), &pane);
     assert_eq!(shown_elsewhere(&pane, &viewer(None)).host, HostName::Zmx);
 }
+
+#[test]
+fn a_repeated_place_keeps_the_session_a_later_record_nests_there() {
+    let bare = Origin::created(HostName::Herdr, "w1:p1".into());
+    let nested = pane_with("work");
+    let agent = Recorded {
+        agent: Some(&"claude".into()),
+        ..unrecorded(&nested)
+    };
+    let distinct = distinct_places(&[unrecorded(&bare), agent]);
+    assert_eq!(distinct, [agent]);
+}
