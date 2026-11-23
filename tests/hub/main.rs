@@ -22,15 +22,20 @@ use std::{fs, path::Path, process::Output};
 
 use serde_json::{Value, json};
 use support::{
-    cli as command, daemon::DaemonGuard, daemon_client, printed, shoal_binary, wait::wait_for,
+    cli as command,
+    daemon::{DaemonGuard, Leftovers},
+    daemon_client, printed, shoal_binary,
+    wait::wait_for,
 };
 use tempfile::TempDir;
 
 /// A daemon in a temporary home and state directory, with its global
 /// config.
 struct Machine {
-    // Dropped first, so the daemon stops before its directory goes.
+    // Fields drop in declaration order: the daemon stops, then what it left
+    // running, before its directory goes.
     _guard: DaemonGuard,
+    _leftovers: Leftovers,
     root: TempDir,
 }
 
@@ -47,6 +52,7 @@ impl Machine {
         let guard = DaemonGuard::start(root.path(), &mut command(root.path()));
         Self {
             _guard: guard,
+            _leftovers: Leftovers::new(root.path()),
             root,
         }
     }

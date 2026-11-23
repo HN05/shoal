@@ -3,17 +3,17 @@ use anyhow::Result;
 use std::path::PathBuf;
 
 /// A process and the directory it works in.
-pub(super) struct WorkingDirectory {
-    pub(super) pid: u32,
+pub(crate) struct WorkingDirectory {
+    pub(crate) pid: u32,
     /// Its command name, as the kernel records it.
-    pub(super) name: String,
-    pub(super) path: PathBuf,
+    pub(crate) name: String,
+    pub(crate) path: PathBuf,
 }
 
 /// The working directory of each of this user's live processes other than
 /// this one; a process that exits meanwhile, or whose directory the kernel
 /// does not tell, is left out.
-pub(super) fn working_directories() -> Result<Vec<WorkingDirectory>> {
+pub(crate) fn working_directories() -> Result<Vec<WorkingDirectory>> {
     let mut found = Vec::new();
     for pid in super::identity::same_user_pids()? {
         if let Some(directory) = working_directory(pid)? {

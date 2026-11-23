@@ -383,6 +383,17 @@ fn cloning_unsupported(error: &std::io::Error) -> bool {
     })
 }
 
+/// The processes of this user, other than this one, that work in `root` or
+/// a directory below it.
+pub fn working_in(root: &Path) -> anyhow::Result<Vec<u32>> {
+    let root = fs::canonicalize(root)?;
+    Ok(crate::process::directories::working_directories()?
+        .into_iter()
+        .filter(|process| process.path.starts_with(&root))
+        .map(|process| process.pid)
+        .collect())
+}
+
 /// A shell command that runs until this test binary exits, for at most ten
 /// minutes, standing in for a long-running tool: a test killed before it
 /// stops the command leaves nothing running.

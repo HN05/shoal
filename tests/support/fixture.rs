@@ -12,7 +12,7 @@ use tempfile::TempDir;
 
 use crate::support::{
     self,
-    daemon::{CommandGroup, DaemonGuard, Detached},
+    daemon::{CommandGroup, DaemonGuard, Leftovers},
     git, repository_with,
 };
 
@@ -37,7 +37,7 @@ pub struct Base {
     sessions: Sessions,
     pub commands: CommandGroup,
     pub daemon: DaemonGuard,
-    _detached: Detached,
+    _leftovers: Leftovers,
     pub root: TempDir,
     pub repo: PathBuf,
 }
@@ -73,7 +73,7 @@ impl Base {
         let base = Self {
             sessions: Sessions::default(),
             commands: CommandGroup::new(),
-            _detached: Detached::new(root.path().join("state")),
+            _leftovers: Leftovers::new(root.path()),
             daemon,
             root,
             repo,
