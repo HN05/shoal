@@ -2506,8 +2506,9 @@ it a minute. Any local user can reach a loopback port, so each proxy answers onl
 a rate limit, an overloaded or failing upstream, an unreachable one, and a stream
 that reports one of those before any content, waiting from a second, doubling to
 half a minute, or as long as the upstream's `Retry-After`, the reset time its
-error names, or, for a rate limit, Anthropic's `anthropic-ratelimit-unified-reset`,
-asks. Once an outage has lasted five minutes, or a reset falls past
+error names, or Anthropic's `anthropic-ratelimit-unified-reset`, when its
+`anthropic-ratelimit-unified-status` of `rejected` says the usage limit refused
+the request, asks. Once an outage has lasted five minutes, or a reset falls past
 that, the agent gets the failure, and later requests get theirs at once until one
 succeeds; a failure a retry does not fix, or one after content arrived, reaches
 the agent unchanged. A Codex stream that gives up ends with a `response.failed`

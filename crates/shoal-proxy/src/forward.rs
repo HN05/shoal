@@ -299,7 +299,7 @@ async fn failed_status(
         .map(|body| body["error"].clone())
         .filter(serde_json::Value::is_object);
     let failure = failure.of_error(error.as_ref());
-    let retry_after = named_wait(failure, &parts.headers, error.as_ref(), clock);
+    let retry_after = named_wait(&parts.headers, error.as_ref(), clock);
     Attempt::Failed(Failed {
         failure,
         retry_after,
@@ -309,12 +309,11 @@ async fn failed_status(
     })
 }
 
-/// How long the upstream says it refuses requests after `failure`, by its
-/// response's `headers` and its `error`: the latest of `Retry-After`, the
-/// error's reset and, for a rate limit, Anthropic's reset header, since a
-/// short Retry-After may come with a usage limit's far reset.
+/// How long the upstream says it refuses requests, by its response's
+/// `headers` and its `error`: the latest of `Retry-After`, the error's reset
+/// and the reset of a usage limit the response says refused it, since a
+/// short Retry-After may come with that limit's far reset.
 fn named_wait(
-    failure: Failure,
     headers: &hyper::HeaderMap,
     error: Option<&serde_json::Value>,
     clock: &dyn Clock,
@@ -323,11 +322,7 @@ fn named_wait(
     [
         retry::retry_after(headers),
         error.and_then(|error| retry::error_wait(error, now)),
-        // Anthropic names when every limit resets on each response, so only
-        // a refusal waits for it.
-        (failure == Failure::RateLimited)
-            .then(|| retry::limit_reset(headers, now))
-            .flatten(),
+        retry::usage_limit_reset(headers, now),
     ]
     .into_iter()
     .flatten()
@@ -353,7 +348,7 @@ async fn opened(protocol: Protocol, response: Response<Incoming>, clock: &dyn Cl
         // wait, as an HTTP failure's do.
         Ok(Opening::Failure(failure, error, read)) => Attempt::Failed(Failed {
             failure,
-            retry_after: named_wait(failure, &parts.headers, error.as_ref(), clock),
+            retry_after: named_wait(&parts.headers, error.as_ref(), clock),
             in_stream: true,
             error,
             response: Response::from_parts(parts, full(read)),

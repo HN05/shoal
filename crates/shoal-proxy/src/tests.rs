@@ -661,22 +661,30 @@ async fn a_usage_limit_ends_the_turn_at_once_with_the_upstreams_own_error() {
     );
 }
 
+/// A Claude 429 whose headers name the usage limit's reset at `reset` and
+/// its status `status`, with `retry_after` seconds when given.
+fn claude_limit(reset: &str, status: &str, retry_after: Option<&str>) -> Response<Full<Bytes>> {
+    let mut response = reply(
+        429,
+        r#"{"type":"error","error":{"type":"rate_limit_error"}}"#,
+    );
+    let headers = response.headers_mut();
+    headers.insert("anthropic-ratelimit-unified-reset", reset.parse().unwrap());
+    headers.insert(
+        "anthropic-ratelimit-unified-status",
+        status.parse().unwrap(),
+    );
+    if let Some(retry_after) = retry_after {
+        headers.insert("retry-after", retry_after.parse().unwrap());
+    }
+    response
+}
+
 #[tokio::test]
 async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
     let reset = (clock::MANUAL_UNIX_START + Duration::from_secs(7200)).to_string();
     let limited = reset.clone();
-    let upstream = FakeUpstream::start(move |_| {
-        let mut response = reply(
-            429,
-            r#"{"type":"error","error":{"type":"rate_limit_error"}}"#,
-        );
-        response.headers_mut().insert(
-            "anthropic-ratelimit-unified-reset",
-            limited.parse().unwrap(),
-        );
-        response
-    })
-    .await;
+    let upstream = FakeUpstream::start(move |_| claude_limit(&limited, "rejected", None)).await;
     let (addr, mut events, _clock) = proxy_on(upstream.url("")).await;
     let (status, _, _) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
     assert_eq!(status.as_u16(), 429);
@@ -692,20 +700,32 @@ async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
     );
 
     // Every response names the reset, so an overload does not wait for it.
+    let overloaded = reset.clone();
     let upstream = FakeUpstream::start(move |received| {
         let mut response = match received.len() {
             1 => reply(529, "overloaded"),
             _ => reply(200, "done"),
         };
-        response
-            .headers_mut()
-            .insert("anthropic-ratelimit-unified-reset", reset.parse().unwrap());
+        response.headers_mut().insert(
+            "anthropic-ratelimit-unified-reset",
+            overloaded.parse().unwrap(),
+        );
         response
     })
     .await;
     let (addr, _) = proxy(upstream.url("")).await;
     let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
     assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
+
+    // Nor does a rate limit the usage limit did not cause: its Retry-After
+    // says how long it lasts.
+    let upstream = FakeUpstream::start(move |_| claude_limit(&reset, "allowed", Some("600"))).await;
+    let (addr, mut events, _clock) = proxy_on(upstream.url("")).await;
+    send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    assert!(matches!(
+        drain(&mut events)[..],
+        [Event::Failed { wait: Some(wait), .. }] if wait == Duration::from_secs(600)
+    ));
 }
 
 #[tokio::test]
@@ -768,9 +788,9 @@ async fn a_rate_limit_inside_a_claude_stream_waits_for_the_reset_its_headers_nam
         let mut response = sse(
             "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\"}}\n\n",
         );
-        response
-            .headers_mut()
-            .insert("anthropic-ratelimit-unified-reset", reset.parse().unwrap());
+        let headers = response.headers_mut();
+        headers.insert("anthropic-ratelimit-unified-reset", reset.parse().unwrap());
+        headers.insert("anthropic-ratelimit-unified-status", "rejected".parse().unwrap());
         response
     })
     .await;

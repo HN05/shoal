@@ -205,8 +205,14 @@ pub(crate) fn error_wait(error: &serde_json::Value, now: UnixTime) -> Option<Dur
 
 /// The wait at `now` until Anthropic's subscription usage limit resets,
 /// which its `anthropic-ratelimit-unified-reset` header gives in Unix
-/// seconds.
-pub(crate) fn limit_reset(headers: &HeaderMap, now: UnixTime) -> Option<Duration> {
+/// seconds, when that limit refused the request, as its
+/// `anthropic-ratelimit-unified-status` of `rejected` says. Every response
+/// names the reset, whether or not the limit is reached.
+pub(crate) fn usage_limit_reset(headers: &HeaderMap, now: UnixTime) -> Option<Duration> {
+    let status = headers.get("anthropic-ratelimit-unified-status")?;
+    if status.as_bytes() != b"rejected" {
+        return None;
+    }
     let reset = header_seconds(headers, "anthropic-ratelimit-unified-reset")?;
     Some(UnixTime::from_seconds(reset).duration_since(now))
 }
