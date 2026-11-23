@@ -119,14 +119,8 @@ impl Coordination {
         Ok(here + daemon.waiting_elsewhere(id).await)
     }
 
-    /// Whether a thread the space `id` opened waits for its holder, here or
-    /// on another machine, which only a space without one here asks.
-    pub async fn has_waiting_threads(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
-        Ok(self.waiting_here(id).await? > 0 || daemon.waiting_elsewhere(id).await > 0)
-    }
-
     /// How many threads the space `id` opened here wait for their holder.
-    async fn waiting_here(&self, id: &SpaceId) -> Result<usize> {
+    pub async fn waiting_here(&self, id: &SpaceId) -> Result<usize> {
         let id = id.clone();
         self.store.run(move |db| waiting_count(db, &id)).await
     }

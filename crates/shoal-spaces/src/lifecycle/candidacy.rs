@@ -25,11 +25,7 @@ impl Spaces {
         if self.has_holds(id).await? {
             return Ok(Some(Retention::Held));
         }
-        if daemon
-            .coordination()
-            .has_waiting_threads(daemon, id)
-            .await?
-        {
+        if self.waits_on_threads(daemon, id).await? {
             return Ok(Some(Retention::WaitingThread));
         }
         if daemon.coordination().has_pending_pull_proposal(id).await? {
@@ -49,6 +45,21 @@ impl Spaces {
         }
         let waits = daemon.has_queued_launch(id).await?;
         Ok(waits.then_some(Retention::QueuedAgent))
+    }
+
+    /// Whether a thread the space `id` opened waits for its holder: here, or
+    /// on another machine while its completion does not stand, since `done`
+    /// closed those there, so one whose close that machine never took, as
+    /// while it stayed offline past the hub's hold, keeps it no longer.
+    /// Other machines are asked only for a space with none here.
+    async fn waits_on_threads(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
+        if daemon.coordination().waiting_here(id).await? > 0 {
+            return Ok(true);
+        }
+        if self.completion(id).await?.is_some() {
+            return Ok(false);
+        }
+        Ok(daemon.waiting_elsewhere(id).await > 0)
     }
 
     /// Assignment state whose own cleanup path decides removal: a completed

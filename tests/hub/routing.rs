@@ -621,6 +621,10 @@ fn an_offline_machine_closes_a_finished_writer_s_comment_once_it_connects() {
     let (hub, laptop) = (&tree.hub, &tree.laptop);
     working(laptop, &tree.child);
     let number = submitted_comment(&tree);
+    let reason = || hub.ok(&["status", &tree.coordinator])["cleanup_reason"]["reason"].clone();
+    wait_for("the hub to list the waiting comment", || {
+        (reason() == "waiting_thread").then_some(())
+    });
     reroute(laptop, Some("false"));
     wait_for("the hub to see the laptop go", || {
         let members = hub.ok(&["hub", "ls"])["members"].clone();
@@ -628,6 +632,10 @@ fn an_offline_machine_closes_a_finished_writer_s_comment_once_it_connects() {
         (laptop?["connected"] == false).then_some(())
     });
     hub.ok(&["done", &tree.coordinator]);
+    // The hub still lists the comment waiting, but `done` closed it, so it
+    // keeps the finished writer no longer, even should the close never
+    // reach the laptop.
+    assert_ne!(reason(), "waiting_thread");
     reroute(laptop, None);
     wait_for("the laptop to close the comment", || {
         (outcome_on(laptop, &number) == "closed").then_some(())
