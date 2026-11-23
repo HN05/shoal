@@ -29,6 +29,9 @@ pub(super) fn acting(command: &SessionsCommand) -> Option<Acting> {
                 | TriggerCommand::Pause { .. }
                 | TriggerCommand::Resume { .. }
                 | TriggerCommand::Run { .. },
-        } => return None,
+        }
+        // A pause acts on a machine, not a space.
+        | SessionsCommand::Pause { .. }
+        | SessionsCommand::Unpause { .. } => return None,
     })
 }

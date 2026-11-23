@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::sessions::SessionsCommand,
-    commands::{demo, queue, restart, restore, resume, sessions, triggers},
+    commands::{demo, pause, queue, restart, restore, resume, sessions, triggers},
     context::Context,
 };
 use crate::config::permissions::PermissionChange;
@@ -116,6 +116,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             print,
         } => queue::run(&ctx, command, repository, print).await,
         SessionsCommand::Trigger { command } => triggers::run(&ctx, command).await,
+        SessionsCommand::Pause { machine } => pause::pause(&ctx, machine).await,
+        SessionsCommand::Unpause { machine } => pause::unpause(&ctx, machine).await,
     }
 }
 

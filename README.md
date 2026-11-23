@@ -171,6 +171,8 @@ shoal repo                    # Interactive repository menu
 shoal inbox                   # Threads, approvals, agents needing input, failures, ready work, demos; --print to list
 shoal list                    # Workspaces, chats and queued agents; --print to list
 shoal queue                   # Agents waiting for a heavy slot under the agent limits; start or cancel one
+shoal pause                   # Stop all work on this machine, send it to others of the hub, admit nothing new
+shoal unpause                 # Admit work again and restore what stayed
 shoal trigger ls              # Triggers of this repository and the global config: next firing, last run
 shoal trigger run triage      # Fire the trigger triage now; pause and resume stop and restart it
 shoal list --chats            # Running chats

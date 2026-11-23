@@ -378,7 +378,18 @@ carries on. While the
 user is there, `finish` and `on` keep the machine awake while agents
 work, and `off` and `handover` hold nothing. A machine that admits nothing
 new says so in its capacity, which placement skips. The daemon reads the
-lid and idle state every few seconds only under `finish` and `handover`. Space numbers form
+lid and idle state every few seconds only under `finish` and `handover`.
+`shoal pause` frees a machine on demand, whatever its `keep_awake`, and
+on the hub's own machine too: the store keeps the pause until `shoal
+unpause`, so it holds through restarts, the queue admits nothing new and
+the capacity says so, every agent stops as for a shutdown, the spaces with
+something to do hand over as a walk-away's do, and the CI jobs end to
+rerun, the reviews requeue as for a sleep and the demos stop. The hub's
+own machine, whose daemon keeps running, builds each package then and keeps
+it as the hub, placing the space among the other machines; unpausing
+retires the copies that went there too. Only the user pauses, since a
+pause acts on every space of a machine; `--machine` reaches another
+through the hub. Space numbers form
 one sequence across the hub's machines, which the hub holds: it answers
 each report with a few spares it keeps for that machine, which numbers a
 new space from them without waiting for the hub, and once none is left, as
@@ -577,7 +588,9 @@ start its agent would make, which places a takeover, replacing it
 only once the new one arrived whole, until the space ends on its machine or
 the machine is revoked, and refuses new ones while its disk is below the
 overload warning threshold; the hub's own machine sends none, having
-nowhere else to keep them. These times are fixed, not settings. A machine also tells the hub which agent
+nowhere else to keep them, but keeps one as it hands a space over once
+paused, and counts as connected, so no other machine takes its spaces
+over from them. These times are fixed, not settings. A machine also tells the hub which agent
 tools it has installed, when its link opens and as its config changes them,
 which the hub keeps for its open link alone, since only a connected machine
 starts work. Placement is a policy in `shoal-schedule`, beside the queue's
@@ -588,7 +601,7 @@ where it did. Each machine reports its capacity with its spaces: its
 repositories by origin, its `max_heavy_agents`, the heavy agents its
 admission would start now, the memory new work may use, its waiting heavy
 agents and whether its user walked away from it while its `keep_awake` admits
-nothing new then, which every policy's machine skips, measured at most every 15 seconds and sent when it changes enough to
+nothing new then or paused it, which every policy's machine skips, measured at most every 15 seconds and sent when it changes enough to
 place by; the hub places from the latest report, not a live query, and keeps
 it in memory alone. `balanced` sends lasting work to `always_on` machines
 with room and otherwise keeps it on the caller's machine, beside its parent

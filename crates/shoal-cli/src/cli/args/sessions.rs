@@ -176,6 +176,28 @@ pub enum SessionsCommand {
         )]
         cancel: bool,
     },
+    /// Stop all work on this machine and send it to other machines, admitting nothing new.
+    ///
+    /// The pause lasts through daemon restarts until shoal unpause. Every agent stops as shoal
+    /// stop stops it, saving its session, and the spaces with something to do, an agent working
+    /// or waiting to be restored, go to other connected machines of the hub, a chat in a
+    /// workspace's worktree with that workspace; the CI jobs this machine runs end to run again
+    /// elsewhere, reviews wait in the queue, and demos stop. An alert names where each space went,
+    /// or why it stays.
+    Pause {
+        /// Pause this joined machine instead, by its name or the ID shoal hub ls shows.
+        #[arg(long, value_name = "MACHINE")]
+        machine: Option<String>,
+    },
+    /// Admit work on this machine again after shoal pause.
+    ///
+    /// The agent queue restores the agents the pause stopped here, and the machine retires its
+    /// copies of the spaces that went to other machines.
+    Unpause {
+        /// Unpause this joined machine instead, by its name or the ID shoal hub ls shows.
+        #[arg(long, value_name = "MACHINE")]
+        machine: Option<String>,
+    },
     /// List the agent queue, or start or cancel an entry.
     ///
     /// The queue holds the agent launches and restores of every repository

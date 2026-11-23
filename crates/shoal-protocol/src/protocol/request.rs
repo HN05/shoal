@@ -273,6 +273,7 @@ from_domains!(
     Trigger(TriggerMethod),
     Hub(HubMethod),
     App(AppMethod),
+    Machine(MachineMethod),
 );
 
 /// How long a request keeps its connection.

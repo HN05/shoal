@@ -56,6 +56,25 @@ fn status_names_why_the_link_to_the_hub_is_down() {
 }
 
 #[test]
+fn status_says_since_when_the_machine_is_paused() {
+    let since = crate::time::UnixTime::from_seconds(1_800_000_000);
+    let status = crate::protocol::DaemonStatus {
+        pid: 42,
+        version: "1.0.0".into(),
+        uptime_secs: 1,
+        managed: true,
+        unread_notifications: 0,
+        access_stalls: Vec::new(),
+        cleanup_error: None,
+        hub: None,
+        paused: Some(since),
+    };
+    let message = status_message(&status);
+    let line = message.lines().nth(1).unwrap_or_default();
+    assert!(line.contains(&since.local_minutes()), "{message}");
+}
+
+#[test]
 fn an_exit_points_to_restoring_only_the_spaces_it_stopped() {
     let left = Left::Spaces(vec![2.into(), 5.into()]);
     let restore = left.restore().unwrap_or_default();

@@ -51,6 +51,7 @@ pub(crate) mod menu;
 mod merge;
 mod merge_warning;
 pub(crate) mod operations;
+mod pause;
 mod preparation;
 
 mod permissions;

@@ -755,6 +755,40 @@ inhibitor ends with the daemon. When it cannot start or ends on its own, such as
 when polkit refuses the lock, the daemon records a `keep_awake_failed`
 alert and tries again only once agents have no work or the config reloads.
 
+### Pausing a machine
+
+```sh
+shoal pause                    # Stop all work here, send it elsewhere, admit nothing new
+shoal unpause                  # Admit work again and restore what stayed
+shoal pause --machine desktop  # Another machine of the hub, by name or ID
+```
+
+`shoal pause` frees a machine for its user, such as a gaming PC, at once.
+The pause lasts through daemon restarts and reboots until `shoal unpause`.
+Meanwhile the [agent queue](#agent-queue) admits nothing new, no agent,
+restore, CI job or review, and the hub's [placement](#hub) skips the
+machine. Every agent stops as `shoal stop` stops it, saving its session,
+and on a machine of a hub, the hub's own included, the spaces with
+something to do, an agent working on a turn or waiting in the queue to be
+restored, with the workspace whose worktree such a chat runs in, go to
+other connected machines as a [shutdown's hand-over](#hub) sends them, a
+chat in a workspace's worktree going with that workspace. The CI jobs the
+machine runs end and run again elsewhere, as a sleep ends them, its running
+reviews wait in the queue again, and its demos stop. A `handed_over` alert
+names where each space went, or why it stayed: the machine is in no hub, no
+other connected machine can take it, or its package did not reach the hub
+in time. A space that stays is stopped with its session saved. The hub's
+own machine keeps routing requests, syncing default branches and following
+the forge while paused.
+
+`shoal unpause` admits work again: the queue restores the agents the pause
+stopped here, and the machine retires its copies of the spaces that went,
+as after any takeover. `shoal status` outside a space says since when the
+machine is paused, and `shoal hub ls` names each paused machine with since
+when. `--machine` on either command pauses or unpauses another machine of
+the hub through it. Only the user's own terminal pauses or unpauses a
+machine, since that acts on every space there.
+
 ### Sleep
 
 An agent Shoal stopped on its own and brings back on its own is asleep: it
@@ -1229,8 +1263,8 @@ machine cannot remove raises a `space_conflict` alert naming the error and
 A machine joined to a hub hands its spaces over as it shuts down, whether
 it is `always_on` or `intermittent`, and under
 [`keep_awake = "handover"`](#keeping-the-machine-awake) those with something
-to do once its user walks away; the hub's own machine and a machine in no
-hub keep theirs. Once the stop before the shutdown saved its agents, it
+to do once its user walks away or [pauses it](#pausing-a-machine); a machine
+in no hub keeps its spaces, and so does the hub's own until it is paused. Once the stop before the shutdown saved its agents, it
 sends the hub the final package of every workspace whose worktree is ready,
 but one a CI job runs in, and every chat, all at once, until a second
 before logind's `InhibitDelayMaxSec` ends, or for a signal for 15 seconds,
@@ -1384,11 +1418,12 @@ machine last reported with its spaces: the origins of its repositories, its
 `max_heavy_agents`, the heavy agents its admission would start now, the
 memory new work may use, the heavy agents waiting in its queue and whether
 its user walked away while its [`keep_awake`](#keeping-the-machine-awake)
-admits nothing new then, which `hub ls --json` shows as `capacity`. A start that finds the machine full
+admits nothing new then, or [paused it](#pausing-a-machine), which
+`hub ls --json` shows as `capacity`. A start that finds the machine full
 meanwhile waits in its queue there; placement never moves a space once it
 is created. `shoal start` names the machine with the policy's reason, and
 each connected machine it skipped for lacking the repository or the agent
-tool or for a user who walked away, which `--json` gives as `placement` in a chat's start and as a last
+tool or for a user who walked away or paused it, which `--json` gives as `placement` in a chat's start and as a last
 document after a workspace's; a hub that cannot be asked leaves the start on
 your machine, as does a machine the start never reached, such as one that went
 offline since its last report, with a warning. Under `placement = "external"`, an

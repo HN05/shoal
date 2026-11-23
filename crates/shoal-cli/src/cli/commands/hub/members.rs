@@ -57,6 +57,7 @@ fn member_rows(overview: &Overview, palette: Palette) -> Vec<String> {
                         .unwrap_or_default(),
                     None,
                 ),
+                (paused(member, now), Some(Style::Warning)),
                 (member.id.to_string(), Some(Style::Muted)),
             ]
         })
@@ -72,6 +73,15 @@ fn state(member: &Member, now: UnixTime) -> (String, Style) {
         (false, false, Some(seen)) => (format!("seen {}", seen.local_ago(now)), Style::Warning),
         (false, false, None) => ("never connected".into(), Style::Warning),
     }
+}
+
+/// Since when `member`'s user paused it, as of `now`, as its last report
+/// says; empty while it is not paused.
+fn paused(member: &Member, now: UnixTime) -> String {
+    let since = (member.capacity.as_ref()).and_then(|capacity| capacity.paused);
+    since
+        .map(|since| format!("paused {}", since.local_ago(now)))
+        .unwrap_or_default()
 }
 
 /// Revoke a member's credential, naming the settings whose values it
@@ -137,3 +147,6 @@ pub(in crate::cli::commands) fn role_line(role: &HubRole) -> String {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

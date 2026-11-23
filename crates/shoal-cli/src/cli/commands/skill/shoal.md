@@ -1031,6 +1031,15 @@ wait and run on the next daemon, or fail for a stop; while it restarts, every ag
 commands fail. `shoal config reload` applies the config on disk without
 stopping anything; an invalid file leaves the previous settings in place.
 
+`shoal pause` stops all work on the machine, or with `--machine` another of
+the hub, until `shoal unpause`, even across restarts: its queue admits
+nothing new and the hub places nothing there, every agent stops with its
+session saved, the spaces with something to do continue on other machines
+of the hub, its CI jobs run again elsewhere, its reviews wait and its demos
+stop, and an alert names where each space went. `shoal unpause` admits work
+again and restores the agents that stayed. Only the user's own terminal
+pauses or unpauses a machine.
+
 ## Skill
 
 `shoal skill` prints this skill. `shoal skill install` installs it into every

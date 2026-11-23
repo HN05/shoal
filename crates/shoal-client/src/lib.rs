@@ -31,6 +31,7 @@ pub mod log;
 pub mod merging;
 pub mod operations;
 pub mod output;
+pub mod pause;
 pub mod permissions;
 pub mod places;
 pub mod preparation;

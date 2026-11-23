@@ -24,9 +24,9 @@ pub(in crate::cli::commands) async fn status(ctx: &Context) -> Result<i32> {
         .as_ref()
         .map(status_message)
         .unwrap_or_else(|| "Daemon is not running".into());
-    let healthy = status
-        .as_ref()
-        .is_some_and(|s| s.access_stalls.is_empty() && s.cleanup_error.is_none());
+    let healthy = status.as_ref().is_some_and(|s| {
+        s.access_stalls.is_empty() && s.cleanup_error.is_none() && s.paused.is_none()
+    });
     ctx.emit_styled(
         if healthy {
             Style::Success
@@ -43,8 +43,9 @@ pub(in crate::cli::commands) async fn status(ctx: &Context) -> Result<i32> {
     Ok(if running { 0 } else { 1 })
 }
 
-/// The running daemon, each directory whose file access stalls, and why
-/// automatic cleanup fails other than in a workspace.
+/// The running daemon, since when the machine is paused, each directory
+/// whose file access stalls, and why automatic cleanup fails other than in
+/// a workspace.
 fn status_message(status: &crate::protocol::DaemonStatus) -> String {
     let mut message = format!(
         "Daemon running (PID {}, version {}{})",
@@ -55,6 +56,12 @@ fn status_message(status: &crate::protocol::DaemonStatus) -> String {
             n => format!(", {n} new notifications"),
         }
     );
+    if let Some(since) = status.paused {
+        let since = since.local_minutes();
+        message.push_str(&format!(
+            "\nPaused since {since}: this machine admits no new work until shoal unpause"
+        ));
+    }
     let now = crate::time::UnixTime::now();
     for stall in &status.access_stalls {
         let since = stall.since.local_ago(now);
