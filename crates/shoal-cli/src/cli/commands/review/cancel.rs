@@ -35,24 +35,37 @@ pub(super) async fn cancel(
     Ok(0)
 }
 
-/// What a cancellation without an ID names: a workspace, whose queued or
-/// running review the daemon finds, or the queued or running review of a
-/// chat's linked PRs.
+/// What a cancellation without an ID names: a workspace, whose pending,
+/// queued or running review the daemon finds, or the queued or running
+/// review of a chat's linked PRs, else the caller's only pending review.
 async fn cancelled(
     ctx: &Context,
     space: Option<SpaceSelector>,
 ) -> Result<(Option<SpaceSelector>, Option<ReviewId>)> {
     Ok(match super::select(ctx, space).await? {
-        super::Space::Chat(chat) => (None, Some(active_review(ctx, &chat).await?)),
+        super::Space::Chat(chat) => (None, Some(chat_cancelled(ctx, &chat).await?)),
         super::Space::Workspace(workspace) => (Some(workspace), None),
     })
 }
 
+/// The review a cancellation in or of `chat` ends: the queued or running
+/// review of its linked PRs, else the caller's only pending review.
+async fn chat_cancelled(ctx: &Context, chat: &Chat) -> Result<ReviewId> {
+    if let Some(id) = active_review(ctx, chat).await? {
+        return Ok(id);
+    }
+    let pending = super::writing::only_pending(ctx).await?;
+    pending.with_context(|| {
+        format!(
+            "no review of {}'s PRs is queued or running, nor is any one review of yours pending",
+            chat.name
+        )
+    })
+}
+
 /// The ID of the queued or running review of the chat's linked PRs.
-async fn active_review(ctx: &Context, chat: &Chat) -> Result<ReviewId> {
+async fn active_review(ctx: &Context, chat: &Chat) -> Result<Option<ReviewId>> {
     let reviews = super::chat_reviews(ctx, chat).await?;
-    let active = (reviews.into_iter())
-        .find(|review| review.state.is_active())
-        .with_context(|| format!("no review of {}'s PRs is queued or running", chat.name))?;
-    Ok(active.id)
+    let active = (reviews.into_iter()).find(|review| review.state.is_active());
+    Ok(active.map(|review| review.id))
 }
