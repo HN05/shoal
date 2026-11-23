@@ -230,3 +230,50 @@ fn a_move_trusts_the_new_path_only_where_the_old_one_was_trusted() {
     // Codex trusted nothing there, so its config stays absent.
     assert!(!home.join(".codex/config.toml").exists());
 }
+
+#[test]
+fn a_launch_trusts_each_added_directory_its_repository_does_not_cover() {
+    let root = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(root.path()).unwrap();
+    let (checkout, workspaces, elsewhere) = (
+        root.join("checkout"),
+        root.join("shoal/repo"),
+        root.join("tmp"),
+    );
+    let repository: Repository = serde_json::from_value(json!({
+        "id": "r", "path": checkout, "source": checkout, "last_used": 0,
+        "workspaces_dir": workspaces,
+    }))
+    .unwrap();
+    let chat_tmp = workspaces.join(".tmp/chat");
+    let placed = root.join("placed");
+    let added = [elsewhere.clone(), chat_tmp, workspaces.clone()];
+
+    // The workspaces directory covers the worktrees and temporary
+    // directories in it; an added directory elsewhere gets its own entry.
+    let worktree = workspaces.join("fix");
+    assert_eq!(
+        CLAUDE_CODE.launch_paths(Some(&repository), &worktree, &added),
+        [checkout.clone(), workspaces.clone(), elsewhere.clone()]
+    );
+    assert_eq!(
+        CLAUDE_CODE.launch_paths(Some(&repository), &placed, &added),
+        [
+            checkout.clone(),
+            workspaces.clone(),
+            placed.clone(),
+            elsewhere.clone()
+        ]
+    );
+    // Without a repository the directory covers what lies below it.
+    let below = root.join("chats/.tmp/chat");
+    assert_eq!(
+        CLAUDE_CODE.launch_paths(None, &root.join("chats"), &[below, elsewhere.clone()]),
+        [root.join("chats"), elsewhere.clone()]
+    );
+    // Codex never asks about the directories a launch adds.
+    assert_eq!(
+        CODEX.launch_paths(Some(&repository), &placed, &added),
+        [checkout, workspaces, placed]
+    );
+}

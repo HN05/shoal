@@ -292,7 +292,9 @@ async fn trust_for(paths: &CommandPaths, workspace: &Workspace, agents: Vec<Agen
     for name in &agents {
         if let Some(trust) = agent_integration(&settings, name).trust_file() {
             let profile = &settings.launch(name).environment;
-            trust::tracked(trust, paths, workspace, profile).await;
+            let home = AgentHome::Workspace(workspace);
+            let added = crate::homes::dirs(paths, home, &settings, name).await;
+            trust::tracked(trust, paths, workspace, profile, &added).await;
         }
     }
 }

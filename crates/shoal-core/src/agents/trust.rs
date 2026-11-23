@@ -26,6 +26,9 @@ pub struct TrustFile {
     config: fn(&AgentEnvironment) -> Result<std::path::PathBuf>,
     add: fn(&std::path::Path, &std::path::Path) -> Result<bool>,
     remove: fn(&std::path::Path, &[std::path::PathBuf]) -> Result<bool>,
+    /// Whether the tool asks whether to trust each other working directory
+    /// a launch gives it.
+    asks_about_added_dirs: bool,
 }
 
 pub static CLAUDE_CODE: TrustFile = TrustFile {
@@ -33,6 +36,7 @@ pub static CLAUDE_CODE: TrustFile = TrustFile {
     config: claude_config,
     add: trust_claude_workspace,
     remove: remove_claude_trust,
+    asks_about_added_dirs: true,
 };
 
 pub static CODEX: TrustFile = TrustFile {
@@ -40,12 +44,31 @@ pub static CODEX: TrustFile = TrustFile {
     config: codex_config,
     add: trust_codex_workspace,
     remove: remove_codex_trust,
+    asks_about_added_dirs: false,
 };
 
 impl TrustFile {
     /// The tool's name in warnings.
     pub fn tool(&self) -> &'static str {
         self.tool
+    }
+
+    /// The directories a launch in `directory` of `repository` trusts for
+    /// the tool, as [`launch_trust_paths`] gives them, with `added`, the
+    /// other working directories it gives the agent, where the tool asks
+    /// about them.
+    pub fn launch_paths(
+        &self,
+        repository: Option<&Repository>,
+        directory: &Path,
+        added: &[PathBuf],
+    ) -> Vec<PathBuf> {
+        let added = if self.asks_about_added_dirs {
+            added
+        } else {
+            &[]
+        };
+        launch_trust_paths(repository, directory, added)
     }
 
     /// Trust `paths` in the config file the tool reads when it runs with
@@ -251,21 +274,36 @@ pub(super) fn codex_home(
     Ok(env::codex_home_from(variable)?.unwrap_or_else(|| home.join(".codex")))
 }
 
-/// Trust the repository's checkout and the shared workspaces directory for
-/// normal Shoal worktrees. Claude Code keys every worktree's trust by the
-/// checkout and searches parents only up to the worktree root; the directory
-/// covers versions that search every parent. An explicitly placed worktree
-/// outside it needs its own project entry.
-pub fn repository_trust_paths(
-    repository: &Repository,
-    workspace: &std::path::Path,
-) -> Vec<std::path::PathBuf> {
-    let mut paths = vec![repository.path.clone(), repository.workspaces_dir.clone()];
-    let shared = workspace.starts_with(&repository.workspaces_dir);
-    if !shared && !paths.iter().any(|path| path == workspace) {
-        paths.push(workspace.to_owned());
+/// The directories a launch in `directory` trusts: `repository`'s checkout
+/// and shared workspaces directory, then each of `directory` and `added`,
+/// the other working directories the launch gives its agent, that no path
+/// before it covers; without a repository `directory` heads them. Claude
+/// Code keys every worktree's trust by the checkout and asks about each
+/// added directory no entry covers, looking up one outside a Git repository
+/// under each parent, so the workspaces directory covers the temporary
+/// directories there. A directory elsewhere, such as an explicitly placed
+/// worktree or a configured agent directory, needs its own project entry.
+fn launch_trust_paths(
+    repository: Option<&Repository>,
+    directory: &Path,
+    added: &[PathBuf],
+) -> Vec<PathBuf> {
+    let mut paths = match repository {
+        Some(repository) => vec![repository.path.clone(), repository.workspaces_dir.clone()],
+        None => Vec::new(),
+    };
+    for path in std::iter::once(directory).chain(added.iter().map(PathBuf::as_path)) {
+        if !paths.iter().any(|trusted| covers(trusted, path)) {
+            paths.push(path.to_owned());
+        }
     }
     paths
+}
+
+/// Whether trusting `trusted` trusts `path`: as trust entries spell both,
+/// `path` is `trusted` or lies below it.
+fn covers(trusted: &Path, path: &Path) -> bool {
+    trust_key(path).starts_with(trust_key(trusted))
 }
 
 /// Record the workspace as trusted in Claude Code's `.claude.json` so

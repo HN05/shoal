@@ -6,10 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context as _;
 
 use crate::{
-    agents::{
-        AgentHome, HomeRecords,
-        trust::{TrustFile, repository_trust_paths},
-    },
+    agents::{AgentHome, HomeRecords, trust::TrustFile},
     client::connection::CommandPaths,
     launch::environment,
     model::{Chat, ChatHome, Repository, Space, Workspace},
@@ -23,15 +20,17 @@ enum Holder<'a> {
     Repository(&'a Repository),
 }
 
-/// Trust the workspace's repository directories for the tool of `file`
-/// running with `environment`.
-pub(super) async fn workspace(
+/// Trust the workspace's repository directories and `added`, the other
+/// working directories its agent gets, for the tool of `file` running with
+/// `environment`.
+async fn workspace(
     file: &TrustFile,
     paths: &CommandPaths,
     workspace: &Workspace,
     environment: &AgentEnvironment<'_>,
+    added: &[PathBuf],
 ) {
-    let paths = workspace_trust_paths(paths, workspace, file.tool()).await;
+    let paths = workspace_trust_paths(paths, workspace, file, added).await;
     warn(file.trust(environment, &paths));
 }
 
@@ -43,28 +42,34 @@ pub(super) async fn tracked(
     paths: &CommandPaths,
     workspace: &Workspace,
     profile: &crate::ai::Environment,
+    added: &[PathBuf],
 ) {
     let mut configured =
         environment::agent_environment(paths, &Space::from(workspace.clone())).await;
     profile.layer(&mut configured, &paths.home);
     let environment = AgentEnvironment::new(&paths.home, &configured);
     keep_config_location(file, paths, Holder::Workspace(workspace), &environment).await;
-    self::workspace(file, paths, workspace, &environment).await;
+    self::workspace(file, paths, workspace, &environment, added).await;
 }
 
-/// Trust the directories of `space`, a workspace or a chat, for a tracked
-/// agent of `file`'s tool running with `profile`, as [`tracked`] and
-/// [`chat`] trust each kind's.
+/// Trust the directories of `space`, a workspace or a chat, and `added`,
+/// the other working directories its agent gets, for a tracked agent of
+/// `file`'s tool running with `profile`, as [`tracked`] and [`chat`] trust
+/// each kind's.
 pub(super) async fn space(
     file: &TrustFile,
     paths: &CommandPaths,
     space: &HomeRecords,
     profile: &crate::ai::Environment,
+    added: &[PathBuf],
 ) {
     match (space, space.home()) {
-        (HomeRecords::Workspace(workspace), _) => tracked(file, paths, workspace, profile).await,
+        (HomeRecords::Workspace(workspace), _) => {
+            tracked(file, paths, workspace, profile, added).await;
+        }
         (HomeRecords::Chat { repository, .. }, Ok(AgentHome::Chat { chat, home, .. })) => {
-            self::chat(file, paths, (chat, repository.as_ref()), home, profile).await;
+            let chat = (chat, repository.as_ref());
+            self::chat(file, paths, chat, home, profile, added).await;
         }
         // A chat without a home runs nowhere to trust.
         (HomeRecords::Chat { .. }, _) => {}
@@ -103,48 +108,50 @@ async fn keep_config_location(
     }
 }
 
-/// Trust the directory of `chat` of `repository` at `home`, which runs with
-/// its `[env]` changed by `profile`, as workspace launches trust theirs.
-pub(super) async fn chat(
+/// Trust the directory of `chat` of `repository` at `home` and `added`,
+/// for an agent that runs with its `[env]` changed by `profile`, as
+/// workspace launches trust theirs.
+async fn chat(
     file: &TrustFile,
     paths: &CommandPaths,
     (chat, repository): (&Chat, Option<&Repository>),
     home: ChatHome<'_>,
     profile: &crate::ai::Environment,
+    added: &[PathBuf],
 ) {
     let mut configured = environment::agent_environment(paths, &Space::from(chat.clone())).await;
     profile.layer(&mut configured, &paths.home);
     let environment = AgentEnvironment::new(&paths.home, &configured);
-    directory(file, paths, &environment, repository, home.path()).await;
+    directory(file, paths, &environment, repository, (home.path(), added)).await;
 }
 
-/// Trust `directory` for the tool of `file` running with `environment`: the
-/// trust paths of `repository` for it, whose removal or move cleans the
-/// entries, or the directory alone without one, such as the `root_dir` of a
-/// chat without a repository, which stays trusted.
+/// Trust `directory` and `added`, the other working directories its agent
+/// gets, for the tool of `file` running with `environment`, as
+/// [`TrustFile::launch_paths`] gives them for `repository`, whose removal or
+/// move cleans the entries for its paths. Those outside it stay trusted,
+/// such as the `root_dir` of a chat without a repository.
 pub(super) async fn directory(
     file: &TrustFile,
     paths: &CommandPaths,
     environment: &AgentEnvironment<'_>,
     repository: Option<&Repository>,
-    directory: &Path,
+    (directory, added): (&Path, &[PathBuf]),
 ) {
     if let Some(repository) = repository {
         keep_config_location(file, paths, Holder::Repository(repository), environment).await;
     }
-    let paths = match repository {
-        Some(repository) => repository_trust_paths(repository, directory),
-        None => vec![directory.to_owned()],
-    };
+    let paths = file.launch_paths(repository, directory, added);
     warn(file.trust(environment, &paths));
 }
 
-/// The workspace's repository trust paths, or the workspace alone when its
-/// repository cannot be resolved.
+/// The trust paths of the workspace's repository and `added` for the tool
+/// of `file`, or without the repository, when it cannot be resolved, of the
+/// workspace and `added`.
 async fn workspace_trust_paths(
     paths: &CommandPaths,
     workspace: &Workspace,
-    tool: &str,
+    file: &TrustFile,
+    added: &[PathBuf],
 ) -> Vec<PathBuf> {
     match crate::client::repositories::list(paths)
         .await
@@ -154,10 +161,11 @@ async fn workspace_trust_paths(
                 .find(|repo| repo.id == *workspace.repository())
                 .context("workspace repository is missing")
         }) {
-        Ok(repo) => repository_trust_paths(&repo, &workspace.path),
+        Ok(repo) => file.launch_paths(Some(&repo), &workspace.path, added),
         Err(error) => {
+            let tool = file.tool();
             eprintln!("warning: could not resolve repository trust paths for {tool}: {error:#}");
-            vec![workspace.path.clone()]
+            file.launch_paths(None, &workspace.path, added)
         }
     }
 }

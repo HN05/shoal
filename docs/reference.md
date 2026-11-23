@@ -1685,7 +1685,10 @@ shared Shoal workspaces directory before launch, or for a chat without a reposit
 `root_dir`, whose entry stays, creating the agent's user config if needed and
 preserving other settings. Claude Code looks up a worktree's trust under
 the checkout, not under parent directories above the worktree. An explicitly placed
-workspace outside the workspaces directory gets its own trust entry.
+workspace outside the workspaces directory gets its own trust entry, and so, for
+Claude, which asks about each, does every other directory the launch passes with
+`--add-dir` that none of those covers, such as an `agent.dirs` entry; one outside
+the repository stays when the repository is removed.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). For tracked
 agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the space's `[env]` takes

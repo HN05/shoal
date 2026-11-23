@@ -2944,8 +2944,9 @@ splits there without leaving its sandbox or permission rules; chats get only
 their temporary directory, plus the local config directory when a
 chat sets up local config. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
-directory, or an explicitly placed workspace outside it, in their user config before
-launch, creating the file if needed; Happy
+directory, or an explicitly placed workspace outside it, and Claude launches each
+other working directory none of those covers, which Claude Code asks about, in their
+user config before launch, creating the file if needed; Happy
 launches and Claude and Codex app handoffs do so too. The user config is the one the agent
 reads: a tracked agent's follows its space's `[env]`, while the app runs with
 Shoal's environment. Agent guidance and templates become native

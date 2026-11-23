@@ -144,7 +144,9 @@ pub async fn hand_off(
     if let Some(trust) = app.trust {
         // The app runs with this process's environment, not the space's.
         let environment = AgentEnvironment::inherited(&paths.home);
-        super::trust::directory(trust, paths, &environment, repository, directory).await;
+        // The app opens there without other working directories.
+        let launch = (directory, &[][..]);
+        super::trust::directory(trust, paths, &environment, repository, launch).await;
     }
     run_launcher(app, directory, args).await
 }

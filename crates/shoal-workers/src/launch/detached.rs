@@ -60,7 +60,7 @@ pub(super) async fn start(
     let directories = [model_args, directories].concat();
     let (prompt, args) = session_input(app, &settings, instructions, directories, prompt, args);
     if let Some(trust) = integration.trust_file() {
-        super::trust::space(trust, caller.paths, &space, &Default::default()).await;
+        super::trust::space(trust, caller.paths, &space, &Default::default(), &added).await;
     }
     let files = session_files(caller.paths, home.id(), &name);
     let session = Session {

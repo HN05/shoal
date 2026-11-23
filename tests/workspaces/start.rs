@@ -1575,10 +1575,13 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     assert!(!first_path.exists());
     fs::remove_file(second_path.join("fail-removal")).unwrap();
     fixture.ok(&["repo", "rm", "configured", "--yes"]);
+    // `/tmp`, an `agent.dirs` entry outside the repository, stays trusted.
+    let tmp = fs::canonicalize("/tmp").unwrap();
+    let kept = serde_json::json!({tmp.to_str().unwrap(): {"hasTrustDialogAccepted": true}});
     for workspace in ["early", "first", "late"] {
         let claude = home.join(format!("claude-{workspace}/.claude.json"));
         let root: Value = serde_json::from_str(&fs::read_to_string(&claude).unwrap()).unwrap();
-        assert_eq!(root["projects"], serde_json::json!({}), "{workspace}");
+        assert_eq!(root["projects"], kept, "{workspace}");
     }
     for workspace in ["early", "first"] {
         let codex = home.join(format!("codex-{workspace}/config.toml"));
@@ -1797,7 +1800,9 @@ fn claude_launch_trusts_checkout_and_shared_repository_directory() {
     let directory = fs::canonicalize(repository["workspaces_dir"].as_str().unwrap()).unwrap();
     // Claude Code keys a worktree's trust by the repository checkout.
     let checkout = fs::canonicalize(repository["path"].as_str().unwrap()).unwrap();
-    let keys = [checkout.as_path(), directory.as_path()];
+    // `agent.dirs`, `/tmp` by default, is outside both, so it gets its own.
+    let tmp = fs::canonicalize("/tmp").unwrap();
+    let keys = [checkout.as_path(), directory.as_path(), tmp.as_path()];
     let bin = home.join("bin");
     install_test_script(bin.join("claude"), "#!/bin/sh\nexit 0\n");
     let config = home.join(".claude.json");

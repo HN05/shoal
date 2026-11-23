@@ -24,7 +24,9 @@ pub(super) async fn tracked(
     let model_args = crate::agents::model_args(&launch.settings, &launch.name, &launch.model)?;
     if let Some(trust) = integration.trust_file() {
         let profile = &launch.settings.launch(&launch.name).environment;
-        super::trust::space(trust, caller.paths, &launch.space, profile).await;
+        let home = launch.space.home()?;
+        let added = crate::homes::dirs(caller.paths, home, &launch.settings, &launch.name).await;
+        super::trust::space(trust, caller.paths, &launch.space, profile, &added).await;
     }
     let command = command(caller, &launch, model_args).await?;
     let Launch {
