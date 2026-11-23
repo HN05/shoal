@@ -40,3 +40,6 @@ fn store_name(tx: &Transaction<'_>, id: &SpaceId, name: &SpaceName) -> Result<Sp
     tx.execute("UPDATE spaces SET name=?2 WHERE id=?1", params![id, name])?;
     Ok(previous)
 }
+
+#[cfg(test)]
+mod tests;

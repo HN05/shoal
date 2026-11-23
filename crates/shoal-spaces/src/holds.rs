@@ -366,3 +366,6 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceHold> {
         placed_by: row.get(4)?,
     })
 }
+
+#[cfg(test)]
+mod tests;

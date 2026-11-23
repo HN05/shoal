@@ -205,3 +205,6 @@ impl Spaces {
         crate::events::record_retained(&self.store, space.id, cause, error).await
     }
 }
+
+#[cfg(test)]
+mod tests;

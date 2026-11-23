@@ -31,3 +31,12 @@ shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-store.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "process", "rt", "sync", "time"] }
+
+[dev-dependencies]
+libc.workspace = true
+shoal-daemon-base = { workspace = true, features = ["test-support"] }
+shoal-core = { workspace = true, features = ["test-support"] }
+shoal-ids = { workspace = true, features = ["test-support"] }
+shoal-protocol = { workspace = true, features = ["test-support"] }
+shoal-store = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true, features = ["macros", "rt", "test-util"] }

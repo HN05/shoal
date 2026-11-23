@@ -188,3 +188,6 @@ pub(super) fn step(plan: &Plan, step: &PlanStep, done: bool) -> Step {
         blockers: plan.step_blockers(step),
     }
 }
+
+#[cfg(test)]
+mod tests;

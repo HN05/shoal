@@ -66,65 +66,6 @@ async fn a_number_selects_a_workspace_or_a_chat_and_a_command_takes_its_kind() {
 }
 
 #[tokio::test]
-async fn a_stored_id_never_selects_a_space_by_name() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    manager
-        .create_workspace(&repo.id, "worker".into(), None, None, None)
-        .await
-        .unwrap();
-    assert!(
-        manager
-            .spaces
-            .space(&manager.named("worker").await)
-            .await
-            .is_ok()
-    );
-    assert!(
-        manager
-            .spaces
-            .space(&SpaceSelector::Id("worker".into()))
-            .await
-            .is_err()
-    );
-}
-
-#[tokio::test]
-async fn a_removed_workspace_keeps_no_number() {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let worker = manager
-        .create_workspace(&repo.id, "worker".into(), None, None, None)
-        .await
-        .unwrap();
-    let number = SpaceSelector::Number(worker.number);
-    (manager.spaces.remove_selected(
-        &*manager,
-        &number,
-        UnsavedWork::default(),
-        InspectionPolicy::GitOnly,
-    ))
-    .await
-    .unwrap();
-    assert!(manager.spaces.space(&number).await.is_err());
-    assert!(manager.restore_workspace(&number).await.is_err());
-    manager
-        .restore_workspace(&manager.named("worker").await)
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
 async fn a_removed_space_s_id_names_the_repository_removed_with_it() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");

@@ -111,24 +111,3 @@ async fn a_space_moves_below_its_grandparent_and_its_branch_past_its_old_base() 
         ]
     );
 }
-
-#[tokio::test]
-async fn a_child_of_a_top_level_space_moves_to_the_top_level() {
-    let (temp, manager) = manager().await;
-    let [_, middle, _] = tree(&manager, temp.path()).await;
-
-    let above = manager
-        .spaces
-        .move_up_one_level(&*manager, &middle.id, None)
-        .await
-        .unwrap();
-
-    assert_eq!(above, None);
-    let middle = manager.spaces.workspace_by_id(&middle.id).await.unwrap();
-    assert_eq!(middle.parent, None);
-    let top = manager
-        .spaces
-        .move_up_one_level(&*manager, &middle.id, None)
-        .await;
-    assert!(top.is_err(), "a top-level space has no level above it");
-}

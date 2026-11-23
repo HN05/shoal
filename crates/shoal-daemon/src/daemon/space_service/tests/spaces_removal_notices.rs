@@ -3,14 +3,11 @@ use crate::daemon::notifications::AlertKind;
 use crate::daemon::spaces::removal_notices::*;
 use crate::model::EventCause;
 use crate::model::Space;
-use crate::model::SpaceKind;
 use anyhow::Result;
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceName;
 
 use crate::daemon::{
     events::{EventItem, EventKind},
-    test_support::{manager, repository},
+    test_support::manager,
 };
 
 /// The causes of the retentions the journal records.
@@ -36,34 +33,6 @@ async fn notices(manager: &Manager) -> Vec<(AlertKind, Option<String>)> {
 }
 
 #[tokio::test]
-async fn a_retained_workspace_records_its_cleanup_as_the_cause() {
-    let (root, manager) = manager().await;
-    let checkout = repository(root.path(), "repo");
-    let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "topic".into(), None, None, None)
-        .await
-        .unwrap();
-
-    let removal: Result<bool> = Err(anyhow::anyhow!("dirty worktree"));
-    (manager
-        .spaces
-        .announce_removal(&*manager, &workspace, Cleanup::Merged, &removal))
-    .await
-    .unwrap();
-
-    assert_eq!(retentions(&manager).await, [Some(EventCause::Merged)]);
-    assert_eq!(
-        notices(&manager).await,
-        [(AlertKind::CleanupFailed, Some("topic".to_owned()))]
-    );
-}
-
-#[tokio::test]
 async fn a_retained_chat_records_its_cleanup_as_the_cause() {
     let (_root, manager) = manager().await;
     let chat = crate::daemon::test_support::chat(&manager, "notes", "chat", None, None).await;
@@ -81,22 +50,4 @@ async fn a_retained_chat_records_its_cleanup_as_the_cause() {
         notices(&manager).await,
         [(AlertKind::CleanupFailed, Some("notes".to_owned()))]
     );
-}
-
-#[test]
-fn every_removed_space_with_a_record_is_restorable() {
-    let (id, name) = (SpaceId::from("id"), SpaceName::from("topic"));
-    let space = |kind: SpaceKind| Announced {
-        kind,
-        id: &id,
-        name: &name,
-        worktree: kind.has_worktree(),
-    };
-    let restorable =
-        |kind, cleanup| (space(kind).removal_notice(cleanup)).contains("shoal restore id");
-    assert!(restorable(SpaceKind::Workspace, Cleanup::Idle));
-    assert!(restorable(SpaceKind::Workspace, Cleanup::Parent("parent")));
-    assert!(!restorable(SpaceKind::Workspace, Cleanup::DeletedWorktree));
-    assert!(restorable(SpaceKind::Chat, Cleanup::Parent("parent")));
-    assert!(restorable(SpaceKind::Chat, Cleanup::Idle));
 }

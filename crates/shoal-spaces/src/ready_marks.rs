@@ -401,3 +401,6 @@ fn marked_kind(selection: &Selection) -> Result<Option<ItemKind>> {
 fn marked_item(explicit: Option<ItemRef>) -> Option<ItemRef> {
     explicit.filter(|item| item.kind().item().is_some())
 }
+
+#[cfg(test)]
+mod tests;

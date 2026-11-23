@@ -358,3 +358,6 @@ impl Spaces {
         self.store.read(move |db| current(db, &id)).await
     }
 }
+
+#[cfg(test)]
+mod tests;

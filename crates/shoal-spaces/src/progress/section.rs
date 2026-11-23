@@ -84,3 +84,6 @@ fn in_code_block(before: &str) -> bool {
         .count();
     fences % 2 == 1
 }
+
+#[cfg(test)]
+mod tests;

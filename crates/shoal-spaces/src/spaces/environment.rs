@@ -94,3 +94,6 @@ fn exported(values: BTreeMap<String, OsString>) -> Result<BTreeMap<String, Strin
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

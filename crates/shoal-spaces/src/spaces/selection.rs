@@ -185,3 +185,6 @@ pub fn selected(db: &Connection, selector: &SpaceSelector) -> Result<Option<(Spa
         )
         .optional()?)
 }
+
+#[cfg(test)]
+mod tests;

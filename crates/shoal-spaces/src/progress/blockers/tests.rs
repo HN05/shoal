@@ -1,5 +1,5 @@
-use crate::daemon::progress::Plan;
-use crate::daemon::progress::blockers::*;
+use crate::progress::Plan;
+use crate::progress::blockers::*;
 use crate::state::BlockerKind;
 use shoal_protocol::progress::PlanStep;
 use shoal_protocol::progress::RecordedBlocker;

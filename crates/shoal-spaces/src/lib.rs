@@ -62,6 +62,9 @@ pub mod workspace;
 pub mod workspace_files;
 pub mod workspace_usage;
 
+#[cfg(test)]
+mod stand_in;
+
 /// The spaces service, which `Manager` holds.
 pub struct Spaces {
     pub store: Store,
@@ -133,4 +136,12 @@ impl Spaces {
             records,
         }
     }
+}
+
+#[cfg(test)]
+shoal_core::prepare_test_process!();
+
+#[cfg(test)]
+mod helper_tests {
+    shoal_core::helper_tests!();
 }

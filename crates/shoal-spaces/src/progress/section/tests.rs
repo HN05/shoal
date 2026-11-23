@@ -1,4 +1,4 @@
-use crate::daemon::progress::section::*;
+use crate::progress::section::*;
 use shoal_protocol::progress::Progress;
 
 use shoal_protocol::progress::Step;

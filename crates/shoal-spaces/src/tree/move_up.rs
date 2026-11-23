@@ -62,3 +62,6 @@ fn move_up(tx: &Transaction<'_>, id: &SpaceId, held: &[Removing; 2]) -> Result<O
     super::set_parent(tx, id, above)?;
     super::parent(tx, id)
 }
+
+#[cfg(test)]
+mod tests;

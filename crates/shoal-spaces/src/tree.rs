@@ -290,3 +290,6 @@ pub fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
 
 pub mod move_up;
 mod parents;
+
+#[cfg(test)]
+mod tests;

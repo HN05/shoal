@@ -1,15 +1,17 @@
 use crate::env;
+use crate::stand_in::Fixture;
 use shoal_protocol::space_names::SpaceSelector;
 
-use crate::{daemon::test_support, state::WorkspaceState};
+use crate::state::WorkspaceState;
+use shoal_core::test_support::repository;
 
 #[tokio::test]
 async fn a_workspace_environment_requires_a_ready_verified_worktree_and_carries_no_token() {
-    let (root, manager) = test_support::manager().await;
-    let repo = test_support::repository(root.path(), "repo");
+    let manager = Fixture::new().await;
+    let root = &manager.root;
+    let repo = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(repo.to_str().unwrap().into(), None, None)
+        .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

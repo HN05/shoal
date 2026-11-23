@@ -2955,6 +2955,7 @@ dependencies = [
  "anyhow",
  "fs2",
  "futures-util",
+ "libc",
  "rusqlite",
  "serde",
  "serde_json",

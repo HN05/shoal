@@ -1,5 +1,6 @@
-//! The daemon's tests of the spaces: each module tests the spaces module
-//! of the same path, flattened, through a whole daemon.
+//! The daemon's tests of the spaces that need the rest of the daemon: each
+//! module tests the spaces module of the same path, flattened, through a
+//! whole daemon. The spaces' own tests run over a stand-in in the crate.
 mod absorb;
 mod carried_commits_retention;
 mod carried_sessions;
@@ -41,9 +42,7 @@ mod lifecycle_abandoned;
 mod lifecycle_background;
 mod ownership;
 mod progress;
-mod progress_blockers;
 mod progress_publish;
-mod progress_section;
 mod quarantine;
 mod ready_marks;
 mod recovery;
@@ -53,7 +52,6 @@ mod restore_packages;
 mod restore_records;
 mod restore_takeovers;
 mod spaces_done;
-mod spaces_environment;
 mod spaces_export;
 mod spaces_export_kept;
 mod spaces_following;
