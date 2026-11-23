@@ -2221,6 +2221,46 @@ async fn a_tools_upstream_limit_holds_its_queued_agents_while_others_start() {
     assert!(started(&claude.id));
 }
 
+/// An answer through any proxy of the tool lifts its limit, not only one
+/// through the proxy that met it, which may have stopped since; another
+/// tool's answer leaves it.
+#[tokio::test]
+async fn any_agent_of_the_tool_that_gets_an_answer_lifts_its_upstream_limit() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 3);
+    let (selector, _) = limit_claude(&manager, &repo).await;
+    let claude = add(&manager, &repo, "claude").await.entry.unwrap();
+    manager
+        .store
+        .run(|db| {
+            for (id, agent) in [("codex-agent", "codex"), ("other-claude", "claude")] {
+                db.execute(
+                    "INSERT INTO executions(id,space_id,state,agent)
+                     SELECT ?1,space_id,state,?2 FROM executions WHERE id='running'",
+                    params![id, agent],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let answered = |execution: &'static str| {
+        let (manager, selector) = (manager.clone(), selector.clone());
+        async move {
+            (manager.agents)
+                .report_upstream_answered(&*manager, &selector, execution.into())
+                .await
+                .unwrap();
+            manager.agents.dispatch_queue(&*manager).await.unwrap();
+        }
+    };
+    answered("codex-agent").await;
+    assert!(!started(&claude.id));
+    answered("other-claude").await;
+    assert!(started(&claude.id));
+}
+
 /// A chat's agent, light or heavy, waits while its tool's upstream stands
 /// under a limit, as a workspace agent's does.
 #[tokio::test]

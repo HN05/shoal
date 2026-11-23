@@ -162,6 +162,7 @@ pub async fn send_relayed(paths: &CommandPaths, report: &str) -> Result<i32> {
                 | AgentMethod::ReportSubagentRequest { .. }
                 | AgentMethod::ReportUpstreamReset { .. }
                 | AgentMethod::ReportUpstreamLimit { .. }
+                | AgentMethod::ReportUpstreamAnswered { .. }
                 | AgentMethod::ReportTurnFailure {
                     execution: Some(_),
                     ..

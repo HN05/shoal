@@ -52,7 +52,7 @@ impl Agents {
     /// still holds for it.
     pub async fn forget_proxy_reports(&self, execution: &ExecutionId, ended: bool) {
         self.proxy_retries.lock().unwrap().remove(execution);
-        self.upstream_limits.lock().unwrap().remove(execution);
+        self.forget_upstream_limit(execution, "its wrapper is gone");
         if !ended {
             return;
         }

@@ -111,6 +111,12 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<crate::executions::UpstreamLimit>,
     },
+    /// The upstream answered a request of `execution`'s proxy, which its
+    /// wrapper reports so the limits other agents of its tool met lift.
+    ReportUpstreamAnswered {
+        workspace: SpaceSelector,
+        execution: ExecutionId,
+    },
     /// The agent `execution` runs read a key from its terminal at `at`, as
     /// its wrapper finds by the terminal's access time.
     ReportInput {
@@ -287,6 +293,7 @@ impl AgentMethod {
             | Self::ReportProxyRetry { .. }
             | Self::ReportUpstreamReset { .. }
             | Self::ReportUpstreamLimit { .. }
+            | Self::ReportUpstreamAnswered { .. }
             | Self::ReportInput { .. }
             | Self::ReportTyping { .. }
             | Self::ReportAttach { .. }
@@ -307,6 +314,7 @@ impl AgentMethod {
             | Self::ReportProxyRetry { workspace, .. }
             | Self::ReportUpstreamReset { workspace, .. }
             | Self::ReportUpstreamLimit { workspace, .. }
+            | Self::ReportUpstreamAnswered { workspace, .. }
             | Self::ReportInput { workspace, .. }
             | Self::ReportTyping { workspace, .. }
             | Self::AwaitAgentWake { workspace, .. } => Some(Target::Space(workspace)),

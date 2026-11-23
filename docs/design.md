@@ -2611,7 +2611,11 @@ fixed value, nothing it outranks starts until it fits, so a large start is
 not passed over for good. An AI tool whose upstream a proxied agent finds
 rate-limited or out of quota holds that tool's queued agents, which would only
 fail, while other tools' start; a limit without a named end lifts after 15
-minutes, a fixed value, so a new agent finds out whether it still stands. Dynamic is machine-wide, so a
+minutes, a fixed value, so a new agent finds out whether it still stands, and
+any limit lifts once a request through any of the tool's proxies succeeds,
+since the agent that met it may never send another. A limit lasts as long as
+the refusal names: Anthropic's usage window reset counts only when the
+response says the usage limit refused it, since every response names it. Dynamic is machine-wide, so a
 repository's `dynamic` adds no limit. A positive number fixes a repository's
 limit and `none` disables it. The machine's two limits take a number from 0
 instead, and no `none`: a machine that should run no heavy agents, such as a

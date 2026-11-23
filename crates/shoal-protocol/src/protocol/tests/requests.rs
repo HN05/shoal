@@ -140,6 +140,7 @@ const REQUESTS: &[&str] = &[
     r#"{"report_typing":{"workspace":"fix","execution":"e1"}}"#,
     r#"{"report_attach":{"space":"fix"}}"#,
     r#"{"report_upstream_limit":{"workspace":"fix","execution":"e1","limit":{"limit":"exhausted","until":1700000000}}}"#,
+    r#"{"report_upstream_answered":{"workspace":"fix","execution":"e1"}}"#,
     r#"{"await_agent_wake":{"workspace":"fix","due":true,"hooked":"e1"}}"#,
     r#""list_agents""#,
     r#"{"space_agents":{"space":"fix"}}"#,

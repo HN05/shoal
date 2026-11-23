@@ -194,6 +194,16 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        AgentMethod::ReportUpstreamAnswered {
+            workspace,
+            execution,
+        } => {
+            manager
+                .agents
+                .report_upstream_answered(&**manager, &workspace, execution)
+                .await?;
+            Body::Ok
+        }
         AgentMethod::ReportProxyRetry {
             workspace,
             execution,
@@ -275,6 +285,7 @@ impl Checked for AgentMethod {
             | Self::ReportProxyRetry { .. }
             | Self::ReportUpstreamReset { .. }
             | Self::ReportUpstreamLimit { .. }
+            | Self::ReportUpstreamAnswered { .. }
             | Self::ReportInput { .. }
             | Self::ReportTyping { .. }
             | Self::ReportAttach { .. }
@@ -321,7 +332,8 @@ impl Scoped for AgentMethod {
             AgentMethod::ReportProxyRetry { .. }
             | AgentMethod::ReportSubagentRequest { .. }
             | AgentMethod::ReportUpstreamReset { .. }
-            | AgentMethod::ReportUpstreamLimit { .. } => {
+            | AgentMethod::ReportUpstreamLimit { .. }
+            | AgentMethod::ReportUpstreamAnswered { .. } => {
                 bail!("workspace processes cannot report what a proxy learns")
             }
             // Only the agent's wrapper reads the keys of its terminal.
