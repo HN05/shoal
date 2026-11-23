@@ -4204,7 +4204,13 @@ restarts: an agent that sleeps after most turns would otherwise keep giving up
 and reacquiring slow resources. One daemon operation releases an acquirer's
 leases through each kind's release once a demo's execution's end is recorded,
 or once an agent's space has no agent execution, queued restore or restart
-left. A lease whose workspace another lifecycle or resource operation holds then, such
+left. An asleep agent's lease that keeps something running, a booted
+simulator or started containers, still costs the machine, so the cleanup
+sweep stops it once the agent has slept past `[sleep] keep_leases_minutes`,
+counted from when its restore entered the agent queue, which it leaves only as
+the agent runs again; permits cost nothing while held and stay. The agent reads
+each lease Shoal took back in a message that waits for its next turn without
+waking it. A lease whose workspace another lifecycle or resource operation holds then, such
 as the stop that ended the agent or a resource hook, waits for it to end; the
 stop then releases the leases of the agents that ended in its space or hold
 leases there, and the cleanup sweep, which also runs as the daemon starts, in

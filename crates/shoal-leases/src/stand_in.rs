@@ -21,6 +21,7 @@ use shoal_daemon_base::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::acquirers::Acquirer;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, Target};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -29,7 +30,7 @@ use crate::{
     Leases,
     callers::Caller,
     config::{Config, Effective, repo::ConfigLayers},
-    daemon::{Agents, Approvals, Records, Settings, Spaces, Unborrowable},
+    daemon::{Agents, Approvals, Records, Settings, Sleeper, Spaces, Unborrowable},
     hooks::{Hook, HookKind},
     model::{Repository, Workspace},
 };
@@ -66,6 +67,8 @@ impl Fixture {
             hooks: Mutex::default(),
             hooks_run: Mutex::default(),
             agents: Mutex::default(),
+            sleepers: Mutex::default(),
+            told: Mutex::default(),
             touched: Mutex::default(),
             announced: Mutex::default(),
         };
@@ -85,6 +88,49 @@ impl Fixture {
 
     pub(crate) fn selector(&self) -> SpaceSelector {
         SpaceSelector::id(&self.workspace.id)
+    }
+
+    /// Record a leased simulator named `name` of the workspace that
+    /// `acquirer` acquired, without a device, so releasing it runs no
+    /// simctl.
+    pub(crate) async fn lease_simulator(&self, name: &str, acquirer: Acquirer) {
+        let sim = shoal_protocol::sim::Simulator {
+            id: name.into(),
+            udid: None,
+            device: "phone".into(),
+            runtime: "ios".into(),
+            workspace_id: Some(self.workspace.id.clone()),
+            last_workspace_id: None,
+            lease_name: Some(name.into()),
+            reason: None,
+            state: shoal_protocol::sim::SimulatorState::Leased,
+            last_used: crate::time::UnixTime::now(),
+            error: None,
+            installed_apps: None,
+            acquirer,
+        };
+        let record = serde_json::to_string(&sim).unwrap();
+        (self.leases.store)
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO simulators(id,record) VALUES (?1,?2)",
+                    [&sim.id, &record],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+
+    /// The names of the workspace's simulator leases.
+    pub(crate) async fn simulators(&self) -> Vec<String> {
+        let sims = self.leases.list_simulators(Some(&self.workspace.id));
+        let mut names: Vec<_> = (sims.await.unwrap().into_iter())
+            .filter(|sim| sim.workspace_id.is_some())
+            .filter_map(|sim| sim.lease_name)
+            .collect();
+        names.sort();
+        names
     }
 
     /// The notifications recorded for the user, as kind and message.
@@ -163,6 +209,10 @@ pub(crate) struct StandIn {
     pub(crate) hooks_run: Mutex<Vec<PathBuf>>,
     /// The spaces whose agent has not ended.
     pub(crate) agents: Mutex<HashSet<SpaceId>>,
+    /// The asleep agents, lowest-ranked first.
+    pub(crate) sleepers: Mutex<Vec<Sleeper>>,
+    /// What each space's agent was told, in order.
+    pub(crate) told: Mutex<Vec<(SpaceId, String)>>,
     /// The workspaces whose requests counted as their activity.
     pub(crate) touched: Mutex<Vec<SpaceId>>,
     /// The approval requests announced to whoever decides them.
@@ -259,6 +309,16 @@ impl Agents for StandIn {
 
     fn has_queued_launch<'a>(&'a self, _id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
+    }
+
+    fn sleepers(&self) -> BoxFuture<'_, Result<Vec<Sleeper>>> {
+        let sleepers = self.sleepers.lock().unwrap().clone();
+        Box::pin(async move { Ok(sleepers) })
+    }
+
+    fn tell_agent<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, ()> {
+        self.told.lock().unwrap().push((id.clone(), message));
+        Box::pin(async {})
     }
 }
 

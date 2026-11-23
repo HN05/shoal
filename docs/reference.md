@@ -7576,7 +7576,19 @@ secret grants keep their own rules.
 
 An [asleep](#sleep) agent keeps its leases, so an agent that sleeps after most
 turns does not give up and reacquire slow resources, such as a simulator Shoal
-must boot again or containers it must start again.
+must boot again or containers it must start again. A lease that keeps something
+running, a simulator or containers, stops once the agent has slept past
+[`[sleep] keep_leases_minutes`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#sleep),
+30 by default, counted from when its harness stopped; `0` stops them as it goes
+to sleep, and waking it while its restore still waits in the agent queue does
+not restart the count. A stopped simulator shuts down with its apps and data
+kept. Resource and repository permits stay.
+
+The agent's first message once it runs again names each lease Shoal took back
+while it slept and why, with the `shoal acquire` that gets it back, which
+takes its turn as any request does. Taking it back runs the lease's release as
+`shoal release` does; a release that fails keeps the lease as the user's and
+records `release_failed`.
 
 Queued requests get capacity in arrival order, per pool and for simulators. While
 any are queued, every other request for new capacity is busy, even when capacity is

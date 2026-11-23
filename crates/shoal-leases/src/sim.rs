@@ -562,21 +562,61 @@ impl Leases {
         selector: &SpaceSelector,
         name: String,
     ) -> Result<()> {
-        (self.release_simulator_held_by(daemon, selector, name, None)).await
+        (self.release_simulator_held_by(daemon, selector, name, None))
+            .await
+            .map(drop)
     }
 
     /// Release the simulator lease `name` of `selector`'s workspace, unless
     /// `holder` names an acquirer it no longer has, as when the user took
     /// over an agent's lease since a release of it was decided. Only a
     /// release without `holder`, which someone asked for, is activity.
+    /// Whether it released the lease.
     pub async fn release_simulator_held_by(
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
         name: String,
         holder: Option<&Acquirer>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
+        (self.release_simulator_then(daemon, selector, name, holder, Device::Keep)).await
+    }
+
+    /// [`Self::release_simulator_held_by`], then do `then` with its device.
+    pub(crate) async fn release_simulator_then(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        name: String,
+        holder: Option<&Acquirer>,
+        then: Device,
+    ) -> Result<bool> {
         let guard = self.gates.lock_simulators().await;
+        let released = (self.release_locked_simulator(daemon, selector, name, holder)).await?;
+        let SimRelease::Released(idle) = released else {
+            return Ok(false);
+        };
+        if let Some(sim) = idle {
+            if then == Device::ShutDown && sim.udid.is_some() {
+                self.shutdown_sim(&sim).await?;
+            }
+            // Expiry passes over the devices while another holds the lock.
+            drop(guard);
+            self.simulator_idle.notify_one();
+        }
+        Ok(true)
+    }
+
+    /// Release the simulator lease `name` of `selector`'s workspace as
+    /// [`Self::release_simulator_held_by`] does, under the simulators' lock
+    /// the caller holds.
+    pub(crate) async fn release_locked_simulator(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        name: String,
+        holder: Option<&Acquirer>,
+    ) -> Result<SimRelease> {
         let workspace = daemon.workspace(selector).await?;
         store::ensure_ready(&workspace)?;
         if holder.is_none() {
@@ -590,19 +630,19 @@ impl Leases {
         if let Some(holder) = holder
             && sim.as_ref().is_none_or(|sim| sim.acquirer != *holder)
         {
-            return Ok(());
+            return Ok(SimRelease::Kept);
         }
         let Some(mut sim) = sim else {
             ensure!(
                 self.release_simulator_access(workspace.id, name).await?,
                 "unknown simulator lease or approval request"
             );
-            return Ok(());
+            return Ok(SimRelease::Released(None));
         };
         if sim.state != SimulatorState::Leased {
             self.delete_sim(&mut sim).await?;
             self.release_simulator_access(workspace.id, name).await?;
-            return Ok(());
+            return Ok(SimRelease::Released(None));
         }
         sim.installed_apps = match sim.udid.as_deref() {
             Some(udid) => simctl::user_app_count(udid).await.ok(),
@@ -615,10 +655,7 @@ impl Leases {
         sim.last_used = UnixTime::now();
         self.save_sim(&sim).await?;
         self.release_simulator_access(workspace.id, name).await?;
-        // Expiry passes over the devices while another holds the lock.
-        drop(guard);
-        self.simulator_idle.notify_one();
-        Ok(())
+        Ok(SimRelease::Released(Some(Box::new(sim))))
     }
 
     async fn release_simulator_access(&self, owner: SpaceId, name: String) -> Result<bool> {
@@ -702,6 +739,24 @@ impl Leases {
         }
         Ok(())
     }
+}
+
+/// What a release of a simulator lease did.
+pub(crate) enum SimRelease {
+    /// Nothing: the lease is no longer the holder's.
+    Kept,
+    /// It released the lease, with the device it left idle; none when the
+    /// lease had no device yet, which it deleted.
+    Released(Option<Box<Simulator>>),
+}
+
+/// What a release does with the device it leaves idle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Device {
+    /// Keep it as it is, booted for the next lease.
+    Keep,
+    /// Shut it down, keeping its apps and data, to free what it runs.
+    ShutDown,
 }
 
 /// The simctl device name Shoal gives its own devices.

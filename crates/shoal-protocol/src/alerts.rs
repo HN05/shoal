@@ -152,6 +152,9 @@ states!(AlertKind {
     /// A lease could not be released when the agent or demo that acquired
     /// it ended, and stays held.
     ReleaseFailed => "release_failed",
+    /// Shoal took back a lease an asleep agent kept, which the agent reads
+    /// once it runs again.
+    LeaseTaken => "lease_taken",
     /// The hub refused a machine or device, such as for another version,
     /// or this machine's link to the hub.
     HubRefused => "hub_refused",

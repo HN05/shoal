@@ -21,6 +21,7 @@ use tokio::sync::{Notify, futures::Notified};
 
 mod acquired_leases;
 pub mod allocation;
+mod asleep_leases;
 pub mod containers;
 pub mod daemon;
 pub mod ports;

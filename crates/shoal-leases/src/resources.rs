@@ -472,12 +472,14 @@ impl Leases {
     ) -> Result<()> {
         self.release_resource_held_by(daemon, selector, pool, name, None)
             .await
+            .map(drop)
     }
 
     /// Release the lease `name` of `pool` in `selector`'s workspace, unless
     /// `holder` names an acquirer it no longer has, as when the user took
     /// over an agent's lease since a release of it was decided. Only a
     /// release without `holder`, which someone asked for, is activity.
+    /// Whether it released the lease.
     pub async fn release_resource_held_by(
         &self,
         daemon: &dyn Daemon,
@@ -485,7 +487,7 @@ impl Leases {
         pool: String,
         name: String,
         holder: Option<&Acquirer>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let workspace = daemon.workspace(selector).await?;
         if holder.is_none() {
             daemon.touch(&workspace.id).await;
@@ -507,7 +509,7 @@ impl Leases {
         if let Some(holder) = holder
             && owned.as_ref().is_none_or(|lease| lease.acquirer != *holder)
         {
-            return Ok(());
+            return Ok(false);
         }
         if let Some(lease) = &owned {
             self.run_resource_release_hook(daemon, &workspace, lease, hook.as_deref())
@@ -629,6 +631,7 @@ fn releasable_lease(
 /// Delete a lease and end its approval atomically, in either scope, so
 /// release works even after the pool definition is edited or deleted;
 /// nothing when `holder` names an acquirer the lease no longer has.
+/// Whether it released them.
 fn release_lease(
     tx: &Transaction<'_>,
     records: &dyn Records,
@@ -636,12 +639,12 @@ fn release_lease(
     pool: &str,
     name: &str,
     holder: Option<&Acquirer>,
-) -> Result<()> {
+) -> Result<bool> {
     store::require_ready(tx, &workspace.id)?;
     if let Some(holder) = holder {
         let current = named_lease(tx, &workspace.id, pool, name)?;
         if current.is_none_or(|lease| lease.acquirer != *holder) {
-            return Ok(());
+            return Ok(false);
         }
     }
     let mut released = false;
@@ -660,7 +663,7 @@ fn release_lease(
             || released,
         "unknown resource lease or approval request"
     );
-    Ok(())
+    Ok(true)
 }
 
 /// The workspace asking for a lease and its standing.

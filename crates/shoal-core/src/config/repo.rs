@@ -623,8 +623,9 @@ pub struct RestoreConfig {
     pub archive_max_mb: Option<u64>,
 }
 
-/// Whether Shoal puts idle agents to sleep, and the longest an idle agent
-/// the user is engaged with waits for them first.
+/// Whether Shoal puts idle agents to sleep, the longest an idle agent the
+/// user is engaged with waits for them first, and how long an asleep agent
+/// keeps the leases that keep something running.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = SleepSettings)]
@@ -633,6 +634,8 @@ pub struct SleepConfig {
     pub enabled: Option<bool>,
     #[option(default = 30)]
     pub max_wait_minutes: Option<u64>,
+    #[option(default = 30)]
+    pub keep_leases_minutes: Option<u64>,
 }
 
 /// Who runs local reviews and whether PR reviews post their findings.

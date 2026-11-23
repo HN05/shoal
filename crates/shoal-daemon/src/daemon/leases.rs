@@ -3,18 +3,22 @@
 //! the agents that acquire them and the approval requests that gate them.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use shoal_agents::messages::Delivery;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_leases::daemon::{Agents, Approvals, Records, Settings, Spaces, Unborrowable};
+use shoal_leases::daemon::{Agents, Approvals, Records, Settings, Sleeper, Spaces, Unborrowable};
+use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use super::{
     approvals::{self, ApprovalRequest, Target},
+    log,
     manager::Manager,
     scope::Caller,
     store,
@@ -118,6 +122,47 @@ impl Agents for Manager {
 
     fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(self.agents.has_queued_launch(id))
+    }
+
+    fn sleepers(&self) -> BoxFuture<'_, Result<Vec<Sleeper>>> {
+        Box::pin(self.sleepers())
+    }
+
+    fn tell_agent<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            let kind = AlertKind::LeaseTaken;
+            let told =
+                self.agents
+                    .queue_agent_message_delivered(id, kind, message, Delivery::NextTurn);
+            if let Err(error) = told.await {
+                log!("the agent of {id} was not told of a lease taken back: {error:#}");
+            }
+        })
+    }
+}
+
+impl Manager {
+    /// The asleep agents, lowest-ranked in the agent queue first, each with
+    /// how long its space's settings keep its running leases.
+    async fn sleepers(&self) -> Result<Vec<Sleeper>> {
+        let asleep = self.agents.asleep_agents().await?;
+        let ids: Vec<SpaceId> = asleep.keys().cloned().collect();
+        let ranked = self.agents.ranked_spaces(self, &ids).await?;
+        let mut sleepers = Vec::with_capacity(ranked.len());
+        for (id, _) in ranked.into_iter().rev() {
+            // One removed meanwhile keeps nothing.
+            let Ok(space) = self.spaces.space(&SpaceSelector::id(&id)).await else {
+                continue;
+            };
+            let settings = self.repositories.space_settings(self, &space).await?;
+            let minutes = settings.sleep.keep_leases_minutes;
+            sleepers.push(Sleeper {
+                since: asleep[&id],
+                keeps_running: Duration::from_secs(minutes.saturating_mul(60)),
+                space: id,
+            });
+        }
+        Ok(sleepers)
     }
 }
 

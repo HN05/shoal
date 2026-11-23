@@ -12,7 +12,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::{
     Leases, callers::Caller, containers, daemon::Daemon, gates::ResourcesBusy, log,
-    model::Workspace, resources, state::WorkspaceState,
+    model::Workspace, resources, sim::Device, state::WorkspaceState,
 };
 use shoal_core::refusal::Reason;
 use shoal_protocol::{
@@ -20,14 +20,14 @@ use shoal_protocol::{
 };
 
 /// A lease that ends with the agent or demo that acquired it.
-struct Acquired {
-    workspace: SpaceId,
-    acquirer: Acquirer,
-    held: Held,
+pub(crate) struct Acquired {
+    pub(crate) workspace: SpaceId,
+    pub(crate) acquirer: Acquirer,
+    pub(crate) held: Held,
 }
 
 /// What a lease holds, as its kind's release names it.
-enum Held {
+pub(crate) enum Held {
     Simulator { name: String },
     Containers,
     Permit { pool: String, name: String },
@@ -36,13 +36,31 @@ enum Held {
 impl Held {
     /// The command that releases it in the workspace numbered `number`.
     fn release_command(&self, number: impl std::fmt::Display) -> String {
+        format!("shoal release {}", self.command_arguments(number))
+    }
+
+    /// The command that acquires it again in the workspace numbered
+    /// `number`.
+    pub(crate) fn acquire_command(&self, number: impl std::fmt::Display) -> String {
+        format!("shoal acquire {}", self.command_arguments(number))
+    }
+
+    /// What `shoal acquire` and `shoal release` take to name it in the
+    /// workspace numbered `number`.
+    fn command_arguments(&self, number: impl std::fmt::Display) -> String {
         match self {
-            Self::Simulator { name } => format!("shoal release sim --name {name} --space {number}"),
-            Self::Containers => format!("shoal release containers --space {number}"),
+            Self::Simulator { name } => format!("sim --name {name} --space {number}"),
+            Self::Containers => format!("containers --space {number}"),
             Self::Permit { pool, name } => {
-                format!("shoal release resource {pool} --name {name} --space {number}")
+                format!("resource {pool} --name {name} --space {number}")
             }
         }
+    }
+
+    /// Whether it keeps something running on the machine: a booted
+    /// simulator or started containers.
+    pub(crate) fn running(&self) -> bool {
+        matches!(self, Self::Simulator { .. } | Self::Containers)
     }
 }
 
@@ -141,7 +159,8 @@ impl Leases {
             .into_iter()
             .filter(|lease| selects(lease) && live.ended(&lease.acquirer));
         for lease in ended {
-            self.release_acquired_lease(daemon, lease).await;
+            self.release_acquired_lease(daemon, &lease, Device::Keep)
+                .await;
         }
         Ok(())
     }
@@ -157,13 +176,14 @@ impl Leases {
             }
         };
         for lease in leases.into_iter().filter(|lease| selects(&lease.acquirer)) {
-            self.release_acquired_lease(daemon, lease).await;
+            self.release_acquired_lease(daemon, &lease, Device::Keep)
+                .await;
         }
     }
 
-    /// Every simulator lease, running project and resource permit an
-    /// execution acquired.
-    async fn acquired_leases(&self) -> Result<Vec<Acquired>> {
+    /// Every simulator lease, running project and resource permit an agent
+    /// or demo acquired.
+    pub(crate) async fn acquired_leases(&self) -> Result<Vec<Acquired>> {
         let permits = self.store.read(|db| resources::leases(db, None)).await?;
         let permits = permits.into_iter().map(|lease| Acquired {
             workspace: lease.workspace_id,
@@ -198,31 +218,37 @@ impl Leases {
             .collect())
     }
 
-    /// Release `lease` as `shoal release` does. One in a workspace that is
-    /// not ready, or whose resources another operation holds, waits for the
-    /// next pass, since a release cannot overlap them, or goes with the
-    /// workspace's removal. A failed release hands the lease to the user, so
-    /// a failing hook is not retried.
-    async fn release_acquired_lease(&self, daemon: &dyn Daemon, lease: Acquired) {
+    /// Release `lease` as `shoal release` does, doing what `device` says
+    /// with a simulator's, while it is still its acquirer's, returning its
+    /// workspace once it went. One in a workspace that is not ready, or
+    /// whose resources another operation holds, waits for the next pass,
+    /// since a release cannot overlap them, or goes with the workspace's
+    /// removal. A failed release hands the lease to the user, so a failing
+    /// hook is not retried.
+    pub(crate) async fn release_acquired_lease(
+        &self,
+        daemon: &dyn Daemon,
+        lease: &Acquired,
+        device: Device,
+    ) -> Option<Workspace> {
         let workspace = match daemon.workspace_by_id(&lease.workspace).await {
             Ok(workspace) if workspace.state == WorkspaceState::Ready => workspace,
-            Ok(_) => return,
+            Ok(_) => return None,
             Err(error) => {
                 log!(
                     "{} of workspace {} not released: {error:#}",
                     lease.held,
                     lease.workspace
                 );
-                return;
+                return None;
             }
         };
         let selector = SpaceSelector::id(&workspace.id);
-        // Only while it is still the lease of the acquirer that ended.
         let holder = Some(&lease.acquirer);
         let released = match &lease.held {
             Held::Simulator { name } => {
                 let name = name.clone();
-                (self.release_simulator_held_by(daemon, &selector, name, holder)).await
+                (self.release_simulator_then(daemon, &selector, name, holder, device)).await
             }
             Held::Containers => {
                 self.release_containers_held_by(daemon, &selector, holder)
@@ -234,11 +260,15 @@ impl Leases {
             }
         };
         match released {
-            Ok(()) => {}
+            Ok(released) => released.then_some(workspace),
             Err(error) if waits(&error) => {
                 log!("{} waits for the next pass: {error:#}", lease.held);
+                None
             }
-            Err(error) => self.hand_to_user(daemon, &workspace, &lease, &error).await,
+            Err(error) => {
+                self.hand_to_user(daemon, &workspace, lease, &error).await;
+                None
+            }
         }
     }
 
@@ -273,9 +303,9 @@ impl Leases {
             }
         };
         let message = format!(
-            "The {} that acquired {} ended, but releasing it failed: {error:#}; {owner}, and {} releases it",
-            lease.acquirer.kind(),
+            "Releasing {}, which the {} acquired, failed: {error:#}; {owner}, and {} releases it",
             lease.held,
+            lease.acquirer.kind(),
             lease.held.release_command(workspace.number),
         );
         log!("{message}");

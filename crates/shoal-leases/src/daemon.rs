@@ -3,6 +3,7 @@
 //! that acquire them and the approval requests that gate them.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
@@ -19,6 +20,7 @@ use crate::{
     hooks::{Hook, HookKind},
     model::{Repository, Workspace},
     notifications::Coordinators,
+    time::UnixTime,
 };
 
 /// The workspaces leases belong to.
@@ -93,6 +95,33 @@ pub trait Agents: Send + Sync {
 
     /// Whether an agent launch waits to start in the space `id`.
     fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
+
+    /// The asleep agents, which keep their leases while they sleep, the one
+    /// whose space ranks lowest in the agent queue first.
+    fn sleepers(&self) -> BoxFuture<'_, Result<Vec<Sleeper>>>;
+
+    /// Tell the agent of the space `id` `message` once it runs again,
+    /// without waking it.
+    fn tell_agent<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, ()>;
+}
+
+/// An asleep agent, as the leases it keeps read it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sleeper {
+    /// Its space.
+    pub space: SpaceId,
+    /// When its harness stopped.
+    pub since: UnixTime,
+    /// How long it keeps the leases that keep something running: its
+    /// space's `[sleep] keep_leases_minutes`.
+    pub keeps_running: Duration,
+}
+
+impl Sleeper {
+    /// Whether it has slept past how long it keeps its running leases.
+    pub fn overdue(&self, now: UnixTime) -> bool {
+        now.duration_since(self.since) >= self.keeps_running
+    }
 }
 
 /// The approval requests a lease that needs one waits for.

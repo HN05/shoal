@@ -272,19 +272,20 @@ impl Leases {
     ) -> Result<()> {
         self.release_containers_held_by(daemon, selector, None)
             .await
+            .map(drop)
     }
 
     /// Stop the project of `selector`'s workspace, keeping its volumes and
     /// port reservations, unless `holder` names an acquirer it no longer
     /// has, as when the user took over an agent's project since its release
     /// was decided. Only a release without `holder`, which someone asked
-    /// for, is activity.
+    /// for, is activity. Whether it stopped them.
     pub async fn release_containers_held_by(
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
         holder: Option<&Acquirer>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let id = daemon.workspace(selector).await?.id;
         let _gate = self.gates.lock_containers(&id).await;
         let workspace = daemon.workspace_by_id(&id).await?;
@@ -298,19 +299,20 @@ impl Leases {
                 recorded.project.acquirer != *holder || !recorded.project.state.active()
             })
         {
-            return Ok(());
+            return Ok(false);
         }
         let mut recorded =
             recorded.with_context(|| format!("{} has no containers", workspace.name))?;
         if recorded.project.state == ContainerState::Stopped {
-            return Ok(());
+            return Ok(false);
         }
         let compose = (self.compose(&recorded.project, Some(&workspace.path))).await?;
         compose.stop().await?;
         recorded.project.state = ContainerState::Stopped;
         recorded.project.acquirer = Acquirer::User;
         recorded.for_agent = false;
-        self.save_containers(&recorded).await
+        self.save_containers(&recorded).await?;
+        Ok(true)
     }
 
     /// Take the project of `workspace` down with its volumes: with its file

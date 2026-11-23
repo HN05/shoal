@@ -717,9 +717,11 @@ values. See [agent secrets](../../../../../../docs/reference.md#agent-secrets).
 [sleep]
 enabled = true          # Put idle agents to sleep once you are away from them
 max_wait_minutes = 30   # The longest an idle agent you are engaged with waits for you
+keep_leases_minutes = 30  # How long an asleep agent keeps its simulators and containers; 0 stops them as it sleeps
 ```
 
-See [sleep](../../../../../../docs/reference.md#sleep).
+See [sleep](../../../../../../docs/reference.md#sleep) and
+[leases while asleep](../../../../../../docs/reference.md#leases-while-asleep).
 
 ### Alerts
 

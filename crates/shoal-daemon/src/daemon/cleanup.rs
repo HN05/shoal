@@ -31,6 +31,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
             .release_leases_of_ended_executions(manager)
             .await,
     );
+    step(
+        "asleep agents' running leases",
+        manager.leases.stop_leases_of_long_sleepers(manager).await,
+    );
     step("grace periods", spaces.begin_grace_pass().await);
     step("branch observation", observe_branches(manager).await);
     step("completion cleanup", spaces.sweep_completed(manager).await);
