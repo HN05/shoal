@@ -160,8 +160,12 @@ impl Agents {
     /// Admit work again once the user is back after a hand-over, or the
     /// machine woke from a sleep that handed spaces over, retiring the
     /// copies of the spaces that went, unless a shutdown stopped work since.
+    /// While a hand-over is under way, a later reading of the user's
+    /// presence comes back once it ends, so the wake does not wait for it.
     pub async fn come_back(&self, daemon: &dyn Daemon) {
-        let mut handed_over = self.presences.handed_over.lock().await;
+        let Ok(mut handed_over) = self.presences.handed_over.try_lock() else {
+            return;
+        };
         if std::mem::take(&mut *handed_over) {
             self.stay_unless_shut_down(daemon).await;
         }
