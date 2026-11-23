@@ -346,10 +346,7 @@ carries on. While the
 user is there, `finish` and `on` keep the machine awake while agents
 work, and `off` and `handover` hold nothing. A machine that admits nothing
 new says so in its capacity, which placement skips. The daemon reads the
-lid and idle state every few seconds only under `finish` and `handover`.
-`keep_awake` was a boolean; reading or editing a global config file
-rewrites `true` and `false` to `on` and `off`, and a file Shoal may not
-write fails to load. Space numbers form
+lid and idle state every few seconds only under `finish` and `handover`. Space numbers form
 one sequence across the hub's machines, which the hub holds: it answers
 each report with a few spares it keeps for that machine, which numbers a
 new space from them without waiting for the hub, and once none is left, as
