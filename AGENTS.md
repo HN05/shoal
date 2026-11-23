@@ -170,9 +170,12 @@ for delivering a PR, under Committing near the end, decide when work is done.
   registered repositories, their config layers, seeds and caches,
   `crates/shoal-agents` for the agents the daemon runs,
   `crates/shoal-apps` for the settings and the store of apps built on Shoal,
-  `crates/shoal-demos` for demos and their viewers, and
+  `crates/shoal-demos` for demos and their viewers,
   `crates/shoal-coordination` for alerts, threads and the changes made for
-  them, approval requests, permissions and the scope of scope tokens.
+  them, approval requests, permissions and the scope of scope tokens, and
+  `crates/shoal-spaces` for the workspaces and chats themselves: their
+  records and tree, worktrees, lifecycle, removal and cleanup, restores,
+  conversions, moves and launches.
   Its service, a field of `Manager`, holds what the subsystem
   keeps in memory and offers its operations; what it needs of other
   subsystems is an interface it declares, as the base does, which the daemon
@@ -193,10 +196,13 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs`,
   `shoal-schedule`, `shoal-store` and `shoal-subprocess`; and `shoal-apps`
   and `shoal-demos` on none but `shoal-core`, `shoal-daemon-base`,
-  `shoal-ids`, `shoal-protocol` and `shoal-store`; and `shoal-coordination`
+  `shoal-ids`, `shoal-protocol` and `shoal-store`; `shoal-coordination`
   on none but `shoal-core`, `shoal-daemon-base`, `shoal-forge`,
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs` and
-  `shoal-store`.
+  `shoal-store`; and `shoal-spaces` on none but those of
+  `shoal-coordination`, `shoal-coordination` itself and `shoal-schedule`.
+  `shoal-spaces` calls coordination's service directly, which its interface
+  gives with the daemon coordination takes.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that

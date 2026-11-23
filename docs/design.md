@@ -205,7 +205,19 @@ the caller a scope token stands for and the spaces its scope reaches.
 The spaces, their files and holds, the agents and their queue, the hub,
 the repositories, the reviews and the links it routes between are its
 interface's; confining each request to its caller's scope stays with the
-daemon's request dispatch. The walks up and down the tree of spaces, and
+daemon's request dispatch.
+`shoal-spaces` holds the workspaces and chats: its `Spaces` service keeps
+their records and the tree they form, their marks and progress, their
+worktrees, checkpoints and the files they send, their lifecycle, removal
+and the cleanup sweep's own steps, the startup audit of what they own, and
+their restores, conversions, moves and launches. The agents, links,
+repositories, hub, CI jobs, reviews, leases and demos it works with are its
+interface's, which also gives it coordination's service to call; what other
+subsystems record of a space it reads and writes in its own transactions
+through its interface's records. The cleanup sweep's order across
+subsystems, the request dispatch with each request kind's target check,
+and streaming an answer over a connection stay with the daemon.
+The walks up and down the tree of spaces, and
 whether a space on the way has an agent, are `shoal-store`'s, which every
 subsystem that follows the tree takes in its own transactions.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
