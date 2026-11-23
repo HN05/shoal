@@ -214,11 +214,12 @@ impl Manager {
             return Attacher::User;
         };
         Attacher::Agent {
-            session: crate::execution::recovery::reported_session(
+            session: crate::execution::recovery::carried::continued(
                 &self.paths,
                 &agent.space_id,
                 &agent.execution,
-            ),
+            )
+            .session,
             agent: agent.name,
             execution: agent.execution,
         }

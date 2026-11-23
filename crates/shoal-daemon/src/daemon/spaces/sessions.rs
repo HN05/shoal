@@ -82,8 +82,8 @@ impl Manager {
             .collect())
     }
 
-    /// The session each of the agent executions of the space `id` last
-    /// reported, those that run their agent first.
+    /// The session each of the agent executions of the space `id`
+    /// continues, those that run their agent first.
     async fn execution_sessions(&self, id: &SpaceId) -> Result<Vec<ReportedSession>> {
         let mut executions = self.workspace_executions(id).await?;
         executions.sort_by_key(|execution| !runs_agent(execution));
@@ -91,7 +91,7 @@ impl Manager {
             .into_iter()
             .filter_map(|execution| {
                 Some(ReportedSession {
-                    session: recovery::reported_session(&self.paths, id, &execution.id)?,
+                    session: recovery::carried::continued(&self.paths, id, &execution.id).session?,
                     current: runs_agent(&execution),
                     agent: execution.agent?,
                     execution: Some(execution.id),

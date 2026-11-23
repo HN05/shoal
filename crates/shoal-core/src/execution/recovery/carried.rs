@@ -62,7 +62,7 @@ impl Carried {
 
     /// `record`, which keeps no session of its own, with this session and
     /// these changes of its space.
-    pub(super) fn kept_in(self, record: Record) -> Record {
+    pub fn kept_in(self, record: Record) -> Record {
         Record {
             session: self.session,
             moved: record.moved || self.moved,

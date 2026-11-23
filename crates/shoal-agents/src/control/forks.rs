@@ -1,5 +1,5 @@
 //! The session a new agent starts from a fork of: the one a space's agent
-//! reported last, which its hooks keep for `shoal resume`.
+//! continues, which its hooks keep for `shoal resume`.
 use anyhow::{Context as _, Result, bail};
 
 use crate::Agents;
@@ -22,13 +22,13 @@ impl Agents {
     ) -> Result<AgentSession> {
         let space = daemon.space(selector).await?;
         let (execution, agent) = self.forked_agent(&space, caller).await?;
-        let session =
-            recovery::reported_session(&self.paths, &space.id, &execution).with_context(|| {
-                format!(
-                    "{agent} in {} has not reported a session to fork",
-                    space.name
-                )
-            })?;
+        let carried = recovery::carried::continued(&self.paths, &space.id, &execution);
+        let session = carried.session.with_context(|| {
+            format!(
+                "{agent} in {} has not reported a session to fork",
+                space.name
+            )
+        })?;
         Ok(AgentSession { agent, session })
     }
 

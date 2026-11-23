@@ -106,8 +106,8 @@ impl Manager {
         Ok(record)
     }
 
-    /// The agents of the space `id`, each with the session it reported
-    /// last: those stopped, then those its executions run.
+    /// The agents of the space `id`, each with the session it continues:
+    /// those stopped, then those its executions run.
     pub(super) async fn agents_now(&self, id: &SpaceId) -> Result<Vec<StoppedAgent>> {
         let mut agents = recovery::stopped_agents(&self.paths, id)?;
         let now = UnixTime::now();
@@ -115,8 +115,8 @@ impl Manager {
             if agents.iter().any(|agent| agent.execution == execution.id) {
                 continue;
             }
-            let session = recovery::reported_session(&self.paths, id, &execution.id);
-            let Some(record) = running_record(&execution, session) else {
+            let carried = recovery::carried::continued(&self.paths, id, &execution.id);
+            let Some(record) = running_record(&execution, carried) else {
                 continue;
             };
             agents.push(StoppedAgent {
@@ -130,29 +130,29 @@ impl Manager {
 }
 
 /// The record a package keeps of the agent `execution` runs, with the
-/// `session` it reported; `None` for an execution without an agent.
-fn running_record(
-    execution: &Execution,
-    session: Option<shoal_ids::agent_session_ids::AgentSessionId>,
-) -> Option<Record> {
-    Some(Record {
-        narrowing: execution.narrowing,
-        // Named as recovery records name it.
-        agent: execution.agent.as_ref()?.normalized(),
-        stop_reason: None,
-        stage: None,
-        origin: None,
-        waiting: None,
-        session,
-        moved: false,
-        copied: None,
-        converted: false,
-        turn: None,
-        for_load: false,
-        model: execution.model.clone(),
-        mode: execution
-            .mode
-            .clone()
-            .unwrap_or(crate::config::modes::ModeName::DEFAULT),
-    })
+/// session it continues as `carried`; `None` for an execution without an
+/// agent.
+fn running_record(execution: &Execution, carried: recovery::carried::Carried) -> Option<Record> {
+    Some(
+        carried.kept_in(Record {
+            narrowing: execution.narrowing,
+            // Named as recovery records name it.
+            agent: execution.agent.as_ref()?.normalized(),
+            stop_reason: None,
+            stage: None,
+            origin: None,
+            waiting: None,
+            session: None,
+            moved: false,
+            copied: None,
+            converted: false,
+            turn: None,
+            for_load: false,
+            model: execution.model.clone(),
+            mode: execution
+                .mode
+                .clone()
+                .unwrap_or(crate::config::modes::ModeName::DEFAULT),
+        }),
+    )
 }

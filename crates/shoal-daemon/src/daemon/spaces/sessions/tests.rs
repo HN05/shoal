@@ -23,6 +23,13 @@ async fn agent(
     name: &str,
     session: &str,
 ) -> Result<ExecutionId> {
+    let id = tracked(manager, workspace, name).await?;
+    recovery::save_session(&manager.paths, &workspace.id, &id, &session.into())?;
+    Ok(id)
+}
+
+/// An execution of agent `name` in `workspace` that reported no session.
+async fn tracked(manager: &Manager, workspace: &Workspace, name: &str) -> Result<ExecutionId> {
     let id = manager
         .agents
         .begin_execution(
@@ -48,7 +55,6 @@ async fn agent(
             Duration::ZERO,
         )
         .await;
-    recovery::save_session(&manager.paths, &workspace.id, &id, &session.into())?;
     Ok(id)
 }
 
@@ -59,6 +65,38 @@ fn reported(agent: &str, session: &str, execution: &str, current: bool) -> Repor
         execution: Some(execution.into()),
         current,
     }
+}
+
+#[tokio::test]
+async fn a_restored_agent_lists_the_session_it_carries_until_it_reports_one() -> Result<()> {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .repositories
+        .register(checkout.to_str().context("path")?.into(), None, None)
+        .await?;
+    let workspace = manager
+        .create_workspace(&repo.id, "work".into(), None, None, None)
+        .await?;
+    let last: LastSession = serde_json::from_value(serde_json::json!({
+        "execution": "old",
+        "agent": "claude",
+        "mode": "worker",
+        "session": "s1",
+    }))?;
+    last.write(&manager.paths, &workspace.id)?;
+    let restored = LastSession::path(&manager.paths, &workspace.id, &last.execution);
+    let restoring = tracked(&manager, &workspace, "claude").await?;
+    let from = std::slice::from_ref(&restored);
+    recovery::carried::carry(&manager.paths, &workspace.id, &restoring, from)?;
+    recovery::consume(&restored)?;
+
+    let sessions = manager.space_sessions(&manager.named("work").await).await?;
+    assert_eq!(
+        sessions.sessions,
+        vec![reported("claude", "s1", restoring.as_str(), false)]
+    );
+    Ok(())
 }
 
 #[tokio::test]

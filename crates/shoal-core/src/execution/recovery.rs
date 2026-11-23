@@ -656,11 +656,7 @@ pub fn save_session(
 }
 
 /// The session the hooks of execution `id` last reported.
-pub fn reported_session(
-    paths: &Paths,
-    space_id: &SpaceId,
-    id: &ExecutionId,
-) -> Option<AgentSessionId> {
+fn reported_session(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Option<AgentSessionId> {
     std::fs::read_to_string(session_path(paths, space_id, id))
         .ok()
         .filter(|session| valid_session(session))
