@@ -31,6 +31,7 @@ use crate::{
     streams::{Outgoing, Streams},
 };
 pub(crate) use state::Handovers;
+pub(super) use state::Released;
 
 /// How long the hub waits for a machine to continue a space handed over,
 /// which may clone its repository and set its worktree up first.
@@ -107,7 +108,7 @@ impl Hub {
         let continued = continued.await;
         self.handovers.end(id);
         if continued.is_ok() {
-            self.retire_while_staying(from);
+            self.retire_after_continuing(daemon, from).await;
         }
         if let Err(error) = continued {
             log!("hub: space {id} handed over did not continue: {error:#}");
@@ -129,15 +130,38 @@ impl Hub {
         id: &SpaceId,
     ) -> Result<()> {
         let released = self.handovers.release(id, member)?;
-        let (hub, daemon, from, id) = (self.clone(), daemon.clone(), member.clone(), id.clone());
-        tokio::spawn(async move {
-            if let Some(mut after) = released.after {
-                let _ = after.wait_for(|ended| *ended).await;
-            }
-            (hub.continue_handover(&*daemon, &id, &from, &released.decision)).await;
-            hub.handovers.continued(&id);
-        });
+        let (daemon, from, id) = (daemon.clone(), member.clone(), id.clone());
+        tokio::spawn((self.clone()).continue_released(daemon, from, id, released));
         Ok(())
+    }
+
+    /// Have the machine `released` names continue the space `id`, which
+    /// `from` left to the hub, after the workspace a chat follows.
+    pub(super) async fn continue_released(
+        self: Arc<Self>,
+        daemon: Arc<dyn Daemon>,
+        from: MemberId,
+        id: SpaceId,
+        released: Released,
+    ) {
+        if let Some(mut after) = released.after {
+            let _ = after.wait_for(|ended| *ended).await;
+        }
+        (self.continue_handover(&*daemon, &id, &from, &released.decision)).await;
+        self.handovers.continued(&id);
+    }
+
+    /// Have `from`, which a space it handed over left, retire the spaces
+    /// taken over from it, unless it is still leaving: here for the hub's
+    /// own machine, else over its link.
+    async fn retire_after_continuing(self: &Arc<Self>, daemon: &dyn Daemon, from: &MemberId) {
+        match self.own_member().await {
+            Ok(own) if &own == from && !self.handovers.is_leaving(from) => {
+                self.retire_own(daemon, from).await;
+            }
+            Ok(own) if &own == from => {}
+            _ => self.retire_while_staying(from),
+        }
     }
 
     /// As the hub: take `member`'s word that the shutdown it handed spaces

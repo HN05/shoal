@@ -14,6 +14,7 @@ mod sending;
 mod sleeps;
 pub(crate) mod takeovers;
 
+pub(crate) use handing_over::OwnReleases;
 pub(crate) use handovers::Handovers;
 pub(crate) use keeping::{Continuation, Kept, Sent, forget};
 pub(crate) use sleeps::{Sleeps, forget as forget_sleep};

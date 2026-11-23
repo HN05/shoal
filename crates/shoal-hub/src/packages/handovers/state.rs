@@ -41,7 +41,7 @@ pub(crate) struct Handovers {
 
 /// A space its machine released, which goes where `decision` says once
 /// `after` holds, when it follows a workspace.
-pub(super) struct Released {
+pub(crate) struct Released {
     pub decision: Decision,
     pub after: Option<watch::Receiver<bool>>,
 }
@@ -63,7 +63,7 @@ impl Handovers {
     }
 
     /// Record that `member` hands spaces over for its shutdown.
-    pub(super) fn leaves(&self, member: &MemberId) {
+    pub(in crate::packages) fn leaves(&self, member: &MemberId) {
         self.leaving.lock().unwrap().insert(member.clone());
     }
 
@@ -73,7 +73,7 @@ impl Handovers {
 
     /// Record that the hub sends the space `id`, which `from` handed over
     /// following the workspace `within`, where `decision` says.
-    pub(super) fn place(
+    pub(in crate::packages) fn place(
         &self,
         id: &SpaceId,
         (from, within): (&MemberId, Option<&SpaceId>),
@@ -96,7 +96,11 @@ impl Handovers {
 
     /// Where the hub sends the workspace `id` that `from` handed over,
     /// which a chat in its worktree follows.
-    pub(super) fn placed_workspace(&self, id: &SpaceId, from: &MemberId) -> Result<Decision> {
+    pub(in crate::packages) fn placed_workspace(
+        &self,
+        id: &SpaceId,
+        from: &MemberId,
+    ) -> Result<Decision> {
         let placed = self.placed.lock().unwrap();
         match placed.get(id) {
             Some(placed) if &placed.from == from => Ok(placed.decision.clone()),
@@ -107,7 +111,7 @@ impl Handovers {
     /// Take `from`'s release of the space `id`, once: where it goes, and
     /// the continuing of the workspace it follows, which its machine must
     /// have released first.
-    pub(super) fn release(&self, id: &SpaceId, from: &MemberId) -> Result<Released> {
+    pub(in crate::packages) fn release(&self, id: &SpaceId, from: &MemberId) -> Result<Released> {
         let mut placed = self.placed.lock().unwrap();
         let space = (placed.get_mut(id))
             .filter(|placed| &placed.from == from && !placed.released)
@@ -137,7 +141,7 @@ impl Handovers {
     }
 
     /// Record that `to` may claim the space `id`, while it continues it.
-    pub(super) fn start(&self, id: &SpaceId, to: &MemberId) {
+    pub(in crate::packages) fn start(&self, id: &SpaceId, to: &MemberId) {
         self.claims.lock().unwrap().insert(id.clone(), to.clone());
     }
 

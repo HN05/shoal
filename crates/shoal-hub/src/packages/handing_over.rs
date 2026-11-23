@@ -1,17 +1,19 @@
 //! A machine's side of its hand-over as it shuts down, or as its user walks
-//! away: once its work stopped, it sends the hub the final package of each
-//! space it hands over with the start its agent would make, all at once,
-//! each over a stream of its own, until the deadline it has, and learns
-//! where the hub sends each. Nothing waits for a space to continue there.
-use std::collections::HashSet;
+//! away or pauses it: once its work stopped, it sends the hub the final
+//! package of each space it hands over with the start its agent would
+//! make, all at once, each over a stream of its own, until the deadline it
+//! has, and learns where the hub sends each. The hub's own machine, once
+//! paused, keeps each package as the hub and places it among the others
+//! itself. Nothing waits for a space to continue there.
+use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result;
 use futures_util::future::join_all;
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::{
     hub::{
         link::{Call, Reply},
-        packages::{Handed, Handing},
+        packages::{Handed, Handing, Leaving},
         placement::Decision,
     },
     model::Space,
@@ -27,23 +29,45 @@ use crate::{
     time::UnixTime,
 };
 
+mod own;
+pub(crate) use own::OwnReleases;
+
+/// Where this machine sends the spaces it hands over.
+enum Route {
+    /// Over its link, to the hub it joined.
+    Link(Arc<Calls>),
+    /// To the hub this daemon is, as the hub's own machine `MemberId`.
+    Own(MemberId),
+}
+
+/// Why a machine in no hub keeps the spaces a pause would hand over.
+const IN_NO_HUB: &str = "this machine is in no hub";
+
 impl Hub {
-    /// Whether this machine hands its spaces over: one joined to a hub,
-    /// but not the hub's own, which has nowhere to send them.
-    pub async fn hands_over(&self, daemon: &dyn Daemon) -> bool {
-        !self.is_hub(daemon) && matches!(self.store.read(membership::load).await, Ok(Some(_)))
+    /// Whether this machine hands its spaces over as it is `leaving`: one
+    /// joined to a hub, and the hub's own, which keeps running to place
+    /// them, only once its user paused it.
+    pub async fn hands_over(&self, daemon: &dyn Daemon, leaving: Leaving) -> bool {
+        if self.is_hub(daemon) {
+            return leaving == Leaving::Paused;
+        }
+        matches!(self.store.read(membership::load).await, Ok(Some(_)))
     }
 
     /// Hand each of this machine's spaces `handing` takes but those `kept`
-    /// here over through the hub by `deadline`, and where each went; none
-    /// on a machine that [hands nothing over](Self::hands_over).
+    /// here over through the hub by `deadline` as it is `leaving`, and
+    /// where each went; none on a machine that [hands nothing
+    /// over](Self::hands_over) then, but for a pause the spaces it takes,
+    /// which stay in a machine in no hub.
     pub async fn hand_over(
         &self,
         daemon: &dyn Daemon,
         deadline: Instant,
         (handing, kept): (&Handing, &HashSet<SpaceId>),
+        leaving: Leaving,
     ) -> Option<Vec<(Space, Handed)>> {
-        if !self.hands_over(daemon).await {
+        let hands_over = self.hands_over(daemon, leaving).await;
+        if !hands_over && leaving == Leaving::Away {
             return None;
         }
         let spaces = match daemon.listed_spaces(None).await {
@@ -56,10 +80,16 @@ impl Hub {
         let spaces = (spaces.into_iter()).filter(|space| {
             packageable(space) && handing.takes(space) && !kept.contains(&space.id)
         });
-        let calls = match self.hub_calls().await {
-            Ok(calls) => calls,
-            Err(error) => {
-                let why = format!("{error:#}");
+        let route = match hands_over {
+            true => self
+                .route(daemon)
+                .await
+                .map_err(|error| format!("{error:#}")),
+            false => Err(IN_NO_HUB.to_owned()),
+        };
+        let route = match route {
+            Ok(route) => route,
+            Err(why) => {
                 return Some(
                     spaces
                         .map(|space| (space, Handed::Stayed(why.clone())))
@@ -71,22 +101,31 @@ impl Hub {
         let (chats, others): (Vec<Space>, Vec<Space>) =
             spaces.partition(|space| space.within().is_some());
         let none = HashSet::new();
-        let mut handed = (self.hand_over_all(daemon, &calls, others, (deadline, &none))).await;
+        let mut handed = (self.hand_over_all(daemon, &route, others, (deadline, &none))).await;
         let left: HashSet<SpaceId> = (handed.iter())
             .filter(|(_, handed)| handed.left())
             .map(|(space, _)| space.id.clone())
             .collect();
-        handed.extend((self.hand_over_all(daemon, &calls, chats, (deadline, &left))).await);
+        handed.extend((self.hand_over_all(daemon, &route, chats, (deadline, &left))).await);
         Some(handed)
     }
 
-    /// Hand each of `spaces` over through the hub over `calls` by
+    /// Where this machine sends the spaces it hands over: the hub its daemon
+    /// is, or else the one it joined, failing while its link is down.
+    async fn route(&self, daemon: &dyn Daemon) -> Result<Route> {
+        match self.is_hub(daemon) {
+            true => Ok(Route::Own(self.own_member().await?)),
+            false => Ok(Route::Link(self.hub_calls().await?)),
+        }
+    }
+
+    /// Hand each of `spaces` over through the hub on `route` by
     /// `deadline`, all at once, a chat in a workspace's worktree only once
     /// this machine `left` that workspace to the hub, and where each went.
     async fn hand_over_all(
         &self,
         daemon: &dyn Daemon,
-        calls: &Calls,
+        route: &Route,
         spaces: Vec<Space>,
         (deadline, left): (Instant, &HashSet<SpaceId>),
     ) -> Vec<(Space, Handed)> {
@@ -96,25 +135,25 @@ impl Hub {
                     let why = "the workspace whose worktree it runs in stays here";
                     Handed::Stayed(why.into())
                 }
-                within => (self.hand_over_by(daemon, calls, (&space, within), deadline)).await,
+                within => (self.hand_over_by(daemon, route, (&space, within), deadline)).await,
             };
             (space, handed)
         });
         join_all(handing).await
     }
 
-    /// Hand `space` over through the hub over `calls` by `deadline`, and
+    /// Hand `space` over through the hub on `route` by `deadline`, and
     /// where it went: once it read where the hub sends it, this machine
     /// leaves it there, and whether the hub took that word decides only
     /// whether the space surely went.
     async fn hand_over_by(
         &self,
         daemon: &dyn Daemon,
-        calls: &Calls,
+        route: &Route,
         (space, within): (&Space, Option<&SpaceId>),
         deadline: Instant,
     ) -> Handed {
-        let handing = self.hand_over_space(daemon, calls, (space, within));
+        let handing = self.send_final_package(daemon, route, (space, within));
         let decision = match tokio::time::timeout_at(deadline, handing).await {
             Ok(Ok(Some(decision))) => decision,
             Ok(Ok(None)) => {
@@ -129,10 +168,7 @@ impl Hub {
                 return Handed::Stayed(why.into());
             }
         };
-        let release = calls.call(Call::Release {
-            space: space.id.clone(),
-        });
-        let released = tokio::time::timeout_at(deadline, release).await.ok();
+        let released = self.release(route, &space.id, deadline).await;
         if !matches!(released, Some(Ok(Reply::Delivered))) {
             log!(
                 "hub: the hub did not take space {} as released: {released:?}",
@@ -142,12 +178,48 @@ impl Hub {
         released_as(released, decision)
     }
 
+    /// Send the hub on `route` the final package of `space`, a chat in the
+    /// worktree of the workspace `within` when it names one, and where the
+    /// hub sends the space, none where no machine can take it.
+    async fn send_final_package(
+        &self,
+        daemon: &dyn Daemon,
+        route: &Route,
+        (space, within): (&Space, Option<&SpaceId>),
+    ) -> Result<Option<Decision>> {
+        match route {
+            Route::Link(calls) => self.hand_over_space(daemon, calls, (space, within)).await,
+            Route::Own(own) => self.hand_over_own(daemon, own, (space, within)).await,
+        }
+    }
+
+    /// Tell the hub on `route` that this machine leaves the space `id`
+    /// where the hub sends it, and the hub's answer, none when it did not
+    /// come by `deadline`.
+    async fn release(
+        &self,
+        route: &Route,
+        id: &SpaceId,
+        deadline: Instant,
+    ) -> Option<Result<Reply>> {
+        match route {
+            Route::Link(calls) => {
+                let release = calls.call(Call::Release { space: id.clone() });
+                tokio::time::timeout_at(deadline, release).await.ok()
+            }
+            Route::Own(own) => Some(self.release_own(own, id).map(|()| Reply::Delivered)),
+        }
+    }
+
     /// Tell the hub that this machine stays after all, as once its shutdown
-    /// was cancelled or its user came back, so it retires the spaces it
-    /// handed over that other machines took; nothing on a machine that
-    /// [hands nothing over](Self::hands_over).
+    /// was cancelled or its user came back or unpaused it, so it retires
+    /// the spaces it handed over that other machines took; as the hub,
+    /// retire them here; nothing on a machine in no hub.
     pub async fn stay(&self, daemon: &dyn Daemon) {
-        if !self.hands_over(daemon).await {
+        if self.is_hub(daemon) {
+            return self.stay_own(daemon).await;
+        }
+        if !self.hands_over(daemon, Leaving::Away).await {
             return;
         }
         // While the link is down, the hub has it retire them once it opens.

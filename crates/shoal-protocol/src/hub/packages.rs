@@ -22,6 +22,18 @@ pub struct KeptPackage {
     pub built_at: UnixTime,
 }
 
+/// Why a machine hands its spaces over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Leaving {
+    /// It goes away: it shuts down or sleeps, or its user walked away, so
+    /// the hub's own machine, whose daemon the hub needs to place them,
+    /// hands nothing over.
+    Away,
+    /// Its user paused it, and its daemon keeps running, so the hub's own
+    /// machine hands over too.
+    Paused,
+}
+
 /// The spaces a machine hands over.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Handing {

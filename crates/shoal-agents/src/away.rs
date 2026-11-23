@@ -10,6 +10,7 @@ use std::{collections::HashSet, time::Duration};
 use anyhow::Result;
 use shoal_core::config::machine::KeepAwake;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::hub::packages::Leaving;
 use tokio::{sync::watch, time::Instant};
 
 use crate::{
@@ -146,7 +147,7 @@ impl Agents {
         why: Shutdown,
         window: HandoverWindow,
     ) {
-        if *handed_over || !daemon.hands_over().await {
+        if *handed_over || !daemon.hands_over(Leaving::Away).await {
             return;
         }
         self.presences.set(|presence| presence.handing_over = true);

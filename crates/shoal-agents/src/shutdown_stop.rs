@@ -9,7 +9,7 @@ use std::{collections::HashSet, time::Duration};
 
 use anyhow::Result;
 use futures_util::future::join_all;
-use shoal_protocol::hub::packages::{Handed, Handing};
+use shoal_protocol::hub::packages::{Handed, Handing, Leaving};
 use tokio::time::Instant;
 
 use crate::Agents;
@@ -156,7 +156,7 @@ impl Agents {
         // before a sleep goes ahead, leaving alone the spaces under way.
         let latch = shutdown.ends_work().then_some(finished);
         let deadline = window.deadline(started);
-        let handed = (self.hand_over(daemon, deadline, handing)).await;
+        let handed = (self.hand_over(daemon, deadline, handing, Leaving::Away)).await;
         (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
         if let Some(mut finished) = latch {
             *finished = true;
@@ -271,19 +271,20 @@ impl Agents {
             .await;
     }
 
-    /// Hand the spaces `handing` takes over through the hub by `deadline`,
-    /// and where each went. A space that went keeps no restore here, so it
-    /// does not come back at boot, where this machine retires it once the
-    /// hub names it, as after any takeover.
+    /// Hand the spaces `handing` takes over through the hub by `deadline`
+    /// as this machine is `leaving`, and where each went. A space that went
+    /// keeps no restore here, so it does not come back at boot, where this
+    /// machine retires it once the hub names it, as after any takeover.
     async fn hand_over(
         &self,
         daemon: &dyn Daemon,
         deadline: Instant,
         handing: Handing,
+        leaving: Leaving,
     ) -> Vec<(Space, Handed)> {
         let under_way = handing.named();
         self.presences.leaving(&under_way);
-        let handed = daemon.hand_over(deadline, handing).await;
+        let handed = daemon.hand_over(deadline, handing, leaving).await;
         self.presences.settled(&under_way, went(&handed));
         for (space, handed) in &handed {
             if !handed.left() {

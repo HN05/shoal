@@ -121,6 +121,9 @@ pub struct Hub {
     /// As the hub: the spaces handed over that their new machine has not
     /// claimed yet.
     handovers: packages::Handovers,
+    /// As the hub: the spaces its own machine handed over as it was
+    /// paused, to continue elsewhere.
+    own_releases: packages::OwnReleases,
     /// As the hub: how its machines are powered, and what it tried to take
     /// over from those asleep.
     sleeps: packages::Sleeps,
@@ -182,6 +185,7 @@ impl Hub {
             deliveries: Default::default(),
             packages: Default::default(),
             handovers: Default::default(),
+            own_releases: Default::default(),
             sleeps: Default::default(),
             known_tree: Default::default(),
             waiting: Default::default(),
@@ -226,6 +230,7 @@ pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: boo
         hub.keep_rerunning_cut_off_jobs(&*daemon),
         hub.keep_sharing_own(&daemon),
         hub.keep_own_alert_copies(&*daemon),
+        hub.keep_continuing_own(&daemon),
         member::run(hub.clone(), daemon.clone()),
     );
 }

@@ -282,6 +282,8 @@ pub(crate) struct StandIn {
     pub(crate) hands_over: std::sync::atomic::AtomicBool,
     /// The spaces each hand-over took.
     pub(crate) handings: Mutex<Vec<shoal_protocol::hub::packages::Handing>>,
+    /// Why the machine left at each hand-over.
+    pub(crate) leavings: Mutex<Vec<shoal_protocol::hub::packages::Leaving>>,
     /// Where the next hand-over says the spaces went.
     pub(crate) handed: Mutex<Vec<(Space, shoal_protocol::hub::packages::Handed)>>,
     /// Told as each hand-over starts sending.
@@ -992,7 +994,7 @@ impl Ranking for StandIn {
 }
 
 impl crate::daemon::Handovers for StandIn {
-    fn hands_over(&self) -> BoxFuture<'_, bool> {
+    fn hands_over(&self, _: shoal_protocol::hub::packages::Leaving) -> BoxFuture<'_, bool> {
         let hands_over = self.hands_over.load(std::sync::atomic::Ordering::SeqCst);
         Box::pin(async move { hands_over })
     }
@@ -1001,8 +1003,10 @@ impl crate::daemon::Handovers for StandIn {
         &self,
         _: tokio::time::Instant,
         handing: shoal_protocol::hub::packages::Handing,
+        leaving: shoal_protocol::hub::packages::Leaving,
     ) -> BoxFuture<'_, Vec<(Space, shoal_protocol::hub::packages::Handed)>> {
         self.handings.lock().unwrap().push(handing);
+        self.leavings.lock().unwrap().push(leaving);
         let handed = std::mem::take(&mut *self.handed.lock().unwrap());
         self.handing_started.notify_one();
         Box::pin(async move {

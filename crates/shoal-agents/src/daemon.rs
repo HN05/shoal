@@ -36,7 +36,7 @@ use shoal_protocol::{
         modes::ModeName,
         permissions::{PermissionChange, PermissionsConfig},
     },
-    hub::packages::{Handed, Handing},
+    hub::packages::{Handed, Handing, Leaving},
     item_numbers::ItemNumber,
     model::{
         Chat, Completion, MergeOptions, MergePlan, OpenedWorkspace, PortReservation,
@@ -619,20 +619,22 @@ pub trait Memory: Send + Sync {
     fn work_limit(&self) -> Option<WorkLimit>;
 }
 
-/// The hub, through which a machine joined to one hands its spaces over
-/// as it shuts down or its user walks away.
+/// The hub, through which a machine of one hands its spaces over as it
+/// shuts down, its user walks away or pauses it.
 pub trait Handovers: Send + Sync {
-    /// Whether this machine hands its spaces over: one joined to a hub,
-    /// but not the hub's own.
-    fn hands_over(&self) -> BoxFuture<'_, bool>;
+    /// Whether this machine hands its spaces over as it is `leaving`: one
+    /// joined to a hub, and the hub's own once paused.
+    fn hands_over(&self, leaving: Leaving) -> BoxFuture<'_, bool>;
 
-    /// Hand the spaces `handing` takes over through the hub by `deadline`,
-    /// and where each went; none on a machine that hands nothing over, as
-    /// one in no hub.
+    /// Hand the spaces `handing` takes over through the hub by `deadline`
+    /// as this machine is `leaving`, and where each went; none on a
+    /// machine that hands nothing over then, but for a pause the spaces it
+    /// takes, which stay.
     fn hand_over(
         &self,
         deadline: tokio::time::Instant,
         handing: Handing,
+        leaving: Leaving,
     ) -> BoxFuture<'_, Vec<(Space, Handed)>>;
 
     /// Tell the hub this machine stays after all, as once its shutdown was

@@ -99,7 +99,7 @@ impl Hub {
         (ticket, takeover): (Option<&MoveTicket>, bool),
     ) -> Result<Option<SpaceNumber>> {
         let (member, id, ticket) = (member.clone(), id.clone(), ticket.cloned());
-        let connected = self.links.connected();
+        let connected = self.connected_machines().await;
         let handed = self.handovers.handed_to(&id, &member);
         self.store
             .write(move |tx| {

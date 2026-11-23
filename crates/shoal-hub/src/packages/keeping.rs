@@ -120,7 +120,9 @@ impl Hub {
         let received = self.receive_package(up).await;
         let operation = self.gates.operation_unless_exiting().await;
         let kept = match (received, &operation) {
-            (Ok((incoming, size)), Some(_)) => self.place_package(sent, size, incoming).await,
+            (Ok((incoming, size)), Some(_)) => {
+                (self.place_package(sent, size, incoming.into_temp_path())).await
+            }
             (Ok(_), None) => Err(anyhow::anyhow!(
                 "the hub's daemon is restarting; send it again once it is back"
             )),
@@ -154,11 +156,11 @@ impl Hub {
     /// under its machine. A file that cannot take its place leaves the one
     /// before and its record as they were; one that cannot be recorded, as
     /// once its space ended, goes, and its machine sends the space again.
-    async fn place_package(
+    pub(super) async fn place_package(
         &self,
         sent: Sent,
         size: u64,
-        incoming: tempfile::NamedTempFile,
+        incoming: tempfile::TempPath,
     ) -> Result<()> {
         let path = self.package_path(&sent.space);
         let _files = self.packages.files.lock().await;
@@ -187,7 +189,7 @@ impl Hub {
     /// Refuse a package while the disk of the hub's state directory has less
     /// free space than the overload warning threshold, alerting the user
     /// the first time since the hub last took one.
-    async fn ensure_package_room(&self, daemon: &dyn Daemon) -> Result<()> {
+    pub(super) async fn ensure_package_room(&self, daemon: &dyn Daemon) -> Result<()> {
         let threshold = (self.config.current().machine.overload.warning).disk_free_bytes();
         let state = self.paths.state.clone();
         let free = tokio::task::spawn_blocking(move || {
@@ -226,7 +228,7 @@ impl Hub {
     }
 
     /// Where the hub keeps packages.
-    fn package_directory(&self) -> PathBuf {
+    pub(super) fn package_directory(&self) -> PathBuf {
         self.paths.state.join("hub").join("packages")
     }
 

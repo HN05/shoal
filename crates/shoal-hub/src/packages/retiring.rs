@@ -25,20 +25,36 @@ impl Hub {
     /// takeovers and its packages of the spaces it retired. One it did not
     /// retire waits for its next link.
     pub(crate) async fn retire_taken_over(self: Arc<Self>, member: MemberId, calls: Arc<Calls>) {
-        if let Err(error) = self.have_retired(&member, &calls).await {
+        let retiring = self.have_retired(&member, async |call| calls.call(call).await);
+        if let Err(error) = retiring.await {
             log!("hub: could not have machine {member} retire the spaces taken over: {error:#}");
         }
     }
 
+    /// As the hub: retire here the spaces other machines took over from its
+    /// own machine `own`, then forget those takeovers and its packages of
+    /// the spaces it retired.
+    pub(super) async fn retire_own(&self, daemon: &dyn Daemon, own: &MemberId) {
+        let retiring =
+            self.have_retired(own, async |call| self.answer_hub_call(daemon, call).await);
+        if let Err(error) = retiring.await {
+            log!("hub: could not retire its own spaces taken over: {error:#}");
+        }
+    }
+
     /// Have `member` retire the spaces other machines took over from it,
-    /// over `calls`, and forget what it retired.
-    async fn have_retired(&self, member: &MemberId, calls: &Calls) -> Result<()> {
+    /// asking it with `ask`, and forget what it retired.
+    async fn have_retired(
+        &self,
+        member: &MemberId,
+        ask: impl AsyncFnOnce(Call) -> Result<Reply>,
+    ) -> Result<()> {
         let from = member.clone();
         let spaces = self.store.read(move |tx| taken_from(tx, &from)).await?;
         if spaces.is_empty() {
             return Ok(());
         }
-        let retired = match calls.call(Call::Retire { spaces }).await? {
+        let retired = match ask(Call::Retire { spaces }).await? {
             Reply::Retired(retired) => retired,
             reply => return Err(unexpected(reply)),
         };

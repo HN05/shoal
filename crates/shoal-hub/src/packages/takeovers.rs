@@ -134,7 +134,7 @@ impl Hub {
         id: &SpaceId,
         taker: Option<&MemberId>,
     ) -> Result<Option<(MemberId, UnixTime)>> {
-        let connected = self.links.connected();
+        let connected = self.connected_machines().await;
         let handed = taker.is_some_and(|taker| self.handovers.handed_to(id, taker));
         let space = id.clone();
         let kept = self
