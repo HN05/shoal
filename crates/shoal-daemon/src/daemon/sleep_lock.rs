@@ -107,11 +107,13 @@ async fn end_jobs(manager: &Arc<Manager>, deadline: Instant) {
     }
 }
 
-/// Open the hub link and the agent queue again once the machine woke.
+/// Open the hub link and the agent queue again once the machine woke,
+/// admitting work again after a hand-over before the sleep.
 async fn woke(manager: &Manager) {
     log!("sleep lock: the machine woke");
     manager.hub.woke();
     manager.agents.agent_queue().sleep(false);
+    manager.agents.come_back(manager).await;
 }
 
 #[cfg(test)]

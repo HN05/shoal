@@ -278,6 +278,14 @@ pub(crate) struct StandIn {
     pub(crate) state_failures: Mutex<Vec<(SpaceSelector, String)>>,
     /// The service's store, which the workspaces' lifecycles live in.
     store: Mutex<Option<shoal_store::Store>>,
+    /// Whether this machine hands its spaces over, as one joined to a hub.
+    pub(crate) hands_over: std::sync::atomic::AtomicBool,
+    /// The spaces each hand-over took.
+    pub(crate) handings: Mutex<Vec<shoal_protocol::hub::packages::Handing>>,
+    /// Where the next hand-over says the spaces went.
+    pub(crate) handed: Mutex<Vec<(Space, shoal_protocol::hub::packages::Handed)>>,
+    /// How often the machine told the hub it stays.
+    pub(crate) stays: std::sync::atomic::AtomicUsize,
 }
 
 impl StandIn {
@@ -974,18 +982,22 @@ impl Ranking for StandIn {
 
 impl crate::daemon::Handovers for StandIn {
     fn hands_over(&self) -> BoxFuture<'_, bool> {
-        Box::pin(async { false })
+        let hands_over = self.hands_over.load(std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async move { hands_over })
     }
 
     fn hand_over(
         &self,
         _: tokio::time::Instant,
-        _: shoal_protocol::hub::packages::Handing,
+        handing: shoal_protocol::hub::packages::Handing,
     ) -> BoxFuture<'_, Vec<(Space, shoal_protocol::hub::packages::Handed)>> {
-        Box::pin(async { Vec::new() })
+        self.handings.lock().unwrap().push(handing);
+        let handed = std::mem::take(&mut *self.handed.lock().unwrap());
+        Box::pin(async move { handed })
     }
 
     fn stay(&self) -> BoxFuture<'_, ()> {
+        (self.stays).fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Box::pin(async {})
     }
 }

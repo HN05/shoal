@@ -331,15 +331,18 @@ that workspace. A space that lags more stays for the alert and a manual
 restore; the machine retires the copies taken over once it wakes, and one
 that wakes within the 10 minutes keeps everything. The hub keeps a sleep
 in its store, and these numbers are fixed, not settings. What a machine
-does once its user walks away, by closing its lid or, without one, leaving
-it idle as long as the platform reads as idle, is `[machine] keep_awake`:
+does once its user walks away, by closing its lid or, without one or docked
+with it closed, leaving it idle as long as the platform reads as idle, is
+`[machine] keep_awake`:
 `off` sleeps as usual, leaving its work to the sleep's announcement;
 `finish` admits nothing new, keeps the machine awake only while a turn
 works and then lets it sleep; `handover` admits nothing new and hands its
 spaces with something to do over as a shutdown does, the walk-away or the
 sleep's announcement, whichever comes first, starting it, holding the
 machine awake until the hub confirms their packages, at most 10 minutes,
-and retiring its copies once the user is back; `on` carries on. While the
+and retiring its copies once the user is back or the machine wakes, while
+a shutdown meanwhile still hands over every space that did not go; `on`
+carries on. While the
 user is there, `finish` and `on` keep the machine awake while agents
 work, and `off` and `handover` hold nothing. A machine that admits nothing
 new says so in its capacity, which placement skips. The daemon reads the

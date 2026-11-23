@@ -23,10 +23,11 @@ pub struct KeptPackage {
 }
 
 /// The spaces a machine hands over.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Handing {
-    /// Every space, as it shuts down.
-    Every,
+    /// Every space but these, which an earlier hand-over sent, as it shuts
+    /// down.
+    AllBut(HashSet<SpaceId>),
     /// These spaces, which have something to do, as its user walked away,
     /// with the chats in their worktrees, which follow them.
     Only(HashSet<SpaceId>),
@@ -36,7 +37,7 @@ impl Handing {
     /// Whether the hand-over takes `space`.
     pub fn takes(&self, space: &Space) -> bool {
         match self {
-            Self::Every => true,
+            Self::AllBut(gone) => !gone.contains(&space.id),
             Self::Only(spaces) => {
                 spaces.contains(&space.id) || space.within().is_some_and(|w| spaces.contains(w))
             }
@@ -77,3 +78,6 @@ states! {
         Slept => "slept",
     }
 }
+
+#[cfg(test)]
+mod tests;

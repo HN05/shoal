@@ -733,8 +733,9 @@ each space's final package goes to the hub, which places it and continues it
 there, a chat in a workspace's worktree going with that workspace. The
 machine stays awake until the hub confirms every package, or for at most 10
 minutes, before a sleep only within the platform's allowance, then may
-sleep; an alert says where each space went. Once the user is back, the
-machine admits work again and retires its copies of the spaces that went.
+sleep; an alert says where each space went. Once the user is back, or the
+machine wakes from such a sleep, it admits work again and retires its copies
+of the spaces that went. A shutdown meanwhile hands over the rest.
 Spaces with nothing to do stay, and the sleep announcement covers them.
 
 Linux holds a `systemd-inhibit` lock on sleep, idle and the lid switch,

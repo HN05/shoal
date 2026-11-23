@@ -87,6 +87,13 @@ impl Shutdown {
         }
     }
 
+    /// Whether the machine's work ends with the stop, so a later one leaves
+    /// it alone: as the system or the daemon shuts down, not as the user
+    /// walks away or the machine sleeps.
+    fn ends_work(self) -> bool {
+        matches!(self, Self::System | Self::Daemon)
+    }
+
     /// Whether the stop also ends CI jobs, to rerun: a system shutdown ends
     /// them, while the daemon's own end leaves them to the next daemon, since
     /// the forge's runner does their work, and a machine its user left runs
@@ -112,9 +119,12 @@ impl Agents {
     /// agent queue until a system shutdown is cancelled, so nothing starts
     /// again before it.
     /// Then, on a machine joined to a hub, hand every space over to the
-    /// machines the hub places them on, sending what fits in `window`. The user learns where each space went and what
-    /// to continue. An update waits for the stop. Once a stop before a
-    /// shutdown finished, later ones wait for it and leave the work alone.
+    /// machines the hub places them on, sending what fits in `window`, but
+    /// those an earlier hand-over sent, which run elsewhere already. The
+    /// user learns where each space went and what to continue. An update
+    /// waits for the stop. Once a stop before a shutdown finished, later
+    /// ones wait for it and leave the work alone; a hand-over once the user
+    /// walked away or before a sleep leaves a later shutdown its stop.
     /// Returns the spaces stopped.
     pub async fn stop_for_shutdown_of(
         &self,
@@ -144,22 +154,24 @@ impl Agents {
         let deadline = window.deadline(started);
         let handed = (self.hand_over(daemon, deadline, handing)).await;
         (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
-        *finished = true;
+        *finished = shutdown.ends_work();
         stopped
     }
 
-    /// The spaces a stop before `shutdown` hands over: every space, or
-    /// once the user walked away or before the machine sleeps, those with
-    /// something to do, none when they cannot be read.
+    /// The spaces a stop before `shutdown` hands over, but those an
+    /// earlier hand-over sent: every space, or once the user walked away
+    /// or before the machine sleeps, those with something to do, none when
+    /// they cannot be read.
     async fn handing(&self, shutdown: Shutdown) -> Handing {
-        if matches!(shutdown, Shutdown::System | Shutdown::Daemon) {
-            return Handing::Every;
+        let gone = self.presences.gone();
+        if shutdown.ends_work() {
+            return Handing::AllBut(gone);
         }
         let spaces = self.spaces_with_work().await.unwrap_or_else(|error| {
             log!("hand-over: the spaces with something to do are unreadable: {error:#}");
             HashSet::new()
         });
-        Handing::Only(spaces)
+        Handing::Only(spaces.difference(&gone).cloned().collect())
     }
 
     /// Admit queued agents again once the shutdown that stopped work was
@@ -170,6 +182,7 @@ impl Agents {
         *self.shutdown_stopped.lock().await = false;
         self.agent_queue.suspend(false).await;
         daemon.stay().await;
+        self.presences.forget_gone();
     }
 
     /// Stop each space `shoal stop --all` stops that `stops` takes, with
@@ -241,9 +254,11 @@ impl Agents {
     ) -> Vec<(Space, Handed)> {
         let handed = daemon.hand_over(deadline, handing).await;
         for (space, handed) in &handed {
-            if handed.left()
-                && let Err(error) = self.cancel_stopped_restores(daemon, &space.id).await
-            {
+            if !handed.left() {
+                continue;
+            }
+            self.presences.went(&space.id);
+            if let Err(error) = self.cancel_stopped_restores(daemon, &space.id).await {
                 log!(
                     "{} went to another machine, but its restores here stay: {error:#}",
                     space.name

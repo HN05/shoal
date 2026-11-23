@@ -40,6 +40,9 @@ pub struct Presences {
     /// Held through a hand-over; true once one finished, until the user
     /// is back.
     handed_over: tokio::sync::Mutex<bool>,
+    /// The spaces a hand-over sent to other machines, which a later one
+    /// leaves out until this machine retires its copies.
+    gone: std::sync::Mutex<HashSet<SpaceId>>,
 }
 
 impl Default for Presences {
@@ -47,11 +50,27 @@ impl Default for Presences {
         Self {
             presence: watch::Sender::new(Presence::default()),
             handed_over: Default::default(),
+            gone: Default::default(),
         }
     }
 }
 
 impl Presences {
+    /// The space `id` went to another machine.
+    pub(crate) fn went(&self, id: &SpaceId) {
+        self.gone.lock().unwrap().insert(id.clone());
+    }
+
+    /// The spaces a hand-over sent to other machines.
+    pub(crate) fn gone(&self) -> HashSet<SpaceId> {
+        self.gone.lock().unwrap().clone()
+    }
+
+    /// Forget the spaces that went, whose copies this machine retires.
+    pub(crate) fn forget_gone(&self) {
+        self.gone.lock().unwrap().clear();
+    }
+
     fn set(&self, change: impl FnOnce(&mut Presence)) {
         self.presence.send_if_modified(|presence| {
             let before = *presence;
@@ -110,9 +129,10 @@ impl Agents {
         *handed_over = true;
     }
 
-    /// Admit work again once the user is back after a hand-over, retiring
-    /// the copies of the spaces that went.
-    async fn come_back(&self, daemon: &dyn Daemon) {
+    /// Admit work again once the user is back after a hand-over, or the
+    /// machine woke from a sleep that handed spaces over, retiring the
+    /// copies of the spaces that went.
+    pub async fn come_back(&self, daemon: &dyn Daemon) {
         let mut handed_over = self.presences.handed_over.lock().await;
         if std::mem::take(&mut *handed_over) {
             self.stay(daemon).await;
