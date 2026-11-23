@@ -594,11 +594,13 @@ pub(super) fn reread(db: &Connection, id: i64) -> Result<Thread> {
 }
 
 /// Renumber the thread `id` as the next item of the space `to`, which it
-/// is numbered in from now on.
+/// is numbered in from now on, and which opened it if the space it was
+/// numbered in did.
 pub(super) fn renumber(tx: &Transaction<'_>, id: i64, to: &SpaceId) -> Result<ItemNumber> {
     let number = item_numbers::next(tx, to)?;
     tx.execute(
-        "UPDATE threads SET space_id=?2,space_number=?3,number=?4 WHERE id=?1",
+        "UPDATE threads SET space_id=?2,space_number=?3,number=?4,
+                opener_id=iif(opener_id=space_id,?2,opener_id) WHERE id=?1",
         params![id, to, number.space, number.item],
     )?;
     Ok(number)

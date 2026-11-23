@@ -280,6 +280,8 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
         .await
         .unwrap();
     assert_eq!(listing.threads.len(), 1);
+    // The absorbing space opened it from now on.
+    assert_eq!(listing.threads[0].opener_id(), Some(&parent.id));
     let files = manager
         .spaces
         .attached_files(&SpaceSelector::id(&parent.id))
