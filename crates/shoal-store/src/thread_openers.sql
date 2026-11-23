@@ -5,3 +5,4 @@ ALTER TABLE threads ADD COLUMN opener_id TEXT;
 ALTER TABLE threads ADD COLUMN opener_name TEXT;
 ALTER TABLE threads ADD COLUMN opener_number INTEGER;
 UPDATE threads SET opener_id=space_id WHERE opener='space';
+CREATE INDEX threads_opener ON threads(opener_id) WHERE opener_id IS NOT NULL;

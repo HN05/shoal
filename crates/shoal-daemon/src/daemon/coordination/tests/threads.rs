@@ -679,6 +679,29 @@ async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
     assert_eq!(forward.forwarded_to.as_ref().unwrap().label(), "90 away");
 }
 
+#[tokio::test]
+async fn a_thread_without_a_kind_waits_for_the_machine_that_would_keep_its_review() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    away_on_offline_machine(manager, Some(&tree.parent.id)).await;
+    let away = SpaceSelector::Number(90.into());
+    let parent = caller(&tree.parent);
+
+    let opened = (manager.coordination.open_thread(
+        &**manager,
+        Some(&parent),
+        "Unclear name".into(),
+        None,
+        Some(&away),
+        Vec::new(),
+    ))
+    .await;
+    let error = format!("{:#}", opened.unwrap_err());
+    assert!(error.contains("--kind question"), "{error}");
+    let open = manager.coordination.open_threads().await.unwrap();
+    assert!(open.is_empty(), "{open:?}");
+}
+
 /// Start `writer`'s pending review of `workspace`.
 async fn start_review(
     manager: &Manager,

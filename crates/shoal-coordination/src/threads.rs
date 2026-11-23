@@ -96,7 +96,8 @@ impl Coordination {
                     code: &code,
                 };
                 if kind.is_none()
-                    && let Some(thread) = comment_elsewhere(daemon, caller, &located, comment).await
+                    && let Some(thread) =
+                        comment_elsewhere(daemon, caller, &located, comment).await?
                 {
                     return Ok(thread);
                 }
@@ -234,21 +235,25 @@ impl Coordination {
 
 /// `comment` of `caller`'s pending review of the workspace `located`,
 /// which the machine that runs that workspace keeps and opens; none for
-/// a workspace here, without such a review, or from a machine that
-/// cannot be asked, which keeps no comment it could take.
+/// a workspace here or without such a review. Only that machine knows
+/// whether it keeps one, so failing to ask it refuses the thread.
 async fn comment_elsewhere(
     daemon: &dyn Daemon,
     caller: &Caller,
     located: &Located,
     comment: Comment<'_>,
-) -> Option<Thread> {
+) -> Result<Option<Thread>> {
     let Located::Elsewhere { space, machine } = located else {
-        return None;
+        return Ok(None);
     };
     let opened = ask_comment(daemon, caller, machine, &space.space.id, comment);
-    opened.await.unwrap_or_else(|error| {
-        crate::log!("{} kept no review comment: {error:#}", machine.name);
-        None
+    opened.await.with_context(|| {
+        format!(
+            "machine {} keeps any review of {} and could not open the thread as its comment; \
+             open a question with --kind question",
+            machine.name,
+            shoal_protocol::space_names::label(space.space.number, &space.space.name)
+        )
     })
 }
 

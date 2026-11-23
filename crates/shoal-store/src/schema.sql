@@ -1204,6 +1204,8 @@ CREATE UNIQUE INDEX reviews_active ON reviews(workspace_id)
 CREATE UNIQUE INDEX reviews_pending ON reviews(workspace_id, opener, COALESCE(opener_id, ''))
     WHERE state='pending';
 
+CREATE INDEX threads_opener ON threads(opener_id) WHERE opener_id IS NOT NULL;
+
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind
             WHEN 'workspace' THEN json_object('id',spaces.id,'name',spaces.name,
