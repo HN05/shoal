@@ -104,6 +104,8 @@ states! {
         NoRepository => "no_repository",
         /// It has not installed the start's agent tool.
         NoAgent => "no_agent",
+        /// Its user walked away, and it admits nothing new.
+        Away => "away",
     }
 }
 

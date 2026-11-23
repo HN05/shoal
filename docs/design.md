@@ -522,8 +522,9 @@ of each connected machine, never the hub's or a daemon's state, and ranks the
 machines with a reason each, so a start and an app can say why a space went
 where it did. Each machine reports its capacity with its spaces: its
 repositories by origin, its `max_heavy_agents`, the heavy agents its
-admission would start now, the memory new work may use and its waiting heavy
-agents, measured at most every 15 seconds and sent when it changes enough to
+admission would start now, the memory new work may use, its waiting heavy
+agents and whether its user walked away from it while its `keep_awake` admits
+nothing new then, which every policy's machine skips, measured at most every 15 seconds and sent when it changes enough to
 place by; the hub places from the latest report, not a live query, and keeps
 it in memory alone. `balanced` sends lasting work to `always_on` machines
 with room and otherwise keeps it on the caller's machine, beside its parent

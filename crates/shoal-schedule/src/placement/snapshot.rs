@@ -77,16 +77,26 @@ pub struct Capacity {
     pub memory_free: Option<u64>,
     /// The heavy agents waiting in its queue.
     pub heavy_waiting: u32,
+    /// Whether its user walked away, so it admits nothing new.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub away: bool,
 }
 
 impl Request {
-    /// Why the start cannot go to `machine`, none when it can: the
-    /// caller's machine has its repository, where the start found it, and
-    /// another one needs it registered, unless the start needs none, and
-    /// every machine needs its agent tool.
+    /// Why the start cannot go to `machine`, none when it can: a machine
+    /// its user walked away from admits nothing new, the caller's machine
+    /// has its repository, where the start found it, and another one needs
+    /// it registered, unless the start needs none, and every machine needs
+    /// its agent tool.
     pub fn unfit(&self, machine: &Machine) -> Option<SkippedBy> {
         let caller = machine.id == self.caller;
-        if !caller && !machine.has_repository(self.origin.as_deref()) {
+        if machine
+            .capacity
+            .as_ref()
+            .is_some_and(|capacity| capacity.away)
+        {
+            Some(SkippedBy::Away)
+        } else if !caller && !machine.has_repository(self.origin.as_deref()) {
             Some(SkippedBy::NoRepository)
         } else if !machine.has_agent(&self.agent) {
             Some(SkippedBy::NoAgent)

@@ -47,6 +47,7 @@ impl Agents {
             light_free: light_free(&occupied, &limits),
             memory_free: memory_free(sample, room),
             heavy_waiting: self.heavy_waiting(&light).await?,
+            away: self.agent_queue.held_away(),
         })
     }
 

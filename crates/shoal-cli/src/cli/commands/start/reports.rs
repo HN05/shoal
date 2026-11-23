@@ -127,5 +127,6 @@ fn skipped_why(why: SkippedBy) -> &'static str {
     match why {
         SkippedBy::NoRepository => "repository not registered; `shoal repo add` there registers it",
         SkippedBy::NoAgent => "agent tool not installed",
+        SkippedBy::Away => "its user is away; it starts nothing new until they return",
     }
 }

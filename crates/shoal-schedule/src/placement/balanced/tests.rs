@@ -154,3 +154,29 @@ fn a_start_skips_machines_without_its_repository_or_agent_tool() {
     chat.origin = None;
     assert_eq!(ranked(chat, machines)[0].0, "elsewhere");
 }
+
+#[test]
+fn a_start_skips_machines_whose_user_walked_away() {
+    let away = |id: &str| {
+        let mut machine = machine(id, true, capacity(1, 64, 0));
+        (machine.capacity.as_mut().into_iter()).for_each(|capacity| capacity.away = true);
+        machine
+    };
+    let mut caller = away("laptop");
+    caller.always_on = false;
+    let machines = vec![
+        caller,
+        away("desktop"),
+        machine("server", true, capacity(1, 8, 0)),
+    ];
+    let placement = Balanced.place(&Snapshot {
+        request: request(true),
+        machines,
+    });
+    let skipped: Vec<_> = (placement.skipped.iter())
+        .map(|skipped| (skipped.machine.to_string(), skipped.why))
+        .collect();
+    let away = |id: &str| (id.to_owned(), SkippedBy::Away);
+    assert_eq!(skipped, [away("laptop"), away("desktop")]);
+    assert_eq!(placement.chosen().unwrap().machine.to_string(), "server");
+}

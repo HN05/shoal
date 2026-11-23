@@ -53,6 +53,9 @@ pub struct AgentQueue {
     /// Admission waits while the machine sleeps, from its announcement
     /// until it fully wakes, so a dark wake starts nothing.
     asleep: AtomicBool,
+    /// Admission waits while the user is away from a machine whose
+    /// `keep_awake` admits nothing new then.
+    away: AtomicBool,
 }
 
 #[derive(Default)]
@@ -413,10 +416,24 @@ impl AgentQueue {
         }
     }
 
-    /// Whether admission waits, while the system shuts down or the machine
-    /// sleeps.
+    /// Hold back admission while the user is away, as [`Self::sleep`]
+    /// does while the machine sleeps; their return wakes the dispatcher.
+    pub fn away(&self, away: bool) {
+        let was = self.away.swap(away, Ordering::SeqCst);
+        if was && !away {
+            self.wake();
+        }
+    }
+
+    /// Whether admission waits for the user's return.
+    pub fn held_away(&self) -> bool {
+        self.away.load(Ordering::SeqCst)
+    }
+
+    /// Whether admission waits, while the system shuts down, the machine
+    /// sleeps or the user is away.
     pub fn holds_admission(&self) -> bool {
-        self.suspended() || self.asleep.load(Ordering::SeqCst)
+        self.suspended() || self.asleep.load(Ordering::SeqCst) || self.held_away()
     }
 
     /// Wake the dispatcher, since a slot may have freed or work may fit.
