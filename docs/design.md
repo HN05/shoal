@@ -2979,7 +2979,8 @@ and a thread it opens there without a kind is a question in its own space
 when it has no pending review of that workspace, which only that machine can
 tell, so the thread waits for it to be reachable or for an explicit kind. The
 reviewed workspace's removal, or its writer's on the same machine, drops a
-pending review, whose comments a restore could never submit. Forge reviews stay on the forge.
+pending review, whose comments a restore could never submit; a writer's
+comments on another machine neither keep it from cleanup nor close with it. Forge reviews stay on the forge.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the
