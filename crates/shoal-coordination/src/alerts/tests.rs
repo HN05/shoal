@@ -131,15 +131,15 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
 
 #[tokio::test]
 async fn a_failed_state_report_alerts_one_line_that_fits() {
-    let manager = &Fixture::new().await;
-    let workspace = manager.workspace("reporter", None).await;
+    let fixture = &Fixture::new().await;
+    let workspace = fixture.workspace("reporter", None).await;
     let error = format!("first\nsecond {}", "x".repeat(600));
-    manager
+    fixture
         .coordination
-        .report_state_failure(&**manager, &SpaceSelector::id(&workspace.id), &error)
+        .report_state_failure(&**fixture, &SpaceSelector::id(&workspace.id), &error)
         .await
         .unwrap();
-    let unread = manager.notifications.list(true, 50).await.unwrap();
+    let unread = fixture.notifications.list(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
     assert_eq!(unread[0].kind, AlertKind::StateReportFailed);
     assert_eq!(unread[0].space.as_deref(), Some("reporter"));
@@ -153,19 +153,19 @@ async fn a_failed_state_report_alerts_one_line_that_fits() {
 
 #[tokio::test]
 async fn an_event_named_alone_takes_no_workspace_that_shares_its_name() {
-    let manager = &Fixture::new().await;
-    manager.workspace("fix", None).await;
+    let fixture = &Fixture::new().await;
+    fixture.workspace("fix", None).await;
 
     // A launch that opened no workspace is named alone.
-    (manager.coordination.notify(
-        &**manager,
+    (fixture.coordination.notify(
+        &**fixture,
         Some(&"fix".into()),
         AlertKind::QueueFailed,
         "did not start",
     ))
     .await;
 
-    let [notification] = &manager.notifications.list(true, 10).await.unwrap()[..] else {
+    let [notification] = &fixture.notifications.list(true, 10).await.unwrap()[..] else {
         panic!("one notification");
     };
     assert_eq!(notification.space.as_deref(), Some("fix"));

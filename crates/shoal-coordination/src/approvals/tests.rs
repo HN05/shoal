@@ -106,8 +106,8 @@ fn sample(owner: &SpaceId, target: Target) -> ApprovalRequest {
 
 #[tokio::test]
 async fn only_a_request_nothing_else_carries_out_waits_for_the_user() -> Result<()> {
-    let manager = &Fixture::new().await;
-    manager
+    let fixture = &Fixture::new().await;
+    fixture
         .store()
         .run(|db| {
             owners(db)?;
@@ -146,8 +146,8 @@ async fn only_a_request_nothing_else_carries_out_waits_for_the_user() -> Result<
 
 #[tokio::test]
 async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result<()> {
-    let manager = &Fixture::new().await;
-    manager.store().run(|db| {
+    let fixture = &Fixture::new().await;
+    fixture.store().run(|db| {
             owners(db)?;
             let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
             for (id, owner, target) in [
@@ -182,8 +182,8 @@ async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result
 
 #[tokio::test]
 async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Result<()> {
-    let manager = &Fixture::new().await;
-    manager
+    let fixture = &Fixture::new().await;
+    fixture
         .store()
         .run(|db| {
             owners(db)?;
@@ -224,8 +224,8 @@ async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Re
 
 #[tokio::test]
 async fn a_merge_retried_with_other_wording_keeps_its_request_and_approval() -> Result<()> {
-    let manager = &Fixture::new().await;
-    manager
+    let fixture = &Fixture::new().await;
+    fixture
         .store()
         .run(|db| {
             owners(db)?;
@@ -266,8 +266,8 @@ async fn a_merge_retried_with_other_wording_keeps_its_request_and_approval() -> 
 
 #[tokio::test]
 async fn withdrawal_never_reaches_a_request_that_took_the_number_meanwhile() -> Result<()> {
-    let manager = &Fixture::new().await;
-    manager
+    let fixture = &Fixture::new().await;
+    fixture
         .store()
         .run(|db| {
             owners(db)?;
@@ -316,8 +316,8 @@ fn decision_messages_name_the_request_target_and_next_step() {
 
 #[tokio::test]
 async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()> {
-    let manager = &Fixture::new().await;
-    manager
+    let fixture = &Fixture::new().await;
+    fixture
         .store()
         .run(|db| {
             owners(db)?;
@@ -412,8 +412,8 @@ fn query_work(db: &Connection, sql: &str, params: impl Params) -> Result<(usize,
 
 #[tokio::test]
 async fn bundled_planner_bounds_lookups_and_limits_candidate_decoding() -> Result<()> {
-    let manager = &Fixture::new().await;
-    manager.store().run(|db| {
+    let fixture = &Fixture::new().await;
+    fixture.store().run(|db| {
             owners(db)?;
             let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
             let mut request = sample(&SpaceId::from("owner"), target.clone());
