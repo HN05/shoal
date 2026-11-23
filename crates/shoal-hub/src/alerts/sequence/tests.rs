@@ -27,9 +27,9 @@ fn the_first_machine_keeps_its_numbers_and_the_next_takes_new_ones() {
     // A machine joining with alerts of its own renumbers every one below
     // the sequence, which may have named another machine's alert.
     let laptop = report(&mut db, "laptop", &[], &[3, 40]);
-    assert_eq!(laptop.renumbered, [renumbering(3, 26)]);
+    assert_eq!(laptop.renumbered, [renumbering(3, 41)]);
     assert_eq!(laptop.confirmed, [40]);
-    assert_eq!(laptop.spares, (41..61).collect::<Vec<_>>());
+    assert_eq!(laptop.spares, (42..62).collect::<Vec<_>>());
 }
 
 #[test]
@@ -61,4 +61,14 @@ fn spares_a_machine_used_or_never_heard_of_are_never_given_again() {
     assert_eq!(second.spares.len(), SPARES);
     let laptop = report(&mut db, "laptop", &[], &[]);
     assert!(laptop.spares.iter().all(|spare| *spare > 25));
+}
+
+#[test]
+fn a_renumbered_alert_goes_above_every_number_the_same_report_keeps() {
+    let mut db = shoal_store::test_support::migrated().unwrap();
+    let desk = report(&mut db, "desk", &[], &[]);
+    let next = desk.spares.last().unwrap() + 1;
+    let laptop = report(&mut db, "laptop", &[], &[3, next]);
+    assert_eq!(laptop.confirmed, [next]);
+    assert_eq!(laptop.renumbered, [renumbering(3, next + 1)]);
 }

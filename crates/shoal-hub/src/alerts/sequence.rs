@@ -29,6 +29,8 @@ pub(crate) fn number(
     let mut unconfirmed = report.unconfirmed.clone();
     unconfirmed.sort_unstable();
     unconfirmed.dedup();
+    // Confirmed first, so a new number goes above every one confirmed.
+    let mut taken = Vec::new();
     for number in unconfirmed {
         if number >= next || keeps(tx, member, number)? {
             keep(tx, member, number, false)?;
@@ -36,14 +38,16 @@ pub(crate) fn number(
             numbering.confirmed.push(number);
             kept.insert(number);
         } else {
-            keep(tx, member, next, false)?;
-            numbering.renumbered.push(AlertRenumbering {
-                from: number,
-                to: next,
-            });
-            kept.insert(next);
-            next += 1;
+            taken.push(number);
         }
+    }
+    for from in taken {
+        keep(tx, member, next, false)?;
+        numbering
+            .renumbered
+            .push(AlertRenumbering { from, to: next });
+        kept.insert(next);
+        next += 1;
     }
     let left: HashSet<i64> = report.spares.iter().copied().collect();
     drop_heard(tx, member, &left, &kept)?;
