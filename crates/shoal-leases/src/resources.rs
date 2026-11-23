@@ -6,11 +6,13 @@ use shoal_ids::space_ids::SpaceId;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use uuid::Uuid;
 
+mod freeing;
 mod repositories;
 pub use repositories::{borrowed, ensure_no_external_leases};
 
 use crate::{
     Leases,
+    acquired_leases::Acquired,
     allocation::Allocation,
     callers::Caller,
     daemon::{Daemon, Records},
@@ -390,16 +392,9 @@ impl Leases {
         let (scope, definition) = definitions
             .remove(&request.pool)
             .ok_or_else(|| anyhow::anyhow!("unknown resource or pool: {}", request.pool))?;
-        let related = repositories::related(daemon, &definition).await?;
-        let hook_workspace = workspace.clone();
         let hook = daemon
             .hook(&workspace, HookKind::PostResourceAcquire)
             .await?;
-        let mode = if hook.is_some() {
-            GuardMode::Exclusive
-        } else {
-            GuardMode::Shared
-        };
         let target = Target::Resource {
             scope: scope.clone(),
             pool: request.pool.clone(),
@@ -407,51 +402,85 @@ impl Leases {
         let mut place = self
             .queues
             .enter(target, &workspace.id, &request.name, request.queue);
-        // A hook in this workspace holds the guard briefly; a queued request
-        // waits it out in place instead of failing.
-        let _resources = match self.gates.resource_guard(&workspace.id, mode) {
-            Ok(guard) => guard,
-            Err(error) if request.queue => {
-                let busy = Ok(Allocation::Busy(error.to_string()));
-                place.settle(&busy);
-                return busy;
-            }
-            Err(error) => return Err(error),
+        let asked = ResourceClaim {
+            workspace: &workspace,
+            scope: &scope,
+            definition: &definition,
+            request: &request,
+            caller,
+            hooked: hook.is_some(),
         };
-        if hook.is_some() {
-            daemon.verify_worktree(&workspace).await?;
+        let mut claimed = self.claim_resource(daemon, &asked, place.ahead()).await;
+        // Capacity asleep agents hold goes to the request, which claims again.
+        if let Ok(claim) = &mut claimed
+            && !claim.freeing.is_empty()
+        {
+            let freeing = permits(std::mem::take(&mut claim.freeing));
+            if self
+                .give_to_request(daemon, &workspace, caller, freeing)
+                .await
+            {
+                claimed = self.claim_resource(daemon, &asked, place.ahead()).await;
+            }
         }
-        let workspace_name = (workspace.name.clone(), workspace.id.clone());
-        let acquirer = self.acquirer(daemon, caller).await;
-        let caller = caller.cloned();
-        let ahead = place.ahead();
-        let records = self.records.clone();
-        let acquisition = self
-            .store
-            .run(move |db| {
-                let claimant = Claimant {
-                    workspace_id: workspace.id,
-                    caller,
-                    acquirer,
-                    ahead,
-                };
-                acquire_lease(db, &*records, claimant, scope, definition, request, related)
-            })
-            .await;
+        let acquisition = claimed.map(|claim| claim.allocation);
         place.settle(&acquisition);
         let acquisition = acquisition?;
         if let Allocation::Granted(lease) = &acquisition
             && let Some(command) = hook
         {
-            (daemon.run_hook(&hook_workspace, Hook::PostResourceAcquire(lease), &command))
+            (daemon.run_hook(&workspace, Hook::PostResourceAcquire(lease), &command))
                 .await
                 .context(
                     "resource lease retained; repeat acquire to retry the hook, or release it",
                 )?;
         }
-        let space = (&workspace_name.0, &workspace_name.1);
+        let space = (&workspace.name, &workspace.id);
         (self.notify_allocation(daemon, space, &acquisition, "")).await;
         Ok(acquisition)
+    }
+
+    /// Claim the lease `claim` asks for in one transaction, with `ahead`
+    /// queued requests that arrived earlier, under the workspace's resource
+    /// guard, exclusive when a hook runs after the claim. A hook in the
+    /// workspace holds the guard briefly; a queued request waits it out in
+    /// place instead of failing.
+    async fn claim_resource(
+        &self,
+        daemon: &dyn Daemon,
+        claim: &ResourceClaim<'_>,
+        ahead: usize,
+    ) -> Result<Claim> {
+        let workspace = claim.workspace;
+        let related = repositories::related(daemon, claim.definition).await?;
+        let mode = match claim.hooked {
+            true => GuardMode::Exclusive,
+            false => GuardMode::Shared,
+        };
+        let _resources = match self.gates.resource_guard(&workspace.id, mode) {
+            Ok(guard) => guard,
+            Err(error) if claim.request.queue => {
+                return Ok(Allocation::Busy(error.to_string()).into());
+            }
+            Err(error) => return Err(error),
+        };
+        if claim.hooked {
+            daemon.verify_worktree(workspace).await?;
+        }
+        let claimant = Claimant {
+            workspace_id: workspace.id.clone(),
+            caller: claim.caller.cloned(),
+            acquirer: self.acquirer(daemon, claim.caller).await,
+            ahead,
+        };
+        let (scope, definition) = (claim.scope.clone(), claim.definition.clone());
+        let request = claim.request.clone();
+        let records = self.records.clone();
+        self.store
+            .run(move |db| {
+                acquire_lease(db, &*records, claimant, scope, definition, request, related)
+            })
+            .await
     }
 
     pub async fn list_resources(
@@ -666,6 +695,39 @@ fn release_lease(
     Ok(true)
 }
 
+/// Each set of `leases` as the leases agents acquire.
+fn permits(leases: Vec<Vec<ResourceLease>>) -> Vec<Vec<Acquired>> {
+    let permits = |set: Vec<ResourceLease>| set.into_iter().map(Acquired::permit).collect();
+    leases.into_iter().map(permits).collect()
+}
+
+/// What a request for a resource lease asks for.
+struct ResourceClaim<'a> {
+    workspace: &'a Workspace,
+    scope: &'a Scope,
+    definition: &'a Definition,
+    request: &'a ResourceRequest,
+    caller: Option<&'a Caller>,
+    /// Whether a hook runs once the lease is claimed.
+    hooked: bool,
+}
+
+/// What a claim came to, with the sets of held leases any one of which
+/// would grant it once released, where capacity keeps it busy.
+struct Claim {
+    allocation: Allocation<ResourceLease>,
+    freeing: Vec<Vec<ResourceLease>>,
+}
+
+impl From<Allocation<ResourceLease>> for Claim {
+    fn from(allocation: Allocation<ResourceLease>) -> Self {
+        Self {
+            allocation,
+            freeing: Vec::new(),
+        }
+    }
+}
+
 /// The workspace asking for a lease and its standing.
 struct Claimant {
     workspace_id: SpaceId,
@@ -689,7 +751,7 @@ fn acquire_lease(
     definition: Definition,
     mut request: ResourceRequest,
     mut related: repositories::Related,
-) -> Result<Allocation<ResourceLease>> {
+) -> Result<Claim> {
     let Claimant {
         workspace_id,
         caller,
@@ -699,7 +761,7 @@ fn acquire_lease(
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     store::require_ready(&tx, &workspace_id)?;
     if let Some(existing) = named_lease(&tx, &workspace_id, &request.pool, &request.name)? {
-        return renew_lease(tx, &existing, &scope, request, &acquirer);
+        return renew_lease(tx, &existing, &scope, request, &acquirer).map(Claim::from);
     }
     if let Some(resource) = &request.resource {
         ensure!(
@@ -760,7 +822,7 @@ fn acquire_lease(
         )))
     };
     let Some((resource, settings, mode)) = selected else {
-        return busy();
+        return busy().map(Claim::from);
     };
     let repository = settings
         .repo
@@ -784,14 +846,17 @@ fn acquire_lease(
         );
         if let Some(approval) = records.check_approval(&tx, approval)? {
             tx.commit()?;
-            return Ok(Allocation::Approval(Box::new(approval)));
+            return Ok(Allocation::Approval(Box::new(approval)).into());
         }
     }
     if let Some(queued) = queue::behind(ahead, &format!("pool {}", request.pool)) {
-        return Ok(queued);
+        return Ok(queued.into());
     }
     if !settings.can_acquire(mode, usage.member(resource), pool_available) {
-        return busy();
+        return Ok(Claim {
+            allocation: busy()?,
+            freeing: freeing::freeing(&definition, &request, &active),
+        });
     }
     let lease = ResourceLease {
         repository,
@@ -812,7 +877,7 @@ fn acquire_lease(
     insert_lease(&tx, &lease)?;
     repositories::record(&tx, &lease)?;
     tx.commit()?;
-    Ok(Allocation::Granted(lease))
+    Ok(Allocation::Granted(lease).into())
 }
 
 /// An existing lease with the same name is returned again, refreshing its

@@ -4211,7 +4211,14 @@ counted from when its restore entered the agent queue, which it leaves only as
 the agent runs again; permits cost nothing while held and stay. Under memory
 pressure, overload protection stops one such lease, the lowest-ranked asleep
 agent's first, wherever it would stop an agent, and stops an agent only once
-no asleep agent holds one: an asleep agent loses less than a running one. The agent reads
+no asleep agent holds one: an asleep agent loses less than a running one. A request that capacity keeps busy
+takes a permit an asleep agent keeps instead of waiting for an agent that may
+sleep for hours: the claim's transaction names the sets of held permits any of
+which would grant it, a single permit or every reader on one member, and the
+request takes the set wholly held by asleep agents that may yield to it whose
+highest-ranked holder ranks lowest, releases it through the normal release and
+claims again. An agent yields to a request for a space of no lower priority, and
+to any of the user's. The agent reads
 each lease Shoal took back in a message that waits for its next turn without
 waking it. A lease whose workspace another lifecycle or resource operation holds then, such
 as the stop that ended the agent or a resource hook, waits for it to end; the

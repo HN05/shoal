@@ -26,6 +26,20 @@ pub(crate) struct Acquired {
     pub(crate) held: Held,
 }
 
+impl Acquired {
+    /// The resource or repository permit `lease`.
+    pub(crate) fn permit(lease: resources::ResourceLease) -> Self {
+        Self {
+            workspace: lease.workspace_id,
+            acquirer: lease.acquirer,
+            held: Held::Permit {
+                pool: lease.pool,
+                name: lease.name,
+            },
+        }
+    }
+}
+
 /// What a lease holds, as its kind's release names it.
 pub(crate) enum Held {
     Simulator { name: String },
@@ -185,14 +199,7 @@ impl Leases {
     /// or demo acquired.
     pub(crate) async fn acquired_leases(&self) -> Result<Vec<Acquired>> {
         let permits = self.store.read(|db| resources::leases(db, None)).await?;
-        let permits = permits.into_iter().map(|lease| Acquired {
-            workspace: lease.workspace_id,
-            acquirer: lease.acquirer,
-            held: Held::Permit {
-                pool: lease.pool,
-                name: lease.name,
-            },
-        });
+        let permits = permits.into_iter().map(Acquired::permit);
         let simulators = self.list_simulators(None).await?.into_iter();
         let simulators = simulators.filter_map(|sim| {
             Some(Acquired {

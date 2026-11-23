@@ -311,7 +311,8 @@ impl Agents for StandIn {
         Box::pin(async { Ok(false) })
     }
 
-    fn sleepers(&self) -> BoxFuture<'_, Result<Vec<Sleeper>>> {
+    /// Every asleep agent yields to every request.
+    fn sleepers<'a>(&'a self, _: Option<&'a SpaceId>) -> BoxFuture<'a, Result<Vec<Sleeper>>> {
         let sleepers = self.sleepers.lock().unwrap().clone();
         Box::pin(async move { Ok(sleepers) })
     }

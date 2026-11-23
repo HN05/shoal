@@ -97,8 +97,13 @@ pub trait Agents: Send + Sync {
     fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
     /// The asleep agents, which keep their leases while they sleep, the one
-    /// whose space ranks lowest in the agent queue first.
-    fn sleepers(&self) -> BoxFuture<'_, Result<Vec<Sleeper>>>;
+    /// whose space ranks lowest in the agent queue first: every one, or
+    /// with `yielding_to` those whose space's priority is no higher than
+    /// that space's, which may give it a lease.
+    fn sleepers<'a>(
+        &'a self,
+        yielding_to: Option<&'a SpaceId>,
+    ) -> BoxFuture<'a, Result<Vec<Sleeper>>>;
 
     /// Tell the agent of the space `id` `message` once it runs again,
     /// without waking it.

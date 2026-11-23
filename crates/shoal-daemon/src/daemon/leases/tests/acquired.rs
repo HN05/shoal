@@ -17,14 +17,14 @@ use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::{resources::ResourceRequest, space_names::SpaceSelector};
 
 /// A ready workspace in a daemon whose global config is `config`.
-struct Fixture {
+pub(super) struct Fixture {
     _root: tempfile::TempDir,
-    manager: Arc<Manager>,
-    workspace: Workspace,
+    pub(super) manager: Arc<Manager>,
+    pub(super) workspace: Workspace,
 }
 
 impl Fixture {
-    async fn new(config: &str) -> Self {
+    pub(super) async fn new(config: &str) -> Self {
         let (root, manager) = manager().await;
         configure(&manager, config).await;
         let checkout = repository(root.path(), "repo");
@@ -44,13 +44,13 @@ impl Fixture {
         }
     }
 
-    fn selector(&self) -> SpaceSelector {
+    pub(super) fn selector(&self) -> SpaceSelector {
         SpaceSelector::id(&self.workspace.id)
     }
 
     /// Start a tracked agent in the workspace, returning its execution and
     /// the caller its requests come as.
-    async fn agent(&self) -> (ExecutionId, Caller) {
+    pub(super) async fn agent(&self) -> (ExecutionId, Caller) {
         let execution = (self.manager.agents)
             .begin_agent_execution(&*self.manager, self.workspace.id.as_str())
             .await
@@ -79,7 +79,7 @@ impl Fixture {
     }
 
     /// Acquire a permit of the pool `lock` named `name` as `caller`.
-    async fn acquire(&self, name: &str, caller: Option<&Caller>) {
+    pub(super) async fn acquire(&self, name: &str, caller: Option<&Caller>) {
         let request = ResourceRequest {
             mode: None,
             kind: None,
@@ -102,7 +102,7 @@ impl Fixture {
     }
 
     /// The acquirer of the workspace's agent.
-    fn its_agent(&self) -> Acquirer {
+    pub(super) fn its_agent(&self) -> Acquirer {
         Acquirer::Agent {
             space_id: self.workspace.id.clone(),
         }
@@ -110,12 +110,12 @@ impl Fixture {
 
     /// Put the agent of `execution` to sleep as Shoal does on its own: its
     /// restore waits in the agent queue as its execution ends.
-    async fn sleep(&self, execution: &ExecutionId) {
+    pub(super) async fn sleep(&self, execution: &ExecutionId) {
         self.sleep_since(execution, UnixTime::now()).await;
     }
 
     /// [`Self::sleep`], as though its harness stopped at `since`.
-    async fn sleep_since(&self, execution: &ExecutionId, since: UnixTime) {
+    pub(super) async fn sleep_since(&self, execution: &ExecutionId, since: UnixTime) {
         let (restored, space) = (execution.clone(), self.workspace.id.clone());
         let queued = self.manager.store.run(move |db| {
             db.execute(
@@ -132,7 +132,7 @@ impl Fixture {
     }
 
     /// Release the leases of every acquirer that ended, as the sweep does.
-    async fn sweep(&self) {
+    pub(super) async fn sweep(&self) {
         (self.manager.leases)
             .release_leases_of_ended_executions(&*self.manager)
             .await
@@ -140,7 +140,7 @@ impl Fixture {
     }
 
     /// The workspace's permits by name, with who acquired each.
-    async fn permits(&self) -> Vec<(String, Acquirer)> {
+    pub(super) async fn permits(&self) -> Vec<(String, Acquirer)> {
         let leases = self
             .manager
             .leases
@@ -154,9 +154,9 @@ impl Fixture {
     }
 }
 
-const POOL: &str = "[resources.lock]\ncapacity = 3\n";
+pub(super) const POOL: &str = "[resources.lock]\ncapacity = 3\n";
 
-fn permit(name: &str, acquirer: &Acquirer) -> (String, Acquirer) {
+pub(super) fn permit(name: &str, acquirer: &Acquirer) -> (String, Acquirer) {
     (name.to_owned(), acquirer.clone())
 }
 
@@ -178,7 +178,7 @@ async fn an_agents_permit_is_its_spaces_agents_and_the_users_the_users() {
 impl Fixture {
     /// Record a leased simulator named `name` that `acquirer` acquired,
     /// without a device, so releasing it runs no simctl.
-    async fn lease_simulator(&self, name: &str, acquirer: Acquirer) {
+    pub(super) async fn lease_simulator(&self, name: &str, acquirer: Acquirer) {
         self.lease_device(name, None, acquirer).await;
     }
 
@@ -214,7 +214,7 @@ impl Fixture {
     }
 
     /// The names of the workspace's simulator leases.
-    async fn simulators(&self) -> Vec<String> {
+    pub(super) async fn simulators(&self) -> Vec<String> {
         let sims = self
             .manager
             .leases
@@ -596,69 +596,4 @@ async fn releasing_an_ended_agents_leases_leaves_the_workspace_idle() {
         .await
         .unwrap();
     assert_eq!(active_at, Some(crate::time::UnixTime::from_seconds(1)));
-}
-
-/// Put an agent holding a permit and a simulator to sleep for `asleep`
-/// under the global config `sleep`, then run the sweep's stop of long
-/// sleepers' running leases, returning the fixture.
-async fn sleep_with_leases(sleep: &str, asleep: Duration) -> Fixture {
-    let fixture = Fixture::new(&format!("{POOL}[sleep]\n{sleep}\n")).await;
-    let (execution, caller) = fixture.agent().await;
-    fixture.acquire("permit", Some(&caller)).await;
-    fixture.lease_simulator("sim", fixture.its_agent()).await;
-    let since = UnixTime::now() - asleep;
-    fixture.sleep_since(&execution, since).await;
-    let manager = &fixture.manager;
-    (manager.leases.stop_leases_of_long_sleepers(&**manager))
-        .await
-        .unwrap();
-    fixture
-}
-
-/// The asleep agent's unread messages about leases taken back, and whether
-/// any would wake it.
-async fn taken(fixture: &Fixture) -> (Vec<String>, bool) {
-    let unread = fixture
-        .manager
-        .agents
-        .unread_messages(&fixture.workspace.id);
-    let unread = unread.await.unwrap();
-    let taken = (unread.alerts.into_iter())
-        .filter(|alert| alert.kind == AlertKind::LeaseTaken)
-        .map(|alert| alert.message)
-        .collect();
-    (taken, unread.wakes)
-}
-
-/// An agent asleep past `[sleep] keep_leases_minutes` loses its simulator
-/// and keeps its permit, and reads why once it runs again, which does not
-/// wake it.
-#[tokio::test]
-async fn an_agent_asleep_past_its_limit_loses_its_simulator_and_keeps_its_permit() {
-    let fixture = sleep_with_leases("keep_leases_minutes = 30", Duration::from_secs(31 * 60)).await;
-
-    assert_eq!(fixture.simulators().await, Vec::<String>::new());
-    let agent = fixture.its_agent();
-    assert_eq!(fixture.permits().await, [permit("permit", &agent)]);
-    let (taken, wakes) = taken(&fixture).await;
-    assert_eq!(taken.len(), 1, "{taken:?}");
-    assert!(taken[0].contains("after 30 minutes asleep"), "{}", taken[0]);
-    assert!(!wakes);
-}
-
-/// `keep_leases_minutes = 0` stops an agent's running leases as it sleeps.
-#[tokio::test]
-async fn no_minutes_kept_stops_the_running_leases_as_the_agent_sleeps() {
-    let fixture = sleep_with_leases("keep_leases_minutes = 0", Duration::ZERO).await;
-
-    assert_eq!(fixture.simulators().await, Vec::<String>::new());
-}
-
-/// An agent asleep within its limit keeps its simulator.
-#[tokio::test]
-async fn an_agent_asleep_within_its_limit_keeps_its_simulator() {
-    let fixture = sleep_with_leases("keep_leases_minutes = 30", Duration::from_secs(60)).await;
-
-    assert_eq!(fixture.simulators().await, ["sim"]);
-    assert_eq!(taken(&fixture).await.0, Vec::<String>::new());
 }

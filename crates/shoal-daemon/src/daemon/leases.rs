@@ -124,8 +124,11 @@ impl Agents for Manager {
         Box::pin(self.agents.has_queued_launch(id))
     }
 
-    fn sleepers(&self) -> BoxFuture<'_, Result<Vec<Sleeper>>> {
-        Box::pin(self.sleepers())
+    fn sleepers<'a>(
+        &'a self,
+        yielding_to: Option<&'a SpaceId>,
+    ) -> BoxFuture<'a, Result<Vec<Sleeper>>> {
+        Box::pin(self.sleepers(yielding_to))
     }
 
     fn tell_agent<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, ()> {
@@ -143,13 +146,22 @@ impl Agents for Manager {
 
 impl Manager {
     /// The asleep agents, lowest-ranked in the agent queue first, each with
-    /// how long its space's settings keep its running leases.
-    async fn sleepers(&self) -> Result<Vec<Sleeper>> {
+    /// how long its space's settings keep its running leases: every one, or
+    /// those whose space's priority is no higher than `yielding_to`'s.
+    async fn sleepers(&self, yielding_to: Option<&SpaceId>) -> Result<Vec<Sleeper>> {
         let asleep = self.agents.asleep_agents().await?;
-        let ids: Vec<SpaceId> = asleep.keys().cloned().collect();
+        let mut ids: Vec<SpaceId> = asleep.keys().cloned().collect();
+        ids.extend(yielding_to.cloned());
         let ranked = self.agents.ranked_spaces(self, &ids).await?;
+        let ceiling = yielding_to.and_then(|requester| {
+            let ranks = ranked.iter().find(|(id, _)| id == requester);
+            ranks.map(|(_, priority)| *priority)
+        });
+        let yields = |priority| ceiling.is_none_or(|ceiling| priority <= ceiling);
         let mut sleepers = Vec::with_capacity(ranked.len());
-        for (id, _) in ranked.into_iter().rev() {
+        let asleep_ranked = (ranked.into_iter().rev())
+            .filter(|(id, priority)| asleep.contains_key(id) && yields(*priority));
+        for (id, _) in asleep_ranked {
             // One removed meanwhile keeps nothing.
             let Ok(space) = self.spaces.space(&SpaceSelector::id(&id)).await else {
                 continue;

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use super::*;
 use crate::callers::Caller;
-use crate::resources::ResourceRequest;
+use crate::resources::{LockMode, ResourceRequest};
 use crate::stand_in::Fixture;
 use shoal_protocol::acquirers::Acquirer;
 
@@ -103,4 +103,129 @@ async fn memory_pressure_stops_one_running_lease_of_the_lowest_ranked_sleeper() 
     assert!(!stop().await.unwrap());
     let told = fixture.daemon.told.lock().unwrap().clone();
     assert!(told[0].1.contains("to free memory"), "{}", told[0].1);
+}
+
+/// Request a lease of the pool `lock` named `name` in `mode`, as the user,
+/// returning whether it was granted.
+async fn request_lock(fixture: &Fixture, name: &str, mode: Option<LockMode>) -> bool {
+    let request = ResourceRequest {
+        mode,
+        kind: None,
+        pool: "lock".into(),
+        name: name.into(),
+        resource: None,
+        reason: None,
+        queue: false,
+    };
+    let selector = fixture.selector();
+    let acquired = (fixture.leases).acquire_resource(&fixture.daemon, &selector, request, None);
+    matches!(
+        acquired.await.unwrap(),
+        crate::allocation::Allocation::Granted(_)
+    )
+}
+
+/// The names of the pool's leases, with who acquired each.
+async fn holders(fixture: &Fixture) -> Vec<(String, Acquirer)> {
+    let leases = fixture.leases.list_resources(&fixture.daemon, None).await;
+    let mut holders: Vec<_> = (leases.unwrap().into_iter())
+        .map(|lease| (lease.name, lease.acquirer))
+        .collect();
+    holders.sort_by(|a, b| a.0.cmp(&b.0));
+    holders
+}
+
+/// Acquire a lease of the pool `lock` named `name` in `mode` as the agent
+/// of `space`.
+async fn agent_lock(fixture: &Fixture, name: &str, space: &SpaceId, mode: Option<LockMode>) {
+    let request = ResourceRequest {
+        mode,
+        kind: None,
+        pool: "lock".into(),
+        name: name.into(),
+        resource: None,
+        reason: None,
+        queue: false,
+    };
+    let (caller, selector) = (Caller::of_space(space.clone()), fixture.selector());
+    let acquired =
+        (fixture.leases).acquire_resource(&fixture.daemon, &selector, request, Some(&caller));
+    assert!(matches!(
+        acquired.await.unwrap(),
+        crate::allocation::Allocation::Granted(_)
+    ));
+}
+
+/// A busy request takes the permit of the lowest-ranked asleep agent, who
+/// reads that it went to the request's space.
+#[tokio::test]
+async fn a_busy_request_takes_the_lowest_ranked_asleep_agents_permit() {
+    let fixture = Fixture::new("[resources.lock]\ncapacity = 2\n", "").await;
+    let [lowest, higher] = [(); 2].map(|()| SpaceId::generate());
+    acquire_permit(&fixture, "higher", &higher).await;
+    acquire_permit(&fixture, "lowest", &lowest).await;
+    let long = Duration::from_secs(3600);
+    *fixture.daemon.sleepers.lock().unwrap() = vec![
+        sleeper(&lowest, Duration::ZERO, long),
+        sleeper(&higher, Duration::ZERO, long),
+    ];
+
+    assert!(request_lock(&fixture, "mine", None).await);
+
+    let higher = permit_of("higher", agent(&higher));
+    assert_eq!(
+        holders(&fixture).await,
+        [higher, permit_of("mine", Acquirer::User)]
+    );
+    let told = fixture.daemon.told.lock().unwrap().clone();
+    assert_eq!(told.len(), 1);
+    assert_eq!(told[0].0, lowest);
+    assert!(told[0].1.contains("given to space 1"), "{}", told[0].1);
+}
+
+/// A running agent's permit is never taken: the request stays busy.
+#[tokio::test]
+async fn a_busy_request_leaves_a_running_agents_permit() {
+    let fixture = Fixture::new("[resources.lock]\ncapacity = 1\n", "").await;
+    let running = SpaceId::generate();
+    acquire_permit(&fixture, "held", &running).await;
+
+    assert!(!request_lock(&fixture, "mine", None).await);
+    assert_eq!(
+        holders(&fixture).await,
+        [permit_of("held", agent(&running))]
+    );
+}
+
+/// A writer takes asleep readers' leases only when every reader in its way
+/// is asleep.
+#[tokio::test]
+async fn a_writer_takes_readers_leases_only_when_every_reader_sleeps() {
+    let pool = "[resources.lock]\nkind = \"rwlock\"\ncapacity = 1\n";
+    let fixture = Fixture::new(pool, "").await;
+    let [asleep, running] = [(); 2].map(|()| SpaceId::generate());
+    let read = Some(LockMode::Read);
+    agent_lock(&fixture, "asleep", &asleep, read).await;
+    agent_lock(&fixture, "running", &running, read).await;
+    let long = Duration::from_secs(3600);
+    *fixture.daemon.sleepers.lock().unwrap() = vec![sleeper(&asleep, Duration::ZERO, long)];
+
+    assert!(!request_lock(&fixture, "writer", Some(LockMode::Write)).await);
+    assert_eq!(holders(&fixture).await.len(), 2);
+
+    fixture
+        .daemon
+        .sleepers
+        .lock()
+        .unwrap()
+        .push(sleeper(&running, Duration::ZERO, long));
+    assert!(request_lock(&fixture, "writer", Some(LockMode::Write)).await);
+    assert_eq!(
+        holders(&fixture).await,
+        [permit_of("writer", Acquirer::User)]
+    );
+}
+
+fn permit_of(name: &str, acquirer: Acquirer) -> (String, Acquirer) {
+    (name.to_owned(), acquirer)
 }

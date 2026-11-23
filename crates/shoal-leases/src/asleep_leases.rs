@@ -1,8 +1,9 @@
 //! The leases Shoal takes back from asleep agents, which otherwise keep
 //! them: one that keeps something running, a simulator or containers, once
 //! its agent has slept past `[sleep] keep_leases_minutes` or the machine
-//! needs its memory. The agent reads which it lost, why, and how to get it
-//! back once it runs again.
+//! needs its memory, and one other requests can find busy, a permit or a
+//! simulator, for the request that needs it. The agent reads which it lost,
+//! why, and how to get it back once it runs again.
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -10,7 +11,8 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::acquired_leases::{Acquired, Held};
 use crate::daemon::{Daemon, Sleeper};
-use crate::{Leases, model::Workspace, sim::Device, time::UnixTime};
+use crate::{Leases, callers::Caller, model::Workspace, sim::Device, time::UnixTime};
+use shoal_ids::space_ids::SpaceNumber;
 
 /// Why Shoal took a lease back from an asleep agent.
 #[derive(Debug, Clone, Copy)]
@@ -19,6 +21,8 @@ pub(crate) enum Taken {
     Overslept(u64),
     /// The machine ran short of memory.
     Memory,
+    /// A request for the space numbered so needed it.
+    Given(SpaceNumber),
 }
 
 impl std::fmt::Display for Taken {
@@ -26,6 +30,7 @@ impl std::fmt::Display for Taken {
         match self {
             Self::Overslept(minutes) => write!(f, "stopped after {minutes} minutes asleep"),
             Self::Memory => f.write_str("stopped to free memory"),
+            Self::Given(number) => write!(f, "given to space {number}"),
         }
     }
 }
@@ -35,7 +40,7 @@ impl Leases {
     /// keeps them.
     pub async fn stop_leases_of_long_sleepers(&self, daemon: &dyn Daemon) -> Result<()> {
         let now = UnixTime::now();
-        let overdue: HashMap<SpaceId, Sleeper> = (daemon.sleepers().await?.into_iter())
+        let overdue: HashMap<SpaceId, Sleeper> = (daemon.sleepers(None).await?.into_iter())
             .filter(|sleeper| sleeper.overdue(now))
             .map(|sleeper| (sleeper.space.clone(), sleeper))
             .collect();
@@ -56,7 +61,7 @@ impl Leases {
     /// Stop one running lease of the lowest-ranked asleep agent that holds
     /// one, to free memory, returning whether one stopped.
     pub async fn stop_a_sleepers_running_lease(&self, daemon: &dyn Daemon) -> Result<bool> {
-        let sleepers = daemon.sleepers().await?;
+        let sleepers = daemon.sleepers(None).await?;
         let leases = self.acquired_leases().await?;
         for sleeper in &sleepers {
             let held = (leases.iter()).filter(|lease| {
@@ -71,6 +76,40 @@ impl Leases {
         Ok(false)
     }
 
+    /// Release one of the sets of leases in `freeing`, each of which would
+    /// grant a request for `workspace` from `caller` that capacity keeps
+    /// busy, once every lease in it is an asleep agent's that may yield to
+    /// the request: any for the user's, else one whose space's priority is
+    /// no higher than the workspace's. The set whose highest-ranked holder
+    /// ranks lowest goes, the smallest among equals. Whether it went.
+    pub(crate) async fn give_to_request(
+        &self,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
+        caller: Option<&Caller>,
+        freeing: Vec<Vec<Acquired>>,
+    ) -> bool {
+        let requester = caller.map(|_| &workspace.id);
+        let sleepers = match daemon.sleepers(requester).await {
+            Ok(sleepers) => sleepers,
+            Err(error) => {
+                crate::log!("asleep agents unread for a busy request: {error:#}");
+                return false;
+            }
+        };
+        let Some(given) = lowest_ranked(&sleepers, freeing) else {
+            return false;
+        };
+        for lease in &given {
+            let released = self.release_acquired_lease(daemon, lease, Device::Keep);
+            let Some(holding) = released.await else {
+                return false;
+            };
+            tell_taken(daemon, lease, &holding, Taken::Given(workspace.number)).await;
+        }
+        true
+    }
+
     /// Stop the running `lease` of an asleep agent for `why`, shutting a
     /// simulator down, and tell its agent; whether it stopped.
     async fn stop_running(&self, daemon: &dyn Daemon, lease: &Acquired, why: Taken) -> bool {
@@ -81,6 +120,22 @@ impl Leases {
         tell_taken(daemon, lease, &workspace, why).await;
         true
     }
+}
+
+/// The set in `freeing` held wholly by `sleepers`, lowest-ranked first,
+/// whose highest-ranked holder ranks lowest, the smallest among equals.
+fn lowest_ranked(sleepers: &[Sleeper], freeing: Vec<Vec<Acquired>>) -> Option<Vec<Acquired>> {
+    let rank = |lease: &Acquired| {
+        let space = lease.acquirer.agent_space()?;
+        sleepers.iter().position(|sleeper| sleeper.space == *space)
+    };
+    (freeing.into_iter())
+        .filter_map(|leases| {
+            let highest = leases.iter().map(rank).collect::<Option<Vec<_>>>()?;
+            Some(((highest.into_iter().max()?, leases.len()), leases))
+        })
+        .min_by_key(|(order, _)| *order)
+        .map(|(_, leases)| leases)
 }
 
 /// Tell the agent that acquired `lease` in `workspace` that Shoal took it

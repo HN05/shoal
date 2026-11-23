@@ -2,4 +2,5 @@
 
 mod acquired;
 mod allocation;
+mod asleep;
 mod secrets;

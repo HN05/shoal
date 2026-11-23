@@ -7590,6 +7590,18 @@ kept. Resource and repository permits stay. Under memory pressure,
 [overload protection](#overload-protection) stops them sooner, before it stops
 any agent.
 
+A request that capacity keeps busy, waiting with `--queue` or not, takes what
+frees it from asleep agents: a resource or repository permit on the member it
+needs, or on any member when the pool is full, and for a writer every reader in
+its way, only when each of them is asleep. Shoal releases them as `shoal
+release` does, running `hooks.pre_resource_release`, then grants the request
+as usual. The asleep agent whose space ranks lowest in the
+[agent queue](#queue-order) loses its lease first, and only one whose space's
+priority is no higher than that of the space the request is for, its own or
+the one `--space` names; your own request takes from any asleep agent. A
+queued request takes nothing before the requests that arrived earlier are
+served. Containers are never taken for a request: no other space can use them.
+
 The agent's first message once it runs again names each lease Shoal took back
 while it slept and why, with the `shoal acquire` that gets it back, which
 takes its turn as any request does. Taking it back runs the lease's release as
