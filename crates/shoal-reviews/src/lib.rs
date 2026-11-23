@@ -62,6 +62,9 @@ pub struct Reviews {
     queued: Notify,
     /// Stops each review that has started to run.
     cancels: Mutex<HashMap<ReviewId, Arc<watch::Sender<bool>>>>,
+    /// The running reviews the machine's sleep stopped, until each is
+    /// queued again.
+    slept: Mutex<std::collections::HashSet<ReviewId>>,
     /// The repository and run of each review whose checkout, a worktree of
     /// the repository, may exist, which outlives the review's records when
     /// its workspace goes.
@@ -94,6 +97,7 @@ impl Reviews {
             paths,
             queued: Notify::new(),
             cancels: Mutex::default(),
+            slept: Mutex::default(),
             checkouts: Mutex::default(),
             ended: watch::channel(0).0,
             runs: oneshot::Runs::default(),

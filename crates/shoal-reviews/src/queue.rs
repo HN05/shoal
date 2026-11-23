@@ -1,5 +1,6 @@
-//! Queueing and cancelling reviews, stopping those a removal ends, and the
-//! refusals of a repository's move or removal while its reviews run.
+//! Queueing and cancelling reviews, stopping those a removal ends and
+//! those the machine's sleep would cut off, and the refusals of a
+//! repository's move or removal while its reviews run.
 use anyhow::{Context, Result, bail, ensure};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -144,6 +145,23 @@ impl Reviews {
         while running() {
             if ended.changed().await.is_err() {
                 return;
+            }
+        }
+    }
+
+    /// Stop the running reviews, which the machine's sleep would cut off,
+    /// queueing each again to run once the agent queue admits it after the
+    /// machine wakes.
+    pub async fn stop_for_sleep(&self) {
+        let running = match self.store.read(|db| store::running(db)).await {
+            Ok(running) => running,
+            Err(error) => return log!("reviews to stop for sleep: {error:#}"),
+        };
+        let cancels = self.cancels.lock().unwrap();
+        for id in running {
+            if let Some(cancel) = cancels.get(&id) {
+                self.slept.lock().unwrap().insert(id);
+                cancel.send_replace(true);
             }
         }
     }

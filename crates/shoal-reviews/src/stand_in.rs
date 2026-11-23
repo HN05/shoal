@@ -115,6 +115,7 @@ impl Fixture {
             workspace: workspace.clone(),
             stops: Mutex::default(),
             recovered: watch::channel(false).0,
+            admissions: watch::channel(Vec::new()).0,
             held: Mutex::default(),
             messages: Mutex::default(),
             notices: Mutex::default(),
@@ -240,6 +241,9 @@ pub(crate) struct StandIn {
     pub(crate) stops: Mutex<Vec<Box<dyn FnOnce() + Send + Sync>>>,
     /// Whether load recovered, which admits the runs protection stopped.
     pub(crate) recovered: watch::Sender<bool>,
+    /// Whether each admission asked for waited for healthy readings, in
+    /// the order they were asked for.
+    pub(crate) admissions: watch::Sender<Vec<bool>>,
     /// The repositories of the admissions kept until a restart.
     pub(crate) held: Mutex<Vec<RepositoryId>>,
     /// The messages queued for the workspace's agents.
@@ -370,6 +374,8 @@ impl Agents for StandIn {
         stop: Box<dyn FnOnce() + Send + Sync>,
     ) -> BoxFuture<'a, Result<Box<dyn Admission + 'a>>> {
         self.stops.lock().unwrap().push(stop);
+        self.admissions
+            .send_modify(|admissions| admissions.push(after_stop));
         let waits = after_stop.then(|| self.recovered.subscribe());
         Box::pin(async { Ok(Box::new(Admitted(waits)) as Box<dyn Admission>) })
     }

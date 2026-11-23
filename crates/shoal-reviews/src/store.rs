@@ -143,14 +143,20 @@ pub fn settle_interrupted(
     Ok((failed, requeue_running(db, kept)?))
 }
 
-/// Queue running review `id` again after protection stopped its run, to wait
-/// for healthy readings; false when it is no longer running.
-pub fn requeue(db: &Connection, id: ReviewId) -> Result<bool> {
+/// Queue running review `id` again after its run was stopped, by
+/// protection to wait for healthy readings when `waits_for_recovery`, else
+/// by the machine's sleep; false when it is no longer running.
+pub fn requeue(db: &Connection, id: ReviewId, waits_for_recovery: bool) -> Result<bool> {
     Ok(db.execute(
         "UPDATE reviews SET state=?2,head=NULL,base=NULL,started_at=NULL,reviewer=NULL,
-            waits_for_recovery=1
+            waits_for_recovery=?4
             WHERE id=?1 AND state=?3",
-        params![id, ReviewState::Queued, ReviewState::Running],
+        params![
+            id,
+            ReviewState::Queued,
+            ReviewState::Running,
+            waits_for_recovery
+        ],
     )? == 1)
 }
 

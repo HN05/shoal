@@ -6,7 +6,8 @@
 //! hub link sends the notice and packages within the platform's allowance,
 //! then stays closed, so a dark wake, as macOS's Power Nap makes, neither
 //! starts work nor tells the hub the machine is back. Meanwhile the runner
-//! ends its running CI jobs to rerun, so other runners can take them.
+//! ends its running CI jobs to rerun, so other runners can take them, and
+//! running reviews stop to run again once the machine wakes.
 use std::{sync::Arc, time::Duration};
 
 use tokio::time::Instant;
@@ -74,12 +75,13 @@ async fn follow(manager: &Arc<Manager>, mut events: impl PowerEvents) {
     }
 }
 
-/// Hold the agent queue, and by `deadline` end the running CI jobs to
-/// rerun and tell the hub that the machine sleeps, closing its link until
-/// it wakes.
+/// Hold the agent queue, queue running reviews again, and by `deadline`
+/// end the running CI jobs to rerun and tell the hub that the machine
+/// sleeps, closing its link until it wakes.
 async fn prepare_for_sleep(manager: &Arc<Manager>, deadline: Instant) {
     log!("sleep lock: the machine goes to sleep");
     manager.agents.agent_queue().sleep(true);
+    manager.reviews.stop_for_sleep().await;
     let jobs = end_jobs(manager, deadline);
     tokio::join!(manager.hub.announce_sleep(&**manager, deadline), jobs);
 }

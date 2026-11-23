@@ -115,7 +115,7 @@ async fn one_review_is_queued_or_running_per_workspace() {
             assert!(start(db, first.id(), &"head".into(), &"base".into(), UnixTime::from_seconds(3))?);
             // A run protection stopped waits for healthy readings until the
             // review starts again.
-            assert!(requeue(db, first.id())?);
+            assert!(requeue(db, first.id(), true)?);
             assert!(waits_for_recovery(db, first.id())?);
             assert!(start(db, first.id(), &"head".into(), &"base".into(), UnixTime::from_seconds(3))?);
             assert!(!waits_for_recovery(db, first.id())?);

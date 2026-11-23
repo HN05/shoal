@@ -1769,7 +1769,11 @@ workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one
 runs. A review waits in the [agent queue](#agent-queue), ranked
 with the workspace it reviews, for the memory and disk an agent's start needs,
-but takes no heavy slot; `shoal queue` does not list it. A
+but takes no heavy slot; `shoal queue` does not list it. A review that
+the machine's sleep or a shutdown cuts off runs again: as the machine goes to
+sleep, Shoal stops each running reviewer and queues its review again, which
+starts over once the machine wakes, and a daemon that starts again queues
+each review that was running. A
 chat has no changes of its own; see [chat reviews](#chat-reviews) below.
 
 The reviewer is `--agent`, else [`[review] agent`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), else `agent.default`, else one you

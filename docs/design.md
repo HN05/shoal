@@ -2898,7 +2898,11 @@ found again by its marker after a crash. A one-shot run waits for admission at t
 rank of the workspace it serves, ahead of that workspace's agent, which waits on it.
 Protection stops a one-shot run before
 any agent, since it has no running session to lose; it asks for admission again and waits
-for healthy readings, as a stopped agent's restore does. A chat has no worktree or branch, so it
+for healthy readings, as a stopped agent's restore does. A review the machine's
+announced sleep would cut off stops the same way as the machine goes to sleep
+and asks for admission again, which the asleep queue gives once the machine
+wakes, without waiting for readings, and a daemon that starts again queues each
+review that was running. A chat has no worktree or branch, so it
 reviews no changes of its own: it names the workspace it reviews, or reviews
 its one linked PR as a PR target, and its reviews are those of its linked PRs. A PR target, named by URL or `--pr`, resolves a same-repository PR through the daemon's
 forge reads, as the agent account for a scoped caller and the user's logins otherwise, and

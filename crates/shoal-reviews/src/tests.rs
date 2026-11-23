@@ -316,6 +316,27 @@ async fn a_review_whose_admission_is_taken_back_is_queued_again() {
     ended.changed().await.unwrap();
 }
 
+/// A running review the machine's sleep stops asks for admission again,
+/// without waiting for healthy readings, and runs again once admitted.
+#[tokio::test]
+async fn a_review_the_machines_sleep_stops_runs_again() {
+    let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
+    let mut admissions = fixture.daemon.admissions.subscribe();
+    let queued = fixture.queue(None).await.unwrap();
+    fixture.until(queued.id, ReviewState::Running).await;
+    fixture.reviews.stop_for_sleep().await;
+    let asked = admissions.wait_for(|admissions| admissions.len() == 2);
+    assert_eq!(*asked.await.unwrap(), [false, false]);
+    // Once asked for again, it stays running until cancelled.
+    fixture.until(queued.id, ReviewState::Running).await;
+    let mut ended = fixture.reviews.ends();
+    (fixture.reviews)
+        .cancel(&*fixture.daemon, None, Some(queued.id), None)
+        .await
+        .unwrap();
+    ended.changed().await.unwrap();
+}
+
 #[tokio::test]
 async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;

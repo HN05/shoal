@@ -91,6 +91,8 @@ enum Pass {
     Ended,
     /// Protection stopped its run and queued the review again.
     Stopped,
+    /// The machine's sleep stopped its run and queued the review again.
+    Slept,
 }
 
 /// A run in the place of a review's subject: the review, its workspace and
@@ -138,6 +140,11 @@ impl Reviews {
                 Ok(Pass::Stopped) => {
                     log!("review {id}: protection stopped it; it runs again once load recovers");
                 }
+                Ok(Pass::Slept) => {
+                    log!(
+                        "review {id}: the machine's sleep stopped it; it runs again once it wakes"
+                    );
+                }
                 Ok(Pass::Ended) => break,
                 Err(error) => {
                     self.fail_unprepared(daemon, id, error).await;
@@ -146,6 +153,7 @@ impl Reviews {
             }
         }
         self.cancels.lock().unwrap().remove(&id);
+        self.slept.lock().unwrap().remove(&id);
         self.ended.send_modify(|ended| *ended += 1);
     }
 
@@ -485,7 +493,8 @@ impl Reviews {
     /// Record how the run ended, post a finished PR review and deliver the
     /// review, under an operation guard. A cancel already recorded and
     /// delivered it; a run that ended cancelled while still running was
-    /// stopped by protection, and its review is queued again.
+    /// stopped by protection or the machine's sleep, and its review is
+    /// queued again.
     async fn record_end(
         &self,
         daemon: &dyn Daemon,
@@ -498,8 +507,7 @@ impl Reviews {
         // which a restart would not redo once the result is recorded.
         let _operation = self.gates.operation().await;
         if ended == Ended::Cancelled {
-            let requeued = self.store.run(move |db| store::requeue(db, id)).await?;
-            return Ok(if requeued { Pass::Stopped } else { Pass::Ended });
+            return self.requeue_stopped(id).await;
         }
         let code = match &ended {
             Ended::Returned { output, .. } => match self.reviewed_head(id).await? {
@@ -539,6 +547,20 @@ impl Reviews {
         }
         self.deliver(daemon, id).await;
         Ok(Pass::Ended)
+    }
+
+    /// Queue review `id`, whose run was stopped while it ran, again: to wait
+    /// for healthy readings unless the machine's sleep stopped it.
+    async fn requeue_stopped(&self, id: ReviewId) -> Result<Pass> {
+        let slept = self.slept.lock().unwrap().remove(&id);
+        let requeued = (self.store)
+            .run(move |db| store::requeue(db, id, !slept))
+            .await?;
+        Ok(match (requeued, slept) {
+            (false, _) => Pass::Ended,
+            (true, false) => Pass::Stopped,
+            (true, true) => Pass::Slept,
+        })
     }
 
     /// The commit running review `id` reviews.
