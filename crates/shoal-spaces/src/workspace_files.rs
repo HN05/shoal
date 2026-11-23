@@ -607,3 +607,6 @@ impl Unsent for UnsentCopies {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

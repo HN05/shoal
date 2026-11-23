@@ -623,3 +623,6 @@ async fn fetched_upstream_commit(repo: &Repository, following: &Following) -> Re
         .await
         .with_context(|| format!("{branch}'s remote-tracking branch {tracking} was never fetched"))
 }
+
+#[cfg(test)]
+mod tests;

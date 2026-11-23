@@ -3,7 +3,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
 use std::time::Duration;
 
-use crate::daemon::workspace_files::{Attacher, FileSource, KeptCopy};
+use crate::daemon::workspace_files::{Attacher, FileSource};
 use crate::{
     daemon::{
         executions::ExecutionKind,
@@ -15,7 +15,6 @@ use crate::{
     model::Workspace,
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::files::SentFile;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// Whether permissions bind this test process; root reads and deletes past
@@ -97,6 +96,24 @@ async fn agent_caller(manager: &Manager, id: &SpaceId, space: &SpaceName, name: 
     caller
 }
 
+/// Start a chat named `name` in the repository of `workspace`.
+async fn chat(
+    manager: &std::sync::Arc<Manager>,
+    workspace: &Workspace,
+    name: &str,
+) -> crate::model::Chat {
+    manager
+        .start_chat(
+            workspace.repository().clone().into(),
+            name.into(),
+            "claude".into(),
+            None,
+        )
+        .await
+        .unwrap()
+}
+
+mod events;
 #[tokio::test]
 async fn files_from_outside_any_agent_are_the_users() {
     let (temp, manager) = manager().await;
@@ -287,97 +304,6 @@ async fn results_name_the_agent_that_handed_them_back() {
 }
 
 #[tokio::test]
-async fn files_sent_with_messages_are_listed_until_they_expire() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let file = temp.path().join("crash.log");
-    std::fs::write(&file, "panic").unwrap();
-    assert!(
-        manager
-            .spaces
-            .attached_files(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    // Sending the same file again keeps one record of its copy.
-    for _ in 0..2 {
-        manager
-            .coordination
-            .send_space_message(
-                &*manager,
-                None,
-                &SpaceSelector::id(&workspace.id),
-                "See the log".into(),
-                vec![file.clone().into()],
-            )
-            .await
-            .unwrap();
-    }
-    let files = manager
-        .spaces
-        .attached_files(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    let [listed] = files.as_slice() else {
-        panic!("{files:?}");
-    };
-    assert_eq!(listed.name, "crash.log");
-    assert_eq!(listed.bytes, 5);
-    assert_eq!(listed.source, FileSource::Message);
-    assert_eq!(listed.space.name, "receiver");
-    assert_eq!(
-        std::fs::read_to_string(listed.path().unwrap()).unwrap(),
-        "panic"
-    );
-
-    manager
-        .spaces
-        .remove_selected(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            crate::removal::UnsavedWork::default(),
-            crate::removal::InspectionPolicy::GitOnly,
-        )
-        .await
-        .unwrap();
-    // The removed workspace's files stay, listed under its ID.
-    let kept = manager
-        .spaces
-        .attached_files(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    let [kept] = kept.as_slice() else {
-        panic!("{kept:?}");
-    };
-    assert_eq!(
-        (&kept.path().unwrap(), kept.expires_at.is_some()),
-        (&listed.path().unwrap(), true)
-    );
-    assert!(listed.path().unwrap().exists());
-    manager
-        .store
-        .run(|db| {
-            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    manager.spaces.expire_results(&*manager).await.unwrap();
-    assert!(!listed.path().unwrap().exists());
-    let left = manager
-        .store
-        .run(|db| {
-            Ok(db.query_row("SELECT COUNT(*) FROM space_files", [], |row| {
-                row.get::<_, i64>(0)
-            })?)
-        })
-        .await
-        .unwrap();
-    assert_eq!(left, 0);
-}
-
-#[tokio::test]
 async fn added_files_need_no_message() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
@@ -440,264 +366,6 @@ async fn added_files_need_no_message() {
             .all(|message| message.attachments().len() == 1),
         "adding sends no message"
     );
-}
-
-#[tokio::test]
-async fn titles_stay_with_their_files_until_a_new_one() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let (chart, shot, report) = (
-        temp.path().join("chart.html"),
-        temp.path().join("shot.png"),
-        temp.path().join("report.md"),
-    );
-    for file in [&chart, &shot, &report] {
-        std::fs::write(file, "content").unwrap();
-    }
-    let titled = |path: &std::path::Path, title: &str| crate::daemon::workspace_files::NewFile {
-        path: path.to_owned(),
-        title: Some(title.into()),
-    };
-    manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![titled(&chart, "Latency by region")],
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // Adding it again without a title keeps the title.
-    manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![chart.clone().into()],
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    manager
-        .coordination
-        .send_space_message(
-            &*manager,
-            None,
-            &SpaceSelector::id(&workspace.id),
-            String::new(),
-            vec![titled(&shot, "Login screen"), report.clone().into()],
-        )
-        .await
-        .unwrap();
-    manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            Done {
-                results: vec![titled(&report, "Audit findings")],
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    let titles = |files: Vec<crate::daemon::workspace_files::AttachedFile>| -> Vec<_> {
-        files
-            .into_iter()
-            .map(|file| (file.name, file.title))
-            .collect()
-    };
-    let listed = manager
-        .spaces
-        .attached_files(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    assert_eq!(
-        titles(listed),
-        [
-            ("chart.html".into(), Some("Latency by region".into())),
-            ("shot.png".into(), Some("Login screen".into())),
-            ("report.md".into(), None),
-            ("report.md".into(), Some("Audit findings".into())),
-        ]
-    );
-    // A new title replaces the old one.
-    let added = manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![titled(&chart, "Latency")],
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        titles(added),
-        [("chart.html".into(), Some("Latency".into()))]
-    );
-}
-
-#[tokio::test]
-async fn a_title_that_is_not_one_line_copies_nothing() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let file = temp.path().join("chart.html");
-    std::fs::write(&file, "content").unwrap();
-    let added = manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![crate::daemon::workspace_files::NewFile {
-                path: file,
-                title: Some("Latency\nby region".into()),
-            }],
-            &Attacher::User,
-        )
-        .await;
-    assert!(added.is_err());
-    assert!(
-        manager
-            .spaces
-            .attached_files(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .is_empty()
-    );
-}
-
-#[tokio::test]
-async fn deleting_by_name_keeps_the_other_files() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let (log, shot) = (temp.path().join("crash.log"), temp.path().join("shot.png"));
-    std::fs::write(&log, "panic").unwrap();
-    std::fs::write(&shot, "image").unwrap();
-    manager
-        .coordination
-        .send_space_message(
-            &*manager,
-            None,
-            &SpaceSelector::id(&workspace.id),
-            "See".into(),
-            vec![log.clone().into(), shot.into()],
-        )
-        .await
-        .unwrap();
-    assert!(
-        manager
-            .spaces
-            .remove_attached_files(
-                &*manager,
-                &SpaceSelector::id(&workspace.id),
-                vec!["missing.txt".into()],
-                vec![]
-            )
-            .await
-            .is_err()
-    );
-    let deleted = manager
-        .spaces
-        .remove_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec!["crash.log".into()],
-            vec![],
-        )
-        .await
-        .unwrap();
-    assert!(!deleted[0].path().unwrap().exists());
-    let left = manager
-        .spaces
-        .attached_files(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    let [kept] = left.as_slice() else {
-        panic!("{left:?}");
-    };
-    assert_eq!(kept.name, "shot.png");
-    assert!(kept.path().unwrap().exists());
-
-    // Sending the same files again copies the deleted one anew.
-    manager
-        .coordination
-        .send_space_message(
-            &*manager,
-            None,
-            &SpaceSelector::id(&workspace.id),
-            "See".into(),
-            vec![log.into(), temp.path().join("shot.png").into()],
-        )
-        .await
-        .unwrap();
-    assert!(deleted[0].path().unwrap().exists());
-    assert_eq!(
-        manager
-            .spaces
-            .attached_files(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .len(),
-        2
-    );
-}
-
-#[tokio::test]
-async fn deleting_every_workspaces_files_spares_active_ones() {
-    let (temp, manager) = manager().await;
-    let idle = workspace(&temp, &manager).await;
-    let create =
-        |name: &str| manager.create_workspace(idle.repository(), name.into(), None, None, None);
-    let active = create("active").await.unwrap();
-    // An execution whose end the daemon could not confirm may still run.
-    let unresolved = create("unresolved").await.unwrap();
-    let file = temp.path().join("notes.md");
-    std::fs::write(&file, "plan").unwrap();
-    for workspace in [&idle, &active, &unresolved] {
-        manager
-            .spaces
-            .add_attached_files(
-                &*manager,
-                &SpaceSelector::id(&workspace.id),
-                vec![file.clone().into()],
-                &Attacher::User,
-            )
-            .await
-            .unwrap();
-    }
-    let (active_id, unresolved_id) = (active.id.clone(), unresolved.id.clone());
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running'),
-                    ('command',?2,'unknown')",
-                [active_id, unresolved_id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let deleted = manager.spaces.remove_idle_files(&*manager).await.unwrap();
-    let [gone] = deleted.as_slice() else {
-        panic!("{deleted:?}");
-    };
-    assert_eq!(gone.space.name, "receiver");
-    assert!(!gone.path().unwrap().exists());
-    for spared in [&active, &unresolved] {
-        assert_eq!(
-            manager
-                .spaces
-                .attached_files(&SpaceSelector::id(&spared.id))
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
-    }
 }
 
 #[tokio::test]
@@ -900,426 +568,6 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
     scope::authorize(&manager, Some(&"top".into()), &mut list)
         .await
         .unwrap();
-}
-
-#[tokio::test]
-async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let file = temp.path().join("notes.md");
-    std::fs::write(&file, "plan").unwrap();
-    let added = manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![file.into()],
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // The copy's directory now leads elsewhere, to a file of the same name.
-    let elsewhere = temp.path().join("elsewhere");
-    std::fs::create_dir(&elsewhere).unwrap();
-    std::fs::write(elsewhere.join("notes.md"), "keep me").unwrap();
-    let directory = added[0].path().unwrap().parent().unwrap();
-    std::fs::remove_dir_all(directory).unwrap();
-    std::os::unix::fs::symlink(&elsewhere, directory).unwrap();
-    assert!(
-        manager
-            .spaces
-            .remove_attached_files(&*manager, &SpaceSelector::id(&workspace.id), vec![], vec![])
-            .await
-            .is_err()
-    );
-    assert_eq!(
-        std::fs::read_to_string(elsewhere.join("notes.md")).unwrap(),
-        "keep me"
-    );
-}
-
-#[tokio::test]
-async fn expiry_refuses_results_whose_directory_was_replaced() {
-    let (temp, manager) = manager().await;
-    let audit = workspace(&temp, &manager).await;
-    let report = temp.path().join("report.md");
-    std::fs::write(&report, "No leaks").unwrap();
-    manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&audit.id),
-            Done {
-                results: vec![report.into()],
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    let result = manager
-        .spaces
-        .attached_files(&SpaceSelector::id(&audit.id))
-        .await
-        .unwrap()[0]
-        .path()
-        .unwrap()
-        .to_path_buf();
-    manager
-        .spaces
-        .remove_selected(
-            &*manager,
-            &SpaceSelector::id(&audit.id),
-            crate::removal::UnsavedWork::default(),
-            crate::removal::InspectionPolicy::GitOnly,
-        )
-        .await
-        .unwrap();
-    // The results directory now leads elsewhere, to a directory of the
-    // workspace's ID.
-    let results = result
-        .ancestors()
-        .find(|path| path.ends_with("results"))
-        .unwrap()
-        .to_owned();
-    let elsewhere = temp.path().join("elsewhere");
-    std::fs::create_dir_all(elsewhere.join(&audit.id)).unwrap();
-    std::fs::write(elsewhere.join(&audit.id).join("keep.md"), "keep me").unwrap();
-    std::fs::remove_dir_all(&results).unwrap();
-    std::os::unix::fs::symlink(&elsewhere, &results).unwrap();
-    let id = audit.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("DELETE FROM removed_space_files WHERE space_id=?1", [id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    assert!(manager.spaces.expire_results(&*manager).await.is_err());
-    assert!(elsewhere.join(&audit.id).join("keep.md").exists());
-}
-
-#[tokio::test]
-async fn a_completion_hands_back_a_bounded_number_of_files() {
-    let (temp, manager) = manager().await;
-    let audit = workspace(&temp, &manager).await;
-    // Each file exists, so only the count can refuse them.
-    let results = (0..=shoal_protocol::files::MAX_RESULTS)
-        .map(|n| {
-            let path = temp.path().join(format!("{n}.md"));
-            std::fs::write(&path, "result").unwrap();
-            path.into()
-        })
-        .collect();
-    let done = manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&audit.id),
-            Done {
-                results,
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await;
-    assert!(done.is_err());
-    assert!(
-        manager
-            .spaces
-            .completion(&audit.id)
-            .await
-            .unwrap()
-            .is_none()
-    );
-}
-
-#[tokio::test]
-async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
-    let (temp, manager) = manager().await;
-    let audit = workspace(&temp, &manager).await;
-    let report = temp.path().join("report.md");
-    std::fs::write(&report, "No leaks").unwrap();
-    manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&audit.id),
-            Done {
-                results: vec![report.into()],
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    let renamed = manager
-        .spaces
-        .rename_branch(&*manager, &SpaceSelector::id(&audit.id), "renamed", None)
-        .await
-        .unwrap();
-    manager
-        .spaces
-        .remove_selected(
-            &*manager,
-            &SpaceSelector::id(&audit.id),
-            crate::removal::UnsavedWork::default(),
-            crate::removal::InspectionPolicy::GitOnly,
-        )
-        .await
-        .unwrap();
-    let files = manager
-        .spaces
-        .attached_files(&SpaceSelector::id(&renamed.id))
-        .await
-        .unwrap();
-    assert_eq!(files[0].space.name, renamed.name);
-}
-
-#[tokio::test]
-async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let (notes, shot) = (temp.path().join("notes.md"), temp.path().join("shot.png"));
-    std::fs::write(&notes, "plan").unwrap();
-    std::fs::write(&shot, "image").unwrap();
-    let files = vec![notes.into(), shot.into()];
-    let added = manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            files.clone(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // The workspace's directory now leads elsewhere, where a copy is gone.
-    let directory = added[0]
-        .path()
-        .unwrap()
-        .ancestors()
-        .nth(3)
-        .unwrap()
-        .to_owned();
-    let elsewhere = temp.path().join("elsewhere");
-    std::fs::rename(&directory, &elsewhere).unwrap();
-    std::os::unix::fs::symlink(&elsewhere, &directory).unwrap();
-    let inside = added[1].path().unwrap().strip_prefix(&directory).unwrap();
-    std::fs::remove_file(
-        elsewhere.join(added[0].path().unwrap().strip_prefix(&directory).unwrap()),
-    )
-    .unwrap();
-    assert!(
-        manager
-            .spaces
-            .add_attached_files(
-                &*manager,
-                &SpaceSelector::id(&workspace.id),
-                files,
-                &Attacher::User
-            )
-            .await
-            .is_err()
-    );
-    assert!(elsewhere.join(inside).exists());
-}
-
-#[tokio::test]
-async fn sent_files_relayed_back_take_their_copies_paths_by_id() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let file = temp.path().join("notes.md");
-    std::fs::write(&file, "plan").unwrap();
-    let added = manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![file.into()],
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // The records as another machine read them, and one removed since.
-    let elsewhere = |id: i64| SentFile {
-        id,
-        space: workspace.id.clone(),
-        name: "notes.md".into(),
-        title: None,
-        copy: KeptCopy::Elsewhere {
-            machine: "here".into(),
-        },
-    };
-    let kept = manager
-        .spaces
-        .kept_sent_files(vec![elsewhere(added[0].id + 1), elsewhere(added[0].id)])
-        .await
-        .unwrap();
-    let paths: Vec<_> = kept.iter().map(SentFile::path).collect();
-    assert_eq!(paths, [added[0].path()]);
-}
-
-#[tokio::test]
-async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let file = temp.path().join("notes.md");
-    std::fs::write(&file, "plan").unwrap();
-    let added = manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![file.clone().into()],
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    manager
-        .coordination
-        .send_space_message(
-            &*manager,
-            None,
-            &SpaceSelector::id(&workspace.id),
-            String::new(),
-            vec![file.into()],
-        )
-        .await
-        .unwrap();
-    let deleted = manager
-        .spaces
-        .remove_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![],
-            vec![added[0].id],
-        )
-        .await
-        .unwrap();
-    assert_eq!(deleted, added);
-    let left = manager
-        .spaces
-        .attached_files(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    let [sent] = left.as_slice() else {
-        panic!("{left:?}");
-    };
-    assert_eq!(sent.source, FileSource::Message);
-    assert!(sent.path().unwrap().exists());
-}
-
-#[tokio::test]
-async fn handing_back_a_changed_file_completes_again() {
-    let (temp, manager) = manager().await;
-    let audit = workspace(&temp, &manager).await;
-    let report = temp.path().join("report.md");
-    std::fs::write(&report, "First draft").unwrap();
-    let first = manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&audit.id),
-            Done {
-                results: vec![report.clone().into()],
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // The same file again changes nothing.
-    let again = manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&audit.id),
-            Done {
-                results: vec![report.clone().into()],
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await;
-    assert!(again.is_err());
-    std::fs::write(&report, "Revised").unwrap();
-    let revised = manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&audit.id),
-            Done {
-                results: vec![report.into()],
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    assert_eq!(revised.results[0].name, first.results[0].name);
-    assert_ne!(revised.results[0].id, first.results[0].id);
-}
-
-#[tokio::test]
-async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
-    use std::os::unix::fs::PermissionsExt;
-    if !permissions_bind() {
-        return;
-    }
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let file = temp.path().join("notes.md");
-    std::fs::write(&file, "plan").unwrap();
-    let added = manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![file.into()],
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // The copy's directory refuses to give it up.
-    let directory = added[0].path().unwrap().parent().unwrap().to_owned();
-    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o500)).unwrap();
-    let repo = manager
-        .repositories
-        .repository(workspace.repository())
-        .await
-        .unwrap();
-    let deleted = manager.spaces.delete_repository_files(&repo).await;
-    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
-    assert!(deleted.is_err(), "the copy could not be deleted");
-    assert!(added[0].path().unwrap().exists());
-    assert_eq!(
-        manager
-            .spaces
-            .attached_files(&SpaceSelector::id(&workspace.id))
-            .await
-            .unwrap()
-            .len(),
-        1
-    );
-}
-
-/// Start a chat named `name` in the repository of `workspace`.
-async fn chat(
-    manager: &std::sync::Arc<Manager>,
-    workspace: &Workspace,
-    name: &str,
-) -> crate::model::Chat {
-    manager
-        .start_chat(
-            workspace.repository().clone().into(),
-            name.into(),
-            "claude".into(),
-            None,
-        )
-        .await
-        .unwrap()
 }
 
 #[tokio::test]
@@ -1699,108 +947,317 @@ async fn a_chats_agent_attaches_as_an_agent_with_its_execution_and_session() {
     );
 }
 
-mod events;
-
 #[tokio::test]
-async fn a_disposable_workspaces_files_outlive_it_for_the_retention_period() {
+async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
     let (temp, manager) = manager().await;
-    let receiver = workspace(&temp, &manager).await;
-    let disposable = manager
-        .spaces
-        .create_workspace_with(
-            &*manager,
-            receiver.repository(),
-            "scratch".into(),
-            None,
-            crate::daemon::workspace::NewWorkspace {
-                options: crate::protocol::CreationOptions {
-                    disposable: true,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
+    let workspace = workspace(&temp, &manager).await;
     let file = temp.path().join("notes.md");
-    std::fs::write(&file, "notes").unwrap();
+    std::fs::write(&file, "plan").unwrap();
     let added = manager
         .spaces
         .add_attached_files(
             &*manager,
-            &SpaceSelector::id(&disposable.id),
-            vec![file.into()],
+            &SpaceSelector::id(&workspace.id),
+            vec![file.clone().into()],
             &Attacher::User,
         )
         .await
         .unwrap();
-    let [added] = added.as_slice() else {
-        panic!("{added:?}");
+    manager
+        .coordination
+        .send_space_message(
+            &*manager,
+            None,
+            &SpaceSelector::id(&workspace.id),
+            String::new(),
+            vec![file.into()],
+        )
+        .await
+        .unwrap();
+    let deleted = manager
+        .spaces
+        .remove_attached_files(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            vec![],
+            vec![added[0].id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(deleted, added);
+    let left = manager
+        .spaces
+        .attached_files(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let [sent] = left.as_slice() else {
+        panic!("{left:?}");
     };
+    assert_eq!(sent.source, FileSource::Message);
+    assert!(sent.path().unwrap().exists());
+}
+
+#[tokio::test]
+async fn deleting_by_name_keeps_the_other_files() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let (log, shot) = (temp.path().join("crash.log"), temp.path().join("shot.png"));
+    std::fs::write(&log, "panic").unwrap();
+    std::fs::write(&shot, "image").unwrap();
+    manager
+        .coordination
+        .send_space_message(
+            &*manager,
+            None,
+            &SpaceSelector::id(&workspace.id),
+            "See".into(),
+            vec![log.clone().into(), shot.into()],
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .spaces
+            .remove_attached_files(
+                &*manager,
+                &SpaceSelector::id(&workspace.id),
+                vec!["missing.txt".into()],
+                vec![]
+            )
+            .await
+            .is_err()
+    );
+    let deleted = manager
+        .spaces
+        .remove_attached_files(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            vec!["crash.log".into()],
+            vec![],
+        )
+        .await
+        .unwrap();
+    assert!(!deleted[0].path().unwrap().exists());
+    let left = manager
+        .spaces
+        .attached_files(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let [kept] = left.as_slice() else {
+        panic!("{left:?}");
+    };
+    assert_eq!(kept.name, "shot.png");
+    assert!(kept.path().unwrap().exists());
+
+    // Sending the same files again copies the deleted one anew.
+    manager
+        .coordination
+        .send_space_message(
+            &*manager,
+            None,
+            &SpaceSelector::id(&workspace.id),
+            "See".into(),
+            vec![log.into(), temp.path().join("shot.png").into()],
+        )
+        .await
+        .unwrap();
+    assert!(deleted[0].path().unwrap().exists());
+    assert_eq!(
+        manager
+            .spaces
+            .attached_files(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn files_sent_with_messages_are_listed_until_they_expire() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("crash.log");
+    std::fs::write(&file, "panic").unwrap();
+    assert!(
+        manager
+            .spaces
+            .attached_files(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    // Sending the same file again keeps one record of its copy.
+    for _ in 0..2 {
+        manager
+            .coordination
+            .send_space_message(
+                &*manager,
+                None,
+                &SpaceSelector::id(&workspace.id),
+                "See the log".into(),
+                vec![file.clone().into()],
+            )
+            .await
+            .unwrap();
+    }
+    let files = manager
+        .spaces
+        .attached_files(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let [listed] = files.as_slice() else {
+        panic!("{files:?}");
+    };
+    assert_eq!(listed.name, "crash.log");
+    assert_eq!(listed.bytes, 5);
+    assert_eq!(listed.source, FileSource::Message);
+    assert_eq!(listed.space.name, "receiver");
+    assert_eq!(
+        std::fs::read_to_string(listed.path().unwrap()).unwrap(),
+        "panic"
+    );
+
     manager
         .spaces
         .remove_selected(
             &*manager,
-            &SpaceSelector::id(&disposable.id),
+            &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
         )
         .await
         .unwrap();
-    manager.spaces.expire_results(&*manager).await.unwrap();
+    // The removed workspace's files stay, listed under its ID.
     let kept = manager
         .spaces
-        .attached_files(&SpaceSelector::id(&disposable.id))
+        .attached_files(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let [kept] = kept.as_slice() else {
         panic!("{kept:?}");
     };
-    assert_eq!(kept.path().unwrap(), added.path().unwrap());
-    assert_eq!(kept.space.name, "scratch");
-    assert!(kept.expires_at.is_some());
-    assert!(added.path().unwrap().exists());
+    assert_eq!(
+        (&kept.path().unwrap(), kept.expires_at.is_some()),
+        (&listed.path().unwrap(), true)
+    );
+    assert!(listed.path().unwrap().exists());
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE removed_space_files SET expires_at=0", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.spaces.expire_results(&*manager).await.unwrap();
+    assert!(!listed.path().unwrap().exists());
+    let left = manager
+        .store
+        .run(|db| {
+            Ok(db.query_row("SELECT COUNT(*) FROM space_files", [], |row| {
+                row.get::<_, i64>(0)
+            })?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
 }
 
 #[tokio::test]
-async fn removal_deletes_the_directories_of_files_already_deleted() {
+async fn titles_stay_with_their_files_until_a_new_one() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let file = temp.path().join("notes.md");
-    std::fs::write(&file, "notes").unwrap();
+    let (chart, shot, report) = (
+        temp.path().join("chart.html"),
+        temp.path().join("shot.png"),
+        temp.path().join("report.md"),
+    );
+    for file in [&chart, &shot, &report] {
+        std::fs::write(file, "content").unwrap();
+    }
+    let titled = |path: &std::path::Path, title: &str| crate::daemon::workspace_files::NewFile {
+        path: path.to_owned(),
+        title: Some(title.into()),
+    };
+    manager
+        .spaces
+        .add_attached_files(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            vec![titled(&chart, "Latency by region")],
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    // Adding it again without a title keeps the title.
+    manager
+        .spaces
+        .add_attached_files(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            vec![chart.clone().into()],
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    manager
+        .coordination
+        .send_space_message(
+            &*manager,
+            None,
+            &SpaceSelector::id(&workspace.id),
+            String::new(),
+            vec![titled(&shot, "Login screen"), report.clone().into()],
+        )
+        .await
+        .unwrap();
+    manager
+        .spaces
+        .mark_space_done(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            Done {
+                results: vec![titled(&report, "Audit findings")],
+                ..Done::default()
+            },
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let titles = |files: Vec<crate::daemon::workspace_files::AttachedFile>| -> Vec<_> {
+        files
+            .into_iter()
+            .map(|file| (file.name, file.title))
+            .collect()
+    };
+    let listed = manager
+        .spaces
+        .attached_files(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    assert_eq!(
+        titles(listed),
+        [
+            ("chart.html".into(), Some("Latency by region".into())),
+            ("shot.png".into(), Some("Login screen".into())),
+            ("report.md".into(), None),
+            ("report.md".into(), Some("Audit findings".into())),
+        ]
+    );
+    // A new title replaces the old one.
     let added = manager
         .spaces
         .add_attached_files(
             &*manager,
             &SpaceSelector::id(&workspace.id),
-            vec![file.into()],
+            vec![titled(&chart, "Latency")],
             &Attacher::User,
         )
         .await
         .unwrap();
-    let [added] = added.as_slice() else {
-        panic!("{added:?}");
-    };
-    manager
-        .spaces
-        .remove_attached_files(&*manager, &SpaceSelector::id(&workspace.id), vec![], vec![])
-        .await
-        .unwrap();
-    let directory = added.path().unwrap().ancestors().nth(3).unwrap().to_owned();
-    assert!(directory.ends_with(workspace.id.as_str()));
-    assert!(!directory.exists(), "deleting its last copy empties it");
-    // A leftover no record names, as a failed discard leaves.
-    std::fs::create_dir_all(&directory).unwrap();
-    std::fs::write(directory.join("leftover"), "").unwrap();
-    manager
-        .spaces
-        .remove_selected(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            crate::removal::UnsavedWork::default(),
-            crate::removal::InspectionPolicy::GitOnly,
-        )
-        .await
-        .unwrap();
-    assert!(!directory.exists());
+    assert_eq!(
+        titles(added),
+        [("chart.html".into(), Some("Latency".into()))]
+    );
 }
