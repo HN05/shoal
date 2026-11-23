@@ -703,11 +703,21 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     ended.changed().await.unwrap();
 
     let review = (reviews.latest(daemon, &fixture.selector())).await.unwrap();
+    // An approval of the same commit leaves the finding to be resolved.
+    let writer = crate::written::Writer::User;
+    let selector = fixture.selector();
+    (reviews.start_written(daemon, &selector, writer.clone()))
+        .await
+        .unwrap();
+    (reviews.submit(daemon, None, writer, true, None))
+        .await
+        .unwrap();
     let refused = require(Gate::Ready, agent).await.unwrap_err().to_string();
     assert!(refused.contains("1.1 should-fix"), "{refused}");
-    // Unresolved findings at HEAD need answers, not another review.
+    // Unresolved findings at HEAD need answers, not another review: the
+    // latest is still the approval.
     let latest = (reviews.latest(daemon, &fixture.selector())).await.unwrap();
-    assert_eq!(latest.id, review.id);
+    assert_eq!(latest.author, crate::reviews::Author::User);
 
     let outcome = Outcome::WontFix {
         reason: "The name matches the file".into(),

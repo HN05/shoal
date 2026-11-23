@@ -198,17 +198,17 @@ fn requester(caller: Option<&Caller>) -> Requester {
     }
 }
 
-/// The review of the workspace `id` that decides a gate for `head`: one the
-/// user or a space wrote whose comments are not all resolved, since only
-/// its writer resolves them, else the newest that judges the commit.
+/// The review of the workspace `id` that decides a gate for `head`: one of
+/// the commit whose threads are not all resolved, since a later review
+/// settles none of them, else the newest that judges the commit.
 fn deciding(
     db: &rusqlite::Connection,
     records: &dyn Records,
     id: &SpaceId,
     head: &CommitId,
 ) -> Result<Option<Review>> {
-    let commented = store::commented_at(db, records, id, head)?;
-    let outstanding = (commented.into_iter()).find(|review| review.unresolved().next().is_some());
+    let finished = store::finished_all_at(db, records, id, head)?;
+    let outstanding = (finished.into_iter()).find(|review| review.unresolved().next().is_some());
     match outstanding {
         Some(review) => Ok(Some(review)),
         None => store::finished_at(db, records, id, head),

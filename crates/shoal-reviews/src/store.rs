@@ -440,10 +440,9 @@ pub fn list(db: &Connection, records: &dyn Records, ids: &[SpaceId]) -> Result<V
     Ok(listed)
 }
 
-/// The finished reviews of commit `head` that the user or a space wrote
-/// with comments, whose writers resolve them: until they do, no other
-/// review of the commit opens a gate.
-pub fn commented_at(
+/// The finished reviews of commit `head`, oldest first: until each
+/// resolves its threads, no other review of the commit opens a gate.
+pub fn finished_all_at(
     db: &Connection,
     records: &dyn Records,
     workspace_id: &SpaceId,
@@ -451,8 +450,7 @@ pub fn commented_at(
 ) -> Result<Vec<Review>> {
     let ids: Vec<ReviewId> = db
         .prepare(
-            "SELECT id FROM reviews WHERE workspace_id=?1 AND head=?2 AND state=?3
-                AND opener IS NOT 'shoal' ORDER BY id",
+            "SELECT id FROM reviews WHERE workspace_id=?1 AND head=?2 AND state=?3 ORDER BY id",
         )?
         .query_map(params![workspace_id, head, ReviewState::Finished], |row| {
             row.get(0)
