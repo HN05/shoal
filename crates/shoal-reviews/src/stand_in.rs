@@ -484,6 +484,41 @@ impl StandInRecords {
         thread.posts.push(post);
     }
 
+    /// Open the user's comment `name` of the pending review `review`,
+    /// whose posts are held; its number.
+    pub(crate) fn comment(&self, review: ReviewId, name: &str) -> ItemNumber {
+        let mut threads = self.threads.lock().unwrap();
+        let item = u32::try_from(threads.len()).unwrap() + 1;
+        let id = i64::from(item);
+        let mut post = Self::shoal_post(id, name, Vec::new());
+        post.sender = Sender::User;
+        let number = ItemNumber {
+            space: SpaceNumber::new(1),
+            item,
+        };
+        threads.push(Thread {
+            id,
+            number,
+            space_id: self.workspace.into(),
+            space: self.name.into(),
+            kind: ThreadKind::Review,
+            finding: Some(Finding {
+                severity: None,
+                review: Some(review),
+            }),
+            name: name.to_owned(),
+            opener: Sender::User,
+            holder: Holder::Space(ThreadSpace::here(self.workspace.into())),
+            created_at: UnixTime::from_seconds(id),
+            posts: vec![post],
+            resolution: None,
+            working: false,
+            held: true,
+            changes: Vec::new(),
+        });
+        number
+    }
+
     /// A post from Shoal saying `text`, pointing at `code`.
     fn shoal_post(id: i64, text: &str, code: Vec<CodeRef>) -> Post {
         Post {
@@ -507,8 +542,13 @@ impl StandInRecords {
 }
 
 impl Records for StandInRecords {
+    /// The workspace's name, or the name of the space `parent` above it.
     fn space_name(&self, _db: &Connection, id: &SpaceId) -> Result<Option<SpaceName>> {
-        Ok((id.as_str() == self.workspace).then(|| self.name.into()))
+        Ok(match id.as_str() {
+            id if id == self.workspace => Some(self.name.into()),
+            "parent" => Some("coordinator".into()),
+            _ => None,
+        })
     }
 
     fn thread_space(&self, db: &Connection, id: &SpaceId) -> Result<ThreadSpace> {
@@ -561,6 +601,12 @@ impl Records for StandInRecords {
         let post = Self::shoal_post(thread.id * 100, why, Vec::new());
         thread.posts.push(post);
         Ok(Some(thread.id))
+    }
+
+    fn drop_review_threads(&self, _tx: &Transaction<'_>, review: ReviewId) -> Result<()> {
+        let mut threads = self.threads.lock().unwrap();
+        threads.retain(|thread| thread.finding.and_then(|finding| finding.review) != Some(review));
+        Ok(())
     }
 
     fn review_threads(&self, _db: &Connection, review: ReviewId) -> Result<Vec<Thread>> {
@@ -664,7 +710,7 @@ pub(crate) fn finding(item: u32, path: &str, severity: Severity, body: &str) -> 
 
 /// The reviewer's answers go into the stand-in's records.
 impl Threads for StandIn {
-    fn findings_recorded<'a>(&'a self, _workspace: &'a Workspace) -> BoxFuture<'a, ()> {
+    fn review_threads_changed<'a>(&'a self, _workspace: &'a Workspace) -> BoxFuture<'a, ()> {
         Box::pin(async {})
     }
 

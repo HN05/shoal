@@ -109,10 +109,10 @@ pub trait Settings: Send + Sync {
 /// The threads of a review's findings, which the daemon follows once their
 /// records commit.
 pub trait Threads: Send + Sync {
-    /// Wake what waits for threads after a review of `workspace` opened or
-    /// reopened its threads, and keep the versions of the code they point
-    /// at.
-    fn findings_recorded<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()>;
+    /// Wake what waits for threads after a review of `workspace` opened,
+    /// reopened, delivered or dropped its threads, and keep the versions of
+    /// the code they point at.
+    fn review_threads_changed<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()>;
 
     /// Post `text` from Shoal, for the reviewer, in the finding's thread
     /// `thread`, telling its holder, unless it was resolved meanwhile.
@@ -367,6 +367,10 @@ pub trait Records: Send + Sync {
         number: ItemNumber,
         why: &str,
     ) -> Result<Option<i64>>;
+
+    /// Delete the threads of review `review`, which its writer cancelled
+    /// while it was pending.
+    fn drop_review_threads(&self, tx: &Transaction<'_>, review: ReviewId) -> Result<()>;
 
     /// The threads review `review` opened, in the order it opened them.
     fn review_threads(&self, db: &Connection, review: ReviewId) -> Result<Vec<Thread>>;

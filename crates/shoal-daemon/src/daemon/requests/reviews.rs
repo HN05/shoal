@@ -12,6 +12,7 @@ use super::super::{
 };
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_reviews::written::Writer;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -47,6 +48,14 @@ pub(super) async fn handle(
                 .queue(daemon, &workspace, target, agent, model)
                 .await,
         ),
+        ReviewMethod::StartReview { workspace } => {
+            let writer = Writer::of(caller.map(|caller| &caller.space_id));
+            pieces(reviews.start_written(daemon, &workspace, writer).await)
+        }
+        ReviewMethod::PendingReviews => {
+            let writer = Writer::of(caller.map(|caller| &caller.space_id));
+            pieces(reviews.pending_reviews(daemon, writer).await)
+        }
         ReviewMethod::CancelReview { workspace, id } => {
             let by = caller.map(|caller| caller.space_id.clone());
             pieces(reviews.cancel(daemon, workspace.as_ref(), id, by).await)
@@ -90,7 +99,10 @@ fn named(workspace: Option<SpaceSelector>) -> Result<SpaceSelector> {
 impl Checked for ReviewMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
+            // Its reviews are the caller's own.
+            Self::PendingReviews => None,
             Self::RunReview { .. }
+            | Self::StartReview { .. }
             | Self::CancelReview { .. }
             | Self::ListReviews { .. }
             | Self::ShowReview { .. }
@@ -116,9 +128,10 @@ impl Scoped for ReviewMethod {
                 }
                 Some(caller.own_by_default(workspace))
             }
-            ReviewMethod::RunReview { workspace, .. } | ReviewMethod::CheckPrGate { workspace } => {
-                Some(workspace)
-            }
+            ReviewMethod::RunReview { workspace, .. }
+            | ReviewMethod::StartReview { workspace }
+            | ReviewMethod::CheckPrGate { workspace } => Some(workspace),
+            ReviewMethod::PendingReviews => None,
             ReviewMethod::ListReviews {
                 workspace,
                 repository,

@@ -282,9 +282,9 @@ impl Review {
         (self.threads.iter().chain(&self.reopened)).filter(|thread| thread.is_open())
     }
 
-    /// The review's state in one line: queued, running, the finding counts
-    /// by severity and how many it reopened, or why it failed or that it
-    /// was cancelled.
+    /// The review's state in one line: queued, running, pending with its
+    /// comments so far, the finding counts by severity and how many it
+    /// reopened, or why it failed or that it was cancelled.
     pub fn status(&self) -> String {
         match self.state {
             ReviewState::Finished => {
@@ -302,6 +302,10 @@ impl Review {
                     false => format!("finished: {}", found.join(", ")),
                 }
             }
+            ReviewState::Pending => match severity_counts(&self.threads) {
+                counts if counts.is_empty() => "pending".into(),
+                counts => format!("pending: {counts}"),
+            },
             ReviewState::Failed => match self.failure {
                 Some(reason) => format!("failed: {reason}"),
                 None => "failed".into(),

@@ -541,7 +541,7 @@ impl Reviews {
         }
         let review = self.load(id).await?;
         if let Some(review) = review.filter(|review| review.state == ReviewState::Finished) {
-            daemon.findings_recorded(workspace).await;
+            daemon.review_threads_changed(workspace).await;
             self.post(daemon, &review, workspace).await;
         }
         self.deliver(daemon, id).await;

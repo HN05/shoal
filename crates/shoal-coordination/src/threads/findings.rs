@@ -126,6 +126,13 @@ pub fn reopen(
     Ok(Some(thread.id))
 }
 
+/// Delete the threads of review `review`, which its writer cancelled while
+/// it was pending.
+pub fn drop_of_review(tx: &Transaction<'_>, review: ReviewId) -> Result<()> {
+    tx.execute("DELETE FROM threads WHERE review_id=?1", [review.0])?;
+    Ok(())
+}
+
 /// The threads review `review` opened, oldest first.
 pub fn of_review(db: &Connection, review: ReviewId) -> Result<Vec<Thread>> {
     records::query(db, "WHERE t.review_id=?1", [review.0])

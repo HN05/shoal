@@ -19,7 +19,14 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
         model: crate::agent::ModelChoice,
     },
-    /// Cancel review `id`, else the workspace's queued or running one.
+    /// Start the caller's pending review of the workspace, which the
+    /// threads it opens towards that workspace join, or return the one it
+    /// has.
+    StartReview { workspace: SpaceSelector },
+    /// The caller's pending reviews, oldest first.
+    PendingReviews,
+    /// Cancel review `id`, else the workspace's queued or running one; a
+    /// pending review goes with its threads.
     CancelReview {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,
@@ -74,19 +81,23 @@ impl ReviewMethod {
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::RunReview { .. }
+            | Self::StartReview { .. }
             | Self::CancelReview { .. }
             | Self::ListReviews { .. }
             | Self::ShowReview { .. }
             | Self::CheckPrGate { .. } => Forwarding::Online,
             Self::AwaitReview { .. } => Forwarding::Streamed,
+            // The caller's reviews are those of its own machine.
+            Self::PendingReviews => Forwarding::Never,
         }
     }
 
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
-            Self::RunReview { workspace, .. } | Self::CheckPrGate { workspace } => {
-                Some(Target::Space(workspace))
-            }
+            Self::RunReview { workspace, .. }
+            | Self::StartReview { workspace }
+            | Self::CheckPrGate { workspace } => Some(Target::Space(workspace)),
+            Self::PendingReviews => None,
             Self::CancelReview { workspace, .. }
             | Self::ListReviews { workspace, .. }
             | Self::ShowReview { workspace, .. }

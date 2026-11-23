@@ -385,7 +385,7 @@ struct Deleted {
 /// spaces below it are gone, in one transaction with what it recorded:
 /// the user gets its unread messages and the requests it decides, such as
 /// an issue proposal that outlives it, its attached files stay until
-/// `expires_at`, and its open threads close.
+/// `expires_at`, its pending reviews go and its open threads close.
 fn delete_record(
     tx: &rusqlite::Transaction<'_>,
     outside: &super::coordination::CoordinationRecords,
@@ -405,6 +405,9 @@ fn delete_record(
     let released = release_decided_by(tx, id)?;
     let assignees = links::issue::removed_assignees(tx, id)?;
     let issues = links::issue::removed_issues(tx, id)?;
+    // Its pending reviews go with their comments, which reached nobody.
+    let writer = shoal_reviews::written::Writer::Space(id.clone());
+    shoal_reviews::written::drop_written_by(tx, &super::reviews::ReviewRecords, &writer)?;
     let (_, threads) = threads::close(
         tx,
         outside,

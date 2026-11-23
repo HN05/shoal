@@ -172,7 +172,7 @@ impl Agents for Manager {
 }
 
 impl Threads for Manager {
-    fn findings_recorded<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()> {
+    fn review_threads_changed<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             self.signals.thread_changed();
             let spaces = [workspace.id.clone()];
@@ -284,6 +284,10 @@ impl Records for ReviewRecords {
         why: &str,
     ) -> Result<Option<i64>> {
         super::threads::findings::reopen(tx, workspace, number, why)
+    }
+
+    fn drop_review_threads(&self, tx: &rusqlite::Transaction<'_>, review: ReviewId) -> Result<()> {
+        super::threads::findings::drop_of_review(tx, review)
     }
 
     fn review_threads(&self, db: &rusqlite::Connection, review: ReviewId) -> Result<Vec<Thread>> {

@@ -108,7 +108,7 @@ impl Reviews {
 
 /// Mark each review whose workspace's HEAD has moved past it as outdated;
 /// HEAD that cannot be read leaves it unknown.
-async fn annotate(daemon: &dyn Daemon, reviews: &mut [Review]) {
+pub(crate) async fn annotate(daemon: &dyn Daemon, reviews: &mut [Review]) {
     let mut heads = HashMap::new();
     for review in reviews.iter_mut() {
         let Some(reviewed) = &review.head else {

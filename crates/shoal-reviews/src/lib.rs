@@ -42,6 +42,7 @@ mod run;
 mod stand_in;
 pub mod store;
 mod view;
+pub mod written;
 
 use checkouts::HeldCheckout;
 use daemon::{Records, Requests};

@@ -14,6 +14,7 @@ use crate::{
     log,
     reviews::{Review, ReviewId, ReviewTarget},
     store,
+    written::Writer,
 };
 
 impl Reviews {
@@ -44,8 +45,10 @@ impl Reviews {
         self.review(daemon, queued.id()).await
     }
 
-    /// Cancel review `id`, else the workspace's queued or running one, for a
-    /// process of workspace `by` when one asked.
+    /// Cancel review `id`, else the workspace's pending review that the
+    /// space `by`, or the user without one, writes, else its queued or
+    /// running one, for a process of workspace `by` when one asked. A
+    /// pending review goes with its threads.
     pub async fn cancel(
         &self,
         daemon: &dyn Daemon,
@@ -53,11 +56,40 @@ impl Reviews {
         id: Option<ReviewId>,
         by: Option<SpaceId>,
     ) -> Result<Review> {
+        let writer = Writer::of(by.as_ref());
         let id = match (id, selector) {
             (Some(id), _) => id,
-            (None, Some(selector)) => self.active(daemon, selector).await?,
+            (None, Some(selector)) => self.cancelled_of(daemon, selector, &writer).await?,
             (None, None) => bail!("name a review or a workspace"),
         };
+        match self.writer_of(id).await? {
+            Some(_) => self.cancel_written(daemon, id, &writer).await,
+            None => self.cancel_run(daemon, id, by).await,
+        }
+    }
+
+    /// The review of the workspace `selector` names that a cancel without an
+    /// ID ends: `writer`'s pending one, else its queued or running one.
+    async fn cancelled_of(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        writer: &Writer,
+    ) -> Result<ReviewId> {
+        match self.pending_of(daemon, selector, writer).await? {
+            Some(id) => Ok(id),
+            None => self.active(daemon, selector).await,
+        }
+    }
+
+    /// Cancel the run of Shoal's review `id`, queued or running, for a
+    /// process of workspace `by` when one asked.
+    async fn cancel_run(
+        &self,
+        daemon: &dyn Daemon,
+        id: ReviewId,
+        by: Option<SpaceId>,
+    ) -> Result<Review> {
         let now = UnixTime::now();
         let cancelled = self
             .store
