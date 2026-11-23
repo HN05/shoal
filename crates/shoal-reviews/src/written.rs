@@ -12,7 +12,7 @@ use crate::{
     Reviews,
     daemon::{Daemon, Records},
     model::Workspace,
-    reviews::{Review, ReviewId, ReviewState, Verdict},
+    reviews::{Review, ReviewId, Verdict},
     validate,
 };
 
@@ -251,15 +251,6 @@ pub fn drop_pending_of_removed(
         records.drop_review_threads(tx, id)?;
     }
     Ok(())
-}
-
-/// `review` as `viewer` sees it: a pending review's comments are its
-/// writer's, and the user's, until it is submitted.
-pub fn seen_by(mut review: Review, viewer: &Writer) -> Review {
-    if review.state == ReviewState::Pending && !writes(&review, viewer) {
-        review.threads.clear();
-    }
-    review
 }
 
 /// Refuse `writer` reviewing `workspace` when it is that workspace: a

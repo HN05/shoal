@@ -817,3 +817,23 @@ async fn a_bare_cancel_in_the_writers_own_space_drops_its_only_pending_review() 
     let cancelled = (manager.reviews).cancel(&**manager, Some(&own), None, by);
     assert_eq!(cancelled.await.unwrap().id, review.id);
 }
+
+#[tokio::test]
+async fn a_pending_reviews_comments_show_in_the_review_to_its_writers_side_only() {
+    let tree = tree().await;
+    let (manager, parent) = (&tree.manager, caller(&tree.parent));
+    let writer = shoal_reviews::written::Writer::Space(tree.parent.id.clone());
+    let review = start_review(manager, &tree.child, writer).await;
+    open_kind(manager, Some(&parent), &tree.child, "Unclear name", None).await;
+    let review = manager.reviews.review(&**manager, review.id).await.unwrap();
+    let seen = |caller: Option<Caller>| {
+        let review = review.clone();
+        async move {
+            let seen = crate::daemon::requests::reviews::seen_by(manager, caller.as_ref(), review);
+            seen.await.unwrap().threads.len()
+        }
+    };
+    assert_eq!(seen(Some(caller(&tree.child))).await, 0);
+    assert_eq!(seen(Some(parent.clone())).await, 1);
+    assert_eq!(seen(None).await, 1);
+}

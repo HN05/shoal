@@ -32,7 +32,7 @@ mod recovery;
 mod removal;
 mod repositories;
 mod resources;
-mod reviews;
+pub(in crate::daemon) mod reviews;
 mod secrets;
 mod simulators;
 pub(super) mod spaces;

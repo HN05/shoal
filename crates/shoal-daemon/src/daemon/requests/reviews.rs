@@ -11,8 +11,9 @@ use super::super::{
     target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
+use shoal_protocol::reviews::{Author, Review, ReviewState};
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_reviews::written::{self, Writer};
+use shoal_reviews::written::Writer;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -71,23 +72,23 @@ pub(super) async fn handle(
         } => pieces(
             async {
                 let ids = (reviews.workspaces(daemon, workspace.as_ref(), repository)).await?;
-                let listed = reviews.list(daemon, ids).await?;
-                Ok(listed
-                    .into_iter()
-                    .map(|review| written::seen_by(review, &viewer))
-                    .collect::<Vec<_>>())
+                let mut seen = Vec::new();
+                for review in reviews.list(daemon, ids).await? {
+                    seen.push(seen_by(manager, caller, review).await?);
+                }
+                Ok(seen)
             }
             .await,
         ),
         ReviewMethod::ShowReview { workspace, id } => pieces(
-            match id {
-                Some(id) => reviews.review(daemon, id).await,
-                None => match named(workspace) {
-                    Ok(workspace) => reviews.latest(daemon, &workspace).await,
-                    Err(error) => Err(error),
-                },
+            async {
+                let review = match id {
+                    Some(id) => reviews.review(daemon, id).await?,
+                    None => reviews.latest(daemon, &named(workspace)?).await?,
+                };
+                seen_by(manager, caller, review).await
             }
-            .map(|review| written::seen_by(review, &viewer)),
+            .await,
         ),
     };
     Ok(Answer::pages(shown, Body::ReviewPieces))
@@ -101,6 +102,31 @@ fn pieces<T: serde::Serialize>(shown: Result<T>) -> Result<Vec<ReviewPiece>> {
         .into_iter()
         .map(ReviewPiece)
         .collect())
+}
+
+/// `review` as `caller`, or the user without one, sees it: a pending
+/// review's comments are read, as its threads are, only by the user and
+/// the spaces that reach the space that writes it.
+pub(in crate::daemon) async fn seen_by(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    mut review: Review,
+) -> Result<Review> {
+    let reads = match (caller, &review.author) {
+        (None, _) => true,
+        _ if review.state != ReviewState::Pending => true,
+        (Some(caller), Author::Space { space }) => {
+            manager
+                .coordination
+                .reaches(manager, caller, &space.id)
+                .await?
+        }
+        (Some(_), Author::User | Author::Shoal { .. }) => false,
+    };
+    if !reads {
+        review.threads.clear();
+    }
+    Ok(review)
 }
 
 /// The workspace a request without a review ID names.
