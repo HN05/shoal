@@ -80,27 +80,26 @@ pub fn record(
     Ok(())
 }
 
-/// The demos of `workspace`, or of every workspace, by workspace and name.
-pub(crate) fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Running>> {
-    let mut statement = db.prepare(
-        "SELECT d.workspace_id,w.name,d.execution_id,d.started_at,d.record,d.has_run
-         FROM demos d JOIN spaces w ON w.id=d.workspace_id
-         WHERE ?1 IS NULL OR d.workspace_id=?1 ORDER BY w.name,d.name",
-    )?;
-    let rows = statement.query_map([workspace], |row| {
-        Ok((
-            row.get::<_, SpaceId>(0)?,
-            row.get::<_, SpaceName>(1)?,
-            row.get::<_, ExecutionId>(2)?,
-            row.get(3)?,
-            row.get::<_, String>(4)?,
-            row.get::<_, bool>(5)?,
-        ))
-    })?;
-    rows.map(|row| {
-        let (workspace_id, workspace, execution_id, started_at, record, has_run) = row?;
-        let launch: Launch = serde_json::from_str(&record).context("invalid demo record")?;
-        Ok(Running {
+/// A demo as its record keeps it.
+pub(crate) struct Recorded {
+    pub workspace_id: SpaceId,
+    pub execution_id: ExecutionId,
+    pub started_at: UnixTime,
+    pub launch: Launch,
+    pub has_run: bool,
+}
+
+impl Recorded {
+    /// The demo as it runs in the workspace named `workspace`.
+    pub(crate) fn running(self, workspace: SpaceName) -> Running {
+        let Self {
+            workspace_id,
+            execution_id,
+            started_at,
+            launch,
+            has_run,
+        } = self;
+        Running {
             workspace_id,
             workspace,
             execution_id,
@@ -111,6 +110,34 @@ pub(crate) fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<R
             viewer: None,
             launch,
             machine: None,
+        }
+    }
+}
+
+/// The demos of `workspace`, or of every workspace.
+pub(crate) fn list(db: &Connection, workspace: Option<&SpaceId>) -> Result<Vec<Recorded>> {
+    let mut statement = db.prepare(
+        "SELECT workspace_id,execution_id,started_at,record,has_run
+         FROM demos WHERE ?1 IS NULL OR workspace_id=?1",
+    )?;
+    let rows = statement.query_map([workspace], |row| {
+        Ok((
+            row.get::<_, SpaceId>(0)?,
+            row.get::<_, ExecutionId>(1)?,
+            row.get(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, bool>(4)?,
+        ))
+    })?;
+    rows.map(|row| {
+        let (workspace_id, execution_id, started_at, record, has_run) = row?;
+        let launch: Launch = serde_json::from_str(&record).context("invalid demo record")?;
+        Ok(Recorded {
+            workspace_id,
+            execution_id,
+            started_at,
+            launch,
+            has_run,
         })
     })
     .collect()

@@ -12,12 +12,16 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::model::{Execution, ExecutionSpace, PortRequest, PortReservation, Space};
+use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces demos run in.
 pub trait Spaces: Send + Sync {
     /// The workspace or chat `selector` names.
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>>;
+
+    /// The workspace or chat `id`, while it exists.
+    fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>>;
 }
 
 /// The executions that run demos, and their processes.
@@ -27,6 +31,12 @@ pub trait Executions: Send + Sync {
 
     /// Whether the execution `execution` is completing.
     fn completing(&self, execution: &ExecutionId) -> bool;
+
+    /// The record of the execution `id`, while it exists.
+    fn execution<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<Option<Execution>>>;
+
+    /// The scope token the commands of the execution `id` act under.
+    fn scope_token<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<ScopeToken>>;
 
     /// Ask the connected wrappers among `executions` to stop for `reason`,
     /// saving nothing, and return the rest.

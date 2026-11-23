@@ -15,6 +15,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::demos::{Launch, Running};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::Store;
 
 use crate::{
     Demos,
@@ -43,8 +44,13 @@ impl Fixture {
             .unwrap();
         Self {
             root,
-            demos: Arc::new(Demos::new(store, paths.clone())),
-            daemon: Arc::default(),
+            demos: Arc::new(Demos::new(store.clone(), paths.clone())),
+            daemon: Arc::new(StandIn {
+                store,
+                spaces: Mutex::default(),
+                completing: Mutex::default(),
+                ports: Mutex::default(),
+            }),
             paths,
         }
     }
@@ -104,9 +110,10 @@ impl Fixture {
     }
 }
 
-/// The rest of the daemon, as the fixture records it.
-#[derive(Default)]
+/// The rest of the daemon, as the fixture records it, with the store its
+/// executions' records are in.
 pub(crate) struct StandIn {
+    store: Store,
     spaces: Mutex<Vec<Space>>,
     /// The executions a test says are completing.
     completing: Mutex<HashSet<ExecutionId>>,
@@ -141,6 +148,11 @@ impl Spaces for StandIn {
             .with_context(|| format!("{NOT_HERE}: {selector}"));
         Box::pin(async { space })
     }
+
+    fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
+        let space = self.find(id);
+        Box::pin(async { Ok(space) })
+    }
 }
 
 impl Executions for StandIn {
@@ -150,6 +162,22 @@ impl Executions for StandIn {
 
     fn completing(&self, execution: &ExecutionId) -> bool {
         self.completing.lock().unwrap().contains(execution)
+    }
+
+    fn execution<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<Option<Execution>>> {
+        let id = id.to_owned();
+        Box::pin((self.store).read(move |db| shoal_store::find_execution(db, &id)))
+    }
+
+    fn scope_token<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<ScopeToken>> {
+        let id = id.to_owned();
+        Box::pin((self.store).read(move |db| {
+            Ok(db.query_row(
+                "SELECT scope_token FROM executions WHERE id=?1",
+                [&id],
+                |row| row.get(0),
+            )?)
+        }))
     }
 
     fn ask_to_stop(

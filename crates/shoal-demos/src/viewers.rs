@@ -19,7 +19,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_core::config::repo::ConflictPolicy;
 use shoal_daemon_base::callers::Caller;
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::{demos::Running, scope_tokens::ScopeToken};
+use shoal_protocol::demos::Running;
 use tokio::{
     net::TcpStream,
     process::{Child, Command},
@@ -264,11 +264,7 @@ impl Demos {
             configured,
             ports,
         } = daemon.joining(&demo.workspace_id).await?;
-        let execution = demo.execution_id.clone();
-        let token = self
-            .store
-            .read(move |db| scope_token(db, &execution))
-            .await?;
+        let token = daemon.scope_token(&demo.execution_id).await?;
         let execution = env::execution_environment(&space, &self.paths, &ports, &token);
         let paths = self.paths.clone();
         Ok(Place {
@@ -375,20 +371,6 @@ fn recorded(db: &Connection, execution: &ExecutionId) -> Result<Option<Viewer>> 
         })
     })
     .transpose()
-}
-
-/// The scope token of the execution `execution`, which its commands act
-/// under.
-fn scope_token(db: &Connection, execution: &ExecutionId) -> Result<ScopeToken> {
-    let token: Option<ScopeToken> = db
-        .query_row(
-            "SELECT scope_token FROM executions WHERE id=?1",
-            [execution],
-            |row| row.get(0),
-        )
-        .optional()?
-        .flatten();
-    token.context("the demo's execution has no scope token")
 }
 
 /// Kill the viewer `process` of the demo `execution` runs and its process

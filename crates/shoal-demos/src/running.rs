@@ -33,10 +33,19 @@ impl Demos {
             }
             None => None,
         };
-        let mut demos = self
+        let recorded = self
             .store
             .run(move |db| records::list(db, workspace.as_ref()))
             .await?;
+        let mut demos = Vec::new();
+        for demo in recorded {
+            // Its record goes with its workspace, which a removal may
+            // delete meanwhile.
+            if let Some(space) = daemon.find_space(&demo.workspace_id).await? {
+                demos.push(demo.running(space.name));
+            }
+        }
+        demos.sort_by(|a, b| (&a.workspace, &a.launch.name).cmp(&(&b.workspace, &b.launch.name)));
         for demo in &mut demos {
             let viewer = self.running_viewer(&demo.execution_id).await?;
             let serving = viewer.filter(|viewer| viewer.serving);
@@ -100,12 +109,7 @@ impl Demos {
         let reason = "stopped by shoal demo stop".to_owned();
         let disconnected = daemon.ask_to_stop(executions, reason).await;
         for id in disconnected {
-            let query = id.clone();
-            let execution = self
-                .store
-                .run(move |db| shoal_store::find_execution(db, &query))
-                .await?;
-            if let Some(execution) = execution {
+            if let Some(execution) = daemon.execution(&id).await? {
                 self.stop_disconnected(daemon, &execution).await?;
             }
         }
@@ -150,12 +154,7 @@ impl Demos {
         // A viewer spawning meanwhile is spared once recorded.
         let spawning = self.viewers.spawn_lock(execution);
         let _spawning = spawning.lock().await;
-        let query = execution.clone();
-        let record = self
-            .store
-            .run(move |db| shoal_store::find_execution(db, &query))
-            .await?;
-        let Some(record) = record else {
+        let Some(record) = daemon.execution(execution).await? else {
             return Ok(false);
         };
         let scan = process::scan(HashSet::from([record.id.clone()])).await?;

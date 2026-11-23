@@ -7,6 +7,7 @@ use shoal_demos::daemon::{Executions, Joining, Ports, Proof, Reserved, Spaces};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_leases::{allocation::Allocation, ports::Acquisition};
+use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
@@ -22,6 +23,10 @@ impl Spaces for Manager {
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
         Box::pin(Manager::space(self, selector))
     }
+
+    fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
+        Box::pin(Manager::find_space(self, id))
+    }
 }
 
 impl Executions for Manager {
@@ -31,6 +36,14 @@ impl Executions for Manager {
 
     fn completing(&self, execution: &ExecutionId) -> bool {
         self.agents.executions().completing(execution).is_some()
+    }
+
+    fn execution<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<Option<Execution>>> {
+        Box::pin(self.agents.execution(id))
+    }
+
+    fn scope_token<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<ScopeToken>> {
+        Box::pin(self.agents.execution_scope_token(id))
     }
 
     fn ask_to_stop(
