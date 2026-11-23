@@ -164,8 +164,8 @@ states!(AlertKind {
     /// A space another machine took over changed here after the package
     /// the takeover went by, and this machine removed its copy.
     SpaceDiverged => "space_diverged",
-    /// An intermittent machine stayed unreachable while its spaces had
-    /// work to do.
+    /// An intermittent machine, or one that announced its sleep, stayed
+    /// unreachable while its spaces had work to do.
     MachineUnreachable => "machine_unreachable",
     /// A space a machine handed over as it shut down, or that the hub took
     /// over from a sleeping machine, did not continue on the machine the

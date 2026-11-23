@@ -131,7 +131,8 @@ fn listen(
     };
     // Lives as long as the run loop, which never returns.
     let functions: &'static Functions = Box::leak(Box::new(functions));
-    let context = Box::leak(Box::new(Context {
+    // One pointer, which the callback and this thread both go through.
+    let context = Box::into_raw(Box::new(Context {
         functions,
         port: 0,
         events,
@@ -142,7 +143,7 @@ fn listen(
     // are valid for writes.
     let port = unsafe {
         (functions.register_for_system_power)(
-            std::ptr::from_mut(context).cast(),
+            context.cast(),
             &raw mut notify_port,
             notified,
             &raw mut notifier,
@@ -152,7 +153,9 @@ fn listen(
         let _ = registered.send(Err("IOKit refused the system power registration"));
         return;
     }
-    context.port = port;
+    // SAFETY: the context is never freed, and the callback reads it only
+    // from the run loop, which runs once this write is done.
+    unsafe { (*context).port = port };
     let _ = registered.send(Ok(()));
     // SAFETY: the port came from the registration, and this thread's run
     // loop runs the source it gives.
