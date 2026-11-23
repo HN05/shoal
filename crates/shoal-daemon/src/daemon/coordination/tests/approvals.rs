@@ -1,6 +1,7 @@
 #[allow(unused_imports)]
 use crate::daemon::manager::Manager;
 use crate::daemon::resources::{Definition, LockMode, Scope};
+use crate::daemon::scope::Access;
 use crate::daemon::{
     item_numbers::{self, ItemNumber},
     notifications::AlertKind,
@@ -339,7 +340,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     manager

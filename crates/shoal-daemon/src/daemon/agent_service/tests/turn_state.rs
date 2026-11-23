@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
@@ -208,7 +209,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
                 space_id: own.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

@@ -1,4 +1,5 @@
 use crate::daemon::agent_queue::Grant;
+use crate::daemon::scope::Access;
 use crate::{
     daemon::{
         agent_service::tests::queue::{
@@ -368,7 +369,7 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let mut children = Vec::new();
@@ -439,7 +440,7 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
                 space_id: parent.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

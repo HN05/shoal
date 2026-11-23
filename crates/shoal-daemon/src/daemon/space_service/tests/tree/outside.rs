@@ -1,5 +1,6 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
+use crate::daemon::scope::Access;
 use crate::execution::recovery::LastSessionExt;
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use crate::{
@@ -359,7 +360,7 @@ async fn a_chat_without_a_repository_copies_a_workspace_of_any_repository() {
         space_id: master.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let mut source = crate::protocol::CopySource {

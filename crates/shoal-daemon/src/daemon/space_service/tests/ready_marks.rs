@@ -1,4 +1,5 @@
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use crate::forge::items::link::LinkKind;
 use crate::forge::items::link::Selection;
 use crate::model::ReadyMarks;
@@ -456,7 +457,7 @@ async fn scoped_callers_mark_only_their_own_workspace() {
                 space_id: own.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

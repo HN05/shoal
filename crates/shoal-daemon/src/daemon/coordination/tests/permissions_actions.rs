@@ -1,5 +1,6 @@
 //! Taking an action a permission governs: at once, after approval, or not
 //! at all.
+use crate::daemon::scope::Access;
 use crate::{
     config::permissions::PermissionKey,
     daemon::{
@@ -14,7 +15,7 @@ fn caller(space: &shoal_ids::space_ids::SpaceId) -> Caller {
         space_id: space.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

@@ -1,4 +1,5 @@
 use crate::daemon::links::issue::test_support::{Fixture, Refuse, USER};
+use crate::daemon::scope::Access;
 use crate::{
     forge::items::reference::ItemRef,
     model::{Assigner, IssueAssignee, Workspace},
@@ -145,7 +146,7 @@ async fn a_scoped_relink_takes_on_no_assignment() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let warnings = (fixture.manager.links.relink_space(
@@ -178,7 +179,7 @@ async fn a_scoped_relink_checks_its_related_items_as_links_do() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let manager = &fixture.manager;

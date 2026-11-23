@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use serde_json::json;
 
 use crate::{
@@ -40,7 +41,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let request = |method| RawRequest {
@@ -205,7 +206,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
         space_id: chat.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let request = |method| RawRequest {
@@ -319,7 +320,7 @@ async fn agents_download_from_their_forge_as_their_account() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let url = &format!("http://{host}/user-attachments/assets/abc");

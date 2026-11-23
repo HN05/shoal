@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::paths::StateFiles;
 use std::fs;
 
@@ -376,7 +377,7 @@ async fn a_merge_binds_the_head_the_pr_has_unless_it_names_one() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let merge = |head| Action::AutoMerge {

@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::model::EventCause;
 use crate::{
     daemon::{
@@ -61,7 +62,7 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
                 space_id: upper.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

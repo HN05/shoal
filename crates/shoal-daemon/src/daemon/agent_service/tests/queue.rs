@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use shoal_ids::execution_ids::ExecutionId;
 use std::{
     collections::{BTreeMap, HashSet},
@@ -1072,7 +1073,7 @@ async fn a_scoped_caller_holds_reads_and_fails_only_the_launches_it_reaches() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let child = manager
@@ -1166,7 +1167,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
                 space_id: parent.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

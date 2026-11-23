@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
@@ -122,7 +123,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
             agent_execution: Some("agent".into()),
         }),
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let from_execution = manager

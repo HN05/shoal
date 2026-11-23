@@ -1,4 +1,5 @@
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use crate::daemon::scope::Caller;
 use shoal_protocol::launches::Launch;
 use shoal_protocol::launches::LaunchSource;
@@ -102,7 +103,7 @@ async fn a_trigger_or_scoped_start_leaves_the_user_unengaged() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let trigger = LaunchSource::Trigger {
@@ -154,7 +155,7 @@ async fn another_machine_s_caller_reads_a_launch_s_items_through_the_checkout() 
         space_id: space,
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: Some(std::sync::Arc::new(vouched)),
     };
     let context = manager

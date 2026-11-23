@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::{
     daemon::{
         approvals::proposals::PR,
@@ -57,7 +58,7 @@ async fn setup_with(
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     (root, manager, workspace, caller)
@@ -468,7 +469,7 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
         space_id: child.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let selected = SpaceSelector::id(&child.id);

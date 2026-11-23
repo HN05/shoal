@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::daemon::space_service::tests::lifecycle::{
     fixture, fixture_with_hook, fixture_with_removal_hook,
 };
@@ -196,7 +197,7 @@ fn caller_in(id: &SpaceId) -> Caller {
         space_id: id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

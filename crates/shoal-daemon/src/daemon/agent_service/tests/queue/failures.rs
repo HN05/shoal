@@ -1,6 +1,7 @@
 use crate::daemon::agent_service::tests::queue::{
     add, create, launch_in, limit_globally, register,
 };
+use crate::daemon::scope::Access;
 use crate::{
     daemon::{chats::NewChat, manager::Manager, notifications::AlertKind, test_support::manager},
     model::{QueueEntry, Repository},
@@ -344,7 +345,7 @@ async fn a_coordinator_changes_the_permissions_of_a_failed_chat_below_it() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let mut method = crate::protocol::AssignmentMethod::ChangeStoppedPermissions {

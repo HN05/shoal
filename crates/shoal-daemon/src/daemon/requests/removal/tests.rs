@@ -1,5 +1,6 @@
 //! Removal requests from a scoped caller.
 use super::*;
+use crate::daemon::scope::Access;
 use crate::{
     daemon::test_support::{chat, manager, repository, vouched_admin, workspace_below},
     model::HoldPlacer,
@@ -12,7 +13,7 @@ fn caller(space: &SpaceId) -> Caller {
         space_id: space.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

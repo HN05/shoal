@@ -7,6 +7,7 @@ use crate::scope::Caller;
 use crate::stand_in::Fixture;
 use crate::transfer::MoveLock;
 use shoal_core::test_support::{commit, git, repository};
+use shoal_daemon_base::callers::Access;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 use std::fs;
@@ -678,7 +679,7 @@ async fn a_scoped_caller_restores_only_below_a_parent_in_its_scope() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
 

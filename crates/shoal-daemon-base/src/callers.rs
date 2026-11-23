@@ -18,13 +18,29 @@ pub struct Caller {
     /// take, which lets the requests that command sends take actions that
     /// permission governs without asking again.
     pub granted: Option<PermissionKey>,
-    /// It only reads what its scope reaches, as the gate's runs do, and is
-    /// refused every request that would change anything.
-    pub read_only: bool,
+    /// What it may change of what its scope reaches.
+    pub access: Access,
     /// What another machine vouches for this caller, a process of a space
     /// there, with the request it forwarded: the reach of its scope and its
     /// permissions, which decide that request and no other.
     pub vouched: Option<Arc<VouchedSpace>>,
+}
+
+/// What a caller may change of what its scope reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Access {
+    /// What its scope and permissions allow.
+    Full,
+    /// Nothing: it only reads, as the gate's runs do, and is refused every
+    /// request that would change anything.
+    ReadOnly,
+}
+
+impl Access {
+    /// Whether it is refused every request that would change anything.
+    pub fn reads_only(self) -> bool {
+        self == Self::ReadOnly
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -45,7 +61,7 @@ impl Caller {
             space_id,
             execution: None,
             granted: None,
-            read_only: false,
+            access: Access::Full,
             vouched: None,
         }
     }

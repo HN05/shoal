@@ -7,7 +7,7 @@ mod reach;
 pub mod tokens;
 
 pub use reach::outside_scope;
-pub use shoal_daemon_base::callers::{Caller, ScopedExecution};
+pub use shoal_daemon_base::callers::{Access, Caller, ScopedExecution};
 
 use anyhow::Result;
 

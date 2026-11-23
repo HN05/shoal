@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
@@ -127,7 +128,7 @@ async fn files_from_outside_any_agent_are_the_users() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     assert_eq!(
@@ -461,7 +462,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
                     space_id: workspace.id.clone(),
                     execution: None,
                     granted: None,
-                    read_only: false,
+                    access: Access::Full,
                     vouched: None,
                 },
             )
@@ -557,7 +558,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
                 space_id: top.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -628,7 +629,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
                 space_id: workspace.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

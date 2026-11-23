@@ -1,4 +1,5 @@
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use crate::daemon::scope::Caller;
 use crate::git;
 use crate::model::EventCause;
@@ -638,7 +639,7 @@ async fn a_scoped_caller_cannot_restore_a_chat_into_a_worktree_outside_its_scope
         space_id: own.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
 

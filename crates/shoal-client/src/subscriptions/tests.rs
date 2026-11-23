@@ -5,6 +5,7 @@ use crate::forge::items::link::LinkKind;
 use crate::test_daemon::Connect as _;
 use shoal_core::execution::recovery::LastSessionExt as _;
 use shoal_core::removal::{InspectionPolicy, UnsavedWork};
+use shoal_daemon::test_daemon::Access;
 use shoal_daemon::test_daemon::{
     ApprovalRequestExt as _, HANG, TestDaemon, link_item, link_space, store_issue_proposal,
 };
@@ -61,7 +62,7 @@ fn caller(id: &SpaceId) -> shoal_daemon::test_daemon::Caller {
         space_id: id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }
@@ -192,7 +193,7 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
                 space_id: workspace.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             }),
             shoal_protocol::protocol::AlertTarget::Up,

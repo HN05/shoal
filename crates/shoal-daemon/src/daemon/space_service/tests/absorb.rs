@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use std::{fs, path::Path, sync::Arc};
 
 use crate::{
@@ -401,7 +402,7 @@ async fn a_scoped_caller_absorbs_only_the_spaces_below_its_own() {
         space_id: worker.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     (manager.agents.executions())
@@ -645,7 +646,7 @@ async fn a_hold_on_a_chat_in_the_absorbed_worktree_asks_a_scoped_caller_first() 
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let before = head(&parent.path);

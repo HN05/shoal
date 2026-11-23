@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use crate::daemon::test_support::{away_on_offline_machine, held_calls, manager};
 use crate::daemon::workspace_files::{FileSource, NewFile};
 use shoal_coordination::alerts::*;
@@ -72,7 +73,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
                 space_id: workspace.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

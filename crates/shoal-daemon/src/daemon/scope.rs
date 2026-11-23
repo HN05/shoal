@@ -14,7 +14,7 @@ mod read_only;
 
 #[cfg(test)]
 pub(crate) use shoal_coordination::scope::ScopedExecution;
-pub use shoal_coordination::scope::{Caller, ScopeRefusal, outside_scope};
+pub use shoal_coordination::scope::{Access, Caller, ScopeRefusal, outside_scope};
 
 /// Resolve `token`, which may stand for a caller another machine vouches
 /// for, and confine `method` to the spaces the caller's scope reaches: its own space, a workspace or a chat, and the spaces below it,
@@ -40,7 +40,7 @@ pub(crate) async fn authorize(
             .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?,
     };
     ensure!(
-        !caller.read_only || method.changes_nothing(),
+        !caller.access.reads_only() || method.changes_nothing(),
         "a read-only scope only reads; this request would change something"
     );
     let reads_only = method.reads_space();

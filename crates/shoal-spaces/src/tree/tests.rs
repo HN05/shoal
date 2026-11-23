@@ -6,6 +6,7 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
 };
 use shoal_core::test_support::repository;
+use shoal_daemon_base::callers::Access;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -251,7 +252,7 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     assert_eq!(

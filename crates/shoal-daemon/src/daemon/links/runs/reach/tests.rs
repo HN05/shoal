@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use shoal_links::runs::reach::branch_in_reach;
 
 use crate::daemon::{
@@ -28,7 +29,7 @@ async fn a_scope_reaches_the_default_branch_and_its_workspaces_branches() {
             space_id: space.clone(),
             execution: None,
             granted: None,
-            read_only: false,
+            access: Access::Full,
             vouched: None,
         };
         branch_in_reach(&*manager, &caller, &repo.id, branch)

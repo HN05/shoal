@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use rusqlite::params;
 use serde_json::json;
 use shoal_protocol::progress::Blocker;
@@ -15,7 +16,7 @@ fn caller(space: &SpaceId) -> Caller {
         space_id: space.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

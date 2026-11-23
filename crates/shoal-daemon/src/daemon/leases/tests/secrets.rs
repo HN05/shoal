@@ -1,4 +1,5 @@
 //! Secrets as the approvals store grants them.
+use crate::daemon::scope::Access;
 use anyhow::Result;
 
 use crate::daemon::{
@@ -92,7 +93,7 @@ async fn setup() -> (tempfile::TempDir, std::sync::Arc<Manager>, Caller) {
         space_id: workspace.id,
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     (temp, manager, caller)
@@ -202,7 +203,7 @@ async fn a_chat_reads_a_written_secret_as_a_workspace_does() -> Result<()> {
         space_id: chat.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let chat = SpaceSelector::id(&chat.id);

@@ -1,6 +1,7 @@
 //! The scope a gate run holds: read-only, of the requesting space, so the
 //! run's `shoal` commands read that space and the spaces below it and
 //! change nothing. It ends with the run.
+use shoal_daemon_base::callers::Access;
 use std::{collections::BTreeMap, ffi::OsString};
 
 use shoal_daemon_base::callers::Caller;
@@ -22,7 +23,7 @@ impl<'a> RunScope<'a> {
     /// A read-only scope of `space` for one gate run.
     pub(super) fn of(operations: &'a Operations, space: &SpaceId) -> Self {
         let caller = Caller {
-            read_only: true,
+            access: Access::ReadOnly,
             ..Caller::of_space(space.clone())
         };
         let token = operations.issue(&caller);

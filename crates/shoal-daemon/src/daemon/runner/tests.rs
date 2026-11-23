@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -1163,7 +1164,7 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_job_alone_to_rerun() {
             agent_execution: None,
         }),
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     // A step's command, which inherits the job's scope, neither reports

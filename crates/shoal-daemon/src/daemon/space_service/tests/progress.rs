@@ -1,4 +1,5 @@
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use shoal_protocol::progress::ProgressChange;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -48,7 +49,7 @@ async fn scoped_callers_set_only_their_own_progress_read_below_and_unblock_below
                 space_id: own.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

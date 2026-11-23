@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use std::{sync::Arc, time::Duration};
 
 use shoal_ids::execution_ids::ExecutionId;
@@ -139,7 +140,7 @@ async fn a_deferred_restart_that_fails_reaches_the_coordinator_that_asked() {
         space_id: coordinator.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     fail_after_the_turn(&manager, &workspace, &execution, Some(&caller)).await;

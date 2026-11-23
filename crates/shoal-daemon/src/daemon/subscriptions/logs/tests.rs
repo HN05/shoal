@@ -1,4 +1,5 @@
 use super::*;
+use crate::daemon::scope::Access;
 use crate::daemon::{events::EventKind, test_support::manager};
 
 mod journal;
@@ -47,7 +48,7 @@ fn caller(space: &str) -> Caller {
         space_id: space.into(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }
@@ -137,7 +138,7 @@ async fn a_scoped_caller_cannot_read_shoal_s_log() {
         space_id: "plan".into(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     assert!(manager.narrow_to_log(&caller, &mut None).await.is_err());

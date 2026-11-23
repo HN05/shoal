@@ -1,3 +1,4 @@
+use shoal_daemon_base::callers::Access;
 use std::path::PathBuf;
 
 use shoal_ids::space_ids::SpaceId;
@@ -686,7 +687,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let agent = Some(&caller);

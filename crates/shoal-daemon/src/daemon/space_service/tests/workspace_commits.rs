@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::forge::numbers::PullNumber;
 use shoal_ids::space_ids::SpaceId;
 
@@ -37,7 +38,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
                     agent_execution: None,
                 }),
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -145,7 +146,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
             space_id,
             execution: None,
             granted: None,
-            read_only: false,
+            access: Access::Full,
             vouched: None,
         });
         let head = head.clone();
@@ -247,7 +248,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
                 space_id: chat.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             }),
         )

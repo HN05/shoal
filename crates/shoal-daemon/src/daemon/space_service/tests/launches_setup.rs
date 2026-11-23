@@ -1,4 +1,5 @@
 use crate::config::permissions::PermissionKey;
+use crate::daemon::scope::Access;
 use crate::daemon::scope::Caller;
 use shoal_protocol::launches::Launch;
 
@@ -14,7 +15,7 @@ fn caller(starter: &crate::model::Chat) -> Caller {
         space_id: starter.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

@@ -1,4 +1,5 @@
 use super::handle;
+use crate::daemon::scope::Access;
 use crate::{
     daemon::{
         scope::Caller,
@@ -12,7 +13,7 @@ fn caller(space: &shoal_ids::space_ids::SpaceId) -> Caller {
         space_id: space.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

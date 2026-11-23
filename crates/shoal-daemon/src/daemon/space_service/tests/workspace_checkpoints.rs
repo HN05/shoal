@@ -1,4 +1,5 @@
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use crate::daemon::scope::Caller;
 use crate::model::Space;
 use crate::model::Workspace;
@@ -160,7 +161,7 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
             agent_execution: None,
         }),
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     manager

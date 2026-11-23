@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::shoal_dirs::{Contents, ShoalDir};
 use crate::time::UnixTime;
 use shoal_ids::space_ids::SpaceId;
@@ -347,7 +348,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                     agent_execution: None,
                 }),
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -372,7 +373,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
                 space_id: child.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -428,7 +429,7 @@ async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let resolving = Resolving {
@@ -482,7 +483,7 @@ async fn the_reviewer_answers_its_workspace_s_post_in_a_finding_s_thread() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let post = NewPost {

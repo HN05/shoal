@@ -34,7 +34,7 @@ pub mod test_daemon {
     pub use crate::daemon::links::proposals::{link_item, link_space, store_issue_proposal};
     pub use crate::daemon::overload::Pressure;
     pub use crate::daemon::queued_starts::fake::STARTED as STARTED_QUEUED;
-    pub use crate::daemon::scope::Caller;
+    pub use crate::daemon::scope::{Access, Caller};
     pub use crate::daemon::test_daemon::{HANG, TestDaemon};
     pub use crate::daemon::test_support::{chat_launches, configure, overload};
     pub use crate::daemon::{

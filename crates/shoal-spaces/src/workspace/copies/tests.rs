@@ -6,6 +6,7 @@ use crate::workspace::NewWorkspace;
 use crate::workspace::copies::*;
 use anyhow::Result;
 use shoal_core::test_support::{git, global_config, repository};
+use shoal_daemon_base::callers::Access;
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_refs::BranchName;
 use std::fs;
@@ -606,7 +607,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         space_id: f.source.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     for (workspace, allowed) in [(&f.source, true), (&child, true), (&other, false)] {

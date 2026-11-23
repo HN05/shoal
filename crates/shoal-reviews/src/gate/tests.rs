@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use shoal_daemon_base::approval_requests::ApprovalRequestExt;
+use shoal_daemon_base::callers::Access;
 use shoal_protocol::approvals::{PushSpecification, Specification, Target};
 use shoal_protocol::config::repo::Lifetime;
 
@@ -220,7 +221,7 @@ async fn a_run_holds_a_read_only_scope_of_the_space_until_it_ends() {
             token.to_owned(),
         ))
     };
-    assert!(caller().is_some_and(|caller| caller.read_only));
+    assert!(caller().is_some_and(|caller| caller.access == Access::ReadOnly));
     fixture.mark("hold", false);
     fixture
         .request_when(&request.key, |stored| {

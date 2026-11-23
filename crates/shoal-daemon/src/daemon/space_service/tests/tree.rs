@@ -1,4 +1,5 @@
 use crate::daemon::approvals::ApprovalRequestExt;
+use crate::daemon::scope::Access;
 use crate::execution::recovery::LastSessionExt;
 use crate::{
     daemon::{
@@ -52,7 +53,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
                     agent_execution: None,
                 }),
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -134,7 +135,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     (manager.agents.executions())
@@ -295,7 +296,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
                 space_id: parent.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -364,7 +365,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
                 space_id: child.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -704,7 +705,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
                 space_id: parent.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -1094,7 +1095,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
                     space_id: workspace.id.clone(),
                     execution: None,
                     granted: None,
-                    read_only: false,
+                    access: Access::Full,
                     vouched: None,
                 },
             )
@@ -2024,7 +2025,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         space_id: parent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     manager
@@ -2153,7 +2154,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                 space_id: parent.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -2299,7 +2300,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
                     space_id: workspace.id.clone(),
                     execution: None,
                     granted: None,
-                    read_only: false,
+                    access: Access::Full,
                     vouched: None,
                 },
             )

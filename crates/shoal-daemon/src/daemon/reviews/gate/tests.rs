@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use shoal_protocol::approvals::PushSpecification;
 use std::{path::PathBuf, sync::Arc};
 
@@ -80,7 +81,7 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     Fixture {
@@ -251,7 +252,7 @@ async fn a_run_holds_a_read_only_scope_of_the_space_until_it_ends() {
         .unwrap()
         .unwrap();
     assert_eq!(caller.space_id, fixture.workspace.id);
-    assert!(caller.read_only);
+    assert_eq!(caller.access, Access::ReadOnly);
     std::fs::remove_file(&hold).unwrap();
     fixture
         .request_when(&request.key, |stored| stored.operation.is_some())

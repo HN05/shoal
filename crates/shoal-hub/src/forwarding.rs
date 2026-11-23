@@ -492,7 +492,7 @@ impl Hub {
             everywhere,
             permissions,
             granted: caller.granted,
-            read_only: caller.read_only,
+            read_only: caller.access.reads_only(),
             priority,
             chat_modes,
         }))

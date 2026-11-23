@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use shoal_ids::repository_ids::RepositoryId;
 use std::{fs, path::PathBuf, sync::Arc};
 
@@ -124,7 +125,7 @@ async fn begin_merge_by_agent(
         execution: None,
         space_id: workspace.id.clone(),
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let request = crate::daemon::executions::ExecutionRequest {
@@ -1939,7 +1940,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
                     agent_execution: None,
                 }),
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )

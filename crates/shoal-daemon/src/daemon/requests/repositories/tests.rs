@@ -1,5 +1,6 @@
 //! Repository requests from a scoped caller.
 use super::*;
+use crate::daemon::scope::Access;
 use crate::daemon::test_support::manager;
 use shoal_ids::space_ids::SpaceId;
 
@@ -12,7 +13,7 @@ async fn a_scoped_process_here_carries_no_commits() {
         space_id: SpaceId::generate(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let mut method = RepositoryMethod::ReceiveCommits {
@@ -42,7 +43,7 @@ async fn a_scoped_process_without_admin_previews_no_removal() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let mut method = RepositoryMethod::PreviewRepositoryRemoval {

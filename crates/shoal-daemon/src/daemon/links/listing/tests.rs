@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::{
     daemon::{
         scope::Caller,
@@ -63,7 +64,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
         space_id: chat.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     for caller in [Some(&agent), None] {

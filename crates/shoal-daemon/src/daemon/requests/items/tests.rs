@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use tokio::net::UnixStream;
 
 use super::super::super::answer;
@@ -129,7 +130,7 @@ async fn agents_approve_prs_as_the_review_account_as_pr_review_allows() {
         space_id: id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let approve = async |id, number| {

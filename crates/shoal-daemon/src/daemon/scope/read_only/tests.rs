@@ -1,17 +1,17 @@
 use crate::daemon::{
-    scope::{Caller, authorize},
+    scope::{Access, Caller, authorize},
     test_support::{manager, repository, workspace_below},
 };
 use crate::protocol::{AgentMethod, MergingMethod, Operation, SpaceMethod};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-fn caller(space: &SpaceId, read_only: bool) -> Caller {
+fn caller(space: &SpaceId, access: Access) -> Caller {
     Caller {
         space_id: space.clone(),
         execution: None,
         granted: None,
-        read_only,
+        access,
         vouched: None,
     }
 }
@@ -63,17 +63,17 @@ async fn read_only_scope_reads_without_changing() {
             }),
         ]
     };
-    for read_only in [false, true] {
-        let token = manager.operations.issue(&caller(&parent.id, read_only));
+    for access in [Access::Full, Access::ReadOnly] {
+        let token = manager.operations.issue(&caller(&parent.id, access));
         let mut allowed = Vec::new();
         for mut operation in operations(&child.id) {
             let authorized = authorize(&manager, Some(&token), &mut operation).await;
             allowed.push(authorized.is_ok());
         }
-        let expected = match read_only {
-            false => [true, true, true, true, true],
-            true => [true, true, false, false, false],
+        let expected = match access {
+            Access::Full => [true, true, true, true, true],
+            _ => [true, true, false, false, false],
         };
-        assert_eq!(allowed, expected, "read_only: {read_only}");
+        assert_eq!(allowed, expected, "{access:?}");
     }
 }

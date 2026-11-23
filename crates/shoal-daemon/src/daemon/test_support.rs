@@ -1,5 +1,6 @@
 //! Daemon test fixtures: a [`Manager`] in a temporary state directory,
 //! beside the crate's own fixtures, which this module re-exports.
+use crate::daemon::scope::Access;
 use shoal_ids::repository_ids::RepositoryId;
 use std::{fs, path::Path, sync::Arc};
 
@@ -397,7 +398,7 @@ pub(crate) fn caller_in(
         space_id: id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }
@@ -434,7 +435,7 @@ pub(crate) async fn vouched_admin(
         space_id: space,
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: Some(Arc::new(vouched)),
     }
 }

@@ -1,5 +1,6 @@
 //! Trees that mix workspaces and chats: every walk passes spaces of either
 //! kind alike.
+use crate::daemon::scope::Access;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::{
     daemon::{
@@ -523,7 +524,7 @@ async fn a_scoped_chat_starts_chats_only_in_the_worktrees_of_its_tree() {
                 space_id: chat.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -566,7 +567,7 @@ async fn a_scoped_process_restarts_only_the_chats_below_its_space() {
             space_id,
             execution: None,
             granted: None,
-            read_only: false,
+            access: Access::Full,
             vouched: None,
         };
         manager

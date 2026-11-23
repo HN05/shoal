@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use std::sync::Arc;
 
 use crate::{
@@ -415,7 +416,7 @@ async fn a_scoped_caller_resumes_a_hold_only_where_it_administers_directly() {
             space_id: space.id,
             execution: None,
             granted: None,
-            read_only: false,
+            access: Access::Full,
             vouched: None,
         };
         let token = format!("scope-{mode}");

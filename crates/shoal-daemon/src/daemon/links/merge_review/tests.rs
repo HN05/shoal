@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -98,7 +99,7 @@ impl Fixture {
             space_id: self.workspace.id.clone(),
             execution: None,
             granted: None,
-            read_only: false,
+            access: Access::Full,
             vouched: None,
         }
     }

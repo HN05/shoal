@@ -1,3 +1,4 @@
+use shoal_daemon_base::callers::Access;
 use shoal_daemon_base::callers::Caller;
 use shoal_forge_types::items::{
     action::Action,
@@ -19,7 +20,7 @@ fn a_scoped_verdict_is_the_space_s_own_post_and_the_user_s_is_not() {
         space_id: "space".into(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     assert_eq!(own_posts(&approval, Some(&scoped), posted()), posted());

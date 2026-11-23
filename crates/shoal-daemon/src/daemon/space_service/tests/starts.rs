@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use std::{sync::Arc, time::Duration};
 
 use crate::daemon::starts::{Child, Opening, Preparing};
@@ -553,7 +554,7 @@ fn scoped(workspace: &Workspace) -> Caller {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::daemon::scope::Caller;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -14,7 +15,7 @@ async fn an_agent_takes_a_space_over_only_as_its_admin_permission_allows() {
         space_id: space.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let (_temp, manager) = manager().await;

@@ -1,6 +1,7 @@
 //! Triggers across the daemon's subsystems: a scoped caller's run, which
 //! its `triggers` permission decides and the launch `shoal start` uses
 //! starts.
+use crate::daemon::scope::Access;
 use std::sync::Arc;
 
 use shoal_protocol::triggers::{Fired, RunOrigin, RunOutcome};
@@ -61,7 +62,7 @@ async fn a_scoped_run_follows_the_triggers_permission() {
         space_id: agent.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let context = || Some(ItemContext::Checkout(repo.id.clone()));

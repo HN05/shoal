@@ -1,5 +1,6 @@
 use crate::daemon::holds::*;
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 
 use crate::{
     daemon::{
@@ -66,7 +67,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
                     agent_execution: None,
                 }),
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -194,7 +195,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
                     space_id: workspace.id.clone(),
                     execution: None,
                     granted: None,
-                    read_only: false,
+                    access: Access::Full,
                     vouched: None,
                 },
             )

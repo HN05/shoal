@@ -1,4 +1,5 @@
 use super::*;
+use shoal_daemon_base::callers::Access;
 use shoal_daemon_base::callers::Caller;
 
 use crate::stand_in::Fixture;
@@ -128,7 +129,7 @@ async fn a_coordinators_request_is_not_the_users_interaction() {
         space_id: "parent".into(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let space = SpaceSelector::id(&id);

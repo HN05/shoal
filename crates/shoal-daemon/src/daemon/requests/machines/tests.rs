@@ -4,7 +4,7 @@ use super::handle;
 use crate::{
     daemon::{
         answer::Answer,
-        scope::{Caller, Scoped},
+        scope::{Access, Caller, Scoped},
         test_support::{chat, manager},
     },
     protocol::{Body, MachineMethod},
@@ -18,7 +18,7 @@ async fn only_the_user_pauses_a_machine_which_admits_nothing_until_unpaused() {
         space_id: space.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let mut pause = MachineMethod::PauseMachine { machine: None };

@@ -1,4 +1,5 @@
 use crate::daemon::conversions::to_workspace::WorkspaceConversion;
+use crate::daemon::scope::Access;
 use crate::{
     config::modes::ModeName,
     daemon::{
@@ -57,7 +58,7 @@ async fn an_agent_converts_the_spaces_its_scope_reaches() {
         space_id: lead.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     manager

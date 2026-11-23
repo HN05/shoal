@@ -1,4 +1,5 @@
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use crate::daemon::scope::Caller;
 use crate::model::Refreshed;
 use crate::model::Repository;
@@ -401,7 +402,7 @@ fn caller(space: &SpaceId, execution: &str) -> Caller {
             agent_execution: None,
         }),
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

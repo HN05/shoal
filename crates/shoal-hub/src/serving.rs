@@ -8,7 +8,7 @@
 //! daemon writes it, and one whose connection carries bytes both ways, as a
 //! demo's, also takes the caller's from the stream. A forwarded request is
 //! never forwarded again.
-use shoal_daemon_base::callers::Caller;
+use shoal_daemon_base::callers::{Access, Caller};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, PoisonError},
@@ -198,7 +198,10 @@ impl Hub {
                 space_id: space.space.clone(),
                 execution: None,
                 granted: space.granted,
-                read_only: space.read_only,
+                access: match space.read_only {
+                    true => Access::ReadOnly,
+                    false => Access::Full,
+                },
                 vouched: Some(Arc::new(space)),
             }),
         })

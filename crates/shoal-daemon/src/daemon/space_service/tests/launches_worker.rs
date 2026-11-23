@@ -1,4 +1,5 @@
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use crate::daemon::scope::Caller;
 use crate::model::Workspace;
 use shoal_protocol::launches::Launch;
@@ -184,7 +185,7 @@ async fn a_scoped_caller_replaces_no_stopped_agent_of_its_own_space() {
         space_id: workspace.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
 

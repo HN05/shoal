@@ -1,4 +1,5 @@
 use crate::daemon::execution_connection::*;
+use crate::daemon::scope::Access;
 use crate::daemon::test_support::{manager, repository};
 use crate::daemon::{executions::ExecutionKind, manager::Manager, scope::Caller};
 use crate::protocol::{
@@ -57,7 +58,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
                 space_id: workspace.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             }),
         },

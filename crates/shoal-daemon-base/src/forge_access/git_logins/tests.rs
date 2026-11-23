@@ -4,7 +4,10 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::agents::GitCredential;
 
 use crate::{
-    callers::Caller, config::Config, config_state::ConfigState, forge_access::ForgeAccess,
+    callers::{Access, Caller},
+    config::Config,
+    config_state::ConfigState,
+    forge_access::ForgeAccess,
 };
 
 #[tokio::test]
@@ -23,7 +26,7 @@ async fn only_scoped_callers_get_the_agent_token_of_a_host_with_one() {
         space_id: SpaceId::generate(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
 

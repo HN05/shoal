@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use crate::execution::recovery::LastSessionExt;
 use crate::paths::StateFiles;
 use crate::{
@@ -158,7 +159,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
                 space_id: workspace.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -405,7 +406,7 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
                 space_id: parent.id.clone(),
                 execution: None,
                 granted: None,
-                read_only: false,
+                access: Access::Full,
                 vouched: None,
             },
         )
@@ -902,7 +903,7 @@ fn scoped(id: SpaceId) -> crate::daemon::scope::Caller {
         space_id: id,
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     }
 }

@@ -1,4 +1,5 @@
 //! A chat without a repository acting in each registered repository.
+use crate::daemon::scope::Access;
 use crate::{
     config::permissions::Opening,
     daemon::{
@@ -268,7 +269,7 @@ async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_dir
         space_id: master.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let issue = || NewIssue {

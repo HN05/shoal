@@ -1,3 +1,4 @@
+use crate::daemon::scope::Access;
 use shoal_agents::execution_connection::RecordChange;
 use shoal_ids::repository_ids::RepositoryId;
 use std::{fs, path::PathBuf, sync::Arc};
@@ -645,7 +646,7 @@ async fn an_agents_unmerge_waits_for_approval_of_the_merge_it_undoes() {
         execution: None,
         space_id: worker.id.clone(),
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     let begin = async || {

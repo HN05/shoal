@@ -1,4 +1,5 @@
 use crate::daemon::manager::Manager;
+use crate::daemon::scope::Access;
 use crate::model::Chat;
 use crate::model::Repository;
 use crate::model::Workspace;
@@ -755,7 +756,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         space_id: chat.id.clone(),
         execution: None,
         granted: None,
-        read_only: false,
+        access: Access::Full,
         vouched: None,
     };
     manager

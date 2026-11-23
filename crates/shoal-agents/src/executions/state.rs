@@ -8,6 +8,7 @@
 //! requests. Agents, renewals and stop requests are reached only through
 //! closures, which cannot await another lock, or through [`Connections`],
 //! which already holds the first.
+use shoal_daemon_base::callers::Access;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::scope_tokens::ScopeToken;
@@ -315,7 +316,7 @@ impl Connections<'_> {
                     }),
                     space_id: workspace_id.to_owned(),
                     granted: None,
-                    read_only: false,
+                    access: Access::Full,
                     vouched: None,
                 },
             )
