@@ -54,19 +54,21 @@ impl Server {
     /// after the port file.
     fn serve(root: &Path, port: &str, args: &[String]) -> Self {
         let port_file = root.join("forge").join(port);
-        let child = support::isolated(root, "python3")
-            .arg(root.join("forge.py"))
-            .args(["serve", port_file.to_str().unwrap()])
-            .args(args)
-            .spawn()
-            .unwrap();
+        // Owned before it listens, so a failed start also stops it.
+        let mut server = Self {
+            child: support::isolated(root, "python3")
+                .arg(root.join("forge.py"))
+                .args(["serve", port_file.to_str().unwrap()])
+                .args(args)
+                .spawn()
+                .unwrap(),
+            host: String::new(),
+        };
         // A hang guard only: the server writes its port once it listens.
         support::wait::wait_until("forge server to start", || port_file.exists());
         let port = fs::read_to_string(port_file).unwrap();
-        Self {
-            child,
-            host: format!("127.0.0.1:{port}"),
-        }
+        server.host = format!("127.0.0.1:{port}");
+        server
     }
 }
 
