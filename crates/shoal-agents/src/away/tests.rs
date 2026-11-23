@@ -147,3 +147,14 @@ async fn a_shutdown_during_a_walk_away_hand_over_leaves_it_the_spaces_under_way(
     let under_way = [working.id.clone()].into();
     assert_eq!(handings(&fixture)[1], Handing::AllBut(under_way));
 }
+
+#[tokio::test]
+async fn coming_back_after_a_shutdown_stopped_work_keeps_its_hold() {
+    let (fixture, _, _) = handing_over().await;
+    let (agents, daemon) = (&fixture.agents, &*fixture.daemon);
+    agents.user_away(daemon, true).await;
+    (agents.stop_for_system_shutdown(daemon, Duration::from_secs(60))).await;
+    agents.user_away(daemon, false).await;
+    assert!(agents.agent_queue.holds_admission());
+    assert_eq!(daemon.stays.load(Ordering::SeqCst), 0);
+}

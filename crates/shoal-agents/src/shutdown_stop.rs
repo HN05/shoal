@@ -181,11 +181,26 @@ impl Agents {
     }
 
     /// Admit queued agents again once the shutdown that stopped work was
-    /// cancelled, or the user who walked away came back, and stop work
-    /// again before the next one. The spaces handed over meanwhile run on
-    /// other machines, so this one retires its copies.
+    /// cancelled, and stop work again before the next one. The spaces
+    /// handed over meanwhile run on other machines, so this one retires its
+    /// copies.
     pub async fn stay(&self, daemon: &dyn Daemon) {
         *self.shutdown_stopped.lock().await = false;
+        self.resume_here(daemon).await;
+    }
+
+    /// [`Self::stay`] once the user who walked away came back, unless a
+    /// shutdown's stop ran since, whose hold on the queue stands.
+    pub(crate) async fn stay_unless_shut_down(&self, daemon: &dyn Daemon) {
+        let finished = self.shutdown_stopped.lock().await;
+        if !*finished {
+            self.resume_here(daemon).await;
+        }
+    }
+
+    /// Admit queued agents again and have this machine retire its copies
+    /// of the spaces handed over.
+    async fn resume_here(&self, daemon: &dyn Daemon) {
         self.agent_queue.suspend(false).await;
         daemon.stay().await;
         self.presences.forget_gone();

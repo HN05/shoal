@@ -159,11 +159,11 @@ impl Agents {
 
     /// Admit work again once the user is back after a hand-over, or the
     /// machine woke from a sleep that handed spaces over, retiring the
-    /// copies of the spaces that went.
+    /// copies of the spaces that went, unless a shutdown stopped work since.
     pub async fn come_back(&self, daemon: &dyn Daemon) {
         let mut handed_over = self.presences.handed_over.lock().await;
         if std::mem::take(&mut *handed_over) {
-            self.stay(daemon).await;
+            self.stay_unless_shut_down(daemon).await;
         }
     }
 
