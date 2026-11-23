@@ -237,7 +237,7 @@ impl Hub {
             built_at,
             stream,
             start: start.clone(),
-            within: within(space).cloned(),
+            within: space.within().cloned(),
         };
         let (mut kept, mut package) = calls.duplex(keep).await?;
         package.write_file(&file).await?;
@@ -300,15 +300,6 @@ fn next_due(due: Option<Instant>, found: Option<Instant>, every_space: bool) -> 
         (false, Some(due), Some(found)) => Some(due.min(found)),
         (false, due, found) => due.or(found),
     }
-}
-
-/// The workspace whose worktree the chat `space` runs in, none for any
-/// other space.
-pub(super) fn within(space: &Space) -> Option<&SpaceId> {
-    let chat = space.worktree().is_none();
-    (space.workdir.workspace())
-        .filter(|_| chat)
-        .map(|workspace| &workspace.id)
 }
 
 /// Whether a package can hold `space`: a chat, or a workspace whose

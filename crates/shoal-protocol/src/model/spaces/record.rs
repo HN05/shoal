@@ -277,6 +277,15 @@ impl<P: Part> Space<P> {
 }
 
 impl Space {
+    /// The workspace whose worktree a chat runs in, none for a workspace
+    /// and a chat that runs in none.
+    pub fn within(&self) -> Option<&SpaceId> {
+        let chat = self.worktree().is_none();
+        (self.workdir.workspace())
+            .filter(|_| chat)
+            .map(|workspace| &workspace.id)
+    }
+
     /// A copy of the workspace it is, for a caller that holds it only by
     /// reference.
     pub fn to_workspace(&self) -> Option<Workspace> {

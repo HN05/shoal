@@ -38,9 +38,7 @@ impl Manager {
             }
             ImportedMove::Failed { error } => {
                 let left = match departure {
-                    Departure::ShutDown => {
-                        format!("which machine {from} handed over as it shut down")
-                    }
+                    Departure::HandedOver => format!("which machine {from} handed over"),
                     Departure::Slept => {
                         format!("which the hub took over from machine {from} as it slept")
                     }

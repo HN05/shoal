@@ -973,9 +973,14 @@ impl Ranking for StandIn {
 }
 
 impl crate::daemon::Handovers for StandIn {
+    fn hands_over(&self) -> BoxFuture<'_, bool> {
+        Box::pin(async { false })
+    }
+
     fn hand_over(
         &self,
         _: tokio::time::Instant,
+        _: shoal_protocol::hub::packages::Handing,
     ) -> BoxFuture<'_, Vec<(Space, shoal_protocol::hub::packages::Handed)>> {
         Box::pin(async { Vec::new() })
     }

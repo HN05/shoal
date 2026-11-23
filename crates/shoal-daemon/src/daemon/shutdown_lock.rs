@@ -59,7 +59,7 @@ async fn hold(manager: &Manager, mut login: impl LoginManager) {
         if !announced(&mut login, false).await {
             return;
         }
-        manager.agents.system_shutdown_cancelled(manager).await;
+        manager.agents.stay(manager).await;
     }
 }
 

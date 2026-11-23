@@ -94,33 +94,40 @@ impl Manager {
         let _shutdown_stop = self.agents.shutdown_stopped().lock().await;
         let moment = "before the Shoal daemon stopped";
         self.agents
-            .stop_every_target(self, moment, &HashSet::new(), |workspace| async move {
-                // A CI job's runner would end once it saw its run cancelled,
-                // after the daemon has gone; stop it now, as removal does,
-                // also when the forge refused the cancellation.
-                if (self
-                    .runner
-                    .cancel_job_before_stopping(self, &workspace, JobStop::DaemonStop))
-                .await
-                {
-                    let request = StopRequest {
-                        reason: "the Shoal daemon stopped".into(),
-                        save: Save::Everything,
-                    };
-                    return self
-                        .agents
-                        .stop_space(self, &SpaceSelector::id(&workspace), request)
-                        .await;
-                }
-                (self.agents.stop_space_manually(
-                    self,
-                    &SpaceSelector::id(&workspace),
-                    false,
-                    QueuedLaunches::Keep,
-                ))
-                .await?;
-                Ok(())
-            })
+            .stop_every_target(
+                self,
+                moment,
+                |_| true,
+                |workspace| async move {
+                    // A CI job's runner would end once it saw its run cancelled,
+                    // after the daemon has gone; stop it now, as removal does,
+                    // also when the forge refused the cancellation.
+                    if (self.runner.cancel_job_before_stopping(
+                        self,
+                        &workspace,
+                        JobStop::DaemonStop,
+                    ))
+                    .await
+                    {
+                        let request = StopRequest {
+                            reason: "the Shoal daemon stopped".into(),
+                            save: Save::Everything,
+                        };
+                        return self
+                            .agents
+                            .stop_space(self, &SpaceSelector::id(&workspace), request)
+                            .await;
+                    }
+                    (self.agents.stop_space_manually(
+                        self,
+                        &SpaceSelector::id(&workspace),
+                        false,
+                        QueuedLaunches::Keep,
+                    ))
+                    .await?;
+                    Ok(())
+                },
+            )
             .await
     }
 }

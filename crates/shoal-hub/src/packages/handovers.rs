@@ -102,7 +102,7 @@ impl Hub {
         decision: &Decision,
     ) {
         self.handovers.start(id, &decision.machine);
-        let departure = Departure::ShutDown;
+        let departure = Departure::HandedOver;
         let continued = self.ask_to_continue(daemon, id, (from, &decision.machine), departure);
         let continued = continued.await;
         self.handovers.end(id);
@@ -202,8 +202,8 @@ impl Hub {
     ) -> String {
         let from = self.member_name(daemon, from).await;
         let (left, back) = match departure {
-            Departure::ShutDown => (
-                format!("which machine {from} handed over as it shut down"),
+            Departure::HandedOver => (
+                format!("which machine {from} handed over"),
                 format!("where shoal resume {id} continues it once that machine is back"),
             ),
             Departure::Slept => (

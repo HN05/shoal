@@ -1,8 +1,8 @@
-//! A machine's side of its hand-over as it shuts down: once its work
-//! stopped, it sends the hub the final package of each of its spaces with
-//! the start its agent would make, all at once, each over a stream of its
-//! own, until the deadline the shutdown leaves it, and learns where the hub
-//! sends each. Nothing waits for a space to continue there.
+//! A machine's side of its hand-over as it shuts down, or as its user walks
+//! away: once its work stopped, it sends the hub the final package of each
+//! space it hands over with the start its agent would make, all at once,
+//! each over a stream of its own, until the deadline it has, and learns
+//! where the hub sends each. Nothing waits for a space to continue there.
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -11,14 +11,14 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::{
         link::{Call, Reply},
-        packages::Handed,
+        packages::{Handed, Handing},
         placement::Decision,
     },
     model::Space,
 };
 use tokio::time::Instant;
 
-use super::sending::{self, packageable, within};
+use super::sending::{self, packageable};
 use crate::{
     Hub,
     daemon::Daemon,
@@ -28,16 +28,22 @@ use crate::{
 };
 
 impl Hub {
-    /// Hand each of this machine's spaces but those `kept` here over
-    /// through the hub by `deadline`, and where each went; none on the
-    /// hub's own machine and on one in no hub, which keep their spaces.
+    /// Whether this machine hands its spaces over: one joined to a hub,
+    /// but not the hub's own, which has nowhere to send them.
+    pub async fn hands_over(&self, daemon: &dyn Daemon) -> bool {
+        !self.is_hub(daemon) && matches!(self.store.read(membership::load).await, Ok(Some(_)))
+    }
+
+    /// Hand each of this machine's spaces `handing` takes but those `kept`
+    /// here over through the hub by `deadline`, and where each went; none
+    /// on a machine that [hands nothing over](Self::hands_over).
     pub async fn hand_over(
         &self,
         daemon: &dyn Daemon,
         deadline: Instant,
-        kept: &HashSet<SpaceId>,
+        (handing, kept): (&Handing, &HashSet<SpaceId>),
     ) -> Option<Vec<(Space, Handed)>> {
-        if self.is_hub(daemon) || !matches!(self.store.read(membership::load).await, Ok(Some(_))) {
+        if !self.hands_over(daemon).await {
             return None;
         }
         let spaces = match daemon.listed_spaces(None).await {
@@ -47,8 +53,9 @@ impl Hub {
                 return Some(Vec::new());
             }
         };
-        let spaces =
-            (spaces.into_iter()).filter(|space| packageable(space) && !kept.contains(&space.id));
+        let spaces = (spaces.into_iter()).filter(|space| {
+            packageable(space) && handing.takes(space) && !kept.contains(&space.id)
+        });
         let calls = match self.hub_calls().await {
             Ok(calls) => calls,
             Err(error) => {
@@ -62,7 +69,7 @@ impl Hub {
         };
         // A chat in a workspace's worktree follows that workspace.
         let (chats, others): (Vec<Space>, Vec<Space>) =
-            spaces.partition(|space| within(space).is_some());
+            spaces.partition(|space| space.within().is_some());
         let none = HashSet::new();
         let mut handed = (self.hand_over_all(daemon, &calls, others, (deadline, &none))).await;
         let left: HashSet<SpaceId> = (handed.iter())
@@ -84,7 +91,7 @@ impl Hub {
         (deadline, left): (Instant, &HashSet<SpaceId>),
     ) -> Vec<(Space, Handed)> {
         let handing = spaces.into_iter().map(|space| async move {
-            let handed = match within(&space) {
+            let handed = match space.within() {
                 Some(workspace) if !left.contains(workspace) => {
                     let why = "the workspace whose worktree it runs in stays here";
                     Handed::Stayed(why.into())
@@ -118,7 +125,7 @@ impl Hub {
                 return Handed::Stayed(format!("{error:#}"));
             }
             Err(_) => {
-                let why = "its package did not reach the hub before the shutdown";
+                let why = "its package did not reach the hub in time";
                 return Handed::Stayed(why.into());
             }
         };
@@ -136,10 +143,11 @@ impl Hub {
     }
 
     /// Tell the hub that this machine stays after all, as once its shutdown
-    /// was cancelled, so it retires the spaces it handed over that other
-    /// machines took; nothing on the hub's own machine and on one in no hub.
+    /// was cancelled or its user came back, so it retires the spaces it
+    /// handed over that other machines took; nothing on a machine that
+    /// [hands nothing over](Self::hands_over).
     pub async fn stay(&self, daemon: &dyn Daemon) {
-        if self.is_hub(daemon) || !matches!(self.store.read(membership::load).await, Ok(Some(_))) {
+        if !self.hands_over(daemon).await {
             return;
         }
         // While the link is down, the hub has it retire them once it opens.

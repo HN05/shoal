@@ -7,7 +7,7 @@ use std::{collections::HashSet, time::Duration};
 
 use anyhow::Result;
 use futures_util::future::join_all;
-use shoal_protocol::hub::packages::Handed;
+use shoal_protocol::hub::packages::{Handed, Handing};
 use tokio::time::Instant;
 
 use crate::Agents;
@@ -44,7 +44,8 @@ impl StoppedSpaces {
     }
 }
 
-/// What shuts down, which the stop and the user's notifications name.
+/// What ends this machine's work, which the stop and the user's
+/// notifications name.
 #[derive(Clone, Copy)]
 pub enum Shutdown {
     System,
@@ -54,10 +55,10 @@ pub enum Shutdown {
 
 impl Shutdown {
     fn request(self) -> StopRequest {
-        match self {
-            Self::System => StopRequest::shutdown("the system is shutting down"),
-            Self::Daemon => StopRequest::shutdown("the Shoal daemon is stopping"),
-        }
+        StopRequest::shutdown(match self {
+            Self::System => "the system is shutting down",
+            Self::Daemon => "the Shoal daemon is stopping",
+        })
     }
 
     /// When the work stopped, as the user's notifications say it.
@@ -116,7 +117,9 @@ impl Agents {
         }
         // A CI job's runner stops with its job, which ends apart.
         let left = daemon.job_workspaces().await;
-        let spaces = self.stop_every_target(daemon, shutdown.moment(), &left, |space| async move {
+        let handing = Handing::Every;
+        let stops = |space: &Space| !left.contains(&space.id) && handing.takes(space);
+        let spaces = self.stop_every_target(daemon, shutdown.moment(), stops, |space| async move {
             self.stop_keeping_restores(daemon, &SpaceSelector::id(&space), shutdown.request())
                 .await
         });
@@ -126,22 +129,24 @@ impl Agents {
             }
         };
         let (stopped, ()) = tokio::join!(spaces, jobs);
-        let handed = (self.hand_over(daemon, window.deadline(started))).await;
+        let deadline = window.deadline(started);
+        let handed = (self.hand_over(daemon, deadline, handing)).await;
         (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
         *finished = true;
         stopped
     }
 
-    /// Admit queued agents again once the shutdown was cancelled, and stop
-    /// work again before the next one. The spaces handed over meanwhile run
-    /// on other machines, so this one retires its copies.
-    pub async fn system_shutdown_cancelled(&self, daemon: &dyn Daemon) {
+    /// Admit queued agents again once the shutdown that stopped work was
+    /// cancelled, or the user who walked away came back, and stop work
+    /// again before the next one. The spaces handed over meanwhile run on
+    /// other machines, so this one retires its copies.
+    pub async fn stay(&self, daemon: &dyn Daemon) {
         *self.shutdown_stopped.lock().await = false;
         self.agent_queue.suspend(false).await;
         daemon.stay().await;
     }
 
-    /// Stop each space `shoal stop --all` stops but those `left`, with
+    /// Stop each space `shoal stop --all` stops that `stops` takes, with
     /// `stop`, given its ID, in parallel, holding the agent queue so nothing
     /// starts again, and tell the user of each that failed to stop `moment`.
     /// Returns those stopped.
@@ -149,7 +154,7 @@ impl Agents {
         &self,
         daemon: &dyn Daemon,
         moment: &str,
-        left: &HashSet<SpaceId>,
+        stops: impl Fn(&Space) -> bool,
         stop: F,
     ) -> StoppedSpaces
     where
@@ -165,9 +170,7 @@ impl Agents {
                 return StoppedSpaces::default();
             }
         };
-        let targets: Vec<Space> = (targets.into_iter())
-            .filter(|space| !left.contains(&space.id))
-            .collect();
+        let targets: Vec<Space> = targets.into_iter().filter(|space| stops(space)).collect();
         let results = join_all(targets.iter().map(|space| stop(space.id.clone()))).await;
         let mut stopped = StoppedSpaces::none();
         for (space, result) in targets.into_iter().zip(results) {
@@ -200,12 +203,17 @@ impl Agents {
             .await;
     }
 
-    /// Hand this machine's spaces over through the hub by `deadline`, and
-    /// where each went. A space that went keeps no restore here, so it
+    /// Hand the spaces `handing` takes over through the hub by `deadline`,
+    /// and where each went. A space that went keeps no restore here, so it
     /// does not come back at boot, where this machine retires it once the
     /// hub names it, as after any takeover.
-    async fn hand_over(&self, daemon: &dyn Daemon, deadline: Instant) -> Vec<(Space, Handed)> {
-        let handed = daemon.hand_over(deadline).await;
+    async fn hand_over(
+        &self,
+        daemon: &dyn Daemon,
+        deadline: Instant,
+        handing: Handing,
+    ) -> Vec<(Space, Handed)> {
+        let handed = daemon.hand_over(deadline, handing).await;
         for (space, handed) in &handed {
             if handed.left()
                 && let Err(error) = self.cancel_stopped_restores(daemon, &space.id).await

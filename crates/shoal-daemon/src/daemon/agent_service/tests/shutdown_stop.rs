@@ -180,7 +180,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     };
     use crate::state::QueueState::{Queued, Starting};
     assert_eq!(restores().await, (Queued, Queued));
-    manager.agents.system_shutdown_cancelled(&*manager).await;
+    manager.agents.stay(&*manager).await;
     assert!(!manager.agents.agent_queue().suspended());
     assert_eq!(restores().await.0, Starting);
 }
