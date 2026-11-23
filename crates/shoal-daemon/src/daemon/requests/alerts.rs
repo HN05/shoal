@@ -97,7 +97,9 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        AlertMethod::ClearAlerts => Body::Cleared(manager.notifications.clear().await?),
+        AlertMethod::ClearAlerts => {
+            Body::Cleared(manager.coordination.clear_users_alerts(&**manager).await?)
+        }
     }))
 }
 
@@ -185,11 +187,14 @@ async fn watch_alerts(
         for alert in batch {
             after.deliver(&alert);
             let id = alert.id;
-            let here = alert.machine.is_none();
             let response = Response::new(request_id, Body::Alert(alert));
             protocol::write(&mut writer, &response).await?;
-            if !keep_unread && here {
-                manager.notifications.mark_read(vec![id]).await?;
+            if !keep_unread {
+                // The watch's caller may read the user's alerts.
+                let marked = manager
+                    .coordination
+                    .mark_alerts_read(&*manager, None, vec![id]);
+                marked.await?;
             }
         }
         drop(operation);

@@ -81,6 +81,27 @@ pub struct AlertNumbering {
     /// number its alert takes instead.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub renumbered: Vec<AlertRenumbering>,
+    /// What other machines did to its alerts to the user that it has not
+    /// reported doing yet.
+    #[serde(default, skip_serializing_if = "AlertMarks::is_empty")]
+    pub marked: AlertMarks,
+}
+
+/// What a machine did to another machine's alerts to the user, which the
+/// hub passes on to the machine that keeps them: those it read, and those
+/// it cleared.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AlertMarks {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read: Vec<i64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deleted: Vec<i64>,
+}
+
+impl AlertMarks {
+    pub fn is_empty(&self) -> bool {
+        self.read.is_empty() && self.deleted.is_empty()
+    }
 }
 
 /// The number `to` an alert takes instead of `from`, which another

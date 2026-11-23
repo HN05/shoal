@@ -16,6 +16,7 @@ use crate::{Hub, daemon::Daemon, log};
 
 pub(crate) mod copies;
 mod following;
+mod marking;
 pub(crate) mod numbering;
 mod reporting;
 pub(crate) mod sequence;
@@ -43,7 +44,9 @@ impl Hub {
                     Some(users) => copies::record(tx, &member, users)?,
                     None => None,
                 };
-                Ok((sequence::number(tx, &member, &report)?, changed))
+                let mut numbering = sequence::number(tx, &member, &report)?;
+                numbering.marked = copies::pending(tx, &member)?;
+                Ok((numbering, changed))
             })
             .await?;
         if let Some(changed) = changed {
@@ -61,13 +64,16 @@ impl Hub {
 
     /// Number this machine's alerts as `numbering`, the hub's answer to
     /// `reported`, says, telling the agent of the space that sent each
-    /// unread alert it renumbers.
+    /// unread alert it renumbers, and read or delete those to the user
+    /// other machines read or cleared.
     async fn take_alert_numbering(
         &self,
         daemon: &dyn Daemon,
         reported: AlertsReport,
-        numbering: AlertNumbering,
+        mut numbering: AlertNumbering,
     ) -> Result<()> {
+        let marked = std::mem::take(&mut numbering.marked);
+        self.notifications.take_marks(marked).await?;
         let records = self.records.clone();
         let renumbered = (self.store)
             .write(move |tx| numbering::take(tx, &*records, &reported, &numbering))

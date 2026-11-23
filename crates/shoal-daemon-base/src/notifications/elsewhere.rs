@@ -4,7 +4,10 @@
 use std::collections::BTreeMap;
 
 use shoal_ids::member_ids::MemberId;
-use shoal_protocol::{alerts::Alert, hub::alerts::AlertCopies};
+use shoal_protocol::{
+    alerts::Alert,
+    hub::alerts::{AlertCopies, AlertMarks},
+};
 
 /// Each other machine's alerts to the user, by number.
 #[derive(Default)]
@@ -40,6 +43,21 @@ impl Elsewhere {
             AlertCopies::Dropped { machine } => {
                 self.0.remove(&machine);
             }
+        }
+    }
+
+    /// Read or clear, as `marks` says, `machine`'s alerts.
+    pub(super) fn mark(&mut self, machine: &MemberId, marks: &AlertMarks) {
+        let Some(kept) = self.0.get_mut(machine) else {
+            return;
+        };
+        for id in &marks.read {
+            if let Some(alert) = kept.get_mut(id) {
+                alert.read = true;
+            }
+        }
+        for id in &marks.deleted {
+            kept.remove(id);
         }
     }
 

@@ -113,7 +113,13 @@ impl Hub {
         if self.store.read(membership::load).await?.is_none() {
             anyhow::bail!("this machine joined no hub to pass the event to");
         }
-        let call = Call::Tell { told };
+        self.call_or_hold(Call::Tell { told }).await
+    }
+
+    /// Make `call` over this machine's link, or keep it in the outbox,
+    /// which sends it once the link opens, while the link is down or the
+    /// call fails.
+    pub(crate) async fn call_or_hold(&self, call: Call) -> Result<()> {
         if let Some(calls) = self.member.calls()
             && calls.call(call.clone()).await.is_ok()
         {

@@ -1125,7 +1125,9 @@ CREATE TABLE hub_alert_numbers (
 CREATE TABLE hub_user_alerts (
     member_id TEXT NOT NULL,
     id INTEGER NOT NULL,
-    alert TEXT NOT NULL,
+    alert TEXT NOT NULL, read_marked INTEGER NOT NULL DEFAULT 0
+    CHECK(read_marked IN (0,1)), deleted INTEGER NOT NULL DEFAULT 0
+    CHECK(deleted IN (0,1)),
     PRIMARY KEY(member_id, id)
 );
 

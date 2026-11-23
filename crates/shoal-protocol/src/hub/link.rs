@@ -359,6 +359,18 @@ pub enum Call {
     /// once, then each change as it comes, until the link closes. Answered
     /// with [`Reply::Streaming`].
     FollowAlerts { stream: u64 },
+    /// What the caller did to the alerts to the user that the machine
+    /// `machine` keeps, which the hub's copies take at once and the hub
+    /// passes on to that machine, now or once its next report carries it.
+    /// Answered with [`Reply::Delivered`].
+    MarkAlerts {
+        machine: MemberId,
+        marks: super::alerts::AlertMarks,
+    },
+    /// The hub's call to the machine that keeps alerts to the user another
+    /// machine read or cleared, which it reads or deletes. Answered with
+    /// [`Reply::Delivered`].
+    AlertsMarked { marks: super::alerts::AlertMarks },
     /// What a machine says of itself, when its link opens and when its
     /// setting changes. Answered with [`Reply::Availability`].
     Describe { description: Description },

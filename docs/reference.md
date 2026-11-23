@@ -7275,7 +7275,13 @@ the followed stream's line and its terminal notification name the machine
 that keeps another machine's alert as `on <machine>` after its sender, and
 `--json` gives it as `machine`, its `id` and `name`. Following on several
 machines notifies on each for an alert still unread when it reaches it. A
-machine the hub revokes, or that leaves, takes its alerts with it.
+machine the hub revokes, or that leaves, takes its alerts with it. Reading
+another machine's alert reads it there too, and `alert clear` deletes the
+alerts of every machine this one knew of, each machine deleting its own once
+it connects, and none it recorded since. `alert withdraw` finds another
+machine's alert by its number, as for a space that moved since it sent it,
+and while that machine is offline fails at once, naming it and when the hub
+last saw it.
 
 Identical unread alerts collapse into one: conflicts, cleanup failures and
 messages until read, while every agent exit is listed. A space holds at most

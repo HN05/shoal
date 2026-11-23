@@ -14,14 +14,16 @@ use shoal_coordination::daemon::{
 };
 use shoal_daemon_base::notifications::{Coordinators, Recorded, Source};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::member_ids::MemberId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::alerts::AlertKind;
+use shoal_protocol::alerts::{Alert, AlertKind};
 use shoal_protocol::approvals::{ApprovalRequest, ProposalDecision};
 use shoal_protocol::config::permissions::Permissions;
 use shoal_protocol::files::{Attacher, FileSource, NewFile, SentFile};
 use shoal_protocol::hub::Member;
+use shoal_protocol::hub::alerts::AlertMarks;
 use shoal_protocol::hub::directory::HubView;
 use shoal_protocol::hub::routing::ChainedMode;
 use shoal_protocol::model::{Located, QueueEntry, Repository, Space, SpaceTarget, Workspace};
@@ -370,6 +372,23 @@ impl Hub for Manager {
             files: event.files,
         };
         Box::pin(self.hub.pass_up(self, above, event))
+    }
+
+    fn mark_alerts_elsewhere<'a>(
+        &'a self,
+        machine: &'a MemberId,
+        marks: AlertMarks,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(self.hub.mark_alerts(self, machine, marks))
+    }
+
+    fn withdraw_elsewhere<'a>(
+        &'a self,
+        machine: &'a MemberId,
+        id: i64,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Alert>> {
+        Box::pin(self.hub.withdraw_elsewhere(self, machine, id, caller))
     }
 }
 

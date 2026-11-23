@@ -3337,7 +3337,17 @@ alerts are one set: the machine that records an alert keeps it and stays its
 authority, collapsing, retention and withdrawal included, while every
 machine shows every machine's, each another machine's naming that machine,
 in the order they were recorded rather than by number, and a followed stream
-keeps its place in each machine's numbers. An alert is separate from completion:
+keeps its place in each machine's numbers. Reading or clearing another
+machine's alert goes to the hub, or waits for the link while it is down,
+whose copy takes it at once and which passes it to the alert's machine,
+while connected or in the answer to its next report, the copy keeping it
+until that machine reports doing the same, so no report sent meanwhile
+undoes it and nothing expires; a clear covers exactly the alerts the
+clearing machine knew of, leaving those an offline machine records after
+it. Withdrawing one goes to its machine, found by its number among the
+copies, so a sender that moved since finds it, and fails at once, naming
+that machine, while it is offline, since a withdrawal that waited could
+remove an alert after the user read it. An alert is separate from completion:
 telling the user a PR is ready neither ends the assignment nor affects
 cleanup. What a finished assignment found travels with its completion
 instead: `done --summary` records one line under the rule for an alert sent

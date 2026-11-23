@@ -674,6 +674,23 @@ impl Hub for StandIn {
     fn pass_up<'a>(&'a self, _: SpaceId, _: PassedUp<'a>) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { bail!("{NOT_HERE}: another machine") })
     }
+
+    fn mark_alerts_elsewhere<'a>(
+        &'a self,
+        _: &'a shoal_ids::member_ids::MemberId,
+        _: shoal_protocol::hub::alerts::AlertMarks,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { bail!("{NOT_HERE}: another machine") })
+    }
+
+    fn withdraw_elsewhere<'a>(
+        &'a self,
+        _: &'a shoal_ids::member_ids::MemberId,
+        _: i64,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<shoal_protocol::alerts::Alert>> {
+        Box::pin(async { bail!("{NOT_HERE}: another machine") })
+    }
 }
 
 impl Repositories for StandIn {

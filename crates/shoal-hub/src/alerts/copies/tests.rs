@@ -72,3 +72,30 @@ fn a_machine_reads_every_other_machine_s_copies_until_the_hub_forgets_them() {
     tx.commit().unwrap();
     assert!(read(&db).is_empty());
 }
+
+#[test]
+fn what_another_machine_did_stays_until_the_alert_s_machine_reports_doing_it() {
+    let mut db = database();
+    let desk = MemberId::from("desk".to_owned());
+    let unread = || vec![alert(1, "one"), alert(2, "two")];
+    report(&mut db, "desk", UsersAlerts::Whole(unread()));
+    let marks = AlertMarks {
+        read: vec![1],
+        deleted: vec![2],
+    };
+    let tx = db.transaction().unwrap();
+    mark(&tx, &desk, &marks).unwrap();
+    tx.commit().unwrap();
+    // A report the desk sent before it heard undoes neither.
+    assert_eq!(report(&mut db, "desk", UsersAlerts::Whole(unread())), None);
+    assert_eq!(pending(&db, &desk).unwrap(), marks);
+    let laptop = MemberId::from("laptop".to_owned());
+    let shown: Vec<(i64, bool)> = (others(&db, &laptop).unwrap().iter())
+        .map(|alert| (alert.id, alert.read))
+        .collect();
+    assert_eq!(shown, [(1, true)]);
+    let mut read = alert(1, "one");
+    read.read = true;
+    report(&mut db, "desk", UsersAlerts::Whole(vec![read]));
+    assert_eq!(pending(&db, &desk).unwrap(), AlertMarks::default());
+}

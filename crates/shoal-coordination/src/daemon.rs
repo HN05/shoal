@@ -13,15 +13,18 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_daemon_base::notifications::{Coordinators, Recorded};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::member_ids::MemberId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::alerts::Alert;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::approvals::ProposalDecision;
 use shoal_protocol::config::permissions::Permissions;
 use shoal_protocol::files::{Attacher, FileSource, NewFile, SentFile};
 use shoal_protocol::hub::Member;
+use shoal_protocol::hub::alerts::AlertMarks;
 use shoal_protocol::hub::directory::HubView;
 use shoal_protocol::hub::routing::ChainedMode;
 use shoal_protocol::model::{Located, QueueEntry, Repository, Space, SpaceTarget, Workspace};
@@ -296,6 +299,23 @@ pub trait Hub: Send + Sync {
 
     /// Pass `event` up to the space `above`, which another machine runs.
     fn pass_up<'a>(&'a self, above: SpaceId, event: PassedUp<'a>) -> BoxFuture<'a, Result<()>>;
+
+    /// Read or clear, as `marks` says, alerts to the user that the machine
+    /// `machine` keeps, through the hub.
+    fn mark_alerts_elsewhere<'a>(
+        &'a self,
+        machine: &'a MemberId,
+        marks: AlertMarks,
+    ) -> BoxFuture<'a, Result<()>>;
+
+    /// Withdraw the alert `id` to the user that the machine `machine`
+    /// keeps, as `caller`, on that machine.
+    fn withdraw_elsewhere<'a>(
+        &'a self,
+        machine: &'a MemberId,
+        id: i64,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Alert>>;
 }
 
 /// What the machines above report of the spaces above a space: the

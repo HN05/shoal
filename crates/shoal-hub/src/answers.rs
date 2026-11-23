@@ -122,6 +122,11 @@ impl Hub {
                 ensure_machine(member)?;
                 Reply::AlertsReported(self.record_alert_report(&member.id, report).await?)
             }
+            Call::MarkAlerts { machine, marks } => {
+                ensure_machine(member)?;
+                self.take_alert_marks(&machine, marks).await?;
+                Reply::Delivered
+            }
             Call::FollowAlerts { stream } => {
                 let (out, _) = calls.streams().answering(stream, false);
                 self.serve_alert_copies(member.id.clone(), out);
@@ -294,6 +299,7 @@ impl Hub {
             | Call::Retire { .. }
             | Call::Continue { .. }
             | Call::RerunCutOff { .. }
+            | Call::AlertsMarked { .. }
             | Call::Shared { .. } => {
                 anyhow::bail!(
                     "only the hub passes requests, expiries, availability, retirements, hand-overs, reruns, shared items and value commands to machines"

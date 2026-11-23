@@ -8,9 +8,9 @@ use std::{
 use serde_json::{Value, json};
 
 use super::{
-    directory::{join, machine, workspace},
+    directory::{join, machine, reach, workspace},
     numbers::reroute,
-    support::{daemon_client, fixture::Base, wait::wait_for},
+    support::{daemon_client, fixture::Base, shoal_binary, wait::wait_for},
 };
 
 /// Send the agent of `machine`'s space `id` an alert with `text`, as the
@@ -138,4 +138,88 @@ fn a_revoked_machine_s_alerts_leave_the_other_machines() {
             .any(|alert| alert["message"] == "from the laptop"))
         .then_some(())
     });
+}
+
+/// The user's alert with `text` that `machine` keeps itself, once `ready`
+/// holds of it, or none once it has none.
+fn own_once(machine: &Base, text: &str, ready: impl Fn(Option<&Value>) -> bool) -> Option<Value> {
+    wait_for("the machine's own alert", || {
+        let alerts = users_alerts(machine);
+        let own =
+            (alerts.iter()).find(|alert| alert["message"] == text && alert["machine"].is_null());
+        ready(own).then(|| own.cloned())
+    })
+}
+
+#[test]
+fn reading_another_machine_s_alert_reads_it_where_it_is_kept() {
+    let hub = machine(true, "app");
+    let laptop = machine(false, "app");
+    join(&laptop, &hub, "laptop");
+    let on_laptop = workspace(&laptop, "on-laptop");
+    let id = send_up(&laptop, &on_laptop, "from the laptop");
+    shown(&hub, "from the laptop");
+    let marked = hub.request(json!({"mark_alerts_read": {"ids": [id]}}));
+    assert_ne!(marked["type"], "error", "{marked}");
+    own_once(&laptop, "from the laptop", |own| {
+        own.is_some_and(|alert| alert["read"] == true)
+    });
+}
+
+#[test]
+fn a_clear_reaches_an_offline_machine_and_leaves_what_it_recorded_since() {
+    let hub = machine(true, "app");
+    let laptop = machine(false, "app");
+    join(&laptop, &hub, "laptop");
+    let on_laptop = workspace(&laptop, "on-laptop");
+    send_up(&laptop, &on_laptop, "before the clear");
+    shown(&hub, "before the clear");
+    reroute(&laptop, Some("false"));
+    hub.ok(&["alert", "clear"]);
+    send_up(&laptop, &on_laptop, "after the clear");
+    reroute(&laptop, None);
+    shown(&hub, "after the clear");
+    own_once(&laptop, "before the clear", |own| own.is_none());
+    assert!(own_once(&laptop, "after the clear", |own| own.is_some()).is_some());
+    let shown_on_hub = users_alerts(&hub);
+    assert!(
+        !shown_on_hub
+            .iter()
+            .any(|alert| alert["message"] == "before the clear"),
+        "{shown_on_hub:?}"
+    );
+}
+
+#[test]
+fn a_sender_that_moved_withdraws_its_alert_from_the_machine_that_keeps_it() {
+    let hub = machine(true, "app");
+    let laptop = machine(false, "app");
+    join(&laptop, &hub, "laptop");
+    reach(&laptop, &hub);
+    let sender = workspace(&laptop, "sender");
+    let id = send_up(&laptop, &sender, "from the sender");
+    let moved = laptop.ok(&["move", "--ssh", "hub", &sender, "--shoal", shoal_binary()]);
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    shown(&hub, "from the sender");
+    let withdraw = json!({"withdraw_alert": {"id": id, "from": sender}});
+    // While the machine that keeps it is offline, a withdrawal fails at
+    // once, naming that machine.
+    reroute(&laptop, Some("false"));
+    wait_for("the hub to see the laptop offline", || {
+        let members = hub.ok(&["hub", "ls"])["members"].clone();
+        let laptop = (members.as_array().unwrap().iter()).find(|m| m["name"] == "laptop")?;
+        (laptop["connected"] == false).then_some(())
+    });
+    let refused = hub.request(withdraw.clone());
+    assert_eq!(refused["type"], "error", "{refused}");
+    assert!(
+        refused["data"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("laptop") && m.contains("offline")),
+        "{refused}"
+    );
+    reroute(&laptop, None);
+    let withdrawn = hub.request(withdraw);
+    assert_eq!(withdrawn["data"]["id"], id, "{withdrawn}");
+    own_once(&laptop, "from the sender", |own| own.is_none());
 }

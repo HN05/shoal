@@ -210,6 +210,10 @@ impl Hub {
                 setting,
                 command,
             } => self.serve_value(&requester, &setting, &command).await,
+            Call::AlertsMarked { marks } => {
+                self.notifications.take_marks(marks).await?;
+                Ok(Reply::Delivered)
+            }
             Call::Continue {
                 space,
                 from,

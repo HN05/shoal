@@ -18,7 +18,8 @@ pub enum AlertMethod {
     /// Mark exactly these alerts read, each one for the caller's space or,
     /// as the caller may read them, for the user.
     MarkAlertsRead { ids: Vec<i64> },
-    /// Deletes every alert to the user, read or not; answers with how many.
+    /// Deletes every alert to the user this machine knows of, read or not,
+    /// its own and the other joined machines'; answers with how many.
     ClearAlerts,
     /// Long-lived: the user's unread alerts, this machine's and the other
     /// joined machines', that `after` has not passed, then new ones as they
@@ -106,7 +107,8 @@ impl AlertMethod {
     /// message waits for it while it is offline; the caller's own agent's
     /// turn is this machine's own, and the user's alerts name no space,
     /// since every machine keeps the other machines' as the hub sends
-    /// them.
+    /// them and sends the hub what reads, clears or withdraws another
+    /// machine's itself.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::SendAlert { .. } => Forwarding::Queued,

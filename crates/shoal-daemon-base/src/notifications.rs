@@ -14,8 +14,12 @@ pub use crate::alerts::About;
 use crate::alerts::{self, COLUMNS, FROM, NewAlert};
 use crate::log;
 use crate::store::Store;
+use shoal_ids::member_ids::MemberId;
 pub use shoal_protocol::alerts::{Alert, AlertKind, Cleared, Sent};
-use shoal_protocol::{alerts::AlertCursor, hub::alerts::AlertCopies};
+use shoal_protocol::{
+    alerts::AlertCursor,
+    hub::alerts::{AlertCopies, AlertMarks},
+};
 
 /// Operations on the client type [`AlertKind`] that only the `shoal` command uses.
 trait AlertKindExt {
@@ -200,6 +204,59 @@ impl Notifications {
                 .await?;
         }
         Ok(())
+    }
+
+    /// Read and delete, as `marks` says, the alerts to the user this
+    /// machine keeps that another machine read or cleared.
+    pub async fn take_marks(&self, marks: AlertMarks) -> Result<()> {
+        if marks.is_empty() {
+            return Ok(());
+        }
+        (self.store)
+            .write(move |tx| {
+                for id in &marks.read {
+                    tx.execute(
+                        "UPDATE alerts SET read=1 WHERE id=?1 AND recipient_id IS NULL",
+                        [id],
+                    )?;
+                }
+                for id in &marks.deleted {
+                    tx.execute(
+                        "DELETE FROM alerts WHERE id=?1 AND recipient_id IS NULL",
+                        [id],
+                    )?;
+                }
+                Ok(())
+            })
+            .await?;
+        self.recorded();
+        Ok(())
+    }
+
+    /// Read or clear, as `marks` says, this machine's copies of the alerts
+    /// `machine` keeps, until the hub sends what that machine did.
+    pub fn mark_copies(&self, machine: &MemberId, marks: &AlertMarks) {
+        self.elsewhere.lock().unwrap().mark(machine, marks);
+        self.recorded();
+    }
+
+    /// This machine's copy of another machine's alert `id`.
+    pub fn copy(&self, id: i64) -> Option<Alert> {
+        let elsewhere = self.elsewhere.lock().unwrap();
+        elsewhere.alerts().find(|alert| alert.id == id).cloned()
+    }
+
+    /// The machines that keep the alerts numbered `ids` among this
+    /// machine's copies, each with the numbers it keeps.
+    pub fn kept_elsewhere(&self, ids: &[i64]) -> Vec<(MemberId, Vec<i64>)> {
+        let elsewhere = self.elsewhere.lock().unwrap();
+        let mut kept: std::collections::BTreeMap<MemberId, Vec<i64>> = Default::default();
+        for alert in elsewhere.alerts().filter(|alert| ids.contains(&alert.id)) {
+            if let Some(machine) = &alert.machine {
+                kept.entry(machine.id.clone()).or_default().push(alert.id);
+            }
+        }
+        kept.into_iter().collect()
     }
 
     /// Forget the other machines' alerts, as once this machine leaves its

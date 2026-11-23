@@ -309,6 +309,11 @@ impl Coordination {
             Some(recipient) => Some(daemon.space(recipient).await?.id),
             None => None,
         };
+        if recipient.is_none()
+            && let Some(withdrawn) = self.withdraw_kept_elsewhere(daemon, caller, id).await?
+        {
+            return Ok(withdrawn);
+        }
         let sender = caller.map(|caller| caller.space_id.clone());
         let withdrawn = Withdrawn {
             id,
@@ -327,6 +332,45 @@ pub fn sent_alert(about: About, message: String, files: &[SentFile]) -> NewAlert
         ..NewAlert::shoal(AlertKind::Message, about, message)
     };
     alert.with_files(files)
+}
+
+impl Coordination {
+    /// Withdraw the alert `id` to the user, which `caller` sent, on the
+    /// other machine that keeps it, as a sender that moved here since
+    /// does; none when this machine keeps it or knows no other that does.
+    async fn withdraw_kept_elsewhere(
+        &self,
+        daemon: &dyn Daemon,
+        caller: Option<&Caller>,
+        id: i64,
+    ) -> Result<Option<Alert>> {
+        if self.store.read(move |db| kept_here(db, id)).await? {
+            return Ok(None);
+        }
+        let Some(alert) = self.notifications.copy(id) else {
+            return Ok(None);
+        };
+        let Some(machine) = &alert.machine else {
+            return Ok(None);
+        };
+        ensure!(
+            !alert.read,
+            "alert {id} was already read; send a correction with shoal send"
+        );
+        daemon
+            .withdraw_elsewhere(&machine.id, id, caller)
+            .await
+            .map(Some)
+    }
+}
+
+/// Whether this machine keeps the alert `id`.
+fn kept_here(db: &rusqlite::Connection, id: i64) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM alerts WHERE id=?1)",
+        [id],
+        |row| row.get(0),
+    )?)
 }
 
 /// The alert `id` that the space `sender` sent, or the user without one,

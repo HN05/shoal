@@ -1,5 +1,5 @@
 //! Reading alerts: listing those for the user, a space or every recipient a
-//! caller may read, and marking those a caller read.
+//! caller may read, marking those a caller read, and clearing the user's.
 use crate::{Coordination, daemon::Daemon};
 use shoal_daemon_base::notifications::{chosen, merged};
 use shoal_daemon_base::permitted_actions::Action;
@@ -7,8 +7,10 @@ use std::collections::{BTreeMap, HashSet};
 
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, Transaction};
-use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{protocol::AlertsFor, space_names::SpaceSelector};
+use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
+use shoal_protocol::{
+    alerts::Cleared, hub::alerts::AlertMarks, protocol::AlertsFor, space_names::SpaceSelector,
+};
 
 use super::{Alert, COLUMNS, FROM};
 use crate::{config::permissions::PermissionKey, scope::Caller};
@@ -69,15 +71,20 @@ impl Coordination {
     }
 
     /// Mark exactly the alerts `ids` read: the user's, as `caller` may read
-    /// them, and those for the agents of the spaces its scope reaches,
-    /// whose agents then do not receive them again.
+    /// them, this machine's and those other machines keep, which the hub
+    /// passes on to them, and those for the agents of the spaces its scope
+    /// reaches, whose agents then do not receive them again.
     pub async fn mark_alerts_read(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
         ids: Vec<i64>,
     ) -> Result<()> {
+        let asked = ids.clone();
         let recipients = (self.store).read(move |db| recipients(db, &ids)).await?;
+        let here: HashSet<i64> = recipients.iter().map(|(id, _)| *id).collect();
+        let missing: Vec<i64> = asked.into_iter().filter(|id| !here.contains(id)).collect();
+        let elsewhere = self.notifications.kept_elsewhere(&missing);
         let mut users = Vec::new();
         let mut spaces: BTreeMap<SpaceId, Vec<i64>> = BTreeMap::new();
         for (id, recipient) in recipients {
@@ -87,7 +94,7 @@ impl Coordination {
             }
         }
         if let Some(caller) = caller {
-            if !users.is_empty() {
+            if !users.is_empty() || !elsewhere.is_empty() {
                 self.authorize_action(daemon, Some(caller), users_alerts())
                     .await?;
             }
@@ -101,10 +108,52 @@ impl Coordination {
         if !users.is_empty() {
             self.notifications.mark_read(users).await?;
         }
+        for (machine, read) in elsewhere {
+            let marks = AlertMarks {
+                read,
+                ..AlertMarks::default()
+            };
+            self.mark_elsewhere(daemon, &machine, marks).await?;
+        }
         for (space, ids) in spaces {
             (daemon.mark_messages_delivered(&SpaceSelector::id(&space), ids)).await?;
         }
         Ok(())
+    }
+
+    /// Delete every alert to the user this machine knows of, read or not:
+    /// its own, and the other machines' as the hub last sent them, which
+    /// those machines delete too, now or once they connect, leaving any
+    /// they recorded since.
+    pub async fn clear_users_alerts(&self, daemon: &dyn Daemon) -> Result<Cleared> {
+        let mut cleared = self.notifications.clear().await?;
+        let mut elsewhere: BTreeMap<MemberId, Vec<i64>> = BTreeMap::new();
+        for alert in self.notifications.copies() {
+            if let Some(machine) = alert.machine {
+                elsewhere.entry(machine.id).or_default().push(alert.id);
+            }
+        }
+        for (machine, deleted) in elsewhere {
+            cleared.cleared += deleted.len() as u64;
+            let marks = AlertMarks {
+                deleted,
+                ..AlertMarks::default()
+            };
+            self.mark_elsewhere(daemon, &machine, marks).await?;
+        }
+        Ok(cleared)
+    }
+
+    /// Take `marks` of `machine`'s alerts into this machine's copies at
+    /// once, and send them to the hub.
+    async fn mark_elsewhere(
+        &self,
+        daemon: &dyn Daemon,
+        machine: &MemberId,
+        marks: AlertMarks,
+    ) -> Result<()> {
+        self.notifications.mark_copies(machine, &marks);
+        daemon.mark_alerts_elsewhere(machine, marks).await
     }
 }
 
