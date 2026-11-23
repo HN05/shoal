@@ -838,6 +838,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 284 {
         db.execute_batch(include_str!("agent_lease_spaces.sql"))?;
     }
+    if version >= 285 {
+        db.execute_batch(include_str!("hub_handed_over_copies.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -4635,5 +4638,24 @@ fn a_held_thread_records_its_events_only_once_released() -> Result<()> {
     assert!(events()?.is_empty());
     db.execute("UPDATE threads SET held=0 WHERE id=1", [])?;
     assert_eq!(events()?, ["thread_opened", "thread_posted"]);
+    Ok(())
+}
+
+#[test]
+fn copies_of_spaces_taken_over_from_their_machines_count_as_handed_over() -> Result<()> {
+    let mut db = historical_database(284)?;
+    db.execute_batch(
+        r#"INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+            VALUES ('desk','machine','desk','k1',0),('laptop','machine','laptop','k2',0);
+         INSERT INTO hub_space_copies(space_id,member_id,summary,since)
+            VALUES ('taken','desk','{}',0),('duplicate','desk','{}',0);
+         INSERT INTO hub_takeovers(space_id,member_id,taken_at) VALUES ('taken','desk',0);"#,
+    )?;
+    migrate(&mut db)?;
+    let handed = db
+        .prepare("SELECT space_id FROM hub_space_copies WHERE handed_over")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(handed, ["taken"]);
     Ok(())
 }

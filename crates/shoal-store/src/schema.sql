@@ -600,7 +600,7 @@ CREATE TABLE hub_space_copies (
     space_id TEXT NOT NULL,
     member_id TEXT NOT NULL REFERENCES hub_members(id),
     summary TEXT NOT NULL,
-    since INTEGER NOT NULL,
+    since INTEGER NOT NULL, handed_over INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY(space_id, member_id)
 );
 

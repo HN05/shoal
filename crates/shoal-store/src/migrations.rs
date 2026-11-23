@@ -10,7 +10,7 @@ use super::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-pub const SCHEMA_VERSION: i64 = 284;
+pub const SCHEMA_VERSION: i64 = 285;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -573,6 +573,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (282, include_str!("held_thread_events.sql"), None),
     (283, include_str!("hub_ci_job_reruns.sql"), None),
     (284, include_str!("agent_lease_spaces.sql"), None),
+    (285, include_str!("hub_handed_over_copies.sql"), None),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
