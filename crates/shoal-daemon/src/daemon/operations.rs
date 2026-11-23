@@ -324,15 +324,15 @@ impl Manager {
         if let Some(caller) = caller {
             ensure!(
                 self.follows(caller, &entry).await?,
-                "workspace processes can only follow operations their space started or that work in their own space or one below it"
+                "scoped processes can only follow operations their space started or that work in their own space or one below it"
             );
         }
         Ok(entry)
     }
 
-    /// Whether `caller` follows `entry`: one its own space started, as a
-    /// move it ran is whatever the hub lists of the space it moved
-    /// meanwhile, or one in a space its scope reaches.
+    /// Whether `caller` follows `entry`: one its own space started, such as
+    /// a move after its space left this machine, or one in a space its
+    /// scope reaches.
     async fn follows(&self, caller: &Caller, entry: &Entry) -> Result<bool> {
         Ok(entry.started_by(caller) || self.reaches(caller, &entry.workspace).await?)
     }
