@@ -44,6 +44,7 @@ pub mod sent_files;
 mod space_titles;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
+pub mod tree;
 mod worker;
 #[cfg(test)]
 mod workspace_availability_tests;

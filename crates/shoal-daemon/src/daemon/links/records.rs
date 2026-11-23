@@ -153,10 +153,6 @@ impl Records for LinkRecords {
         messages::queue_shoal_message(tx, &AgentRecords, id, kind, message).map(drop)
     }
 
-    fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
-        tree::subtree(db, id)
-    }
-
     fn checked_branch(&self, db: &Connection, id: &SpaceId) -> Result<Option<String>> {
         checked_branch(db, id)
     }

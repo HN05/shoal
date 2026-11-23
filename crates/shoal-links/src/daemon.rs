@@ -522,9 +522,6 @@ pub trait Records: Send + Sync {
         message: &str,
     ) -> Result<()>;
 
-    /// The space `id` and every space below it.
-    fn subtree(&self, db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>>;
-
     /// The branch of the workspace `id` while its conflicts are checked:
     /// none for a chat, a workspace at a commit and one whose assignment is
     /// done.

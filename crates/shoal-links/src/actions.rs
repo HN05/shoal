@@ -138,9 +138,9 @@ impl Links {
     /// change keeps a poll from recording it first, whichever agents start
     /// or stop meanwhile.
     pub async fn lock_change_gates(&self, id: &SpaceId, others: &[&SpaceId]) -> Result<PrGuard> {
-        let (owned, records) = (id.to_owned(), self.records.clone());
+        let owned = id.to_owned();
         let subtree = (self.store)
-            .read(move |db| records.subtree(db, &owned))
+            .read(move |db| shoal_store::tree::subtree(db, &owned))
             .await?;
         let ids = subtree.iter().chain(others.iter().copied());
         Ok(self.gates.lock_prs(ids).await)

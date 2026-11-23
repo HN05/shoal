@@ -539,10 +539,6 @@ impl Records for StandInRecords {
         bail!(NOT_HERE)
     }
 
-    fn subtree(&self, _: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
-        Ok(vec![id.clone()])
-    }
-
     fn checked_branch(&self, _: &Connection, _: &SpaceId) -> Result<Option<String>> {
         Ok(None)
     }
