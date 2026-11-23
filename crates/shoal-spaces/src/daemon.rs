@@ -1118,12 +1118,44 @@ pub trait Records: Send + Sync {
     /// The retry of the failed turn of the agent of the space `id`.
     fn turn_retry(&self, db: &Connection, id: &SpaceId) -> Result<Option<TurnRetry>>;
 
-    /// The spaces with an execution other than `own`, with that execution.
+    /// The executions, with their spaces, other than `own`, of the space
+    /// `space` or of every space.
     fn other_executions(
         &self,
         db: &Connection,
+        space: Option<&SpaceId>,
         own: Option<&ExecutionId>,
     ) -> Result<Vec<(SpaceId, ExecutionId)>>;
+
+    /// The executions of the space `id` that run an agent, other than
+    /// those whose restore waits in the queue.
+    fn running_agents(&self, db: &Connection, id: &SpaceId) -> Result<Vec<ExecutionId>>;
+
+    /// The agent the newest queue entry of the space `id` starts.
+    fn queued_agent(&self, db: &Connection, id: &SpaceId) -> Result<Option<Agent>>;
+
+    /// Whether a queued launch waits to open the workspace `id`.
+    fn launch_waits_to_open(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
+
+    /// Forget the executions of the space `id` and the queue entries that
+    /// restore or opened them, as its kind changes under it.
+    fn forget_executions(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()>;
+
+    /// Forget the executions of the space `id` that run no agent.
+    fn forget_command_executions(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()>;
+
+    /// Mark what other subsystems recorded as running when the daemon
+    /// stopped as interrupted: executions and simulator clean requests.
+    fn interrupt_operations(&self, tx: &Transaction<'_>) -> Result<()>;
+
+    /// Every registered repository.
+    fn repositories(&self, db: &Connection) -> Result<Vec<Repository>>;
+
+    /// Record that the repository `id` was used last.
+    fn touch_repository(&self, tx: &Transaction<'_>, id: &RepositoryId) -> Result<()>;
+
+    /// The workspaces that hold a lease of the pool or resource `name`.
+    fn leasing_workspaces(&self, db: &Connection, name: &str) -> Result<Vec<SpaceId>>;
 
     /// Take the number the hub's sequence gives the new space `id`, on a
     /// machine that numbers its spaces from a hub's sequence.

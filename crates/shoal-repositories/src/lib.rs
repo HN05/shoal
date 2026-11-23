@@ -18,7 +18,7 @@ pub mod configuration;
 pub mod contributions;
 pub mod daemon;
 pub mod moves;
-mod records;
+pub mod records;
 pub mod registration;
 mod removal;
 pub mod root;

@@ -457,10 +457,9 @@ impl Spaces {
                         created_at: crate::time::UnixTime::now(),
                     })?,
                 };
-                tx.execute(
-                    "UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1",
-                    [&record.repository_id],
-                )?;
+                if let Some(repository) = &record.repository_id {
+                    records.touch_repository(tx, repository)?;
+                }
                 Ok(Workspace { number, ..record })
             })
             .await

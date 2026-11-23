@@ -44,3 +44,16 @@ thread_local! {
 
 #[cfg(test)]
 mod tests;
+
+/// Mark the clean requests a stopped daemon left running as interrupted.
+pub fn interrupt_clean_requests(tx: &rusqlite::Transaction<'_>) -> Result<()> {
+    tx.execute(
+        "UPDATE simulator_clean_requests SET record=json_set(record, '$.status', ?1)
+            WHERE json_extract(record, '$.status')=?2",
+        [
+            shoal_protocol::sim::CleanRequestStatus::Interrupted,
+            shoal_protocol::sim::CleanRequestStatus::Requested,
+        ],
+    )?;
+    Ok(())
+}

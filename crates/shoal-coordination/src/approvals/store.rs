@@ -106,6 +106,17 @@ pub fn release_decided_by(tx: &Transaction<'_>, id: &SpaceId) -> Result<Vec<Appr
     Ok(released)
 }
 
+/// Delete the requests of the space `id` that bind its worktree, its branch
+/// or its leases, which go with them as it becomes a chat; its requests to
+/// take actions stay.
+pub fn drop_worktree_requests(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+    tx.execute(
+        "DELETE FROM access_requests WHERE space_id=?1 AND target_key NOT LIKE 'action/%'",
+        [id],
+    )?;
+    Ok(())
+}
+
 /// Give the request stored under `key` back to the user while it is pending
 /// and still `decider`'s, in the caller's transaction.
 pub(super) fn give_back(tx: &Transaction<'_>, key: &str, decider: Option<&SpaceId>) -> Result<()> {

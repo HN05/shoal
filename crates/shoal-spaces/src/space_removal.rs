@@ -9,8 +9,7 @@ use crate::daemon::Records;
 use crate::forge::items::reference::ItemRef;
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
-use rusqlite::params;
-use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_ids::space_ids::SpaceId;
 use std::borrow::Cow;
 
 use super::{
@@ -23,7 +22,7 @@ use crate::{
     fsutil::off_runtime,
     model::{Space, Workspace},
     removal::IdleRestore,
-    state::{QueueKind, QueueState, WorkspaceState},
+    state::WorkspaceState,
     time::UnixTime,
     {
         approvals::{ApprovalRequest, release_decided_by},
@@ -120,20 +119,9 @@ impl Spaces {
     /// ones a removal stopped: an agent whose restore waits in the queue
     /// does not.
     async fn agent_runs(&self, id: &SpaceId, cancelled: &[IdleRestore]) -> Result<bool> {
-        let id = id.to_owned();
-        let running: Vec<ExecutionId> = (self.store)
-            .run(move |db| {
-                db.prepare(
-                    "SELECT id FROM executions e WHERE space_id=?1 AND agent IS NOT NULL
-                        AND NOT EXISTS (SELECT 1 FROM agent_queue
-                            WHERE kind=?2 AND state=?3 AND execution_id=e.id)",
-                )?
-                .query_map(params![id, QueueKind::Restore, QueueState::Queued], |row| {
-                    row.get(0)
-                })?
-                .collect::<rusqlite::Result<_>>()
-                .map_err(Into::into)
-            })
+        let (id, records) = (id.to_owned(), self.records.clone());
+        let running = (self.store)
+            .run(move |db| records.running_agents(db, &id))
             .await?;
         Ok(running.iter().any(|execution| {
             !cancelled

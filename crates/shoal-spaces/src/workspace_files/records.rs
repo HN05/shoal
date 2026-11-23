@@ -176,15 +176,19 @@ pub fn count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
 /// The files `home` keeps whose workspace has no recorded execution, running
 /// or unresolved, and that no running chat owns, oldest first.
 pub(super) fn idle(db: &Connection, home: &HomeKey) -> Result<Vec<AttachedFile>> {
-    Ok(db
+    let running = crate::store::spaces_with_executions(db)?;
+    let files: Vec<AttachedFile> = db
         .prepare(&format!(
             "SELECT {COLUMNS} FROM space_files WHERE {IN_HOME}
-                AND space_id NOT IN (SELECT space_id FROM executions)
                 AND space_id NOT IN (SELECT id FROM spaces WHERE kind='chat')
                 ORDER BY id"
         ))?
         .query_map(params![home.repository_id(), home.root_dir()], row)?
-        .collect::<rusqlite::Result<_>>()?)
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(files
+        .into_iter()
+        .filter(|file| !running.contains(&file.space.id))
+        .collect())
 }
 
 /// Whether a record is kept in the home of the repository `?1`, or with none

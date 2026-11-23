@@ -1156,6 +1156,49 @@ pub fn other_executions(
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+/// Mark the executions a stopped daemon left running as of unknown state,
+/// which the next one resolves once it sees whether they still run.
+pub fn interrupt_running(tx: &Transaction<'_>) -> Result<()> {
+    tx.execute(
+        "UPDATE executions SET state=?1 WHERE state=?2",
+        [ExecutionState::Unknown, ExecutionState::Running],
+    )?;
+    Ok(())
+}
+
+/// Delete the executions of the space `id`, and the queue entries that
+/// restore or opened them, as its kind changes under it.
+pub fn forget_space(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+    tx.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
+    tx.execute("DELETE FROM agent_queue WHERE space_id=?1", [id])?;
+    Ok(())
+}
+
+/// Delete the executions of the space `id` that run no agent.
+pub fn forget_commands(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+    tx.execute(
+        "DELETE FROM executions WHERE space_id=?1 AND agent IS NULL",
+        [id],
+    )?;
+    Ok(())
+}
+
+/// The executions of the space `id` that run an agent, other than those
+/// whose restore waits in the queue, which run none yet.
+pub fn running_agents(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<ExecutionId>> {
+    use crate::state::{QueueKind, QueueState};
+    Ok(db
+        .prepare(
+            "SELECT id FROM executions e WHERE space_id=?1 AND agent IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM agent_queue
+                    WHERE kind=?2 AND state=?3 AND execution_id=e.id)",
+        )?
+        .query_map(params![id, QueueKind::Restore, QueueState::Queued], |row| {
+            row.get(0)
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Whether a reattaching wrapper is the one the record names. One awaiting a
 /// restore also matches once the daemon has forgotten its stopped child.
 fn reattaching_identity_matches(execution: &Execution, request: &Reattach) -> bool {

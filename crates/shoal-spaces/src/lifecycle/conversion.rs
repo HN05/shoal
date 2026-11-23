@@ -36,11 +36,11 @@ impl Spaces {
         id: &SpaceId,
         chat: &ConvertedChat,
     ) -> Result<Vec<ApprovalRequest>> {
-        let (id, chat) = (id.to_owned(), chat.clone());
+        let (id, chat, records) = (id.to_owned(), chat.clone(), self.records.clone());
         self.store
             .write(move |tx| {
                 super::super::restore::rekey_converted(tx, &id)?;
-                crate::conversions::record::replace_workspace(tx, &id, &chat)
+                crate::conversions::record::replace_workspace(tx, &*records, &id, &chat)
             })
             .await
     }

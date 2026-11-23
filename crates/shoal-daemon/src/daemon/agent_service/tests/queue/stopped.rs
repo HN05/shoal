@@ -342,9 +342,7 @@ async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
     assert_eq!(admitted.state, Starting);
 
     let restarted = Manager::open(manager.paths.clone()).await.unwrap();
-    crate::daemon::quarantine::interrupted_operations(&restarted.store)
-        .await
-        .unwrap();
+    restarted.spaces.interrupted_operations().await.unwrap();
     limit_globally(&restarted, 4);
     restarted.agents.return_recovery_starts().await.unwrap();
 

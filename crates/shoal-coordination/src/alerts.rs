@@ -20,7 +20,7 @@ mod reading;
 mod routing;
 mod sending;
 
-pub use reading::users_alerts;
+pub use reading::{mark_in_chat, read_in_chat, users_alerts};
 pub use routing::{Reader, Recipients, Route};
 pub use sending::sent_alert;
 pub use sending::{recipient, send_with_files};

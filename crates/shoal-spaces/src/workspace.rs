@@ -65,7 +65,7 @@ impl Spaces {
     pub async fn workspace_has_executions(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
-            .run(move |db| store::exists(db, "SELECT 1 FROM executions WHERE space_id=?1", [id]))
+            .run(move |db| Ok(store::execution_count(db, &id, None)? > 0))
             .await
     }
 
@@ -79,14 +79,7 @@ impl Spaces {
     pub async fn workspace_execution_count(&self, id: &SpaceId) -> Result<usize> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let count: i64 = db.query_row(
-                    "SELECT COUNT(*) FROM executions WHERE space_id=?1",
-                    [id],
-                    |row| row.get(0),
-                )?;
-                Ok(usize::try_from(count)?)
-            })
+            .run(move |db| store::execution_count(db, &id, None))
             .await
     }
 
@@ -236,11 +229,8 @@ fn load_details(
     stack::load(db, workspace)?;
     copies::load(db, workspace)?;
     super::tree::load(db, workspace)?;
-    workspace.running = store::exists(
-        db,
-        "SELECT 1 FROM executions WHERE space_id=?1 AND state=?2",
-        rusqlite::params![workspace.id, crate::state::ExecutionState::Running],
-    )?;
+    let running = Some(crate::state::ExecutionState::Running);
+    workspace.running = store::execution_count(db, &workspace.id, running)? > 0;
     workspace.done = store::exists(
         db,
         "SELECT 1 FROM space_completion WHERE space_id=?1",

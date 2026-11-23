@@ -17,17 +17,7 @@ use crate::Repositories;
 impl Repositories {
     /// Every registered repository, the most recently used first.
     pub async fn list(&self) -> Result<Vec<Repository>> {
-        self.store
-            .run(|db| {
-                Ok(db
-                    .prepare(&format!(
-                        "SELECT {} FROM repositories ORDER BY last_used DESC",
-                        store::REPOSITORY_COLUMNS
-                    ))?
-                    .query_map([], store::repository)?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
-            })
-            .await
+        self.store.run(|db| all(db)).await
     }
 
     /// Resolve an ID, path, source URL, explicit name, derived name, or
@@ -170,3 +160,24 @@ async fn shared_url(source: &str, name: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests;
+
+/// Every registered repository, the most recently used first.
+pub fn all(db: &rusqlite::Connection) -> Result<Vec<Repository>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT {} FROM repositories ORDER BY last_used DESC",
+            store::REPOSITORY_COLUMNS
+        ))?
+        .query_map([], store::repository)?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Record that the repository `id` was used last, as a space created there
+/// makes it.
+pub fn touch(tx: &rusqlite::Transaction<'_>, id: &RepositoryId) -> Result<()> {
+    tx.execute(
+        "UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1",
+        [id],
+    )?;
+    Ok(())
+}

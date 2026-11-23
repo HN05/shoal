@@ -83,19 +83,11 @@ impl Spaces {
     }
 
     async fn holding_workspaces(&self, name: &str, within: Vec<SpaceId>) -> Result<Vec<SpaceId>> {
-        let name = name.to_owned();
+        let (name, records) = (name.to_owned(), self.records.clone());
         let label = name.clone();
         let mut ids = self
             .store
-            .run(move |db| {
-                Ok(db
-                    .prepare(
-                        "SELECT DISTINCT workspace_id FROM resource_leases
-                         WHERE pool=?1 OR resource=?1",
-                    )?
-                    .query_map([name], |row| row.get::<_, SpaceId>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
-            })
+            .run(move |db| records.leasing_workspaces(db, &name))
             .await?;
         ids.retain(|id| within.contains(id));
         ensure!(!ids.is_empty(), "no workspace holds resource {label}");

@@ -5,6 +5,17 @@ use crate::state::WorkspaceState;
 use crate::state::ExecutionState;
 use anyhow::Result;
 use rusqlite::Connection;
+use std::sync::Arc;
+
+/// The records of the daemon's other subsystems, which quarantine also
+/// marks.
+fn records() -> Arc<dyn shoal_spaces::daemon::Records> {
+    Arc::new(crate::daemon::space_service::SpaceRecords {
+        coordination: crate::daemon::coordination::CoordinationRecords(
+            crate::daemon::spaces::Removing::default(),
+        ),
+    })
+}
 
 fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
     db.execute_batch(
@@ -91,7 +102,7 @@ async fn startup_quarantines_transient_workspaces_and_preserves_settled_states()
     store.run(seed_interrupted_operations).await?;
     // A second quarantine finds nothing left to change.
     for _ in 0..2 {
-        interrupted_operations(&store).await?;
+        interrupted_operations(&store, records()).await?;
         assert_eq!(store.run(operation_snapshot).await?, quarantined_snapshot());
     }
     Ok(())
@@ -112,13 +123,13 @@ async fn failed_quarantine_rolls_back_until_a_retry_succeeds() -> Result<()> {
         })
         .await?;
     let before = store.run(operation_snapshot).await?;
-    let error = interrupted_operations(&store).await.unwrap_err();
+    let error = interrupted_operations(&store, records()).await.unwrap_err();
     assert!(format!("{error:#}").contains("quarantine blocked"));
     assert_eq!(store.run(operation_snapshot).await?, before);
     store
         .run(|db| Ok(db.execute_batch("DROP TRIGGER fail_quarantine;")?))
         .await?;
-    interrupted_operations(&store).await?;
+    interrupted_operations(&store, records()).await?;
     assert_eq!(store.run(operation_snapshot).await?, quarantined_snapshot());
     Ok(())
 }

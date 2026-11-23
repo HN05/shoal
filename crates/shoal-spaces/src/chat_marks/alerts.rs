@@ -5,7 +5,6 @@
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, bail};
-use rusqlite::Transaction;
 use serde::{Deserialize, Serialize};
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::executions::ExecutionKind;
@@ -68,26 +67,6 @@ fn alert_text(to: &AlertTarget, message: Option<&str>) -> String {
         "" => super::WROTE_IN_CHAT.to_owned(),
         _ => crate::validate::shorten(text, max),
     }
-}
-
-/// Mark read the user's unread alerts that the space `id` sent from its
-/// chat, which a prompt the user submits there answers. Alerts are
-/// one-way, so the prompt is no reply to them.
-pub(super) fn read_in_chat(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
-    tx.execute(
-        "UPDATE alerts SET read=1 WHERE recipient_id IS NULL AND read=0 AND in_chat
-            AND sender='space' AND space_id=?1",
-        [id],
-    )?;
-    Ok(())
-}
-
-/// Record that the alerts `ids` carry a turn's final message.
-fn mark_in_chat(tx: &Transaction<'_>, ids: &[i64]) -> Result<()> {
-    for id in ids {
-        tx.execute("UPDATE alerts SET in_chat=1 WHERE id=?1", [id])?;
-    }
-    Ok(())
 }
 
 impl Spaces {
@@ -214,7 +193,9 @@ impl Spaces {
                 .await,
         )?;
         let here = recorded_here(&recipients, sent);
-        self.store.write(move |tx| mark_in_chat(tx, &here)).await
+        self.store
+            .write(move |tx| crate::alerts::mark_in_chat(tx, &here))
+            .await
     }
 }
 

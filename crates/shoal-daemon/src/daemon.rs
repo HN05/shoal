@@ -14,8 +14,8 @@ pub(crate) use shoal_daemon_base::{
 };
 pub(crate) use shoal_leases::{allocation, resources};
 pub(crate) use shoal_spaces::{
-    conversions, holds, hub_moves, imported_sessions, moves, ownership, progress, quarantine,
-    ready_marks, restore, space_processes, spaces, starts, tree,
+    conversions, holds, hub_moves, imported_sessions, moves, ownership, progress, ready_marks,
+    restore, space_processes, spaces, starts, tree,
 };
 pub use shoal_spaces::{workspace, workspace_files};
 // The daemon's tests reach the spaces' modules, and those of the services
@@ -28,7 +28,8 @@ pub(crate) use shoal_leases::containers;
 pub(crate) use shoal_spaces::chats;
 #[cfg(test)]
 pub(crate) use shoal_spaces::{
-    carried_sessions, launches, leftovers, lifecycle, recovery, startup_audit, tmp_dirs, untracked,
+    carried_sessions, launches, leftovers, lifecycle, quarantine, recovery, startup_audit,
+    tmp_dirs, untracked,
 };
 mod agent_service;
 mod answer;
@@ -372,7 +373,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     startup
         .step(
             "quarantining interrupted operations",
-            crate::daemon::quarantine::interrupted_operations(&manager.store),
+            manager.spaces.interrupted_operations(),
         )
         .await?;
     // Finishing a move restores the states quarantine failed.

@@ -367,7 +367,7 @@ impl Spaces {
         let (own, records) = (own.cloned(), self.records.clone());
         let busy = self
             .store
-            .read(move |db| records.other_executions(db, own.as_ref()));
+            .read(move |db| records.other_executions(db, None, own.as_ref()));
         let busy = busy.await.unwrap_or_default().into_iter();
         busy.map(|(space, _)| space).collect()
     }

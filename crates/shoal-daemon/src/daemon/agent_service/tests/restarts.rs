@@ -308,9 +308,7 @@ async fn waiting_for_processes(
 /// the wrapper's connection receives its stop and resume on.
 async fn take_over(manager: &Manager, request: &Reattach) -> tokio::sync::watch::Receiver<bool> {
     manager.agents.detach_execution(&request.execution).await;
-    (crate::daemon::quarantine::interrupted_operations(&manager.store))
-        .await
-        .unwrap();
+    (manager.spaces.interrupted_operations()).await.unwrap();
     manager
         .agents
         .reattach_execution(manager, request)

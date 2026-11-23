@@ -195,6 +195,29 @@ pub fn queues_launch_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> 
     )
 }
 
+/// Whether a queued launch waits to open `workspace`.
+pub fn launch_waits_to_open(db: &rusqlite::Connection, workspace: &SpaceId) -> Result<bool> {
+    shoal_store::exists(
+        db,
+        "SELECT 1 FROM agent_queue WHERE opens_workspace_id=?1 AND kind=?2 AND state=?3",
+        params![workspace, QueueKind::Launch, QueueState::Queued],
+    )
+}
+
+/// The agent the newest queue entry of the space `id` starts.
+pub fn queued_agent(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+) -> Result<Option<crate::agent::Agent>> {
+    Ok(db
+        .query_row(
+            "SELECT agent FROM agent_queue WHERE space_id=?1 ORDER BY rowid DESC LIMIT 1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// Whether `workspace`'s setup failed, or never started and runs in no
 /// execution, as when the daemon refused it, either of which a retried
 /// setup can ready.

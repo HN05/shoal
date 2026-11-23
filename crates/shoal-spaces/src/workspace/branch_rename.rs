@@ -132,16 +132,17 @@ impl Spaces {
         let intent = RenameIntent {
             branch: branch.to_owned().into(),
         };
-        let caller_execution = caller_execution.cloned();
+        let (caller_execution, records) = (caller_execution.cloned(), self.records.clone());
         self.store
             .write(move |tx| {
                 store::require_ready(tx, &workspace.id)?;
                 ensure!(
-                    !store::exists(
+                    (records.other_executions(
                         tx,
-                        "SELECT 1 FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id!=?2)",
-                        params![workspace.id, caller_execution]
-                    )?,
+                        Some(&workspace.id),
+                        caller_execution.as_ref()
+                    )?)
+                    .is_empty(),
                     "workspace has other active or unknown executions; stop them before renaming"
                 );
                 store::ensure_branch_available(
@@ -198,15 +199,12 @@ impl Spaces {
         caller_execution: Option<&ExecutionId>,
     ) -> Result<()> {
         let (id, workspace) = (workspace.id.clone(), workspace.clone());
-        let caller_execution = caller_execution.cloned();
+        let (caller_execution, records) = (caller_execution.cloned(), self.records.clone());
         self.store
             .write(move |tx| {
                 ensure!(
-                    !store::exists(
-                        tx,
-                        "SELECT 1 FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id!=?2)",
-                        params![id, caller_execution]
-                    )?,
+                    (records.other_executions(tx, Some(&id), caller_execution.as_ref())?)
+                        .is_empty(),
                     "workspace has other active or unknown executions; stop them before renaming"
                 );
                 let state: WorkspaceState =

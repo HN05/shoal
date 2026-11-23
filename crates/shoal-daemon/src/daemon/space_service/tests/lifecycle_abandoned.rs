@@ -21,9 +21,7 @@ async fn a_removal_the_daemon_stopped_fails_its_workspace_for_shoal_rm() {
     (crate::daemon::events::record_removal_start(&manager.store, &workspace.id, EventCause::Idle))
         .await
         .unwrap();
-    crate::daemon::quarantine::interrupted_operations(&manager.store)
-        .await
-        .unwrap();
+    manager.spaces.interrupted_operations().await.unwrap();
 
     let failed = manager.spaces.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(failed.state, WorkspaceState::Failed);

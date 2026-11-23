@@ -5,7 +5,7 @@
 //! workspace, says what it waits for, and starts it once that allows, in
 //! the scope of the space that started the workspace.
 use crate::Spaces;
-use crate::daemon::Daemon;
+use crate::daemon::{Daemon, Records};
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Result, bail};
@@ -17,7 +17,6 @@ use shoal_refs::BranchName;
 use crate::{
     model::{PreparationWait, Workspace},
     protocol::operations::{Failure, OperationSpec, Preparation},
-    state::{QueueKind, QueueState},
     {blockers::Readiness, log, scope::Caller, workspace::build_pending_in},
 };
 
@@ -218,10 +217,10 @@ impl Spaces {
             None => None,
         };
         let _gate = self.gates.lock_prs(owner.iter().chain([id])).await;
-        let claiming = id.clone();
+        let (claiming, records) = (id.clone(), self.records.clone());
         let claimed = (self.store)
             .write(move |tx| {
-                let claimed = claim_waiting(tx, &claiming)?;
+                let claimed = claim_waiting(tx, &*records, &claiming)?;
                 if let (Some(_), Some(base)) = (&claimed, &base) {
                     build_pending_in(tx, &claiming, base, owner.as_ref())?;
                 }
@@ -355,14 +354,18 @@ fn end_wait(db: &mut rusqlite::Connection, id: &SpaceId) -> Result<()> {
 /// start it, if it still waits, unstopped, and, where it waits for an
 /// agent, the launch of that agent still waits to open the workspace: a
 /// stop since its gate was read keeps it waiting.
-fn claim_waiting(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Claimed>> {
+fn claim_waiting(
+    db: &rusqlite::Connection,
+    records: &dyn Records,
+    id: &SpaceId,
+) -> Result<Option<Claimed>> {
+    let launch_waits = records.launch_waits_to_open(db, id)?;
     let claimed: Option<(String, Option<String>, Option<SpaceId>)> = db
         .query_row(
-            "DELETE FROM waiting_preparations WHERE workspace_id=?1 AND waits IS NOT ?4
-                AND (NOT for_agent OR EXISTS (SELECT 1 FROM agent_queue
-                    WHERE opens_workspace_id=?1 AND kind=?2 AND state=?3))
+            "DELETE FROM waiting_preparations WHERE workspace_id=?1 AND waits IS NOT ?2
+                AND (NOT for_agent OR ?3)
              RETURNING steps,env,scope_space_id",
-            params![id, QueueKind::Launch, QueueState::Queued, stopped()?],
+            params![id, stopped()?, launch_waits],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?;

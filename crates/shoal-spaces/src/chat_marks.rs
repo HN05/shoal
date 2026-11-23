@@ -219,7 +219,7 @@ impl Spaces {
                     Some(turn) => taken(tx, turn)?,
                     None => None,
                 };
-                alerts::read_in_chat(tx, &id)?;
+                crate::alerts::read_in_chat(tx, &id)?;
                 let delivered = crate::threads::record_chat_replies(
                     tx,
                     records.coordination(),

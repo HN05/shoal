@@ -408,15 +408,11 @@ impl Spaces {
         own: Option<&ExecutionId>,
     ) -> Result<Option<ExecutionId>> {
         let (id, own) = (workspace_id.to_owned(), own.cloned());
+        let records = self.records.clone();
         self.store
             .run(move |db| {
-                Ok(db
-                    .query_row(
-                        "SELECT id FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
-                        params![id, own],
-                        |row| row.get(0),
-                    )
-                    .optional()?)
+                let others = records.other_executions(db, Some(&id), own.as_ref())?;
+                Ok(others.into_iter().next().map(|(_, execution)| execution))
             })
             .await
     }

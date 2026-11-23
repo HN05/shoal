@@ -14,7 +14,8 @@ pub use shoal_protocol::approvals::{
     MergeSpecification, Specification, Target, Undecided, UnmergeSpecification,
 };
 pub use store::{
-    by_key, by_number, list_of_space, oldest_for_user, pending_count, release_decided_by, renumber,
+    by_key, by_number, drop_worktree_requests, list_of_space, oldest_for_user, pending_count,
+    release_decided_by, renumber,
 };
 pub use store::{check, current, release, request_action, retire};
 

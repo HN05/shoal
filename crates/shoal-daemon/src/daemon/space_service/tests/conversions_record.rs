@@ -24,6 +24,7 @@ async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_acti
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
     };
+    let records = manager.spaces.records.clone();
     let kept: Vec<(String, String)> = (manager.store)
         .write(move |tx| {
             tx.execute_batch(
@@ -36,7 +37,7 @@ async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_acti
                      VALUES ('action','w','action/merge','merge','{}',1,2),
                          ('port','w','port/web','web','{}',1,3);",
             )?;
-            crate::daemon::conversions::record::replace_workspace(tx, &"w".into(), &chat)?;
+            crate::daemon::conversions::record::replace_workspace(tx, &*records, &"w".into(), &chat)?;
             let mut kept: Vec<(String, String)> = tx
                 .prepare(
                     "SELECT 'thread',space_id FROM threads

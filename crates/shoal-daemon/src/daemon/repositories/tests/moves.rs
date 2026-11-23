@@ -158,7 +158,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
             .is_err()
     );
     // Quarantine fails the reserved workspaces; setup must not revive one.
-    crate::daemon::quarantine::interrupted_operations(&manager.store).await?;
+    manager.spaces.interrupted_operations().await?;
     test_support::configure(
         &manager,
         &format!("hooks.pre_setup = \"true\"\n[machine]\nroot_dir = {root:?}\n"),
@@ -197,7 +197,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     fs::rename(&source, &destination)?;
     fs::create_dir(&source)?;
     fs::write(source.join("unrelated"), "keep")?;
-    crate::daemon::quarantine::interrupted_operations(&manager.store).await?;
+    manager.spaces.interrupted_operations().await?;
     manager.repositories.finish_moves(&*manager).await?;
     let workspace = manager.spaces.workspace_by_id(&workspace.id).await?;
     assert_eq!(workspace.path, destination.join("feature"));

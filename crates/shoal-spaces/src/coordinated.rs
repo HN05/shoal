@@ -9,12 +9,12 @@ use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::daemon::Records;
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension as _};
 use shoal_ids::space_ids::SpaceId;
 
 use super::tree::{self, TrackedAgents};
 use crate::{
-    model::Space,
+    model::{Space, SpaceKind},
     state::AgentState,
     {spaces::worktrees_mut, store},
 };
@@ -100,13 +100,18 @@ enum Working {
 /// its own works there, as none has started in the workspace, or the chat's
 /// has stopped.
 fn working_coordinator(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<Working> {
-    let agentless = store::exists(
-        db,
-        "SELECT 1 FROM spaces WHERE id=?1 AND CASE kind
-            WHEN 'workspace' THEN mode IS NULL
-            ELSE NOT EXISTS (SELECT 1 FROM executions WHERE space_id=?1) END",
-        [id],
-    )?;
+    let kind: Option<(SpaceKind, bool)> = db
+        .query_row(
+            "SELECT kind,mode IS NULL FROM spaces WHERE id=?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let agentless = match kind {
+        None => false,
+        Some((SpaceKind::Workspace, modeless)) => modeless,
+        Some((SpaceKind::Chat, _)) => store::execution_count(db, id, None)? == 0,
+    };
     if !agentless {
         return Ok(Working::Own);
     }

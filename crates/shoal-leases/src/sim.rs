@@ -13,6 +13,7 @@ use shoal_ids::space_ids::SpaceId;
 use uuid::Uuid;
 
 use audit::CleanRequest;
+pub use records::interrupt_clean_requests;
 pub use shoal_protocol::sim::{
     Profile, SimConfig, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, SimulatorState,
 };

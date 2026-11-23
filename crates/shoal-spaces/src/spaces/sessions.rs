@@ -2,13 +2,13 @@
 //! the files of; the daemon never reads them. Its executions and their
 //! saved sessions record them for every space, whatever its kind.
 use crate::Spaces;
-use crate::daemon::Daemon;
+use crate::daemon::{Daemon, Records};
 use crate::execution::recovery::LastSessionExt;
 use shoal_ids::space_ids::SpaceId;
 use std::collections::BTreeSet;
 
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 
 use crate::{
     agent::Agent,
@@ -55,9 +55,9 @@ impl Spaces {
     /// session, else the one its queued launch starts; none for a space
     /// whose saved sessions were discarded and that waits for no launch.
     pub async fn agent_of(&self, id: &SpaceId) -> Result<Option<Agent>> {
-        let space = id.to_owned();
+        let (space, records) = (id.to_owned(), self.records.clone());
         let stored = (self.store)
-            .read(move |tx| stored_agents(tx, &space))
+            .read(move |tx| stored_agents(tx, &*records, &space))
             .await?;
         self.agent_from(id, stored)
     }
@@ -114,34 +114,11 @@ pub struct StoredAgents {
 }
 
 /// What the store records of the agent of the space `id`.
-pub fn stored_agents(db: &Connection, id: &SpaceId) -> Result<StoredAgents> {
+pub fn stored_agents(db: &Connection, records: &dyn Records, id: &SpaceId) -> Result<StoredAgents> {
     Ok(StoredAgents {
-        running: running_agent(db, id)?,
-        queued: queued_agent(db, id)?,
+        running: crate::store::newest_agent(db, id)?,
+        queued: records.queued_agent(db, id)?,
     })
-}
-
-/// The agent an execution of the space `id` runs, the newest first.
-fn running_agent(db: &Connection, id: &SpaceId) -> Result<Option<Agent>> {
-    Ok(db
-        .query_row(
-            "SELECT agent FROM executions WHERE space_id=?1 AND agent IS NOT NULL
-             ORDER BY rowid DESC LIMIT 1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?)
-}
-
-/// The agent the newest queued launch of the space `id` starts.
-fn queued_agent(db: &Connection, id: &SpaceId) -> Result<Option<Agent>> {
-    Ok(db
-        .query_row(
-            "SELECT agent FROM agent_queue WHERE space_id=?1 ORDER BY rowid DESC LIMIT 1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?)
 }
 
 /// The agent the space `space_id` saved last: its newest stopped agent's,

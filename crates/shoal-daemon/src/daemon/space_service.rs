@@ -1415,9 +1415,55 @@ impl shoal_spaces::daemon::Records for SpaceRecords {
     fn other_executions(
         &self,
         db: &Connection,
+        space: Option<&SpaceId>,
         own: Option<&ExecutionId>,
     ) -> Result<Vec<(SpaceId, ExecutionId)>> {
-        executions::other_executions(db, None, own)
+        executions::other_executions(db, space, own)
+    }
+
+    fn running_agents(&self, db: &Connection, id: &SpaceId) -> Result<Vec<ExecutionId>> {
+        executions::running_agents(db, id)
+    }
+
+    fn queued_agent(&self, db: &Connection, id: &SpaceId) -> Result<Option<Agent>> {
+        shoal_agents::queue::store::queued_agent(db, id)
+    }
+
+    fn launch_waits_to_open(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
+        shoal_agents::queue::store::launch_waits_to_open(db, id)
+    }
+
+    fn forget_executions(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+        executions::forget_space(tx, id)
+    }
+
+    fn forget_command_executions(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+        executions::forget_commands(tx, id)
+    }
+
+    fn interrupt_operations(&self, tx: &Transaction<'_>) -> Result<()> {
+        shoal_leases::sim::interrupt_clean_requests(tx)?;
+        executions::interrupt_running(tx)
+    }
+
+    fn repositories(&self, db: &Connection) -> Result<Vec<Repository>> {
+        shoal_repositories::records::all(db)
+    }
+
+    fn touch_repository(&self, tx: &Transaction<'_>, id: &RepositoryId) -> Result<()> {
+        shoal_repositories::records::touch(tx, id)
+    }
+
+    fn leasing_workspaces(&self, db: &Connection, name: &str) -> Result<Vec<SpaceId>> {
+        let mut holders: Vec<SpaceId> = Vec::new();
+        for lease in shoal_leases::resources::leases(db, None)? {
+            if (lease.pool == name || lease.resource == name)
+                && !holders.contains(&lease.workspace_id)
+            {
+                holders.push(lease.workspace_id);
+            }
+        }
+        Ok(holders)
     }
 
     fn next_space_number(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> {

@@ -205,10 +205,10 @@ impl Spaces {
                 return;
             }
         }
-        let id = chat.clone();
+        let (id, records) = (chat.clone(), self.records.clone());
         let given = self
             .store
-            .write(move |tx| crate::conversions::record::restore_chat(tx, &id, &row))
+            .write(move |tx| crate::conversions::record::restore_chat(tx, &*records, &id, &row))
             .await;
         if let Err(error) = given {
             crate::log!("chat {chat} not given back: {error:#}");

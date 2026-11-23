@@ -11,6 +11,7 @@ use crate::daemon::Daemon;
 use crate::daemon::Records;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[cfg(any(test, feature = "test-support"))]
@@ -373,12 +374,16 @@ impl Spaces {
         let id = id.to_owned();
         self.store
             .run(move |db| {
-                store::exists(
-                    db,
-                    "SELECT 1 FROM chats JOIN executions ON executions.space_id=chats.id
-                     WHERE chats.workspace_id=?1",
-                    [id],
-                )
+                let chats: Vec<SpaceId> = db
+                    .prepare("SELECT id FROM chats WHERE workspace_id=?1")?
+                    .query_map([id], |row| row.get(0))?
+                    .collect::<rusqlite::Result<_>>()?;
+                for chat in chats {
+                    if store::execution_count(db, &chat, None)? > 0 {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
             })
             .await
     }
@@ -596,7 +601,7 @@ pub fn recorded_within(
 ) -> Result<Vec<(Chat, spaces::sessions::StoredAgents)>> {
     (recorded(db, records, owner, root)?.into_iter())
         .map(|chat| {
-            let stored = spaces::sessions::stored_agents(db, &chat.id)?;
+            let stored = spaces::sessions::stored_agents(db, records, &chat.id)?;
             Ok((chat, stored))
         })
         .collect()
@@ -616,16 +621,18 @@ fn recorded(
     let reached = root
         .map(|root| super::tree::subtree(db, root))
         .transpose()?;
+    let repositories: HashMap<RepositoryId, Repository> = (records.repositories(db)?)
+        .into_iter()
+        .map(|repository| (repository.id.clone(), repository))
+        .collect();
     db.prepare(
         "SELECT chats.id,space.repository_id,space.name,
-                    EXISTS (SELECT 1 FROM executions e WHERE e.space_id=chats.id) AS running,
-                    space.created_at AS started_at,repositories.workspaces_dir,
+                    space.created_at AS started_at,
                     space_completion.record AS completion,
                     workspaces.id AS workspace_id,home.name AS workspace_name,
-                    workspaces.branch,workspaces.path AS worktree,repositories.path AS checkout,
+                    workspaces.branch,workspaces.path AS worktree,
                     space.number,space.mode,chats.root_dir,space.narrowing
              FROM chats JOIN spaces space ON space.id=chats.id
-                LEFT JOIN repositories ON repositories.id=space.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
                 LEFT JOIN spaces home ON home.id=workspaces.id
                 LEFT JOIN space_completion ON space_completion.space_id=chats.id
@@ -635,10 +642,10 @@ fn recorded(
         let id: SpaceId = row.get("id")?;
         let repository_id: Option<RepositoryId> = row.get("repository_id")?;
         let root_dir = row.get::<_, Option<String>>("root_dir")?.map(PathBuf::from);
-        let directory = row.get::<_, Option<String>>("workspaces_dir")?;
+        let repository = (repository_id.as_ref()).and_then(|id| repositories.get(id));
         let tmp_dir = match &repository_id {
-            Some(repository_id) => directory.map(|directory| {
-                tmp_dirs::Layout::new(Path::new(&directory), repository_id).locate(&id)
+            Some(repository_id) => repository.map(|repository| {
+                tmp_dirs::Layout::new(&repository.workspaces_dir, repository_id).locate(&id)
             }),
             None => (root_dir.as_deref())
                 .map(|root| tmp_dirs::Layout::outside_repositories(root, owner).locate(&id)),
@@ -650,7 +657,7 @@ fn recorded(
             name: row.get("name")?,
             mode: row.get("mode")?,
             narrowing: store::json_column(row, "narrowing")?.unwrap_or_default(),
-            running: row.get("running")?,
+            running: false,
             links: SpaceLinks::default(),
             review: Vec::new(),
             holds: Vec::new(),
@@ -662,7 +669,7 @@ fn recorded(
             restart: None,
             parent: None,
             children: Vec::new(),
-            workdir: workdir(row, root_dir)?,
+            workdir: workdir(row, repository, root_dir)?,
             part: ChatPart {
                 agent: None,
                 started_at: row.get("started_at")?,
@@ -678,6 +685,7 @@ fn recorded(
     .into_iter()
     .filter(|chat| (reached.as_ref()).is_none_or(|reached| reached.contains(&chat.id)))
     .map(|mut chat| {
+        chat.running = store::execution_count(db, &chat.id, None)? > 0;
         chat.review = crate::ready_marks::list(db, &chat.id)?;
         chat.holds = crate::holds::list(db, &chat.id)?;
         chat.parent = super::tree::parent(db, &chat.id)?;
@@ -689,9 +697,13 @@ fn recorded(
     .collect()
 }
 
-/// Where the chat of `row` works: the worktree it runs in, its repository's
-/// checkout, or the `root_dir` it started in.
-fn workdir(row: &rusqlite::Row<'_>, root_dir: Option<PathBuf>) -> rusqlite::Result<Workdir> {
+/// Where the chat of `row` works: the worktree it runs in, the checkout of
+/// its `repository`, or the `root_dir` it started in.
+fn workdir(
+    row: &rusqlite::Row<'_>,
+    repository: Option<&Repository>,
+    root_dir: Option<PathBuf>,
+) -> rusqlite::Result<Workdir> {
     if let Some(id) = row.get::<_, Option<SpaceId>>("workspace_id")? {
         return Ok(Workdir::Worktree {
             workspace: WorkspaceRef {
@@ -702,9 +714,9 @@ fn workdir(row: &rusqlite::Row<'_>, root_dir: Option<PathBuf>) -> rusqlite::Resu
             path: PathBuf::from(row.get::<_, String>("worktree")?),
         });
     }
-    if let Some(checkout) = row.get::<_, Option<String>>("checkout")? {
+    if let Some(repository) = repository {
         return Ok(Workdir::Checkout {
-            path: PathBuf::from(checkout),
+            path: repository.path.clone(),
         });
     }
     let path = root_dir.ok_or_else(|| {
@@ -718,12 +730,8 @@ fn workdir(row: &rusqlite::Row<'_>, root_dir: Option<PathBuf>) -> rusqlite::Resu
 /// its start failed with `error`, journaling its removal as a removed
 /// space's.
 fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -> Result<()> {
-    let unstarted = store::exists(
-        tx,
-        "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat' AND NOT EXISTS
-            (SELECT 1 FROM executions WHERE space_id=?1)",
-        [id],
-    )?;
+    let unstarted = store::exists(tx, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])?
+        && store::execution_count(tx, id, None)? == 0;
     if unstarted {
         let cause = crate::model::EventCause::StartFailed;
         events::record(tx, id, events::EventKind::Removed, cause, Some(error))?;

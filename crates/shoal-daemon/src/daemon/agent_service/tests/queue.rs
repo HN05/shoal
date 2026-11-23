@@ -892,9 +892,7 @@ async fn restart_keeps_restores_in_order_without_starting_one_twice() {
 
     // The daemon restarts before the restored agent registers.
     let restarted = Manager::open(manager.paths.clone()).await.unwrap();
-    crate::daemon::quarantine::interrupted_operations(&restarted.store)
-        .await
-        .unwrap();
+    restarted.spaces.interrupted_operations().await.unwrap();
     limit_globally(&restarted, 2);
     restarted.agents.refresh_starting_entries().await.unwrap();
     publish_recovery(&restarted);

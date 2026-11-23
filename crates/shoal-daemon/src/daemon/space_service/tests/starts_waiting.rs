@@ -293,9 +293,7 @@ async fn a_restart_keeps_a_waiting_preparation_waiting() {
     let api = create(&manager, &repo, "api").await;
     let blocker = Blocker::Space(api.id.to_string());
     let ui = *start(&manager, &repo, "ui", vec![blocker]).await.workspace;
-    crate::daemon::quarantine::interrupted_operations(&manager.store)
-        .await
-        .unwrap();
+    manager.spaces.interrupted_operations().await.unwrap();
     let after = read(&manager, &ui).await;
     assert_eq!(after.state, WorkspaceState::Preparing);
     assert_eq!(after.error, None);

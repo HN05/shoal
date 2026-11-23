@@ -7,13 +7,15 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
+use crate::daemon::Records;
+
 use crate::{
     agent::Agent,
     config::{modes::ModeName, permissions::PermissionsConfig},
     model::SpaceKind,
     sessions::Origin,
     {
-        approvals::{ApprovalRequest, release_decided_by},
+        approvals::{ApprovalRequest, drop_worktree_requests, release_decided_by},
         scope::tokens,
         spaces::records as spaces,
     },
@@ -217,19 +219,15 @@ pub fn record_chat_conversion(
     id: &SpaceId,
     chat: ConvertedChat,
 ) -> Result<()> {
+    let ready = crate::store::exists(
+        tx,
+        "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
+        params![id, crate::state::WorkspaceState::Ready],
+    )?;
+    let running = crate::store::execution_state(tx, &chat.execution)?
+        == Some((id.to_owned(), crate::state::ExecutionState::Running));
     anyhow::ensure!(
-        crate::store::exists(
-            tx,
-            "SELECT 1 FROM workspaces JOIN executions ON executions.space_id=workspaces.id
-             WHERE workspaces.id=?1 AND workspaces.state=?2 AND executions.id=?3
-                AND executions.state=?4",
-            params![
-                id,
-                crate::state::WorkspaceState::Ready,
-                chat.execution,
-                crate::state::ExecutionState::Running
-            ],
-        )?,
+        ready && running,
         "the workspace's agent was stopped meanwhile; it stays a workspace"
     );
     let pending = Pending::Chat {
@@ -253,15 +251,10 @@ pub fn replace_chat(
     narrowing: &PermissionsConfig,
 ) -> Result<(ChatRow, ExecutionId)> {
     // A chat's executions run its agent and nothing else.
-    let execution: Option<ExecutionId> = tx
-        .query_row(
-            "SELECT executions.id FROM chats JOIN executions ON executions.space_id=chats.id
-             WHERE chats.id=?1 ORDER BY executions.rowid DESC LIMIT 1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let execution = execution.context("the chat was stopped meanwhile; it stays a chat")?;
+    let chat = crate::store::exists(tx, "SELECT 1 FROM chats WHERE id=?1", [id])?;
+    let execution = (crate::store::newest_execution(tx, id)?)
+        .filter(|_| chat)
+        .context("the chat was stopped meanwhile; it stays a chat")?;
     let row = chat_row(tx, id)?;
     forget_completion(tx, id)?;
     spaces::convert(tx, id, SpaceKind::Workspace, mode, narrowing)?;
@@ -289,13 +282,15 @@ pub fn relocated_chat(
 /// that workspace's row: its completion, threads, approval requests and
 /// unread messages return to the chat, and of its scope tokens only the
 /// chat's own stays.
-pub fn restore_chat(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
+pub fn restore_chat(
+    tx: &Transaction<'_>,
+    records: &dyn Records,
+    id: &SpaceId,
+    row: &ChatRow,
+) -> Result<()> {
     give_back_chat_row(tx, id, row)?;
     // The chat's agent, which has yet to move, runs on as the chat's.
-    tx.execute(
-        "DELETE FROM executions WHERE space_id=?1 AND agent IS NULL",
-        [id],
-    )?;
+    records.forget_command_executions(tx, id)?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
     forget_completion(tx, id)?;
     if let Some(completion) = &row.space_completion {
@@ -326,6 +321,7 @@ pub struct ConvertedChat {
 /// decided, given back to the user, since a stopped chat decides none.
 pub fn replace_workspace(
     tx: &Transaction<'_>,
+    records: &dyn Records,
     id: &SpaceId,
     chat: &ConvertedChat,
 ) -> Result<Vec<ApprovalRequest>> {
@@ -335,13 +331,11 @@ pub fn replace_workspace(
     // chat's agent carries a token of its own.
     tokens::clear(tx, id)?;
     tokens::issue_agent(tx, id)?;
-    // Requests bound to the worktree, its branch or its leases go with them.
-    tx.execute(
-        "DELETE FROM access_requests WHERE space_id=?1 AND target_key NOT LIKE 'action/%'",
-        [id],
-    )?;
+    drop_worktree_requests(tx, id)?;
     let released = release_decided_by(tx, id)?;
-    forget_executions(tx, id)?;
+    // Its executions, and the queue entries that restore or opened them, go
+    // too: the record a conversion keeps does not take them with it.
+    records.forget_executions(tx, id)?;
     forget_completion(tx, id)?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
     forget(tx, id)?;
@@ -352,15 +346,6 @@ pub fn replace_workspace(
 /// had: its record, which a conversion keeps, does not take it with it.
 fn forget_completion(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM space_completion WHERE space_id=?1", [id])?;
-    Ok(())
-}
-
-/// Delete the executions of the workspace `id`, which a chat replaces, and
-/// the queue entries that restore or opened them, which its record, which a
-/// conversion keeps, does not take with it.
-fn forget_executions(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
-    tx.execute("DELETE FROM executions WHERE space_id=?1", [id])?;
-    tx.execute("DELETE FROM agent_queue WHERE space_id=?1", [id])?;
     Ok(())
 }
 
