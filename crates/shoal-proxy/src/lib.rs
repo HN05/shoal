@@ -41,10 +41,9 @@ pub enum Event {
         wait: Option<Duration>,
         subagent: bool,
     },
-    /// The upstream answered again: a request the proxy retried succeeded,
-    /// or the first one after it gave up on an outage or found the quota
-    /// spent.
-    Recovered,
+    /// The upstream answered a request, which ends any outage: the account
+    /// is under no limit that refuses it.
+    Answered,
 }
 
 /// The header a client names the proxy's key in. Any local user can reach

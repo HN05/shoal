@@ -35,7 +35,7 @@ impl Agents {
         daemon.space(selector).await?;
         match limit {
             Some(limit) => self.keep_upstream_limit(execution, standing(limit, UnixTime::now())),
-            None => self.forget_upstream_limit(&execution, "its proxy cleared it"),
+            None => self.forget_upstream_limit(&execution, "its proxy is replaced or gone"),
         }
         self.agent_queue.wake();
         Ok(())

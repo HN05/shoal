@@ -136,7 +136,7 @@ impl Forwarder {
         loop {
             let failed = match self.attempt(request, attempt > 1).await {
                 Attempt::Answered(response) => {
-                    self.answered(attempt);
+                    self.answered();
                     return response;
                 }
                 Attempt::Failed(failed) => failed,
@@ -184,7 +184,8 @@ impl Forwarder {
     async fn send(&self, request: &Buffered) -> Attempt {
         let sent = match request.to_upstream(&self.upstream) {
             Ok(sent) => self.client.request(sent).await,
-            Err(error) => return Attempt::Answered(bad_gateway(&error)),
+            // The upstream never saw it, so it says nothing of the upstream.
+            Err(error) => return Attempt::Failed(Failed::gateway(Failure::Other, &error)),
         };
         let response = match sent {
             Ok(response) => response,
@@ -202,12 +203,10 @@ impl Forwarder {
         }
     }
 
-    /// An answer ends the outage; one that took retries, or the first after
-    /// a request gave up on the outage, is a recovery.
-    fn answered(&self, attempt: u32) {
-        if self.outage.ended() || attempt > 1 {
-            self.report(Event::Recovered);
-        }
+    /// An answer ends the outage, if any.
+    fn answered(&self) {
+        self.outage.ended();
+        self.report(Event::Answered);
     }
 
     /// The wait before trying again after `failed`, reported; `None` when

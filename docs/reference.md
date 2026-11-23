@@ -3063,7 +3063,9 @@ each such entry waits with `memory_kept`. While the [proxy](#agents) of a runnin
 agent finds its tool's upstream rate-limited or out of quota, queued agents of
 that tool wait with `upstream_limit` and others start ahead: until the reset
 the upstream names, or, without one, 15 minutes after the proxy last met the
-limit, unless a request through it succeeds first. An entry queued from another host's pane, block
+limit, unless a request through any proxy of that tool succeeds first. The
+daemon log names each limit a proxy reports, with its execution, kind and end,
+and when it lifts. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. An admitted agent keeps its slot until it

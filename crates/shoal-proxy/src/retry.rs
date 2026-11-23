@@ -185,11 +185,9 @@ impl Outage {
         }
     }
 
-    /// A request succeeded, so the next failure starts a new outage;
-    /// whether one was under way.
-    pub(crate) fn ended(&self) -> bool {
-        let previous = std::mem::take(&mut *self.state.lock().unwrap());
-        !matches!(previous, State::Up)
+    /// A request succeeded, so the next failure starts a new outage.
+    pub(crate) fn ended(&self) {
+        *self.state.lock().unwrap() = State::Up;
     }
 }
 

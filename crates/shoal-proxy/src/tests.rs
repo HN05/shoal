@@ -241,7 +241,7 @@ async fn requests_reach_the_upstream_with_their_own_credentials() {
     assert_eq!(requests[0].headers["x-api-key"], "secret");
     assert_eq!(requests[0].headers["host"], upstream.addr.to_string());
     assert_eq!(requests[0].body, r#"{"model":"m"}"#);
-    assert!(drain(&mut events).is_empty());
+    assert_eq!(drain(&mut events), [Event::Answered]);
 }
 
 #[tokio::test]
@@ -296,7 +296,7 @@ async fn transient_failures_are_retried_until_the_upstream_recovers() {
                 attempt: 2,
                 wait: RETRYING.first_wait * 2,
             },
-            Event::Recovered,
+            Event::Answered,
         ]
     );
 }
@@ -413,7 +413,7 @@ async fn an_overload_before_any_content_is_retried_unseen() {
                 attempt: 1,
                 wait: RETRYING.first_wait,
             },
-            Event::Recovered,
+            Event::Answered,
         ]
     );
 
@@ -426,7 +426,7 @@ async fn an_overload_before_any_content_is_retried_unseen() {
     let (status, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, format!("{RESPONSE_CREATED}{RESPONSE_CONTENT}"));
-    assert_eq!(drain(&mut events).last(), Some(&Event::Recovered));
+    assert_eq!(drain(&mut events).last(), Some(&Event::Answered));
 }
 
 #[tokio::test]
@@ -438,7 +438,8 @@ async fn a_failure_after_content_reaches_the_agent_as_it_came() {
     let (_, _, body) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
     assert_eq!(body, stream);
     assert_eq!(upstream.requests().len(), 1);
-    assert!(drain(&mut events).is_empty());
+    // The upstream answered: the failure came after content.
+    assert_eq!(drain(&mut events), [Event::Answered]);
 }
 
 #[tokio::test]
@@ -568,7 +569,7 @@ async fn a_comment_that_keeps_a_stream_alive_is_no_content() {
     let (addr, mut events) = proxy(upstream.url("")).await;
     let (_, _, body) = send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
     assert_eq!(body, complete);
-    assert_eq!(drain(&mut events).last(), Some(&Event::Recovered));
+    assert_eq!(drain(&mut events).last(), Some(&Event::Answered));
 }
 
 #[tokio::test]
@@ -844,27 +845,6 @@ async fn a_spent_quota_ends_the_turn_at_once_in_either_form() {
 }
 
 #[tokio::test]
-async fn the_first_answer_after_a_spent_quota_is_a_recovery() {
-    let upstream = FakeUpstream::start(|received| match received.len() {
-        1 => reply(429, r#"{"error":{"code":"insufficient_quota"}}"#),
-        _ => reply(200, "done"),
-    })
-    .await;
-    let (addr, mut events) = proxy(upstream.url("")).await;
-    send(addr, Request::post("/responses"), "{}").await;
-    assert!(matches!(
-        drain(&mut events)[..],
-        [Event::Failed {
-            failure: Failure::Exhausted,
-            ..
-        }]
-    ));
-    // Its owner learns the quota is no longer spent.
-    send(addr, Request::post("/responses"), "{}").await;
-    assert_eq!(drain(&mut events), [Event::Recovered]);
-}
-
-#[tokio::test]
 async fn a_subagents_request_and_its_failure_say_they_were_a_subagents() {
     let upstream = FakeUpstream::start(|_| {
         reply(
@@ -894,30 +874,6 @@ async fn a_subagents_request_and_its_failure_say_they_were_a_subagents() {
             "{header:?}: {events:?}"
         );
     }
-}
-
-#[tokio::test]
-async fn the_first_answer_after_giving_up_is_a_recovery() {
-    let upstream = FakeUpstream::start(|received| match received.len() {
-        1 => reply(
-            429,
-            r#"{"error":{"type":"usage_limit_reached","resets_in_seconds":7200}}"#,
-        ),
-        _ => reply(200, "done"),
-    })
-    .await;
-    let (addr, mut events) = proxy(upstream.url("")).await;
-    let (status, _, _) = send(addr, Request::post("/responses"), "{}").await;
-    assert_eq!(status.as_u16(), 429);
-    assert!(matches!(drain(&mut events)[..], [Event::Failed { .. }]));
-    // A request that succeeds at once still ends the outage the proxy gave
-    // up on, so its owner forgets the reset.
-    let (status, _, body) = send(addr, Request::post("/responses"), "{}").await;
-    assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
-    assert_eq!(drain(&mut events), [Event::Recovered]);
-    // Later answers, with no outage, are not.
-    send(addr, Request::post("/responses"), "{}").await;
-    assert!(drain(&mut events).is_empty());
 }
 
 #[tokio::test]

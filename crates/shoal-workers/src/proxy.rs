@@ -233,6 +233,8 @@ pub(super) struct Sent {
     reset: Option<UnixTime>,
     /// The limit the upstream is under, with when it was sent.
     limit: Option<(shoal_protocol::executions::UpstreamLimit, UnixTime)>,
+    /// When an answer of the upstream's was last sent.
+    answered: Option<UnixTime>,
     /// When a subagent's request was last sent.
     subagent_request: Option<UnixTime>,
 }
@@ -241,6 +243,11 @@ pub(super) struct Sent {
 /// counts a limit without a named end from when it was last met and learns
 /// again one it lost in a restart.
 const LIMIT_RESENT_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// How long after an answer of the upstream's is sent the next one goes:
+/// it lifts the limits other agents of the tool met, which hold back its
+/// queued agents, so one a minute lifts them soon enough.
+const ANSWER_RESENT_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// How long after a subagent's request is sent the next one goes: the
 /// daemon counts a subagent whose stop was lost until none has passed for
@@ -280,8 +287,8 @@ impl Reporter {
                         self.turn_failed(turn_failure(failure)).await;
                     }
                 }
-                // An upstream that answers again refuses nothing until.
-                Event::Recovered => self.recovered().await,
+                // An upstream that answers refuses nothing until.
+                Event::Answered => self.answered().await,
                 Event::SubagentRequest => self.subagent_request().await,
             }
         }
@@ -302,16 +309,36 @@ impl Reporter {
         self.sent.retry |= self.retried(Some(retry)).await;
     }
 
-    /// Clear what the daemon holds of an outage that ended, each report on
-    /// its own, keeping in [`Sent`] any clear it did not take, so the next
-    /// event's reports go out as they should.
-    async fn recovered(&mut self) {
+    /// Clear what the daemon holds of an outage the upstream's answer
+    /// ended, each report on its own, keeping in [`Sent`] any clear it did
+    /// not take, so the next event's reports go out as they should, and
+    /// tell it the upstream answers.
+    async fn answered(&mut self) {
         self.retry_done().await;
         if self.sent.reset.is_some() && self.reset_cleared().await {
             self.sent.reset = None;
         }
-        if self.sent.limit.is_some() && self.limit_sent(None).await {
+        self.answer().await;
+    }
+
+    /// Tell the daemon the upstream answered, which lifts the limits the
+    /// tool's proxies met, this one's among them: at once while it shows a
+    /// limit of this one's, and otherwise once [`ANSWER_RESENT_AFTER`] has
+    /// passed since the last.
+    async fn answer(&mut self) {
+        let now = (self.now)();
+        let recent =
+            (self.sent.answered).is_some_and(|sent| now.duration_since(sent) < ANSWER_RESENT_AFTER);
+        if self.sent.limit.is_none() && recent {
+            return;
+        }
+        let report = crate::protocol::AgentMethod::ReportUpstreamAnswered {
+            workspace: SpaceSelector::id(&self.workspace),
+            execution: self.execution.clone(),
+        };
+        if self.send(report).await {
             self.sent.limit = None;
+            self.sent.answered = Some(now);
         }
     }
 

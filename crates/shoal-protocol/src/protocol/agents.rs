@@ -104,7 +104,7 @@ pub enum AgentMethod {
     },
     /// The limit the upstream of `execution`'s proxy is under, which its
     /// wrapper reports so queued agents of the same tool wait it out;
-    /// `None` once the upstream answers again.
+    /// `None` once another proxy replaces it or none runs.
     ReportUpstreamLimit {
         workspace: SpaceSelector,
         execution: ExecutionId,

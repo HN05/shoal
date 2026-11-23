@@ -235,9 +235,9 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
         limited.clone(),
         // Each request the given-up outage fails names the same reset.
         limited,
-        Event::Recovered,
+        Event::Answered,
         // Nothing is left to clear.
-        Event::Recovered,
+        Event::Answered,
     ] {
         sender.send(event).unwrap();
     }
@@ -251,8 +251,8 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
         now: || UnixTime::from_seconds(1_700_000_000),
     };
     reporter.run(events).await;
-    // The failure took the retry away, so recovery clears the reset and
-    // limit alone.
+    // The failure took the retry away, so the answer clears the reset
+    // and, by reporting the answer, the limit alone.
     assert_eq!(
         *methods.lock().unwrap(),
         [
@@ -261,7 +261,7 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
             "report_upstream_reset",
             "report_upstream_limit",
             "report_upstream_reset",
-            "report_upstream_limit",
+            "report_upstream_answered",
         ]
     );
 }
@@ -285,7 +285,7 @@ async fn a_rate_limit_or_spent_quota_is_reported_once_until_the_upstream_answers
         wait: None,
         subagent: false,
     };
-    for event in [retrying(1), retrying(2), spent, Event::Recovered] {
+    for event in [retrying(1), retrying(2), spent, Event::Answered] {
         sender.send(event).unwrap();
     }
     drop(sender);
@@ -307,7 +307,7 @@ async fn a_rate_limit_or_spent_quota_is_reported_once_until_the_upstream_answers
             "report_proxy_retry",
             "report_proxy_retry",
             "report_upstream_limit",
-            "report_upstream_limit",
+            "report_upstream_answered",
         ]
     );
 }
@@ -345,6 +345,52 @@ async fn a_limit_the_proxy_keeps_meeting_is_sent_again_after_a_while() {
     assert_eq!(
         *methods.lock().unwrap(),
         ["report_upstream_limit", "report_upstream_limit"]
+    );
+}
+
+#[tokio::test]
+async fn answers_are_reported_once_a_minute_or_at_once_after_a_limit() {
+    use shoal_proxy::{Event, Failure};
+    use std::sync::atomic::{AtomicI64, Ordering};
+    static CLOCK: AtomicI64 = AtomicI64::new(1_700_000_000);
+    let root = tempfile::tempdir().unwrap();
+    let paths =
+        crate::client::connection::CommandPaths::from(crate::paths::Paths::for_test(root.path()));
+    let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    let spent = Event::Failed {
+        failure: Failure::Exhausted,
+        in_stream: false,
+        wait: None,
+        subagent: false,
+    };
+    for event in [
+        Event::Answered,
+        Event::Answered,
+        spent,
+        Event::Answered,
+        Event::Answered,
+    ] {
+        sender.send(event).unwrap();
+    }
+    drop(sender);
+    let reporter = Reporter {
+        paths: paths.clone(),
+        workspace: "w".into(),
+        execution: "e".into(),
+        ends_turns: false,
+        sent: Default::default(),
+        // Each reading is half a minute after the last.
+        now: || UnixTime::from_seconds(CLOCK.fetch_add(30, Ordering::Relaxed)),
+    };
+    reporter.run(events).await;
+    assert_eq!(
+        *methods.lock().unwrap(),
+        [
+            "report_upstream_answered",
+            "report_upstream_limit",
+            "report_upstream_answered",
+        ]
     );
 }
 
@@ -393,7 +439,7 @@ async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
         wait: Some(std::time::Duration::from_secs(7200)),
         subagent: false,
     };
-    for event in [limited.clone(), limited, Event::Recovered] {
+    for event in [limited.clone(), limited, Event::Answered] {
         sender.send(event).unwrap();
     }
     drop(sender);
@@ -413,7 +459,7 @@ async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
             "report_upstream_limit",
             "report_upstream_reset",
             "report_upstream_reset",
-            "report_upstream_limit",
+            "report_upstream_answered",
         ]
     );
 }
@@ -438,7 +484,7 @@ async fn a_recovery_the_daemon_took_in_part_keeps_what_it_did_not() {
         attempt: 1,
         wait: std::time::Duration::from_secs(1),
     };
-    for event in [limited.clone(), retrying, Event::Recovered, limited] {
+    for event in [limited.clone(), retrying, Event::Answered, limited] {
         sender.send(event).unwrap();
     }
     drop(sender);
@@ -461,7 +507,7 @@ async fn a_recovery_the_daemon_took_in_part_keeps_what_it_did_not() {
             "report_proxy_retry",
             "refused report_proxy_retry",
             "report_upstream_reset",
-            "report_upstream_limit",
+            "report_upstream_answered",
             "report_proxy_retry",
             "report_upstream_reset",
             "report_upstream_limit",
