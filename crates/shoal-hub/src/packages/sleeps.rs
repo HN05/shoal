@@ -183,8 +183,8 @@ pub(super) fn asleep_members(tx: &Transaction<'_>) -> Result<HashSet<MemberId>> 
     Ok(ids.collect::<rusqlite::Result<_>>()?)
 }
 
-/// Forget `member`'s sleep, as once its link opened.
-fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
+/// Forget `member`'s sleep, as once its link opened or the hub revoked it.
+pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute(
         "UPDATE hub_members SET asleep_at=NULL WHERE id=?1",
         [member],

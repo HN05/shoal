@@ -18,7 +18,7 @@ use std::{
 
 use anyhow::Result;
 use rusqlite::{Transaction, params};
-use shoal_daemon_base::alerts::About;
+use shoal_daemon_base::{alerts::About, log::elapsed};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::{
     alerts::AlertKind,
@@ -153,8 +153,10 @@ impl Hub {
                         .collect();
                     let (hub, daemon, from) =
                         (self.clone(), daemon.clone(), sleeper.member.clone());
+                    let asleep_at = sleeper.asleep_at;
                     tokio::spawn(async move {
-                        hub.take_over_group(&*daemon, &from, (group, labels)).await
+                        let from = (&from, asleep_at);
+                        hub.take_over_group(&*daemon, from, (group, labels)).await
                     });
                 }
             }
@@ -162,14 +164,14 @@ impl Hub {
         Ok(())
     }
 
-    /// Move `group`, spaces of the sleeping machine `from` that the user
-    /// knows by `labels`, to the machine placement chooses, one after
-    /// another, telling the user where they went; what does not go stays
-    /// on `from`.
+    /// Move `group`, spaces of the machine `from`, asleep since
+    /// `asleep_at`, that the user knows by `labels`, to the machine
+    /// placement chooses, one after another, telling the user where they
+    /// went; what does not go stays on `from`.
     async fn take_over_group(
         &self,
         daemon: &dyn Daemon,
-        from: &MemberId,
+        (from, asleep_at): (&MemberId, UnixTime),
         (group, labels): (Group, Vec<String>),
     ) {
         let decision = match self.place_elsewhere(daemon, from, group.start).await {
@@ -205,8 +207,9 @@ impl Hub {
             went.push(label.as_str());
         }
         if !went.is_empty() {
+            let slept = UnixTime::now().duration_since(asleep_at);
             let message = self
-                .taken_over_message(daemon, from, &went, &decision.name)
+                .taken_over_message(daemon, (from, slept), &went, &decision.name)
                 .await;
             (self.notify(
                 daemon,
@@ -241,18 +244,19 @@ impl Hub {
     }
 
     /// What the user reads of the spaces `went`, which the hub took over
-    /// from the sleeping machine `from` to the machine named `to`.
+    /// from the machine `from`, asleep for `slept`, to the machine named
+    /// `to`.
     async fn taken_over_message(
         &self,
         daemon: &dyn Daemon,
-        from: &MemberId,
+        (from, slept): (&MemberId, Duration),
         went: &[&str],
         to: &str,
     ) -> String {
         let from = self.member_name(daemon, from).await;
         format!(
-            "Machine {from} has slept for {} minutes while its spaces had work to do, so {} continue on machine {to}; {from} removes its copies once it wakes",
-            AWAY_FOR.as_secs() / 60,
+            "Machine {from} has slept for {} while its spaces had work to do, so {} continue on machine {to}; {from} removes its copies once it wakes",
+            elapsed(slept),
             went.join(", "),
         )
     }

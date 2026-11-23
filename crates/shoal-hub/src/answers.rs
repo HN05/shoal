@@ -337,6 +337,7 @@ impl Hub {
                 directory::forget(tx, &member.id)?;
                 super::queue::forget(tx, &member.id)?;
                 takeovers::forget(tx, &member.id)?;
+                packages::forget_sleep(tx, &member.id)?;
                 packages::forget(tx, &member.id)?;
                 Ok(member)
             })
@@ -359,6 +360,7 @@ impl Hub {
                 directory::forget(tx, &member)?;
                 super::queue::forget(tx, &member)?;
                 takeovers::forget(tx, &member)?;
+                packages::forget_sleep(tx, &member)?;
                 packages::forget(tx, &member)
             })
             .await?;

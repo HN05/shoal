@@ -16,7 +16,7 @@ pub(crate) mod takeovers;
 
 pub(crate) use handovers::Handovers;
 pub(crate) use keeping::{Continuation, Kept, Sent, forget};
-pub(crate) use sleeps::Sleeps;
+pub(crate) use sleeps::{Sleeps, forget as forget_sleep};
 
 #[cfg(test)]
 mod tests;
