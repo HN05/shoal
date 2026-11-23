@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::approvals::SecretSpecification;
+use crate::{approvals::SecretSpecification, config::value::Value};
 
 /// A request to fetch a configured secret.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -40,16 +40,18 @@ pub struct SecretCatalog {
     pub secrets: Vec<CatalogSecret>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Secret {
-    /// Argument array whose standard output is the value.
-    pub command: Vec<String>,
+    pub value: Value,
     /// Programs that receive the value each time they run; empty gives it to
     /// the agent's environment instead.
+    #[serde(default)]
     pub tools: Vec<String>,
     /// Scoped callers fetch it only after the user approves a request.
+    #[serde(default)]
     pub requires_approval: bool,
+    #[serde(default)]
     pub approval_lifetime: Lifetime,
 }
 

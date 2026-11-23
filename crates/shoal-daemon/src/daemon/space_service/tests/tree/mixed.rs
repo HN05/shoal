@@ -84,7 +84,9 @@ pub(super) async fn decider(
             Target::Secret(secret.into()),
             "default",
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
-                command: vec!["token-source".into()],
+                value: shoal_protocol::config::value::Value::Cmd {
+                    cmd: vec!["token-source".into()],
+                },
                 tools: vec![],
             }),
             Lifetime::Workspace,

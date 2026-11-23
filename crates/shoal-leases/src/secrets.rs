@@ -76,6 +76,37 @@ impl Leases {
         Ok(outcome)
     }
 
+    /// The secret `name` of the workspace `selector`, still configured as
+    /// `source`, once `caller` may fetch it: at once for unscoped callers
+    /// and ungated secrets, otherwise under an approved grant.
+    pub async fn granted_secret(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        name: String,
+        source: SecretSpecification,
+        caller: Option<&Caller>,
+    ) -> Result<Secret> {
+        let workspace = daemon.workspace(selector).await?;
+        let secret = (self.configured_secret(daemon, &workspace, &name, Some(&source))).await?;
+        let request = SecretRequest {
+            reason: None,
+            source: Some(source),
+        };
+        match self
+            .acquire_secret(daemon, selector, name.clone(), request, caller)
+            .await?
+        {
+            Allocation::Granted(_) => Ok(secret),
+            Allocation::Approval(pending) => Err(anyhow!(
+                "secrets.{name} needs approval {}, which is {}",
+                pending.number,
+                pending.status
+            )),
+            Allocation::Busy(message) => Err(anyhow!(message)),
+        }
+    }
+
     /// Cancel the secret's request or end its lease grant; a workspace grant
     /// stays reusable until the workspace is removed.
     pub async fn release_secret(

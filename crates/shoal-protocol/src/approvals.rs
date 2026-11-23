@@ -264,12 +264,13 @@ pub struct UnmergeSpecification {
     pub result: CommitId,
 }
 
-/// A secret grant covers the configured source; changing the command or the
+/// A secret grant covers the configured source; changing the value or the
 /// tools it serves needs a new decision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecretSpecification {
-    pub command: Vec<String>,
+    /// The value as [`Value::recorded`] keeps it.
+    pub value: crate::config::value::Value,
     pub tools: Vec<String>,
 }
 

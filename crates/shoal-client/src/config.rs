@@ -1,10 +1,15 @@
 //! Config: the repository layers of the config of a space or a repository,
-//! which the caller resolves under the global files it reads.
+//! which the caller resolves under the global files it reads, and the
+//! values of settings it cannot read itself.
 use anyhow::Result;
 use serde::de::DeserializeOwned;
 
-use crate::connection::{Daemon, Prepared};
-use shoal_protocol::protocol::{ConfigMethod, ConfigTarget, RepositoryLayers};
+use crate::connection::{Daemon, Prepared, request};
+use shoal_protocol::{
+    config::value::{Resolved, ValueKey},
+    protocol::{ConfigMethod, ConfigTarget, RepositoryLayers},
+    space_names::SpaceSelector,
+};
 
 /// The repository configuration layers that apply to `target`, below the
 /// global configuration, read as `L`.
@@ -20,4 +25,14 @@ pub async fn config_layers<L: DeserializeOwned>(
 /// space whose layers it reads judges it.
 pub fn layered_config(target: ConfigTarget) -> Prepared<RepositoryLayers> {
     Prepared::new(ConfigMethod::LayeredConfig { target })
+}
+
+/// The value of `key` for `space`, which the caller cannot read itself.
+pub async fn config_value(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    key: ValueKey,
+) -> Result<String> {
+    let Resolved(value) = request(daemon, ConfigMethod::ConfigValue { space, key }).await?;
+    Ok(value)
 }

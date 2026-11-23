@@ -4,8 +4,12 @@ use super::*;
 
 fn secret(command: &[&str]) -> Secret {
     Secret {
-        command: command.iter().map(|word| word.to_string()).collect(),
-        ..Default::default()
+        value: Value::Cmd {
+            cmd: command.iter().map(|word| word.to_string()).collect(),
+        },
+        tools: Vec::new(),
+        requires_approval: false,
+        approval_lifetime: Default::default(),
     }
 }
 
@@ -32,19 +36,23 @@ fn names_and_commands_are_validated() {
     assert!(validate(&Secrets::from([("TOKEN".into(), gated)])).is_ok());
 }
 
+fn secret_value(command: &[&str]) -> Value {
+    secret(command).value
+}
+
 #[tokio::test]
 async fn fetch_strips_one_line_break_and_rejects_failures() {
-    let value = fetch("TOKEN", &secret(&["printf", "a b\\n\\n"]), None)
+    let value = fetch("TOKEN", &secret_value(&["printf", "a b\\n\\n"]), None)
         .await
         .unwrap();
     assert_eq!(value, "a b\n");
-    let value = fetch("TOKEN", &secret(&["printf", "value\\r\\n"]), None)
+    let value = fetch("TOKEN", &secret_value(&["printf", "value\\r\\n"]), None)
         .await
         .unwrap();
     assert_eq!(value, "value");
     for command in [&["false"][..], &["printf", "\\n"], &["printf", "a\\0b"]] {
         assert!(
-            fetch("TOKEN", &secret(command), None).await.is_err(),
+            fetch("TOKEN", &secret_value(command), None).await.is_err(),
             "{command:?}"
         );
     }
@@ -64,6 +72,24 @@ async fn launchers_that_cannot_join_path_stop_the_launch() {
         format!("{error:#}").contains("cannot go on PATH"),
         "{error:#}"
     );
+}
+
+#[tokio::test]
+async fn launchers_keep_a_written_value_only_as_its_digest() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path().join("state"));
+    std::fs::create_dir_all(&paths.state).unwrap();
+    let mut scoped = secret(&["true"]);
+    scoped.value = Value::Written("s3cret".into());
+    scoped.tools = vec!["agent-browser".into()];
+    let secrets = Secrets::from([("TOKEN".into(), scoped.clone())]);
+    let launch = Launch::prepare(&secrets, &paths).await.unwrap();
+
+    let launchers = launch.launchers.as_ref().unwrap().path();
+    let manifest = std::fs::read_to_string(launchers.join(MANIFEST)).unwrap();
+    assert!(!manifest.contains("s3cret"), "{manifest}");
+    let manifest: Manifest = serde_json::from_str(&manifest).unwrap();
+    assert_eq!(manifest["TOKEN"], specification(&scoped));
 }
 
 #[tokio::test]
@@ -93,13 +119,13 @@ async fn apply_records_the_names_hooks_drop() {
 #[test]
 fn agents_never_receive_a_secret_a_webhook_signs_with() {
     let config = crate::config::Config::from_toml(
-        "[secrets.GLOBAL_HOOK]\ncommand = ['true']\n[secrets.API_KEY]\ncommand = ['true']\n\
+        "[secrets.GLOBAL_HOOK]\nvalue = { cmd = ['true'] }\n[secrets.API_KEY]\nvalue = { cmd = ['true'] }\n\
          [triggers.forge]\non = 'webhook'\nsecret = 'GLOBAL_HOOK'\nsignature = 'forgejo'\n",
     )
     .unwrap();
     let layers = crate::config::repo::ConfigLayers {
         local_config: crate::config::repo::parse(
-            "[secrets.REPO_HOOK]\ncommand = ['true']\n[secrets.CHECKOUT_HOOK]\ncommand = ['true']\n\
+            "[secrets.REPO_HOOK]\nvalue = { cmd = ['true'] }\n[secrets.CHECKOUT_HOOK]\nvalue = { cmd = ['true'] }\n\
              [triggers.issues]\non = 'webhook'\nsecret = 'REPO_HOOK'\nsignature = 'github'\n",
         )
         .unwrap(),

@@ -510,7 +510,7 @@ fn specifications_round_trip_recorded_json_and_reject_mixed_shapes() -> Result<(
                 "range": [3000, 3100]}),
         serde_json::json!({"profile": {"requires_approval": true, "approval_lifetime": "workspace",
                 "device": "iPhone", "runtime": "iOS"}, "clean": false}),
-        serde_json::json!({"command": ["op", "read", "op://Agents/key"], "tools": ["agent-browser"]}),
+        serde_json::json!({"value": {"cmd": ["op", "read", "op://Agents/key"]}, "tools": ["agent-browser"]}),
         serde_json::json!({"branch": "feature", "head": "abc", "method": "squash",
                 "message": "Fix login"}),
         serde_json::json!({"hold": "review"}),
@@ -539,7 +539,7 @@ fn specifications_round_trip_recorded_json_and_reject_mixed_shapes() -> Result<(
                 "member": "lock"}),
         serde_json::json!({"preferred": null, "env": "PORT_WEB", "on_conflict": "maybe",
                 "range": [3000, 3100]}),
-        serde_json::json!({"command": ["op"], "tools": [], "head": "abc"}),
+        serde_json::json!({"value": {"cmd": ["op"]}, "tools": [], "head": "abc"}),
         serde_json::json!({"branch": "feature"}),
         serde_json::json!({"branch": "feature", "head": "abc"}),
     ] {

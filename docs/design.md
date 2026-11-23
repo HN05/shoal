@@ -35,19 +35,21 @@ policy puts it, decided once, where its worktree goes, while each machine's
 own queue and admission decide when its agent starts. `shoal start` and `shoal open`
 are thin launchers around the generic execution path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
-daemon's login. `[secrets]` names
-user commands that fetch values in the CLI, for an agent's environment at launch
-or, for listed tools, through private PATH launchers each time the tool runs;
-the daemon fetches only a webhook trigger's, to check each request's
-signature, and neither it nor state keeps a value; hooks drop them. A tool secret
-may require approval: the launcher fetches it only after the daemon confirms a
-workspace grant bound to its command and tools, and fails instead of waiting.
+daemon's login. `[secrets]` gives
+values the CLI reads, for an agent's environment at launch
+or, for listed tools, through private PATH launchers each time the tool runs,
+which take a written one from the daemon so no file holds it;
+the daemon reads only a webhook trigger's, to check each request's
+signature, and no state keeps a value; hooks drop them. A tool secret
+may require approval: the launcher reads it only after the daemon confirms a
+workspace grant bound to its value, a written one as its digest, and tools,
+and fails instead of waiting.
 Environment secrets cannot require approval, since they are fetched before the
 agent can ask. A setting
-that takes its value from outside the config, such as a proxy's upstream key,
-shares one form: as written, `{ env }` from the agent's environment, or `{ cmd }`
-run like a secret's command when the agent starts, and Shoal prints no written
-value. Forge changes Shoal
+that takes its value from outside the config, such as a secret or a proxy's
+upstream key, shares one form: as written, `{ env }` from the agent's
+environment, or `{ cmd }` run when the agent starts, and Shoal prints no
+written value. Forge changes Shoal
 makes for a workspace act as the agent too, with the host's configured
 `agent_token`, and so does the Git of agents and of the pushes Shoal runs for
 them over HTTPS to that host, through a credential helper the agent's Git

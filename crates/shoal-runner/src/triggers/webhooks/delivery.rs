@@ -32,7 +32,7 @@ const SECRET_TIMEOUT: Duration = Duration::from_secs(15);
 /// The value of the secret `name`, which fails once its command takes
 /// longer than [`SECRET_TIMEOUT`], as one waiting for an unlock would.
 pub(super) async fn fetch_secret(name: &str, secret: &Secret) -> Result<OsString> {
-    let fetched = tokio::time::timeout(SECRET_TIMEOUT, secrets::fetch(name, secret, None));
+    let fetched = tokio::time::timeout(SECRET_TIMEOUT, secrets::fetch(name, &secret.value, None));
     match fetched.await {
         Ok(value) => value,
         Err(_) => anyhow::bail!(

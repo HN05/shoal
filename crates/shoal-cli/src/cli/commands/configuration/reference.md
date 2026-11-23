@@ -694,22 +694,23 @@ request itself. `[gate.issue_open]`, `[gate.pr_open]`,
 
 ```toml
 [secrets.OPENAI_API_KEY]
-command = ["security", "find-generic-password", "-s", "shoal-agent-openai", "-w"]
+value = { cmd = ["security", "find-generic-password", "-s", "shoal-agent-openai", "-w"] }
 
 [secrets.AGENT_BROWSER_ENCRYPTION_KEY]
-command = ["op", "read", "op://Agents/agent-browser/key"]
+value = { cmd = ["op", "read", "op://Agents/agent-browser/key"] }
 tools = ["agent-browser"]
 requires_approval = false
 approval_lifetime = "lease"   # Or "workspace"
 ```
 
-Each entry is named after the variable that carries the value, and its `command`
-is an argument array whose standard output, less one trailing line break, is
-the value. Without `tools`, the value joins every tracked agent's environment;
+Each entry is named after the variable that carries the value, and its `value`
+takes the [value form](#files-and-layers) of a secret: written out,
+`{ env }` from the environment of the process that reads it, or `{ cmd }`,
+whose standard output, less one trailing line break, is the value. Without `tools`, the value joins every tracked agent's environment;
 with `tools`, only runs of those programs receive it. Only a tool-scoped secret
 takes `requires_approval` and `approval_lifetime`, as a
-[protected resource](#approvals) does. Shoal stores the commands, never the
-values. See [agent secrets](../../../../../../docs/reference.md#agent-secrets).
+[protected resource](#approvals) does. Shoal's state records where a value
+comes from, a written one as its digest, never the value. See [agent secrets](../../../../../../docs/reference.md#agent-secrets).
 
 ### Sleep
 

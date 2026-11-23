@@ -4665,17 +4665,49 @@ fn copies_of_spaces_taken_over_from_their_machines_count_as_handed_over() -> Res
 
 #[test]
 fn a_thread_a_space_opened_names_that_space_as_its_opener() -> Result<()> {
-    let mut db = historical_database(SCHEMA_VERSION - 1)?;
+    let mut db = historical_database(285)?;
     db.execute_batch(
         "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener)
             VALUES (1,'workspace',1,1,'question','Which?',1,'space'),
                 (2,'workspace',1,2,'question','Which?',1,'user');",
     )?;
-    migrate_to(&mut db, SCHEMA_VERSION)?;
+    migrate_to(&mut db, 286)?;
     let openers: Vec<Option<String>> = db
         .prepare("SELECT opener_id FROM threads ORDER BY id")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(openers, [Some("workspace".to_owned()), None]);
+    Ok(())
+}
+
+#[test]
+fn migrated_secret_grants_bind_the_command_as_a_value() -> Result<()> {
+    let mut db = historical_database(286)?;
+    db.execute_batch(
+        r#"INSERT INTO access_requests(id,space_id,target_key,name,record,number) VALUES
+            ('secret','workspace','secret/TOKEN','TOKEN',
+                '{"specification":{"command":["op","read"],"tools":["gh"]}}',1),
+            ('push','workspace','push','push','{"specification":{"commit":"ccc"}}',2);"#,
+    )?;
+
+    migrate(&mut db)?;
+
+    let specifications: Vec<(String, String)> = db
+        .prepare(
+            "SELECT id,json_extract(record,'$.specification') FROM access_requests ORDER BY id",
+        )?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let specification = |id: &str, json: serde_json::Value| (id.to_owned(), json.to_string());
+    assert_eq!(
+        specifications,
+        [
+            specification("push", serde_json::json!({"commit": "ccc"})),
+            specification(
+                "secret",
+                serde_json::json!({"tools": ["gh"], "value": {"cmd": ["op", "read"]}})
+            ),
+        ]
+    );
     Ok(())
 }

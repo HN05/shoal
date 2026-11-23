@@ -5,8 +5,8 @@ use shoal_protocol::approvals::DecisionStatus;
 /// A repository with a gated and an open secret, each read by `command`.
 fn secrets(command: &str) -> String {
     format!(
-        "[secrets.GATED]\ncommand = ['{command}']\ntools = ['agent-browser']\nrequires_approval = true\n\
-         [secrets.OPEN]\ncommand = ['{command}']\ntools = ['agent-browser']\n"
+        "[secrets.GATED]\nvalue = {{ cmd = ['{command}'] }}\ntools = ['agent-browser']\nrequires_approval = true\n\
+         [secrets.OPEN]\nvalue = {{ cmd = ['{command}'] }}\ntools = ['agent-browser']\n"
     )
 }
 
@@ -73,7 +73,9 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
     let asked = pending(request(&fixture, scoped, "GATED", Some("sign in")).await?);
     assert_eq!(asked.target, Target::Secret("GATED".into()));
     let token = SecretSpecification {
-        command: vec!["token".into()],
+        value: shoal_protocol::config::value::Value::Cmd {
+            cmd: vec!["token".into()],
+        },
         tools: vec!["agent-browser".into()],
     };
     assert_eq!(asked.specification, Specification::Secret(token.clone()));

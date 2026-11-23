@@ -18,6 +18,12 @@ pub enum ConfigMethod {
     /// The repository layer of the target's config, for the CLI to resolve
     /// against the global config it reads at launch.
     LayeredConfig { target: ConfigTarget },
+    /// The value of `key` for the space `space`, which a process there
+    /// cannot read itself. Answers with [`super::Body::ConfigValue`].
+    ConfigValue {
+        space: SpaceSelector,
+        key: crate::config::value::ValueKey,
+    },
 }
 
 impl ConfigMethod {
@@ -25,12 +31,15 @@ impl ConfigMethod {
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::TrackedConfig { .. } | Self::LayeredConfig { .. } => Forwarding::Online,
+            // Asked by a process of this machine, whose daemon reads it.
+            Self::ConfigValue { .. } => Forwarding::Never,
         }
     }
 
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
             Self::TrackedConfig { space }
+            | Self::ConfigValue { space, .. }
             | Self::LayeredConfig {
                 target: ConfigTarget::Space(space),
             } => Some(Target::Space(space)),

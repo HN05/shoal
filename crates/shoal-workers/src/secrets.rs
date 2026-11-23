@@ -8,8 +8,12 @@ use std::{
 };
 
 use crate::{client::connection::CommandPaths, env};
-use shoal_core::secrets::{MANIFEST, Secret, exported_names, fetch, specification};
-use shoal_protocol::{secrets::Secrets, space_names::SpaceSelector};
+use shoal_core::secrets::{MANIFEST, Manifest, exported_names, fetch};
+use shoal_protocol::{
+    approvals::SecretSpecification,
+    config::value::{Value, ValueKey},
+    space_names::SpaceSelector,
+};
 
 /// Run `tool` with the secrets configured for it in place of the launcher
 /// in `launchers`: the next `tool` on PATH, which may be an enclosing
@@ -27,11 +31,11 @@ pub async fn run_tool(
     let program = crate::fsutil::executables::find_executable(OsStr::new(tool), &search)
         .with_context(|| format!("{tool} is not on PATH"))?;
     authorize(paths, tool, &served).await?;
-    let values = fetch_served(served, &search).await?;
+    let values = fetch_served(paths, tool, served, &search).await?;
     exec_with(&program, args, values)
 }
 
-fn read_manifest(launchers: &Path) -> Result<Secrets> {
+fn read_manifest(launchers: &Path) -> Result<Manifest> {
     let manifest = launchers.join(MANIFEST);
     serde_json::from_slice(
         &std::fs::read(&manifest).with_context(|| format!("read {}", manifest.display()))?,
@@ -39,7 +43,7 @@ fn read_manifest(launchers: &Path) -> Result<Secrets> {
     .with_context(|| format!("parse {}", manifest.display()))
 }
 
-fn served_to<'a>(secrets: &'a Secrets, tool: &str) -> Vec<(&'a String, &'a Secret)> {
+fn served_to<'a>(secrets: &'a Manifest, tool: &str) -> Vec<(&'a String, &'a SecretSpecification)> {
     secrets
         .iter()
         .filter(|(_, secret)| secret.tools.iter().any(|candidate| candidate == tool))
@@ -49,7 +53,11 @@ fn served_to<'a>(secrets: &'a Secrets, tool: &str) -> Vec<(&'a String, &'a Secre
 /// A scoped run asks the daemon about every secret, so current approval
 /// policy applies even when it changed after the agent started; unscoped
 /// callers need no approval.
-async fn authorize(paths: &CommandPaths, tool: &str, served: &[(&String, &Secret)]) -> Result<()> {
+async fn authorize(
+    paths: &CommandPaths,
+    tool: &str,
+    served: &[(&String, &SecretSpecification)],
+) -> Result<()> {
     if !must_authorize(
         tool,
         crate::process::scoped::inherits_scope(&paths.state),
@@ -74,16 +82,49 @@ fn must_authorize(tool: &str, inherited: bool, token: bool) -> Result<bool> {
     Ok(inherited)
 }
 
-/// Fetch each served value with PATH set to `search`.
+/// Fetch each served value, a command's with PATH set to `search`, and
+/// one written in the config from the daemon, since the manifest holds it
+/// only as its digest.
 async fn fetch_served<'a>(
-    served: Vec<(&'a String, &'a Secret)>,
+    paths: &CommandPaths,
+    tool: &str,
+    served: Vec<(&'a String, &'a SecretSpecification)>,
     search: &OsStr,
 ) -> Result<Vec<(&'a String, OsString)>> {
     let mut values = Vec::new();
-    for (name, secret) in served {
-        values.push((name, fetch(name, secret, Some(search)).await?));
+    for (name, source) in served {
+        let value = match &source.value {
+            Value::Written(_) => written_value(paths, tool, name, source).await?,
+            value => fetch(name, value, Some(search)).await?,
+        };
+        values.push((name, value));
     }
     Ok(values)
+}
+
+/// The value the config writes out for the secret `name`, which the
+/// daemon reads from the config it still has as `source`.
+async fn written_value(
+    paths: &CommandPaths,
+    tool: &str,
+    name: &str,
+    source: &SecretSpecification,
+) -> Result<OsString> {
+    let key = ValueKey::Secret {
+        name: name.to_owned(),
+        source: source.clone(),
+    };
+    let value = crate::client::config::config_value(paths, own_space(tool, name)?, key)
+        .await
+        .with_context(|| format!("{tool} needs secrets.{name}"))?;
+    Ok(value.into())
+}
+
+/// The space of the agent whose tool runs, which a launch names.
+fn own_space(tool: &str, name: &str) -> Result<SpaceSelector> {
+    let space = std::env::var(env::SPACE)
+        .with_context(|| format!("{tool} needs secrets.{name}, but its space is unknown"))?;
+    Ok(SpaceSelector::Id(SpaceId::from(space)))
 }
 
 /// Replace this process with `program`, adding the fetched values.
@@ -106,18 +147,16 @@ async fn confirm_grant(
     paths: &CommandPaths,
     tool: &str,
     name: &str,
-    secret: &Secret,
+    source: &SecretSpecification,
 ) -> Result<()> {
     use crate::protocol::{Body, SecretMethod};
     use shoal_protocol::{approvals::DecisionStatus, secrets::SecretRequest};
-    let workspace = std::env::var(env::SPACE)
-        .with_context(|| format!("{tool} needs secrets.{name}, but its space is unknown"))?;
     let method = SecretMethod::SecretAcquire {
-        workspace: SpaceSelector::Id(SpaceId::from(workspace)),
+        workspace: own_space(tool, name)?,
         name: name.to_owned(),
         request: SecretRequest {
             reason: None,
-            source: Some(specification(secret)),
+            source: Some(source.clone()),
         },
     };
     let body = crate::client::connection::call(paths, method)

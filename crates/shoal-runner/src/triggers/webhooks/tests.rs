@@ -23,7 +23,7 @@ const SECRET: &str = "s3cret";
 
 /// A trigger that starts a chat on each issue a signed Forgejo request
 /// says was labelled `agent`, with the secret its command prints.
-const LABELLED: &str = "[secrets.HOOK]\ncommand = ['printf', 's3cret']\n\
+const LABELLED: &str = "[secrets.HOOK]\nvalue = { cmd = ['printf', 's3cret'] }\n\
     [triggers.labelled]\non = 'webhook'\nsecret = 'HOOK'\nsignature = 'forgejo'\n\
     mode = 'chat'\nagent = 'claude'\nname = 'Labelled'\noverlap = 'parallel'\n\
     issue = '{{ payload.issue.number }}'\ntask = 'Handle {{ payload.issue.title }}'\n\
@@ -178,10 +178,13 @@ async fn a_request_no_active_trigger_takes_is_refused_without_a_run() {
 #[tokio::test]
 async fn a_repositorys_trigger_never_signs_with_a_global_secret() {
     // Another repository's agents receive the global secret.
-    let local = LABELLED.replace("[secrets.HOOK]\ncommand = ['printf', 's3cret']\n", "");
+    let local = LABELLED.replace(
+        "[secrets.HOOK]\nvalue = { cmd = ['printf', 's3cret'] }\n",
+        "",
+    );
     let (fixture, address) = listening(&local).await;
     fixture.configure(
-        "[machine.webhooks]\nlisten = '127.0.0.1:0'\n[secrets.HOOK]\ncommand = ['printf', 's3cret']\n",
+        "[machine.webhooks]\nlisten = '127.0.0.1:0'\n[secrets.HOOK]\nvalue = { cmd = ['printf', 's3cret'] }\n",
     );
 
     assert_eq!(deliver(address, "d-1", SECRET, ISSUE).await, 500);
@@ -286,8 +289,12 @@ async fn a_sample_request_fires_unsigned_and_names_the_condition_that_drops_it()
 #[tokio::test(start_paused = true)]
 async fn a_secret_command_that_never_answers_fails_the_delivery() {
     let secret = shoal_core::secrets::Secret {
-        command: vec!["sleep".into(), "3600".into()],
-        ..Default::default()
+        value: shoal_protocol::config::value::Value::Cmd {
+            cmd: vec!["sleep".into(), "3600".into()],
+        },
+        tools: Vec::new(),
+        requires_approval: false,
+        approval_lifetime: Default::default(),
     };
 
     let error = super::delivery::fetch_secret("HOOK", &secret)

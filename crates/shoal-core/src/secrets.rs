@@ -1,5 +1,5 @@
-//! Secrets that user-configured commands fetch for tracked agents. Shoal keeps
-//! the commands, never the values.
+//! Secrets that the config gives tracked agents. Shoal keeps where each
+//! value comes from, and no value but in memory.
 use crate::paths::PathsExt;
 use anyhow::{Context, Result, ensure};
 use std::{
@@ -8,23 +8,29 @@ use std::{
     os::unix::fs::PermissionsExt,
 };
 
-use crate::{env, paths::Paths};
+use crate::{config::value::Value, env, paths::Paths};
 use shoal_protocol::approvals::SecretSpecification;
 pub use shoal_protocol::secrets::Secret;
 pub use shoal_protocol::secrets::Secrets;
 
-/// What a grant for `secret` binds: the command that fetches it and the tools
-/// it serves.
+/// What a grant for `secret` binds: where its value comes from, a written
+/// one as its digest, and the tools it serves.
 pub fn specification(secret: &Secret) -> SecretSpecification {
     SecretSpecification {
-        command: secret.command.clone(),
+        value: secret.value.recorded(),
         tools: secret.tools.clone(),
     }
 }
 
-/// The tool-scoped secrets a launcher directory serves, beside its launchers.
-/// Tool names cannot start with a dot, so no launcher can take its name.
+/// The specification of each tool-scoped secret a launcher directory
+/// serves, beside its launchers, so no value written in the config is in a
+/// file. Tool names cannot start with a dot, so no launcher can take its
+/// name.
 pub const MANIFEST: &str = ".secrets.json";
+
+/// What a launcher directory's [`MANIFEST`] holds: each secret's
+/// specification by name.
+pub type Manifest = std::collections::BTreeMap<String, SecretSpecification>;
 
 /// The secret variables an agent launch adds to its child's environment, and
 /// the launchers that give tool-scoped secrets to their tools.
@@ -46,7 +52,7 @@ impl Launch {
             .partition(|(_, secret)| !secret.tools.is_empty());
         let mut environment = Vec::new();
         for (name, secret) in &unscoped {
-            environment.push((name.clone(), fetch(name, secret, None).await?));
+            environment.push((name.clone(), fetch(name, &secret.value, None).await?));
         }
         let launchers = if scoped.is_empty() {
             None
@@ -98,9 +104,12 @@ fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir
             directory.path().display()
         )
     })?;
+    let manifest: Manifest = (secrets.iter())
+        .map(|(name, secret)| (name.clone(), specification(secret)))
+        .collect();
     std::fs::write(
         directory.path().join(MANIFEST),
-        serde_json::to_vec(secrets)?,
+        serde_json::to_vec(&manifest)?,
     )?;
     let tools: BTreeSet<_> = secrets.values().flat_map(|secret| &secret.tools).collect();
     for tool in tools {
@@ -154,9 +163,10 @@ pub fn exported_names<'a>(names: impl Iterator<Item = &'a String>) -> String {
     all.join(":")
 }
 
-/// Fetch the secret's value with PATH replaced by `path`.
-pub async fn fetch(name: &str, secret: &Secret, path: Option<&OsStr>) -> Result<OsString> {
-    crate::config::value::command_output(&secret.command, path)
+/// Fetch the value `value` gives the secret `name`, a command's with PATH
+/// replaced by `path` and a variable's from this process's environment.
+pub async fn fetch(name: &str, value: &Value, path: Option<&OsStr>) -> Result<OsString> {
+    crate::config::value::output(value, |name| std::env::var_os(name), path)
         .await
         .with_context(|| format!("secrets.{name}"))
 }
@@ -169,10 +179,7 @@ pub(crate) fn validate(secrets: &Secrets) -> Result<()> {
             !crate::env::PROTECTED.contains(&name.as_str()),
             "[secrets] cannot set {name}"
         );
-        crate::config::value::validate_command(
-            &format!("secrets.{name}.command"),
-            &secret.command,
-        )?;
+        crate::config::value::validate(&secret.value, &format!("secrets.{name}.value"))?;
         // Environment secrets are fetched before the agent can ask for them.
         ensure!(
             !secret.requires_approval || !secret.tools.is_empty(),

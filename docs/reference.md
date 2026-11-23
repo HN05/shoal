@@ -3394,32 +3394,34 @@ the agent's [`push` permission](#approval-for-agent-pushes) at launch is
 
 ### Agent secrets
 
-[`[secrets]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#secrets) gives tracked agents values that commands fetch
-from your secret store.
+[`[secrets]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#secrets) gives tracked agents values, written in
+the config, read from the environment or fetched by a command from your
+secret store.
 
 Commands run without input. Without
-`tools`, agent launches run the command before the agent starts and add the
-value to the agent's environment, which nested commands inherit; a command
-that fails, prints nothing or prints NUL stops the launch. With `tools`, the
+`tools`, agent launches read the value before the agent starts and add it
+to the agent's environment, which nested commands inherit; a command that
+fails, prints nothing or prints NUL stops the launch. With `tools`, the
 agent's environment never holds the value: the launch puts a launcher for
 each listed program first on a private PATH, and each run of the program
-through it fetches the value and runs the next program of that name on PATH
-with the value set, or fails with the command's error. Launchers are
+through it reads the value, a written one from the daemon, and runs the next
+program of that name on PATH with the value set, or fails with the
+command's error; no file of the launch holds a written value. Launchers are
 cooperative: an absolute program path or a reset PATH bypasses them. Other executions fetch no secrets of their own, and hooks started
 beneath an agent drop the inherited values and launchers.
 
 A tool-scoped secret can set `requires_approval = true` and `approval_lifetime`
 like a [protected resource](#resource-approvals); an environment secret cannot,
 because it is fetched before the agent can ask. `shoal catalog secret` lists the
-configured secrets with their tools and approval settings, without their commands. The agent requests access with
+configured secrets with their tools and approval settings, without their values. The agent requests access with
 `shoal acquire secret NAME --reason ...`, and the user decides with `shoal
 approvals`. Each run of a listed tool in a workspace asks the daemon about
 every secret it serves, under the current policy, and fetches a gated value
-only once the workspace holds a grant for the secret's current `command` and
+only once the workspace holds a grant for the secret's current `value` and
 `tools`; otherwise the run fails, naming the pending or denied request, or the
 `acquire` command when there is none; a run that cleared `SHOAL_SCOPE_TOKEN`
 fails too. A launcher serves the config of its agent launch, so once a
-secret's `command` or `tools` change, its runs fail until the agent restarts. `shoal release secret NAME` cancels the request or
+secret's `value` or `tools` change, its runs fail until the agent restarts. `shoal release secret NAME` cancels the request or
 ends a lease grant.
 
 ### Modes and rules

@@ -575,7 +575,7 @@ pub(crate) fn pending_approval(output: Output) -> Value {
 #[test]
 fn release_cancels_pending_requests_without_leases() {
     let fixture = Fixture::with_config(Some(
-        "[resources.signing]\nrequires_approval=true\n[secrets.TOKEN]\ncommand=['true']\ntools=['sign']\nrequires_approval=true\n",
+        "[resources.signing]\nrequires_approval=true\n[secrets.TOKEN]\nvalue = { cmd = ['true'] }\ntools=['sign']\nrequires_approval=true\n",
     ));
     set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
     fixture.add("agent");

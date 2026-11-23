@@ -99,7 +99,7 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
 #[test]
 fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     let fixture = Fixture::with_config(Some(
-        "[secrets.AGENT_TOKEN]\ncommand = ['printf', '%s\\n', 'global secret']\n",
+        "[secrets.AGENT_TOKEN]\nvalue = { cmd = ['printf', '%s\\n', 'global secret'] }\n",
     ));
     let workspace = fixture.add("secrets");
     let worktree = Path::new(workspace["path"].as_str().unwrap());
@@ -160,7 +160,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     let tracked = fs::read_to_string(worktree.join(".shoal.toml")).unwrap();
     fs::write(
         worktree.join(".shoal.toml"),
-        format!("{tracked}[secrets.AGENT_TOKEN]\ncommand = ['printf', 'tracked secret']\n"),
+        format!("{tracked}[secrets.AGENT_TOKEN]\nvalue = {{ cmd = ['printf', 'tracked secret'] }}\n"),
     )
     .unwrap();
     let output = fixture.run(&[
@@ -177,7 +177,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     // The local config replaces the worktree file's; a failing command
     // stops the launch.
     let saved = fixture.root.path().join("saved.toml");
-    fs::write(&saved, "[secrets.AGENT_TOKEN]\ncommand = ['false']\n").unwrap();
+    fs::write(&saved, "[secrets.AGENT_TOKEN]\nvalue = { cmd = ['false'] }\n").unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&[
         "start",
@@ -194,7 +194,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
 #[test]
 fn tool_secrets_reach_only_their_tools() {
     let fixture = Fixture::with_config(Some(
-        "[secrets.TOOL_TOKEN]\ncommand = ['printf', 'tool secret']\ntools = ['show-token']\n",
+        "[secrets.TOOL_TOKEN]\nvalue = { cmd = ['printf', 'tool secret'] }\ntools = ['show-token']\n",
     ));
     let workspace = fixture.add("tool-secrets");
     let worktree = Path::new(workspace["path"].as_str().unwrap());
@@ -281,7 +281,7 @@ fn tool_secrets_reach_only_their_tools() {
         fs::write(
             launchers.join(".secrets.json"),
             format!(
-                r#"{{"{name}_TOKEN": {{"command": ["printf", "{name}"], "tools": ["show-tokens"]}}}}"#
+                r#"{{"{name}_TOKEN": {{"value": {{"cmd": ["printf", "{name}"]}}, "tools": ["show-tokens"]}}}}"#
             ),
         )
         .unwrap();
@@ -317,7 +317,7 @@ fn tool_secrets_reach_only_their_tools() {
 #[test]
 fn gated_tool_secrets_wait_for_the_users_approval() {
     let fixture = Fixture::with_config(Some(
-        "[secrets.TOOL_TOKEN]\ncommand = ['sh', '-c', 'echo fetched >> \"$0\"; printf secret', 'fetches']\ntools = ['show-token']\nrequires_approval = true\n",
+        "[secrets.TOOL_TOKEN]\nvalue = { cmd = ['sh', '-c', 'echo fetched >> \"$0\"; printf secret', 'fetches'] }\ntools = ['show-token']\nrequires_approval = true\n",
     ));
     let workspace = fixture.add("gated");
     let worktree = Path::new(workspace["path"].as_str().unwrap());

@@ -88,7 +88,7 @@ pub(super) async fn handle(
         Operation::Space(method) => spaces::handle(&server.manager, method, caller, scope).await,
         Operation::Place(method) => places::handle(&server.manager, method).await,
         Operation::Permission(method) => permissions::handle(&server.manager, method, caller).await,
-        Operation::Config(method) => config::handle(&server.manager, method).await,
+        Operation::Config(method) => config::handle(&server.manager, method, caller).await,
         Operation::Diff(method) => diffs::handle(&server.manager, method, scope).await,
         Operation::Merging(method) => merging::handle(&server.manager, method, caller).await,
         Operation::Removal(method) => removal::handle(&server.manager, method, caller).await,

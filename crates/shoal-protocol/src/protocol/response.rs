@@ -230,6 +230,7 @@ response_bodies! {
     LaunchModes(crate::config::modes::ModeShapes),
     LabelledMode(crate::launches::LabelledMode),
     TrackedConfig(String),
+    ConfigValue(crate::config::value::Resolved),
     Triggers(Vec<crate::triggers::TriggerStatus>),
     Trigger(crate::triggers::TriggerStatus),
     TriggerFired(crate::triggers::Fired),

@@ -75,6 +75,7 @@ const REQUESTS: &[&str] = &[
     r#"{"create_pending_worktree":{"workspace":"fix"}}"#,
     r#"{"workspace_hook":{"workspace":"fix","kind":"post_setup"}}"#,
     r#"{"layered_config":{"target":{"space":"fix"}}}"#,
+    r#"{"config_value":{"space":"fix","key":{"secret":{"name":"TOKEN","source":{"value":{"cmd":["op","read"]},"tools":["gh"]}}}}}"#,
     r#"{"keep_agent_environment":{"workspace":"fix","environment":{}}}"#,
     r#"{"close_owned_place":{"workspace":"fix","place":{"host":"rex","place":"block:1"}}}"#,
     r#"{"place_ownership":{"space":"fix","place":{"host":"herdr","place":"w1:p1"}}}"#,

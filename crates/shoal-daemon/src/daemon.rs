@@ -37,6 +37,7 @@ mod apps;
 mod auto_update;
 pub(crate) mod blockers;
 pub mod cleanup;
+mod config_values;
 mod connections;
 mod contribution_holds;
 mod coordination;

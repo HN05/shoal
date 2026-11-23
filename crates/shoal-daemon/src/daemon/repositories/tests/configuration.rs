@@ -375,8 +375,7 @@ async fn secret_names(
 
 #[tokio::test]
 async fn a_workspace_whose_file_lacks_the_checkouts_trigger_still_never_gets_its_secret() {
-    let secrets =
-        "[secrets.HOOK]\ncommand = ['printf', 's3cret']\n[secrets.API_KEY]\ncommand = ['true']\n";
+    let secrets = "[secrets.HOOK]\nvalue = { cmd = ['printf', 's3cret'] }\n[secrets.API_KEY]\nvalue = { cmd = ['true'] }\n";
     let (_root, manager, repo) = repository_with_local_config(secrets).await;
     let workspace = (manager.create_workspace(&repo.id, "fix".into(), None, None, None))
         .await
@@ -393,9 +392,9 @@ async fn a_workspace_whose_file_lacks_the_checkouts_trigger_still_never_gets_its
 
 #[tokio::test]
 async fn an_unreadable_checkout_file_withholds_every_local_secret() {
-    let local = "[secrets.HOOK]\ncommand = ['true']\n";
+    let local = "[secrets.HOOK]\nvalue = { cmd = ['true'] }\n";
     let (_root, manager, repo) = repository_with_local_config(local).await;
-    test_support::configure(&manager, "[secrets.API_KEY]\ncommand = ['true']\n").await;
+    test_support::configure(&manager, "[secrets.API_KEY]\nvalue = { cmd = ['true'] }\n").await;
     let workspace = (manager.create_workspace(&repo.id, "fix".into(), None, None, None))
         .await
         .unwrap();

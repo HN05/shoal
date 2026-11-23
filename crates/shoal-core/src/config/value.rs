@@ -21,22 +21,31 @@ pub fn validate(value: &Value, setting: &str) -> Result<()> {
 /// The value itself, reading `variable` of the agent's environment for one
 /// it names.
 pub async fn resolve(value: &Value, variable: impl Fn(&str) -> Option<OsString>) -> Result<String> {
-    let (value, source) = match value {
+    let source = match value {
         Value::Written(value) => return Ok(value.clone()),
-        Value::Env { env } => {
-            let value = variable(env)
-                .filter(|value| !value.is_empty())
-                .with_context(|| format!("variable {env} is not set"))?;
-            (value, format!("variable {env}"))
-        }
-        Value::Cmd { cmd } => (
-            command_output(cmd, None).await?,
-            format!("the output of {}", cmd[0]),
-        ),
+        Value::Env { env } => format!("variable {env}"),
+        Value::Cmd { cmd } => format!("the output of {}", cmd[0]),
     };
-    value
+    output(value, variable, None)
+        .await?
         .into_string()
         .map_err(|_| anyhow::anyhow!("{source} is not UTF-8"))
+}
+
+/// The value's bytes, reading `variable` for one it names, and running a
+/// command with PATH replaced by `path`.
+pub async fn output(
+    value: &Value,
+    variable: impl Fn(&str) -> Option<OsString>,
+    path: Option<&OsStr>,
+) -> Result<OsString> {
+    match value {
+        Value::Written(value) => Ok(value.into()),
+        Value::Env { env } => variable(env)
+            .filter(|value| !value.is_empty())
+            .with_context(|| format!("variable {env} is not set")),
+        Value::Cmd { cmd } => command_output(cmd, path).await,
+    }
 }
 
 /// `setting`, an argument array, names a program and holds no NUL.

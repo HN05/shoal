@@ -21,7 +21,7 @@ git_profile = 'work'\n\
 [setup]\ncommand = 'setup'\ncopy_ignored = false\ncopy_ignored_exclude = ['build/']\npresets = ['cargo']\n[setup.seed]\ncommand = 'scripts/seed'\npaths = ['target']\n\
 [hooks]\npre_setup = 'pre-setup'\npost_remove = 'post-remove'\npost_done = 'post-done'\npost_ready = 'post-ready'\npost_agent_exit = 'agent-exit'\n\
 post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup = 'attach'\npre_remove = 'detach'\n\
-[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[mcp.docs]\ncommand = 'docs-mcp'\nargs = ['--stdio']\nenv = { TOKEN = 'a' }\nenabled = false\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\ncommand = ['token']\n\
+[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[mcp.docs]\ncommand = 'docs-mcp'\nargs = ['--stdio']\nenv = { TOKEN = 'a' }\nenabled = false\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\nvalue = { cmd = ['token'] }\n\
 [commands]\ncheck = ['check']\n[ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\

@@ -13,7 +13,11 @@ use super::super::{
 use crate::protocol::{Body, ConfigMethod, ConfigTarget, RepositoryLayers};
 use shoal_protocol::space_names::SpaceSelector;
 
-pub(super) async fn handle(manager: &Arc<Manager>, method: ConfigMethod) -> Result<Answer> {
+pub(super) async fn handle(
+    manager: &Arc<Manager>,
+    method: ConfigMethod,
+    caller: Option<&Caller>,
+) -> Result<Answer> {
     Ok(Answer::Body(match method {
         ConfigMethod::TrackedConfig { space } => Body::TrackedConfig(
             manager
@@ -27,13 +31,16 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: ConfigMethod) -> Resu
                 .config_layers_for(&**manager, target)
                 .await?,
         )?),
+        ConfigMethod::ConfigValue { space, key } => {
+            Body::ConfigValue(manager.config_value(&space, key, caller).await?)
+        }
     }))
 }
 
 impl Checked for ConfigMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
-            Self::TrackedConfig { .. } => Some(TargetCheck::Space),
+            Self::TrackedConfig { .. } | Self::ConfigValue { .. } => Some(TargetCheck::Space),
             Self::LayeredConfig { .. } => None,
         }
     }
@@ -67,7 +74,8 @@ impl Scoped for ConfigMethod {
             ConfigMethod::LayeredConfig {
                 target: ConfigTarget::Space(space),
             }
-            | ConfigMethod::TrackedConfig { space } => Some(space),
+            | ConfigMethod::TrackedConfig { space }
+            | ConfigMethod::ConfigValue { space, .. } => Some(space),
         })
     }
 }
