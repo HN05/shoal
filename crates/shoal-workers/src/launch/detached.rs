@@ -55,7 +55,8 @@ pub(super) async fn start(
     crate::agents::ensure_available(&name, &settings)?;
     let home = space.home()?;
     let model_args = model_args(app, &settings, &name, &model)?;
-    let directories = dir_args(caller, app, &settings, home).await;
+    let added = added_dirs(caller, app, &settings, home).await;
+    let directories = crate::agents::add_dir_args(&settings, &app.agent(), &added);
     let directories = [model_args, directories].concat();
     let (prompt, args) = session_input(app, &settings, instructions, directories, prompt, args);
     if let Some(trust) = integration.trust_file() {
@@ -300,16 +301,16 @@ pub(super) fn takes_instructions(app: &dyn App, settings: &Effective) -> bool {
     instruction_args(app, settings, "").is_some()
 }
 
-/// The arguments that give `app`'s agent the directories its agent works
-/// in at `home`, when it takes arguments.
-async fn dir_args(
+/// The other working directories `app`'s agent gets at `home`, when it
+/// takes arguments.
+async fn added_dirs(
     caller: Caller<'_>,
     app: &dyn App,
     settings: &Effective,
     home: AgentHome<'_>,
-) -> Vec<OsString> {
+) -> Vec<PathBuf> {
     match app.takes_agent_args() {
-        true => crate::homes::dir_args(caller.paths, home, settings, &app.agent()).await,
+        true => crate::homes::dirs(caller.paths, home, settings, &app.agent()).await,
         false => Vec::new(),
     }
 }

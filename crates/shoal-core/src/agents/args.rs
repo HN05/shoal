@@ -119,19 +119,19 @@ pub fn workspace_dir_args(
     home: &Path,
     workspaces_dir: Option<&Path>,
 ) -> Vec<OsString> {
-    let extra: Vec<PathBuf> = workspaces_dir.into_iter().map(Path::to_path_buf).collect();
-    dir_args(settings, name, home, &extra)
+    let directories = workspace_dirs(settings, name, home, workspaces_dir);
+    add_dir_args(settings, name, &directories)
 }
 
-/// The arguments that give agent `name` the configured agent directories as
-/// other working directories, so it may read what the tools it runs leave
-/// there without a permission prompt.
-fn agent_dir_args(settings: &Effective, name: &Agent, home: &Path) -> Vec<OsString> {
-    let arguments = &settings.launch(name).arguments;
-    agent_dirs(settings, home)
-        .iter()
-        .flat_map(|directory| arguments.add_dir_args(directory))
-        .collect()
+/// The directories [`workspace_dir_args`] gives a workspace's agent `name`.
+pub fn workspace_dirs(
+    settings: &Effective,
+    name: &Agent,
+    home: &Path,
+    workspaces_dir: Option<&Path>,
+) -> Vec<PathBuf> {
+    let extra: Vec<PathBuf> = workspaces_dir.into_iter().map(Path::to_path_buf).collect();
+    dirs(settings, name, home, &extra)
 }
 
 /// The arguments that give agent `name` the configured agent directories and
@@ -142,14 +142,30 @@ pub fn dir_args(
     home: &Path,
     extra: &[PathBuf],
 ) -> Vec<OsString> {
-    let mut args = agent_dir_args(settings, name, home);
+    add_dir_args(settings, name, &dirs(settings, name, home, extra))
+}
+
+/// The directories [`dir_args`] gives agent `name`: the configured agent
+/// directories, so it may read what the tools it runs leave there without a
+/// permission prompt, then `extra`; none for an agent that takes no other
+/// working directory.
+fn dirs(settings: &Effective, name: &Agent, home: &Path, extra: &[PathBuf]) -> Vec<PathBuf> {
     let arguments = &settings.launch(name).arguments;
-    args.extend(
-        extra
-            .iter()
-            .flat_map(|directory| arguments.add_dir_args(directory)),
-    );
-    args
+    agent_dirs(settings, home)
+        .into_iter()
+        .chain(extra.iter().cloned())
+        .filter(|directory| !arguments.add_dir_args(directory).is_empty())
+        .collect()
+}
+
+/// The arguments that give agent `name` each of `directories` as another
+/// working directory.
+pub fn add_dir_args(settings: &Effective, name: &Agent, directories: &[PathBuf]) -> Vec<OsString> {
+    let arguments = &settings.launch(name).arguments;
+    directories
+        .iter()
+        .flat_map(|directory| arguments.add_dir_args(directory))
+        .collect()
 }
 
 /// The arguments that give agent `name` of `chat` the configured agent
@@ -162,6 +178,11 @@ pub fn chat_dir_args(
     home: &Path,
     chat: &Chat,
 ) -> Vec<OsString> {
+    add_dir_args(settings, name, &chat_dirs(settings, name, home, chat))
+}
+
+/// The directories [`chat_dir_args`] gives agent `name` of `chat`.
+pub fn chat_dirs(settings: &Effective, name: &Agent, home: &Path, chat: &Chat) -> Vec<PathBuf> {
     let tmp_dir = chat
         .tmp_dir
         .as_ref()
@@ -170,7 +191,7 @@ pub fn chat_dir_args(
         .into_iter()
         .chain(global_config_dir(chat, home))
         .collect();
-    dir_args(settings, name, home, &extra)
+    dirs(settings, name, home, &extra)
 }
 
 /// The directory of the global config beside `home` when `chat` sets it up,

@@ -14,15 +14,15 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     let defaults = settings("");
     let tmp = fs::canonicalize("/tmp").unwrap();
     assert_eq!(
-        agent_dir_args(&defaults, &"claude".into(), home.path()),
+        dir_args(&defaults, &"claude".into(), home.path(), &[]),
         [OsString::from(format!("--add-dir={}", tmp.display()))]
     );
     assert_eq!(
-        agent_dir_args(&defaults, &"codex".into(), home.path()),
+        dir_args(&defaults, &"codex".into(), home.path(), &[]),
         [OsString::from("--add-dir"), tmp.clone().into()]
     );
     // A tool that takes no other working directory gets none.
-    assert!(agent_dir_args(&defaults, &"pi".into(), home.path()).is_empty());
+    assert!(dir_args(&defaults, &"pi".into(), home.path(), &[]).is_empty());
     // `~/` names a path under the home directory; one reached again through
     // a symlink counts once.
     let configured = settings("agent.dirs = ['/tmp', '~/cache', '~/link']\n");

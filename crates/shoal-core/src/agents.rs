@@ -32,8 +32,9 @@ use crate::{
 };
 
 pub use args::{
-    chat_dir_args, dir_args, insert_options, model_args, restored_instruction_args, workspace_args,
-    workspace_dir_args, writable_config_dir,
+    add_dir_args, chat_dir_args, chat_dirs, dir_args, insert_options, model_args,
+    restored_instruction_args, workspace_args, workspace_dir_args, workspace_dirs,
+    writable_config_dir,
 };
 pub use checks::{
     NO_AGENT, check_model, check_queued_launch, checked_agent, ensure_available, ensure_forks,
