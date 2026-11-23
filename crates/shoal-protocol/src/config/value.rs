@@ -1,19 +1,28 @@
 //! A setting's value, as written, from a variable of the environment, or
-//! from a command's standard output. Shoal's own code reads it.
+//! from a command's standard output, on this machine or another of its hub.
+//! Shoal's own code reads it.
 use serde::{Deserialize, Serialize};
 
 /// A setting's value: as written, `{ env = "<variable>" }` or
-/// `{ cmd = ["<program>", ...] }`.
+/// `{ cmd = ["<program>", ...] }`, which `on` runs on the machine of the hub
+/// it names.
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     untagged,
     deny_unknown_fields,
-    expecting = "a value, { env = \"<variable>\" } naming the variable that holds it, or { cmd = [\"<program>\", ...] } printing it"
+    expecting = "a value, { env = \"<variable>\" } naming the variable that holds it, or { cmd = [\"<program>\", ...] } printing it, with on = \"<machine>\" to run it there"
 )]
 pub enum Value {
     Written(String),
-    Env { env: String },
-    Cmd { cmd: Vec<String> },
+    Env {
+        env: String,
+    },
+    Cmd {
+        cmd: Vec<String>,
+        /// The machine of the hub that runs the command, by name or ID.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on: Option<String>,
+    },
 }
 
 /// A value as written never shows in what Shoal prints.
@@ -22,7 +31,10 @@ impl std::fmt::Debug for Value {
         match self {
             Self::Written(_) => f.write_str("Written(..)"),
             Self::Env { env } => f.debug_struct("Env").field("env", env).finish(),
-            Self::Cmd { cmd } => f.debug_struct("Cmd").field("cmd", cmd).finish(),
+            Self::Cmd { cmd, on } => (f.debug_struct("Cmd"))
+                .field("cmd", cmd)
+                .field("on", on)
+                .finish(),
         }
     }
 }
@@ -32,6 +44,14 @@ impl Value {
     /// command does.
     pub fn runs_command(&self) -> bool {
         matches!(self, Self::Cmd { .. })
+    }
+
+    /// The machine whose command prints the value, for one `on` names.
+    pub fn on(&self) -> Option<&str> {
+        match self {
+            Self::Cmd { on, .. } => on.as_deref(),
+            _ => None,
+        }
     }
 
     /// The value as a record that binds it keeps it, such as an approval
@@ -61,14 +81,6 @@ pub enum ValueKey {
         name: String,
         source: crate::approvals::SecretSpecification,
     },
-}
-
-impl std::fmt::Display for ValueKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Secret { name, .. } => write!(f, "secrets.{name}.value"),
-        }
-    }
 }
 
 /// The value the daemon read for a [`ValueKey`], which never shows in what

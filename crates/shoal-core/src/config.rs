@@ -26,6 +26,7 @@ pub mod templates;
 #[cfg(test)]
 mod tests;
 pub mod value;
+pub mod values;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};

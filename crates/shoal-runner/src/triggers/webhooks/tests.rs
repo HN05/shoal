@@ -291,13 +291,14 @@ async fn a_secret_command_that_never_answers_fails_the_delivery() {
     let secret = shoal_core::secrets::Secret {
         value: shoal_protocol::config::value::Value::Cmd {
             cmd: vec!["sleep".into(), "3600".into()],
+            on: None,
         },
         tools: Vec::new(),
         requires_approval: false,
         approval_lifetime: Default::default(),
     };
 
-    let error = super::delivery::fetch_secret("HOOK", &secret)
+    let error = super::delivery::fetch_secret("HOOK", &secret, &Default::default())
         .await
         .unwrap_err();
 

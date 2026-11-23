@@ -12,6 +12,9 @@ use shoal_forge_types::{ForgeRepo, backends::ForgeKind};
 /// caller owns where it comes from and what a failure names.
 pub trait Token: Send + Sync {
     fn fetch(&self) -> BoxFuture<'_, Result<String>>;
+
+    /// The forge refused the token fetched, answering 401.
+    fn refused(&self) {}
 }
 
 /// How an account signs in to one host.
@@ -142,6 +145,14 @@ impl Account {
             username: repo.kind().git_username(),
             password: token.to_owned(),
         })
+    }
+
+    /// Tell the token the account signs in to `host` with that the forge
+    /// refused it.
+    pub(crate) fn refused(&self, host: &str) {
+        if let Some(signer) = self.signer(host) {
+            signer.login.token.refused();
+        }
     }
 
     /// Whether the account has a login of its own for `repo`'s host.

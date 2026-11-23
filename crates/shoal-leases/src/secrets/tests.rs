@@ -75,6 +75,7 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
     let token = SecretSpecification {
         value: shoal_protocol::config::value::Value::Cmd {
             cmd: vec!["token".into()],
+            on: None,
         },
         tools: vec!["agent-browser".into()],
     };

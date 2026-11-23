@@ -432,7 +432,8 @@ impl Permissions for StandIn {
 
 impl Forges for StandIn {
     fn user_account(&self) -> Account {
-        Account::user(self.config.current().machine.forges.logins(Whose::User))
+        let forges = &self.config.current().machine.forges;
+        Account::user(forges.logins(Whose::User, self.config.values()))
     }
 
     fn checkout_forge<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<ForgeRepo>> {

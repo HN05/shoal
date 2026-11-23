@@ -2,6 +2,7 @@
 //! trigger, `/webhooks/<name>` for the global config's and
 //! `/webhooks/<repository>/<name>` for a repository's; an active trigger
 //! takes it once its signature checks out, and fires in the background.
+use shoal_core::config::values::Values;
 use std::{ffi::OsString, os::unix::ffi::OsStrExt, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
@@ -30,9 +31,18 @@ pub(in crate::triggers) enum Delivered {
 const SECRET_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// The value of the secret `name`, which fails once its command takes
-/// longer than [`SECRET_TIMEOUT`], as one waiting for an unlock would.
-pub(super) async fn fetch_secret(name: &str, secret: &Secret) -> Result<OsString> {
-    let fetched = tokio::time::timeout(SECRET_TIMEOUT, secrets::fetch(name, &secret.value, None));
+/// longer than [`SECRET_TIMEOUT`], as one waiting for an unlock would; one
+/// another machine prints comes through `values`.
+pub(super) async fn fetch_secret(name: &str, secret: &Secret, values: &Values) -> Result<OsString> {
+    let fetch = async {
+        match secret.value.on() {
+            Some(_) => (values.resolve(&format!("secrets.{name}.value"), &secret.value))
+                .await
+                .map(OsString::from),
+            None => secrets::fetch(name, &secret.value, None).await,
+        }
+    };
+    let fetched = tokio::time::timeout(SECRET_TIMEOUT, fetch);
     match fetched.await {
         Ok(value) => value,
         Err(_) => anyhow::bail!(
@@ -136,7 +146,7 @@ impl Runner {
         body: &[u8],
     ) -> Result<bool> {
         let secret = self.trigger_secret(daemon, trigger, signed).await?;
-        let value = fetch_secret(&signed.secret, &secret).await?;
+        let value = fetch_secret(&signed.secret, &secret, self.config.values()).await?;
         Ok(signed.signature.verifies(value.as_bytes(), request, body))
     }
 

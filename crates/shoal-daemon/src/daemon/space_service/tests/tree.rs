@@ -1458,6 +1458,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
@@ -1739,6 +1740,7 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
@@ -1823,6 +1825,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
@@ -1907,6 +1910,7 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
@@ -1983,6 +1987,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
@@ -2091,6 +2096,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
@@ -2224,6 +2230,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
@@ -2457,6 +2464,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
@@ -2630,6 +2638,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                 Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                     value: shoal_protocol::config::value::Value::Cmd {
                         cmd: vec!["token-source".into()],
+                        on: None,
                     },
                     tools: vec![],
                 }),

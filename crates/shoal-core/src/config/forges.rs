@@ -1,23 +1,17 @@
 //! `[machine.forges."<host>"]`: what a forge host serves, set instead of
 //! asking it, and the tokens the user, the agent account and agents'
 //! verdict reviews sign in with.
-use std::{collections::BTreeMap, time::Duration};
+use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use super::value::Value;
+use super::{value::Value, values::Values};
 use crate::forge::backends::ForgeKind;
 use shoal_forge::transport::{
     account::{Login, Logins, Missing, Token},
     backend::SignIn,
 };
-
-/// Bounds a token command, which may wait on a password manager.
-const TOKEN_TIMEOUT: Duration = Duration::from_secs(60);
-
-/// The most a token command may print.
-const MAX_TOKEN_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(transparent)]
@@ -104,9 +98,9 @@ impl Forges {
             .find(|configured| https(configured) == requested)
     }
 
-    /// The logins of `whose` tokens, each fetched when a request first
-    /// needs it.
-    pub fn logins(&self, whose: Whose) -> Logins {
+    /// The logins of `whose` tokens, each read through `values` when a
+    /// request first needs it.
+    pub fn logins(&self, whose: Whose, values: &Arc<Values>) -> Logins {
         let mut logins = Logins::default();
         for (host, forge) in &self.0 {
             let (value, email) = forge.credentials(whose);
@@ -114,6 +108,7 @@ impl Forges {
                 let token = Box::new(Configured {
                     setting: format!("machine.forges.{host:?}.{}", whose.token_key()),
                     value: value.clone(),
+                    values: values.clone(),
                 });
                 let email = email.clone();
                 logins.insert(host, Login { token, email });
@@ -245,37 +240,26 @@ impl Whose {
 }
 
 /// A token as the config gives it: written, from this process's
-/// environment, or printed by a command.
+/// environment, or printed by a command, here or on another machine.
 struct Configured {
     setting: String,
     value: Value,
+    values: Arc<Values>,
 }
 
 impl Token for Configured {
     fn fetch(&self) -> futures_util::future::BoxFuture<'_, Result<String>> {
         Box::pin(async move {
-            let token = match &self.value {
-                Value::Cmd { cmd } => token_output(cmd).await,
-                value => super::value::resolve(value, |name| std::env::var_os(name)).await,
-            };
-            token.with_context(|| format!("read {}", self.setting))
+            (self.values.resolve(&self.setting, &self.value))
+                .await
+                .with_context(|| format!("read {}", self.setting))
         })
     }
-}
 
-/// What a token command prints, bounded in time and size; its diagnostics
-/// go into the error rather than to the process's stderr.
-async fn token_output(command: &[String]) -> Result<String> {
-    let (program, args) = command
-        .split_first()
-        .context("the command names no program")?;
-    let mut process = tokio::process::Command::new(program);
-    process.args(args);
-    shoal_subprocess::Run::new(process)
-        .timeout(TOKEN_TIMEOUT)
-        .output_limit(MAX_TOKEN_BYTES)
-        .output()
-        .await
+    /// A token the forge refused is no longer one to fall back on.
+    fn refused(&self) {
+        self.values.forget(&self.value);
+    }
 }
 
 /// The setting that pins `host`'s type, for messages that ask for it.

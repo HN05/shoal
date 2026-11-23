@@ -1,11 +1,12 @@
 //! A setting's value, as written, from a variable of the agent's
-//! environment, or from a command's standard output.
+//! environment, or from a command's standard output. A command another
+//! machine runs only the daemon reads, through [`super::values::Values`].
 use std::{
     ffi::{OsStr, OsString},
     process::Stdio,
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 
 pub use shoal_protocol::config::value::Value;
 
@@ -14,7 +15,16 @@ pub fn validate(value: &Value, setting: &str) -> Result<()> {
     match value {
         Value::Written(_) => Ok(()),
         Value::Env { env } => crate::env::validate_configured_name(setting, env),
-        Value::Cmd { cmd } => validate_command(&format!("{setting}.cmd"), cmd),
+        Value::Cmd { cmd, on } => {
+            validate_command(&format!("{setting}.cmd"), cmd)?;
+            ensure!(
+                on.as_ref()
+                    .is_none_or(|machine| !machine.trim().is_empty()
+                        && !machine.chars().any(char::is_control)),
+                "{setting}.on must name a machine of the hub"
+            );
+            Ok(())
+        }
     }
 }
 
@@ -24,7 +34,7 @@ pub async fn resolve(value: &Value, variable: impl Fn(&str) -> Option<OsString>)
     let source = match value {
         Value::Written(value) => return Ok(value.clone()),
         Value::Env { env } => format!("variable {env}"),
-        Value::Cmd { cmd } => format!("the output of {}", cmd[0]),
+        Value::Cmd { cmd, .. } => format!("the output of {}", cmd[0]),
     };
     output(value, variable, None)
         .await?
@@ -33,7 +43,8 @@ pub async fn resolve(value: &Value, variable: impl Fn(&str) -> Option<OsString>)
 }
 
 /// The value's bytes, reading `variable` for one it names, and running a
-/// command with PATH replaced by `path`.
+/// command with PATH replaced by `path`. One another machine prints is
+/// refused: its process asks the daemon for it.
 pub async fn output(
     value: &Value,
     variable: impl Fn(&str) -> Option<OsString>,
@@ -44,8 +55,34 @@ pub async fn output(
         Value::Env { env } => variable(env)
             .filter(|value| !value.is_empty())
             .with_context(|| format!("variable {env} is not set")),
-        Value::Cmd { cmd } => command_output(cmd, path).await,
+        Value::Cmd { cmd, on: None } => command_output(cmd, path).await,
+        Value::Cmd {
+            cmd,
+            on: Some(machine),
+        } => bail!("{} runs on {machine}, through the daemon", cmd[0]),
     }
+}
+
+/// Bounds a command that prints a value for the daemon, which may wait on
+/// a password manager.
+const BOUNDED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The most such a command may print.
+const MAX_BOUNDED_BYTES: usize = 64 * 1024;
+
+/// What `command` prints for the daemon, bounded in time and size; its
+/// diagnostics go into the error rather than to the daemon's stderr.
+pub async fn bounded_output(command: &[String]) -> Result<String> {
+    let (program, args) = command
+        .split_first()
+        .context("the command names no program")?;
+    let mut process = tokio::process::Command::new(program);
+    process.args(args);
+    shoal_subprocess::Run::new(process)
+        .timeout(BOUNDED_TIMEOUT)
+        .output_limit(MAX_BOUNDED_BYTES)
+        .output()
+        .await
 }
 
 /// `setting`, an argument array, names a program and holds no NUL.

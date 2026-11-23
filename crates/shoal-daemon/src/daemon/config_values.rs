@@ -10,24 +10,28 @@ use shoal_protocol::{
 
 impl Manager {
     /// The value of `key` for the space `space`, as `caller` may read it:
-    /// one the config writes out, which no file a launch writes holds.
+    /// one the config writes out, which no file a launch writes holds, or
+    /// one another machine prints, which only the daemon asks it for.
     pub(crate) async fn config_value(
         &self,
         space: &SpaceSelector,
         key: ValueKey,
         caller: Option<&Caller>,
     ) -> Result<Resolved> {
-        let setting = key.to_string();
-        let value = match key {
+        let (setting, value) = match key {
             ValueKey::Secret { name, source } => {
-                (self.leases)
-                    .granted_secret(self, space, name, source, caller)
-                    .await?
-                    .value
+                let secret = (self.leases)
+                    .granted_secret(self, space, name.clone(), source, caller)
+                    .await?;
+                (format!("secrets.{name}.value"), secret.value)
             }
         };
         match value {
             Value::Written(value) => Ok(Resolved(value)),
+            value @ Value::Cmd { on: Some(_), .. } => {
+                let values = self.config_state.values();
+                Ok(Resolved(values.resolve(&setting, &value).await?))
+            }
             _ => bail!("{setting} is read by the process that uses it"),
         }
     }

@@ -26,7 +26,7 @@ impl Manager {
             return Ok(None);
         };
         let username = self.host_type(host, "https").await?.kind().git_username();
-        let logins = forges.logins(Whose::Agent);
+        let logins = forges.logins(Whose::Agent, self.config_state.values());
         Ok(logins.token(host).await?.map(|password| GitCredential {
             username: username.to_owned(),
             password: password.to_owned(),

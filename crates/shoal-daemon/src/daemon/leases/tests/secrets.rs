@@ -18,6 +18,7 @@ use shoal_protocol::secrets::{SecretGrant, SecretRequest};
 fn configure(manager: &Manager, command: &str, lifetime: Lifetime) {
     let value = Value::Cmd {
         cmd: vec![command.into()],
+        on: None,
     };
     configure_value(manager, value, lifetime);
 }
@@ -176,6 +177,7 @@ async fn the_daemon_reads_no_secret_its_process_reads_itself() -> Result<()> {
     let (_temp, manager, _) = setup().await;
     let value = Value::Cmd {
         cmd: vec!["token".into()],
+        on: None,
     };
     configure_value(&manager, value.clone(), Lifetime::Workspace);
     assert!(written(&manager, None, "OPEN", &value).await.is_err());

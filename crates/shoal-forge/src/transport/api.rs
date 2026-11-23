@@ -273,6 +273,9 @@ impl ForgeRepo {
         let memory = account.memory();
         memory.check_limit(&self.host, limit, UnixTime::now())?;
         let response = exchange.await?;
+        if response.status() == 401 {
+            account.refused(&self.host);
+        }
         // Relative limits count from the response, which may have taken a while.
         memory.observe_limit(&self.host, limit, &response, UnixTime::now())?;
         Ok(response)

@@ -18,7 +18,8 @@ impl Links {
     /// The user's own logins, which reads and the user's decisions use.
     pub fn user_account(&self) -> Account {
         let forges = &self.config.current().machine.forges;
-        Account::user(forges.logins(Whose::User))
+        let values = self.config.values();
+        Account::user(forges.logins(Whose::User, values))
             .remembering(self.memories.of(&user_identity(forges)))
             .naming_missing(Whose::User.missing())
     }
@@ -27,6 +28,7 @@ impl Links {
     /// logins for hosts without one.
     pub fn agent_account(&self) -> Account {
         let forges = &self.config.current().machine.forges;
+        let values = self.config.values();
         // An agent with the user's logins shares what the user's requests taught.
         let tokens = forges.identity(Whose::Agent);
         let user = user_identity(forges);
@@ -35,9 +37,12 @@ impl Links {
         } else {
             format!("agent {tokens} {user}")
         };
-        Account::agent(forges.logins(Whose::Agent), forges.logins(Whose::User))
-            .remembering(self.memories.of(&identity))
-            .naming_missing(Whose::Agent.missing())
+        Account::agent(
+            forges.logins(Whose::Agent, values),
+            forges.logins(Whose::User, values),
+        )
+        .remembering(self.memories.of(&identity))
+        .naming_missing(Whose::Agent.missing())
     }
 
     /// The account scoped callers approve and request changes on PRs as:
@@ -45,7 +50,7 @@ impl Links {
     pub fn review_account(&self) -> Account {
         let forges = &self.config.current().machine.forges;
         let identity = format!("review {}", forges.identity(Whose::Review));
-        Account::user(forges.logins(Whose::Review))
+        Account::user(forges.logins(Whose::Review, self.config.values()))
             .remembering(self.memories.of(&identity))
             .naming_missing(Whose::Review.missing())
     }

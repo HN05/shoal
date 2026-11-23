@@ -6,6 +6,7 @@ fn secret(command: &[&str]) -> Secret {
     Secret {
         value: Value::Cmd {
             cmd: command.iter().map(|word| word.to_string()).collect(),
+            on: None,
         },
         tools: Vec::new(),
         requires_approval: false,

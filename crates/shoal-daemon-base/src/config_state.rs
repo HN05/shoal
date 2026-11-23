@@ -1,5 +1,5 @@
-//! The global config the daemon runs under, and readings that hold only
-//! under the config they were taken with.
+//! The global config the daemon runs under, how it reads its values, and
+//! readings that hold only under the config they were taken with.
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
@@ -8,6 +8,7 @@ use std::sync::{
 use tokio::sync::{Mutex, MutexGuard, watch};
 
 use crate::config::Config;
+use shoal_core::config::values::Values;
 
 pub struct ConfigState {
     /// The global file as last loaded; a reload replaces it for later reads
@@ -21,6 +22,9 @@ pub struct ConfigState {
     /// reading found the cleanup threshold free on every filesystem, so
     /// restored agents can write; zero for none.
     disk_recovered_in: AtomicU64,
+    /// How the daemon reads settings' values, which keeps what other
+    /// machines last printed across reloads.
+    values: Arc<Values>,
 }
 
 impl ConfigState {
@@ -30,7 +34,13 @@ impl ConfigState {
             reload: Mutex::new(()),
             generation: AtomicU64::new(0),
             disk_recovered_in: AtomicU64::new(0),
+            values: Arc::default(),
         }
+    }
+
+    /// How the daemon reads settings' values.
+    pub fn values(&self) -> &Arc<Values> {
+        &self.values
     }
 
     /// The config as last loaded. Take one snapshot per operation so a

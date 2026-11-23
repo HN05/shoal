@@ -58,3 +58,25 @@ fn each_form_is_validated() {
         assert!(parse(text).is_err(), "{text}");
     }
 }
+
+#[tokio::test]
+async fn bounded_commands_report_their_diagnostics_and_are_bounded() {
+    let command = |script: &str| vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
+    let error = bounded_output(&command("echo locked >&2; exit 3"))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("locked"), "{error:#}");
+    let flood = command("head -c 70000 /dev/zero | tr '\\0' a");
+    assert!(bounded_output(&flood).await.is_err());
+    assert_eq!(bounded_output(&command("echo abc")).await.unwrap(), "abc\n");
+}
+
+#[tokio::test]
+async fn a_command_another_machine_runs_is_named_and_read_only_by_the_daemon() {
+    let value = parse("value = { cmd = ['security'], on = 'desk' }").unwrap();
+    validate(&value, "value").unwrap();
+    assert_eq!(value.on(), Some("desk"));
+    assert!(resolve(&value, |_| None).await.is_err());
+    let unnamed = parse("value = { cmd = ['security'], on = '' }").unwrap();
+    assert!(validate(&unnamed, "value").is_err());
+}

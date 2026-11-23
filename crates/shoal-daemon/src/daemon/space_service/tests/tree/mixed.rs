@@ -86,6 +86,7 @@ pub(super) async fn decider(
             Specification::Secret(shoal_protocol::approvals::SecretSpecification {
                 value: shoal_protocol::config::value::Value::Cmd {
                     cmd: vec!["token-source".into()],
+                    on: None,
                 },
                 tools: vec![],
             }),
