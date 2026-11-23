@@ -43,8 +43,9 @@ enum Kept {
     /// The recorded move of the space, under the move's lock, which keeps
     /// Shoal from finishing the move while it is read.
     Move { lock: MoveLock, space: SpaceId },
-    /// Nothing: a copy's package, in this file, which goes once read.
-    Copy(PathBuf),
+    /// Nothing: a copy's package, whose file its reader took on opening
+    /// it, so no other reader takes it too.
+    Copy,
 }
 
 impl Manager {
@@ -79,17 +80,18 @@ impl Manager {
     }
 
     /// The package of a copy of the space `selector` names that waits here
-    /// for its reader.
+    /// for its reader, which it takes: its file goes once open, whether or
+    /// not the read ends whole, since its reader cannot read it again.
     async fn held_copy(&self, selector: &SpaceSelector) -> Result<HeldPackage> {
         let space = self.space(selector).await?;
         let path = held_copies(&self.paths.move_packages()).join(package_name(&space.id));
-        let (file, size) = (open_package(path.clone()).await).with_context(|| {
+        let (file, size) = (take_package(path).await).with_context(|| {
             format!("no copy of space {selector} waits here for another machine")
         })?;
         Ok(HeldPackage {
             file,
             size,
-            kept: Kept::Copy(path),
+            kept: Kept::Copy,
         })
     }
 
@@ -151,8 +153,7 @@ impl Manager {
 
     /// Settle what `kept` a held package once a read of it ended, `whole`
     /// or not: a move waits for its reader to end the space after a whole
-    /// read, and a copy's package goes either way, since its reader cannot
-    /// read it again.
+    /// read.
     async fn package_read(&self, kept: Kept, whole: bool) {
         match kept {
             Kept::Move { lock, space } if whole => {
@@ -163,12 +164,7 @@ impl Manager {
                 }
                 lock.release();
             }
-            Kept::Move { .. } => {}
-            Kept::Copy(path) => {
-                if let Err(error) = std::fs::remove_file(&path) {
-                    log!("remove the copy's package {}: {error}", path.display());
-                }
-            }
+            Kept::Move { .. } | Kept::Copy => {}
         }
     }
 }
@@ -178,6 +174,18 @@ async fn open_package(path: PathBuf) -> Result<(File, u64)> {
     blocking(move || {
         let file = File::open(&path)?;
         let size = file.metadata()?.len();
+        Ok((file, size))
+    })
+    .await
+}
+
+/// Open the package in `path`, with its size, and delete its file, which
+/// the open file still reads.
+async fn take_package(path: PathBuf) -> Result<(File, u64)> {
+    blocking(move || {
+        let file = File::open(&path)?;
+        let size = file.metadata()?.len();
+        std::fs::remove_file(&path)?;
         Ok((file, size))
     })
     .await
