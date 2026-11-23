@@ -188,3 +188,16 @@ async fn a_writers_unresolved_comments_keep_the_gate_closed_whatever_reviews_aft
     fixture.records.resolve(comment, Some(Outcome::Fixed));
     assert!(fixture.covered().await);
 }
+
+#[tokio::test]
+async fn a_workspaces_latest_review_is_never_a_pending_one() {
+    let fixture = fixture().await;
+    fixture.start(Writer::User).await.unwrap();
+    fixture.submit(Writer::User, true).await.unwrap();
+    let selector = fixture.selector();
+    let submitted = fixture.reviews.latest(&*fixture.daemon, &selector);
+    let submitted = submitted.await.unwrap().id;
+    fixture.start(Writer::Space("parent".into())).await.unwrap();
+    let latest = fixture.reviews.latest(&*fixture.daemon, &selector);
+    assert_eq!(latest.await.unwrap().id, submitted);
+}

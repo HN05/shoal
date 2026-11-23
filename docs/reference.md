@@ -1838,7 +1838,7 @@ finished: 1 blocker, 2 should-fix`.
 
 ```sh
 shoal review ls [space]       # Newest first; --repo R for a repository's
-shoal view review [ID]          # One review in full; default: the workspace's latest
+shoal view review [ID]          # One review in full; default: the workspace's latest not pending
 shoal watch review [ID]         # Wait until it ends, then show it
 shoal review cancel [ID]        # Default: the space's pending, queued or running review; --space S
 shoal thread switch 3.4         # Changes from now on are for the finding

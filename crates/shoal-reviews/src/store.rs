@@ -484,7 +484,7 @@ pub fn finished_at(
     }
 }
 
-/// The workspace's newest review.
+/// The workspace's newest review but a pending one.
 pub fn latest(
     db: &Connection,
     records: &dyn Records,
@@ -496,7 +496,7 @@ pub fn latest(
     }
 }
 
-/// The workspace's newest review as lists show it.
+/// The workspace's newest review but a pending one, as lists show it.
 pub fn latest_status(
     db: &Connection,
     records: &dyn Records,
@@ -506,10 +506,12 @@ pub fn latest_status(
     Ok(review.as_ref().map(ReviewStatus::from))
 }
 
+/// The workspace's newest review but a pending one, which is its writer's
+/// until submitted.
 fn latest_id(db: &Connection, workspace_id: &SpaceId) -> Result<Option<ReviewId>> {
     Ok(db.query_row(
-        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1",
-        [workspace_id],
+        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND state IS NOT ?2",
+        params![workspace_id, ReviewState::Pending],
         |row| row.get(0),
     )?)
 }
