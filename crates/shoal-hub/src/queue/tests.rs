@@ -118,6 +118,7 @@ fn request(summary: &str, space: Option<&str>) -> Held {
         method: json!({"send": {}}),
         summary: summary.into(),
         space: space.map(|space| SpaceId::from(space.to_owned())),
+        unheard: false,
     };
     Held {
         call: Call::Serve { request },
@@ -158,4 +159,15 @@ fn a_takeover_passes_what_the_hub_held_for_its_space_to_the_machine_that_took_it
     };
     assert_eq!(claimed(&desk), ["event", "request"]);
     assert_eq!(claimed(&laptop), ["other event", "machine request"]);
+}
+
+#[test]
+fn the_sender_of_a_request_it_does_not_hear_of_is_told_nothing() {
+    let heard = request("heard", None);
+    let mut unheard = request("unheard", None);
+    if let Call::Serve { request } = &mut unheard.call {
+        request.unheard = true;
+    }
+    assert!(reported(&heard.call));
+    assert!(!reported(&unheard.call));
 }

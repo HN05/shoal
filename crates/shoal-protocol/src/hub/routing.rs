@@ -76,6 +76,11 @@ pub struct Forwarded {
     /// request the hub holds follows should the hub take the space over.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub space: Option<SpaceId>,
+    /// Whether its sender hears nothing of it should it expire, or fail,
+    /// in the hub's queue, as for what only keeps another machine in step
+    /// with this one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unheard: bool,
 }
 
 /// How the hub delivers a forwarded request whose machine is offline.

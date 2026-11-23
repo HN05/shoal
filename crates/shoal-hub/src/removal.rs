@@ -153,6 +153,7 @@ impl Hub {
             method: serde_json::to_value(method)?,
             summary: format!("the removal of space {id} with the space above it"),
             space: Some(id.clone()),
+            unheard: false,
         };
         let delivery = match below.cause {
             EventCause::Manual => Delivery::Queued,

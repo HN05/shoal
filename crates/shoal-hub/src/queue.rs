@@ -2,7 +2,8 @@
 //! that can wait for it, such as messages, answers, decisions and stops,
 //! and the events spaces pass up to its spaces. Once the machine connects
 //! the hub delivers them in the order they came; one still waiting after
-//! [`LIFETIME`] is dropped, and the machine that sent it hears of it.
+//! [`LIFETIME`] is dropped, and the machine that sent it hears of it unless
+//! the request says it does not.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
@@ -232,15 +233,14 @@ fn refusal(reply: &Reply) -> Option<String> {
 }
 
 impl Hub {
-    /// Tell the sender of `lapsed` its `outcome`; what tells a sender of
-    /// one is not reported in turn.
+    /// Tell the sender of `lapsed` its `outcome`, where it hears of it.
     async fn tell_sender(&self, daemon: &dyn Daemon, lapsed: Lapsed, outcome: HeldOutcome) {
         let Lapsed {
             machine,
             held,
             queued_at,
         } = lapsed;
-        if matches!(held.call, Call::Expired { .. }) {
+        if !reported(&held.call) {
             return;
         }
         let members = self
@@ -260,6 +260,17 @@ impl Hub {
         if let Err(error) = self.send_expired(daemon, &held.sender, expired).await {
             log!("hub: could not tell a sender what became of its call: {error:#}");
         }
+    }
+}
+
+/// Whether the sender of `call` hears what became of it once the hub held
+/// it: not of what tells a sender of one, nor of a request it does not
+/// hear of.
+fn reported(call: &Call) -> bool {
+    match call {
+        Call::Expired { .. } => false,
+        Call::Serve { request } => !request.unheard,
+        _ => true,
     }
 }
 

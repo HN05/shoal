@@ -112,4 +112,5 @@ async fn a_request_told_while_the_hub_cannot_be_reached_waits_in_the_outbox() {
         request.method["close_opened"]["opener"], "writer",
         "{request:?}"
     );
+    assert!(request.unheard, "the user hears nothing of it: {request:?}");
 }

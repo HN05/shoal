@@ -234,6 +234,7 @@ impl Hub {
             method,
             summary: format!("{name} for space {space}"),
             space: id.cloned(),
+            unheard: false,
         };
         if let Forwarding::Streamed | Forwarding::Duplex = request.forwarding {
             // Refusals of the request itself come on the stream, so what
@@ -331,14 +332,18 @@ impl Hub {
     /// which holds it while that machine is offline, keeping it in this
     /// machine's outbox while the hub cannot be reached, so it goes once
     /// it can; an error that machine answered fails it, and one it kept or
-    /// the hub holds succeeds.
+    /// the hub holds succeeds, of which the user hears nothing should it
+    /// expire or fail there, since it only keeps that machine in step.
     pub async fn tell_machine(
         &self,
         daemon: &dyn Daemon,
         machine: &Member,
         operation: Operation,
     ) -> Result<()> {
-        let request = self.forwarded_to(daemon, machine, operation, None).await?;
+        let request = Forwarded {
+            unheard: true,
+            ..self.forwarded_to(daemon, machine, operation, None).await?
+        };
         let reply = if self.is_hub(daemon) {
             let own = self.own_machine(daemon).await?;
             let routed = self.route_request(daemon, &own, &machine.id, request, Delivery::Queued);
@@ -399,6 +404,7 @@ impl Hub {
             method,
             summary: format!("{name} on machine {}", machine.name),
             space: None,
+            unheard: false,
         })
     }
 
