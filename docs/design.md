@@ -2025,10 +2025,14 @@ stop` and a system shutdown do, cancels its run there, as does its wrapper
 through the daemon, which keeps the forge's login, when a logout's or a
 shutdown's signal reaches it, and disk protection leaves it running. Load
 protection alone ends a job without
-cancelling its run, which would end the run's other jobs too: it stops the
-job's processes and its runner, the forge fails the job once the runner
-reports the stopped step or gives up on the runner, and the job reruns once
-the run has finished, so the PR's check shows the job failed until then. Once the forge has finished the run,
+cancelling its run, which would end the run's other jobs too: before it
+signals anything, Shoal reports that job alone cancelled through the forge's
+runner protocol, as the runner it registered there, then stops the
+job's processes and its runner, whose report of the stopped step changes
+nothing, since the forge keeps a finished job's result. The job reruns once the
+run has finished, so the PR's check shows the job cancelled until then. On a
+forge whose runner protocol Shoal does not speak, GitHub's, the forge fails
+the job once the runner reports the stopped step. Once the forge has finished the run,
 a runner that outlives it by a grace period, held open by a process a step
 left, is Shoal's to end with every process of the job's workspace. Every space that links a run's PR, and the workspace that owns its branch, lists the job in its status, and a
 waiting one with what holds it back, but

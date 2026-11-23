@@ -129,7 +129,11 @@ pub(super) async fn fixture(jobs: Vec<Value>, settings: &str) -> Fixture {
             waiting["status"] = json!("waiting");
             json!({"workflow_runs": [waiting]})
         } else if line == "GET /api/v1/repos/team/repo/actions/runs/6/jobs" {
-            json!([{"id": 8, "name": "rust", "run_id": 6, "status": "failure"}])
+            json!([{"id": 8, "name": "rust", "run_id": 6, "status": "cancelled"}])
+        } else if line == "GET /api/v1/repos/team/repo/actions/jobs/8" {
+            json!({"id": 8, "name": "rust", "run_id": 6, "task_id": 31})
+        } else if line == "POST /api/actions/runner.v1.RunnerService/UpdateTask" {
+            json!({"state": {"id": "31", "result": "RESULT_CANCELLED"}})
         } else if line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel"
             || line == "POST /api/v1/repos/team/repo/actions/runs/2/cancel"
             || line == "POST /api/v1/repos/team/repo/actions/jobs/8/rerun"
@@ -1421,9 +1425,9 @@ async fn heavy_agent(manager: &Manager, repository: &RepositoryId) -> StartedExe
     execution
 }
 
-/// Load protection ends the running job before any agent, records why,
-/// and reruns it on the forge once its run has finished, while readings
-/// have yet to recover.
+/// Load protection cancels the running job on the forge as its runner, then
+/// ends it before any agent, records why, and reruns it on the forge once
+/// its run has finished, while readings have yet to recover.
 #[tokio::test]
 async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_its_run_finished() {
     use crate::daemon::events::EventItem;
@@ -1450,6 +1454,11 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_its_run_fin
     });
     let control: Control = read(&mut connection).await;
     assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
+    let received = fixture.server.received();
+    let cancel = (received.iter())
+        .find(|request| request.line.ends_with("RunnerService/UpdateTask"))
+        .expect("the job is cancelled before its runner stops");
+    assert_eq!(cancel.header("x-runner-uuid"), Some("runner-uuid"));
     let event = ExecutionEvent::Finished {
         exit_code: 143,
         memory: None,

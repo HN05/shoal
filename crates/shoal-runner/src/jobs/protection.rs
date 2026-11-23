@@ -1,11 +1,13 @@
 //! CI jobs that load protection stops. Shoal ends one as it ends a job
 //! whose runner outlived its run, without cancelling its run, which would
-//! end the run's other jobs, recording why in the workspace's log, and
-//! records it to rerun: each pass reruns it on its forge as soon as its run
-//! has finished there, whatever this machine's readings, and the forge
-//! then offers the waiting job to every runner, each Shoal runner admitting
-//! it as any other. A rerun its run never allows within [`PATIENCE`] is
-//! given up.
+//! end the run's other jobs, recording why in the workspace's log. Before
+//! anything is signaled it records the job to rerun and has the forge
+//! cancel that job alone, which a forge whose runner protocol Shoal speaks
+//! does, so the job shows as cancelled rather than failed. Each pass then
+//! reruns it on its forge as soon as its run has finished there, whatever
+//! this machine's readings, and the forge offers the waiting job to every
+//! runner, each Shoal runner admitting it as any other. A rerun its run
+//! never allows within [`PATIENCE`] is given up.
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -34,6 +36,10 @@ const PATIENCE: Duration = Duration::from_secs(24 * 60 * 60);
 /// took, before it stops without a rerun. Only a runner registered for one
 /// job asks; another's claim names its job.
 const IDENTIFY_LIMIT: Duration = Duration::from_secs(10);
+
+/// How long a job to stop waits for its forge to cancel it, before it
+/// stops to fail there instead.
+const CANCEL_LIMIT: Duration = Duration::from_secs(10);
 
 /// A job a runner runs, as its forge names it.
 struct TakenJob {
@@ -71,7 +77,7 @@ impl Runner {
         let taken = tokio::time::timeout(IDENTIFY_LIMIT, self.taken_job(daemon, &job))
             .await
             .unwrap_or_else(|_| Err(anyhow::anyhow!("its forge did not answer in time")));
-        let stopped = self
+        let (stopped, cancelled) = self
             .interrupt_job(daemon, &job, taken.as_ref().ok())
             .await?;
         let reason = format!("stopped for {pressure}");
@@ -80,9 +86,10 @@ impl Runner {
             Ok(taken) => (taken.name.clone(), taken.run.to_string()),
             Err(_) => (job.job.job.name.clone(), job.job.run.url.to_string()),
         };
-        let outcome = match &taken {
-            Ok(_) => "reruns once its run has finished",
-            Err(_) => "not rerun, since the job it took is unknown",
+        let outcome = match (&taken, cancelled) {
+            (Ok(_), true) => "cancelled on its forge; reruns once its run has finished",
+            (Ok(_), false) => "reruns once its run has finished",
+            (Err(_), _) => "not rerun, since the job it took is unknown",
         };
         self.log_job_stop(&job, JobStop::Overload(pressure), outcome);
         if let Err(error) = taken {
@@ -124,23 +131,56 @@ impl Runner {
     }
 
     /// Stop the processes of `job`'s workspace under its lifecycle,
-    /// recording first that `taken`, when known, is to rerun: a stop another
-    /// lifecycle operation refuses records nothing, and the record outlives
-    /// a stop that fails or a daemon that ends once anything may have been
-    /// signaled.
+    /// recording first that `taken`, when known, is to rerun and having its
+    /// forge cancel it, returning the processes stopped and whether the
+    /// forge cancelled it: a stop another lifecycle operation refuses
+    /// records and cancels nothing, and the record outlives a stop that
+    /// fails or a daemon that ends once anything may have been signaled.
     async fn interrupt_job(
         &self,
         daemon: &dyn Daemon,
         job: &ClaimedJob,
         taken: Option<&TakenJob>,
-    ) -> Result<Vec<shoal_protocol::events::StoppedProcess>> {
-        let record = async move {
-            match taken {
-                Some(taken) => self.record_job_rerun(job, taken).await,
-                None => Ok(()),
+    ) -> Result<(Vec<shoal_protocol::events::StoppedProcess>, bool)> {
+        let mut cancelled = false;
+        let first = async {
+            if let Some(taken) = taken {
+                self.record_job_rerun(job, taken).await?;
+                cancelled = self.cancel_stopping_job(daemon, job, taken).await;
             }
+            Ok(())
         };
-        (daemon.interrupt_job_processes(&job.workspace_id, record.boxed())).await
+        let stopped = (daemon.interrupt_job_processes(&job.workspace_id, first.boxed())).await?;
+        Ok((stopped, cancelled))
+    }
+
+    /// Have the forge cancel `taken`, which `job`'s runner runs, before the
+    /// runner is stopped, so its report of the stop does not fail the job,
+    /// returning whether it did. A forge that cannot, or does not answer
+    /// within [`CANCEL_LIMIT`], leaves the job to fail.
+    async fn cancel_stopping_job(
+        &self,
+        daemon: &dyn Daemon,
+        job: &ClaimedJob,
+        taken: &TakenJob,
+    ) -> bool {
+        let cancel = async {
+            let forge = daemon.item_forge(&taken.run).await?;
+            let registration = self.runner_registration(&job.repository_id).await?;
+            let runner = registration.and_then(|registration| registration.runner);
+            (forge.cancel_runner_job(&daemon.user_account(), runner.as_ref(), taken.id)).await
+        };
+        let cancelled = tokio::time::timeout(CANCEL_LIMIT, cancel)
+            .await
+            .unwrap_or_else(|_| Err(anyhow::anyhow!("its forge did not answer in time")));
+        cancelled.unwrap_or_else(|error| {
+            log!(
+                "runner: cancel of {} of run {}: {error:#}",
+                taken.name,
+                taken.run
+            );
+            false
+        })
     }
 
     /// Whether the execution running `job`'s runner is still recorded, so

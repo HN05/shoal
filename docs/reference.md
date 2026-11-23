@@ -254,10 +254,12 @@ every running agent below it, light ones included. A running
 [reviewer](#local-reviews) stops before any of them. A stopped CI job ends as
 one whose runner outlived its run does: Shoal stops its workspace's processes,
 then its runner, and its end in the workspace's [log](#space-log) says what it was
-stopped for. Once readings have recovered, as an agent's restore needs below,
-Shoal reruns the job on its forge as soon as its run has finished there, and the
-job waits in the [queue](#agent-queue) as any other; one whose run allows no
-rerun within a day records a `runner_failed` alert.
+stopped for. On Forgejo, Shoal first cancels that job alone, so it shows as
+cancelled and the run's other jobs go on; on GitHub, which offers no way to,
+the job shows as failed. Shoal reruns the job on its forge as soon as its run has
+finished there, whatever this machine's readings, and each runner's
+[queue](#agent-queue) admits it as any other job; one whose run allows no rerun
+within a day records a `runner_failed` alert.
 
 On Linux the kernel's OOM killer follows the same order. The daemon lowers its
 own `oom_score_adj` at startup to that of the service manager that started it,
