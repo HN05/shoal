@@ -4423,8 +4423,8 @@ the source's space goes, and a fetch happens only while it exists, so an
 unchanged copy never outlives the source's retention, while a later fetch of
 a living space's file makes it again; an edit keeps the copy that long again,
 since its changes exist nowhere else. Disk space cleanup deletes such copies first, since their
-source machine keeps them, except one the user changed since its fetch,
-whose changes exist nowhere else, and one a fetch is still writing.
+source machine keeps them, except one the user changed since its fetch and
+one a fetch is still writing.
 Files are keyed by their owner's ID, which a workspace and a
 chat never share, so no kind tells them apart: an owner is gone when neither
 has the ID, and a record of its own says how long its files stay, apart from

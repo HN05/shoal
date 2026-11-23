@@ -56,7 +56,7 @@ async fn copies_go_once_fetched_longer_ago_than_the_retention() {
 }
 
 #[tokio::test]
-async fn disk_space_cleanup_deletes_every_copy_where_it_frees_space() {
+async fn disk_space_cleanup_deletes_unchanged_copies_where_it_frees_space() {
     let (temp, manager) = manager().await;
     let low = fetched(temp.path(), &manager, "low", DAY).await;
     let elsewhere = fetched(temp.path(), &manager, "elsewhere", DAY).await;
