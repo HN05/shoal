@@ -1222,8 +1222,9 @@ waking within the 10 minutes leaves everything where it was. These times
 and the battery level are fixed, not settings.
 
 The hub never takes a space over on its own otherwise: a machine that is
-awake but lost only the hub keeps working. Once an `intermittent` machine has been
-unreachable for 30 minutes, the hub records one `machine_unreachable` alert
+awake but lost only the hub keeps working. Once an `intermittent` machine, or
+any that announced its sleep, has been unreachable for 30 minutes, the hub
+records one `machine_unreachable` alert
 for that drop, naming its spaces that had something to do (an agent working
 when its link dropped, a queued agent, or an event the hub holds for one
 since), how far behind the hub's package of each is, and the

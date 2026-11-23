@@ -176,6 +176,13 @@ fn record_unless_asleep(
     }
 }
 
+/// The machines recorded asleep.
+pub(super) fn asleep_members(tx: &Transaction<'_>) -> Result<HashSet<MemberId>> {
+    let mut statement = tx.prepare("SELECT id FROM hub_members WHERE asleep_at IS NOT NULL")?;
+    let ids = statement.query_map([], |row| row.get(0))?;
+    Ok(ids.collect::<rusqlite::Result<_>>()?)
+}
+
 /// Forget `member`'s sleep, as once its link opened.
 fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute(

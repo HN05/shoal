@@ -1,9 +1,10 @@
-//! The hub's alert once an intermittent machine has stayed unreachable for
-//! [`UNREACHABLE_FOR`] while its spaces had something to do: an agent
-//! working when its link dropped, a queued agent, or an update the hub
-//! holds for one since. It names each such space, how far behind the hub's
-//! package of it is, and the restore that takes it over, and starts
-//! nothing, since a machine that lost only the hub keeps working.
+//! The hub's alert once an intermittent machine, or any that announced its
+//! sleep, has stayed unreachable for [`UNREACHABLE_FOR`] while its spaces
+//! had something to do: an agent working when its link dropped, a queued
+//! agent, or an update the hub holds for one since. It names each such
+//! space, how far behind the hub's package of it is, and the restore that
+//! takes it over, and starts nothing, since a machine that lost only the
+//! hub keeps working and one that slept kept these spaces.
 use std::{
     collections::{HashMap, HashSet},
     time::Duration,
@@ -62,7 +63,8 @@ impl Hub {
     /// spaces had something to do, and was not alerted for that drop yet.
     async fn alert_drops(&self, daemon: &dyn Daemon, now: UnixTime) -> Result<()> {
         let directory = self.local_directory(daemon).await?;
-        for (machine, dropped_at) in dropped(&directory, now) {
+        let asleep = self.store.read(super::sleeps::asleep_members).await?;
+        for (machine, dropped_at) in dropped(&directory, now, &asleep) {
             let id = machine.id.clone();
             let held = self.store.read(move |tx| held(tx, &id, dropped_at)).await?;
             let busy = busy_spaces(&directory, &machine.id, &held.spaces);
@@ -76,7 +78,9 @@ impl Hub {
             let id = machine.id.clone();
             let kept = self.store.read(move |tx| packaged(tx, &id)).await?;
             let away = now.duration_since(dropped_at);
-            let message = drop_message(machine, (dropped_at, away), (&busy, &kept), held.others);
+            let slept = asleep.contains(&machine.id);
+            let away = (dropped_at, away, slept);
+            let message = drop_message(machine, away, (&busy, &kept), held.others);
             (self.notify(
                 daemon,
                 About::named(None),
@@ -104,14 +108,20 @@ impl Hub {
     }
 }
 
-/// The intermittent machines of `directory` that have been unreachable for
-/// [`UNREACHABLE_FOR`] at `now`, each with when the hub last saw it.
-fn dropped(directory: &Directory, now: UnixTime) -> Vec<(&Member, UnixTime)> {
+/// The machines of `directory` that have been unreachable for
+/// [`UNREACHABLE_FOR`] at `now`, each with when the hub last saw it: the
+/// intermittent ones, and any that announced its sleep, as `asleep` lists,
+/// whose spaces the hub could not take over.
+fn dropped<'a>(
+    directory: &'a Directory,
+    now: UnixTime,
+    asleep: &HashSet<MemberId>,
+) -> Vec<(&'a Member, UnixTime)> {
     (directory.machines.iter())
         .filter(|machine| !machine.hub && !machine.connected)
         .filter(|machine| {
             let availability = machine.availability.map(|told| told.availability);
-            availability == Some(Availability::Intermittent)
+            availability == Some(Availability::Intermittent) || asleep.contains(&machine.id)
         })
         .filter_map(|machine| Some((machine, machine.last_seen?)))
         .filter(|(_, seen)| now.duration_since(*seen) >= UNREACHABLE_FOR)
@@ -162,20 +172,27 @@ pub(super) fn had_work(listed: &Listed, held: &HashSet<SpaceId>) -> bool {
 }
 
 /// The alert that `machine`, last seen at `dropped_at` and unreachable
-/// for `away` since, dropped while the `busy` spaces had something to do,
-/// of which the hub `kept` packages, with `others` requests waiting for it
-/// besides.
+/// for `away` since, as it `slept` or not, dropped while the `busy` spaces
+/// had something to do, of which the hub `kept` packages, with `others`
+/// requests waiting for it besides.
 fn drop_message(
     machine: &Member,
-    (dropped_at, away): (UnixTime, Duration),
+    (dropped_at, away, slept): (UnixTime, Duration, bool),
     (busy, kept): (&[&Listed], &HashMap<SpaceId, UnixTime>),
     others: usize,
 ) -> String {
-    let mut message = format!(
-        "Machine {} has been unreachable for {}; the hub starts nothing in its place, since it may still be working without the hub.",
-        machine.name,
-        elapsed(away),
-    );
+    let mut message = match slept {
+        true => format!(
+            "Machine {} has slept for {}, and the hub could not take these of its spaces over to another machine.",
+            machine.name,
+            elapsed(away),
+        ),
+        false => format!(
+            "Machine {} has been unreachable for {}; the hub starts nothing in its place, since it may still be working without the hub.",
+            machine.name,
+            elapsed(away),
+        ),
+    };
     for listed in busy {
         let space = &listed.space;
         let package = match (kept.contains_key(&space.id), space.unsent_since) {

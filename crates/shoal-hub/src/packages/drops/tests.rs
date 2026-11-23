@@ -39,7 +39,7 @@ fn listed(machine: &str, id: &str, number: u32, fields: serde_json::Value) -> Li
 }
 
 #[test]
-fn only_an_intermittent_machine_away_for_half_an_hour_has_dropped() {
+fn an_intermittent_or_sleeping_machine_away_for_half_an_hour_has_dropped() {
     let now = UnixTime::now();
     let long_ago = now - UNREACHABLE_FOR;
     let lately = now - Duration::from_secs(60);
@@ -48,13 +48,15 @@ fn only_an_intermittent_machine_away_for_half_an_hour_has_dropped() {
             machine("laptop", Availability::Intermittent, long_ago),
             machine("tablet", Availability::Intermittent, lately),
             machine("desk", Availability::AlwaysOn, long_ago),
+            machine("studio", Availability::AlwaysOn, long_ago),
         ],
         ..Directory::default()
     };
-    let dropped: Vec<&str> = (dropped(&directory, now).into_iter())
+    let asleep = HashSet::from([MemberId::from("studio".to_owned())]);
+    let dropped: Vec<&str> = (dropped(&directory, now, &asleep).into_iter())
         .map(|(machine, _)| machine.name.as_str())
         .collect();
-    assert_eq!(dropped, ["laptop"]);
+    assert_eq!(dropped, ["laptop", "studio"]);
 }
 
 #[test]
@@ -92,7 +94,7 @@ fn the_alert_says_how_far_behind_each_package_is_and_what_takes_it_over() {
         (SpaceId::from("fix".to_owned()), dropped_at),
     ]);
     let laptop = machine("laptop", Availability::Intermittent, dropped_at);
-    let away = (dropped_at, UNREACHABLE_FOR);
+    let away = (dropped_at, UNREACHABLE_FOR, false);
     let message = drop_message(&laptop, away, (&busy, &kept), 2);
     // Each space with a package names how far behind it is and its
     // restore; one without names none.

@@ -249,8 +249,9 @@ makes the space its machine's, and the machine it was taken from retires its
 copy through the removal path once its link opens, alerting the user when
 its copy changed after the package. Silence alone never starts a second
 copy: a machine that lost only the hub keeps working, so the hub only
-alerts the user once an intermittent machine has been unreachable for 30
-minutes while its spaces had something to do. A shutdown is no silence:
+alerts the user once an intermittent machine, or one that announced its
+sleep, has been unreachable for 30 minutes while its spaces had something
+to do. A shutdown is no silence:
 every machine joined to a hub, whatever its availability, hands its spaces
 over as it shuts down, which is not a setting. Once the save-first
 shutdown stop below ends, it sends the final package of every space at
