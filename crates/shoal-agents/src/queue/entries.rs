@@ -291,7 +291,7 @@ impl Agents {
         if self.agent_queue.holds_admission() {
             self.return_start(entry).await?;
             bail!(
-                "the system is shutting down or sleeping, or its user is away; the agent queue starts this agent later"
+                "the system is shutting down or sleeping, or its user is away or paused it; the agent queue starts this agent later"
             );
         }
         if !self.recovery_admission_holds(entry) {

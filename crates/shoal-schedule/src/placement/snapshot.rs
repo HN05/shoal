@@ -2,6 +2,7 @@
 //! machine as the hub last heard of it.
 use serde::{Deserialize, Serialize};
 use shoal_ids::member_ids::MemberId;
+use shoal_time::UnixTime;
 
 use super::SkippedBy;
 
@@ -80,21 +81,24 @@ pub struct Capacity {
     /// Whether its user walked away, so it admits nothing new.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub away: bool,
+    /// Since when its user paused it, so it admits nothing new until they
+    /// unpause it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paused: Option<UnixTime>,
 }
 
 impl Request {
     /// Why the start cannot go to `machine`, none when it can: a machine
-    /// its user walked away from admits nothing new, the caller's machine
-    /// has its repository, where the start found it, and another one needs
-    /// it registered, unless the start needs none, and every machine needs
-    /// its agent tool.
+    /// its user paused or walked away from admits nothing new, the caller's
+    /// machine has its repository, where the start found it, and another
+    /// one needs it registered, unless the start needs none, and every
+    /// machine needs its agent tool.
     pub fn unfit(&self, machine: &Machine) -> Option<SkippedBy> {
         let caller = machine.id == self.caller;
-        if machine
-            .capacity
-            .as_ref()
-            .is_some_and(|capacity| capacity.away)
-        {
+        let capacity = machine.capacity.as_ref();
+        if capacity.is_some_and(|capacity| capacity.paused.is_some()) {
+            Some(SkippedBy::Paused)
+        } else if capacity.is_some_and(|capacity| capacity.away) {
             Some(SkippedBy::Away)
         } else if !caller && !machine.has_repository(self.origin.as_deref()) {
             Some(SkippedBy::NoRepository)

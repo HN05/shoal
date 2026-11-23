@@ -180,3 +180,22 @@ fn a_start_skips_machines_whose_user_walked_away() {
     assert_eq!(skipped, [away("laptop"), away("desktop")]);
     assert_eq!(placement.chosen().unwrap().machine.to_string(), "server");
 }
+
+#[test]
+fn a_start_skips_a_paused_machine_even_while_its_user_is_away() {
+    let mut paused = machine("desktop", true, capacity(4, 64, 0));
+    (paused.capacity.as_mut().into_iter()).for_each(|capacity| {
+        capacity.paused = Some(shoal_time::UnixTime::from_seconds(10));
+        capacity.away = true;
+    });
+    let machines = vec![laptop(), paused];
+    let placement = Balanced.place(&Snapshot {
+        request: request(true),
+        machines,
+    });
+    let skipped: Vec<_> = (placement.skipped.iter())
+        .map(|skipped| (skipped.machine.to_string(), skipped.why))
+        .collect();
+    assert_eq!(skipped, [("desktop".to_owned(), SkippedBy::Paused)]);
+    assert_eq!(placement.chosen().unwrap().machine.to_string(), "laptop");
+}

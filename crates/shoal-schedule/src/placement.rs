@@ -106,6 +106,8 @@ states! {
         NoAgent => "no_agent",
         /// Its user walked away, and it admits nothing new.
         Away => "away",
+        /// Its user paused it, and it admits nothing new.
+        Paused => "paused",
     }
 }
 

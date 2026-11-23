@@ -56,6 +56,9 @@ pub struct AgentQueue {
     /// Admission waits while the user is away from a machine whose
     /// `keep_awake` admits nothing new then.
     away: AtomicBool,
+    /// Since when the user paused the machine, while admission waits for
+    /// `shoal unpause`.
+    paused: StdMutex<Option<UnixTime>>,
 }
 
 #[derive(Default)]
@@ -430,10 +433,27 @@ impl AgentQueue {
         self.away.load(Ordering::SeqCst)
     }
 
+    /// Hold back admission from `since`, while the user paused the
+    /// machine, or with none no longer; unpausing wakes the dispatcher.
+    pub fn pause(&self, since: Option<UnixTime>) {
+        let was = std::mem::replace(&mut *self.paused.lock().unwrap(), since);
+        if was.is_some() && since.is_none() {
+            self.wake();
+        }
+    }
+
+    /// Since when admission waits for the user to unpause the machine.
+    pub fn paused_since(&self) -> Option<UnixTime> {
+        *self.paused.lock().unwrap()
+    }
+
     /// Whether admission waits, while the system shuts down, the machine
-    /// sleeps or the user is away.
+    /// sleeps, the user is away or paused it.
     pub fn holds_admission(&self) -> bool {
-        self.suspended() || self.asleep.load(Ordering::SeqCst) || self.held_away()
+        self.suspended()
+            || self.asleep.load(Ordering::SeqCst)
+            || self.held_away()
+            || self.paused_since().is_some()
     }
 
     /// Wake the dispatcher, since a slot may have freed or work may fit.
