@@ -344,6 +344,12 @@ async fn a_scoped_caller_follows_and_reports_its_own_operation_in_a_space_no_lon
 
     followed.unwrap();
     reported.unwrap();
-    assert!(refused.is_err(), "another space followed it");
+    let Err(refused) = refused else {
+        panic!("another space followed it");
+    };
+    assert!(
+        refused.to_string().contains("can only follow"),
+        "{refused:#}"
+    );
     worker.exit(0);
 }
