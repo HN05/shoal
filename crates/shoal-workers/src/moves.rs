@@ -30,7 +30,7 @@ use checks::Checked;
 pub use finishing::finish;
 use shoal_core::transfer::{MoveDestination, MoveFailure, MoveOrder, MoveReport, SpaceMoved};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::model::RemovedSpace;
+use shoal_protocol::model::{LocatedRemoved, RemovedSpace};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// Where a move reports the step each space reached, and learns that it
@@ -183,6 +183,21 @@ async fn plan_space(
 /// packages those machines hold for this one to write.
 pub async fn runs_elsewhere(paths: &CommandPaths, order: &MoveOrder) -> Result<bool> {
     Ok(!relayed::Relays::find(paths, order).await?.is_empty())
+}
+
+/// Whether a move takes the space `id` as a removed space's record, which
+/// stays where it is kept, as the daemon that starts the move does: one
+/// kept here, else one another machine keeps while no machine runs the
+/// space.
+pub async fn takes_record(paths: &CommandPaths, id: &SpaceId) -> bool {
+    let selector = SpaceSelector::id(id);
+    match crate::client::removal::locate_removed(paths, selector.clone()).await {
+        Ok(LocatedRemoved::Here(_)) => true,
+        Ok(LocatedRemoved::Elsewhere { .. }) => {
+            (crate::client::spaces::locate(paths, selector).await).is_err()
+        }
+        Err(_) => false,
+    }
 }
 
 /// Run `order`: check its spaces, then move each, or a copy of it, going on

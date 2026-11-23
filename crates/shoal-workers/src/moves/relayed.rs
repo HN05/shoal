@@ -1,12 +1,13 @@
 //! A move to files of spaces other joined machines run, or of copies of
-//! them. Each such machine packs its spaces and holds their packages,
-//! which this one reads over the hub and writes where the caller named; for
-//! a file or a directory it then ends each space there, and the command
-//! that copies a package to its standard output ends it once copied, as
-//! for a space of this machine. A copy's package goes there once read, and
-//! the space keeps running. With spaces of several machines, this one's
-//! included, the move asks once what ending all of them needs before any
-//! ends.
+//! them, or of the records of spaces they removed. Each such machine packs
+//! its spaces and holds their packages, which this one reads over the hub
+//! and writes where the caller named; for a file or a directory it then
+//! ends each space there, and the command that copies a package to its
+//! standard output ends it once copied, as for a space of this machine. A
+//! copy's package, or a removed space's, goes there once read, and the
+//! space keeps running, or its record stays there. With spaces of several
+//! machines, this one's included, the move asks once what ending all of
+//! them needs before any ends.
 mod consent;
 mod delivery;
 
@@ -25,7 +26,8 @@ use crate::{
 use delivery::Reserved;
 use shoal_core::transfer::{Consent, MoveDestination, MoveOrder, MoveReport};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
-use shoal_protocol::model::Located;
+use shoal_protocol::hub::Member;
+use shoal_protocol::model::{Located, LocatedRemoved};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// The spaces of a move to files that other joined machines run, by the
@@ -33,18 +35,27 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 #[derive(Default)]
 pub(super) struct Relays(Vec<Relay>);
 
-/// The spaces of a move that one other joined machine runs.
+/// The spaces of a move that one other joined machine runs or keeps the
+/// records of.
 struct Relay {
     member: MemberId,
     /// The machine's name, as the move tells of it.
     machine: String,
-    spaces: Vec<(SpaceId, SpaceName)>,
+    spaces: Vec<Relayed>,
+}
+
+/// A space a relay takes.
+struct Relayed {
+    id: SpaceId,
+    name: SpaceName,
+    /// Whether it is removed, so its record, which stays there, moves.
+    removed: bool,
 }
 
 impl Relays {
     /// The spaces `order` moves to files that this machine neither runs
-    /// nor removed, by the other joined machine that runs each; none for a
-    /// move to another machine.
+    /// nor keeps the record of, by the other joined machine that runs each
+    /// or keeps its record; none for a move to another machine.
     pub(super) async fn find(paths: &CommandPaths, order: &MoveOrder) -> Result<Self> {
         let (MoveDestination::File { .. }
         | MoveDestination::Directory { .. }
@@ -55,13 +66,11 @@ impl Relays {
         let present = crate::client::spaces::list(paths).await?;
         let mut relays = Self::default();
         for id in &order.spaces {
-            if present.iter().any(|space| space.id == *id) || removed_here(paths, id).await {
+            if present.iter().any(|space| space.id == *id) {
                 continue;
             }
-            let located = crate::client::spaces::locate(paths, SpaceSelector::id(id)).await?;
-            if let Located::Elsewhere { space, machine } = located {
-                let space = (space.space.id, space.space.name);
-                relays.add(machine.id, machine.name, space);
+            if let Some((machine, space)) = elsewhere(paths, id).await? {
+                relays.add(machine, space);
             }
         }
         Ok(relays)
@@ -72,13 +81,13 @@ impl Relays {
         self.0.is_empty()
     }
 
-    /// Add `space`, which the machine `member`, named `machine`, runs.
-    fn add(&mut self, member: MemberId, machine: String, space: (SpaceId, SpaceName)) {
-        match self.0.iter_mut().find(|relay| relay.member == member) {
+    /// Add `space`, which `machine` runs or keeps the record of.
+    fn add(&mut self, machine: Member, space: Relayed) {
+        match self.0.iter_mut().find(|relay| relay.member == machine.id) {
             Some(relay) => relay.spaces.push(space),
             None => self.0.push(Relay {
-                member,
-                machine,
+                member: machine.id,
+                machine: machine.name,
                 spaces: vec![space],
             }),
         }
@@ -97,11 +106,33 @@ impl Relays {
     }
 }
 
-/// Whether the space `id` was removed here, which the move takes as a
-/// space of this machine.
-async fn removed_here(paths: &CommandPaths, id: &SpaceId) -> bool {
-    let removed = crate::client::removal::removed_space(paths, SpaceSelector::id(id));
-    removed.await.is_ok()
+/// The other joined machine that runs the space `id`, or keeps its record
+/// once removed, with the space as a relay takes it; none for a space this
+/// machine runs or keeps the record of, which comes first, as the daemon
+/// that starts the move takes it.
+async fn elsewhere(paths: &CommandPaths, id: &SpaceId) -> Result<Option<(Member, Relayed)>> {
+    let selector = SpaceSelector::id(id);
+    let removed = crate::client::removal::locate_removed(paths, selector.clone()).await;
+    if let Ok(LocatedRemoved::Here(_)) = removed {
+        return Ok(None);
+    }
+    let missing = match crate::client::spaces::locate(paths, selector).await {
+        Ok(Located::Here(_)) => return Ok(None),
+        Ok(Located::Elsewhere { space, machine }) => {
+            let (id, name) = (space.space.id, space.space.name);
+            let removed = false;
+            return Ok(Some((*machine, Relayed { id, name, removed })));
+        }
+        Err(missing) => missing,
+    };
+    match removed {
+        Ok(LocatedRemoved::Elsewhere { space, machine }) => {
+            let (id, name) = (space.space_id, space.name);
+            let removed = true;
+            Ok(Some((*machine, Relayed { id, name, removed })))
+        }
+        Ok(LocatedRemoved::Here(_)) | Err(_) => Err(missing),
+    }
 }
 
 /// Run `order`, some of whose spaces `relays` other machines run: alone,
@@ -144,14 +175,20 @@ pub(super) async fn run(
 impl Relay {
     /// The IDs of its spaces.
     fn ids(&self) -> Vec<SpaceId> {
-        self.spaces.iter().map(|(id, _)| id.clone()).collect()
+        self.spaces.iter().map(|space| space.id.clone()).collect()
+    }
+
+    /// Whether the space `id` stays on its machine as `order` moves it: a
+    /// copy of it moves, or its record, which stays there, once removed.
+    fn stays_there(&self, order: &MoveOrder, id: &SpaceId) -> bool {
+        order.keep || (self.spaces.iter()).any(|space| space.id == *id && space.removed)
     }
 
     /// Move its spaces, or copies of them, as `order` says, with
     /// `consent`: its machine packs them and holds their packages, which
     /// this one writes to their new files, refused before anything ends
     /// there when one cannot be created, ending each space there once its
-    /// file holds it, as `report` records.
+    /// file holds it unless it stays there, as `report` records.
     async fn relay(
         &self,
         paths: &CommandPaths,
@@ -169,7 +206,10 @@ impl Relay {
             ..order.clone()
         };
         match pack_there(paths, held).await {
-            Ok(packed) => deliver_packed(paths, order, packed, reserved, steps, report).await,
+            Ok(packed) => {
+                self.deliver_packed(paths, order, (packed, reserved), steps, report)
+                    .await
+            }
             Err(error) => {
                 reserved.into_iter().for_each(Reserved::remove);
                 return Err(error);
@@ -181,41 +221,43 @@ impl Relay {
     /// Record in `report` that none of its spaces moved as `order` says,
     /// for `error`.
     fn failed(&self, order: &MoveOrder, report: &mut MoveReport, error: &anyhow::Error) {
-        for (id, name) in &self.spaces {
+        for space in &self.spaces {
             let failed = Err(anyhow!("{error:#}"));
-            super::record(order, report, (id.clone(), name.clone()), failed);
+            let identity = (space.id.clone(), space.name.clone());
+            super::record(order, report, identity, failed);
         }
     }
-}
 
-/// Record in `report` the spaces `packed` failed to pack, as `order` says,
-/// then deliver each it packed into its file among `reserved`, deleting
-/// those of the spaces that went in another's package.
-async fn deliver_packed(
-    paths: &CommandPaths,
-    order: &MoveOrder,
-    packed: MoveReport,
-    reserved: Vec<Reserved>,
-    steps: &impl Steps,
-    report: &mut MoveReport,
-) {
-    for failed in packed.failed {
-        let error = Err(anyhow!(failed.error));
-        super::record(order, report, (failed.id, failed.name), error);
-    }
-    if !packed.moved.is_empty() {
-        steps.reached(Step::MoveDelivering).await;
-    }
-    let mut moved = packed.moved;
-    for file in reserved {
-        let Some(index) = moved.iter().position(|moved| moved.id == file.id) else {
-            file.remove();
-            continue;
-        };
-        let packed = moved.swap_remove(index);
-        let identity = (packed.id.clone(), packed.name.clone());
-        let delivered = delivery::deliver(paths, order, packed, file).await;
-        super::record(order, report, identity, delivered);
+    /// Record in `report` the spaces `packed` failed to pack, as `order`
+    /// says, then deliver each it packed into its file among `reserved`,
+    /// deleting those of the spaces that went in another's package.
+    async fn deliver_packed(
+        &self,
+        paths: &CommandPaths,
+        order: &MoveOrder,
+        (packed, reserved): (MoveReport, Vec<Reserved>),
+        steps: &impl Steps,
+        report: &mut MoveReport,
+    ) {
+        for failed in packed.failed {
+            let error = Err(anyhow!(failed.error));
+            super::record(order, report, (failed.id, failed.name), error);
+        }
+        if !packed.moved.is_empty() {
+            steps.reached(Step::MoveDelivering).await;
+        }
+        let mut moved = packed.moved;
+        for file in reserved {
+            let Some(index) = moved.iter().position(|moved| moved.id == file.id) else {
+                file.remove();
+                continue;
+            };
+            let packed = moved.swap_remove(index);
+            let identity = (packed.id.clone(), packed.name.clone());
+            let stays = self.stays_there(order, &packed.id);
+            let delivered = delivery::deliver(paths, order, (packed, stays), file).await;
+            super::record(order, report, identity, delivered);
+        }
     }
 }
 

@@ -66,18 +66,19 @@ impl Reserved {
 }
 
 /// Write the package of `packed`, which its machine holds, into `reserved`,
-/// and end the space there when `order` moves it, rather than a copy, to a
-/// file this command keeps no hold of.
+/// and end the space there unless it `stays` there, as a copy's space or a
+/// removed space's record does, or `order` streams its file to the
+/// command, which ends it once copied.
 pub(super) async fn deliver(
     paths: &CommandPaths,
     order: &MoveOrder,
-    mut packed: SpaceMoved,
+    (mut packed, stays): (SpaceMoved, bool),
     reserved: Reserved,
 ) -> Result<SpaceMoved> {
     let selector = SpaceSelector::id(&packed.id);
-    let file = take_package(paths, selector.clone(), order.keep, reserved).await?;
+    let file = take_package(paths, selector.clone(), stays, reserved).await?;
     let streamed = matches!(order.destination, MoveDestination::Client { .. });
-    if !order.keep && !streamed {
+    if !stays && !streamed {
         let ending = crate::client::transfer::end_moved(paths, selector).await;
         packed.removal = Some(ending.with_context(|| both_places(&file, &packed.id))?);
     }
@@ -86,7 +87,8 @@ pub(super) async fn deliver(
 }
 
 /// Write the package the machine of the space `space` holds into
-/// `reserved`, a `copy`'s or a move's; one that does not arrive whole
+/// `reserved`, a `copy`'s, which a removed space's is, or a move's; one
+/// that does not arrive whole
 /// leaves no file, and gives a move back there, where the space stays with
 /// its agents' restores queued.
 async fn take_package(

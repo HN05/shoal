@@ -39,7 +39,8 @@ async fn named(ctx: &Context, names: &[SpaceSelector], removed: bool) -> Result<
 }
 
 /// The ID of the space `selector` names, wherever it runs, or with
-/// `removed` of the removed space it names by ID.
+/// `removed` of the removed space it names by ID, wherever its record is
+/// kept.
 async fn live_or_removed(
     ctx: &Context,
     selector: &SpaceSelector,
@@ -51,8 +52,8 @@ async fn live_or_removed(
         Err(error) if removed && names_no_space(&error) => error,
         Err(error) => return Err(error),
     };
-    let record = crate::client::removal::removed_space(&ctx.paths, selector.clone());
-    Ok((record.await).context(missing)?.space_id)
+    let record = crate::client::removal::locate_removed(&ctx.paths, selector.clone());
+    Ok((record.await).context(missing)?.space().space_id.clone())
 }
 
 /// Whether `error` is the daemon's refusal for a space no machine has.

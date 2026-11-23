@@ -5258,7 +5258,9 @@ and its agent starts as a new one where it is imported.
 A workspace or chat
 already removed, as by cleanup, is exported from its removal record, which
 stays, with the records of the spaces its removal took, under the refusals that
-still apply, without another removal. The file's manifest names each record's `kind`, `workspace` or `chat`.
+still apply, without another removal; the record of a space another joined
+machine removed goes the same way, that machine packing it and deleting its
+package once read, and stays there. The file's manifest names each record's `kind`, `workspace` or `chat`.
 
 `--no-recursive`, with any destination, leaves the spaces below here, where
 `--recursive`, the default except with `--machine`, takes them, except those named too, which go
@@ -5286,8 +5288,8 @@ ending any: when one cannot be exported, it lists
 each refusal and ends nothing. It asks once, as a single export does, before
 ending them, then exports each space and lists the files it wrote; a
 failure there leaves the remaining ones to export, and the command exits 1
-naming each failed space. The spaces other joined machines run go there as
-a single file's space does, each machine's after this machine's; with
+naming each failed space. The spaces other joined machines run, or whose
+removal records they keep, go there as a single file's space does, each machine's after this machine's; with
 spaces of more than one machine, each other machine first checks its own
 without ending any, and the one question lists what each would end.
 

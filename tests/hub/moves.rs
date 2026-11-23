@@ -319,6 +319,65 @@ fn a_copy_of_another_machine_s_space_goes_to_a_file_and_leaves_no_package_there(
     assert_ne!(restored["space"]["id"], work, "{restored}");
 }
 
+/// A workspace `laptop`, joined as `laptop_id`, created and removed, once
+/// `hub` listed it and then no longer does.
+fn laptop_removed_work(hub: &Base, laptop: &Base, laptop_id: &str) -> String {
+    give_origin(laptop);
+    let work = workspace(laptop, "work");
+    listed(hub, &work, laptop_id);
+    laptop.ok(&["rm", &work, "--wait", "--yes"]);
+    wait_for("the hub to drop the removed space", || {
+        let spaces = hub.ok(&["list"]);
+        let mut spaces = spaces.as_array().unwrap().iter();
+        (!spaces.any(|listed| listed["id"] == work)).then_some(())
+    });
+    work
+}
+
+#[test]
+fn another_machine_s_removed_record_goes_to_a_file_and_stays_there_without_a_package() {
+    let (hub, laptop, desk, laptop_id, _) = machines("");
+    let work = laptop_removed_work(&hub, &laptop, &laptop_id);
+    let file = hub.root.path().join("record.shoal");
+
+    let moved = hub.ok(&["move", &work, "-o", file.to_str().unwrap()]);
+
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    assert!(keeps_removed(&laptop, &work));
+    let copies = laptop.root.path().join("state/moves/copies");
+    let left = fs::read_dir(&copies).map_or(0, Iterator::count);
+    assert_eq!(left, 0, "{}", copies.display());
+    restores(&desk, &file, &work);
+}
+
+#[test]
+fn another_machine_s_removed_record_goes_to_a_directory_with_a_live_space() {
+    let (hub, laptop, desk, laptop_id, _) = machines("");
+    let work = laptop_removed_work(&hub, &laptop, &laptop_id);
+    give_origin(&hub);
+    let here = workspace(&hub, "here");
+    let directory = hub.root.path().join("moved");
+
+    let moved = hub.ok(&["move", &work, &here, "-o", directory.to_str().unwrap()]);
+
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    assert!(keeps_removed(&laptop, &work));
+    restores(&desk, &directory.join(format!("{work}.shoal")), &work);
+    restores(&desk, &directory.join(format!("{here}.shoal")), &here);
+}
+
+#[test]
+fn another_machine_s_removed_record_moves_from_there_to_a_joined_machine() {
+    let (hub, laptop, desk, laptop_id, _) = machines("");
+    let work = laptop_removed_work(&hub, &laptop, &laptop_id);
+
+    let moved = hub.ok(&["move", &work, "--machine", "desk"]);
+
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    assert!(!keeps_removed(&laptop, &work));
+    assert!(keeps_removed(&desk, &work));
+}
+
 /// The package files in `directory`.
 fn packages_in(directory: &std::path::Path) -> Vec<String> {
     let entries = fs::read_dir(directory).into_iter().flatten().flatten();

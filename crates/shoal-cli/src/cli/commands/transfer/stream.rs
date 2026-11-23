@@ -71,13 +71,13 @@ fn copy_to_stdout(path: &Path) -> Result<()> {
 }
 
 /// End the `moved` space where it runs, whose package its reader took,
-/// unless it was a removed space here, whose record moved.
+/// unless the move took a removed space's record, which stays where it is
+/// kept.
 async fn end_moved_space(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
-    let selector = SpaceSelector::id(&moved.id);
-    let removed = crate::client::removal::removed_space(&ctx.paths, selector.clone());
-    if removed.await.is_ok() {
+    if moves::takes_record(&ctx.paths, &moved.id).await {
         return Ok(());
     }
+    let selector = SpaceSelector::id(&moved.id);
     let ending = crate::client::transfer::end_moved(&ctx.paths, selector);
     ending.await.with_context(|| {
         format!(
