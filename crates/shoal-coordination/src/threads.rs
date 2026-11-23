@@ -19,7 +19,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     code::NewCodeRef,
     hub::Member,
-    model::Located,
+    model::{Located, SpaceKind},
     protocol::{Body, Operation, ThreadMethod},
     reviews::ReviewId,
     space_names::SpaceSelector,
@@ -235,8 +235,9 @@ impl Coordination {
 
 /// `comment` of `caller`'s pending review of the workspace `located`,
 /// which the machine that runs that workspace keeps and opens; none for
-/// a workspace here or without such a review. Only that machine knows
-/// whether it keeps one, so failing to ask it refuses the thread.
+/// a space here, a chat, which no review is of, or without such a review.
+/// Only that machine knows whether it keeps one, so failing to ask it
+/// refuses the thread.
 async fn comment_elsewhere(
     daemon: &dyn Daemon,
     caller: &Caller,
@@ -246,6 +247,9 @@ async fn comment_elsewhere(
     let Located::Elsewhere { space, machine } = located else {
         return Ok(None);
     };
+    if space.space.kind != SpaceKind::Workspace {
+        return Ok(None);
+    }
     let opened = ask_comment(daemon, caller, machine, &space.space.id, comment);
     opened.await.with_context(|| {
         format!(

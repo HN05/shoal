@@ -2977,7 +2977,8 @@ comment opened there, numbered in the workspace as the user's are and naming
 the space as its opener, since its own space's numbers are its own machine's,
 and a thread it opens there without a kind is a question in its own space
 when it has no pending review of that workspace, which only that machine can
-tell, so the thread waits for it to be reachable or for an explicit kind. The
+tell, so it is refused while that machine cannot be asked, unless it names a
+kind. The
 reviewed workspace's removal, or its writer's on the same machine, drops a
 pending review, whose comments a restore could never submit; a writer's
 comments on another machine neither keep it from cleanup nor close with it. Forge reviews stay on the forge.

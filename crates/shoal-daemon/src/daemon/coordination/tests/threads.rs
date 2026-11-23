@@ -679,27 +679,51 @@ async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
     assert_eq!(forward.forwarded_to.as_ref().unwrap().label(), "90 away");
 }
 
-#[tokio::test]
-async fn a_thread_without_a_kind_waits_for_the_machine_that_would_keep_its_review() {
-    let tree = tree().await;
+/// Open a thread named "Unclear name" without a kind from `tree`'s
+/// parent towards the space `away` lists on its offline machine, as `kind`.
+async fn open_towards_offline(tree: &Tree, kind: &str) -> anyhow::Result<Thread> {
     let manager = &tree.manager;
     away_on_offline_machine(manager, Some(&tree.parent.id)).await;
+    let kind = kind.to_owned();
+    (manager.store)
+        .write(move |tx| {
+            tx.execute(
+                "UPDATE hub_spaces SET summary=json_set(summary,'$.kind',?1)",
+                [kind],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     let away = SpaceSelector::Number(90.into());
-    let parent = caller(&tree.parent);
-
-    let opened = (manager.coordination.open_thread(
+    (manager.coordination.open_thread(
         &**manager,
-        Some(&parent),
+        Some(&caller(&tree.parent)),
         "Unclear name".into(),
         None,
         Some(&away),
         Vec::new(),
     ))
-    .await;
-    let error = format!("{:#}", opened.unwrap_err());
+    .await
+}
+
+#[tokio::test]
+async fn a_thread_without_a_kind_waits_for_the_machine_that_would_keep_its_review() {
+    let tree = tree().await;
+    let error = format!(
+        "{:#}",
+        open_towards_offline(&tree, "workspace").await.unwrap_err()
+    );
     assert!(error.contains("--kind question"), "{error}");
-    let open = manager.coordination.open_threads().await.unwrap();
+    let open = tree.manager.coordination.open_threads().await.unwrap();
     assert!(open.is_empty(), "{open:?}");
+}
+
+#[tokio::test]
+async fn a_thread_without_a_kind_to_a_chat_on_an_offline_machine_is_a_question() {
+    let tree = tree().await;
+    let opened = open_towards_offline(&tree, "chat").await.unwrap();
+    assert_eq!(opened.kind, ThreadKind::Question);
 }
 
 /// Start `writer`'s pending review of `workspace`.
