@@ -121,23 +121,25 @@ pub async fn open_demo(launch: &Launch) -> Result<()> {
         .await
 }
 
-/// What the demo `launch` describes shows.
+/// What the demo `launch` describes shows, read where it runs: its place,
+/// or the session nested there, whether or not the place still shows it.
 pub async fn demo_screen(launch: &Launch) -> Result<String> {
-    let place = &launch.origin;
+    let place = launch.origin.clone().into_typed();
     named(place.host)
         .demos()
         .with_context(|| format!("{} cannot read demos", place.host))?
-        .demo_screen(place)
+        .demo_screen(&place)
         .await
 }
 
-/// Type `keys` into the demo `launch` describes.
+/// Type `keys` into the demo `launch` describes, where it runs as
+/// [`demo_screen`] reads it.
 pub async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
-    let place = &launch.origin;
+    let place = launch.origin.clone().into_typed();
     named(place.host)
         .types()
         .with_context(|| format!("{} cannot type into demos", place.host))?
-        .send_keys(place, keys)
+        .send_keys(&place, keys)
         .await
 }
 
