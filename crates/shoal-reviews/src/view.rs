@@ -70,7 +70,7 @@ impl Reviews {
         Ok(reviews)
     }
 
-    /// Review `id` once it is neither queued nor running.
+    /// Review `id` once it has ended.
     pub async fn wait(&self, daemon: &dyn Daemon, id: ReviewId) -> Result<Review> {
         let mut changed = self.store.watch_changes();
         let mut ended = self.ended.subscribe();
