@@ -236,6 +236,15 @@ impl Hub {
                 self.hear_sleep(&member.id, lagging).await?;
                 Reply::Delivered
             }
+            Call::CutOff { jobs, sent_at } => {
+                ensure_machine(member)?;
+                let clocks = arrived(sent_at);
+                let jobs = (jobs.into_iter())
+                    .map(|job| job.on_hub_clock(clocks))
+                    .collect();
+                self.hear_cut_off(&member.id, jobs).await?;
+                Reply::Delivered
+            }
             Call::Stay => {
                 ensure_machine(member)?;
                 self.hear_stay(&member.id);
@@ -260,9 +269,10 @@ impl Hub {
             | Call::Availability { .. }
             | Call::Retire { .. }
             | Call::Continue { .. }
+            | Call::RerunCutOff { .. }
             | Call::Shared { .. } => {
                 anyhow::bail!(
-                    "only the hub passes requests, expiries, availability, retirements, hand-overs and shared items to machines"
+                    "only the hub passes requests, expiries, availability, retirements, hand-overs, reruns and shared items to machines"
                 )
             }
         })

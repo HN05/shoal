@@ -184,7 +184,8 @@ impl Hub {
     /// This machine's answer to `call`, which the hub passes it, or which
     /// the hub's own machine answers itself: a forwarded request for one of
     /// its spaces, an event for one, the expiry of what it sent, its
-    /// availability, the spaces it retires or one it continues.
+    /// availability, the spaces it retires, one it continues or a CI job
+    /// another machine cut off, which it reruns.
     pub(super) async fn answer_hub_call(&self, daemon: &dyn Daemon, call: Call) -> Result<Reply> {
         match call {
             Call::Serve { request } => Ok(Reply::Answered(
@@ -214,6 +215,7 @@ impl Hub {
                     .await?;
                 Ok(Reply::Delivered)
             }
+            Call::RerunCutOff { job } => Ok(Reply::CutOffRerun(daemon.rerun_cut_off(&job).await?)),
             _ => bail!("a machine answers only what the hub passes it from other machines"),
         }
     }

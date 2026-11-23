@@ -11,6 +11,7 @@ license.workspace = true
 # Store typed names in SQLite columns.
 rusqlite = [
     "dep:rusqlite",
+    "shoal-forge-types/rusqlite",
     "shoal-ids/rusqlite",
     "shoal-refs/rusqlite",
     "shoal-schedule/rusqlite",

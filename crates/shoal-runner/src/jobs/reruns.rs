@@ -27,7 +27,11 @@ use shoal_forge::ci::{
 };
 use shoal_forge_types::{items::reference::ItemRef, numbers::JobId};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_protocol::{alerts::AlertKind, time::UnixTime};
+use shoal_protocol::{
+    alerts::AlertKind,
+    hub::reruns::{CutOffJob, CutOffRerun},
+    time::UnixTime,
+};
 
 use super::{ClaimedJob, overrun::ended_job};
 use crate::{Runner, daemon::Daemon, log};
@@ -343,6 +347,22 @@ impl Runner {
     async fn rerun(&self, daemon: &dyn Daemon, job: &StoppedJob) -> Result<JobRerun> {
         let forge = daemon.item_forge(&job.run).await?;
         (forge.rerun_job(&daemon.user_account(), &job.run, job.id)).await
+    }
+
+    /// Rerun `job`, which another machine cut off and handed the hub, on
+    /// its forge as the user once its run has finished, or say this
+    /// machine has no login of the user's for its forge.
+    pub async fn rerun_cut_off(&self, daemon: &dyn Daemon, job: &CutOffJob) -> Result<CutOffRerun> {
+        let forge = daemon.item_forge(&job.run).await?;
+        let account = daemon.user_account();
+        if !account.has_login(&forge) {
+            return Ok(CutOffRerun::NoLogin);
+        }
+        Ok(match forge.rerun_job(&account, &job.run, job.job).await? {
+            JobRerun::Rerun => CutOffRerun::Rerun,
+            JobRerun::Unfinished => CutOffRerun::Unfinished,
+            JobRerun::Settled => CutOffRerun::Settled,
+        })
     }
 
     /// Whether `job` is done waiting, given what its `rerun` found: rerun,

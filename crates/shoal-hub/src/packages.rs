@@ -19,4 +19,4 @@ pub(crate) use keeping::{Continuation, Kept, Sent, forget};
 pub(crate) use sleeps::{Sleeps, forget as forget_sleep};
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

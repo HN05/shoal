@@ -145,7 +145,7 @@ impl Account {
     }
 
     /// Whether the account has a login of its own for `repo`'s host.
-    pub(crate) fn has_login(&self, repo: &ForgeRepo) -> bool {
+    pub fn has_login(&self, repo: &ForgeRepo) -> bool {
         self.logins.get(&repo.host).is_some()
     }
 

@@ -22,6 +22,7 @@ pub mod numbering;
 pub mod packages;
 pub mod pairing;
 pub mod placement;
+pub mod reruns;
 pub mod routing;
 pub mod shared_config;
 pub mod shared_repositories;

@@ -3,8 +3,9 @@
 //! messages that reach their agents, the approvals and threads that pass
 //! between machines, the app store a member asks of the hub, the
 //! packages of an intermittent machine's spaces, the room its queue has,
-//! the global config the hub's copies of the shared files change and the
-//! registrations and local configs of the repositories they share.
+//! the global config the hub's copies of the shared files change, the
+//! registrations and local configs of the repositories they share and the
+//! reruns of CI jobs other machines cut off.
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -20,7 +21,12 @@ use shoal_protocol::{
     approvals::ApprovalRequest,
     config::permissions::Permissions,
     files::SentFile,
-    hub::{Member, packages::Departure, routing::ChainedMode},
+    hub::{
+        Member,
+        packages::Departure,
+        reruns::{CutOffJob, CutOffRerun},
+        routing::ChainedMode,
+    },
     model::{QueueEntry, RemovedSpace, Repository, RunningAgent, Space},
     protocol::{AppMethod, Request},
     saved::SavedSummary,
@@ -305,6 +311,13 @@ pub trait Queue: Send + Sync {
     fn queue_room(&self) -> BoxFuture<'_, Result<Capacity>>;
 }
 
+/// Rerunning the CI jobs that machines asleep or shut down cut off.
+pub trait CutOffJobs: Send + Sync {
+    /// Rerun `job` on its forge as the user once its run has finished, or
+    /// say this machine has no login of the user's for that forge.
+    fn rerun_cut_off<'a>(&'a self, job: &'a CutOffJob) -> BoxFuture<'a, Result<CutOffRerun>>;
+}
+
 /// Everything the hub needs of the daemon, which each of its operations
 /// that reaches beyond it takes.
 pub trait Daemon:
@@ -318,6 +331,7 @@ pub trait Daemon:
     + Packages
     + GlobalConfig
     + Registrations
+    + CutOffJobs
     + Coordinators
 {
 }
@@ -333,6 +347,7 @@ impl<T> Daemon for T where
         + Packages
         + GlobalConfig
         + Registrations
+        + CutOffJobs
         + Coordinators
 {
 }

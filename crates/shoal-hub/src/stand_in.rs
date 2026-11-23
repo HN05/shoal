@@ -25,7 +25,11 @@ use shoal_protocol::{
     approvals::ApprovalRequest,
     config::permissions::Permissions,
     files::SentFile,
-    hub::{Member, routing::ChainedMode},
+    hub::{
+        Member,
+        reruns::{CutOffJob, CutOffRerun},
+        routing::ChainedMode,
+    },
     model::{QueueEntry, Repository, RunningAgent, Space},
     paths::Paths,
     protocol::{AppMethod, Request},
@@ -38,8 +42,8 @@ use shoal_schedule::{placement::snapshot::Capacity, priority::Priority};
 use crate::{
     Hub,
     daemon::{
-        Approvals, Apps, Dispatch, GlobalConfig, Messages, Packages, Queue, Receiver, Records,
-        Registrations, SpacePermissions, Spaces,
+        Approvals, Apps, CutOffJobs, Dispatch, GlobalConfig, Messages, Packages, Queue, Receiver,
+        Records, Registrations, SpacePermissions, Spaces,
     },
     streams::{Incoming, Outgoing},
 };
@@ -73,6 +77,9 @@ pub(crate) struct StandIn {
     refusing: std::sync::Mutex<HashSet<RepositoryId>>,
     /// The records of the files a test keeps here, with their paths.
     kept: Vec<SentFile>,
+    /// What a rerun of a CI job another machine cut off finds, none for a
+    /// machine without the user's login for its forge.
+    rerun: std::sync::Mutex<Option<CutOffRerun>>,
 }
 
 /// A repository a test registers with the stand-in, with the text of its
@@ -108,6 +115,11 @@ impl StandIn {
             true => refusing.insert(id.clone()),
             false => refusing.remove(id),
         };
+    }
+
+    /// Have each rerun of a CI job another machine cut off find `rerun`.
+    pub(crate) fn rerun_finds(&self, rerun: CutOffRerun) {
+        *self.rerun.lock().unwrap() = Some(rerun);
     }
 
     /// The repositories registered now.
@@ -415,6 +427,13 @@ impl Queue for StandIn {
 impl GlobalConfig for StandIn {
     fn reload_config(&self) -> BoxFuture<'_, Result<()>> {
         Box::pin(async { Ok(()) })
+    }
+}
+
+impl CutOffJobs for StandIn {
+    fn rerun_cut_off<'a>(&'a self, _: &'a CutOffJob) -> BoxFuture<'a, Result<CutOffRerun>> {
+        let rerun = self.rerun.lock().unwrap().unwrap_or(CutOffRerun::NoLogin);
+        Box::pin(async move { Ok(rerun) })
     }
 }
 

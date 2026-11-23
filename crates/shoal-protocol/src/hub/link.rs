@@ -381,6 +381,20 @@ pub enum Call {
         /// carries the lags' times over to its own by.
         sent_at: UnixTime,
     },
+    /// A sleeping or shutting-down machine's CI jobs that it cut off and
+    /// recorded to rerun, which the hub keeps and reruns once their runs
+    /// finish, in place of that machine, which forgets them. Answered with
+    /// [`Reply::Delivered`].
+    CutOff {
+        jobs: Vec<super::reruns::CutOffJob>,
+        /// When the machine sent it, by its own clock, which the hub
+        /// carries the jobs' times over to its own by.
+        sent_at: UnixTime,
+    },
+    /// The hub's call to a machine to rerun `job` as the user, which a
+    /// machine that cut it off handed the hub. Answered with
+    /// [`Reply::CutOffRerun`].
+    RerunCutOff { job: super::reruns::CutOffJob },
     /// The package the hub keeps of the space `space`, whose machine is
     /// offline, which the caller would take the space over from; none
     /// without one, or while that machine is connected. Answered with
@@ -558,6 +572,7 @@ pub enum Reply {
     Streaming,
     Queued(Queued),
     Delivered,
+    CutOffRerun(super::reruns::CutOffRerun),
     Shared(Copies),
     Failed {
         message: String,

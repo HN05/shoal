@@ -34,6 +34,7 @@ mod app_servers;
 
 mod availability;
 mod battery;
+mod cut_off_jobs;
 pub mod daemon;
 pub mod directory;
 mod escalation;
@@ -139,6 +140,8 @@ pub struct Hub {
     capacities: placement::Capacities,
     /// As the hub: the app registered as the placer.
     placers: placement::Placers,
+    /// As the hub: wakes the reruns of the CI jobs machines cut off.
+    cut_off_jobs: tokio::sync::Notify,
 }
 
 impl Hub {
@@ -178,6 +181,7 @@ impl Hub {
             shared_local_configs: Default::default(),
             capacities: Default::default(),
             placers: Default::default(),
+            cut_off_jobs: Default::default(),
         }
     }
 }
@@ -206,6 +210,7 @@ pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: boo
         hub.keep_marking_presence(&*daemon),
         hub.keep_alerting_drops(&*daemon),
         hub.keep_taking_over_sleepers(&daemon),
+        hub.keep_rerunning_cut_off_jobs(&*daemon),
         hub.keep_sharing_own(&daemon),
         member::run(hub.clone(), daemon.clone()),
     );

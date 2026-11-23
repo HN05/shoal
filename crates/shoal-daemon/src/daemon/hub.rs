@@ -297,6 +297,15 @@ impl Packages for Manager {
     }
 }
 
+impl shoal_hub::daemon::CutOffJobs for Manager {
+    fn rerun_cut_off<'a>(
+        &'a self,
+        job: &'a shoal_protocol::hub::reruns::CutOffJob,
+    ) -> BoxFuture<'a, Result<shoal_protocol::hub::reruns::CutOffRerun>> {
+        Box::pin(self.runner.rerun_cut_off(self, job))
+    }
+}
+
 impl shoal_hub::daemon::Queue for Manager {
     fn queue_room(&self) -> BoxFuture<'_, Result<shoal_schedule::placement::snapshot::Capacity>> {
         Box::pin(self.agents.queue_room(self))

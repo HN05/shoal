@@ -218,7 +218,7 @@ impl Hub {
     }
 
     /// The name of the machine `member`, its ID where the hub lists none.
-    pub(super) async fn member_name(&self, daemon: &dyn Daemon, member: &MemberId) -> String {
+    pub(crate) async fn member_name(&self, daemon: &dyn Daemon, member: &MemberId) -> String {
         match self.hub_machine(daemon, member).await {
             Ok(machine) => machine.name,
             Err(_) => member.to_string(),

@@ -1042,6 +1042,16 @@ CREATE TABLE hub_sleep_lags (
     since INTEGER
 );
 
+CREATE TABLE hub_ci_job_reruns (
+    run_url TEXT NOT NULL,
+    job_id INTEGER NOT NULL,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    job_name TEXT NOT NULL,
+    cut_off_by TEXT NOT NULL,
+    stopped_at INTEGER NOT NULL,
+    PRIMARY KEY(run_url, job_id)
+);
+
 CREATE TABLE "reviews" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
