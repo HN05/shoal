@@ -1,14 +1,20 @@
-//! Demos in the places of the first host that keeps them; a demo needs a
-//! terminal host.
+//! Demos in the places of the first host that keeps them, in a session
+//! nested there where config asks for one; a demo needs a terminal host.
+use std::ffi::OsString;
+
 use anyhow::{Context as _, Result};
 
 use super::Caller;
 use crate::places::groups;
 use crate::{
     config::Effective,
+    env,
     model::Workspace,
     sessions::Origin,
-    terminal::{Demo, DemoWorker, Elsewhere, Host, current_origin, named, names_places, place_env},
+    terminal::{
+        Demo, DemoWorker, Demos, Elsewhere, Host, Nested, current_origin, named, names_places,
+        place_env,
+    },
 };
 use shoal_protocol::demos::Launch;
 
@@ -47,11 +53,48 @@ pub async fn start_demo(
                 env: &env,
                 worker,
             };
-            demos.start_demo(&demo).await.map(Some)
+            match host.nesting() {
+                Some(nesting) => start_nested(demos, nesting, &demo).await.map(Some),
+                None => demos.start_demo(&demo).await.map(Some),
+            }
         },
     )
     .await?
     .context(NO_DEMO_HOST)
+}
+
+/// Start `demo` through `demos` in a session of `nesting` nested in the
+/// place `demos` opens for it, returning that place with the session.
+async fn start_nested(demos: &dyn Demos, nesting: &dyn Host, demo: &Demo<'_>) -> Result<Origin> {
+    let nested = nesting
+        .nests()
+        .with_context(|| format!("{} runs no nested demos", nesting.name()))?
+        .nest_demo(demo)
+        .await?;
+    let marked = (env::NESTED_SESSION, nesting.name().to_string());
+    let env = [demo.env, &[marked]].concat();
+    let worker = nested_worker(demo.worker, &nested);
+    let demo = Demo {
+        env: &env,
+        worker: &worker,
+        ..*demo
+    };
+    demos.start_demo(&demo).await
+}
+
+/// `worker` run in the session `nested`, which nests in the place it runs
+/// in, and records that session nested in the place.
+fn nested_worker<'a>(
+    worker: &'a DemoWorker<'a>,
+    nested: &'a Nested,
+) -> impl Fn(&Origin) -> Result<Vec<OsString>> + Send + Sync + 'a {
+    move |place| {
+        let place = Origin {
+            nested: Some(Box::new(nested.session.clone())),
+            ..place.clone()
+        };
+        Ok([nested.command.clone(), worker(&place)?].concat())
+    }
 }
 
 const NO_DEMO_HOST: &str = "no terminal host can start demos";
@@ -114,3 +157,6 @@ pub async fn show_for_viewer(
     crate::terminal::show_place_elsewhere(place, &format!("demo {name}"), &viewer).await?;
     Ok(0)
 }
+
+#[cfg(test)]
+mod tests;

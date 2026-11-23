@@ -63,6 +63,12 @@ pub trait Host: Sync {
         None
     }
 
+    /// How this host runs demos in sessions nested in other hosts' places,
+    /// unless it nests none.
+    fn nests(&self) -> Option<&dyn Nests> {
+        None
+    }
+
     /// How this host types into the places it records, unless it types
     /// into none.
     fn types(&self) -> Option<&dyn Types> {
@@ -328,6 +334,24 @@ pub trait Demos: Sync {
 
     /// What the demo at `place` shows, oldest line first.
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>>;
+}
+
+/// A host whose sessions run attached in places of other hosts, nested
+/// there, so any terminal attaches to the work they run.
+pub trait Nests: Sync {
+    /// A new session of this host for `demo`, which another host starts in
+    /// a place of its own, and the command that, run in that place, runs
+    /// the demo's worker in the session attached there.
+    fn nest_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Nested>>;
+}
+
+/// A session nested in another host's place, as [`Nests`] prepares it.
+pub struct Nested {
+    /// The session, which the place's record nests.
+    pub session: Origin,
+    /// The command that runs the session in the place, before the argv the
+    /// session runs.
+    pub command: Vec<OsString>,
 }
 
 /// Variables a demo's worker must not inherit from the agent that starts it:

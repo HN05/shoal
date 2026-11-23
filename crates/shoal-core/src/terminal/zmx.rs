@@ -18,7 +18,7 @@ use tokio::process::Command;
 
 use super::{
     Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
-    host::{Attaches, Closes, Demos, Places, Sessions, Types, Watches},
+    host::{Attaches, Closes, Demos, Nested, Nests, Places, Sessions, Types, Watches},
 };
 use crate::{
     env,
@@ -74,6 +74,10 @@ impl Host for Zmx {
     }
 
     fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+
+    fn nests(&self) -> Option<&dyn Nests> {
         Some(self)
     }
 
@@ -215,6 +219,12 @@ impl Demos for Zmx {
     }
 }
 
+impl Nests for Zmx {
+    fn nest_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Nested>> {
+        Box::pin(nest_demo(demo))
+    }
+}
+
 impl Types for Zmx {
     fn send_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(send_keys(place.id(), keys))
@@ -322,17 +332,39 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         &NewSession {
             environment: demo.env,
             clear: super::host::NOT_INHERITED_BY_DEMOS,
-            labels: vec![
-                owner_label(Owner::Workspace(demo.workspace)),
-                CREATED.into(),
-                format!("shoal.demo={}", demo.launch),
-                crate::sessions::zmx::state_label(demo.state)?,
-            ],
+            labels: demo_labels(demo)?,
             ..Default::default()
         },
     )
     .await?;
     Ok(place)
+}
+
+/// A new session for `demo`, which runs in another host's place, and the
+/// `zmx attach` that creates it there, labelled as a session of its own
+/// would be; the session ends with the demo's worker.
+async fn nest_demo(demo: &Demo<'_>) -> Result<Nested> {
+    ensure_zmx("demo").await?;
+    let session = unused_name(demo.label).await?;
+    let labels = demo_labels(demo)?.join(" ");
+    let command = [Tool::Zmx.program(), "attach", "--labels", &labels, &session]
+        .map(OsString::from)
+        .to_vec();
+    Ok(Nested {
+        session: Origin::created(HostName::Zmx, session),
+        command,
+    })
+}
+
+/// The labels of `demo`'s session: its workspace's, Shoal's and the
+/// demo's own.
+fn demo_labels(demo: &Demo<'_>) -> Result<Vec<String>> {
+    Ok(vec![
+        owner_label(Owner::Workspace(demo.workspace)),
+        CREATED.into(),
+        format!("shoal.demo={}", demo.launch),
+        crate::sessions::zmx::state_label(demo.state)?,
+    ])
 }
 
 /// A detached session's shell setup and ownership labels.
