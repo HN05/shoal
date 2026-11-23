@@ -17,7 +17,7 @@ use crate::{
 
 /// Whose entries a request reads or changes on this daemon.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum Holder {
+pub enum Holder {
     /// Every machine and device of the user's.
     Shared,
     /// This machine's own.
@@ -28,7 +28,7 @@ pub(crate) enum Holder {
 
 impl Holder {
     /// Whose entries in `scope` this daemon's own callers reach.
-    pub(crate) fn own(scope: AppScope) -> Self {
+    pub fn own(scope: AppScope) -> Self {
         match scope {
             AppScope::Shared => Self::Shared,
             AppScope::Device => Self::Own,
@@ -46,7 +46,7 @@ impl Holder {
 }
 
 /// The entries of `app` that `holder` has, as one change leaves them.
-pub(super) struct Entries<'a> {
+pub(crate) struct Entries<'a> {
     holder: &'a Holder,
     app: &'a AppName,
 }
@@ -64,12 +64,12 @@ fn entry(row: &Row<'_>) -> rusqlite::Result<Entry> {
 }
 
 impl<'a> Entries<'a> {
-    pub(super) fn of(holder: &'a Holder, app: &'a AppName) -> Self {
+    pub(crate) fn of(holder: &'a Holder, app: &'a AppName) -> Self {
         Self { holder, app }
     }
 
     /// The entry under `key`, with its bytes.
-    pub(super) fn read(&self, tx: &Transaction<'_>, key: &EntryKey) -> Result<Option<Stored>> {
+    pub(crate) fn read(&self, tx: &Transaction<'_>, key: &EntryKey) -> Result<Option<Stored>> {
         let (scope, device) = self.holder.columns();
         let sql = format!(
             "SELECT {ENTRY}, bytes FROM app_entries WHERE app=?1 AND scope=?2 AND device=?3 AND key=?4"
@@ -85,7 +85,7 @@ impl<'a> Entries<'a> {
 
     /// The entries whose keys start with `prefix`, without their bytes, by
     /// key.
-    pub(super) fn list(&self, tx: &Transaction<'_>, prefix: &KeyPrefix) -> Result<Vec<Entry>> {
+    pub(crate) fn list(&self, tx: &Transaction<'_>, prefix: &KeyPrefix) -> Result<Vec<Entry>> {
         let (scope, device) = self.holder.columns();
         let sql = format!(
             "SELECT {ENTRY} FROM app_entries WHERE app=?1 AND scope=?2 AND device=?3 \
@@ -99,7 +99,7 @@ impl<'a> Entries<'a> {
     /// Refuse a write of `size` bytes as `write` before its bytes come: one
     /// that names a revision the entry is not at, or that would hold more
     /// than `limits` allow.
-    pub(super) fn check_write(
+    pub(crate) fn check_write(
         &self,
         tx: &Transaction<'_>,
         write: &Write,
@@ -126,7 +126,7 @@ impl<'a> Entries<'a> {
 
     /// Write `bytes` as `write`, refused as [`Self::check_write`] refuses
     /// it, and the entry it leaves.
-    pub(super) fn write(
+    pub(crate) fn write(
         &self,
         tx: &Transaction<'_>,
         write: &Write,
@@ -158,7 +158,7 @@ impl<'a> Entries<'a> {
     }
 
     /// Delete the entry under `key`, which must be at `replaces`.
-    pub(super) fn delete(
+    pub(crate) fn delete(
         &self,
         tx: &Transaction<'_>,
         key: &EntryKey,

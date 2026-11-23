@@ -9,8 +9,9 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use shoal_apps::{Holder, Watched, Watcher, frames};
 use shoal_protocol::{
-    apps::store::{AppScope, EntryPiece},
+    apps::store::AppScope,
     hub::{Member, link::Call},
     protocol::{AppMethod, Body, Response},
     scope_tokens::ScopeToken,
@@ -18,12 +19,7 @@ use shoal_protocol::{
 use tokio::net::UnixStream;
 
 use crate::{
-    daemon::{
-        answer,
-        apps::{Holder, Watched, Watcher},
-        manager::Manager,
-        relayed::Relayed,
-    },
+    daemon::{answer, manager::Manager, relayed::Relayed},
     refusal::{Reason, Refusal},
 };
 use shoal_hub::{
@@ -149,7 +145,7 @@ impl Manager {
                 prefix,
             };
             let mut link = Link { manager: self, out };
-            let watched = self.watch_kept_entries(watched, &mut link).await;
+            let watched = self.apps.watch_entries(watched, &mut link).await;
             let error = watched.err().map(|error| format!("{error:#}"));
             return link.out.end(error).await;
         }
@@ -159,56 +155,13 @@ impl Manager {
             let error = "the hub's daemon is restarting; try again once it is back";
             return out.end(Some(error.into())).await;
         };
-        let bodies = match self.answer_kept(holder, method, bytes).await {
+        let bodies = match self.apps.answer_kept(holder, method, bytes).await {
             Ok(bodies) => bodies,
             Err(error) => vec![answer::failure(&error)],
         };
         let written = write_bodies(&mut out, bodies).await;
         out.end(written.err().map(|error| format!("{error:#}")))
             .await;
-    }
-
-    /// The answer to `method`, other than a watch, of `holder`'s entries,
-    /// a write of `bytes`.
-    async fn answer_kept(
-        &self,
-        holder: Holder,
-        method: AppMethod,
-        bytes: Option<Vec<u8>>,
-    ) -> Result<Vec<Body>> {
-        Ok(match method {
-            AppMethod::ReadAppEntry { app, key, .. } => {
-                let stored = self.read_kept_entry(holder, app, key).await?;
-                vec![Body::AppEntryPieces(
-                    stored.map(EntryPiece::split).unwrap_or_default(),
-                )]
-            }
-            AppMethod::ListAppEntries { app, prefix, .. } => {
-                let listed = self.list_kept_entries(holder, app, prefix).await?;
-                vec![Body::AppEntries(listed), Body::Ok]
-            }
-            // Without its bytes, a write is checked before they come.
-            AppMethod::WriteAppEntry {
-                app, write, size, ..
-            } => match bytes {
-                Some(bytes) => vec![Body::AppEntry(
-                    self.write_kept_entry(holder, app, write, bytes).await?,
-                )],
-                None => {
-                    self.check_kept_write(holder, app, write, size).await?;
-                    vec![Body::Ok]
-                }
-            },
-            AppMethod::DeleteAppEntry {
-                app, key, replaces, ..
-            } => {
-                self.delete_kept_entry(holder, app, key, replaces).await?;
-                vec![Body::Ok]
-            }
-            AppMethod::ReadAppConfig { .. } | AppMethod::WatchAppEntries { .. } => {
-                anyhow::bail!("not a request of kept entries")
-            }
-        })
     }
 }
 
@@ -218,16 +171,6 @@ async fn write_bodies(out: &mut Outgoing, bodies: Vec<Body>) -> Result<()> {
         out.write(&frames(body)?).await?;
     }
     Ok(())
-}
-
-/// The frames of `body`, one per line, as the socket writes them.
-fn frames(body: Body) -> Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    for frame in Response::new(0, body).frames()? {
-        serde_json::to_writer(&mut bytes, &frame)?;
-        bytes.push(b'\n');
-    }
-    Ok(bytes)
 }
 
 /// A watch a member asked for, answered on a stream of its link.

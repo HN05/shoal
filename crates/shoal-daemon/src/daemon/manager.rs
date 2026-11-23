@@ -50,8 +50,8 @@ pub struct Manager {
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
     /// The hub role, or this machine's membership of a hub.
     pub hub: Arc<shoal_hub::Hub>,
-    /// The app store's watches.
-    pub(crate) apps: crate::daemon::apps::Apps,
+    /// What apps keep in Shoal.
+    pub apps: shoal_apps::Apps,
     /// The commits other machines carried here for launches on their way.
     pub(crate) carried_holds: crate::daemon::carried_commits::CarriedHolds,
     /// The viewers of simulator demos someone opened.
@@ -135,6 +135,7 @@ impl Manager {
             Arc::new(super::gate::GatedRequests),
             paths.clone(),
         ));
+        let apps = shoal_apps::Apps::new(store.clone(), config_state.clone());
         Ok(Arc::new(Self {
             config_state,
             notifications,
@@ -161,7 +162,7 @@ impl Manager {
             reviews,
             file_access,
             hub,
-            apps: Default::default(),
+            apps,
             carried_holds: Default::default(),
             viewers: Default::default(),
         }))

@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use shoal_apps::{Holder, Watched, Writing};
 use shoal_protocol::{
     apps::store::{AppScope, EntryPiece},
     scope_tokens::ScopeToken,
@@ -13,7 +14,7 @@ use shoal_protocol::{
 
 use super::super::{
     answer::Answer,
-    apps::{Holder, Keeper, Socket, Watched, Writing},
+    apps::{Keeper, Socket},
     manager::Manager,
     scope::{Caller, Scoped},
     target_checks::{Checked, TargetCheck},
@@ -48,21 +49,22 @@ pub(super) async fn handle(
     };
     Ok(Answer::Body(match method {
         AppMethod::ReadAppConfig { app, target } => {
-            Body::AppConfig(manager.app_config(&app, target).await?)
+            Body::AppConfig(manager.apps.app_config(&**manager, &app, target).await?)
         }
         AppMethod::ReadAppEntry { app, key, .. } => {
-            let stored = manager.read_kept_entry(holder, app, key).await?;
+            let stored = manager.apps.read_entry(holder, app, key).await?;
             Body::AppEntryPieces(stored.map(EntryPiece::split).unwrap_or_default())
         }
         AppMethod::ListAppEntries { app, prefix, .. } => {
-            let listed = manager.list_kept_entries(holder, app, prefix);
+            let listed = manager.apps.list_entries(holder, app, prefix);
             return Ok(Answer::pages(listed.await, Body::AppEntries));
         }
         AppMethod::DeleteAppEntry {
             app, key, replaces, ..
         } => {
             manager
-                .delete_kept_entry(holder, app, key, replaces)
+                .apps
+                .delete_entry(holder, app, key, replaces)
                 .await?;
             Body::Ok
         }
@@ -70,18 +72,13 @@ pub(super) async fn handle(
             app, write, size, ..
         } => {
             let manager = manager.clone();
-            let writing = Writing {
-                keeper,
-                app,
-                write,
-                size,
-                scope: scope.cloned(),
-            };
+            let writing = (keeper, Writing { app, write, size });
+            let scope = scope.cloned();
             return Ok(Answer::connection(
                 move |stream, id, operation| async move {
                     // Held until the entry is written and answered.
                     let _operation = operation;
-                    manager.answer_write(stream, id, writing).await
+                    manager.answer_write(stream, id, writing, scope).await
                 },
             ));
         }
@@ -97,7 +94,7 @@ pub(super) async fn handle(
                 // Each write takes an operation of its own.
                 drop(startup);
                 let mut socket = Socket::new(manager.clone(), stream, id, scope);
-                manager.watch_kept_entries(watched, &mut socket).await
+                manager.apps.watch_entries(watched, &mut socket).await
             }));
         }
     }))

@@ -1,0 +1,27 @@
+[package]
+name = "shoal-apps"
+version.workspace = true
+description = "What apps built on Shoal keep in its daemon: their settings and the app store"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+futures-util.workspace = true
+rusqlite = { workspace = true, features = ["bundled"] }
+serde_json.workspace = true
+shoal-core.workspace = true
+shoal-daemon-base.workspace = true
+shoal-ids = { workspace = true, features = ["rusqlite"] }
+shoal-protocol = { workspace = true, features = ["rusqlite"] }
+shoal-store.workspace = true
+tokio = { workspace = true, features = ["io-util", "sync", "time"] }
+toml.workspace = true
+
+[dev-dependencies]
+shoal-core = { workspace = true, features = ["test-support"] }
+shoal-store = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }

@@ -180,6 +180,13 @@ interface reaches, as do, until they move into the crate, the launches
 that create a space for an agent. The crate owns the agents' records, the
 executions' and the queue's among them, and reads what the spaces and
 repositories record through its interface.
+`shoal-apps` holds what apps built on Shoal keep in it: its `Apps` service
+resolves an app's `[apps.<name>]` table over the config layers its
+interface reads, and keeps the app store's entries, writing each only from
+the revision its writer read and waking the watches of its app's entries.
+Answering them on the daemon's socket and the hub link, with a write's
+bytes that follow its request and the shared entries a hub keeps for the
+machines that joined it, stays with the daemon's connections.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

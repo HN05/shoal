@@ -34,6 +34,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 shoal-agents.workspace = true
+shoal-apps.workspace = true
 shoal-core.workspace = true
 shoal-daemon-base.workspace = true
 shoal-forge.workspace = true

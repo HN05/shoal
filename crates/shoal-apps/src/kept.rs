@@ -7,11 +7,11 @@ use shoal_protocol::apps::{
 };
 
 use super::entries::{Entries, Holder};
-use crate::daemon::manager::Manager;
+use crate::Apps;
 
-impl Manager {
+impl Apps {
     /// The entry of `app` under `key` that `holder` has, with its bytes.
-    pub(crate) async fn read_kept_entry(
+    pub async fn read_entry(
         &self,
         holder: Holder,
         app: AppName,
@@ -24,7 +24,7 @@ impl Manager {
 
     /// The entries of `app` that `holder` has whose keys start with
     /// `prefix`, without their bytes.
-    pub(crate) async fn list_kept_entries(
+    pub async fn list_entries(
         &self,
         holder: Holder,
         app: AppName,
@@ -37,14 +37,14 @@ impl Manager {
 
     /// Refuse a write of `size` bytes as `write` before its bytes come, as
     /// writing them now would be refused.
-    pub(crate) async fn check_kept_write(
+    pub async fn check_write(
         &self,
         holder: Holder,
         app: AppName,
         write: Write,
         size: u64,
     ) -> Result<()> {
-        let limits = self.config().machine.app_store;
+        let limits = self.config.current().machine.app_store;
         (self.store)
             .read(move |tx| Entries::of(&holder, &app).check_write(tx, &write, size, &limits))
             .await
@@ -52,24 +52,24 @@ impl Manager {
 
     /// Write `bytes` as `write` to the entries of `app` that `holder` has,
     /// and the entry it leaves.
-    pub(crate) async fn write_kept_entry(
+    pub async fn write_entry(
         &self,
         holder: Holder,
         app: AppName,
         write: Write,
         bytes: Vec<u8>,
     ) -> Result<Entry> {
-        let limits = self.config().machine.app_store;
+        let limits = self.config.current().machine.app_store;
         let written = (self.store)
             .write(move |tx| Entries::of(&holder, &app).write(tx, &write, bytes, &limits))
             .await?;
-        self.apps.changed();
+        self.changed();
         Ok(written)
     }
 
     /// Delete the entry of `app` under `key` that `holder` has, which must
     /// be at `replaces`.
-    pub(crate) async fn delete_kept_entry(
+    pub async fn delete_entry(
         &self,
         holder: Holder,
         app: AppName,
@@ -79,7 +79,7 @@ impl Manager {
         (self.store)
             .write(move |tx| Entries::of(&holder, &app).delete(tx, &key, replaces))
             .await?;
-        self.apps.changed();
+        self.changed();
         Ok(())
     }
 }
