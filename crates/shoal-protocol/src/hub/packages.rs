@@ -37,14 +37,23 @@ impl Handing {
     /// Whether the hand-over takes `space`.
     pub fn takes(&self, space: &Space) -> bool {
         match self {
-            Self::AllBut(gone) => !Self::named(gone, space),
-            Self::Only(spaces) => Self::named(spaces, space),
+            Self::AllBut(gone) => !Self::holds(gone, space),
+            Self::Only(spaces) => Self::holds(spaces, space),
+        }
+    }
+
+    /// The spaces it names to send, none for one that sends every space
+    /// but those it names.
+    pub fn named(&self) -> HashSet<SpaceId> {
+        match self {
+            Self::Only(spaces) => spaces.clone(),
+            Self::AllBut(_) => HashSet::new(),
         }
     }
 
     /// Whether `spaces` holds `space`, or the workspace whose worktree the
     /// chat `space` runs in.
-    fn named(spaces: &HashSet<SpaceId>, space: &Space) -> bool {
+    fn holds(spaces: &HashSet<SpaceId>, space: &Space) -> bool {
         spaces.contains(&space.id) || space.within().is_some_and(|w| spaces.contains(w))
     }
 }

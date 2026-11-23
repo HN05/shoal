@@ -276,17 +276,10 @@ impl Agents {
         deadline: Instant,
         handing: Handing,
     ) -> Vec<(Space, Handed)> {
-        let under_way = match &handing {
-            Handing::Only(spaces) => spaces.clone(),
-            Handing::AllBut(_) => HashSet::new(),
-        };
+        let under_way = handing.named();
         self.presences.leaving(&under_way);
         let handed = daemon.hand_over(deadline, handing).await;
-        let left = (handed.iter())
-            .filter(|(_, handed)| handed.left())
-            .map(|(space, _)| space.id.clone())
-            .collect();
-        self.presences.settled(&under_way, left);
+        self.presences.settled(&under_way, went(&handed));
         for (space, handed) in &handed {
             if !handed.left() {
                 continue;
@@ -423,13 +416,18 @@ const HANDOVER_MARGIN: Duration = Duration::from_secs(1);
 /// Those of the `stopped` spaces that stay here, which `handed` does not
 /// say this machine left to the hub.
 fn staying(stopped: &[Space], handed: &[(Space, Handed)]) -> Vec<Space> {
-    let went: HashSet<&SpaceId> = (handed.iter())
-        .filter(|(_, handed)| handed.left())
-        .map(|(space, _)| &space.id)
-        .collect();
+    let went = went(handed);
     (stopped.iter())
         .filter(|space| !went.contains(&space.id))
         .cloned()
+        .collect()
+}
+
+/// The spaces `handed` says this machine left to the hub.
+fn went(handed: &[(Space, Handed)]) -> HashSet<SpaceId> {
+    (handed.iter())
+        .filter(|(_, handed)| handed.left())
+        .map(|(space, _)| space.id.clone())
         .collect()
 }
 
