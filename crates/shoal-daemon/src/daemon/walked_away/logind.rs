@@ -2,7 +2,9 @@
 //! `LidClosed` and `Docked` on a machine with a lid, and the idle hint of
 //! the user's sessions, which their desktop sets once it reads them as idle.
 //! The user's hint, unlike the manager's, ignores the idle inhibitor that
-//! keep-awake holds.
+//! keep-awake holds. A user without a session, as on a headless machine
+//! whose user lingers, reads as idle to logind but gives no input to wait
+//! for, so counts as present.
 use anyhow::{Context, Result};
 use zbus::proxy::CacheProperties;
 
@@ -16,6 +18,9 @@ use crate::daemon::{log, logind::LoginProxy};
 pub(super) trait User {
     #[zbus(property)]
     fn idle_hint(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn sessions(&self) -> zbus::Result<Vec<(String, zbus::OwnedObjectPath)>>;
 }
 
 /// The input devices the kernel lists, a lid switch among them where the
@@ -76,6 +81,9 @@ impl Platform for Logind {
     }
 
     async fn idle(&mut self) -> Result<bool> {
+        if self.user.sessions().await?.is_empty() {
+            return Ok(false);
+        }
         Ok(self.user.idle_hint().await?)
     }
 }

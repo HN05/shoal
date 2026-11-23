@@ -706,7 +706,8 @@ macOS say, or, on a machine without a lid or a laptop docked with its lid
 closed (logind's `Docked`, or on macOS a closed lid that does not sleep the
 Mac, as with an external display), leaves it without input until the
 platform reads it as idle, on Linux logind's idle hint for the user's
-sessions and on macOS as long as the system's idle sleep timer. The user is
+sessions, where a user without a session counts as there, and on macOS as
+long as the system's idle sleep timer. The user is
 back once the lid opens or input returns.
 
 Under `on` and, while the user is there, `finish`, the daemon keeps the
