@@ -21,10 +21,9 @@ impl Manager {
     ) -> Result<Resolved> {
         let (setting, value) = match key {
             ValueKey::Secret { name, source } => {
-                let secret = (self.leases)
-                    .granted_secret(self, space, name.clone(), source, caller)
-                    .await?;
-                (format!("secrets.{name}.value"), secret.value)
+                let leases = &self.leases;
+                let secret = leases.readable_secret(self, space, name.clone(), source, caller);
+                (format!("secrets.{name}.value"), secret.await?.value)
             }
             ValueKey::ProxyKey { key } => self.configured_proxy_key(key)?,
         };

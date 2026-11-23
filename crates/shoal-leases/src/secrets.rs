@@ -41,19 +41,62 @@ impl Leases {
         request: SecretRequest,
         caller: Option<&Caller>,
     ) -> Result<Allocation<SecretGrant>> {
-        let workspace = daemon.workspace(selector).await?;
         let secret = self
-            .configured_secret(daemon, &workspace, &name, request.source.as_ref())
+            .configured_secret(daemon, selector, &name, request.source.as_ref())
             .await?;
         crate::validate::reason("secret", request.reason.as_deref())?;
+        let reason = request.reason.as_deref();
+        (self.grant_secret(daemon, selector, name, secret, reason, caller)).await
+    }
+
+    /// The secret `name` of the space `selector`, a workspace or a chat,
+    /// still configured as `source`, once `caller` may fetch it: at once for
+    /// unscoped callers and ungated secrets, otherwise under an approved
+    /// grant.
+    pub async fn readable_secret(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        name: String,
+        source: SecretSpecification,
+        caller: Option<&Caller>,
+    ) -> Result<Secret> {
+        let secret = (self.configured_secret(daemon, selector, &name, Some(&source))).await?;
+        let granted =
+            self.grant_secret(daemon, selector, name.clone(), secret.clone(), None, caller);
+        match granted.await? {
+            Allocation::Granted(_) => Ok(secret),
+            Allocation::Approval(pending) => Err(anyhow!(
+                "secrets.{name} needs approval {}, which is {}",
+                pending.number,
+                pending.status
+            )),
+            Allocation::Busy(message) => Err(anyhow!(message)),
+        }
+    }
+
+    /// Grant `caller` the secret `name`, configured as `secret`: at once to
+    /// unscoped callers and ungated secrets, otherwise after the user
+    /// approves a request for `reason` bound to its source, which only a
+    /// workspace makes.
+    async fn grant_secret(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        name: String,
+        secret: Secret,
+        reason: Option<&str>,
+        caller: Option<&Caller>,
+    ) -> Result<Allocation<SecretGrant>> {
         if caller.is_none() || !secret.requires_approval {
             return Ok(Allocation::Granted(SecretGrant {
                 name,
                 approved: false,
             }));
         }
+        let workspace = daemon.workspace(selector).await?;
         daemon.touch(&workspace.id).await;
-        let approval = grant_request(&workspace, &name, secret, request.reason.as_deref());
+        let approval = grant_request(&workspace, &name, secret, reason);
         let pending = self.request_approval(approval).await.map_err(|error| {
             if error.is::<ReasonRequired>() {
                 anyhow!(
@@ -74,37 +117,6 @@ impl Leases {
         let space = (&workspace.name, &workspace.id);
         self.notify_allocation(daemon, space, &outcome, "").await;
         Ok(outcome)
-    }
-
-    /// The secret `name` of the workspace `selector`, still configured as
-    /// `source`, once `caller` may fetch it: at once for unscoped callers
-    /// and ungated secrets, otherwise under an approved grant.
-    pub async fn granted_secret(
-        &self,
-        daemon: &dyn Daemon,
-        selector: &SpaceSelector,
-        name: String,
-        source: SecretSpecification,
-        caller: Option<&Caller>,
-    ) -> Result<Secret> {
-        let workspace = daemon.workspace(selector).await?;
-        let secret = (self.configured_secret(daemon, &workspace, &name, Some(&source))).await?;
-        let request = SecretRequest {
-            reason: None,
-            source: Some(source),
-        };
-        match self
-            .acquire_secret(daemon, selector, name.clone(), request, caller)
-            .await?
-        {
-            Allocation::Granted(_) => Ok(secret),
-            Allocation::Approval(pending) => Err(anyhow!(
-                "secrets.{name} needs approval {}, which is {}",
-                pending.number,
-                pending.status
-            )),
-            Allocation::Busy(message) => Err(anyhow!(message)),
-        }
     }
 
     /// Cancel the secret's request or end its lease grant; a workspace grant
@@ -128,19 +140,23 @@ impl Leases {
         released.await
     }
 
-    /// The workspace's current definition of `name`, which must still be the
-    /// `source` a caller resolved earlier, so a grant covers what it fetches.
+    /// The current definition of `name` in the space `selector`, a
+    /// workspace or a chat, as its agents' launches read it, which must
+    /// still be the `source` a caller resolved earlier, so a grant covers
+    /// what it fetches.
     async fn configured_secret(
         &self,
         daemon: &dyn Daemon,
-        workspace: &Workspace,
+        selector: &SpaceSelector,
         name: &str,
         source: Option<&SecretSpecification>,
     ) -> Result<Secret> {
-        let settings = self.settings(daemon, workspace).await?;
+        let settings = daemon
+            .space_settings(&self.config.current(), selector)
+            .await?;
         let secret = (settings.agent_secrets.clone())
             .remove(name)
-            .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))?;
+            .ok_or_else(|| anyhow!("secrets.{name} is not configured for this space"))?;
         ensure!(
             source.is_none_or(|source| *source == specification(&secret)),
             "secrets.{name} changed since this agent started; restart it to use the new configuration"

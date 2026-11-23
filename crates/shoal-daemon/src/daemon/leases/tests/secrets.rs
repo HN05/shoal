@@ -14,6 +14,7 @@ use shoal_protocol::config::{
     value::{Value, ValueKey},
 };
 use shoal_protocol::secrets::{SecretGrant, SecretRequest};
+use shoal_protocol::space_names::SpaceSelector;
 
 fn configure(manager: &Manager, command: &str, lifetime: Lifetime) {
     let value = Value::Cmd {
@@ -181,5 +182,33 @@ async fn the_daemon_reads_no_secret_its_process_reads_itself() -> Result<()> {
     };
     configure_value(&manager, value.clone(), Lifetime::Workspace);
     assert!(written(&manager, None, "OPEN", &value).await.is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_chat_reads_a_written_secret_as_a_workspace_does() -> Result<()> {
+    let (_temp, manager, _) = setup().await;
+    let value = Value::Written("s3cret".into());
+    configure_value(&manager, value.clone(), Lifetime::Workspace);
+    let chat = crate::daemon::test_support::chat(&manager, "planning", "chat", None, None).await;
+    let key = ValueKey::Secret {
+        name: "OPEN".into(),
+        source: shoal_protocol::approvals::SecretSpecification {
+            value: value.recorded(),
+            tools: vec!["agent-browser".into()],
+        },
+    };
+    let caller = Caller {
+        space_id: chat.id.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
+    };
+    let chat = SpaceSelector::id(&chat.id);
+
+    let read = manager.config_value(&chat, key, Some(&caller)).await?;
+
+    assert_eq!(read.0, "s3cret");
     Ok(())
 }

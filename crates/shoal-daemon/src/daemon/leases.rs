@@ -65,6 +65,19 @@ impl Settings for Manager {
         )
     }
 
+    fn space_settings<'a>(
+        &'a self,
+        config: &'a Config,
+        selector: &'a SpaceSelector,
+    ) -> BoxFuture<'a, Result<Effective>> {
+        Box::pin(async move {
+            let space = self.spaces.space(selector).await?;
+            (self.repositories)
+                .space_settings_from(self, config, &space, None)
+                .await
+        })
+    }
+
     fn hook<'a>(
         &'a self,
         workspace: &'a Workspace,

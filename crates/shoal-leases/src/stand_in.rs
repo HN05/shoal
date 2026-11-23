@@ -269,6 +269,15 @@ impl Settings for StandIn {
         Box::pin(async move { config.resolve(&layers) })
     }
 
+    fn space_settings<'a>(
+        &'a self,
+        config: &'a Config,
+        _selector: &'a SpaceSelector,
+    ) -> BoxFuture<'a, Result<Effective>> {
+        let layers = self.layers.lock().unwrap().clone();
+        Box::pin(async move { config.resolve(&layers) })
+    }
+
     fn hook<'a>(
         &'a self,
         _workspace: &'a Workspace,

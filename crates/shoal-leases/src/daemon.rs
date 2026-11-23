@@ -56,6 +56,14 @@ pub trait Settings: Send + Sync {
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>>;
 
+    /// The settings of the space `selector` names, a workspace or a chat,
+    /// as its agents' launches read them, over the global `config`.
+    fn space_settings<'a>(
+        &'a self,
+        config: &'a Config,
+        selector: &'a SpaceSelector,
+    ) -> BoxFuture<'a, Result<Effective>>;
+
     /// The executable of the hook `kind` of `workspace`, where its settings
     /// configure one.
     fn hook<'a>(
