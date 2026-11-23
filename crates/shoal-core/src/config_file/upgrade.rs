@@ -2,7 +2,9 @@
 //! shape this one reads, so each reader parses one shape: `[machine]
 //! keep_awake` took a boolean, `true` meaning `"on"` and `false` `"off"`.
 //! A file Shoal may not write, as a development build leaves the user's own
-//! files, keeps what it says and fails to load.
+//! files, or whose edit lock is held, keeps what it says and fails to load
+//! until a later read rewrites it; a reader that holds the lock rewrites it
+//! first.
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -21,9 +23,16 @@ pub(crate) fn upgraded(path: &Path, text: String) -> String {
 }
 
 /// Upgrade the file at `path` while holding its edit lock, so a concurrent
-/// edit is kept, and return what it holds now.
+/// edit is kept, and return what it holds now; refused while another
+/// holds the lock, which may be this reader's own caller.
 fn save(path: &Path) -> Result<String> {
-    let _lock = super::lock(path)?;
+    let _lock = super::try_lock(path)?.context("the config is being edited")?;
+    upgrade_held(path)
+}
+
+/// Upgrade the file at `path`, whose edit lock the caller holds, and
+/// return what it holds now.
+pub(crate) fn upgrade_held(path: &Path) -> Result<String> {
     let text = fsutil::read_optional(path)
         .with_context(|| format!("read {}", path.display()))?
         .unwrap_or_default();

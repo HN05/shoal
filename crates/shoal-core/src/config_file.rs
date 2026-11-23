@@ -53,22 +53,42 @@ fn edit_held(
 
 /// Hold `path`'s edit lock while the returned file lives.
 pub(crate) fn lock(path: &Path) -> Result<fs::File> {
+    let file = lock_file(path)?;
+    fs2::FileExt::lock_exclusive(&file)?;
+    Ok(file)
+}
+
+/// [`lock`] when nothing holds it now, this process included; none while
+/// it is held.
+pub(crate) fn try_lock(path: &Path) -> Result<Option<fs::File>> {
+    let file = lock_file(path)?;
+    match fs2::FileExt::try_lock_exclusive(&file) {
+        Ok(()) => Ok(Some(file)),
+        Err(error) if error.kind() == fs2::lock_contended_error().kind() => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// The file whose lock guards edits of the config file at `path`.
+fn lock_file(path: &Path) -> Result<fs::File> {
     refuse_user_config(path)?;
     fs::create_dir_all(path.parent().context("config path has no parent")?)?;
-    let file = fs::OpenOptions::new()
+    Ok(fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
-        .open(path.with_extension("toml.lock"))?;
-    fs2::FileExt::lock_exclusive(&file)?;
-    Ok(file)
+        .open(path.with_extension("toml.lock"))?)
 }
 
 /// Hold the edit locks of the global config and the shared config while
 /// the returned files live. Every holder of both takes the global file's
 /// first, so none waits on another that waits for it.
 fn lock_global_files(paths: &Paths) -> Result<(fs::File, fs::File)> {
-    Ok((lock(&Config::path(paths))?, lock(&Shared::path(paths))?))
+    let locks = (lock(&Config::path(paths))?, lock(&Shared::path(paths))?);
+    // Loading them under these locks cannot take them to upgrade them.
+    upgrade::upgrade_held(&Config::path(paths))?;
+    upgrade::upgrade_held(&Shared::path(paths))?;
+    Ok(locks)
 }
 
 /// Replace `path` with `text`, keeping the previous file as `<path>.backup`.

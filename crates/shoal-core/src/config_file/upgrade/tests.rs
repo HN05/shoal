@@ -42,3 +42,14 @@ fn a_file_left_unwritten_fails_to_load_naming_the_levels() {
     let error = format!("{error:#}");
     assert!(error.contains("\"handover\""), "{error}");
 }
+
+#[test]
+fn a_load_under_the_edit_locks_upgrades_the_files_it_holds() {
+    use crate::config_file::ConfigExt;
+    let home = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(home.path());
+    let own = "[machine]\nkeep_awake = true\n";
+    crate::test_support::write_beside_global_config(&paths, "config.toml", own);
+    let machine = Config::load_settled(&paths).unwrap().machine;
+    assert_eq!(machine.keep_awake, KeepAwake::On);
+}
