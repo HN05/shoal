@@ -284,6 +284,8 @@ pub(crate) struct StandIn {
     pub(crate) handings: Mutex<Vec<shoal_protocol::hub::packages::Handing>>,
     /// Why the machine left at each hand-over.
     pub(crate) leavings: Mutex<Vec<shoal_protocol::hub::packages::Leaving>>,
+    /// What each stop of every CI job, to rerun, was for.
+    pub(crate) job_stops: Mutex<Vec<String>>,
     /// Where the next hand-over says the spaces went.
     pub(crate) handed: Mutex<Vec<(Space, shoal_protocol::hub::packages::Handed)>>,
     /// Told as each hand-over starts sending.
@@ -878,7 +880,8 @@ impl Runner for StandIn {
         Box::pin(async { Default::default() })
     }
 
-    fn stop_jobs_to_rerun(&self, _: JobStop) -> BoxFuture<'_, ()> {
+    fn stop_jobs_to_rerun(&self, why: JobStop) -> BoxFuture<'_, ()> {
+        self.job_stops.lock().unwrap().push(why.to_string());
         Box::pin(async {})
     }
 

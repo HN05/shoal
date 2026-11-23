@@ -43,6 +43,7 @@ pub mod messages;
 pub mod oom_scores;
 pub mod overload;
 pub mod overload_recovery;
+pub mod pause;
 pub mod places;
 pub mod program_status;
 pub mod proxy_retries;

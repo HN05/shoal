@@ -2,7 +2,8 @@
 //! `shoal stop --all` does, while the daemon and wrappers still run to save
 //! it, then handing the spaces over to other machines of the hub; and the
 //! same for the spaces with something to do once the user walks away under
-//! `keep_awake = "handover"`.
+//! `keep_awake = "handover"`, or pauses the machine, which stops the rest
+//! too.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashSet, time::Duration};
@@ -57,6 +58,8 @@ pub enum Shutdown {
     Away,
     /// The machine goes to sleep under `keep_awake = "handover"`.
     Sleep,
+    /// The user paused the machine.
+    Pause,
 }
 
 impl Shutdown {
@@ -66,6 +69,7 @@ impl Shutdown {
             Self::Daemon => "the Shoal daemon is stopping",
             Self::Away => "the user walked away from this machine",
             Self::Sleep => "this machine is going to sleep",
+            Self::Pause => "the user paused this machine",
         })
     }
 
@@ -76,6 +80,7 @@ impl Shutdown {
             Self::Daemon => "before the Shoal daemon stopped",
             Self::Away => "once you walked away from this machine",
             Self::Sleep => "before this machine slept",
+            Self::Pause => "as you paused this machine",
         }
     }
 
@@ -83,23 +88,42 @@ impl Shutdown {
         match self {
             Self::System => AlertKind::SystemShutdown,
             Self::Daemon => AlertKind::DaemonStopped,
-            Self::Away | Self::Sleep => AlertKind::HandedOver,
+            Self::Away | Self::Sleep | Self::Pause => AlertKind::HandedOver,
         }
     }
 
     /// Whether the machine's work ends with the stop, so a later one leaves
     /// it alone: as the system or the daemon shuts down, not as the user
-    /// walks away or the machine sleeps.
+    /// walks away or pauses the machine, or it sleeps.
     fn ends_work(self) -> bool {
         matches!(self, Self::System | Self::Daemon)
     }
 
-    /// Whether the stop also ends CI jobs, to rerun: a system shutdown ends
-    /// them, while the daemon's own end leaves them to the next daemon, since
-    /// the forge's runner does their work, and a machine its user left runs
-    /// them until it sleeps.
-    fn ends_jobs(self) -> bool {
-        matches!(self, Self::System)
+    /// Whether the stop stops every space's agents, not only those of the
+    /// spaces it hands over: all but a walk-away's or a sleep's, which
+    /// leave the rest to the sleep.
+    fn stops_every_space(self) -> bool {
+        matches!(self, Self::System | Self::Daemon | Self::Pause)
+    }
+
+    /// Why the stop also ends CI jobs, to rerun, if it does: a system
+    /// shutdown and a pause end them, while the daemon's own end leaves
+    /// them to the next daemon, since the forge's runner does their work,
+    /// and a machine its user left runs them until it sleeps.
+    fn ends_jobs(self) -> Option<JobStop> {
+        match self {
+            Self::System => Some(JobStop::SystemShutdown),
+            Self::Pause => Some(JobStop::Pause),
+            Self::Daemon | Self::Away | Self::Sleep => None,
+        }
+    }
+
+    /// Why the machine hands its spaces over.
+    fn leaving(self) -> Leaving {
+        match self {
+            Self::Pause => Leaving::Paused,
+            Self::System | Self::Daemon | Self::Away | Self::Sleep => Leaving::Away,
+        }
     }
 }
 
@@ -141,22 +165,25 @@ impl Agents {
         // A CI job's runner stops with its job, which ends apart.
         let left = daemon.job_workspaces().await;
         let handing = self.handing(daemon, shutdown).await;
-        let stops = |space: &Space| !left.contains(&space.id) && handing.takes(space);
+        let stops = |space: &Space| {
+            !left.contains(&space.id) && (shutdown.stops_every_space() || handing.takes(space))
+        };
         let spaces = self.stop_every_target(daemon, shutdown.moment(), stops, |space| async move {
             self.stop_keeping_restores(daemon, &SpaceSelector::id(&space), shutdown.request())
                 .await
         });
         let jobs = async {
-            if shutdown.ends_jobs() {
-                daemon.stop_jobs_to_rerun(JobStop::SystemShutdown).await;
+            if let Some(why) = shutdown.ends_jobs() {
+                daemon.stop_jobs_to_rerun(why).await;
             }
         };
         let (stopped, ()) = tokio::join!(spaces, jobs);
-        // A shutdown during a hand-over once the user walked away or
-        // before a sleep goes ahead, leaving alone the spaces under way.
+        // A shutdown during a hand-over once the user walked away or paused
+        // the machine, or before a sleep, goes ahead, leaving alone the
+        // spaces under way.
         let latch = shutdown.ends_work().then_some(finished);
         let deadline = window.deadline(started);
-        let handed = (self.hand_over(daemon, deadline, handing, Leaving::Away)).await;
+        let handed = (self.hand_over(daemon, deadline, handing, shutdown.leaving())).await;
         (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
         if let Some(mut finished) = latch {
             *finished = true;
@@ -166,8 +193,8 @@ impl Agents {
 
     /// The spaces a stop before `shutdown` hands over, but those an
     /// earlier hand-over sent: every space, or once the user walked away
-    /// or before the machine sleeps, those with something to do, none when
-    /// they cannot be read.
+    /// or paused the machine, or before it sleeps, those with something to
+    /// do, none when they cannot be read.
     async fn handing(&self, daemon: &dyn Daemon, shutdown: Shutdown) -> Handing {
         let gone = self.presences.gone();
         if shutdown.ends_work() {
@@ -310,7 +337,7 @@ impl Agents {
         handed: &[(Space, Handed)],
     ) {
         let moment = shutdown.moment();
-        let stopped = self.stopped_report(moment, stopped, handed).await;
+        let stopped = self.stopped_report(shutdown, stopped, handed).await;
         let handed =
             (!handed.is_empty()).then(|| format!("Handed over {moment}: {}", handovers(handed)));
         let told: Vec<String> = stopped.into_iter().chain(handed).collect();
@@ -322,11 +349,11 @@ impl Agents {
     }
 
     /// What the user reads of the work stopped in the `stopped` spaces
-    /// `moment`, and how the work of those that `handed` does not say went
-    /// elsewhere continues here; none without any.
+    /// before `shutdown`, and how the work of those that `handed` does not
+    /// say went elsewhere continues here; none without any.
     async fn stopped_report(
         &self,
-        moment: &str,
+        shutdown: Shutdown,
         stopped: &[Space],
         handed: &[(Space, Handed)],
     ) -> Option<String> {
@@ -335,11 +362,15 @@ impl Agents {
         }
         let count = stopped.len();
         let spaces = if count == 1 { "space" } else { "spaces" };
+        let moment = shutdown.moment();
         let here = staying(stopped, handed);
         if here.is_empty() {
             return Some(format!("Stopped work in {count} {spaces} {moment}"));
         }
-        let continues = continuation(&self.awaiting_restore(&here).await);
+        let mut continues = continuation(&self.awaiting_restore(&here).await);
+        if matches!(shutdown, Shutdown::Pause) {
+            continues.push_str(" once shoal unpause admits work again");
+        }
         Some(format!(
             "Stopped work in {count} {spaces} {moment}; {continues}"
         ))
