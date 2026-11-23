@@ -33,14 +33,9 @@ fn which(machine: Option<&str>) -> String {
 fn paused_message(paused: &Paused, machine: Option<&str>) -> String {
     let which = which(machine);
     let since = paused.since.local_minutes();
-    let stopped = match paused.stopped.len() {
-        0 => String::new(),
-        1 => "; stopped work in 1 space, which an alert names with where it went".into(),
-        count => {
-            format!("; stopped work in {count} spaces, which an alert names with where each went")
-        }
-    };
-    format!("Paused {which} since {since}{stopped}; it admits no new work until shoal unpause")
+    format!(
+        "Paused {which} since {since}; its work stops, an alert naming where each space went, and it admits no new work until shoal unpause"
+    )
 }
 
 /// What `shoal unpause` says of `unpaused` on the machine `machine` names.

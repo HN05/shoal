@@ -14,7 +14,7 @@ use shoal_protocol::time::UnixTime;
 use crate::{
     Agents,
     daemon::Daemon,
-    shutdown_stop::{HandoverWindow, Shutdown, StoppedSpaces},
+    shutdown_stop::{HandoverWindow, Shutdown},
 };
 
 /// The longest a pause's hand-over waits for the hub to confirm its
@@ -47,11 +47,10 @@ impl Agents {
     }
 
     /// Stop every agent here as the machine is paused, handing the spaces
-    /// with something to do over, and end the CI jobs to rerun; the spaces
-    /// stopped.
-    pub async fn stop_for_pause(&self, daemon: &dyn Daemon) -> StoppedSpaces {
+    /// with something to do over, and end the CI jobs to rerun.
+    pub async fn stop_for_pause(&self, daemon: &dyn Daemon) {
         let window = HandoverWindow::Own(PAUSE_HANDOVER);
-        (self.stop_for_shutdown_of(daemon, Shutdown::Pause, window)).await
+        (self.stop_for_shutdown_of(daemon, Shutdown::Pause, window)).await;
     }
 
     /// Unpause this machine: admit work again, which restores the agents
