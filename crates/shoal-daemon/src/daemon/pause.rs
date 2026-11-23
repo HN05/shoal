@@ -12,6 +12,8 @@ use shoal_protocol::{
     protocol::{Body, MachineMethod, Operation},
 };
 
+use shoal_agents::pause::PauseStop;
+
 use super::{log, manager::Manager};
 
 /// What the demos a pause stops are told.
@@ -28,18 +30,20 @@ impl Manager {
                 .with_context(|| format!("pause machine {}", machine.name))?;
             return Paused::try_from(body);
         }
-        let since = self.agents.pause().await?;
+        let (since, stop) = self.agents.pause().await?;
         self.hub.capacity_changed();
-        tokio::spawn(self.clone().stop_paused_work());
+        if let Some(stop) = stop {
+            tokio::spawn(self.clone().stop_paused_work(stop));
+        }
         Ok(Paused { since })
     }
 
     /// Stop what runs on this paused machine: the agents, handing the
     /// spaces with something to do over, the CI jobs, to rerun elsewhere,
     /// the running reviews, to run again once unpaused, and the demos.
-    async fn stop_paused_work(self: Arc<Self>) {
+    async fn stop_paused_work(self: Arc<Self>, stop: PauseStop) {
         let ((), (), demos) = tokio::join!(
-            self.agents.stop_for_pause(&*self),
+            self.agents.stop_for_pause(&*self, stop),
             self.reviews.stop_to_run_later(),
             self.demos.stop_all(&*self, PAUSE_REASON.to_owned()),
         );

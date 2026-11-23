@@ -96,7 +96,7 @@ pub struct Agents {
     shutdown_stopped: tokio::sync::Mutex<bool>,
     /// Held while a pause stops this machine's work and hands its spaces
     /// over, which an unpause must not cut short.
-    pause_stop: tokio::sync::Mutex<()>,
+    pause_stop: Arc<tokio::sync::Mutex<()>>,
     /// The busy CPU the overload monitor reads for job admission.
     busy_cpu: busy_cpu::BusyCpu,
     /// What the agent queue keeps in memory.

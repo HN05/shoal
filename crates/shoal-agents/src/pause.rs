@@ -37,20 +37,25 @@ impl Agents {
     }
 
     /// Pause this machine, so it admits nothing new, keeping since when an
-    /// earlier pause stands; since when it is paused.
-    pub async fn pause(&self) -> Result<UnixTime> {
+    /// earlier pause stands: since when it is paused, and the stop of its
+    /// work to run, which an unpause waits for from now on; none while an
+    /// earlier pause's stop runs, which this one leaves to it.
+    pub async fn pause(&self) -> Result<(UnixTime, Option<PauseStop>)> {
+        let stop = self.pause_stop.clone().try_lock_owned();
+        let stop = stop.ok().map(|held| PauseStop { _held: held });
         let since = self
             .store
             .write(|tx| record_pause(tx, UnixTime::now()))
             .await?;
         self.agent_queue.pause(Some(since));
-        Ok(since)
+        Ok((since, stop))
     }
 
-    /// Stop every agent here as the machine is paused, handing the spaces
-    /// with something to do over, and end the CI jobs to rerun.
-    pub async fn stop_for_pause(&self, daemon: &dyn Daemon) {
-        let _stopping = self.pause_stop.lock().await;
+    /// Run the `stop` of the paused machine's work: stop every agent here,
+    /// handing the spaces with something to do over, and end the CI jobs
+    /// to rerun.
+    pub async fn stop_for_pause(&self, daemon: &dyn Daemon, stop: PauseStop) {
+        let _stopping = stop;
         let window = HandoverWindow::Own(PAUSE_HANDOVER);
         (self.stop_for_shutdown_of(daemon, Shutdown::Pause, window)).await;
     }
@@ -75,6 +80,12 @@ impl Agents {
         }
         Ok(was)
     }
+}
+
+/// The stop of a paused machine's work, held from the pause until it
+/// ends, through which an unpause is refused.
+pub struct PauseStop {
+    _held: tokio::sync::OwnedMutexGuard<()>,
 }
 
 /// Since when the store records this machine paused.

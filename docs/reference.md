@@ -770,9 +770,9 @@ restore, CI job or review, and the hub's [placement](#hub) skips the
 machine. Every agent stops as `shoal stop` stops it, saving its session,
 and on a machine of a hub, the hub's own included, the spaces with
 something to do, an agent working on a turn or waiting in the queue to be
-restored, with the workspace whose worktree such a chat runs in, go to
-other connected machines as a [shutdown's hand-over](#hub) sends them, a
-chat in a workspace's worktree going with that workspace. The CI jobs the
+restored, go to other connected machines as a [shutdown's
+hand-over](#hub) sends them, a chat in a workspace's worktree going with
+that workspace. The CI jobs the
 machine runs end and run again elsewhere, as a sleep ends them, its running
 reviews wait in the queue again, and its demos stop. A `handed_over` alert
 names where each space went, or why it stayed: the machine is in no hub, no

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::handle;
 use crate::{
     daemon::{
@@ -26,11 +28,19 @@ async fn only_the_user_pauses_a_machine_which_admits_nothing_until_unpaused() {
     };
     assert!(manager.agents.agent_queue().holds_admission());
     assert_eq!(manager.agents.paused_since(), Some(paused.since));
-    let unpause = MachineMethod::UnpauseMachine { machine: None };
-    let Answer::Body(Body::MachineUnpaused(unpaused)) = handle(&manager, unpause).await.unwrap()
-    else {
-        panic!("not an unpause's answer");
-    };
+    // The unpause is refused until the pause's stop, in the background, ended.
+    let unpaused = tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let unpause = MachineMethod::UnpauseMachine { machine: None };
+            if let Ok(Answer::Body(Body::MachineUnpaused(unpaused))) =
+                handle(&manager, unpause).await
+            {
+                return unpaused;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    });
+    let unpaused = unpaused.await.unwrap();
     assert_eq!(unpaused.paused_since, Some(paused.since));
     assert!(!manager.agents.agent_queue().holds_admission());
 }
