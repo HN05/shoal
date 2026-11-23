@@ -141,14 +141,14 @@ fn origins_record_how_to_reach_the_server_again() {
 #[tokio::test]
 async fn older_api_revisions_are_refused_by_name() {
     let (_root, old) =
-        fake(r#"{('version',): (0, '{"rex_version": "0.0.1", "api_revision": 6}')}"#);
+        fake(r#"{('version',): (0, '{"rex_version": "0.0.1", "api_revision": 18}')}"#);
     let error = old.ensure_supported().await.unwrap_err().to_string();
     assert!(
-        error.contains("revision 6") && error.contains("revision 7"),
+        error.contains("revision 18") && error.contains("revision 19"),
         "{error}"
     );
     let (_root, current) =
-        fake(r#"{('version',): (0, '{"rex_version": "0.0.2", "api_revision": 7}')}"#);
+        fake(r#"{('version',): (0, '{"rex_version": "0.0.2", "api_revision": 19}')}"#);
     current.ensure_supported().await.unwrap();
 }
 

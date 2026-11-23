@@ -2347,7 +2347,8 @@ is how to reach the server and its CLI. A Rex block keeps its ID when it
 moves to another session, and Rex names only the block to the programs in
 it, so a block's record names no session: Shoal reads the session from the
 block when it opens a window beside it, and a start queued from any block
-joins that session. Queued entries carry the queuing
+joins that session. Shoal supports only the latest Rex while Rex is in
+alpha, refusing an older API revision. Queued entries carry the queuing
 terminal's origin, recovery records the stopped agent's, demos their launch's,
 and the daemon the place each execution and chat runs in, which `attach`, `status`
 and attach completion ask the host about for every host, together with the

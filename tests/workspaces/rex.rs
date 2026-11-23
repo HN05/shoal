@@ -4,8 +4,8 @@
 //! isolated server, so nothing reaches the user's server.
 use super::*;
 
-/// Where the Mac app installs `rex`, below the home directory.
-const APP_BIN_DIR: &str = "Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS";
+/// Where the Mac app keeps `rex`.
+const APP_BIN_DIR: &str = "/Applications/Rex.app/Contents/Helpers/Rex Server.rex/Contents/MacOS";
 
 /// The runner's `rex`, found as Shoal finds it.
 fn installed_rex() -> Option<PathBuf> {
@@ -14,7 +14,7 @@ fn installed_rex() -> Option<PathBuf> {
         .map(PathBuf::from)
         .into_iter()
         .chain(std::env::split_paths(&path))
-        .chain(std::env::var_os("HOME").map(|home| PathBuf::from(home).join(APP_BIN_DIR)));
+        .chain([PathBuf::from(APP_BIN_DIR)]);
     dirs.map(|dir| dir.join("rex")).find(|rex| rex.is_file())
 }
 

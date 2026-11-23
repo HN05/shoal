@@ -15,16 +15,17 @@ use tokio::process::Command;
 
 use crate::subprocess::Run;
 
-/// The oldest API revision with the methods Shoal calls.
-const REVISION: u64 = 7;
+/// The API revision of the latest Rex, the only one Shoal supports while
+/// Rex is in alpha.
+const REVISION: u64 = 19;
 /// `rex`'s exit status when the session, window or block it names is gone.
 const NOT_FOUND: i32 = 3;
 /// What a Rex origin's data records: the server's address, when not the
 /// local default, and the directory of the `rex` that reaches it.
 const SERVER: &str = "server";
 const BIN_DIR: &str = "bin_dir";
-/// Where the Mac app installs `rex`, below the home directory.
-const APP_BIN_DIR: &str = "Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS";
+/// Where the Mac app keeps `rex`.
+const APP_BIN_DIR: &str = "/Applications/Rex.app/Contents/Helpers/Rex Server.rex/Contents/MacOS";
 const SHELL_FLAVOR: &str = "com.superlogical.terminal.shell";
 /// How long a `rex` command may run before it is stopped; only a hang
 /// guard, since each one answers at once and limits its own requests, while
@@ -491,11 +492,7 @@ fn program(bin_dir: Option<PathBuf>) -> Result<PathBuf> {
             &std::env::var_os("PATH").unwrap_or_default(),
         )
     };
-    let in_app = || {
-        std::env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join(APP_BIN_DIR).join("rex"))
-            .filter(|path| path.is_file())
-    };
+    let in_app = || Some(Path::new(APP_BIN_DIR).join("rex")).filter(|path| path.is_file());
     in_bin_dir
         .filter(|path| path.is_file())
         .or_else(on_path)
