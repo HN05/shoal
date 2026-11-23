@@ -692,8 +692,13 @@ impl Leases {
             return Ok(false);
         };
         if let Some(sim) = idle {
-            if then == Device::ShutDown && sim.udid.is_some() {
-                self.shutdown_sim(&sim).await?;
+            // The lease went whatever the shutdown does, and an idle device
+            // shuts down once another needs its place.
+            if then == Device::ShutDown
+                && sim.udid.is_some()
+                && let Err(error) = self.shutdown_sim(&sim).await
+            {
+                crate::log!("released simulator {} kept running: {error:#}", sim.id);
             }
             // Expiry passes over the devices while another holds the lock.
             drop(guard);

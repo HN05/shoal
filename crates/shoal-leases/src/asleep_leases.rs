@@ -11,7 +11,9 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::acquired_leases::{Acquired, Held};
 use crate::daemon::{Daemon, Sleeper};
-use crate::{Leases, callers::Caller, model::Workspace, sim::Device, time::UnixTime};
+use crate::{
+    Leases, callers::Caller, model::Workspace, sim::Device, state::WorkspaceState, time::UnixTime,
+};
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::model::{KeptKind, KeptLease};
 
@@ -83,7 +85,9 @@ impl Leases {
     /// in it is an asleep agent's that may yield to
     /// the request: any for the user's, else one whose space's priority is
     /// no higher than the workspace's. The set whose highest-ranked holder
-    /// ranks lowest goes, the smallest among equals. Whether it went.
+    /// ranks lowest goes, the smallest among equals, once every holder's
+    /// workspace can release it. Whether any of it went, which the request
+    /// claims again for.
     pub(crate) async fn give_to_request(
         &self,
         daemon: &dyn Daemon,
@@ -103,12 +107,29 @@ impl Leases {
         let Some(given) = lowest_ranked(&sleepers, freeing) else {
             return false;
         };
+        // A set goes whole or not at all, as far as Shoal can tell before.
+        if !self.all_releasable(daemon, &given).await {
+            return false;
+        }
+        let mut any = false;
         for lease in &given {
             let released = self.release_acquired_lease(daemon, lease, device);
-            let Some(holding) = released.await else {
+            if let Some(holding) = released.await {
+                tell_taken(daemon, lease, &holding, Taken::Given(workspace.number)).await;
+                any = true;
+            }
+        }
+        any
+    }
+
+    /// Whether every lease of `leases` sits in a ready workspace, which
+    /// its release needs.
+    async fn all_releasable(&self, daemon: &dyn Daemon, leases: &[Acquired]) -> bool {
+        for lease in leases {
+            let workspace = daemon.workspace_by_id(&lease.workspace).await;
+            if !workspace.is_ok_and(|workspace| workspace.state == WorkspaceState::Ready) {
                 return false;
-            };
-            tell_taken(daemon, lease, &holding, Taken::Given(workspace.number)).await;
+            }
         }
         true
     }
