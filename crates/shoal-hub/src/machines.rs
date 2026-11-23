@@ -23,12 +23,27 @@ impl Hub {
     /// them while the hub cannot be asked; refused on a machine in no hub.
     pub async fn named_machine(&self, daemon: &dyn Daemon, named: &str) -> Result<Named> {
         let Some((own, directory)) = self.directory_or_known(daemon).await? else {
-            bail!("this machine joined no hub, so its spaces start here; leave out --machine");
+            bail!("this machine joined no hub, so --machine names no other machine; leave it out");
         };
         let machine = (directory.named_machine(named))
             .map_err(|message| Refusal::new(Reason::NotFound, message))?
             .clone();
         let own = machine.id == own;
         Ok(Named { machine, own })
+    }
+
+    /// The other joined machine `named` names, as
+    /// [`Self::named_machine`] reads it; none when it names none, or this
+    /// one.
+    pub async fn other_machine(
+        &self,
+        daemon: &dyn Daemon,
+        named: Option<&str>,
+    ) -> Result<Option<Member>> {
+        let Some(named) = named else {
+            return Ok(None);
+        };
+        let Named { machine, own } = self.named_machine(daemon, named).await?;
+        Ok((!own).then_some(machine))
     }
 }

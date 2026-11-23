@@ -12,7 +12,7 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-use super::{hub::Named, manager::Manager, scope::Caller};
+use super::{manager::Manager, scope::Caller};
 
 /// How many workspaces a removal's preview inspects at once.
 const PREVIEW_CONCURRENCY: usize = 4;
@@ -27,7 +27,7 @@ impl Manager {
         machine: Option<&str>,
         caller: Option<&Caller>,
     ) -> Result<RepositoryRemoval> {
-        if let Some(machine) = self.other_machine(machine).await? {
+        if let Some(machine) = self.hub.other_machine(self, machine).await? {
             let method = RepositoryMethod::RemoveRepository {
                 repository: selector,
                 machine: None,
@@ -54,7 +54,7 @@ impl Manager {
         machine: Option<&str>,
         caller: Option<&Caller>,
     ) -> Result<RepositoryRemovalPreview> {
-        if let Some(machine) = self.other_machine(machine).await? {
+        if let Some(machine) = self.hub.other_machine(self, machine).await? {
             let method = RepositoryMethod::PreviewRepositoryRemoval {
                 repository: selector,
                 machine: None,
@@ -71,16 +71,6 @@ impl Manager {
             .collect()
             .await;
         Ok(RepositoryRemovalPreview { repository, spaces })
-    }
-
-    /// The other joined machine `named` names; none when it names none, or
-    /// this one.
-    async fn other_machine(&self, named: Option<&str>) -> Result<Option<Member>> {
-        let Some(named) = named else {
-            return Ok(None);
-        };
-        let Named { machine, own } = self.hub.named_machine(self, named).await?;
-        Ok((!own).then_some(machine))
     }
 
     /// What `machine` answers `method` from `caller` with, through the hub;

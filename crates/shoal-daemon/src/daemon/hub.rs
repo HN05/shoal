@@ -32,7 +32,7 @@ use shoal_schedule::priority::Priority;
 
 use super::{approvals, manager::Manager, messages, scope::Caller, tree, workspace_files};
 
-pub(crate) use shoal_hub::{Elsewhere, Event, Incoming, Named, Outgoing, Unanswered, numbering};
+pub(crate) use shoal_hub::{Elsewhere, Event, Incoming, Outgoing, Unanswered, numbering};
 
 impl Spaces for Manager {
     fn space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>> {
