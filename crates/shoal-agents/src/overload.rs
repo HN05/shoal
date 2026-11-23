@@ -11,7 +11,7 @@ use crate::process::load::{self, MemoryPressure};
 use crate::Agents;
 use crate::daemon::Daemon;
 use crate::log;
-use crate::warnings::{self, Signal, Warnings};
+use crate::warnings::{self, Signal, Warning, Warnings};
 
 /// What a sample found the machine short of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -182,7 +182,7 @@ impl Monitor {
         settings: &crate::config::overload::Overload,
         memory: Option<MemoryPressure>,
         limited: bool,
-    ) -> Vec<(Signal, String)> {
+    ) -> Vec<(Signal, Warning)> {
         let warning = &settings.warning;
         let enabled = |protection| warning.enabled && protection;
         let cpu = self.cpu_warning.observe(
@@ -276,9 +276,9 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
             Recovery::Revoke => agents.overload_recovery.reset(),
             Recovery::Publish(ready) => agents.overload_recovery.publish(ready),
         }
-        for (signal, message) in monitor.warnings(now, settings, readings.memory, readings.limited)
+        for (signal, warning) in monitor.warnings(now, settings, readings.memory, readings.limited)
         {
-            warned.warn(&agents, now, signal, &message).await;
+            warned.warn(&agents, now, signal, &warning).await;
         }
         if let Some(pressure) = pressure
             && agents.stop_for_overload(&*daemon, pressure).await

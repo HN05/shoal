@@ -139,7 +139,7 @@ fn warnings_follow_enabled_protections_and_sustained_cpu() {
         ..Default::default()
     };
     let mut monitor = Monitor::default();
-    let signals = |warnings: Vec<(Signal, String)>| {
+    let signals = |warnings: Vec<(Signal, crate::warnings::Warning)>| {
         warnings
             .into_iter()
             .map(|(signal, _)| signal)

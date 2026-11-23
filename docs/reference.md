@@ -373,13 +373,13 @@ space with a running agent, naming the threshold. On Linux memory warns
 when memory in use passes `memory_used_percent` or some task has stalled
 waiting for memory for `memory_stall_percent` of the last ten seconds. A memory or CPU warning
 tells the agent that load is high and that it needs no action; a disk warning
-asks it to free space in its own worktree, deleting a build's output whole or
-not at all, and to leave other worktrees and Shoal's directories beside them
-to Shoal. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
+asks a workspace's agent to free space in its own worktree, deleting a build's
+output whole or not at all, and to leave other worktrees and Shoal's directories
+beside them to Shoal, and tells a chat's agent, which has no worktree, only that
+space is low. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
 Each space hears about each signal at most once per `repeat_minutes`, and
 agents started later are warned at the next sample. A memory or CPU warning,
-and a disk warning to a chat, which has no worktree, arrive with the agent's
-next update or turn without waking an idle agent; a disk warning wakes a
+and a disk warning to a chat, arrive with the agent's next update or turn without waking an idle agent; a disk warning wakes a
 workspace's. Warnings stop and remove
 nothing; a failed reading warns about nothing. Warning thresholds are not checked
 against stop thresholds; a warning at or above one arrives with the stop.

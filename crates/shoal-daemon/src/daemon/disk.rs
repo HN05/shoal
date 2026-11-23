@@ -121,9 +121,9 @@ impl Monitor {
                 })
                 .min_by_key(|filesystem| filesystem.free)
         {
-            let message = warnings::disk(&config.machine.overload, &lowest.describe());
+            let warning = warnings::disk(&config.machine.overload, &lowest.describe());
             self.warnings
-                .warn(&manager.agents, now, Signal::Disk, &message)
+                .warn(&manager.agents, now, Signal::Disk, &warning)
                 .await;
         }
         low.retain(|filesystem| filesystem.free < settings.cleanup_free_bytes());

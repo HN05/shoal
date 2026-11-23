@@ -16,16 +16,24 @@ pub enum Signal {
     Disk,
 }
 
-impl Signal {
-    /// How its warning reaches an idle agent in a space of `kind`: a disk
-    /// warning wakes a workspace's agent to delete files in its worktree,
-    /// while every other waits for the agent's next turn, a memory or CPU
-    /// warning being a heads-up that asks for nothing and a chat having no
-    /// worktree to delete files in.
-    fn delivery(self, kind: SpaceKind) -> Delivery {
-        match (self, kind) {
-            (Self::Disk, SpaceKind::Workspace) => Delivery::Wake,
-            _ => Delivery::NextTurn,
+/// A warning's text: the load it reports and, where the agent of a
+/// workspace can relieve it in its own worktree, how.
+pub struct Warning {
+    load: String,
+    remedy: Option<String>,
+}
+
+impl Warning {
+    /// Its text for the agent of a space of `kind`, and how it reaches the
+    /// agent while idle. A remedy wakes a workspace's agent to act on it;
+    /// otherwise, and always for a chat, which has no worktree, it is a
+    /// heads-up that asks for nothing and waits for the agent's next turn.
+    fn for_space(&self, kind: SpaceKind) -> (String, Delivery) {
+        match (&self.remedy, kind) {
+            (Some(remedy), SpaceKind::Workspace) => {
+                (format!("{} {remedy}", self.load), Delivery::Wake)
+            }
+            _ => (format!("{} {HEADS_UP}", self.load), Delivery::NextTurn),
         }
     }
 }
@@ -37,11 +45,11 @@ pub struct Warnings {
 }
 
 impl Warnings {
-    /// Queue `message` for each space with a running agent that has not
+    /// Queue `warning` for each space with a running agent that has not
     /// been warned about `signal` within the repeat interval, including agents
-    /// started since the last warning, delivered as [`Signal::delivery`] says
-    /// for its space's kind.
-    pub async fn warn(&mut self, agents: &Agents, now: Instant, signal: Signal, message: &str) {
+    /// started since the last warning, as [`Warning::for_space`] gives it for
+    /// the space's kind.
+    pub async fn warn(&mut self, agents: &Agents, now: Instant, signal: Signal, warning: &Warning) {
         let repeat = Duration::from_secs(
             agents
                 .config
@@ -59,12 +67,13 @@ impl Warnings {
             if self.sent.contains_key(&key) {
                 continue;
             }
+            let (message, delivery) = warning.for_space(kind);
             if let Err(error) = agents
                 .queue_agent_message_delivered(
                     &key.0,
                     shoal_daemon_base::alerts::AlertKind::LoadWarning,
-                    message.into(),
-                    signal.delivery(kind),
+                    message,
+                    delivery,
                 )
                 .await
             {
@@ -100,13 +109,13 @@ async fn running_agent_spaces(agents: &Agents) -> Vec<(SpaceId, SpaceKind)> {
     }
 }
 
-/// Memory and CPU warnings report the machine's load without asking the
-/// agent to change its work.
+/// What a warning without a remedy tells the agent: that it reports the
+/// machine's load without asking the agent to change its work.
 const HEADS_UP: &str = "This is information only; it needs no action from you.";
 
 /// The warning of memory pressure, the machine's or, where `limited`,
 /// that of Shoal's work against its memory limit.
-pub fn memory(settings: &Overload, limited: bool) -> String {
+pub fn memory(settings: &Overload, limited: bool) -> Warning {
     let used = match limited {
         true => "RAM and swap, or Shoal's work against its memory limit,",
         false => "RAM and swap",
@@ -127,27 +136,38 @@ pub fn memory(settings: &Overload, limited: bool) -> String {
             settings.memory.stall_percent,
         )
     };
-    format!("{level} {HEADS_UP}")
+    Warning {
+        load: level,
+        remedy: None,
+    }
 }
 
-pub fn cpu(settings: &Overload) -> String {
-    format!(
-        "CPU use has been above {}% for {} seconds; Shoal stops an agent after {} seconds above {}%. {HEADS_UP}",
-        settings.warning.cpu_used_percent,
-        settings.warning.cpu_sustained_seconds,
-        settings.cpu.sustained_seconds,
-        settings.cpu.used_percent,
-    )
+pub fn cpu(settings: &Overload) -> Warning {
+    Warning {
+        load: format!(
+            "CPU use has been above {}% for {} seconds; Shoal stops an agent after {} seconds above {}%.",
+            settings.warning.cpu_used_percent,
+            settings.warning.cpu_sustained_seconds,
+            settings.cpu.sustained_seconds,
+            settings.cpu.used_percent,
+        ),
+        remedy: None,
+    }
 }
 
 /// `available` describes the filesystem with the least free space.
-pub fn disk(settings: &Overload, available: &str) -> String {
-    format!(
-        "Free disk space is low: {available}; Shoal stops running agents and tracked commands below {} GiB. Delete build output you no longer need in your own worktree, a whole directory or with its clean command, and avoid large downloads; leave other worktrees and Shoal's {} and {} alone.",
-        settings.disk.stop_free_gib,
-        Contents::Caches.directory(),
-        Contents::Seed.directory(),
-    )
+pub fn disk(settings: &Overload, available: &str) -> Warning {
+    Warning {
+        load: format!(
+            "Free disk space is low: {available}; Shoal stops running agents and tracked commands below {} GiB.",
+            settings.disk.stop_free_gib,
+        ),
+        remedy: Some(format!(
+            "Delete build output you no longer need in your own worktree, a whole directory or with its clean command, and avoid large downloads; leave other worktrees and Shoal's {} and {} alone.",
+            Contents::Caches.directory(),
+            Contents::Seed.directory(),
+        )),
+    }
 }
 
 #[cfg(test)]

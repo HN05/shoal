@@ -1,5 +1,6 @@
 use crate::config::overload::Overload;
 use crate::executions::ExecutionKind;
+use crate::model::SpaceKind;
 use crate::stand_in::Fixture;
 use crate::warnings::*;
 use shoal_protocol::space_names::SpaceSelector;
@@ -95,24 +96,28 @@ async fn only_disk_warnings_wake_an_idle_agent_and_only_in_a_workspace() {
             &disk(&settings, "1.0 GiB available at /"),
         )
         .await;
-    assert!(unread(&workspace.id).await.wakes);
+    let workspace_unread = unread(&workspace.id).await;
+    assert!(workspace_unread.wakes);
+    assert!(!workspace_unread.alerts[2].message.ends_with(HEADS_UP));
     // A chat has no worktree to free space in: its agent reads the warning
-    // at its next turn.
+    // as a heads-up at its next turn.
     let chat_unread = unread(&chat).await;
-    assert_eq!(chat_unread.alerts.len(), 3);
     assert!(!chat_unread.wakes);
+    assert!(chat_unread.alerts[2].message.ends_with(HEADS_UP));
 }
 
 #[test]
 fn warnings_are_single_lines_within_the_message_limit() {
     let settings = Overload::default();
     let path = format!("/{}", "x".repeat(200));
-    for message in [
+    for warning in [
         memory(&settings, false),
         memory(&settings, true),
         cpu(&settings),
         disk(&settings, &format!("3.2 GiB available at {path}")),
     ] {
-        crate::validate::message(&message).unwrap();
+        for kind in [SpaceKind::Workspace, SpaceKind::Chat] {
+            crate::validate::message(&warning.for_space(kind).0).unwrap();
+        }
     }
 }
