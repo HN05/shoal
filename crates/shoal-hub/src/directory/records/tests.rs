@@ -117,9 +117,53 @@ fn a_claimed_space_changes_hands_without_a_conflict() {
     // The machine it moved from reports it until its space ends there.
     let conflicts = report(&mut db, "desk", Report::Whole(vec![space("a", "moving")]));
     assert!(conflicts.is_empty());
-    report(&mut db, "desk", Report::Whole(Vec::new()));
     let tx = db.transaction().unwrap();
     assert!(read(&tx).unwrap().1.is_empty());
+}
+
+/// Have desk report the space `a`, then laptop claim and report it.
+fn moved_to_laptop(db: &mut Connection) {
+    report(db, "desk", Report::Whole(vec![space("a", "moving")]));
+    let tx = db.transaction().unwrap();
+    claim(
+        &tx,
+        &MemberId::from("laptop".to_owned()),
+        &"a".to_owned().into(),
+    )
+    .unwrap();
+    tx.commit().unwrap();
+    report(db, "laptop", Report::Whole(vec![space("a", "moving")]));
+}
+
+#[test]
+fn a_moved_space_its_new_machine_ended_has_no_owner_before_the_old_one_ends_it() {
+    let mut db = database();
+    moved_to_laptop(&mut db);
+    report(&mut db, "laptop", Report::Whole(Vec::new()));
+    assert!(listed(&mut db).is_empty());
+    // Desk reports its space again as it ends it.
+    report(&mut db, "desk", Report::Whole(vec![space("a", "ending")]));
+    let tx = db.transaction().unwrap();
+    let laptop = MemberId::from("laptop".to_owned());
+    assert_eq!(
+        owner_seen_by(&tx, &"a".to_owned().into(), &laptop).unwrap(),
+        None
+    );
+}
+
+#[test]
+fn a_moved_space_its_new_machine_restored_is_its_own() {
+    let mut db = database();
+    moved_to_laptop(&mut db);
+    report(&mut db, "laptop", Report::Whole(Vec::new()));
+    let conflicts = report(
+        &mut db,
+        "laptop",
+        Report::Whole(vec![space("a", "restored")]),
+    );
+    assert!(conflicts.is_empty());
+    report(&mut db, "desk", Report::Whole(Vec::new()));
+    assert_eq!(listed(&mut db), [("a".into(), "laptop".into())]);
 }
 
 #[test]

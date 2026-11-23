@@ -283,7 +283,8 @@ heard from it. Repositories match across machines by their origin, never by
 each machine's ID. The directory lists a space ID under the first machine
 that reported it: another machine's copy is left out, routed nothing, and
 alerts the user, and takes the ID once the first's space ends, while an
-import claims the ID, so a move hands it over without a conflict; a restore
+import claims the ID, so a move hands it over without a conflict, and the
+copy it hands over, which its machine retires, never takes it back; a restore
 asks the hub first and refuses a space another
 machine runs, going on while the hub cannot be asked, unless that machine
 is offline and the hub keeps a package of the space: the restore then takes

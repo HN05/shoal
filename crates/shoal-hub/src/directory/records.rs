@@ -126,6 +126,8 @@ fn held(tx: &Transaction<'_>, member: &MemberId) -> Result<Vec<SpaceId>> {
 /// Record `member`'s `space`: as the owner's when no other machine owns
 /// its ID or `member` claimed it, else as a copy, with the conflict a new
 /// copy raises unless another machine took the space over from `member`.
+/// A copy `member` handed over stays one until its space ends there, even
+/// once the machine that took it over ended its own.
 fn record(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -152,6 +154,10 @@ fn record(
                 copy: member.clone(),
                 since: now,
             }))
+        }
+        None if handed_over(tx, &space.id, member)? && !claimed_by(tx, &space.id, member)? => {
+            keep_copy(tx, member, &space.id, &summary, now)?;
+            Ok(None)
         }
         // A claim is spent once its machine owns the space, however it
         // came to: the machine it moved from may have ended it first.
@@ -244,13 +250,15 @@ fn take_claim(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<b
     Ok(taken > 0)
 }
 
-/// Keep the owner's space `id` as a copy, as the machine that claimed it
-/// takes the ID over; the copy goes once its space ends there.
+/// Keep the owner's space `id` as a copy its machine retires, as the
+/// machine that claimed it takes the ID over; the copy goes once its space
+/// ends there, and never takes the ID back.
 fn hand_over(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<()> {
     tx.execute(
-        "INSERT INTO hub_space_copies(space_id, member_id, summary, since)
-         SELECT space_id, member_id, summary, ?2 FROM hub_spaces WHERE space_id=?1
-         ON CONFLICT(space_id, member_id) DO UPDATE SET summary=excluded.summary",
+        "INSERT INTO hub_space_copies(space_id, member_id, summary, since, handed_over)
+         SELECT space_id, member_id, summary, ?2, 1 FROM hub_spaces WHERE space_id=?1
+         ON CONFLICT(space_id, member_id) DO UPDATE
+            SET summary=excluded.summary, handed_over=1",
         params![id, now],
     )?;
     Ok(())
@@ -260,6 +268,16 @@ fn hand_over(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<()> {
 fn has_copy(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<bool> {
     Ok(tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM hub_space_copies WHERE space_id=?1 AND member_id=?2)",
+        params![id, member],
+        |row| row.get(0),
+    )?)
+}
+
+/// Whether `member` keeps a copy of the space `id` it handed over.
+fn handed_over(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<bool> {
+    Ok(tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM hub_space_copies
+            WHERE space_id=?1 AND member_id=?2 AND handed_over)",
         params![id, member],
         |row| row.get(0),
     )?)
@@ -296,11 +314,13 @@ fn drop_copy(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()
 }
 
 /// Make the earliest copy of the space `id`, which no machine owns now,
-/// its owner's, if any machine kept one.
+/// its owner's, if any machine kept one other than a copy it handed over,
+/// which its machine retires.
 fn promote_earliest_copy(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     let earliest: Option<(MemberId, String, UnixTime)> = tx
         .query_row(
-            "SELECT member_id, summary, since FROM hub_space_copies WHERE space_id=?1
+            "SELECT member_id, summary, since FROM hub_space_copies
+             WHERE space_id=?1 AND NOT handed_over
              ORDER BY since, member_id LIMIT 1",
             [id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -313,12 +333,13 @@ fn promote_earliest_copy(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// Every copy the directory leaves out, with the machine that owns its ID.
+/// Every copy the directory leaves out but one handed over, which its
+/// machine retires, with the machine that owns its ID.
 fn conflicts(tx: &Transaction<'_>) -> Result<Vec<Conflict>> {
     let mut statement = tx.prepare(
         "SELECT c.space_id, c.member_id, c.summary, c.since, s.member_id
          FROM hub_space_copies c JOIN hub_spaces s USING (space_id)
-         ORDER BY c.since, c.space_id",
+         WHERE NOT c.handed_over ORDER BY c.since, c.space_id",
     )?;
     let rows = statement.query_map([], |row| {
         Ok((

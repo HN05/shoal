@@ -1184,7 +1184,9 @@ its copy, or `shoal start --copy` to keep it as a new space first; once the
 first machine's space ends, the copy takes its place. An import, as of
 `shoal move`, claims the ID first, so the machine it moves to takes the ID over
 and the one it moves from keeps a copy without a conflict until it ends the
-space there. `shoal restore` of a space another machine runs is refused, naming
+space there; that copy never takes the ID back, so removing and restoring the
+space on the machine it moved to finds no other machine running it.
+`shoal restore` of a space another machine runs is refused, naming
 `shoal move` and a copy, while that machine is connected or the hub keeps no
 package of the space; while the hub cannot be asked, the restore goes on,
 and a duplicate shows as a conflict once both machines report it.
