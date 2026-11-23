@@ -829,6 +829,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 281 {
         db.execute_batch(include_str!("held_threads.sql"))?;
     }
+    if version >= 282 {
+        db.execute_batch(include_str!("held_thread_events.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -4561,5 +4564,30 @@ fn shared_files_become_shared_items_with_their_text_in_json() -> Result<()> {
         ]
     );
     assert_eq!(items("shared_items")?, [config]);
+    Ok(())
+}
+
+#[test]
+fn a_held_thread_records_its_events_only_once_released() -> Result<()> {
+    let db = historical_database(SCHEMA_VERSION)?;
+    let events = || -> Result<Vec<String>> {
+        Ok(db
+            .prepare(
+                "SELECT json_extract(record,'$.kind') FROM space_events
+                    WHERE json_extract(record,'$.kind') LIKE 'thread_%' ORDER BY id",
+            )?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    db.execute_batch(
+        "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
+                holder_id,review_id,held)
+            VALUES (1,'workspace',1,1,'review','Unclear name',1,'user','workspace',1,1);
+        INSERT INTO thread_posts(thread_id,created_at,side,sender,text)
+            VALUES (1,2,'opener','user','Call it retries');",
+    )?;
+    assert!(events()?.is_empty());
+    db.execute("UPDATE threads SET held=0 WHERE id=1", [])?;
+    assert_eq!(events()?, ["thread_opened", "thread_posted"]);
     Ok(())
 }

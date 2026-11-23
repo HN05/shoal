@@ -1952,7 +1952,7 @@ never its own. While it is pending, a [thread](#threads) you open towards that
 workspace without `--kind`, with `--space` from a space, is its comment: a
 `review` thread with its number, which your editor shows, whose posts reach
 nobody and keep no one waiting: until you submit, only you, the spaces that reach the writing space and
-the user read it, in threads and in the review, and its holder neither posts
+the user read it, in threads, in the review and in logs, and its holder neither posts
 in, forwards nor resolves it. `--kind
 question` or `request` opens a thread outside the review, delivered at once. A
 comment's `--code` may point at unsaved lines, since a reference keeps its own

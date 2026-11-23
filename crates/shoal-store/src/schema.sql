@@ -1598,24 +1598,6 @@ CREATE TRIGGER space_removed AFTER DELETE ON spaces BEGIN
     DELETE FROM agent_queue WHERE scope_space_id=OLD.id AND space_id IS NULL;
 END;
 
-CREATE TRIGGER thread_opened AFTER INSERT ON threads BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','thread_opened',
-        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
-            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name)
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
-CREATE TRIGGER thread_resolved AFTER UPDATE OF outcome ON threads
-WHEN OLD.outcome IS NOT NEW.outcome BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','thread_resolved',
-        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
-            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name,
-            'outcome',json_extract(NEW.outcome,'$.outcome'))
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
 CREATE TRIGGER thread_space_numbered AFTER UPDATE OF number ON spaces
 WHEN OLD.number IS NOT NEW.number BEGIN
     UPDATE threads SET space_number=NEW.number WHERE space_id=NEW.id;
@@ -1692,6 +1674,24 @@ WHEN OLD.execution_id IS NOT NULL BEGIN
         AND NOT EXISTS (SELECT 1 FROM executions WHERE id=OLD.execution_id);
 END;
 
+CREATE TRIGGER thread_opened AFTER INSERT ON threads WHEN NOT NEW.held BEGIN
+    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
+        '$.kind','thread_opened',
+        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
+            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name)
+    ) FROM space_event_records WHERE id=NEW.space_id;
+END;
+
+CREATE TRIGGER thread_resolved AFTER UPDATE OF outcome ON threads
+WHEN OLD.outcome IS NOT NEW.outcome AND NOT NEW.held BEGIN
+    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
+        '$.kind','thread_resolved',
+        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
+            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name,
+            'outcome',json_extract(NEW.outcome,'$.outcome'))
+    ) FROM space_event_records WHERE id=NEW.space_id;
+END;
+
 CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
     INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
         '$.kind',iif(NEW.forwards,'thread_forwarded','thread_posted'),
@@ -1703,5 +1703,23 @@ CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
                 WHEN NEW.forwarded_to IS NULL THEN 'the user'
                 ELSE COALESCE((SELECT name FROM spaces WHERE id=NEW.forwarded_to),
                     NEW.forwarded_name, NEW.forwarded_to) END)
-    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id WHERE t.id=NEW.thread_id;
+    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id
+    WHERE t.id=NEW.thread_id AND NOT t.held;
+END;
+
+CREATE TRIGGER thread_released AFTER UPDATE OF held ON threads
+WHEN OLD.held AND NOT NEW.held BEGIN
+    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
+        '$.kind','thread_opened',
+        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
+            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name)
+    ) FROM space_event_records WHERE id=NEW.space_id;
+    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
+        '$.kind','thread_posted',
+        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
+            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name,'text',p.text,
+            'sender',COALESCE(p.sender_name,
+                CASE p.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END))
+    ) FROM thread_posts p JOIN space_event_records r ON r.id=NEW.space_id
+    WHERE p.thread_id=NEW.id AND NOT p.forwards ORDER BY p.id;
 END;
