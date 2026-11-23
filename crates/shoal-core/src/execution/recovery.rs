@@ -663,9 +663,10 @@ fn reported_session(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Opti
         .map(AgentSessionId::from)
 }
 
-/// The agent sessions the space keeps: those its running agents reported,
-/// and those of its stopped agents and last sessions. A record that cannot
-/// be read holds none.
+/// The agent sessions the space keeps: those its running agents reported
+/// or, until they report one, carry from the agents they restored, and
+/// those of its stopped agents and last sessions. A record that cannot be
+/// read holds none.
 pub fn held_sessions(paths: &Paths, space_id: &SpaceId) -> Vec<AgentSessionId> {
     let mut held = Vec::new();
     if let Ok(entries) = std::fs::read_dir(paths.space_state(space_id)) {
