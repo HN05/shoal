@@ -1895,6 +1895,10 @@ impl shoal_coordination::daemon::Hub for StandIn {
         Box::pin(async { Default::default() })
     }
 
+    fn waiting_elsewhere<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, usize> {
+        Box::pin(async { Default::default() })
+    }
+
     fn reaches_elsewhere<'a>(
         &'a self,
         _: &'a Caller,

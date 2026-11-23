@@ -217,12 +217,13 @@ async fn a_space_being_removed_starts_no_wait() {
         Vec::new(),
     );
     assert!(asked.await.is_err());
-    assert!(
-        !manager
+    assert_eq!(
+        manager
             .coordination
-            .has_waiting_threads(&tree.child.id)
+            .waiting_threads(&**manager, &tree.child.id)
             .await
-            .unwrap()
+            .unwrap(),
+        0
     );
     // Its holder's post makes nothing wait.
     let parent = caller(&tree.parent);

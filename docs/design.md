@@ -3045,8 +3045,9 @@ asks it first: without a review the thread is a question in the space's own
 space, and while that machine cannot be asked it is refused unless it names a
 kind. The reviewed workspace's removal, or its writer's on the same machine,
 drops a pending review, whose comments a restore could never submit. A
-writer's comments on another machine neither keep it from cleanup nor close
-with it. Its machine asks every other machine that runs a space it sees for
+writer's waiting comments on another machine keep it from cleanup as its
+threads here do, read from what that machine reports to the hub, but do not
+close with it. Its machine asks every other machine that runs a space it sees for
 its pending reviews there, so its only one is found wherever it is kept and
 acted on there; a machine that cannot be asked is left out, since nothing it
 keeps can be submitted or cancelled until it returns. Forge reviews stay on the forge.

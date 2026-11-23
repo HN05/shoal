@@ -178,12 +178,13 @@ async fn repeating_an_unchanged_completion_is_refused() {
         )
         .await
         .unwrap();
-    assert!(
-        !manager
+    assert_eq!(
+        manager
             .coordination
-            .has_waiting_threads(&workspace.id)
+            .waiting_threads(&*manager, &workspace.id)
             .await
-            .unwrap()
+            .unwrap(),
+        0
     );
     // Another cleanup choice or HEAD replaces the recorded completion.
     assert!(

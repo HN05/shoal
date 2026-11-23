@@ -113,34 +113,37 @@ async fn an_empty_thread_reaches_its_holder_with_its_first_post() {
     );
     assert_eq!(thread.number.space, tree.child.number);
     assert!(alerts(fixture, &tree.parent).await.is_empty());
-    assert!(
-        !fixture
+    assert_eq!(
+        fixture
             .coordination
-            .has_waiting_threads(&tree.child.id)
+            .waiting_threads(&**fixture, &tree.child.id)
             .await
-            .unwrap()
+            .unwrap(),
+        0
     );
 
     send(fixture, Some(&child), &thread, "Postgres or SQLite?").await;
     let received = alerts(fixture, &tree.parent).await;
     assert_eq!(received.len(), 1, "{received:?}");
     assert!(received[0].contains(&thread.number.to_string()));
-    assert!(
+    assert_eq!(
         fixture
             .coordination
-            .has_waiting_threads(&tree.child.id)
+            .waiting_threads(&**fixture, &tree.child.id)
             .await
-            .unwrap()
+            .unwrap(),
+        1
     );
 
     let answered = send(fixture, Some(&caller(&tree.parent)), &thread, "SQLite").await;
     assert_eq!(answered.awaits(), Some(Side::Opener));
-    assert!(
-        !fixture
+    assert_eq!(
+        fixture
             .coordination
-            .has_waiting_threads(&tree.child.id)
+            .waiting_threads(&**fixture, &tree.child.id)
             .await
-            .unwrap()
+            .unwrap(),
+        0
     );
     let replies = alerts(fixture, &tree.child).await;
     assert!(
@@ -420,12 +423,13 @@ async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
         .await
         .unwrap();
     assert!(reopened.is_open());
-    assert!(
+    assert_eq!(
         fixture
             .coordination
-            .has_waiting_threads(&tree.child.id)
+            .waiting_threads(&**fixture, &tree.child.id)
             .await
-            .unwrap()
+            .unwrap(),
+        1
     );
 }
 

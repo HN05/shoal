@@ -50,6 +50,7 @@ mod member;
 pub mod members;
 pub mod membership;
 pub mod numbering;
+mod opened_elsewhere;
 mod owners;
 mod packages;
 mod pairing;

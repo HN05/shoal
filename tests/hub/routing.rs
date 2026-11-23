@@ -550,6 +550,39 @@ fn a_coordinator_reviews_its_child_on_another_machine() {
     assert_eq!(resolved["resolution"]["outcome"], "fixed", "{resolved}");
 }
 
+/// The coordinator's comment of its submitted review of its child on the
+/// laptop, which waits for the child, by number.
+fn submitted_comment(tree: &Tree) -> String {
+    let Tree {
+        hub,
+        coordinator,
+        child,
+        ..
+    } = tree;
+    ok_in(hub, coordinator, &["review", "start", child]);
+    let open = ["thread", "open", "Unclear name", "--space", child];
+    let number = ok_in(hub, coordinator, &open)["number"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    ok_in(hub, coordinator, &["send", &number, "Call it retries"]);
+    let submit = ["review", "submit", "-s", child, "--body", "One rename"];
+    ok_in(hub, coordinator, &submit);
+    number
+}
+
+#[test]
+fn a_comment_waiting_on_another_machine_keeps_its_writer_from_cleanup() {
+    let tree = tree_across_machines();
+    working(&tree.laptop, &tree.child);
+    submitted_comment(&tree);
+    let status = wait_for("the waiting comment to keep its writer", || {
+        let status = tree.hub.ok(&["status", &tree.coordinator]);
+        (status["cleanup_reason"]["reason"] == "waiting_thread").then_some(status)
+    });
+    assert_eq!(status["waiting_threads"], 1, "{status}");
+}
+
 #[test]
 fn a_coordinator_cancels_its_only_pending_review_kept_on_another_machine() {
     let tree = tree_across_machines();

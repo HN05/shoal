@@ -25,7 +25,11 @@ impl Spaces {
         if self.has_holds(id).await? {
             return Ok(Some(Retention::Held));
         }
-        if daemon.coordination().has_waiting_threads(id).await? {
+        if daemon
+            .coordination()
+            .has_waiting_threads(daemon, id)
+            .await?
+        {
             return Ok(Some(Retention::WaitingThread));
         }
         if daemon.coordination().has_pending_pull_proposal(id).await? {

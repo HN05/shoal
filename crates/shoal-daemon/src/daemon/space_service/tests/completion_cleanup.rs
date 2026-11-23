@@ -324,12 +324,13 @@ async fn threads_asked_after_done_retain_completion_and_pr_cleanup() {
         .await
         .unwrap_err();
     assert!(workspace.path.exists());
-    assert!(
+    assert_eq!(
         manager
             .coordination
-            .has_waiting_threads(&workspace.id)
+            .waiting_threads(&*manager, &workspace.id)
             .await
-            .unwrap()
+            .unwrap(),
+        1
     );
     crate::daemon::test_support::answer(&manager, question.number, "No").await;
     manager.sweep_prs().await.unwrap();

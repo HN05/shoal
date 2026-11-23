@@ -13,7 +13,7 @@ use crate::{
     config::permissions::Permissions,
     forge::activity::status::PrStatus,
     model::{Completion, Space},
-    repository, {approvals, store, threads, workspace_files},
+    repository, {approvals, store, workspace_files},
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
@@ -47,7 +47,7 @@ impl Spaces {
         let records = self.space_records(daemon, &space.id).await?;
         let (space, origin) = self.space_detail(daemon, space).await?;
         let (prs, issue_states) = self.linked_states(daemon, &origin, &records).await;
-        let attention = self.attention(&space).await?;
+        let attention = self.attention(daemon, &space).await?;
         let jobs = daemon.linked_job_workspaces(space.id()).await?;
         let waiting_jobs = daemon.linked_waiting_jobs(space.id()).await?;
         let (turn_retry, proxy_retry) = self.agent_retries(daemon, space.id()).await?;
@@ -107,14 +107,16 @@ impl Spaces {
     }
 
     /// What awaits the user about `space`.
-    async fn attention(&self, space: &SpaceDetail) -> Result<Attention> {
+    async fn attention(&self, daemon: &dyn Daemon, space: &SpaceDetail) -> Result<Attention> {
         let unread_notifications = self.notifications.unread_of_space(space.id()).await?;
+        let coordination = daemon.coordination();
+        let waiting_threads = coordination.waiting_threads(daemon, space.id()).await?;
         let id = space.id().to_owned();
         self.store
             .run(move |db| {
                 Ok(Attention {
                     unread_notifications,
-                    waiting_threads: threads::waiting_count(db, &id)?,
+                    waiting_threads,
                     pending_approvals: approvals::pending_count(db, &id)?,
                     attached_files: workspace_files::count(db, &id)?,
                 })

@@ -1,5 +1,6 @@
 //! Reading threads: listing and showing them, waiting for a reply,
-//! linking one to receive its new posts, and which threads wait.
+//! linking one to receive its new posts, and which threads wait, here
+//! and on other machines.
 use crate::{Coordination, daemon::Daemon};
 use std::time::Duration;
 
@@ -111,10 +112,23 @@ impl Coordination {
         self.store.run(records::open_with_posts).await
     }
 
-    /// Whether a thread the space `id` opened waits for its holder.
-    pub async fn has_waiting_threads(&self, id: &SpaceId) -> Result<bool> {
+    /// How many threads the space `id` opened wait for their holder: here,
+    /// and on other machines, which keep its comments of their reviews.
+    pub async fn waiting_threads(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<usize> {
+        let here = self.waiting_here(id).await?;
+        Ok(here + daemon.waiting_elsewhere(id).await)
+    }
+
+    /// Whether a thread the space `id` opened waits for its holder, here or
+    /// on another machine, which only a space without one here asks.
+    pub async fn has_waiting_threads(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
+        Ok(self.waiting_here(id).await? > 0 || daemon.waiting_elsewhere(id).await > 0)
+    }
+
+    /// How many threads the space `id` opened here wait for their holder.
+    async fn waiting_here(&self, id: &SpaceId) -> Result<usize> {
         let id = id.clone();
-        Ok(self.store.run(move |db| waiting_count(db, &id)).await? > 0)
+        self.store.run(move |db| waiting_count(db, &id)).await
     }
 
     /// Deliver the new posts of the thread `number` to the space
