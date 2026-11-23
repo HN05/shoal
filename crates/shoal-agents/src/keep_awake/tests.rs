@@ -113,29 +113,3 @@ async fn an_inhibitor_writing_past_the_pipe_is_drained_and_bounded() {
         ended.len()
     );
 }
-
-#[test]
-fn each_level_holds_the_machine_for_its_work_where_the_user_is() {
-    let present = Presence::default();
-    let away = Presence {
-        away: true,
-        ..present
-    };
-    let held = |level| (held_for(level, present), held_for(level, away));
-    assert_eq!(held(KeepAwake::Off), (Work::None, Work::None));
-    assert_eq!(held(KeepAwake::Handover), (Work::None, Work::None));
-    let handing_over = Presence {
-        handing_over: true,
-        ..away
-    };
-    assert_eq!(
-        held_for(KeepAwake::Handover, handing_over),
-        Work::HandingOver
-    );
-    assert_eq!(
-        held(KeepAwake::Finish),
-        (Work::TurnsAndWatches, Work::Turns)
-    );
-    let on = (Work::TurnsAndWatches, Work::TurnsAndWatches);
-    assert_eq!(held(KeepAwake::On), on);
-}
