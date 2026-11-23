@@ -1,7 +1,10 @@
 //! The threads a space opened that other machines keep, its comments of
 //! the reviews they keep of their workspaces: how many wait, which keeps
-//! the space from cleanup as its waiting threads here do.
+//! the space from cleanup as its waiting threads here do, and the machines
+//! that close and reopen them as its own machine closes and reopens its
+//! own.
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::hub::Member;
 
 use crate::{Hub, daemon::Daemon, log};
 
@@ -23,5 +26,20 @@ impl Hub {
             .flat_map(|listed| &listed.space.threads)
             .filter(|thread| thread.opener_id() == Some(id) && thread.is_waiting())
             .count()
+    }
+
+    /// The joined machines other than this one, as the hub lists them, or
+    /// as it last did while it cannot be asked; none in no hub.
+    pub async fn other_machines(&self, daemon: &dyn Daemon) -> Vec<Member> {
+        match self.directory_or_known(daemon).await {
+            Ok(Some((machine, directory))) => (directory.machines.into_iter())
+                .filter(|member| member.id != machine)
+                .collect(),
+            Ok(None) => Vec::new(),
+            Err(error) => {
+                log!("hub: could not read the other machines: {error:#}");
+                Vec::new()
+            }
+        }
     }
 }

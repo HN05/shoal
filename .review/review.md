@@ -317,7 +317,7 @@ instead of the PR delivery guidance below.
   and PR cleanup. Holds, threads a space opened that wait, pending PR proposals and push requests, and queued
   agent launches block every unattended removal of a space of either kind, rechecked after the removal reserves the space; a child needs a ready
   parent, checked when the child is recorded; `done` and removal close the
-  threads a space is numbered in or holds, telling their openers, and `done --undo` and a
+  threads a space is numbered in, opened or holds, on any machine, telling their openers, and `done --undo` and a
   restore reopen those closed for that cause unless something resolved them since. Children keep their parent only from merged cleanup: every removal kind first
   removes the subtree, deepest first, through the shared path whatever keeps it,
   and a child that fails retains the parent. A standing completion with cleanup

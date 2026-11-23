@@ -2,6 +2,7 @@
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::EventCause;
+use crate::opened_elsewhere::Followed;
 use anyhow::{Context, Result, ensure};
 use rusqlite::OptionalExtension;
 use shoal_ids::space_ids::SpaceId;
@@ -85,6 +86,8 @@ impl Spaces {
             .coordination()
             .announce_threads(daemon, delivered)
             .await;
+        let reopened = Followed::Reopened(CloseCause::Completion);
+        self.tell_other_machines(daemon, &space.id, reopened).await;
         self.signals.wake_cleanup();
         daemon.settle_agents(&space.id);
         Ok(completion)
@@ -221,16 +224,17 @@ impl Spaces {
         Ok(completion)
     }
 
-    /// Record `completion`, with its summary as the status line, and close
-    /// the space's open threads, which its finished work waits on no
-    /// longer, telling their openers.
+    /// Record `completion` of the space `space`, with its summary as the
+    /// status line, and close its open threads, here and on the other
+    /// machines, which its finished work waits on no longer, telling their
+    /// openers.
     async fn persist_completion(
         &self,
         daemon: &dyn Daemon,
-        id: &SpaceId,
+        space: &SpaceId,
         completion: &Completion,
     ) -> Result<Persisted> {
-        let id = id.to_owned();
+        let id = space.to_owned();
         let completion = completion.clone();
         let now = crate::time::UnixTime::now();
         let records = self.records.clone();
@@ -260,6 +264,8 @@ impl Spaces {
             .coordination()
             .announce_threads(daemon, delivered)
             .await;
+        let closed = Followed::Closed(CloseCause::Completion);
+        self.tell_other_machines(daemon, space, closed).await;
         Ok(persisted)
     }
 

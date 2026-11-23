@@ -3043,14 +3043,17 @@ machine. Only that machine knows whether the space has a pending review
 there, so a thread the space opens towards that workspace without a kind
 asks it first: without a review the thread is a question in the space's own
 space, and while that machine cannot be asked it is refused unless it names a
-kind. The reviewed workspace's removal, or its writer's on the same machine,
-drops a pending review, whose comments a restore could never submit. A
-writer's waiting comments on another machine keep it from cleanup as its
-threads here do, read from what that machine reports to the hub, but do not
-close with it. Its machine asks every other machine that runs a space it sees for
-its pending reviews there, so its only one is found wherever it is kept and
-acted on there; a machine that cannot be asked is left out, since nothing it
-keeps can be submitted or cancelled until it returns. Forge reviews stay on the forge.
+kind. The reviewed workspace's removal, or its writer's, drops a pending
+review, whose comments a restore could never submit. A writer's waiting
+comments on another machine keep it from cleanup as its threads here do,
+read from what that machine reports to the hub, and its completion,
+removal, their undo and its restore reach every other machine as a request
+the hub holds while one is offline, since only the machine that keeps a
+review knows whether the space wrote one there. Its machine asks every
+other machine that runs a space it sees for its pending reviews there, so
+its only one is found wherever it is kept and acted on there; a machine
+that cannot be asked is left out, since nothing it keeps can be submitted
+or cancelled until it returns. Forge reviews stay on the forge.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the
@@ -3481,11 +3484,11 @@ A thread waits while it is open and its last post came from the opener's
 side. A waiting thread keeps the space that opened it from unattended
 cleanup, as an agent waits on it, and ranks that space's queued work after
 the holder's. The inbox lists the threads whose turn is the user's. `done`
-closes every open thread the space is numbered in or holds, since finished
-work waits on no answer, and tells an opener other than the space that the
-holder finished; removing a space does the same. `done --undo` and a restore
-reopen the threads closed for that cause, without Shoal's closing posts,
-unless something resolved them since.
+closes every open thread the space is numbered in, opened or holds, on any
+machine, since finished work waits on no answer, and tells an opener other
+than the space that the holder finished; removing a space does the same.
+`done --undo` and a restore reopen the threads closed for that cause,
+without Shoal's closing posts, unless something resolved them since.
 
 A post may point at code: a file or its lines in the worktree of a space the
 poster's scope reaches, or of the workspace its chat runs in, since a

@@ -862,6 +862,9 @@ pub trait Hub: Send + Sync {
     /// The name this machine goes by in its hub, else its host name.
     fn machine_name(&self) -> BoxFuture<'_, String>;
 
+    /// The joined machines other than this one; none in no hub.
+    fn other_machines(&self) -> BoxFuture<'_, Vec<Member>>;
+
     /// The other joined machine whose space `selector` names, as the hub's
     /// directory lists it.
     fn machine_of<'a>(

@@ -4,7 +4,8 @@ use super::{Forwarding, Lifetime, Target};
 use crate::code::NewCodeRef;
 use crate::item_numbers::ItemNumber;
 use crate::space_names::SpaceSelector;
-use crate::threads::{NewPost, Resolving, ThreadKind, ThreadNumber, ThreadState};
+use crate::threads::{CloseCause, NewPost, Resolving, ThreadKind, ThreadNumber, ThreadState};
+use shoal_ids::space_ids::SpaceId;
 
 /// Requests about threads: opening one, posting, forwarding, resolving,
 /// reading and linking them.
@@ -40,6 +41,15 @@ pub enum ThreadMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         code: Vec<NewCodeRef>,
     },
+    /// Close the open threads here that the space `opener` of the
+    /// sending machine opened, its comments of the reviews this machine
+    /// keeps, and those it holds, for `cause`, as that machine closes its
+    /// own; a removal also cancels its pending reviews here. Only another
+    /// machine's daemon sends it, as the user.
+    CloseOpened { opener: SpaceId, cause: CloseCause },
+    /// Reopen the threads here that closing them for `cause` closed, as
+    /// `done --undo` and a restore of the space `opener` reopen its own.
+    ReopenOpened { opener: SpaceId, cause: CloseCause },
     /// Add a post to the thread from the caller's side.
     Post {
         thread: ThreadNumber,
@@ -168,7 +178,9 @@ impl ThreadMethod {
     /// its hooks' report.
     pub fn forwarding(&self) -> Forwarding {
         match self {
-            Self::Post { .. } => Forwarding::Queued,
+            Self::Post { .. } | Self::CloseOpened { .. } | Self::ReopenOpened { .. } => {
+                Forwarding::Queued
+            }
             Self::OpenThread { .. }
             | Self::OpenComment { .. }
             | Self::ForwardThread { .. }
@@ -197,6 +209,8 @@ impl ThreadMethod {
             | Self::ResolveThread { thread, .. }
             | Self::ShowThread { thread } => thread.full().map(Target::Item),
             Self::OpenComment { workspace, .. } => Some(Target::Space(workspace)),
+            // The machine that keeps them is the one asked.
+            Self::CloseOpened { .. } | Self::ReopenOpened { .. } => None,
             Self::PostInChat { space, .. }
             | Self::RepliedInChat { space, .. }
             | Self::LinkThread { space, .. }

@@ -2,7 +2,7 @@
 //! what each requires of the space it acts on.
 use std::sync::Arc;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 
 use super::super::{
     answer::Answer,
@@ -63,6 +63,16 @@ pub(super) async fn handle(
                 .coordination
                 .open_comment(&**manager, caller, &workspace, name, code);
             opened.await?.map_or(Body::Ok, thread)
+        }
+        ThreadMethod::CloseOpened { opener, cause } => {
+            let closed = manager.spaces.close_opened(&**manager, &opener, cause);
+            closed.await?;
+            Body::Ok
+        }
+        ThreadMethod::ReopenOpened { opener, cause } => {
+            let reopened = (manager.coordination).reopen_threads(&**manager, &opener, cause);
+            reopened.await?;
+            Body::Ok
         }
         ThreadMethod::Post {
             thread: number,
@@ -225,7 +235,9 @@ impl Checked for ThreadMethod {
             | Self::Post { .. }
             | Self::ForwardThread { .. }
             | Self::ResolveThread { .. }
-            | Self::ShowThread { .. } => None,
+            | Self::ShowThread { .. }
+            | Self::CloseOpened { .. }
+            | Self::ReopenOpened { .. } => None,
         }
     }
 }
@@ -278,6 +290,12 @@ impl Scoped for ThreadMethod {
             | ThreadMethod::AwaitPost { .. }
             | ThreadMethod::ResolveThread { .. }
             | ThreadMethod::ShowThread { .. } => None,
+            // Only another machine's daemon sends them, as the user.
+            ThreadMethod::CloseOpened { .. } | ThreadMethod::ReopenOpened { .. } => {
+                bail!(
+                    "only another machine's daemon closes and reopens the threads its space opened"
+                )
+            }
         })
     }
 }

@@ -1084,6 +1084,10 @@ impl shoal_spaces::daemon::Hub for Manager {
         Box::pin(self.hub.machine_name(self))
     }
 
+    fn other_machines(&self) -> BoxFuture<'_, Vec<Member>> {
+        Box::pin(self.hub.other_machines(self))
+    }
+
     fn machine_of<'a>(
         &'a self,
         selector: &'a SpaceSelector,

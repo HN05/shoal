@@ -5,6 +5,7 @@ use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::{Copied, LastSession, StoppedAgent};
+use crate::opened_elsewhere::Followed;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::transcripts::CarriedSessionFile;
@@ -79,7 +80,8 @@ impl Spaces {
     /// Open the removed space `selector` names again in its place, below
     /// its recorded parent while that takes it, with its links, which
     /// `caller` relinks only where it may link, and what its record keeps of
-    /// its agents, and the threads its removal closed; the caller links
+    /// its agents, and the threads its removal closed, here and on the
+    /// other machines; the caller links
     /// its PRs, puts the session files in place
     /// and sets a workspace up. The record goes once the space is back.
     pub async fn reopen_space(
@@ -105,6 +107,8 @@ impl Spaces {
         {
             warnings.push(format!("its threads stay closed: {error:#}"));
         }
+        let reopened = Followed::Reopened(CloseCause::Removal);
+        self.tell_other_machines(daemon, id, reopened).await;
         warnings.extend(daemon.relink_space(id, &removed.links, caller).await);
         let session_files = self
             .restore_agents(daemon, &removed, id, &mut warnings)

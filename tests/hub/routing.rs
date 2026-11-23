@@ -571,6 +571,12 @@ fn submitted_comment(tree: &Tree) -> String {
     number
 }
 
+/// The outcome the laptop records for the thread `number`, none while it
+/// is open.
+fn outcome_on(laptop: &Base, number: &str) -> Value {
+    laptop.ok(&["view", "thread", number])["resolution"]["outcome"].clone()
+}
+
 #[test]
 fn a_comment_waiting_on_another_machine_keeps_its_writer_from_cleanup() {
     let tree = tree_across_machines();
@@ -591,6 +597,65 @@ fn a_coordinator_cancels_its_only_pending_review_kept_on_another_machine() {
     let cancelled = ok_in(hub, coordinator, &["review", "cancel"]);
     assert_eq!(cancelled["id"], started["id"], "{cancelled}");
     assert_eq!(cancelled["state"], "cancelled", "{cancelled}");
+}
+
+#[test]
+fn a_writer_s_done_closes_its_comment_on_another_machine_until_undone() {
+    let tree = tree_across_machines();
+    let (hub, laptop, coordinator) = (&tree.hub, &tree.laptop, &tree.coordinator);
+    working(laptop, &tree.child);
+    let number = submitted_comment(&tree);
+    hub.ok(&["done", coordinator]);
+    wait_for("the laptop to close the comment", || {
+        (outcome_on(laptop, &number) == "closed").then_some(())
+    });
+    hub.ok(&["done", "--undo", coordinator]);
+    wait_for("the laptop to reopen the comment", || {
+        outcome_on(laptop, &number).is_null().then_some(())
+    });
+}
+
+#[test]
+fn an_offline_machine_closes_a_finished_writer_s_comment_once_it_connects() {
+    let tree = tree_across_machines();
+    let (hub, laptop) = (&tree.hub, &tree.laptop);
+    working(laptop, &tree.child);
+    let number = submitted_comment(&tree);
+    reroute(laptop, Some("false"));
+    wait_for("the hub to see the laptop go", || {
+        let members = hub.ok(&["hub", "ls"])["members"].clone();
+        let laptop = (members.as_array().unwrap().iter()).find(|member| member["name"] == "laptop");
+        (laptop?["connected"] == false).then_some(())
+    });
+    hub.ok(&["done", &tree.coordinator]);
+    reroute(laptop, None);
+    wait_for("the laptop to close the comment", || {
+        (outcome_on(laptop, &number) == "closed").then_some(())
+    });
+}
+
+#[test]
+fn a_removed_writer_s_pending_review_on_another_machine_is_cancelled() {
+    let tree = tree_across_machines();
+    let (hub, laptop, coordinator) = (&tree.hub, &tree.laptop, &tree.coordinator);
+    working(laptop, &tree.child);
+    ok_in(hub, coordinator, &["review", "start", &tree.child]);
+    let open = ["thread", "open", "Unclear name", "--space", &tree.child];
+    let number = ok_in(hub, coordinator, &open)["number"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // As the hub's daemon tells the laptop once the coordinator goes; its
+    // removal takes the child first, whose reviews go with it, so only a
+    // writer above it on no machine, such as a master session, leaves one.
+    let removed = json!({"close_opened": {"opener": coordinator, "cause": "removal"}});
+    let answer = request(laptop, removed);
+    assert_ne!(answer["type"], "error", "{answer}");
+    let reviews = laptop.ok(&["review", "ls", &tree.child]);
+    let review = &reviews.as_array().unwrap()[0];
+    assert_eq!(review["state"], "cancelled", "{reviews}");
+    let gone = laptop.run(&["view", "thread", &number]);
+    assert!(!gone.status.success(), "{}", printed(&gone));
 }
 
 #[test]

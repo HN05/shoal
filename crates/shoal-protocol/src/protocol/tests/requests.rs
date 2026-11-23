@@ -255,6 +255,8 @@ const REQUESTS: &[&str] = &[
     // Threads.
     r#"{"open_thread":{"name":"Which database?","kind":"question","to":"part","from":"planning"}}"#,
     r#"{"open_comment":{"workspace":"part","name":"Unclear name"}}"#,
+    r#"{"close_opened":{"opener":"s1","cause":"removal"}}"#,
+    r#"{"reopen_opened":{"opener":"s1","cause":"completion"}}"#,
     r#"{"post":{"thread":4,"post":{"text":"Which?","choices":["A","B"],"recommendation":"A","reason":"Simpler"},"changes":[12,14]}}"#,
     r#"{"post_in_chat":{"space":"fix","thread":6}}"#,
     r#"{"alert_in_chat":{"to":{"space":{"space":"part"}},"attachments":[{"path":"/fix/log.txt"}]}}"#,

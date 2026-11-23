@@ -1,8 +1,10 @@
 //! Closing a space's threads when it finishes or goes, and reopening them
 //! when that is undone: `done` and removal close every open thread the
-//! space is numbered in or holds, and tell the opener of one it holds that
-//! the holder finished; `done --undo` and a restore reopen the threads
-//! closed for that cause that nothing resolved otherwise since.
+//! space is numbered in, opened or holds, and tell the opener of one it
+//! holds that the holder finished; `done --undo` and a restore reopen the
+//! threads closed for that cause that nothing resolved otherwise since.
+//! Another machine closes and reopens those it keeps of the space, its
+//! comments of the reviews kept there and those it holds there, when told.
 use crate::daemon::Records;
 use crate::{Coordination, daemon::Daemon};
 use anyhow::Result;
@@ -16,8 +18,8 @@ use super::{
 };
 use crate::item_numbers::ItemNumber;
 
-/// Close the open threads the space `space_id` is numbered in or holds,
-/// for `cause`, telling their openers, but the space itself, that it
+/// Close the open threads the space `space_id` is numbered in, opened or
+/// holds, for `cause`, telling their openers, but the space itself, that it
 /// finished or went; their numbers and what that delivered.
 pub fn close(
     tx: &Transaction<'_>,
@@ -28,7 +30,8 @@ pub fn close(
     let open = records::query(
         tx,
         &format!(
-            "WHERE {} AND (t.space_id=?1 OR t.holder_id=?1) AND t.space_number IS NOT NULL",
+            "WHERE {} AND (t.space_id=?1 OR t.opener_id=?1 OR t.holder_id=?1)
+                AND t.space_number IS NOT NULL",
             records::OPEN
         ),
         [space_id],

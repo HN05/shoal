@@ -1341,6 +1341,10 @@ impl Hub for StandIn {
         Box::pin(async { Default::default() })
     }
 
+    fn other_machines(&self) -> BoxFuture<'_, Vec<Member>> {
+        Box::pin(async { Default::default() })
+    }
+
     fn machine_of<'a>(
         &'a self,
         _: &'a SpaceSelector,

@@ -40,6 +40,7 @@ pub mod launches;
 pub mod leftovers;
 pub mod lifecycle;
 pub mod moves;
+pub mod opened_elsewhere;
 pub mod ownership;
 #[cfg(any(test, feature = "test-support"))]
 mod per_daemon;
