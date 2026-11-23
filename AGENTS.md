@@ -310,11 +310,12 @@ for delivering a PR, under Committing near the end, decide when work is done.
   that space's approval requests. A space posts on the side it took part
   on, or as a participant on neither, which takes no turn; its posts reach
   the current parties and the spaces that linked it but the poster, as
-  alerts the transaction that records them queues; the holder forwards
-  it, and the opener resolves it with an outcome its kind takes, or the
-  holder one Shoal opened. `done` and removal close the threads a space is
-  numbered in, opened or holds, on any machine, and their undo and a
-  restore reopen those closed for that cause.
+  alerts the transaction that records them queues; either side's current
+  party forwards its role, a new opener numbering it in its space, and the
+  opener resolves it with an outcome its kind takes, or the holder one
+  Shoal opened. `done` and removal close the threads a space is numbered
+  in, opened or holds, on any machine, and their undo and a restore reopen
+  those closed for that cause.
 - The daemon keeps each registered checkout's default branch in sync with its
   remote in the background, and `shoal repo sync` syncs it at once; commands that
   only read the default branch use what the checkout has. Syncing never pushes or

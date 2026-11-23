@@ -670,9 +670,10 @@ references at once, in an opening post named as the thread.
 A `question` asks for an answer; a `request` asks the holder to do
 something, such as implement the code it points at.
 
-The holder forwards a thread down, to a space it reaches, or up, to its
-coordinator or the user; the new holder reads what came before and receives
-the posts from then on, as you do too unless `--unlink`. The opener resolves its thread: `answered` a
+The opener or the holder forwards its role in a thread down, to a space it
+reaches, or up, to its coordinator or the user, never to the other side; the
+new party reads what came before and receives the posts from then on, as you
+do too unless `--unlink`. A new opener numbers the thread in its own space. The opener resolves its thread: `answered` a
 question, `done` a request once it accepts the work,
 `duplicate --of <thread>`, or `withdrawn`, which takes back the holder's
 unread alerts of it. A space reads the threads it or a space below it took

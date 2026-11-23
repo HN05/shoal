@@ -36,9 +36,9 @@ pub enum ThreadCommand {
         #[arg(long, value_name = "PATH[:FIRST-LAST]")]
         code: Vec<CodeArg>,
     },
-    /// Give a thread you hold to a space below you, or up to your
-    /// coordinator or the user; the new holder receives its posts from then
-    /// on, and so do you unless --unlink.
+    /// Give your role in a thread, as its opener or holder, to a space
+    /// below you, or up to your coordinator or the user; the new party
+    /// receives its posts from then on, and so do you unless --unlink.
     Forward {
         /// Thread number, such as 3.2, or 2 for one of your own space.
         thread: ThreadNumber,

@@ -119,11 +119,17 @@ pub(super) async fn forward(
 ) -> Result<i32> {
     let from = acting_space(ctx).await?;
     let thread = threads::forward(&ctx.paths, number, space, note, unlink, from).await?;
+    let forward = (thread.posts.last()).context("the forward was not recorded")?;
+    let side = forward.side.context("a forward comes from a side")?;
     ctx.emit(
         &format!(
-            "Thread {} forwarded to {}.",
+            "Thread {} forwarded to {}, who {} it now.",
             thread.number,
-            thread.party(Side::Holder)
+            thread.party(side),
+            match side {
+                Side::Opener => "opens",
+                Side::Holder => "holds",
+            }
         ),
         &thread,
     )?;

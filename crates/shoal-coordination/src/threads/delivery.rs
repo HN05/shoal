@@ -42,7 +42,7 @@ impl Party {
     }
 
     /// Who sent `post`: its space, or the user; none for Shoal.
-    fn sender(post: &Post) -> Option<Self> {
+    pub(super) fn sender(post: &Post) -> Option<Self> {
         match (&post.space, post.sender) {
             (Some(space), _) => Some(Self::Space(space.id.clone())),
             (None, Sender::User) => Some(Self::User),
@@ -259,8 +259,9 @@ impl Texts {
         }
     }
 
-    /// `thread`, which `forward` gave its new holder, with what it says.
-    pub(super) fn forwarded(thread: &Thread, forward: &Post) -> Self {
+    /// `thread`, which `forward` gave the new party on `side`, with what it
+    /// says.
+    pub(super) fn forwarded(thread: &Thread, forward: &Post, side: Side) -> Self {
         let number = thread.number;
         let note = match forward.post.text.as_str() {
             "" => String::new(),
@@ -272,12 +273,12 @@ impl Texts {
             forward.author()
         );
         let mut agent = format!("{heading}\nIt reads:");
-        let reader = Party::of(thread, Side::Holder);
+        let reader = Party::of(thread, side);
         for post in thread.posts.iter().filter(|post| post.speaks()) {
             agent.push_str(&format!("\n{}: {}", post.author(), post.post.text));
             agent.push_str(&code_lines(post, reader.as_ref()));
         }
-        agent.push_str(&format!("\n{}", hint(thread, Side::Holder)));
+        agent.push_str(&format!("\n{}", hint(thread, side)));
         Self {
             kind: AlertKind::ThreadForwarded,
             user: crate::validate::shorten(

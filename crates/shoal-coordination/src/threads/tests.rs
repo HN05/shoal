@@ -310,6 +310,110 @@ async fn a_holder_forwards_its_thread_up_and_down() {
     );
 }
 
+async fn forward(
+    fixture: &Fixture,
+    from: Option<&Caller>,
+    thread: &Thread,
+    to: Option<&Workspace>,
+) -> anyhow::Result<Thread> {
+    let to = to.map(|workspace| SpaceSelector::id(&workspace.id));
+    (fixture.coordination)
+        .forward_thread(&**fixture, from, full(thread), to.as_ref(), None, false)
+        .await
+}
+
+async fn resolve(
+    fixture: &Fixture,
+    from: Option<&Caller>,
+    number: ThreadNumber,
+) -> anyhow::Result<Thread> {
+    let answered = Resolving {
+        outcome: Some(OutcomeKind::Answered),
+        ..Resolving::default()
+    };
+    (fixture.coordination)
+        .resolve_thread(&**fixture, from, number, answered)
+        .await
+}
+
+#[tokio::test]
+async fn an_opener_passes_its_role_on_and_the_thread_its_number() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let below = fixture.workspace("below", Some(&tree.child.id)).await;
+    let child = caller(&tree.child);
+    let thread = open(fixture, Some(&child), Some(&below)).await;
+    send(fixture, Some(&child), &thread, "Which port?").await;
+    // Never to the holder, which cannot open it too.
+    assert!(
+        forward(fixture, Some(&child), &thread, Some(&below))
+            .await
+            .is_err()
+    );
+
+    // Up, to the child's coordinator, in whose space it is numbered now.
+    let moved = forward(fixture, Some(&child), &thread, None).await.unwrap();
+    assert_eq!(moved.opener_id(), Some(&tree.parent.id));
+    assert_eq!(moved.number.space, tree.parent.number);
+    let told = alerts(fixture, &tree.parent).await;
+    assert!(
+        told.iter().any(|alert| alert.contains("Which port?")),
+        "{told:?}"
+    );
+    let heard = alerts(fixture, &below).await;
+    assert!(
+        heard
+            .iter()
+            .any(|alert| alert.contains(&moved.number.to_string())),
+        "{heard:?}"
+    );
+
+    // The earlier opener still posts on the opener's side, though its scope
+    // reaches the holder, but only the opener now resolves it.
+    let earlier = (fixture.coordination)
+        .post_to_thread(
+            &**fixture,
+            Some(&child),
+            full(&moved),
+            post("8080, if free"),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(earlier.last_post().unwrap().side, Some(Side::Opener));
+    assert!(resolve(fixture, Some(&child), full(&moved)).await.is_err());
+    let resolved = resolve(fixture, Some(&caller(&tree.parent)), full(&moved))
+        .await
+        .unwrap();
+    assert!(!resolved.is_open());
+}
+
+#[tokio::test]
+async fn the_user_passes_the_opener_s_role_of_its_thread_to_a_space() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let thread = open(fixture, None, Some(&tree.child)).await;
+    send(fixture, None, &thread, "Which port?").await;
+    // The user has no coordinator to pass it up to.
+    assert!(forward(fixture, None, &thread, None).await.is_err());
+
+    let moved = forward(fixture, None, &thread, Some(&tree.sibling))
+        .await
+        .unwrap();
+    assert_eq!(moved.opener, Sender::Space);
+    assert_eq!(moved.number.space, tree.sibling.number);
+    // The user posts on the side it opened.
+    let earlier = send(fixture, None, &moved, "Any news?").await;
+    assert_eq!(earlier.last_post().unwrap().side, Some(Side::Opener));
+    let news = alerts(fixture, &tree.child).await;
+    assert!(
+        news.iter().any(|alert| alert.contains("Any news?")),
+        "{news:?}"
+    );
+}
+
 #[tokio::test]
 async fn a_thread_the_user_opened_never_goes_back_to_the_user() {
     let tree = tree().await;

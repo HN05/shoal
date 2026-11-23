@@ -1,9 +1,9 @@
 //! Who takes part in a thread and what each may do: a caller posts from
 //! the side it took part on, or on neither as a participant that reads the
 //! thread; the opener resolves, or the holder when Shoal opened the thread,
-//! and the holder forwards. A space reads a thread it took part in, or one
-//! a space its scope reaches took part in; the user reads every thread and
-//! acts for either side.
+//! and either side's current party forwards its role. A space reads a
+//! thread it took part in, or one a space its scope reaches took part in;
+//! the user reads every thread and acts for either side.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
@@ -53,7 +53,7 @@ impl Coordination {
 
     /// Whether `caller` reads `thread`: the user reads every thread, and a
     /// space those that a space its scope reaches took part in, as the
-    /// space it is numbered in, its opener, a holder or an earlier holder,
+    /// space it is numbered in, its opener or holder, now or earlier,
     /// except a pending review's comment, which only its writer's side
     /// reads.
     pub(super) async fn reads(
@@ -69,7 +69,9 @@ impl Coordination {
             return self.reads_held(daemon, Some(caller), thread).await;
         }
         let id = thread.id;
-        let mut parties = self.store.run(move |db| records::holders(db, id)).await?;
+        let mut parties = (self.store)
+            .read(move |db| records::earlier_parties(db, id))
+            .await?;
         parties.push(thread.space_id.clone());
         parties.extend(thread.opener_id().cloned());
         for party in &parties {
@@ -149,10 +151,11 @@ impl Coordination {
         Ok(None)
     }
 
-    /// The side `caller` posts on in `thread`, which it reads: the side
-    /// whose current party it acts for, else the side it took part on
-    /// before, else none, as a participant. Nobody but the opener's side
-    /// posts in a thread that holds its posts.
+    /// The side `caller` posts on in `thread`, which it reads: the
+    /// opener's for its opener, now or earlier, the holder's for the party
+    /// of that side now, which the user acts for, or an earlier holder,
+    /// else none, as a participant. Nobody but the opener's side posts in a
+    /// thread that holds its posts.
     pub(super) async fn posting_side(
         &self,
         daemon: &dyn Daemon,
@@ -160,14 +163,17 @@ impl Coordination {
         thread: &Thread,
     ) -> Result<Option<Side>> {
         let current = self.current_side(daemon, caller, thread).await?;
-        let side = match (current, caller) {
-            (Some(_), _) | (None, None) => current,
-            (None, Some(caller)) => {
-                let (id, space) = (thread.id, caller.space_id.clone());
-                (self.store)
-                    .read(move |db| records::earlier_side(db, id, &space))
-                    .await?
-            }
+        if current == Some(Side::Opener) {
+            return Ok(current);
+        }
+        let (id, space) = (thread.id, caller.map(|caller| caller.space_id.clone()));
+        let earlier = (self.store)
+            .read(move |db| records::earlier_side(db, id, space.as_ref()))
+            .await?;
+        let side = match (earlier, current) {
+            (Some(Side::Opener), _) => earlier,
+            (_, Some(_)) => current,
+            (earlier, None) => earlier,
         };
         if side != Some(Side::Opener) {
             ensure_reached(thread)?;
@@ -178,7 +184,7 @@ impl Coordination {
     /// The side of `thread` whose current party `caller` acts for, which
     /// forwards that side's role and resolves; refused for any other
     /// caller.
-    async fn acting_side(
+    pub(super) async fn acting_side(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
@@ -240,24 +246,6 @@ impl Coordination {
             thread.number
         );
         Ok(side)
-    }
-
-    /// Refuse `caller` forwarding `thread` unless it is on the holder's
-    /// side.
-    pub(super) async fn ensure_forwards(
-        &self,
-        daemon: &dyn Daemon,
-        caller: Option<&Caller>,
-        thread: &Thread,
-    ) -> Result<()> {
-        let side = self.acting_side(daemon, caller, thread).await?;
-        ensure!(
-            side == Side::Holder,
-            "{} holds thread {} and forwards it",
-            thread.party(Side::Holder),
-            thread.number
-        );
-        Ok(())
     }
 }
 

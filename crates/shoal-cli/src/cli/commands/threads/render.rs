@@ -147,11 +147,14 @@ fn entry_lines(entry: &ChangeEntry, palette: Palette) -> Vec<String> {
 /// on neither side too, its text, and what it offers or picks.
 fn post_lines(number: u32, post: &Post, palette: Palette) -> Vec<String> {
     let author = post.author();
-    let heading = match &post.forwarded_to {
-        Some(holder) => format!("{author} forwarded it to {}", holder.label()),
-        None if post.in_chat => format!("#{number} {author}, in the chat"),
-        None if post.side.is_none() => format!("#{number} {author}, participating"),
-        None => format!("#{number} {author}"),
+    let heading = match (&post.forwarded_to, post.side) {
+        (Some(to), Some(Side::Opener)) => {
+            format!("{author} forwarded its opener's side to {}", to.label())
+        }
+        (Some(to), _) => format!("{author} forwarded it to {}", to.label()),
+        (None, _) if post.in_chat => format!("#{number} {author}, in the chat"),
+        (None, None) => format!("#{number} {author}, participating"),
+        (None, Some(_)) => format!("#{number} {author}"),
     };
     let mut lines = vec![format!("  {}", palette.paint(Style::Muted, heading))];
     lines.extend((post.post.text.lines()).map(|line| format!("    {line}").trim_end().to_owned()));

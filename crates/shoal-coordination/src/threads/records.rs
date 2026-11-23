@@ -245,9 +245,13 @@ pub(super) fn known(db: &Connection, number: ItemNumber) -> Result<Thread> {
     }
 }
 
+/// The filter on a `thread_posts` row that keeps a forward of the opener's
+/// role, whose sender opened the thread before.
+const OPENER_FORWARD: &str = "forwards AND side='opener'";
+
 /// The numbered threads `space` takes part in, as the space it is numbered
-/// in, its holder, an earlier holder or a space that linked it, or every
-/// numbered thread without one, with `state` kept by `kept`.
+/// in, its holder, an earlier holder or opener or a space that linked it, or
+/// every numbered thread without one, with `state` kept by `kept`.
 pub(super) fn of_space(
     db: &Connection,
     space: Option<&SpaceId>,
@@ -258,6 +262,8 @@ pub(super) fn of_space(
         &format!(
             "WHERE {NUMBERED} AND {kept} AND (?1 IS NULL OR t.space_id=?1 OR t.holder_id=?1
                 OR EXISTS (SELECT 1 FROM thread_holders WHERE thread_id=t.id AND space_id=?1)
+                OR EXISTS (SELECT 1 FROM thread_posts
+                    WHERE thread_id=t.id AND {OPENER_FORWARD} AND sender_id=?1)
                 OR EXISTS (SELECT 1 FROM thread_links WHERE thread_id=t.id AND space_id=?1))"
         ),
         [space],
@@ -276,23 +282,46 @@ pub(super) fn open_with_posts(db: &mut Connection) -> Result<Vec<Thread>> {
     )
 }
 
-/// The spaces every holder of the thread `id` has been.
-pub(super) fn holders(db: &Connection, id: i64) -> Result<Vec<SpaceId>> {
+/// The spaces that took part in the thread `id` before: every holder it
+/// has had, and every space that passed its opener's role on.
+pub(super) fn earlier_parties(db: &Connection, id: i64) -> Result<Vec<SpaceId>> {
     Ok(db
-        .prepare("SELECT space_id FROM thread_holders WHERE thread_id=?1")?
+        .prepare(&format!(
+            "SELECT space_id FROM thread_holders WHERE thread_id=?1
+            UNION SELECT sender_id FROM thread_posts
+                WHERE thread_id=?1 AND {OPENER_FORWARD} AND sender_id IS NOT NULL"
+        ))?
         .query_map([id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The side of the thread `id` the space `space` took part on before,
-/// which it posts on still: the holder's for a space that held it.
-pub(super) fn earlier_side(db: &Connection, id: i64, space: &SpaceId) -> Result<Option<Side>> {
+/// The side of the thread `id` the space `space`, or the user without
+/// one, took part on before, which it posts on still: the opener's for one
+/// that passed the opener's role on, else the holder's for a space that
+/// held it.
+pub(super) fn earlier_side(
+    db: &Connection,
+    id: i64,
+    space: Option<&SpaceId>,
+) -> Result<Option<Side>> {
+    let opened = shoal_store::exists(
+        db,
+        &format!(
+            "SELECT 1 FROM thread_posts WHERE thread_id=?1 AND {OPENER_FORWARD}
+                AND sender_id IS ?2 AND sender=iif(?2 IS NULL,'user','space')"
+        ),
+        params![id, space],
+    )?;
     let held = shoal_store::exists(
         db,
         "SELECT 1 FROM thread_holders WHERE thread_id=?1 AND space_id=?2",
         params![id, space],
     )?;
-    Ok(held.then_some(Side::Holder))
+    Ok(match (opened, held) {
+        (true, _) => Some(Side::Opener),
+        (false, true) => Some(Side::Holder),
+        (false, false) => None,
+    })
 }
 
 /// Link the thread `id` for the space `space` while this machine has it,
@@ -506,6 +535,30 @@ pub(super) fn set_holder(
     if let Some(holder) = holder {
         add_holder(tx, id, &holder.id)?;
     }
+    Ok(())
+}
+
+/// Give the opener's role in the thread `id` to `opener`, none for the
+/// user.
+pub(super) fn set_opener(
+    tx: &Transaction<'_>,
+    id: i64,
+    opener: Option<&ThreadSpace>,
+) -> Result<()> {
+    let sender = match opener {
+        Some(_) => Sender::Space,
+        None => Sender::User,
+    };
+    tx.execute(
+        "UPDATE threads SET opener=?2,opener_id=?3,opener_name=?4,opener_number=?5 WHERE id=?1",
+        params![
+            id,
+            sender,
+            opener.map(|opener| &opener.id),
+            opener.and_then(|opener| opener.name.as_ref()),
+            opener.and_then(|opener| opener.number)
+        ],
+    )?;
     Ok(())
 }
 

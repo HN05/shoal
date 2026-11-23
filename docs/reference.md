@@ -7557,11 +7557,16 @@ records it as your post and takes back the post's unread alert, or tells the
 agent that held it of your reply. A turn without a final message, as from a
 hook that does not pass one, posts that the agent wrote in its chat.
 
-`shoal thread forward` gives a thread the caller holds to a space its scope
-reaches, or without `--space` up to the holder's coordinator, or you; never to
-its opener. The forward and its `--note` are a post naming the new holder,
-which receives a `thread_forwarded` alert with what the thread says so far and
-its posts from then on. The forwarding space stays linked to the thread, so it
+`shoal thread forward` gives the role the caller has in a thread, as its
+current opener or holder, to a space its scope reaches, or without `--space` up
+to the caller's coordinator, or you; never to the other side's party, and from
+your terminal only to a space. The forward and its `--note` are a post naming
+the new party, which receives a `thread_forwarded` alert with what the thread
+says so far and its posts from then on. A new opener numbers the thread in its
+space, or for you the holder's, and the holder and the spaces that linked it
+hear the new number; the opener's role goes only to a space on the thread's
+machine. Earlier openers and holders post on their side but neither forward nor
+resolve. The forwarding space stays linked to the thread, so it
 receives its later posts too, unless `--unlink`.
 
 `shoal thread resolve` settles a thread with an outcome its kind takes:

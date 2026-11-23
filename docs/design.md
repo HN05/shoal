@@ -3495,18 +3495,25 @@ the next post from a side other than the poster's and prints it, marking its
 alert read, for agents without Shoal's hooks; a wait an upgrade interrupts
 resumes after the same post.
 
-The holder forwards a thread down, to a space its scope reaches, or up, to its
-coordinator or the user, and the new holder reads what came before and
-receives the posts from then on. The forwarder stays linked, since passing a
-question on rarely ends its interest in the answer, unless it unlinks. A
-forward is a post that names the new
-holder, with its note as text, so the thread's history shows who held it, and
-it does not count as an answer. The opener resolves its thread, or the holder
+The current party of either side forwards its role, the holder's or, as
+when a coordinator takes over its child's question, the opener's: down, to a
+space its scope reaches, or up, to its coordinator or the user, never to the
+other side's party; the new party reads what came before and receives the
+posts from then on. Earlier parties post but no longer forward or resolve.
+The forwarder stays linked, since passing a question on rarely ends its
+interest in the answer, unless it unlinks. A forward is a post that names the
+new party, with its note as text, so the thread's history shows who took
+part, and it does not count as an answer. A new opener numbers the thread in
+its own space, or the user in the holder's, so the thread's waiting and
+lifetime follow it, and the holder and the linkers hear the new number; a
+thread does not move between machines, so an opener's role goes only to a
+space of the thread's machine. The opener resolves its thread, or the holder
 of one Shoal opened, and the user may resolve any; withdrawing takes back the
 holder's unread alerts of it, so nobody is asked to decide what no longer
 matters, and the other side hears of any other resolution once it has heard
 of the thread. `--undo` reopens a resolved thread. A space reads a thread it
-took part in, as the space it is numbered in, a holder or an earlier holder,
+took part in, as the space it is numbered in, its opener or holder, now or
+earlier,
 or one a space its scope reaches took part in, and may link it to receive its
 new posts; reading delivers nothing.
 
