@@ -1,7 +1,13 @@
 mod support;
 
-use std::{fs, io::Read, os::unix::fs::PermissionsExt, process::Command};
-use support::printed;
+use std::{
+    fs,
+    io::Read,
+    os::unix::{fs::PermissionsExt, process::CommandExt},
+    path::Path,
+    process::{Child, Command},
+};
+use support::{daemon::Leftovers, printed};
 
 #[test]
 fn installed_scripts_preserve_literal_paths_contents_and_modes() {
@@ -43,6 +49,38 @@ fn installed_scripts_preserve_literal_paths_contents_and_modes() {
             .code(),
         Some(7)
     );
+}
+
+/// A fixture's leftovers stop as it goes, though each leads a group of its
+/// own: one working in its home and one naming it, but no other.
+#[test]
+fn a_fixture_stops_the_processes_working_in_or_naming_its_home() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let elsewhere = tempfile::tempdir_in("/tmp").unwrap();
+    let mut working = looping(root.path(), elsewhere.path());
+    let mut naming = looping(elsewhere.path(), &root.path().join("state"));
+    let mut other = looping(elsewhere.path(), elsewhere.path());
+
+    drop(Leftovers::new(root.path()));
+
+    assert!(working.try_wait().unwrap().is_some());
+    assert!(naming.try_wait().unwrap().is_some());
+    assert!(other.try_wait().unwrap().is_none());
+    // SAFETY: kill only sends a signal, to the group `other` leads.
+    unsafe { libc::kill(-(other.id() as i32), libc::SIGKILL) };
+    other.wait().unwrap();
+}
+
+/// A shell looping in `directory` with `argument` on its command line, in a
+/// process group of its own.
+fn looping(directory: &Path, argument: &Path) -> Child {
+    Command::new("sh")
+        .current_dir(directory)
+        .args(["-c", "while :; do sleep 1; done", "sh"])
+        .arg(argument)
+        .process_group(0)
+        .spawn()
+        .unwrap()
 }
 
 #[test]
