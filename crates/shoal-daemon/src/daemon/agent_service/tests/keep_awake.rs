@@ -9,7 +9,8 @@ use crate::{
 };
 
 async fn has_work(manager: &Manager) -> bool {
-    manager.agents.agents_have_work().await.unwrap()
+    let work = shoal_agents::keep_awake::Work::TurnsAndWatches;
+    manager.agents.agents_have_work(work).await.unwrap()
 }
 
 async fn watch_pr(manager: &Manager, workspace: &crate::model::Workspace) {

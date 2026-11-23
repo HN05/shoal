@@ -1,7 +1,10 @@
-//! Hold the operating system's sleep inhibitor while agents have work, when
-//! `keep_awake` opts in, so an idle timeout or a closed laptop lid does not
-//! suspend it. The inhibitor lasts only as long as a pipe the daemon holds
-//! open, so it ends with the daemon however that stops.
+//! Hold the operating system's sleep inhibitor while agents have the work
+//! `keep_awake` holds the machine for, so an idle timeout or a closed laptop
+//! lid does not suspend it: under `on`, a turn working or an idle agent
+//! receiving an open PR's activity; under `finish` the same while the user
+//! is there and only a working turn once they walked away. The inhibitor
+//! lasts only as long as a pipe the daemon holds open, so it ends with the
+//! daemon however that stops.
 use shoal_ids::space_ids::SpaceId;
 use std::{process::Stdio, sync::Arc, time::Duration};
 
@@ -16,6 +19,7 @@ use tokio::{
 
 use crate::{
     Agents,
+    away::Presence,
     daemon::{Daemon, Records},
     log,
     state::AgentState,
@@ -64,15 +68,18 @@ impl Hold {
 pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
     let mut changed = agents.store.watch_changes();
     let mut reloaded = agents.config.watch();
+    let mut presence = agents.presence();
     let mut hold = Hold::Released;
     loop {
         let config = agents.config.current();
-        if let Some(wanted) = wanted(&agents, &config).await {
+        let held_for = held_for(config.machine.keep_awake, *presence.borrow_and_update());
+        if let Some(wanted) = wanted(&agents, held_for).await {
             hold = update(&*daemon, hold, wanted, &config, INHIBITOR).await;
         }
         let ended = tokio::select! {
             _ = changed.changed() => None,
             _ = reloaded.changed() => None,
+            _ = presence.changed() => None,
             error = hold.ended() => Some(error),
             () = tokio::time::sleep(SWEEP_INTERVAL) => None,
         };
@@ -85,13 +92,35 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
     }
 }
 
-/// Whether to hold the inhibitor under `config`, or `None` when the lookup
-/// failed and the current hold should stay.
-async fn wanted(agents: &Agents, config: &Config) -> Option<bool> {
-    if !matches!(config.machine.keep_awake, KeepAwake::Finish | KeepAwake::On) {
+/// The work that holds the machine awake.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Work {
+    /// None does.
+    None,
+    /// An agent working on a turn.
+    Turns,
+    /// An agent working on a turn, or idle while an open PR whose activity
+    /// Shoal delivers to it as its next turn is watched.
+    TurnsAndWatches,
+}
+
+/// The work that holds the machine awake under `level` while the user is
+/// where `presence` says.
+fn held_for(level: KeepAwake, presence: Presence) -> Work {
+    match level {
+        KeepAwake::Off | KeepAwake::Handover => Work::None,
+        KeepAwake::Finish if presence.away => Work::Turns,
+        KeepAwake::Finish | KeepAwake::On => Work::TurnsAndWatches,
+    }
+}
+
+/// Whether agents have the work that holds the inhibitor, `held_for`, or
+/// `None` when the lookup failed and the current hold should stay.
+async fn wanted(agents: &Agents, held_for: Work) -> Option<bool> {
+    if held_for == Work::None {
         return Some(false);
     }
-    match agents.agents_have_work().await {
+    match agents.agents_have_work(held_for).await {
         Ok(work) => Some(work),
         Err(error) => {
             log!("keep awake: {error:#}");
@@ -101,24 +130,30 @@ async fn wanted(agents: &Agents, config: &Config) -> Option<bool> {
 }
 
 impl Agents {
-    pub async fn agents_have_work(&self) -> Result<bool> {
+    /// Whether agents have the `work` that holds the machine awake.
+    pub async fn agents_have_work(&self, work: Work) -> Result<bool> {
         let running = self.running_agent_workspaces().await;
         let records = self.records.clone();
         self.store
-            .run(move |db| agents_have_work(db, &*records, &running))
+            .run(move |db| agents_have_work(db, &*records, &running, work))
             .await
     }
 }
 
-/// Whether an agent is working on a turn, or has finished one while an open
-/// PR whose activity Shoal delivers to it as its next turn is watched, the
-/// agents of the spaces `running` its own.
-fn agents_have_work(db: &Connection, records: &dyn Records, running: &[SpaceId]) -> Result<bool> {
+/// Whether an agent has `work`, the agents of the spaces `running` its own.
+fn agents_have_work(
+    db: &Connection,
+    records: &dyn Records,
+    running: &[SpaceId],
+    work: Work,
+) -> Result<bool> {
     for (id, state) in turn_state::all(db)? {
-        let work = match state {
-            AgentState::Working => true,
-            AgentState::Idle => records.receives_open_pr_activity(db, &id, running)?,
-            AgentState::Waiting => false,
+        let work = match (state, work) {
+            (AgentState::Working, Work::Turns | Work::TurnsAndWatches) => true,
+            (AgentState::Idle, Work::TurnsAndWatches) => {
+                records.receives_open_pr_activity(db, &id, running)?
+            }
+            _ => false,
         };
         if work {
             return Ok(true);

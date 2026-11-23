@@ -4,7 +4,11 @@ use super::*;
 use crate::stand_in::Fixture;
 
 async fn has_work(fixture: &Fixture) -> bool {
-    fixture.agents.agents_have_work().await.unwrap()
+    has(fixture, Work::TurnsAndWatches).await
+}
+
+async fn has(fixture: &Fixture, work: Work) -> bool {
+    fixture.agents.agents_have_work(work).await.unwrap()
 }
 
 async fn report(fixture: &Fixture, id: &SpaceId, state: AgentState) {
@@ -39,6 +43,10 @@ async fn an_idle_agent_has_work_while_it_receives_an_open_prs_activity() {
         .insert(workspace.id.clone());
     report(&fixture, &workspace.id, AgentState::Idle).await;
     assert!(has_work(&fixture).await);
+    // Once the user walked away under `finish`, only a working turn holds.
+    assert!(!has(&fixture, Work::Turns).await);
+    report(&fixture, &workspace.id, AgentState::Working).await;
+    assert!(has(&fixture, Work::Turns).await);
     // An agent waiting for the user cannot take the PR's activity.
     report(&fixture, &workspace.id, AgentState::Waiting).await;
     assert!(!has_work(&fixture).await);
@@ -104,4 +112,18 @@ async fn an_inhibitor_writing_past_the_pipe_is_drained_and_bounded() {
         "{}",
         ended.len()
     );
+}
+
+#[test]
+fn each_level_holds_the_machine_for_its_work_where_the_user_is() {
+    let (present, away) = (Presence { away: false }, Presence { away: true });
+    let held = |level| (held_for(level, present), held_for(level, away));
+    assert_eq!(held(KeepAwake::Off), (Work::None, Work::None));
+    assert_eq!(held(KeepAwake::Handover), (Work::None, Work::None));
+    assert_eq!(
+        held(KeepAwake::Finish),
+        (Work::TurnsAndWatches, Work::Turns)
+    );
+    let on = (Work::TurnsAndWatches, Work::TurnsAndWatches);
+    assert_eq!(held(KeepAwake::On), on);
 }
