@@ -643,8 +643,14 @@ async fn prepare_agent_launch(
         crate::protocol::ConfigTarget::Space(workspace.clone()),
     )
     .await?;
+    let daemon = super::spawn::KeyDaemon {
+        paths: paths.clone(),
+        space: workspace.clone(),
+    };
     let secrets = if has_agent {
-        shoal_core::secrets::Launch::prepare(&settings.agent_secrets, paths).await?
+        let secrets = &settings.agent_secrets;
+        let elsewhere = crate::secrets::environment_elsewhere(paths, workspace, secrets).await?;
+        shoal_core::secrets::Launch::prepare(secrets, elsewhere, paths).await?
     } else {
         Default::default()
     };
@@ -653,7 +659,7 @@ async fn prepare_agent_launch(
         Some(agent) => crate::agents::launch_proxy(&settings, &agent.name)?.cloned(),
         None => None,
     };
-    let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
+    let fetched_key = super::spawn::fetch_command_key(routed.as_ref(), Some(&daemon)).await?;
     let push_gate = match agent {
         Some(agent) => prepare_push_gate(paths, workspace, agent).await?,
         None => Default::default(),
@@ -676,6 +682,7 @@ async fn prepare_agent_launch(
         home: paths.home.clone(),
         routed,
         fetched_key,
+        daemon: Some(daemon),
         proxy: None,
         reads_terminal: has_agent && input::has_terminal(),
     }))

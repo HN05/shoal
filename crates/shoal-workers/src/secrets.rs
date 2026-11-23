@@ -83,8 +83,8 @@ fn must_authorize(tool: &str, inherited: bool, token: bool) -> Result<bool> {
 }
 
 /// Fetch each served value, a command's with PATH set to `search`, and
-/// one written in the config from the daemon, since the manifest holds it
-/// only as its digest.
+/// from the daemon one written in the config, which the manifest holds
+/// only as its digest, or one another machine prints.
 async fn fetch_served<'a>(
     paths: &CommandPaths,
     tool: &str,
@@ -94,7 +94,9 @@ async fn fetch_served<'a>(
     let mut values = Vec::new();
     for (name, source) in served {
         let value = match &source.value {
-            Value::Written(_) => written_value(paths, tool, name, source).await?,
+            Value::Written(_) | Value::Cmd { on: Some(_), .. } => {
+                daemon_value(paths, tool, name, source).await?
+            }
             value => fetch(name, value, Some(search)).await?,
         };
         values.push((name, value));
@@ -102,22 +104,51 @@ async fn fetch_served<'a>(
     Ok(values)
 }
 
-/// The value the config writes out for the secret `name`, which the
-/// daemon reads from the config it still has as `source`.
-async fn written_value(
+/// The value of the secret `name`, which the daemon reads from the config
+/// it still has as `source`.
+async fn daemon_value(
     paths: &CommandPaths,
     tool: &str,
     name: &str,
     source: &SecretSpecification,
 ) -> Result<OsString> {
+    let space = own_space(tool, name)?;
+    let value = (secret_value(paths, space, name, source).await)
+        .with_context(|| format!("{tool} needs secrets.{name}"))?;
+    Ok(value.into())
+}
+
+/// The value the daemon reads for the secret `name` of `space`, which the
+/// caller's launch resolved as `source`.
+async fn secret_value(
+    paths: &CommandPaths,
+    space: SpaceSelector,
+    name: &str,
+    source: &SecretSpecification,
+) -> Result<String> {
     let key = ValueKey::Secret {
         name: name.to_owned(),
         source: source.clone(),
     };
-    let value = crate::client::config::config_value(paths, own_space(tool, name)?, key)
-        .await
-        .with_context(|| format!("{tool} needs secrets.{name}"))?;
-    Ok(value.into())
+    crate::client::config::config_value(paths, space, key).await
+}
+
+/// The values of the environment secrets of `secrets` that another
+/// machine prints, which the daemon reads for the launch in `space`.
+pub async fn environment_elsewhere(
+    paths: &CommandPaths,
+    space: &SpaceSelector,
+    secrets: &shoal_protocol::secrets::Secrets,
+) -> Result<std::collections::BTreeMap<String, OsString>> {
+    let mut values = std::collections::BTreeMap::new();
+    for (name, secret) in shoal_core::secrets::environment_elsewhere(secrets) {
+        let source = shoal_core::secrets::specification(secret);
+        let value = secret_value(paths, space.clone(), name, &source)
+            .await
+            .with_context(|| format!("secrets.{name}"))?;
+        values.insert(name.clone(), value.into());
+    }
+    Ok(values)
 }
 
 /// The space of the agent whose tool runs, which a launch names.

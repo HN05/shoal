@@ -25,6 +25,7 @@ fn launch(home: &std::path::Path) -> AgentLaunch {
         home: home.to_owned(),
         routed: None,
         fetched_key: None,
+        daemon: None,
         proxy: None,
         reads_terminal: false,
     }
@@ -119,7 +120,7 @@ async fn a_proxy_uses_the_key_its_command_printed_before_the_launch_registered()
     let fetched: shoal_core::proxy::Proxy =
         toml::from_str("upstream = 'http://127.0.0.1:9'\nkey = { cmd = ['echo', 'sk-cmd'] }")
             .unwrap();
-    launch.fetched_key = fetch_command_key(Some(&fetched)).await.unwrap();
+    launch.fetched_key = fetch_command_key(Some(&fetched), None).await.unwrap();
     let key = fetched.key.clone().unwrap();
     assert_eq!(launch.fetched_key, Some((key.clone(), "sk-cmd".to_owned())));
     // The same command is not run again, so one that would fail never does.
@@ -135,7 +136,7 @@ async fn a_proxy_uses_the_key_its_command_printed_before_the_launch_registered()
     assert!(launch.proxy.is_some());
     // A key from the environment is read when the proxy starts.
     assert_eq!(
-        fetch_command_key(Some(&proxy("http://host", Some("KEY"))))
+        fetch_command_key(Some(&proxy("http://host", Some("KEY"))), None)
             .await
             .unwrap(),
         None

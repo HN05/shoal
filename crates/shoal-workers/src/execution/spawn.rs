@@ -17,6 +17,7 @@ use crate::{
     client::connection::CommandPaths, config::value::Value, env, model::ExecutionPlan, paths::Paths,
 };
 use shoal_core::execution::Terminal;
+use shoal_protocol::{config::value::ValueKey, space_names::SpaceSelector};
 
 /// What an agent's or publishing child receives beyond the workspace
 /// environment: the agent Git profile and, for agents, the configured secrets
@@ -40,18 +41,31 @@ pub(super) struct AgentLaunch {
     /// printed, fetched before the execution registers: the daemon cannot
     /// stop a launch until its agent starts.
     pub(super) fetched_key: Option<(Value, String)>,
+    /// The daemon and the space it reads a key another machine prints
+    /// for; none where no launch registers one.
+    pub(super) daemon: Option<KeyDaemon>,
     pub(super) proxy: Option<crate::proxy::Running>,
     /// Whether the agent reads keys from the wrapper's terminal, which the
     /// wrapper reports.
     pub(super) reads_terminal: bool,
 }
 
+/// The daemon a launch asks for a key another machine prints, and the
+/// space it asks for.
+#[derive(Clone)]
+pub(super) struct KeyDaemon {
+    pub(super) paths: CommandPaths,
+    pub(super) space: SpaceSelector,
+}
+
 /// How long a proxy's key command may run once the launch has registered.
 const KEY_COMMAND_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// Run the command that `routed` takes its key from, when it names one.
+/// Run the command that `routed` takes its key from, when it names one,
+/// asking `daemon` for one another machine runs.
 pub(super) async fn fetch_command_key(
     routed: Option<&shoal_core::proxy::Proxy>,
+    daemon: Option<&KeyDaemon>,
 ) -> Result<Option<(Value, String)>> {
     let Some(key) = routed
         .and_then(|proxy| proxy.key.as_ref())
@@ -59,10 +73,29 @@ pub(super) async fn fetch_command_key(
     else {
         return Ok(None);
     };
-    let value = crate::config::value::resolve(key, |_| None)
-        .await
-        .context("the proxy's key")?;
-    Ok(Some((key.clone(), value)))
+    let value = read_key(key, daemon, |_| None).await;
+    Ok(Some((key.clone(), value.context("the proxy's key")?)))
+}
+
+/// The proxy's key `key`: one another machine prints from `daemon`, and
+/// any other read here, from `variable` for one it names.
+async fn read_key(
+    key: &Value,
+    daemon: Option<&KeyDaemon>,
+    variable: impl Fn(&str) -> Option<OsString>,
+) -> Result<String> {
+    match key.on() {
+        Some(_) => daemon_key(key, daemon).await,
+        None => crate::config::value::resolve(key, variable).await,
+    }
+}
+
+/// The key `key` another machine prints, which `daemon` asks that machine
+/// for by the command its own config gives a proxy.
+async fn daemon_key(key: &Value, daemon: Option<&KeyDaemon>) -> Result<String> {
+    let daemon = daemon.context("this launch has no daemon to ask")?;
+    let key = ValueKey::ProxyKey { key: key.clone() };
+    crate::client::config::config_value(&daemon.paths, daemon.space.clone(), key).await
 }
 
 impl AgentLaunch {
@@ -143,19 +176,17 @@ impl AgentLaunch {
         }
         let configured = self.configured_environment(environment);
         let variable = |name: &str| self.variable(&configured, name);
-        tokio::time::timeout(
-            KEY_COMMAND_LIMIT,
-            crate::config::value::resolve(key, variable),
-        )
-        .await
-        .map_err(|_| {
-            anyhow::anyhow!(
-                "its command did not finish within {}s",
-                KEY_COMMAND_LIMIT.as_secs()
-            )
-        })
-        .flatten()
-        .context("the proxy's key")
+        let resolved = read_key(key, self.daemon.as_ref(), variable);
+        tokio::time::timeout(KEY_COMMAND_LIMIT, resolved)
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "its command did not finish within {}s",
+                    KEY_COMMAND_LIMIT.as_secs()
+                )
+            })
+            .flatten()
+            .context("the proxy's key")
     }
 
     /// Run the restored agent, launched as `command` in `directory` with the

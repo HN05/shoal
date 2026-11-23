@@ -66,9 +66,13 @@ async fn launchers_that_cannot_join_path_stop_the_launch() {
     std::fs::create_dir_all(&paths.state).unwrap();
     let mut scoped = secret(&["true"]);
     scoped.tools = vec!["agent-browser".into()];
-    let error = Launch::prepare(&Secrets::from([("TOKEN".into(), scoped)]), &paths)
-        .await
-        .unwrap_err();
+    let error = Launch::prepare(
+        &Secrets::from([("TOKEN".into(), scoped)]),
+        Default::default(),
+        &paths,
+    )
+    .await
+    .unwrap_err();
     assert!(
         format!("{error:#}").contains("cannot go on PATH"),
         "{error:#}"
@@ -84,7 +88,9 @@ async fn launchers_keep_a_written_value_only_as_its_digest() {
     scoped.value = Value::Written("s3cret".into());
     scoped.tools = vec!["agent-browser".into()];
     let secrets = Secrets::from([("TOKEN".into(), scoped.clone())]);
-    let launch = Launch::prepare(&secrets, &paths).await.unwrap();
+    let launch = Launch::prepare(&secrets, Default::default(), &paths)
+        .await
+        .unwrap();
 
     let launchers = launch.launchers.as_ref().unwrap().path();
     let manifest = std::fs::read_to_string(launchers.join(MANIFEST)).unwrap();

@@ -81,6 +81,8 @@ pub enum ValueKey {
         name: String,
         source: crate::approvals::SecretSpecification,
     },
+    /// The key of the `[machine.proxies]` entry whose `key` is `key`.
+    ProxyKey { key: Value },
 }
 
 /// The value the daemon read for a [`ValueKey`], which never shows in what

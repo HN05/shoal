@@ -3,7 +3,7 @@
 use crate::paths::PathsExt;
 use anyhow::{Context, Result, ensure};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     ffi::{OsStr, OsString},
     os::unix::fs::PermissionsExt,
 };
@@ -42,9 +42,14 @@ pub struct Launch {
 
 impl Launch {
     /// Fetch every environment secret now, so a failing command stops the
-    /// launch before the agent starts. Tool-scoped secrets are fetched each
-    /// time their tool runs.
-    pub async fn prepare(secrets: &Secrets, paths: &Paths) -> Result<Self> {
+    /// launch before the agent starts, but those `elsewhere` holds, which
+    /// another machine printed. Tool-scoped secrets are fetched each time
+    /// their tool runs.
+    pub async fn prepare(
+        secrets: &Secrets,
+        mut elsewhere: BTreeMap<String, OsString>,
+        paths: &Paths,
+    ) -> Result<Self> {
         validate(secrets)?;
         let (scoped, unscoped): (Secrets, Secrets) = secrets
             .clone()
@@ -52,7 +57,11 @@ impl Launch {
             .partition(|(_, secret)| !secret.tools.is_empty());
         let mut environment = Vec::new();
         for (name, secret) in &unscoped {
-            environment.push((name.clone(), fetch(name, &secret.value, None).await?));
+            let value = match elsewhere.remove(name) {
+                Some(value) => value,
+                None => fetch(name, &secret.value, None).await?,
+            };
+            environment.push((name.clone(), value));
         }
         let launchers = if scoped.is_empty() {
             None
@@ -152,6 +161,12 @@ pub(crate) fn for_agents(
         .filter(|(name, _)| !signing.contains(name.as_str()))
         .map(|(name, secret)| (name.clone(), secret.clone()))
         .collect()
+}
+
+/// The environment secrets of `secrets` whose value another machine
+/// prints, which a launch asks its daemon for.
+pub fn environment_elsewhere(secrets: &Secrets) -> impl Iterator<Item = (&String, &Secret)> {
+    (secrets.iter()).filter(|(_, secret)| secret.tools.is_empty() && secret.value.on().is_some())
 }
 
 /// [`env::SECRET_ENV`] after adding `names` to the inherited ones.
