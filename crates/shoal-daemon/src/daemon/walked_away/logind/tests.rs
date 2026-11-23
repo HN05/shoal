@@ -8,3 +8,10 @@ fn a_lid_is_a_switch_device_setting_the_lid_bit() {
     assert!(has_lid(&laptop));
     assert!(!has_lid(""));
 }
+
+#[test]
+fn only_a_session_the_user_works_in_can_idle() {
+    assert!(can_idle("user"));
+    assert!(!can_idle("manager"));
+    assert!(!can_idle("background"));
+}

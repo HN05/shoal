@@ -2,9 +2,10 @@
 //! `LidClosed` and `Docked` on a machine with a lid, and the idle hint of
 //! the user's sessions, which their desktop sets once it reads them as idle.
 //! The user's hint, unlike the manager's, ignores the idle inhibitor that
-//! keep-awake holds. A user without a session, as on a headless machine
-//! whose user lingers, reads as idle to logind but gives no input to wait
-//! for, so counts as present.
+//! keep-awake holds. A user without a session that takes input, as on a
+//! headless machine whose user lingers with only its service manager's
+//! session, reads as idle to logind but gives no input to wait for, so
+//! counts as present.
 use anyhow::{Context, Result};
 use zbus::proxy::CacheProperties;
 
@@ -23,11 +24,21 @@ pub(super) trait User {
     fn sessions(&self) -> zbus::Result<Vec<(String, zbus::OwnedObjectPath)>>;
 }
 
+#[zbus::proxy(
+    interface = "org.freedesktop.login1.Session",
+    default_service = "org.freedesktop.login1"
+)]
+pub(super) trait Session {
+    #[zbus(property)]
+    fn class(&self) -> zbus::Result<String>;
+}
+
 /// The input devices the kernel lists, a lid switch among them where the
 /// machine has one.
 const INPUT_DEVICES: &str = "/proc/bus/input/devices";
 
 pub(super) struct Logind {
+    connection: zbus::Connection,
     manager: LoginProxy<'static>,
     user: UserProxy<'static>,
     /// Whether the machine has a lid, which the kernel lists once.
@@ -65,7 +76,12 @@ impl Logind {
             .cache_properties(CacheProperties::No)
             .build()
             .await?;
-        Ok(Self { manager, user, lid })
+        Ok(Self {
+            connection,
+            manager,
+            user,
+            lid,
+        })
     }
 }
 
@@ -81,11 +97,38 @@ impl Platform for Logind {
     }
 
     async fn idle(&mut self) -> Result<bool> {
-        if self.user.sessions().await?.is_empty() {
+        if !self.takes_input().await? {
             return Ok(false);
         }
         Ok(self.user.idle_hint().await?)
     }
+}
+
+impl Logind {
+    /// Whether one of the user's sessions takes the user's input, so its
+    /// idleness says whether they are there.
+    async fn takes_input(&self) -> Result<bool> {
+        for (_, path) in self.user.sessions().await? {
+            let session = (SessionProxy::builder(&self.connection))
+                .path(path)
+                .cache_properties(CacheProperties::No)
+                .build()
+                .await?;
+            if can_idle(&session.class().await?) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+}
+
+/// Whether a session of logind's `class` can idle, as one the user works
+/// in does; a service manager's or a background session cannot.
+fn can_idle(class: &str) -> bool {
+    matches!(
+        class,
+        "user" | "user-early" | "user-incomplete" | "greeter" | "lock-screen"
+    )
 }
 
 /// Whether the kernel's input `devices` include a lid switch: one whose
