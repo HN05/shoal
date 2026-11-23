@@ -94,10 +94,16 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         )
         .await
         .unwrap_err();
-    let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
+    let links = manager
+        .spaces
+        .workspace_by_id(&workspace.id)
+        .await
+        .unwrap()
+        .links;
     assert_eq!(links.opened.len(), 1);
 
     manager
+        .spaces
         .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
         .await
         .unwrap();
@@ -157,7 +163,12 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         .unwrap();
     assert!(!linked);
     assert!(!warning.is_empty());
-    let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
+    let links = manager
+        .spaces
+        .workspace_by_id(&workspace.id)
+        .await
+        .unwrap()
+        .links;
     assert_eq!(links.opened.len(), 1);
     let created = manager
         .space_events(None, 100)

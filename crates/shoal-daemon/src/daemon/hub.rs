@@ -36,11 +36,11 @@ pub(crate) use shoal_hub::{Elsewhere, Event, Incoming, Named, Outgoing, Unanswer
 
 impl Spaces for Manager {
     fn space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>> {
-        Box::pin(self.space_by_id(id))
+        Box::pin(self.spaces.space_by_id(id))
     }
 
     fn select_space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
-        Box::pin(Manager::space(self, selector))
+        Box::pin(self.spaces.space(selector))
     }
 
     fn watch_agents(&self) -> tokio::sync::watch::Receiver<u64> {
@@ -48,22 +48,22 @@ impl Spaces for Manager {
     }
 
     fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
-        Box::pin(Manager::find_space(self, id))
+        Box::pin(self.spaces.find_space(id))
     }
 
     fn listed_spaces<'a>(
         &'a self,
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Vec<Space>>> {
-        Box::pin(Manager::listed_spaces(self, caller))
+        Box::pin(self.spaces.listed_spaces(self, caller))
     }
 
     fn spaces_within<'a>(&'a self, root: Option<&'a SpaceId>) -> BoxFuture<'a, Result<Vec<Space>>> {
-        Box::pin(Manager::spaces_within(self, root))
+        Box::pin(self.spaces.spaces_within(self, root))
     }
 
     fn priority<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Priority>> {
-        Box::pin(self.space_priority(id))
+        Box::pin(self.spaces.space_priority(id))
     }
 
     fn reach_root<'a>(
@@ -75,7 +75,7 @@ impl Spaces for Manager {
 
     fn coordinator<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<SpaceId>>> {
         Box::pin(async move {
-            let (id, agents) = (id.clone(), self.tracked_agents().await);
+            let (id, agents) = (id.clone(), self.spaces.tracked_agents(self).await);
             (self.store)
                 .run(move |db| tree::coordinator_of(db, &id, &agents))
                 .await
@@ -84,7 +84,7 @@ impl Spaces for Manager {
 
     fn receiver_from<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Receiver>>> {
         Box::pin(async move {
-            let (id, agents) = (id.clone(), self.tracked_agents().await);
+            let (id, agents) = (id.clone(), self.spaces.tracked_agents(self).await);
             let found = (self.store)
                 .run(move |db| tree::receiver_from(db, &id, &agents))
                 .await?;
@@ -101,7 +101,7 @@ impl Spaces for Manager {
 
     fn with_agents(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
         Box::pin(async move {
-            let agents = self.tracked_agents().await;
+            let agents = self.spaces.tracked_agents(self).await;
             (self.store)
                 .run(move |db| tree::with_agents(db, &agents))
                 .await
@@ -186,7 +186,7 @@ impl Messages for Manager {
     }
 
     fn kept_copies(&self, files: Vec<SentFile>) -> BoxFuture<'_, Result<Vec<SentFile>>> {
-        Box::pin(self.kept_sent_files(files))
+        Box::pin(self.spaces.kept_sent_files(files))
     }
 }
 
@@ -258,7 +258,7 @@ impl Apps for Manager {
 
 impl Packages for Manager {
     fn package_state<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>> {
-        Box::pin(Manager::package_state(self, space))
+        Box::pin(self.spaces.package_state(self, space))
     }
 
     fn write_package<'a>(
@@ -267,13 +267,16 @@ impl Packages for Manager {
         file: &'a std::path::Path,
     ) -> BoxFuture<'a, Result<crate::model::RemovedSpace>> {
         Box::pin(async move {
-            let exported = self.write_kept_package(space, file.to_owned()).await?;
+            let exported = self
+                .spaces
+                .write_kept_package(self, space, file.to_owned())
+                .await?;
             Ok(exported.manifest.space.record)
         })
     }
 
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>> {
-        Box::pin(Manager::retire_space(self, space))
+        Box::pin(self.spaces.retire_space(self, space))
     }
 
     fn package_start<'a>(
@@ -281,7 +284,7 @@ impl Packages for Manager {
         space: &'a Space,
         packaged: &'a crate::model::RemovedSpace,
     ) -> BoxFuture<'a, Result<shoal_schedule::placement::snapshot::Request>> {
-        Box::pin(Manager::package_start(self, space, packaged))
+        Box::pin(self.spaces.package_start(self, space, packaged))
     }
 
     fn continue_handed_over<'a>(
@@ -290,7 +293,7 @@ impl Packages for Manager {
         from: &'a str,
         departure: shoal_protocol::hub::packages::Departure,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::continue_handed_over(self, id, from, departure))
+        Box::pin(self.spaces.continue_handed_over(self, id, from, departure))
     }
 }
 

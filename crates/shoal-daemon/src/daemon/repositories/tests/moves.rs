@@ -78,7 +78,7 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
         directory.join(".shoal/config.toml")
     );
 
-    let workspace = manager.workspace_by_id(&workspace.id).await?;
+    let workspace = manager.spaces.workspace_by_id(&workspace.id).await?;
     assert_eq!(workspace.path, directory.join("feature"));
     assert_eq!(workspace.state, WorkspaceState::Ready);
     assert!(
@@ -87,9 +87,13 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
             .git_dir()
             .is_some_and(|dir| dir.starts_with(&directory))
     );
-    manager.verify_worktree(&workspace).await?;
+    manager
+        .spaces
+        .verify_worktree(&*manager, &workspace)
+        .await?;
     let exported = manager
-        .space_environment(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .space_environment(&*manager, &SpaceSelector::id(&workspace.id))
         .await?;
     let tmp_dir = directory.join(".tmp").join(&workspace.id);
     assert_eq!(exported[crate::env::TMPDIR], tmp_dir.to_string_lossy());
@@ -133,6 +137,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
         .record_move_intent(&repo.id, &source, &destination)
         .await?;
     let reserved = manager
+        .spaces
         .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
         .await;
     assert!(reserved.is_err());
@@ -178,7 +183,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
         repo.path
     );
     assert_eq!(
-        manager.workspace_by_id(&workspace.id).await?.state,
+        manager.spaces.workspace_by_id(&workspace.id).await?.state,
         WorkspaceState::Ready
     );
 
@@ -194,11 +199,14 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     fs::write(source.join("unrelated"), "keep")?;
     crate::daemon::quarantine::interrupted_operations(&manager.store).await?;
     manager.repositories.finish_moves(&*manager).await?;
-    let workspace = manager.workspace_by_id(&workspace.id).await?;
+    let workspace = manager.spaces.workspace_by_id(&workspace.id).await?;
     assert_eq!(workspace.path, destination.join("feature"));
     assert_eq!(workspace.state, WorkspaceState::Ready);
     assert_eq!(workspace.error, None);
-    manager.verify_worktree(&workspace).await?;
+    manager
+        .spaces
+        .verify_worktree(&*manager, &workspace)
+        .await?;
     assert_eq!(fs::read_to_string(source.join("unrelated"))?, "keep");
     Ok(())
 }
@@ -229,7 +237,7 @@ async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Re
     manager.repositories.finish_moves(&*manager).await?;
 
     assert!(!source.exists());
-    let workspace = manager.workspace_by_id(&workspace.id).await?;
+    let workspace = manager.spaces.workspace_by_id(&workspace.id).await?;
     assert_eq!(workspace.path, destination.join("feature"));
     assert!(
         workspace
@@ -237,7 +245,10 @@ async fn a_copied_move_reconnects_worktrees_before_deleting_the_original() -> Re
             .git_dir()
             .is_some_and(|dir| dir.starts_with(&destination))
     );
-    manager.verify_worktree(&workspace).await?;
+    manager
+        .spaces
+        .verify_worktree(&*manager, &workspace)
+        .await?;
     assert_eq!(
         git::head_branch(&workspace.path).await?,
         Some("feature".into())
@@ -265,7 +276,8 @@ async fn a_checkpoint_waits_for_the_move_and_refuses_while_it_is_pending() -> Re
     let id = workspace.id.clone();
     let mut checkpoint = Box::pin(async move {
         checkpointing
-            .take_checkpoint(&SpaceSelector::id(&id), None)
+            .spaces
+            .take_checkpoint(&*checkpointing, &SpaceSelector::id(&id), None)
             .await
     });
     test_support::assert_pending(&mut checkpoint).await;
@@ -278,7 +290,8 @@ async fn a_checkpoint_waits_for_the_move_and_refuses_while_it_is_pending() -> Re
 
     manager.repositories.finish_moves(&*manager).await?;
     manager
-        .take_checkpoint(&SpaceSelector::id(&workspace.id), None)
+        .spaces
+        .take_checkpoint(&*manager, &SpaceSelector::id(&workspace.id), None)
         .await?;
     Ok(())
 }
@@ -381,7 +394,7 @@ async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
             .is_err()
     );
     assert_eq!(
-        manager.workspace_by_id(&workspace.id).await?.state,
+        manager.spaces.workspace_by_id(&workspace.id).await?.state,
         WorkspaceState::Reconciling
     );
     Ok(())
@@ -469,9 +482,12 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
     let directory = excluded.join("origin");
     assert_eq!(moved.repository.workspaces_dir, directory);
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
-    let workspace = manager.workspace_by_id(&workspace.id).await?;
+    let workspace = manager.spaces.workspace_by_id(&workspace.id).await?;
     assert_eq!(workspace.path, directory.join("feature"));
-    manager.verify_worktree(&workspace).await?;
+    manager
+        .spaces
+        .verify_worktree(&*manager, &workspace)
+        .await?;
 
     // A regular directory replaces the link and takes the repository back.
     let moved = manager
@@ -527,7 +543,9 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
         )
         .await?;
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Done {
                 results: vec![file.into()],
@@ -542,6 +560,7 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
         .move_all(&*manager, Layout::Regular)
         .await?;
     let completion = manager
+        .spaces
         .completion(&workspace.id)
         .await?
         .context("no completion")?;
@@ -560,6 +579,7 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     );
     assert_eq!(fs::read_to_string(copy)?, "panic");
     let files = manager
+        .spaces
         .attached_files(&SpaceSelector::id(&workspace.id))
         .await?;
     assert_eq!(files[0].path().unwrap(), *copy);
@@ -780,7 +800,9 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
     let file = temp.path().join("notes.md");
     fs::write(&file, "plan")?;
     manager
+        .spaces
         .add_attached_files(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![file.into()],
             &Attacher::User,
@@ -812,7 +834,8 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
-                .remove_attached_files(&SpaceSelector::id(&id), vec![], vec![])
+                .spaces
+                .remove_attached_files(&*manager, &SpaceSelector::id(&id), vec![], vec![])
                 .await
         }
     });
@@ -831,6 +854,7 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
     assert!(!gone.path().unwrap().exists());
     assert!(
         manager
+            .spaces
             .attached_files(&SpaceSelector::id(&workspace.id))
             .await?
             .is_empty()
@@ -844,7 +868,9 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     let report = temp.path().join("report.md");
     fs::write(&report, "No leaks")?;
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Done {
                 results: vec![report.into()],
@@ -854,16 +880,20 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
         )
         .await?;
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
         )
         .await?;
-    let [owner] =
-        manager.kept_results().await?.try_into().map_err(|kept| {
-            anyhow::anyhow!("expected one removed workspace with results: {kept:?}")
-        })?;
+    let [owner] = manager
+        .spaces
+        .kept_results()
+        .await?
+        .try_into()
+        .map_err(|kept| anyhow::anyhow!("expected one removed workspace with results: {kept:?}"))?;
     let old = repo.workspaces_dir.clone();
     // A move, then disk cleanup for the old place, wait for the gate.
     let held = manager.gates.lock_message_files(&repo.id).await;
@@ -890,7 +920,8 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
         let manager = manager.clone();
         async move {
             manager
-                .delete_results_in(&owner, |path| path.starts_with(&old))
+                .spaces
+                .delete_results_in(&*manager, &owner, |path| path.starts_with(&old))
                 .await
         }
     });
@@ -899,6 +930,7 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     moving.await??;
     assert!(!cleaning.await??, "the results moved off the low place");
     let kept = manager
+        .spaces
         .attached_files(&SpaceSelector::id(&workspace.id))
         .await?;
     assert!(
@@ -930,7 +962,10 @@ async fn with_master() -> Result<(tempfile::TempDir, Arc<Manager>, crate::model:
         origin: None,
         parent: None,
     };
-    let chat = manager.start_new_chat(None, None, new).await?;
+    let chat = manager
+        .spaces
+        .start_new_chat(&*manager, None, None, new)
+        .await?;
     let chat = manager.run_chat_agent(chat, None).await?;
     Ok((temp, manager, chat, root))
 }
@@ -941,7 +976,7 @@ async fn a_root_move_stops_the_chats_without_a_repository_and_takes_their_files(
     let tmp = chat.tmp_dir.clone().context("no temporary directory")?;
     fs::write(tmp.join("notes"), "kept")?;
     // A directory of no chat, which the move leaves behind.
-    (manager.outside_tmp_layout())
+    (manager.spaces.outside_tmp_layout())
         .context("no layout")?
         .prepare(&SpaceId::from("leftover"))?;
 
@@ -970,7 +1005,11 @@ async fn a_root_move_stops_the_chats_without_a_repository_and_takes_their_files(
         .await?;
 
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
-    let moved = manager.chat_by_id(&chat.id).await?.context("no chat")?;
+    let moved = manager
+        .spaces
+        .chat_by_id(&chat.id)
+        .await?
+        .context("no chat")?;
     // The chat still runs in the configured root, now a link.
     assert_eq!(moved.workdir.root_dir(), chat.workdir.root_dir());
     assert_eq!(fs::read_to_string(tmp.join("notes"))?, "kept");
@@ -984,10 +1023,19 @@ async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> 
     let report = temp.path().join("report.md");
     fs::write(&report, "Plan")?;
     let selector = SpaceSelector::id(&chat.id);
-    (manager.add_attached_files(&selector, vec![report.into()], &Attacher::User)).await?;
+    (manager
+        .spaces
+        .add_attached_files(&*manager, &selector, vec![report.into()], &Attacher::User))
+    .await?;
     manager.agents.end_executions(&*manager, &chat.id).await;
     manager
-        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .spaces
+        .remove_selected(
+            &*manager,
+            &selector,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await?;
 
     manager
@@ -996,7 +1044,7 @@ async fn a_root_move_takes_the_files_of_removed_chats_without_a_repository() -> 
         .await?;
 
     assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
-    let kept = manager.attached_files(&selector).await?;
+    let kept = manager.spaces.attached_files(&selector).await?;
     assert_eq!(fs::read_to_string(kept[0].path().unwrap())?, "Plan");
     Ok(())
 }
@@ -1007,9 +1055,15 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
     let selector = SpaceSelector::id(&chat.id);
     manager.agents.end_executions(&*manager, &chat.id).await;
     manager
-        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .spaces
+        .remove_selected(
+            &*manager,
+            &selector,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await?;
-    let record = manager.removed_spaces().await?.remove(0);
+    let record = manager.spaces.removed_spaces().await?.remove(0);
     let contents = temp.path().join("carried");
     fs::write(&contents, "{}\n")?;
     let carried = shoal_protocol::transcripts::CarriedSessionFile {
@@ -1033,15 +1087,18 @@ async fn a_root_move_takes_the_session_files_kept_for_chats_without_a_repository
         recorded: Default::default(),
         claim: crate::transfer::Claim::Plain,
     };
-    manager.import_space(import).await?;
+    manager.spaces.import_space(&*manager, import).await?;
 
     manager
         .repositories
         .move_all(&*manager, Layout::Excluded)
         .await?;
 
-    let kept = (manager.outside_sessions_layout(&root).existing(&chat.id))
-        .context("no session files kept in the new root")?;
+    let kept = (manager
+        .spaces
+        .outside_sessions_layout(&root)
+        .existing(&chat.id))
+    .context("no session files kept in the new root")?;
     assert_eq!(fs::read_to_string(kept.join("0"))?, "{}\n");
     Ok(())
 }
@@ -1075,7 +1132,7 @@ async fn an_import_reading_a_package_holds_back_the_move() -> Result<()> {
 async fn a_root_move_takes_what_imports_left_in_root_dir_unless_one_reads() -> Result<()> {
     let (_temp, manager, chat, root) = with_master().await?;
     manager.agents.end_executions(&*manager, &chat.id).await;
-    let imports = manager.outside_imports(&root);
+    let imports = manager.spaces.outside_imports(&root);
     reading_import(&imports)?;
     assert!(
         manager
@@ -1100,7 +1157,7 @@ async fn a_root_move_takes_what_imports_left_in_root_dir_unless_one_reads() -> R
 async fn a_root_move_keeps_a_package_an_import_reads_into_the_root_it_leaves() -> Result<()> {
     let (temp, manager, chat, root) = with_master().await?;
     manager.agents.end_executions(&*manager, &chat.id).await;
-    let imports = manager.outside_imports(&root);
+    let imports = manager.spaces.outside_imports(&root);
     reading_import(&imports)?;
     let moved_to = fs::canonicalize(temp.path())?.join("new");
     let config = format!("[cleanup]\ngrace_minutes = 0\n[machine]\nroot_dir = {moved_to:?}\n");

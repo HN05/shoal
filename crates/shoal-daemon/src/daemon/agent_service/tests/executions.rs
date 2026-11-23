@@ -86,7 +86,7 @@ async fn registration_rolls_back_setup_reservation_when_insertion_fails() {
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("injected registration failure"));
-    let after = manager.workspace_by_id(&workspace.id).await.unwrap();
+    let after = manager.spaces.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(after.state, workspace.state);
     assert_eq!(setup_finished(&manager, &workspace).await, was_finished);
     assert!(!manager.agents.executions().has_connections().await);
@@ -236,7 +236,7 @@ async fn pre_setup_failure_and_identity_change_close_registration() {
             )
             .await
             .unwrap_err();
-        let after = manager.workspace_by_id(&workspace.id).await.unwrap();
+        let after = manager.spaces.workspace_by_id(&workspace.id).await.unwrap();
         assert_eq!(after.state, WorkspaceState::Failed);
         assert!(!setup_finished(&manager, &workspace).await);
         assert_eq!(after.error.as_deref(), Some(format!("{error:#}").as_str()));
@@ -358,14 +358,20 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
         );
         assert!(
             manager
-                .cleanup_snapshot(&workspace.id)
+                .spaces
+                .cleanup_snapshot(&*manager, &workspace.id)
                 .await
                 .unwrap()
                 .is_none()
         );
         if kind == ExecutionKind::Setup {
             assert_eq!(
-                manager.workspace_by_id(&workspace.id).await.unwrap().state,
+                manager
+                    .spaces
+                    .workspace_by_id(&workspace.id)
+                    .await
+                    .unwrap()
+                    .state,
                 WorkspaceState::Failed
             );
             assert!(!setup_finished(&manager, &workspace).await);
@@ -397,7 +403,8 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
         if kind == ExecutionKind::Command {
             assert!(
                 manager
-                    .cleanup_snapshot(&workspace.id)
+                    .spaces
+                    .cleanup_snapshot(&*manager, &workspace.id)
                     .await
                     .unwrap()
                     .is_some()
@@ -446,11 +453,17 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
                 .unwrap()
         );
         assert_eq!(
-            manager.workspace_by_id(&workspace.id).await.unwrap().state,
+            manager
+                .spaces
+                .workspace_by_id(&workspace.id)
+                .await
+                .unwrap()
+                .state,
             WorkspaceState::Failed
         );
         assert!(!setup_finished(&manager, &workspace).await);
         let error = manager
+            .spaces
             .workspace_by_id(&workspace.id)
             .await
             .unwrap()
@@ -509,7 +522,7 @@ async fn setup_preserves_inventory_failure_in_its_retained_diagnostic() {
             .await
             .unwrap()
     );
-    let workspace = manager.workspace_by_id(&workspace.id).await.unwrap();
+    let workspace = manager.spaces.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(workspace.state, WorkspaceState::Failed);
     assert!(
         workspace
@@ -630,7 +643,8 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
             .is_some()
     );
     let inspection = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(inspection.executions[0].state, ExecutionState::Running);
@@ -885,7 +899,7 @@ async fn command_reservation(
     workspace: &Workspace,
     state: WorkspaceState,
 ) -> Result<()> {
-    manager.set_state(&workspace.id, state, None).await?;
+    manager.spaces.set_state(&workspace.id, state, None).await?;
     let id = workspace.id.clone();
     manager
         .store
@@ -916,6 +930,7 @@ async fn command_started_during(
     held: WorkspaceState,
 ) -> tokio::task::JoinHandle<Result<StartedExecution>> {
     manager
+        .spaces
         .reserve_lifecycle(&workspace.id, held)
         .await
         .unwrap();
@@ -954,7 +969,11 @@ async fn command_started_during_update(
     after: WorkspaceState,
 ) -> Result<StartedExecution> {
     let start = command_started_during(manager, workspace, WorkspaceState::Updating).await;
-    manager.set_state(&workspace.id, after, None).await.unwrap();
+    manager
+        .spaces
+        .set_state(&workspace.id, after, None)
+        .await
+        .unwrap();
     bounded(start).await.unwrap()
 }
 
@@ -990,6 +1009,7 @@ async fn a_command_started_while_a_repair_has_its_worktree_away_runs_once_it_end
     let start = command_started_during(&manager, &workspace, WorkspaceState::Reconciling).await;
     fs::rename(&away, &workspace.path).unwrap();
     manager
+        .spaces
         .set_state(&workspace.id, WorkspaceState::Ready, None)
         .await
         .unwrap();
@@ -1001,6 +1021,7 @@ async fn a_command_started_while_a_repair_has_its_worktree_away_runs_once_it_end
 async fn an_agent_registering_during_an_update_is_refused_instead_of_waiting() {
     let (_root, manager, workspace) = fixture("exit 0").await;
     manager
+        .spaces
         .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
         .await
         .unwrap();
@@ -1028,7 +1049,13 @@ fn unverified() -> anyhow::Error {
 #[tokio::test]
 async fn a_registration_failing_while_an_operation_that_passes_holds_it_waits() {
     let (_root, manager, workspace) = fixture("exit 0").await;
-    let seen = Some(manager.lifecycle_generation(&workspace.id).await.unwrap());
+    let seen = Some(
+        manager
+            .spaces
+            .lifecycle_generation(&workspace.id)
+            .await
+            .unwrap(),
+    );
     let error = unverified();
     let refused = || {
         manager
@@ -1038,6 +1065,7 @@ async fn a_registration_failing_while_an_operation_that_passes_holds_it_waits() 
     assert!(!refused().await.unwrap());
     // As when a move reserves the workspace after the start's first look.
     manager
+        .spaces
         .reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
         .await
         .unwrap();
@@ -1047,14 +1075,20 @@ async fn a_registration_failing_while_an_operation_that_passes_holds_it_waits() 
 #[tokio::test]
 async fn a_registration_failing_after_an_operation_came_and_went_retries() {
     let (_root, manager, workspace) = fixture("exit 0").await;
-    let seen = manager.lifecycle_generation(&workspace.id).await.unwrap();
+    let seen = manager
+        .spaces
+        .lifecycle_generation(&workspace.id)
+        .await
+        .unwrap();
     // As when a checkpoint restore begins after the start's first look and
     // returns the workspace to the same state before its registration fails.
     manager
+        .spaces
         .reserve_lifecycle(&workspace.id, WorkspaceState::Restoring)
         .await
         .unwrap();
     manager
+        .spaces
         .set_state(&workspace.id, WorkspaceState::Ready, None)
         .await
         .unwrap();

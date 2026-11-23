@@ -71,7 +71,10 @@ impl Agents for Manager {
         source: LaunchSource,
     ) -> BoxFuture<'static, Result<SpaceId>> {
         Box::pin(async move {
-            let launched = Manager::launch(&self, launch, source, None).await?;
+            let launched = self
+                .spaces
+                .launch(&self.daemon(), launch, source, None)
+                .await?;
             Ok(launched.space.id)
         })
     }

@@ -15,7 +15,7 @@ impl Branches for Manager {
         &'a self,
         repo: &'a Repository,
     ) -> BoxFuture<'a, Result<BranchName>> {
-        Box::pin(Manager::fetch_default_remotes(self, repo))
+        Box::pin(self.spaces.fetch_default_remotes(repo))
     }
 
     fn fast_forward_default<'a>(
@@ -23,6 +23,6 @@ impl Branches for Manager {
         repo: &'a Repository,
         default: &'a BranchName,
     ) -> BoxFuture<'a, Result<SyncedRepository>> {
-        Box::pin(Manager::fast_forward_default(self, repo, default))
+        Box::pin(self.spaces.fast_forward_default(repo, default))
     }
 }

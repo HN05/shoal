@@ -368,24 +368,26 @@ async fn completion_cleanup_waits_for_the_runs_of_a_merge() {
         .await
         .unwrap();
     manager
+        .spaces
         .mark_space_done(
+            &**manager,
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
         )
         .await
         .unwrap();
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&**manager).await.unwrap();
     assert!(workspace.path.exists());
-    let space = manager.space_by_id(&workspace.id).await.unwrap();
+    let space = manager.spaces.space_by_id(&workspace.id).await.unwrap();
     assert_eq!(
-        manager.cleanup_reason(&space).await,
+        manager.spaces.cleanup_reason(&**manager, &space).await,
         CleanupReason::MergeRuns
     );
 
     following.end_window().await;
     following.follow().await;
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&**manager).await.unwrap();
     assert!(!workspace.path.exists());
 }
 
@@ -440,7 +442,9 @@ async fn pr_cleanup_waits_for_a_poll_to_see_the_merge() {
     let following = following(true, json!([])).await;
     let (manager, workspace) = (&following.manager, &following.workspace);
     let done = manager
+        .spaces
         .mark_space_done(
+            &**manager,
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -562,7 +566,9 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
         .await
         .unwrap();
     manager
+        .spaces
         .mark_space_done(
+            &**manager,
             &SpaceSelector::id(&chat.id),
             Done::default(),
             &Attacher::User,
@@ -570,10 +576,10 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
         .await
         .unwrap();
     let present = || async {
-        let chats = manager.chats().await.unwrap();
+        let chats = manager.spaces.chats().await.unwrap();
         chats.iter().any(|listed| listed.id == chat.id)
     };
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&**manager).await.unwrap();
     assert!(present().await, "the PR's merge is unseen");
 
     // The poll that sees the merge looks up its runs until the window ends.
@@ -587,7 +593,7 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
             .await
             .unwrap();
     }
-    let space = LinkSpace::own(manager.space_by_id(&chat.id).await.unwrap()).unwrap();
+    let space = LinkSpace::own(manager.spaces.space_by_id(&chat.id).await.unwrap()).unwrap();
     let id = chat.id.clone();
     let started = UnixTime::now() - LOOKUP_WINDOW - Duration::from_secs(60);
     (manager.store)
@@ -605,7 +611,7 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
         .follow_merge_runs(&**manager, &space)
         .await
         .unwrap();
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&**manager).await.unwrap();
     assert!(!present().await);
 }
 
@@ -719,23 +725,25 @@ async fn completion_cleanup_waits_for_a_poll_to_see_an_opened_prs_merge() {
     let following = opening(true, json!([])).await;
     let (manager, workspace) = (&following.manager, &following.workspace);
     manager
+        .spaces
         .mark_space_done(
+            &**manager,
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
         )
         .await
         .unwrap();
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&**manager).await.unwrap();
     assert!(workspace.path.exists(), "the PR's merge is unseen");
 
     following.poll().await;
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&**manager).await.unwrap();
     assert!(workspace.path.exists(), "the merge's runs are looked up");
 
     following.end_window().await;
     following.follow().await;
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&**manager).await.unwrap();
     assert!(!workspace.path.exists());
 }
 

@@ -24,7 +24,7 @@ pub(super) async fn handle(
             mode,
             narrowing,
         } => {
-            let workspace = manager.workspace(&workspace).await?;
+            let workspace = manager.spaces.workspace(&workspace).await?;
             Body::Permissions(
                 manager
                     .coordination

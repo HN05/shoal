@@ -42,7 +42,9 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -372,7 +374,9 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
     let mut children = Vec::new();
     for name in ["one", "two"] {
         let child = manager
+            .spaces
             .create_child(
+                &*manager,
                 &SpaceSelector::id(&parent.id),
                 name.into(),
                 None,

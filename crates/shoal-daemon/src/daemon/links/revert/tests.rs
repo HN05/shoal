@@ -36,6 +36,7 @@ async fn reverts_keep_the_reverted_base_and_skip_workspaces_being_removed() {
     assert!(error.to_string().contains("base branch"), "{error:#}");
 
     manager
+        .spaces
         .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
         .await
         .unwrap();

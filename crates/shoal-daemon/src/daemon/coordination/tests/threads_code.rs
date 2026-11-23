@@ -186,7 +186,7 @@ async fn expiry_lets_go_of_the_versions_of_threads_that_went() {
         .write(move |tx| Ok(tx.execute("DELETE FROM threads WHERE id=?1", [id])?))
         .await
         .unwrap();
-    manager.expire_checkpoints().await.unwrap();
+    manager.spaces.expire_checkpoints(&**manager).await.unwrap();
     let kept = git::code_versions::kept(&repo.path, &reference)
         .await
         .unwrap();
@@ -331,7 +331,8 @@ async fn a_chat_points_at_code_in_the_worktree_it_runs_in() {
     };
     let beside = shoal_protocol::space_names::SpaceSelector::id(&tree.beside.id);
     let chat = manager
-        .start_new_chat(None, Some(&beside), new)
+        .spaces
+        .start_new_chat(&**manager, None, Some(&beside), new)
         .await
         .unwrap();
     let reader = crate::daemon::test_support::caller_in(

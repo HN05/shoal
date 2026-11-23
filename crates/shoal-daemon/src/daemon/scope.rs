@@ -12,7 +12,9 @@ use shoal_protocol::space_names::SpaceSelector;
 
 mod read_only;
 
-pub use shoal_coordination::scope::{Caller, ScopeRefusal, ScopedExecution, outside_scope, tokens};
+#[cfg(test)]
+pub(crate) use shoal_coordination::scope::ScopedExecution;
+pub use shoal_coordination::scope::{Caller, ScopeRefusal, outside_scope};
 
 /// Resolve `token`, which may stand for a caller another machine vouches
 /// for, and confine `method` to the spaces the caller's scope reaches: its own space, a workspace or a chat, and the spaces below it,
@@ -61,10 +63,10 @@ pub(in crate::daemon) async fn confine_target(
     if manager.hub.names_vouched_own(caller, target) {
         return Ok(());
     }
-    let space = manager.space(target).await?;
+    let space = manager.spaces.space(target).await?;
     let id = space.id.to_owned();
     if !manager.coordination.reaches(manager, caller, &id).await? {
-        let home = manager.chat_home(&caller.space_id).await?;
+        let home = manager.spaces.chat_home(&caller.space_id).await?;
         ensure!(home.as_ref() == Some(&id), "{}", outside_scope(&space));
         ensure!(
             reads,

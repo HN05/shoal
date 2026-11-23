@@ -5,6 +5,7 @@
 //! the viewer and the viewer's keys and size to it, until the worker ends
 //! or the viewer goes, which hangs up the terminal and leaves the place
 //! running.
+mod attaching;
 mod pty;
 
 use std::{

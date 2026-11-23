@@ -37,27 +37,39 @@ pub(super) async fn handle(
             let log = manager.log(space.as_ref(), filter, limit).await;
             return Ok(Answer::pages(log, Body::LogEntries));
         }
-        SpaceMethod::ListSpaces => Body::Spaces(manager.listed_spaces(caller).await?),
+        SpaceMethod::ListSpaces => {
+            Body::Spaces(manager.spaces.listed_spaces(&**manager, caller).await?)
+        }
         SpaceMethod::JudgeSpaces { acting } => {
-            let offers = manager.offers_here(caller, &acting).await;
+            let offers = manager
+                .spaces
+                .offers_here(&**manager, caller, &acting)
+                .await;
             return Ok(Answer::pages(offers, Body::SpaceOffers));
         }
         SpaceMethod::ListSpacesEverywhere { here, acting } => {
             let acting = acting.as_deref();
-            let everywhere = manager.spaces_everywhere(caller, here, acting).await;
+            let everywhere = manager
+                .spaces
+                .spaces_everywhere(&**manager, caller, here, acting)
+                .await;
             let parts = everywhere.map(Everywhere::into_parts);
             return Ok(Answer::pages(parts, Body::SpacesEverywhere));
         }
-        SpaceMethod::LocateSpace { space } => {
-            Body::LocatedSpace(Box::new(manager.locate_space(caller, &space).await?))
-        }
+        SpaceMethod::LocateSpace { space } => Body::LocatedSpace(Box::new(
+            manager
+                .spaces
+                .locate_space(&**manager, caller, &space)
+                .await?,
+        )),
         SpaceMethod::SelectSpaces {
             spaces,
             machines,
             below,
         } => Body::LocatedSpaces(
             manager
-                .select_spaces(caller, &spaces, &machines, below)
+                .spaces
+                .select_spaces(&**manager, caller, &spaces, &machines, below)
                 .await?,
         ),
         SpaceMethod::FindSpaces { target } => Body::Spaces(
@@ -67,26 +79,28 @@ pub(super) async fn handle(
                 .await?,
         ),
         SpaceMethod::RenameSpace { space, name } => {
-            Body::RenamedSpace(manager.rename_space(&space, &name).await?)
+            Body::RenamedSpace(manager.spaces.rename_space(&space, &name).await?)
         }
-        SpaceMethod::IssueScope { space } => Body::ScopeToken(manager.issue_scope(&space).await?),
+        SpaceMethod::IssueScope { space } => {
+            Body::ScopeToken(manager.spaces.issue_scope(&space).await?)
+        }
         SpaceMethod::RevokeScope { space, token } => {
-            manager.revoke_scope(&space, token).await?;
+            manager.spaces.revoke_scope(&space, token).await?;
             Body::Ok
         }
         SpaceMethod::SpaceEnvironment { space } => {
-            Body::SpaceEnvironment(manager.space_environment(&space).await?)
+            Body::SpaceEnvironment(manager.spaces.space_environment(&**manager, &space).await?)
         }
         SpaceMethod::SpaceStatus { space } => {
-            let mut status = manager.space_status(&space).await?;
+            let mut status = manager.spaces.space_status(&**manager, &space).await?;
             status.machine = super::forwarded::answering_machine(manager, scope).await?;
             Body::SpaceStatus(Box::new(status))
         }
         SpaceMethod::SpaceSessions { space } => {
-            Body::SpaceSessions(manager.space_sessions(&space).await?)
+            Body::SpaceSessions(manager.spaces.space_sessions(&**manager, &space).await?)
         }
         SpaceMethod::EnterSpace { space } => {
-            Body::EnteredSpace(Box::new(manager.entered_space(&space).await?))
+            Body::EnteredSpace(Box::new(manager.spaces.entered_space(&space).await?))
         }
         SpaceMethod::FollowSession {
             space,
@@ -96,7 +110,10 @@ pub(super) async fn handle(
             // Chosen first, so a space another machine has is followed there.
             // A client follows again, from where it read, on its own.
             let resumed = !from.is_empty();
-            let following = manager.session_to_follow(&space, session, from).await?;
+            let following = manager
+                .spaces
+                .session_to_follow(&**manager, &space, session, from)
+                .await?;
             // Another machine's follow is checked there as it goes, its
             // token here standing for its caller only while it starts.
             let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());
@@ -110,9 +127,14 @@ pub(super) async fn handle(
                     .await;
             }
             let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.follow_session(stream, request_id, (following, scope), guard)
-            }));
+            return Ok(Answer::connection(
+                move |stream, request_id, guard| async move {
+                    manager
+                        .spaces
+                        .follow_session(&*manager, stream, request_id, (following, scope), guard)
+                        .await
+                },
+            ));
         }
         SpaceMethod::AttachSession { space, viewer } => {
             let terminal = manager.open_viewer_terminal(&space, &viewer).await?;

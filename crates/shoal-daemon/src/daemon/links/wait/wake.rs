@@ -50,7 +50,7 @@ impl Manager {
         due: bool,
         hooked: Option<&ExecutionId>,
     ) -> Result<()> {
-        let space = self.space(selector).await?;
+        let space = self.spaces.space(selector).await?;
         let phase = WakePhase::waiting_for(due);
         // Subscribe before reading, so a change in between still wakes.
         let mut messages = self.signals.watch_messages();
@@ -89,7 +89,7 @@ impl Manager {
     /// gates of the spaces whose activity it receives, only messages count,
     /// as in a hook delivery.
     pub(crate) async fn updates_waiting(&self, selector: &SpaceSelector) -> Result<bool> {
-        let space = self.space(selector).await?;
+        let space = self.spaces.space(selector).await?;
         if self.agents.unread_messages(&space.id).await?.wakes {
             return Ok(true);
         }
@@ -101,7 +101,7 @@ impl Manager {
     /// caller holding them, as cleanup does, sees every update their holders
     /// queued.
     pub(crate) async fn agent_updates_recorded(&self, id: &SpaceId) -> Result<bool> {
-        let space = self.space(&SpaceSelector::id(id)).await?;
+        let space = self.spaces.space(&SpaceSelector::id(id)).await?;
         if self.agents.unread_messages(id).await?.wakes {
             return Ok(true);
         }

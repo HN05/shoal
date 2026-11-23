@@ -56,7 +56,7 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
             .map(|status| status.state)
     };
     let execution = |manager: Arc<Manager>, id: SpaceId| async move {
-        let executions = manager.workspace_executions(&id).await.unwrap();
+        let executions = manager.spaces.workspace_executions(&id).await.unwrap();
         Some(executions[0].id.clone())
     };
     let first = execution(manager.clone(), chat.id.clone()).await;
@@ -75,7 +75,7 @@ async fn a_chats_lost_report_counts_only_from_the_agent_it_runs() {
         .failed("refused".into());
     // A restore runs another agent.
     manager.agents.end_executions(&*manager, &chat.id).await;
-    let chat = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
+    let chat = manager.spaces.chat_by_id(&chat.id).await.unwrap().unwrap();
     let mut restored = chat.clone();
     restored.agent = Some("claude".into());
     manager.run_chat_agent(restored, None).await.unwrap();

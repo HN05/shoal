@@ -34,14 +34,6 @@ pub(crate) async fn deliver_file(
     answer.await
 }
 
-/// What `work`, which blocks on the file system, returns, run on the
-/// blocking pool.
-pub(crate) async fn blocking<T: Send + 'static>(
-    work: impl FnOnce() -> std::io::Result<T> + Send + 'static,
-) -> Result<T> {
-    Ok(tokio::task::spawn_blocking(work).await??)
-}
-
 /// The answers another machine's daemon writes on a stream, frame by frame.
 struct Answers {
     incoming: Incoming,

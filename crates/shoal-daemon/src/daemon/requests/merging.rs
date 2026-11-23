@@ -34,7 +34,12 @@ pub(super) async fn handle(
                 message,
                 confirmed: None,
             };
-            Body::MergePreview(manager.preview_merge(&workspace, &options, caller).await?)
+            Body::MergePreview(
+                manager
+                    .spaces
+                    .preview_merge(&**manager, &workspace, &options, caller)
+                    .await?,
+            )
         }
     }))
 }

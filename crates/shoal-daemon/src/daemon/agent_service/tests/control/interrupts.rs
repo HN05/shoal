@@ -123,7 +123,7 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
     let (temp, manager) = manager().await;
     let chat = chat(&manager, temp.path()).await;
     let selected = SpaceSelector::id(&chat.id);
-    let id = manager.workspace_executions(&chat.id).await.unwrap()[0]
+    let id = manager.spaces.workspace_executions(&chat.id).await.unwrap()[0]
         .id
         .clone();
     manager
@@ -227,7 +227,7 @@ async fn an_interrupt_leaves_a_chats_agent_idle_until_a_turn_starts() {
     let (temp, manager) = manager().await;
     let chat = chat(&manager, temp.path()).await;
     let selected = SpaceSelector::id(&chat.id);
-    let agent = manager.workspace_executions(&chat.id).await.unwrap()[0]
+    let agent = manager.spaces.workspace_executions(&chat.id).await.unwrap()[0]
         .id
         .clone();
     let report = |state| {
@@ -247,7 +247,7 @@ async fn an_interrupt_leaves_a_chats_agent_idle_until_a_turn_starts() {
     assert_eq!(status.state, AgentState::Idle);
     // The chat's state shows, which a report from an execution it does not
     // run would hide.
-    let recorded = manager.chats().await.unwrap();
+    let recorded = manager.spaces.chats().await.unwrap();
     assert_eq!(
         recorded[0].agent_state.as_ref().map(|status| status.state),
         Some(AgentState::Idle)

@@ -16,11 +16,9 @@ use crate::{
     daemon::{
         agent_queue, agents,
         approvals::{self, ApprovalRequest},
-        changes, links,
-        operations::starts,
-        progress, ready_marks,
+        changes, links, progress, ready_marks,
         spaces::{self, Removing},
-        store, threads,
+        starts, store, threads,
         tree::{self, TrackedAgents},
     },
     model::{PreparationWait, SpaceKind, Workspace},
@@ -284,13 +282,16 @@ impl Records for AgentRecords {
     }
 }
 
-impl Removals for Removing {
+/// The removals under way, as agents ask them whether a space takes work.
+pub(crate) struct SpaceRemovals(pub(crate) Removing);
+
+impl Removals for SpaceRemovals {
     fn require_taking_work(&self, db: &Connection, id: &SpaceId) -> Result<()> {
-        Removing::require_taking_work(self, db, id)
+        Removing::require_taking_work(&self.0, db, id)
     }
 
     fn being_removed(&self, id: &SpaceId) -> bool {
-        self.reserved(id)
+        self.0.reserved(id)
     }
 }
 

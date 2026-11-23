@@ -33,7 +33,8 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
     let execution = started.plan.id.clone();
     let executions = || async {
         manager
-            .inspect_workspace(&SpaceSelector::id(&workspace.id))
+            .spaces
+            .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions

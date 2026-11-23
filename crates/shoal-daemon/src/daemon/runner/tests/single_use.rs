@@ -42,7 +42,11 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
         panic!("{claimed:?}");
     };
     assert_eq!(job.runner_id, Some(RunnerId::new(77)));
-    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&job.workspace_id)
+        .await
+        .unwrap();
     assert_eq!(workspace.at().unwrap().commit, fixture.head);
     let (command, started) = launched(workspace.id.as_str());
     let copy = manager.runner.job_directory(&job.id).join("runner");
@@ -102,7 +106,7 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
         .await
         .unwrap();
     finish_ended_jobs(manager).await;
-    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
+    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
     // Its end deletes the runner too, which counts as done once it is gone.
     assert_eq!(deleted(&fixture.state), ["77", "77"]);
 }

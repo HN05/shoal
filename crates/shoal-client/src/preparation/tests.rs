@@ -29,6 +29,7 @@ async fn an_app_creates_a_workspace_and_follows_its_setup_to_a_typed_failure() {
     worker.stdout("installing").await;
     // A failed setup command leaves the workspace failed.
     (daemon.manager)
+        .spaces
         .set_state(&preparing.workspace().id, WorkspaceState::Failed, None)
         .await
         .unwrap();
@@ -58,6 +59,7 @@ async fn an_app_creates_a_workspace_and_follows_its_setup_to_a_typed_failure() {
     let worker = fake::take(&preparing.operation().id);
     let child = preparing.workspace().id.clone();
     (daemon.manager)
+        .spaces
         .set_state(&child, WorkspaceState::Ready, None)
         .await
         .unwrap();

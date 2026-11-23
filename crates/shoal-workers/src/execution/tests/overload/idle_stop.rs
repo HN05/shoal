@@ -14,7 +14,8 @@ async fn idle_in_held_done_workspace(
     workspace: &crate::model::Workspace,
 ) -> ExecutionId {
     let id = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]
@@ -32,7 +33,9 @@ async fn idle_in_held_done_workspace(
         .await
         .unwrap();
     manager
+        .spaces
         .acquire_hold(
+            manager,
             &SpaceSelector::id(&workspace.id),
             "app".into(),
             None,
@@ -41,7 +44,9 @@ async fn idle_in_held_done_workspace(
         .await
         .unwrap();
     manager
+        .spaces
         .mark_space_done(
+            manager,
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -100,7 +105,14 @@ async fn an_update_restores_an_idle_agent_stopped_in_a_held_done_workspace() {
     );
     // Shoal ended the agent, so its restore in the waiting wrapper keeps the
     // completion.
-    assert!(manager.completion(&workspace.id).await.unwrap().is_some());
+    assert!(
+        manager
+            .spaces
+            .completion(&workspace.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
     serving.abort();
 }
 
@@ -130,7 +142,14 @@ async fn resuming_an_idle_agent_of_a_held_done_workspace_withdraws_the_completio
         fs::read_to_string(workspace.path.join("restored")).unwrap(),
         "restored"
     );
-    assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+    assert!(
+        manager
+            .spaces
+            .completion(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
     serving.abort();
 }
 

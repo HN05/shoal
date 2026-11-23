@@ -14,6 +14,7 @@ test-support = [
     "shoal-core/test-support",
     "shoal-daemon-base/test-support",
     "shoal-protocol/test-support",
+    "shoal-spaces/test-support",
 ]
 
 [dependencies]
@@ -51,6 +52,7 @@ shoal-repositories.workspace = true
 shoal-reviews.workspace = true
 shoal-runner.workspace = true
 shoal-schedule = { workspace = true, features = ["rusqlite"] }
+shoal-spaces.workspace = true
 shoal-store.workspace = true
 tempfile.workspace = true
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "__rustls-tls"] }
@@ -81,6 +83,7 @@ shoal-protocol = { workspace = true, features = ["test-support"] }
 shoal-links = { workspace = true, features = ["test-support"] }
 shoal-repositories = { workspace = true, features = ["test-support"] }
 shoal-reviews = { workspace = true, features = ["test-support"] }
+shoal-spaces = { workspace = true, features = ["test-support"] }
 shoal-runner = { workspace = true, features = ["test-support"] }
 shoal-store = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }

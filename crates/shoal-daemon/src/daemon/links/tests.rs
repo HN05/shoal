@@ -109,7 +109,7 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
         .await
         .unwrap();
 
-    let links = manager.workspace_by_id(&id).await.unwrap().links;
+    let links = manager.spaces.workspace_by_id(&id).await.unwrap().links;
     assert!(links.issues.is_empty());
     assert!(links.prs.is_empty());
     assert!(links.opened.is_empty());
@@ -190,7 +190,7 @@ async fn linking_an_item_again_replaces_its_recorded_relation() {
             .await
             .is_err()
     );
-    let links = manager.workspace_by_id(&id).await.unwrap().links;
+    let links = manager.spaces.workspace_by_id(&id).await.unwrap().links;
     assert!(links.related.is_empty() && links.opened.is_empty());
     let unlinked = link_events(&manager, EventKind::Unlinked).await;
     let relations: Vec<_> = unlinked.iter().map(|link| link.relation).collect();
@@ -221,7 +221,7 @@ async fn an_assignment_replaces_the_recorded_relation_and_refuses_another() {
     link_issue(&manager, &id, Relation::Related).await.unwrap();
     link_issue(&manager, &id, Relation::Assigned).await.unwrap();
 
-    let links = manager.workspace_by_id(&id).await.unwrap().links;
+    let links = manager.spaces.workspace_by_id(&id).await.unwrap().links;
     let issue = links.issue().map(|issue| issue.url.url());
     assert_eq!(issue, Some("https://github.com/team/repo/issues/7"));
     assert!(links.related.is_empty());
@@ -229,7 +229,7 @@ async fn an_assignment_replaces_the_recorded_relation_and_refuses_another() {
         let refused = link_issue(&manager, &id, relation).await.unwrap_err();
         assert!(format!("{refused:#}").contains("linked as assigned"));
     }
-    let links = manager.workspace_by_id(&id).await.unwrap().links;
+    let links = manager.spaces.workspace_by_id(&id).await.unwrap().links;
     assert!(links.issue().is_some() && links.opened.is_empty() && links.related.is_empty());
 }
 
@@ -250,7 +250,7 @@ async fn assigned_relation_uses_the_issue_link() {
         )
         .await
         .unwrap();
-    let links = manager.workspace_by_id(&id).await.unwrap().links;
+    let links = manager.spaces.workspace_by_id(&id).await.unwrap().links;
     assert_eq!(links.issue().map(|linked| linked.url.url()), Some(issue));
     assert!(links.opened.is_empty() && links.related.is_empty());
     assert_eq!(
@@ -268,7 +268,16 @@ async fn assigned_relation_uses_the_issue_link() {
         )
         .await
         .unwrap();
-    assert!((manager.workspace_by_id(&id).await.unwrap().links.issues).is_empty());
+    assert!(
+        (manager
+            .spaces
+            .workspace_by_id(&id)
+            .await
+            .unwrap()
+            .links
+            .issues)
+            .is_empty()
+    );
     for kind in [Some(LinkKind::Issue), None] {
         let unlinked = manager
             .links
@@ -287,7 +296,7 @@ async fn assigned_relation_uses_the_issue_link() {
 #[tokio::test]
 async fn a_moved_worktree_takes_no_recorded_relations() {
     let (_root, manager, id) = workspace_with_origin().await;
-    let path = manager.workspace_by_id(&id).await.unwrap().part.path;
+    let path = manager.spaces.workspace_by_id(&id).await.unwrap().part.path;
     std::fs::remove_dir_all(&path).unwrap();
     assert!(
         manager
@@ -402,7 +411,7 @@ async fn an_issue_linked_without_its_title_gets_the_forges() {
     // An issue the forge does not show is linked without a title.
     let unread = link("9", Relation::Opened).await.unwrap();
 
-    let links = manager.workspace_by_id(&id).await.unwrap().links;
+    let links = manager.spaces.workspace_by_id(&id).await.unwrap().links;
     assert_eq!(links.issues[0].title.as_deref(), Some("Issue 5"));
     assert_eq!(links.related[0].title.as_deref(), Some("Issue 6"));
     assert!(unread.title_error.is_some());
@@ -431,7 +440,7 @@ async fn an_assigned_pr_keeps_its_title_until_it_is_unlinked() {
         }
     };
     let titles = async || {
-        let links = manager.workspace_by_id(&id).await.unwrap().links;
+        let links = manager.spaces.workspace_by_id(&id).await.unwrap().links;
         let titles = |items: &[LinkedItem]| -> Vec<_> {
             items.iter().map(|item| item.title.clone()).collect()
         };

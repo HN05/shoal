@@ -31,7 +31,8 @@ async fn chat_and_worker(
         .await
         .unwrap();
     manager
-        .assign_parent(&worker.id, Some(chat.id.clone()))
+        .spaces
+        .assign_parent(&**manager, &worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     (chat, worker)
@@ -65,7 +66,9 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     let (temp, manager) = manager().await;
     let (chat, worker) = chat_and_worker(&temp, &manager).await;
     let helper = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&worker.id),
             "helper".into(),
             None,
@@ -365,7 +368,8 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     manager
-        .assign_parent(&worker.id, Some(chat.id.clone()))
+        .spaces
+        .assign_parent(&*manager, &worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     manager
@@ -429,7 +433,9 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     );
     assert!(user(&manager).await.is_empty());
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&chat.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -450,7 +456,7 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     );
     assert_eq!(user(&manager).await, [unread]);
     // The worker went first, with the chat it was below.
-    assert!(manager.workspace_by_id(&worker.id).await.is_err());
+    assert!(manager.spaces.workspace_by_id(&worker.id).await.is_err());
 }
 
 #[tokio::test]
@@ -467,7 +473,9 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -514,7 +522,9 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
     assert!(user(&manager).await.is_empty());
 
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -546,7 +556,8 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
     manager
-        .assign_parent(&worker.id, Some(chat.id.clone()))
+        .spaces
+        .assign_parent(&*manager, &worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     manager
@@ -576,7 +587,8 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     // The worker is renamed and a new workspace takes its name before the
     // chat is removed.
     manager
-        .rename_branch(&SpaceSelector::id(&worker.id), "renamed", None)
+        .spaces
+        .rename_branch(&*manager, &SpaceSelector::id(&worker.id), "renamed", None)
         .await
         .unwrap();
     let successor = manager
@@ -593,9 +605,15 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     manager.agents.end_executions(&*manager, &chat.id).await;
     // Opened outside the chat, the worker is the user's and stays when the
     // chat is removed.
-    manager.assign_parent(&worker.id, None).await.unwrap();
     manager
+        .spaces
+        .assign_parent(&*manager, &worker.id, None)
+        .await
+        .unwrap();
+    manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&chat.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -647,7 +665,8 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         .await
         .unwrap();
     manager
-        .assign_parent(&worker.id, Some(chat.id.clone()))
+        .spaces
+        .assign_parent(&*manager, &worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     manager
@@ -724,9 +743,15 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
 
     // Removed with nothing below it, the chat hands the files to the user.
     manager.agents.end_executions(&*manager, &chat.id).await;
-    manager.assign_parent(&worker.id, None).await.unwrap();
     manager
+        .spaces
+        .assign_parent(&*manager, &worker.id, None)
+        .await
+        .unwrap();
+    manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&chat.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -766,15 +791,18 @@ async fn same_named_spaces_reach_their_own_coordinators() {
         .await
         .unwrap();
     manager
-        .assign_parent(&other.id, Some(other_chat.id.clone()))
+        .spaces
+        .assign_parent(&*manager, &other.id, Some(other_chat.id.clone()))
         .await
         .unwrap();
     // Both take the same name, which identifies neither.
     for workspace in [&worker, &other] {
         let selector = SpaceSelector::id(&workspace.id);
-        (manager.rename_space(&selector, &"Same work".parse().unwrap()))
-            .await
-            .unwrap();
+        (manager
+            .spaces
+            .rename_space(&selector, &"Same work".parse().unwrap()))
+        .await
+        .unwrap();
         (manager
             .agents
             .set_agent_state(&*manager, &selector, AgentState::Working, None, None))
@@ -816,14 +844,17 @@ async fn same_named_siblings_send_the_same_message_apart() {
         .await
         .unwrap();
     manager
-        .assign_parent(&sibling.id, Some(chat.id.clone()))
+        .spaces
+        .assign_parent(&*manager, &sibling.id, Some(chat.id.clone()))
         .await
         .unwrap();
     for workspace in [&worker, &sibling] {
         let selector = SpaceSelector::id(&workspace.id);
-        (manager.rename_space(&selector, &"Same work".parse().unwrap()))
-            .await
-            .unwrap();
+        (manager
+            .spaces
+            .rename_space(&selector, &"Same work".parse().unwrap()))
+        .await
+        .unwrap();
         (manager
             .agents
             .set_agent_state(&*manager, &selector, AgentState::Working, None, None))

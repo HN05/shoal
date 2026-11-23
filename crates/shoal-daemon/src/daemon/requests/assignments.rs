@@ -21,7 +21,7 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         AssignmentMethod::UndoDone { space } => {
-            Body::Completion(manager.undo_space_done(&space).await?)
+            Body::Completion(manager.spaces.undo_space_done(&**manager, &space).await?)
         }
         AssignmentMethod::DiscardStoppedAgent { space, execution } => Body::DiscardedAgent(
             manager
@@ -44,17 +44,31 @@ pub(super) async fn handle(
             .await?;
             Body::Ok
         }
-        AssignmentMethod::MarkReady { space, selection } => {
-            Body::ReadyOutcomes(manager.mark_ready(&space, selection, caller).await?.into())
-        }
+        AssignmentMethod::MarkReady { space, selection } => Body::ReadyOutcomes(
+            manager
+                .spaces
+                .mark_ready(&**manager, &space, selection, caller)
+                .await?
+                .into(),
+        ),
         AssignmentMethod::ClearReady {
             space,
             selection,
             draft,
-        } => Body::ReviewMarks(manager.clear_ready(&space, selection, draft).await?),
+        } => Body::ReviewMarks(
+            manager
+                .spaces
+                .clear_ready(&**manager, &space, selection, draft)
+                .await?,
+        ),
         AssignmentMethod::MarkDone { space, done } => {
-            let attacher = manager.attacher(caller).await;
-            Body::Completion(manager.mark_space_done(&space, done, &attacher).await?)
+            let attacher = manager.spaces.attacher(&**manager, caller).await;
+            Body::Completion(
+                manager
+                    .spaces
+                    .mark_space_done(&**manager, &space, done, &attacher)
+                    .await?,
+            )
         }
     }))
 }

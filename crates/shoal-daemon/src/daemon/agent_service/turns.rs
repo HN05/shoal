@@ -13,6 +13,9 @@ impl Turns for Manager {
         execution: Option<&'a ExecutionId>,
         final_message: Option<String>,
     ) -> BoxFuture<'a, ()> {
-        Box::pin(self.end_marked_turn(selector, execution, final_message))
+        Box::pin(
+            self.spaces
+                .end_marked_turn(self, selector, execution, final_message),
+        )
     }
 }

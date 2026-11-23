@@ -54,9 +54,11 @@ async fn a_launched_chat_whose_agent_waits_is_recorded_with_its_entry() {
     full_machine(&manager, &repo).await;
 
     let launch = heavy_chat(&repo, "queued talk", false);
-    let started = (manager.launch(launch, LaunchSource::Manual, None))
-        .await
-        .unwrap();
+    let started = (manager
+        .spaces
+        .launch(&manager.daemon(), launch, LaunchSource::Manual, None))
+    .await
+    .unwrap();
 
     let Started::Queued { waiting } = started.start else {
         panic!("expected a queued chat: {started:?}");
@@ -65,7 +67,7 @@ async fn a_launched_chat_whose_agent_waits_is_recorded_with_its_entry() {
     let queued = started.entry.expect("the answer names its agent's entry");
     assert_eq!(queued.state, QueueState::Queued);
     assert_eq!(queued.space(), Some(&started.space.id));
-    let chats = manager.chats().await.unwrap();
+    let chats = manager.spaces.chats().await.unwrap();
     let chat = chats.iter().find(|chat| chat.id == started.space.id);
     assert_eq!(chat.unwrap().name, "queued talk");
     assert!(!started_launch(&queued.id));
@@ -80,9 +82,11 @@ async fn a_launched_chat_started_now_runs_past_the_limits() {
     full_machine(&manager, &repo).await;
 
     let launch = heavy_chat(&repo, "urgent talk", true);
-    let started = (manager.launch(launch, LaunchSource::Manual, None))
-        .await
-        .unwrap();
+    let started = (manager
+        .spaces
+        .launch(&manager.daemon(), launch, LaunchSource::Manual, None))
+    .await
+    .unwrap();
 
     let entry = started.entry.unwrap();
     assert_eq!(entry.state, QueueState::Starting);
@@ -106,7 +110,9 @@ async fn a_recorded_chats_agent_queues_as_a_workspaces_does() {
         parent: None,
         priority: None,
     };
-    let chat = manager.start_new_chat(Some((&repo.id).into()), None, chat);
+    let chat = manager
+        .spaces
+        .start_new_chat(&*manager, Some((&repo.id).into()), None, chat);
     let chat = chat.await.unwrap();
     let launch = crate::protocol::operations::QueuedLaunch {
         mode: Some("pair".into()),

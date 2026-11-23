@@ -77,7 +77,9 @@ async fn a_workspace_recorded_where_the_local_config_belongs_is_never_local_conf
     let agent = settings.agent.default.as_ref().map(ToString::to_string);
     assert_ne!(agent.as_deref(), Some("codex"));
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::IncludeDirectoryProcesses,
@@ -269,7 +271,9 @@ async fn a_lease_is_kept_while_the_file_that_may_name_its_hooks_is_rejected() {
     std::fs::write(workspace.path.join(".shoal.toml"), "setup_cmd = \"x\"\n").unwrap();
 
     // Other hooks go with the ignored file.
-    let pre_remove = manager.workspace_hook(&workspace, HookKind::PreRemove);
+    let pre_remove = manager
+        .spaces
+        .workspace_hook(&*manager, &workspace, HookKind::PreRemove);
     assert_eq!(pre_remove.await.unwrap(), None);
     let release =
         manager

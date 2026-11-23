@@ -321,7 +321,11 @@ async fn queued_launches_rank_with_the_priority_set_on_their_spaces() {
     let prioritized = async |name, priority| {
         let workspace = create(&manager, &repo, name).await;
         let selector = SpaceSelector::id(&workspace.id);
-        (manager.set_priority(None, &selector, priority).await).unwrap();
+        (manager
+            .spaces
+            .set_priority(&*manager, None, &selector, priority)
+            .await)
+            .unwrap();
         workspace
     };
     let worker = prioritized("worker", Priority::LOW).await;
@@ -420,7 +424,8 @@ async fn a_space_without_a_priority_set_takes_the_highest_its_issues_labels_map_
     queue_labelled(&manager, &repo, ("watched", 2), "pr_activity").await;
     let set = queue_labelled(&manager, &repo, ("set", 3), "space_item_activity").await;
     manager
-        .set_priority(None, &set, Priority::LOW)
+        .spaces
+        .set_priority(&*manager, None, &set, Priority::LOW)
         .await
         .unwrap();
     add(&manager, &repo, "unlabelled").await;
@@ -518,7 +523,8 @@ async fn a_launch_in_a_space_without_a_priority_ranks_with_the_highest_its_issue
     };
     let given = labelled("given").await;
     (manager
-        .set_priority(None, &given.space, Priority::LOW)
+        .spaces
+        .set_priority(&*manager, None, &given.space, Priority::LOW)
         .await)
         .unwrap();
     manager.agents.queue_add(&*manager, given).await.unwrap();

@@ -5,17 +5,21 @@ mod daemon;
 #[cfg(test)]
 use shoal_core::reviews;
 #[cfg(any(test, feature = "test-support"))]
+use shoal_core::start_plan;
+#[cfg(any(test, feature = "test-support"))]
 use shoal_core::test_support;
+#[cfg(test)]
+use shoal_core::{agents, daemon_owner, fetched_copies, launches, presets, tmp_dirs};
 use shoal_core::{
-    agents, caches, config, config_file, daemon_handoff, daemon_owner, env, execution,
-    fetched_copies, fsutil, git, git_profile, hooks, installed, launches, paths, presets, process,
-    profile, refusal, releases, removal, repository, service, sessions, shoal_dirs, start_plan,
-    terminal, tmp_dirs, tools, transfer, workers,
+    caches, config, config_file, daemon_handoff, env, execution, fsutil, git, hooks, installed,
+    paths, process, profile, refusal, releases, removal, repository, service, sessions, shoal_dirs,
+    terminal, tools, transfer, workers,
 };
-
 use shoal_forge_types as forge;
 use shoal_protocol::time;
-use shoal_protocol::{agent, demos, model, protocol, state, validate};
+#[cfg(test)]
+use shoal_protocol::validate;
+use shoal_protocol::{agent, demos, model, protocol, state};
 
 /// A daemon on the socket of a temporary state directory, which other
 /// crates' tests connect to the way the CLI and apps do, with the fixtures

@@ -48,12 +48,16 @@ async fn block(manager: &Manager, space: &Workspace, blocker: Blocker) {
         reason: "Needs it".into(),
     };
     let selector = SpaceSelector::id(&space.id);
-    manager.set_progress(&selector, change).await.unwrap();
+    manager
+        .spaces
+        .set_progress(manager, &selector, change)
+        .await
+        .unwrap();
 }
 
 async fn blockers(manager: &Manager, space: &Workspace) -> Vec<RecordedBlocker> {
     let selector = SpaceSelector::id(&space.id);
-    let progress = manager.space_progress(&selector).await.unwrap();
+    let progress = manager.spaces.space_progress(&selector).await.unwrap();
     progress.map_or_else(Vec::new, |progress| progress.blockers)
 }
 
@@ -68,7 +72,7 @@ async fn forge_blockers_clear_as_their_lookups_say_and_failures_keep_them() {
     ] {
         block(&manager, &blocked, blocker).await;
     }
-    let targets = manager.progress_forge_blockers().await.unwrap();
+    let targets = manager.spaces.progress_forge_blockers().await.unwrap();
     assert_eq!(targets.len(), 3);
     let lookups: Lookups = [
         (
@@ -85,7 +89,11 @@ async fn forge_blockers_clear_as_their_lookups_say_and_failures_keep_them() {
         ),
     ]
     .into();
-    let cleared = manager.clear_progress_blockers(&lookups).await.unwrap();
+    let cleared = manager
+        .spaces
+        .clear_progress_blockers(&*manager, &lookups)
+        .await
+        .unwrap();
     let how: Vec<_> = (cleared[0].cleared.iter())
         .map(|event| event.cleared.clone().unwrap_or_default())
         .collect();
@@ -97,7 +105,8 @@ async fn forge_blockers_clear_as_their_lookups_say_and_failures_keep_them() {
     let open: Lookups = [((BlockerKind::Pr, PR.into()), Lookup::Open)].into();
     assert!(
         manager
-            .clear_progress_blockers(&open)
+            .spaces
+            .clear_progress_blockers(&*manager, &open)
             .await
             .unwrap()
             .is_empty()
@@ -124,13 +133,16 @@ async fn a_space_blocker_clears_once_that_space_is_done_or_removed() {
     let none = Lookups::new();
     assert!(
         manager
-            .clear_progress_blockers(&none)
+            .spaces
+            .clear_progress_blockers(&*manager, &none)
             .await
             .unwrap()
             .is_empty()
     );
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&api.id),
             Done::default(),
             &Attacher::User,
@@ -138,14 +150,20 @@ async fn a_space_blocker_clears_once_that_space_is_done_or_removed() {
         .await
         .unwrap();
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&docs.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
         .unwrap();
-    let cleared = manager.clear_progress_blockers(&none).await.unwrap();
+    let cleared = manager
+        .spaces
+        .clear_progress_blockers(&*manager, &none)
+        .await
+        .unwrap();
     assert_eq!(cleared[0].cleared.len(), 2);
     assert!(blockers(&manager, &blocked).await.is_empty());
 }

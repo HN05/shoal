@@ -66,7 +66,7 @@ async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
     assert!(live.exists());
     assert!(elsewhere.exists());
     assert!(!unpinned.exists());
-    assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
+    assert_eq!(manager.spaces.list_workspaces().await.unwrap().len(), 1);
 }
 
 #[tokio::test]
@@ -85,11 +85,14 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
             .unwrap();
     }
     let held = manager
+        .spaces
         .workspace(&manager.named("first").await)
         .await
         .unwrap();
     manager
+        .spaces
         .acquire_hold(
+            &*manager,
             &SpaceSelector::id(&held.id),
             "keep".into(),
             None,
@@ -117,16 +120,20 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
             .collect::<Vec<_>>()
     };
     assert_eq!(
-        names(manager.list_workspaces().await.unwrap()),
+        names(manager.spaces.list_workspaces().await.unwrap()),
         ["first", "third"]
     );
     // That pass freed enough space, so the next low reading starts another.
     // Space above the stop threshold stops nothing.
     let above_stop = |_: &Path| Ok(manager.config().machine.overload.disk.stop_free_bytes());
     monitor.check(&manager, start, above_stop).await.unwrap();
-    assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
+    assert_eq!(
+        names(manager.spaces.list_workspaces().await.unwrap()),
+        ["first"]
+    );
     // A pass that could not free enough space waits for the interval.
     manager
+        .spaces
         .release_hold(
             &SpaceSelector::id(&held.id),
             "keep".into(),
@@ -135,12 +142,15 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
         .await
         .unwrap();
     monitor.check(&manager, start, above_stop).await.unwrap();
-    assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
+    assert_eq!(
+        names(manager.spaces.list_workspaces().await.unwrap()),
+        ["first"]
+    );
     monitor
         .check(&manager, start + CLEANUP_INTERVAL, above_stop)
         .await
         .unwrap();
-    assert!(manager.list_workspaces().await.unwrap().is_empty());
+    assert!(manager.spaces.list_workspaces().await.unwrap().is_empty());
 
     // Agents recover only once every filesystem has the cleanup threshold.
     let cleanup = manager.config().machine.overload.disk.cleanup_free_bytes();
@@ -219,7 +229,9 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
         .await
         .unwrap();
     manager
+        .spaces
         .acquire_hold(
+            &*manager,
             &SpaceSelector::id(&held.id),
             "keep".into(),
             None,
@@ -243,7 +255,7 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
         .await
         .unwrap();
     assert!(!go.exists());
-    assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
+    assert_eq!(manager.spaces.list_workspaces().await.unwrap().len(), 1);
     let notifications = manager.notifications.list(true, 10).await.unwrap();
     assert!(
         notifications
@@ -269,7 +281,9 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
     let report = root.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&audit.id),
             Done {
                 results: vec![report.into()],
@@ -280,6 +294,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         .await
         .unwrap();
     let result = manager
+        .spaces
         .attached_files(&SpaceSelector::id(&audit.id))
         .await
         .unwrap()[0]
@@ -287,7 +302,9 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         .unwrap()
         .to_path_buf();
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&audit.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -325,7 +342,9 @@ async fn cleanup_reads_space_again_after_purging_leftover_caches() {
         .await
         .unwrap();
     manager
+        .spaces
         .acquire_hold(
+            &*manager,
             &SpaceSelector::id(&held.id),
             "keep".into(),
             None,
@@ -398,7 +417,7 @@ async fn failed_cleanup_still_stops_executions_on_critical_space() {
         settings.stop_free_bytes() - 1,
         settings.cleanup_free_bytes() - 1,
     );
-    let remaining = || async { manager.list_workspaces().await.unwrap().len() };
+    let remaining = || async { manager.spaces.list_workspaces().await.unwrap().len() };
     let stops = || async {
         manager
             .notifications
@@ -515,5 +534,5 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         messages[0].message
     );
     // Space above the cleanup threshold removes nothing.
-    assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
+    assert_eq!(manager.spaces.list_workspaces().await.unwrap().len(), 1);
 }

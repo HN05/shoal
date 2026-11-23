@@ -22,27 +22,43 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     let files = match method {
-        FileMethod::ListFiles { space } => manager.attached_files(&space).await,
+        FileMethod::ListFiles { space } => manager.spaces.attached_files(&space).await,
         FileMethod::FetchedDirectory { space } => {
-            let directory = manager.fetched_directory(caller, &space).await?;
+            let directory = manager
+                .spaces
+                .fetched_directory(&**manager, caller, &space)
+                .await?;
             return Ok(Answer::Body(Body::FetchedDirectory(directory)));
         }
         FileMethod::ReadFile { space, id } => {
-            let copy = manager.open_attached_file(&space, id).await?;
+            let copy = manager.spaces.open_attached_file(&space, id).await?;
             let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.stream_attached_file(stream, request_id, copy, guard)
-            }));
+            return Ok(Answer::connection(
+                move |stream, request_id, guard| async move {
+                    manager
+                        .spaces
+                        .stream_attached_file(stream, request_id, copy, guard)
+                        .await
+                },
+            ));
         }
         FileMethod::AddFiles { space, files } => {
-            let attacher = manager.attacher(caller).await;
-            manager.add_attached_files(&space, files, &attacher).await
+            let attacher = manager.spaces.attacher(&**manager, caller).await;
+            manager
+                .spaces
+                .add_attached_files(&**manager, &space, files, &attacher)
+                .await
         }
         FileMethod::RemoveFiles {
             space: Some(space),
             names,
             ids,
-        } => manager.remove_attached_files(&space, names, ids).await,
+        } => {
+            manager
+                .spaces
+                .remove_attached_files(&**manager, &space, names, ids)
+                .await
+        }
         FileMethod::RemoveFiles {
             space: None,
             names,
@@ -53,7 +69,7 @@ pub(super) async fn handle(
                 names.is_empty() && ids.is_empty(),
                 "name the workspace or chat whose files to delete by name"
             );
-            manager.remove_idle_files().await
+            manager.spaces.remove_idle_files(&**manager).await
         }
     };
     Ok(Answer::pages(files, Body::AttachedFiles))
@@ -95,7 +111,7 @@ impl Scoped for FileMethod {
             | FileMethod::RemoveFiles {
                 space: Some(space), ..
             } => {
-                if manager.space(space).await.is_ok() {
+                if manager.spaces.space(space).await.is_ok() {
                     return Ok(Some(space));
                 }
                 narrow_to_removed(manager, caller, space).await?;
@@ -116,7 +132,7 @@ async fn narrow_to_removed(
     caller: &Caller,
     workspace: &mut SpaceSelector,
 ) -> Result<()> {
-    let space = manager.file_space(workspace).await?;
+    let space = manager.spaces.file_space(workspace).await?;
     let below = match &space.parent_id {
         Some(parent) => {
             manager

@@ -123,7 +123,8 @@ impl Fixture {
     async fn at_pull_head(&self) -> Workspace {
         let repository = self.workspace.repository().into();
         let start = crate::protocol::CommitStart::Revision(Some(self.head.to_string()));
-        let created = (self.manager).create_commit_workspace(
+        let created = (self.manager).spaces.create_commit_workspace(
+            &*self.manager,
             repository,
             (None, None),
             start,

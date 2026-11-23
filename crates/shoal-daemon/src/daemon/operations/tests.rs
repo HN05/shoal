@@ -185,6 +185,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     let own = workspace(&manager, &repository, "own").await;
     let other = workspace(&manager, &repository, "other").await;
     let token = &manager
+        .spaces
         .issue_scope(&SpaceSelector::id(&own.id))
         .await
         .unwrap();
@@ -204,6 +205,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     let issued = worker.token.clone().unwrap();
     assert_ne!(&issued, token);
     manager
+        .spaces
         .revoke_scope(&SpaceSelector::id(&own.id), token.clone())
         .await
         .unwrap();
@@ -229,7 +231,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     // it ended, as when a `shoal run` command goes before its operation.
     let ended = crate::daemon::scope::Caller {
         space_id: own.id.clone(),
-        execution: Some(crate::daemon::scope::ScopedExecution {
+        execution: Some(shoal_coordination::scope::ScopedExecution {
             id: "ended".into(),
             kind: crate::daemon::executions::ExecutionKind::Command,
             agent_execution: Some("agent".into()),
@@ -336,7 +338,7 @@ async fn a_scoped_caller_follows_and_reports_its_own_operation_in_a_space_no_lon
         let manager = &manager;
         let space = SpaceSelector::id(&space.id);
         async move {
-            let token = manager.issue_scope(&space).await.unwrap();
+            let token = manager.spaces.issue_scope(&space).await.unwrap();
             manager
                 .coordination
                 .caller(&**manager, &token)

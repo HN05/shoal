@@ -39,12 +39,14 @@ pub(super) async fn handle(
             };
             Body::OpenedWorkspace(
                 manager
+                    .spaces
                     .open_branch_below(
+                        &**manager,
                         repository,
                         &branch,
                         base,
                         new,
-                        manager.space_id(parent.as_ref()).await?,
+                        manager.spaces.space_id(parent.as_ref()).await?,
                         caller,
                     )
                     .await?,
@@ -67,12 +69,14 @@ pub(super) async fn handle(
             };
             Body::Workspace(
                 manager
+                    .spaces
                     .create_workspace_below(
+                        &**manager,
                         repository,
                         name,
                         base,
                         new,
-                        manager.space_id(parent.as_ref()).await?,
+                        manager.spaces.space_id(parent.as_ref()).await?,
                     )
                     .await?,
             )
@@ -84,9 +88,11 @@ pub(super) async fn handle(
             options,
         } => Body::Workspace(
             manager
+                .spaces
                 .create_commit_workspace(
+                    &**manager,
                     repository,
-                    (manager.space_id(parent.as_ref()).await?, caller),
+                    (manager.spaces.space_id(parent.as_ref()).await?, caller),
                     start,
                     options,
                 )
@@ -100,12 +106,14 @@ pub(super) async fn handle(
             options,
         } => Body::OpenedWorkspace(
             manager
+                .spaces
                 .open_pull_head(
+                    &**manager,
                     repository,
                     url,
                     head,
                     workspace::NewWorkspace {
-                        parent: manager.space_id(parent.as_ref()).await?,
+                        parent: manager.spaces.space_id(parent.as_ref()).await?,
                         options,
                         ..Default::default()
                     },
@@ -113,47 +121,80 @@ pub(super) async fn handle(
                 )
                 .await?,
         ),
-        WorkspaceMethod::ReopenWorkspace { workspace } => {
-            Body::OpenedWorkspace(manager.reopen_workspace(&workspace).await?)
-        }
+        WorkspaceMethod::ReopenWorkspace { workspace } => Body::OpenedWorkspace(
+            manager
+                .spaces
+                .reopen_workspace(&**manager, &workspace)
+                .await?,
+        ),
         WorkspaceMethod::CreateChild {
             parent,
             name,
             base,
             options,
-        } => Body::Workspace(manager.create_child(&parent, name, base, options).await?),
+        } => Body::Workspace(
+            manager
+                .spaces
+                .create_child(&**manager, &parent, name, base, options)
+                .await?,
+        ),
         WorkspaceMethod::AdoptWorkspace {
             repository,
             path,
             copy,
-        } => Body::Workspace(manager.adopt_workspace(&repository, &path, copy).await?),
+        } => Body::Workspace(
+            manager
+                .spaces
+                .adopt_workspace(&**manager, &repository, &path, copy)
+                .await?,
+        ),
         WorkspaceMethod::RenameBranch { workspace, branch } => Body::Workspace(
             manager
-                .rename_branch(&workspace, &branch, caller.and_then(|c| c.execution_id()))
+                .spaces
+                .rename_branch(
+                    &**manager,
+                    &workspace,
+                    &branch,
+                    caller.and_then(|c| c.execution_id()),
+                )
                 .await?,
         ),
         WorkspaceMethod::UntrackedWorktrees => {
-            let listed = manager.untracked_worktrees().await;
+            let listed = manager.spaces.untracked_worktrees(&**manager).await;
             return Ok(Answer::pages(listed, Body::UntrackedWorktrees));
         }
         WorkspaceMethod::SetBaseWorkspace { workspace, base } => {
-            Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
+            Body::Workspace(manager.spaces.set_base_workspace(&workspace, base).await?)
         }
         WorkspaceMethod::VerifyWorkspace {
             workspace,
             on_branch,
-        } => Body::Workspace(manager.verify_workspace(&workspace, on_branch).await?),
-        WorkspaceMethod::FastForwardWorkspace { workspace, branch } => {
-            Body::FastForwarded(manager.fast_forward_workspace(&workspace, &branch).await?)
-        }
-        WorkspaceMethod::RefreshWorkspace { workspace } => {
-            Body::Refreshed(manager.refresh_workspace(&workspace, caller).await?)
-        }
-        WorkspaceMethod::InspectWorkspace { workspace } => {
-            Body::Inspection(manager.inspect_workspace(&workspace).await?)
-        }
+        } => Body::Workspace(
+            manager
+                .spaces
+                .verify_workspace(&**manager, &workspace, on_branch)
+                .await?,
+        ),
+        WorkspaceMethod::FastForwardWorkspace { workspace, branch } => Body::FastForwarded(
+            manager
+                .spaces
+                .fast_forward_workspace(&**manager, &workspace, &branch)
+                .await?,
+        ),
+        WorkspaceMethod::RefreshWorkspace { workspace } => Body::Refreshed(
+            manager
+                .spaces
+                .refresh_workspace(&**manager, &workspace, caller)
+                .await?,
+        ),
+        WorkspaceMethod::InspectWorkspace { workspace } => Body::Inspection(
+            manager
+                .spaces
+                .inspect_workspace(&**manager, &workspace)
+                .await?,
+        ),
         WorkspaceMethod::CopyOrigin { source } => {
-            Body::CopyOrigin(manager.copy_origin(&source).await?)
+            Body::CopyOrigin(manager.spaces.copy_origin(&source).await?)
         }
         WorkspaceMethod::KeepAgentEnvironment {
             workspace,
@@ -165,12 +206,18 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        WorkspaceMethod::CreatePendingWorktree { workspace } => {
-            Body::Workspace(manager.create_pending_worktree(&workspace).await?)
-        }
-        WorkspaceMethod::WorkspaceHook { workspace, kind } => {
-            Body::Hook(manager.selected_workspace_hook(&workspace, kind).await?)
-        }
+        WorkspaceMethod::CreatePendingWorktree { workspace } => Body::Workspace(
+            manager
+                .spaces
+                .create_pending_worktree(&**manager, &workspace)
+                .await?,
+        ),
+        WorkspaceMethod::WorkspaceHook { workspace, kind } => Body::Hook(
+            manager
+                .spaces
+                .selected_workspace_hook(&**manager, &workspace, kind)
+                .await?,
+        ),
     }))
 }
 

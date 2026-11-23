@@ -22,7 +22,7 @@ mod runner;
 mod spaces;
 mod turns;
 
-pub(crate) use records::AgentRecords;
+pub(crate) use records::{AgentRecords, SpaceRemovals};
 
 #[cfg(test)]
 pub(crate) mod tests;

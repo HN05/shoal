@@ -49,7 +49,11 @@ async fn concurrent_forwarded_requests_of_one_space_are_each_decided_by_their_ow
     };
     assert!(pushing(&earlier).await.is_err());
     pushing(&later).await.unwrap();
-    let ranking = |caller| manager.given_priority(Some(caller), Some(Priority::NORMAL));
+    let ranking = |caller| {
+        manager
+            .spaces
+            .given_priority(&**manager, Some(caller), Some(Priority::NORMAL))
+    };
     assert!(ranking(&earlier).await.is_err());
     ranking(&later).await.unwrap();
 }
@@ -103,7 +107,7 @@ async fn a_streamed_request_s_vouch_stands_for_its_caller_only_until_its_answer_
             .unwrap(),
         granted: None,
         read_only: false,
-        priority: manager.space_priority(&workspace.id).await.unwrap(),
+        priority: manager.spaces.space_priority(&workspace.id).await.unwrap(),
         chat_modes: Vec::new(),
     });
     let request = Forwarded {

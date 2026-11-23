@@ -68,9 +68,14 @@ pub(super) async fn handle(
             let repository = (manager.repositories.register(source, None, None)).await?;
             let manager = manager.clone();
             let carried = (repository, origin, commit, branch);
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.receive_commits(stream, request_id, carried, guard)
-            }));
+            return Ok(Answer::connection(
+                move |stream, request_id, guard| async move {
+                    manager
+                        .spaces
+                        .receive_commits(&*manager, stream, request_id, carried, guard)
+                        .await
+                },
+            ));
         }
         RepositoryMethod::HoldContribution { repository } => {
             let manager = manager.clone();
@@ -135,14 +140,20 @@ pub(super) async fn handle(
             return Ok(Answer::pages(failing, Body::FailingSyncs));
         }
         RepositoryMethod::ListBranches { repository } => {
-            Body::Branches(manager.branches(&repository).await?)
+            Body::Branches(manager.spaces.branches(&**manager, &repository).await?)
         }
-        RepositoryMethod::KeptBranches { repository } => {
-            Body::KeptBranches(manager.list_kept_branches(repository.as_deref()).await?)
-        }
-        RepositoryMethod::DeleteKeptBranches { branches } => {
-            Body::KeptBranches(manager.delete_kept_branches(branches).await?)
-        }
+        RepositoryMethod::KeptBranches { repository } => Body::KeptBranches(
+            manager
+                .spaces
+                .list_kept_branches(&**manager, repository.as_deref())
+                .await?,
+        ),
+        RepositoryMethod::DeleteKeptBranches { branches } => Body::KeptBranches(
+            manager
+                .spaces
+                .delete_kept_branches(&**manager, branches)
+                .await?,
+        ),
         RepositoryMethod::KeepRepositoryAgentEnvironment {
             repository,
             environment,

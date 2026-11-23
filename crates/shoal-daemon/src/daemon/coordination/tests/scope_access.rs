@@ -123,7 +123,7 @@ async fn a_scope_stops_every_space_it_reaches_but_its_own() {
     let master = chat(&manager, "master", "orchestrate", None, None).await;
     let mut spaces = Vec::new();
     for id in [&worker.id, &other.id, &child.id, &master.id] {
-        spaces.push(manager.space_by_id(id).await.unwrap());
+        spaces.push(manager.spaces.space_by_id(id).await.unwrap());
     }
     let stopped = async |caller: &Caller| {
         let below = manager

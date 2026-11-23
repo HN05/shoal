@@ -26,13 +26,19 @@ impl Workspaces for Manager {
         commit: &'a CommitId,
         reference: Option<&'a str>,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::move_job_workspace(self, id, commit, reference))
+        Box::pin(self.spaces.move_job_workspace(self, id, commit, reference))
     }
 
     fn remove_job_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             let selector = SpaceSelector::id(id);
-            (self.remove_selected(&selector, UnsavedWork::All, InspectionPolicy::GitOnly)).await?;
+            (self.spaces.remove_selected(
+                self,
+                &selector,
+                UnsavedWork::All,
+                InspectionPolicy::GitOnly,
+            ))
+            .await?;
             Ok(())
         })
     }
@@ -45,8 +51,10 @@ impl Workspaces for Manager {
         reference: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Box<dyn RecordedJobWorkspace<'a> + 'a>>> {
         Box::pin(async move {
-            let recorded =
-                (Manager::record_job_workspace(self, repository, names, commit, reference)).await?;
+            let recorded = (self
+                .spaces
+                .record_job_workspace(self, repository, names, commit, reference))
+            .await?;
             let recorded: Box<dyn RecordedJobWorkspace<'a> + 'a> = Box::new(Recorded {
                 manager: self,
                 recorded,
@@ -103,6 +111,6 @@ impl<'a> RecordedJobWorkspace<'a> for Recorded<'a> {
 
     fn check_out(self: Box<Self>) -> BoxFuture<'a, Result<Workspace>> {
         let Recorded { manager, recorded } = *self;
-        Box::pin(manager.check_out_job_workspace(recorded))
+        Box::pin(manager.spaces.check_out_job_workspace(manager, recorded))
     }
 }

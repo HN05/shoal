@@ -137,7 +137,14 @@ async fn stopping_still_bounds_a_wrapper_that_never_completes() -> Result<()> {
             ..=timing::WORKSPACE_STOP_TIMEOUT + timing::WORKSPACE_STOP_POLL_INTERVAL)
             .contains(&started.elapsed())
     );
-    assert_eq!(manager.workspace_executions(&workspace.id).await?.len(), 3);
+    assert_eq!(
+        manager
+            .spaces
+            .workspace_executions(&workspace.id)
+            .await?
+            .len(),
+        3
+    );
     Ok(())
 }
 
@@ -230,7 +237,7 @@ async fn a_disconnected_stop_leaves_an_agent_wrapper_its_process_started() -> Re
             Ok(())
         })
         .await?;
-    let execution = (manager.workspace_executions(&workspace.id).await?)
+    let execution = (manager.spaces.workspace_executions(&workspace.id).await?)
         .into_iter()
         .find(|execution| execution.id == id)
         .context("the starter's execution")?;
@@ -244,7 +251,7 @@ async fn a_disconnected_stop_leaves_an_agent_wrapper_its_process_started() -> Re
     wrapper.kill().await?;
     stopped?;
     assert!(running);
-    let left = manager.workspace_executions(&workspace.id).await?;
+    let left = manager.spaces.workspace_executions(&workspace.id).await?;
     assert!(left.iter().all(|execution| execution.id != id));
     Ok(())
 }

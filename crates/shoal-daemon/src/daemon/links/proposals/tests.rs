@@ -233,7 +233,11 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
     // The original is decided and its workspace's next proposal takes its
     // number while the duplicate decision waits for the gates.
     manager.links.forget_proposal(original).await.unwrap();
-    let workspace = manager.workspace_by_id(&original.space_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&original.space_id)
+        .await
+        .unwrap();
     let reused = store_issue_proposal(&manager, &workspace.clone().into()).await;
     assert_eq!(reused.number, original.number);
     let added = manager
@@ -264,7 +268,9 @@ async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
     let proposed = store_issue_proposal(&manager, &proposer.clone().into()).await;
     assert_eq!(proposed.number.space, proposer.number);
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&proposer.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -390,7 +396,9 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -637,7 +645,9 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .await;
     for id in [&child.id, &parent.id] {
         manager
+            .spaces
             .remove_selected(
+                &*manager,
                 &SpaceSelector::id(id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly,

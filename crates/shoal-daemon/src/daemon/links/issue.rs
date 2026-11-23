@@ -1,4 +1,6 @@
 //! Persist issue associations.
+#[cfg(test)]
+pub(crate) use crate::model::Assigner;
 use shoal_ids::space_ids::SpaceId;
 
 use anyhow::Result;
@@ -8,7 +10,6 @@ mod agents;
 mod assignees;
 
 use crate::forge::items::reference::ItemRef;
-pub(crate) use crate::model::Assigner;
 use shoal_links::issue::{
     agents::{self as agent_records},
     assignees::{self as assignee_records, Dropped},

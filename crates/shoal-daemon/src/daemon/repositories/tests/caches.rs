@@ -210,7 +210,8 @@ async fn hooks_the_cli_runs_find_their_caches_prepared() {
     )
     .unwrap();
     manager
-        .workspace_hook(&workspace, crate::hooks::HookKind::PostSetup)
+        .spaces
+        .workspace_hook(&*manager, &workspace, crate::hooks::HookKind::PostSetup)
         .await
         .unwrap()
         .unwrap();

@@ -23,23 +23,41 @@ pub(super) async fn handle(
         LaunchMethod::Launch { launch } => {
             // What a client sends is a start it made itself.
             let source = LaunchSource::Manual;
-            Body::Launched(manager.launch(*launch, source, caller).await?)
+            Body::Launched(
+                manager
+                    .spaces
+                    .launch(&manager.daemon(), *launch, source, caller)
+                    .await?,
+            )
         }
-        LaunchMethod::CheckLaunch { launch } => {
-            Body::CheckedLaunch(manager.check_launch(*launch, caller).await?)
-        }
-        LaunchMethod::CheckCreation { launch } => {
-            Body::CheckedLaunch(manager.check_creation_launch(*launch, caller).await?)
-        }
-        LaunchMethod::LaunchModes { launch } => {
-            Body::LaunchModes(manager.launch_modes(&launch, caller).await?)
-        }
-        LaunchMethod::LabelledMode { launch } => {
-            Body::LabelledMode(manager.launch_labelled_mode(*launch, caller).await?)
-        }
+        LaunchMethod::CheckLaunch { launch } => Body::CheckedLaunch(
+            manager
+                .spaces
+                .check_launch(&**manager, *launch, caller)
+                .await?,
+        ),
+        LaunchMethod::CheckCreation { launch } => Body::CheckedLaunch(
+            manager
+                .spaces
+                .check_creation_launch(&**manager, *launch, caller)
+                .await?,
+        ),
+        LaunchMethod::LaunchModes { launch } => Body::LaunchModes(
+            manager
+                .spaces
+                .launch_modes(&**manager, &launch, caller)
+                .await?,
+        ),
+        LaunchMethod::LabelledMode { launch } => Body::LabelledMode(
+            manager
+                .spaces
+                .launch_labelled_mode(&**manager, *launch, caller)
+                .await?,
+        ),
         LaunchMethod::TakeParentRepository { launch } => {
             manager
-                .take_launch_parent_repository(*launch, caller)
+                .spaces
+                .take_launch_parent_repository(&**manager, *launch, caller)
                 .await?;
             Body::Ok
         }
@@ -54,9 +72,14 @@ pub(super) async fn handle(
                 None => None,
             };
             let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.receive_session(stream, request_id, (repository, files), guard)
-            }));
+            return Ok(Answer::connection(
+                move |stream, request_id, guard| async move {
+                    manager
+                        .spaces
+                        .receive_session(&*manager, stream, request_id, (repository, files), guard)
+                        .await
+                },
+            ));
         }
     }))
 }
@@ -91,7 +114,7 @@ impl Scoped for LaunchMethod {
             LaunchMethod::Launch { launch }
             | LaunchMethod::CheckLaunch { launch }
             | LaunchMethod::CheckCreation { launch } => {
-                manager.select_launch_spaces(launch).await?;
+                manager.spaces.select_launch_spaces(manager, launch).await?;
                 match &mut launch.in_workspace {
                     Some(SpaceChoice::Space(workspace)) => Some(workspace),
                     _ => None,

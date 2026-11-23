@@ -90,7 +90,11 @@ async fn a_setup_its_wrapper_never_received_fails_as_not_started() {
     .unwrap();
 
     let selector = SpaceSelector::id(&workspace.id);
-    let inspection = manager.inspect_workspace(&selector).await.unwrap();
+    let inspection = manager
+        .spaces
+        .inspect_workspace(&*manager, &selector)
+        .await
+        .unwrap();
     assert!(
         inspection.executions.is_empty(),
         "{:?}",
@@ -164,7 +168,11 @@ async fn a_chats_agent_runs_as_an_execution_of_its_chat_with_the_chats_scope() {
     let plan = &registered.plan;
     assert_eq!(plan.space.kind, crate::model::SpaceKind::Chat);
     assert_eq!(plan.space.id, chat.id);
-    let checkout = manager.chat_checkout_path(&chat).await.unwrap();
+    let checkout = manager
+        .spaces
+        .chat_checkout_path(&*manager, &chat)
+        .await
+        .unwrap();
     assert_eq!(plan.space.path, checkout);
     assert!(plan.ports.is_empty());
     let tmp_dir = chat.tmp_dir.clone().unwrap();
@@ -172,7 +180,7 @@ async fn a_chats_agent_runs_as_an_execution_of_its_chat_with_the_chats_scope() {
         plan.environment,
         [(crate::env::TMPDIR.to_owned(), tmp_dir.into_os_string())].into()
     );
-    let token = manager.chat_scope(&chat.id).await.unwrap();
+    let token = manager.spaces.chat_scope(&chat.id).await.unwrap();
     assert_eq!(plan.scope_token, token);
     let caller = manager
         .coordination
@@ -207,15 +215,21 @@ async fn a_chats_agent_runs_with_its_repositorys_env_without_a_worktrees() {
     .unwrap();
 
     let environment = &registered.plan.environment;
-    let checkout = manager.chat_checkout_path(&chat).await.unwrap();
+    let checkout = manager
+        .spaces
+        .chat_checkout_path(&*manager, &chat)
+        .await
+        .unwrap();
     assert_eq!(environment["PROJECT"], "repo");
     assert_eq!(environment["PROFILE"], checkout.join("profile").as_os_str());
     assert!(!environment.contains_key("SESSION"), "{environment:?}");
     assert!(!environment.contains_key("BRANCH"), "{environment:?}");
     // A process an external caller starts there gets the same.
-    let exported = (manager.space_environment(&SpaceSelector::id(&chat.id)))
-        .await
-        .unwrap();
+    let exported = (manager
+        .spaces
+        .space_environment(&*manager, &SpaceSelector::id(&chat.id)))
+    .await
+    .unwrap();
     assert_eq!(exported["PROJECT"], "repo");
     assert!(!exported.contains_key("SESSION"), "{exported:?}");
 }
@@ -239,7 +253,11 @@ async fn a_chat_without_a_repository_runs_with_the_global_env() {
 
     let environment = &registered.plan.environment;
     assert_eq!(environment["GLOBAL"], "yes");
-    let home = manager.chat_checkout_path(&chat).await.unwrap();
+    let home = manager
+        .spaces
+        .chat_checkout_path(&*manager, &chat)
+        .await
+        .unwrap();
     assert_eq!(environment["PROFILE"], home.join("profile").as_os_str());
     for unset in ["PROJECT", "SESSION", "BRANCH"] {
         assert!(!environment.contains_key(unset), "{unset}: {environment:?}");

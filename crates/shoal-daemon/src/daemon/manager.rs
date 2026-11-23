@@ -9,15 +9,8 @@ use std::sync::Arc;
 pub struct Manager {
     pub store: Store,
     pub gates: Arc<super::gates::Gates>,
-    pub(super) cleanup_health: super::cleanup::CleanupHealth,
-    /// How the loop that puts idle agents to sleep is doing.
-    pub(super) idle_sleep_health: super::cleanup::CleanupHealth,
-    /// The spaces automatic cleanup removed since Shoal's log recorded it.
-    pub(crate) cleanup_removals: super::cleanup::Removed,
     /// The triggers and the CI jobs this machine runs.
     pub runner: Arc<shoal_runner::Runner>,
-    /// The spaces whose PRs' progress sections wait for an update.
-    pub(crate) publications: super::progress::Publications,
     pub config_state: Arc<super::config_state::ConfigState>,
     pub notifications: Arc<super::notifications::Notifications>,
     /// The leases workspaces hold.
@@ -26,17 +19,10 @@ pub struct Manager {
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
     /// The alerts, threads, approvals, permissions and scope between spaces.
     pub coordination: shoal_coordination::Coordination,
+    /// The workspaces and chats: their records and tree, lifecycle, removal
+    /// and cleanup.
+    pub spaces: shoal_spaces::Spaces,
     pub(crate) signals: Arc<super::signals::Signals>,
-    pub(crate) usage: super::workspace::usage::Usage,
-    pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
-    /// Held while a converted space's agent is handed over to the new place,
-    /// so a stop and the relocation never both hand it over.
-    pub(crate) conversion_handovers: crate::daemon::conversions::Handovers,
-    /// The spaces a removal holds, whose agent no registration runs again.
-    pub(crate) space_removals: crate::daemon::spaces::Removing,
-    /// The completed spaces whose completion a removal of a space below
-    /// them goes by, which keep the workspaces below them meanwhile.
-    pub(crate) completed_owners: crate::daemon::spaces::Removing,
     /// The agents.
     pub agents: Arc<shoal_agents::Agents>,
     /// The registered repositories.
@@ -51,8 +37,6 @@ pub struct Manager {
     pub hub: Arc<shoal_hub::Hub>,
     /// What apps keep in Shoal.
     pub apps: shoal_apps::Apps,
-    /// The commits other machines carried here for launches on their way.
-    pub(crate) carried_holds: crate::daemon::carried_commits::CarriedHolds,
     /// The demos executions run.
     pub demos: shoal_demos::Demos,
 }
@@ -90,6 +74,11 @@ impl Manager {
             paths.clone(),
         ));
         let file_access = Arc::new(super::file_access::FileAccess::default());
+        let space_removals = crate::daemon::spaces::Removing::default();
+        let space_records: Arc<dyn shoal_spaces::daemon::Records> =
+            Arc::new(super::space_service::SpaceRecords {
+                coordination: super::coordination::CoordinationRecords(space_removals.clone()),
+            });
         let links = Arc::new(shoal_links::Links::new(
             store.clone(),
             gates.clone(),
@@ -105,10 +94,11 @@ impl Manager {
             notifications.clone(),
             file_access.clone(),
             paths.clone(),
-            Arc::new(super::repositories::RepositoryRecords),
+            Arc::new(super::repositories::RepositoryRecords(
+                space_records.clone(),
+            )),
         ));
         let signals = Arc::new(super::signals::Signals::default());
-        let space_removals = crate::daemon::spaces::Removing::default();
         let agents = Arc::new(shoal_agents::Agents::new(
             store.clone(),
             gates.clone(),
@@ -118,7 +108,7 @@ impl Manager {
             file_access.clone(),
             paths.clone(),
             Arc::new(super::agent_service::AgentRecords),
-            Arc::new(space_removals.clone()),
+            Arc::new(super::agent_service::SpaceRemovals(space_removals.clone())),
             // Tests inject hosts and never discover or close the user's
             // sessions.
             if crate::daemon::fake_workers::faked() {
@@ -146,26 +136,29 @@ impl Manager {
                 space_removals.clone(),
             )),
         );
+        let spaces = shoal_spaces::Spaces::new(
+            store.clone(),
+            gates.clone(),
+            config_state.clone(),
+            notifications.clone(),
+            signals.clone(),
+            paths.clone(),
+            file_access.clone(),
+            space_removals,
+            space_records,
+        );
         Ok(Arc::new(Self {
             config_state,
             notifications,
             leases,
-            cleanup_health: Default::default(),
-            idle_sleep_health: super::cleanup::CleanupHealth::of("Idle sleep"),
-            cleanup_removals: Default::default(),
             runner,
-            publications: Default::default(),
             store,
             gates,
             paths,
             operations: Default::default(),
             coordination,
+            spaces,
             signals,
-            usage: Default::default(),
-            leftovers: Default::default(),
-            conversion_handovers: Default::default(),
-            space_removals,
-            completed_owners: Default::default(),
             agents,
             repositories,
             links,
@@ -173,9 +166,14 @@ impl Manager {
             file_access,
             hub,
             apps,
-            carried_holds: Default::default(),
             demos,
         }))
+    }
+
+    /// This daemon as the spaces' interface, which their operations that go
+    /// on in the background keep.
+    pub fn daemon(self: &Arc<Self>) -> Arc<dyn shoal_spaces::daemon::Daemon> {
+        self.clone()
     }
 
     /// The global config as last loaded; see [`super::config_state::ConfigState::current`].

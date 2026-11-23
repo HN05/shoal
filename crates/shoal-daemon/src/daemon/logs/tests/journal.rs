@@ -190,11 +190,20 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
         );
     }
     git(&workspace.path, &["checkout", "-b", "other"]);
-    manager.observe_workspace_branch(&workspace).await.unwrap();
+    manager
+        .spaces
+        .observe_workspace_branch(&*manager, &workspace)
+        .await
+        .unwrap();
     git(&workspace.path, &["checkout", "--detach"]);
-    manager.observe_workspace_branch(&workspace).await.unwrap();
+    manager
+        .spaces
+        .observe_workspace_branch(&*manager, &workspace)
+        .await
+        .unwrap();
     assert_eq!(
         manager
+            .spaces
             .workspace_by_id(&workspace.id)
             .await
             .unwrap()
@@ -242,7 +251,9 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         match cause {
             EventCause::Manual => {
                 manager
+                    .spaces
                     .remove_selected(
+                        &*manager,
                         &SpaceSelector::id(&workspace.id),
                         UnsavedWork::default(),
                         InspectionPolicy::GitOnly,
@@ -252,23 +263,27 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
             }
             EventCause::Idle => {
                 let snapshot = manager
-                    .cleanup_snapshot(&workspace.id)
+                    .spaces
+                    .cleanup_snapshot(&*manager, &workspace.id)
                     .await
                     .unwrap()
                     .unwrap();
                 manager
-                    .remove_idle(&SpaceSelector::id(&workspace.id), snapshot)
+                    .spaces
+                    .remove_idle(&*manager, &SpaceSelector::id(&workspace.id), snapshot)
                     .await
                     .unwrap();
             }
             EventCause::Merged => {
                 let snapshot = manager
-                    .merged_snapshot(&workspace.id)
+                    .spaces
+                    .merged_snapshot(&*manager, &workspace.id)
                     .await
                     .unwrap()
                     .unwrap();
                 manager
-                    .remove_merged_idle(&SpaceSelector::id(&workspace.id), snapshot)
+                    .spaces
+                    .remove_merged_idle(&*manager, &SpaceSelector::id(&workspace.id), snapshot)
                     .await
                     .unwrap();
             }
@@ -292,7 +307,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
             }
             _ => unreachable!(),
         }
-        assert!(manager.workspace_by_id(&workspace.id).await.is_err());
+        assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
         let events = manager.space_events(None, 100).await.unwrap();
         assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id == workspace.id && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
     }
@@ -302,7 +317,9 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .unwrap();
     std::fs::write(workspace.path.join("dirty"), "keep this work").unwrap();
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -312,14 +329,14 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         )
         .await
         .unwrap();
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&*manager).await.unwrap();
     let notifications = manager.notifications.list(true, 100).await.unwrap();
     manager
         .notifications
         .mark_read(notifications.iter().map(|n| n.id).collect())
         .await
         .unwrap();
-    manager.sweep_completed().await.unwrap();
+    manager.spaces.sweep_completed(&*manager).await.unwrap();
     let events = manager.space_events(None, 100).await.unwrap();
     let errors: Vec<_> = events
         .iter()

@@ -285,7 +285,7 @@ async fn a_linked_item_takes_the_title_the_forge_reports() {
         .await
         .unwrap();
     let titles = async || {
-        let links = manager.workspace_by_id(&id).await.unwrap().links;
+        let links = manager.spaces.workspace_by_id(&id).await.unwrap().links;
         (links.prs[0].title.clone(), links.issues[0].title.clone())
     };
 
@@ -510,7 +510,9 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
         .await
         .unwrap();
     let worker = manager
+        .spaces
         .create_workspace_below(
+            &*manager,
             repo.id.clone().into(),
             "worker".into(),
             None,
@@ -590,7 +592,9 @@ async fn a_chat_without_a_repository_waits_for_the_activity_below_it() {
     let chat =
         crate::daemon::test_support::chat(&manager, "master", "orchestrate", None, None).await;
     let below = manager
+        .spaces
         .create_workspace_below(
+            &**manager,
             repo.id.clone().into(),
             "below".into(),
             None,
@@ -638,7 +642,9 @@ async fn chat_above_linked_workspace(manager: &Arc<Manager>, root: &std::path::P
     let chat =
         crate::daemon::test_support::chat(manager, "master", "orchestrate", None, None).await;
     let below = manager
+        .spaces
         .create_workspace_below(
+            &**manager,
             repo.id.clone().into(),
             "below".into(),
             None,
@@ -908,7 +914,9 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -962,7 +970,9 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -971,7 +981,9 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         .await
         .unwrap();
     let grandchild = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&child.id),
             "grandchild".into(),
             None,
@@ -1156,7 +1168,9 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1283,7 +1297,9 @@ async fn hook_responses_fit_messages_and_updates_together() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1342,7 +1358,9 @@ async fn a_delivery_too_large_for_one_response_arrives_in_parts() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1413,7 +1431,9 @@ async fn deliveries_left_out_of_a_response_stay_pending_whole() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1940,9 +1960,11 @@ async fn the_agent_account_done_takes_off_is_the_spaces_own_change() {
             .is_empty()
     );
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .mark_space_done(&**manager, &selector, Done::default(), &Attacher::User))
+    .await
+    .unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes().last(), Some(&json!([])));
     assert!(observe_issue(&fixture, &[], 2).await.is_empty());
@@ -2006,7 +2028,9 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -2316,7 +2340,9 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -2808,7 +2834,14 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
             .to_string()
             .contains("no linked items")
     );
-    assert!(restarted.completion(&workspace.id).await.unwrap().is_none());
+    assert!(
+        restarted
+            .spaces
+            .completion(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -3016,7 +3049,10 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
         .poll_item_activity(&*manager, &linked.id, &all, None)
         .await;
     assert_eq!(updates.unwrap(), queued, "the watch reports it once");
-    let recorded = manager.recorded_changed_on_both_sides(&linked.id).await;
+    let recorded = manager
+        .spaces
+        .recorded_changed_on_both_sides(&linked.id)
+        .await;
     assert_eq!(recorded.unwrap().unwrap().files, ["version"]);
 }
 
@@ -3095,7 +3131,8 @@ async fn a_done_workspace_records_no_branch_check() {
         .await
         .unwrap();
     manager
-        .mark_space_done(&selector, Done::default(), &Attacher::User)
+        .spaces
+        .mark_space_done(&*manager, &selector, Done::default(), &Attacher::User)
         .await
         .unwrap();
     // A stalled worktree would fail the check, waking the agent.
@@ -3162,7 +3199,8 @@ async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported(
     crate::daemon::test_support::commit(&repo_path, "tracked");
     assert!(
         manager
-            .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+            .spaces
+            .check_conflicts(&*manager, &SpaceSelector::id(&workspace.id), None)
             .await
             .unwrap()
             .conflicts
@@ -3200,7 +3238,9 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
         crate::daemon::test_support::commit(repo, "tracked");
     }
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Done {
                 integrated: true,
@@ -3219,7 +3259,8 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
     assert!(poll().await.unwrap().is_empty());
     // Withdrawing the completion reports the conflict again.
     manager
-        .undo_space_done(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .undo_space_done(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let updates = poll().await.unwrap();

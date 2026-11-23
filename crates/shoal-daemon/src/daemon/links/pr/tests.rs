@@ -85,7 +85,14 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
             .unwrap()
             .is_none()
     );
-    assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+    assert!(
+        manager
+            .spaces
+            .completion(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert!(workspace.path.exists());
 }
 

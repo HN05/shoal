@@ -241,15 +241,22 @@ async fn completion_stops_the_workspaces_demos_unless_it_keeps_them() {
         ..Done::default()
     };
     manager
-        .mark_space_done(&selector, kept, &Attacher::User)
+        .spaces
+        .mark_space_done(&*manager, &selector, kept, &Attacher::User)
         .await
         .unwrap();
     assert!(!*web.stop.borrow_and_update());
 
-    manager.undo_space_done(&selector).await.unwrap();
-    (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
+    manager
+        .spaces
+        .undo_space_done(&*manager, &selector)
         .await
         .unwrap();
+    (manager
+        .spaces
+        .mark_space_done(&*manager, &selector, Done::default(), &Attacher::User))
+    .await
+    .unwrap();
     assert!(*web.stop.borrow_and_update());
 }
 

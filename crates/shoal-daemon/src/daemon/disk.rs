@@ -103,7 +103,7 @@ impl Monitor {
             manager.config_state.publish_disk_reading(None);
             return Ok(());
         }
-        let workspaces = manager.list_workspaces().await?;
+        let workspaces = manager.spaces.list_workspaces().await?;
         let (mut low, complete) = sample(&manager.paths.state, &workspaces, &available);
         // A failed reading prevents agent recovery.
         let recovered = complete
@@ -259,7 +259,8 @@ async fn delete_fetched(
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> Result<()> {
     if manager
-        .delete_fetched_in(|path| filesystem.holds(path))
+        .spaces
+        .delete_fetched_in(manager, |path| filesystem.holds(path))
         .await
     {
         filesystem.free = available(&filesystem.path)?;
@@ -277,7 +278,8 @@ async fn delete_xcode_leftovers(
     let mut deleted = false;
     for repo in manager.repositories.list().await? {
         deleted |= manager
-            .delete_xcode_leftovers(&repo, |path| filesystem.holds(path))
+            .spaces
+            .delete_xcode_leftovers(manager, &repo, |path| filesystem.holds(path))
             .await;
     }
     if deleted {
@@ -317,11 +319,19 @@ async fn free_space(
                 continue;
             }
         };
-        let removal = (manager.remove_unused(&space, snapshot, EventCause::DiskSpace)).await;
+        let removal =
+            (manager
+                .spaces
+                .remove_unused(manager, &space, snapshot, EventCause::DiskSpace))
+            .await;
         let described = filesystem.describe();
         let cleanup = Cleanup::DiskSpace(&described);
         // A full disk can fail recording the retention; the notice still goes out.
-        if let Err(recording) = manager.announce_removal(workspace, cleanup, &removal).await {
+        if let Err(recording) = manager
+            .spaces
+            .announce_removal(manager, workspace, cleanup, &removal)
+            .await
+        {
             log!(
                 "disk space cleanup could not record retaining {}: {recording:#}",
                 workspace.name
@@ -370,12 +380,13 @@ async fn delete_results(
     filesystem: &mut Filesystem,
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> Result<()> {
-    for space in manager.kept_results().await? {
+    for space in manager.spaces.kept_results().await? {
         if filesystem.free >= settings.cleanup_free_bytes() {
             break;
         }
         let deleted = manager
-            .delete_results_in(&space, |path| filesystem.holds(path))
+            .spaces
+            .delete_results_in(manager, &space, |path| filesystem.holds(path))
             .await;
         let (kind, message) = match deleted {
             Ok(false) => continue,
@@ -482,7 +493,7 @@ async fn stop_executions(
     let workspaces = workspaces_with_unprotected_executions(manager).await?;
     let (low, reason) = (&low, &protection.reason);
     let stops = workspaces.into_iter().map(|id| async move {
-        let workspace = manager.workspace_by_id(&id).await?;
+        let workspace = manager.spaces.workspace_by_id(&id).await?;
         let (kind, message) = match manager.agents.stop_unprotected(&*manager, &SpaceSelector::id(&id), reason.clone()).await {
             Ok(()) => {
                 log!("disk space protection stopped commands in {}: {low}", workspace.name);

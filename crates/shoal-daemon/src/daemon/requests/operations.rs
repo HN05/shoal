@@ -10,11 +10,9 @@ use super::super::{
     answer::{Answer, OperationGuard},
     manager::Manager,
     moves::MoveStart,
-    operations::{
-        Entry,
-        starts::{Child, Opening, Preparing},
-    },
+    operations::Entry,
     scope::{Caller, Scoped},
+    starts::{Child, Opening, Preparing},
     target_checks::{Checked, TargetCheck},
     workspace::NewWorkspace,
 };
@@ -51,7 +49,7 @@ pub(super) async fn handle(
     }
     Ok(Answer::Body(match method {
         OperationMethod::StartOperation { spec, env } => {
-            manager.admit_explicit_preparation(&spec).await?;
+            manager.spaces.admit_explicit_preparation(&spec).await?;
             Body::OperationStarted(Started {
                 id: manager.start_operation(spec, env, caller).await?,
             })
@@ -70,7 +68,11 @@ pub(super) async fn handle(
             }));
         }
         OperationMethod::StartMove { order, env } => {
-            let id = match manager.start_move(*order, env, caller).await? {
+            let id = match manager
+                .spaces
+                .start_move(&**manager, *order, env, caller)
+                .await?
+            {
                 MoveStart::Started(id) => id,
                 MoveStart::AfterTurn(deferred) => {
                     return Ok(Answer::Body(Body::MoveAfterTurn(deferred)));
@@ -114,7 +116,7 @@ pub(super) async fn handle(
                     options,
                     ..Default::default()
                 },
-                parent: manager.space_id(parent.as_ref()).await?,
+                parent: manager.spaces.space_id(parent.as_ref()).await?,
             };
             let preparing = Preparing {
                 issue,
@@ -128,13 +130,15 @@ pub(super) async fn handle(
             };
             Body::WorkspaceStarted(
                 manager
-                    .start_workspace(repository, opening, preparing, caller)
+                    .spaces
+                    .start_workspace(&manager.daemon(), repository, opening, preparing, caller)
                     .await?,
             )
         }
         OperationMethod::StartCreation { launch, below, env } => Body::WorkspaceStarted(
             manager
-                .create_placed_workspace(*launch, (below, env), caller)
+                .spaces
+                .create_placed_workspace(&manager.daemon(), *launch, (below, env), caller)
                 .await?,
         ),
         OperationMethod::StartChild {
@@ -165,7 +169,8 @@ pub(super) async fn handle(
             };
             Body::WorkspaceStarted(
                 manager
-                    .start_child(&parent, split, preparing, caller)
+                    .spaces
+                    .start_child(&manager.daemon(), &parent, split, preparing, caller)
                     .await?,
             )
         }
@@ -225,7 +230,10 @@ impl Scoped for OperationMethod {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => spec.workspace_mut(),
             OperationMethod::StartMove { order, .. } => {
-                manager.authorize_move(caller, order).await?;
+                manager
+                    .spaces
+                    .authorize_move(manager, caller, order)
+                    .await?;
                 None
             }
             OperationMethod::StartChild { parent, copy, .. } => {
@@ -240,7 +248,7 @@ impl Scoped for OperationMethod {
             // A creation confines what it places to the caller's tree, as a
             // launch does.
             OperationMethod::StartCreation { launch, .. } => {
-                manager.select_launch_spaces(launch).await?;
+                manager.spaces.select_launch_spaces(manager, launch).await?;
                 None
             }
             OperationMethod::StartWorkspace {

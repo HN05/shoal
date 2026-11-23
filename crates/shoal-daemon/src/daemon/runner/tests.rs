@@ -429,6 +429,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     let workspace = manager
+        .spaces
         .workspace_by_id(&claimed[0].workspace_id)
         .await
         .unwrap();
@@ -487,7 +488,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
 
     // A running job keeps its workspace.
     finish_ended_jobs(manager).await;
-    assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
+    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_ok());
 
     manager.runner.jobs().take_wake();
     manager
@@ -504,7 +505,7 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     // for its next poll.
     assert!(manager.runner.jobs().take_wake());
     finish_ended_jobs(manager).await;
-    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
+    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(!directory.exists());
 }
@@ -559,7 +560,7 @@ async fn a_job_whose_checkout_fails_is_passed_over_and_its_workspace_removed() {
         "{notifications:?}"
     );
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
-    let workspaces = manager.list_workspaces().await.unwrap();
+    let workspaces = manager.spaces.list_workspaces().await.unwrap();
     assert!(
         workspaces.iter().all(|workspace| !workspace.disposable),
         "{workspaces:?}"
@@ -610,6 +611,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
+            .spaces
             .workspace(&manager.named("ci-rust-4").await)
             .await
             .is_err()
@@ -693,6 +695,7 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
+            .spaces
             .workspace_by_id(&claimed[0].workspace_id)
             .await
             .is_err()
@@ -771,7 +774,11 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
     assert_eq!(claimed.len(), 1);
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
 
-    let listed = manager.listed_spaces(None).await.unwrap();
+    let listed = manager
+        .spaces
+        .listed_spaces(&**manager, None)
+        .await
+        .unwrap();
     let job = (listed.into_iter())
         .find_map(|space| (space.into_workspace().ok()).filter(|w| w.id == claimed[0].workspace_id))
         .unwrap();
@@ -873,7 +880,8 @@ async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     manager.agents.dispatch_queue(&**manager).await.unwrap();
     let chat_status = || async {
         manager
-            .space_status(&SpaceSelector::id(&chat.id))
+            .spaces
+            .space_status(&**manager, &SpaceSelector::id(&chat.id))
             .await
             .unwrap()
     };
@@ -918,6 +926,7 @@ async fn every_space_that_links_a_jobs_pr_lists_the_job_waiting_and_running() {
     assert_eq!(status.jobs[0].id, claimed[0].workspace_id);
     assert!(
         manager
+            .spaces
             .ancestors(&claimed[0].workspace_id)
             .await
             .unwrap()
@@ -1405,6 +1414,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     admit_and_claim(manager).await;
     let claimed = manager.runner.claimed_jobs().await.unwrap();
     let workspace = manager
+        .spaces
         .workspace_by_id(&claimed[0].workspace_id)
         .await
         .unwrap();
@@ -1455,7 +1465,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     finishing.await.unwrap().unwrap();
 
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
-    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
+    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
     let ended: Vec<_> = manager
         .space_events(None, 1000)
         .await
@@ -1587,6 +1597,7 @@ async fn a_refused_load_stop_leaves_a_job_no_rerun() {
     let workspace = claimed[0].workspace_id.clone();
     let _runner = connect_runner(manager, &workspace, false).await;
     manager
+        .spaces
         .reserve_lifecycle(&workspace, WorkspaceState::Removing)
         .await
         .unwrap();
@@ -1646,6 +1657,7 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
+            .spaces
             .workspace(&manager.named("ci-rust-4").await)
             .await
             .is_err()
@@ -1696,7 +1708,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     // The cut-short claim's workspace goes with its permit, and the job,
     // still admitted, is claimed again.
     finish_ended_jobs(manager).await;
-    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
+    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
     claim_job(manager, entry).await;
     let claimed = manager.runner.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
@@ -1734,7 +1746,7 @@ async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
         .unwrap();
     let id = recorded.id().clone();
     drop(recorded);
-    let workspace = manager.workspace_by_id(&id).await.unwrap();
+    let workspace = manager.spaces.workspace_by_id(&id).await.unwrap();
     assert_eq!(workspace.state, crate::state::WorkspaceState::Preparing);
     workspace
 }
@@ -1742,7 +1754,7 @@ async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
 /// Whether the cut-short claim of `workspace` went with it.
 async fn removed_with_its_claim(manager: &Manager, workspace: &Workspace) -> bool {
     finish_ended_jobs(manager).await;
-    manager.workspace_by_id(&workspace.id).await.is_err()
+    manager.spaces.workspace_by_id(&workspace.id).await.is_err()
         && manager.runner.claimed_jobs().await.unwrap().is_empty()
 }
 
@@ -1786,7 +1798,11 @@ async fn a_jobs_workspace_a_restart_caught_seeding_is_removed() {
     // recorded the worktree Git added.
     add_worktree(&fixture, &workspace).await;
     let manager = &fixture.manager;
-    manager.record_worktree_identity(&workspace).await.unwrap();
+    manager
+        .spaces
+        .record_worktree_identity(&workspace)
+        .await
+        .unwrap();
     assert!(removed_with_its_claim(manager, &workspace).await);
     assert!(!workspace.path.exists());
 }
@@ -1801,8 +1817,16 @@ async fn workspace_whose_removal_stopped_after_its_admin_directory_went(
     let workspace = workspace_a_restart_caught_preparing(fixture).await;
     add_worktree(fixture, &workspace).await;
     let manager = &fixture.manager;
-    manager.record_worktree_identity(&workspace).await.unwrap();
-    manager.record_removal_directory(&workspace).await.unwrap();
+    manager
+        .spaces
+        .record_worktree_identity(&workspace)
+        .await
+        .unwrap();
+    manager
+        .spaces
+        .record_removal_directory(&workspace)
+        .await
+        .unwrap();
     std::fs::create_dir(workspace.path.join("target")).unwrap();
     std::fs::write(workspace.path.join("target/built"), "").unwrap();
     std::fs::remove_file(workspace.path.join(".git")).unwrap();
@@ -1814,9 +1838,11 @@ async fn workspace_whose_removal_stopped_after_its_admin_directory_went(
         .path;
     git(&checkout, &["worktree", "prune"]);
     let error = format!("{STOPPED_REMOVAL} when its work ended early");
-    (manager.set_state(&workspace.id, WorkspaceState::Failed, Some(error)))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .set_state(&workspace.id, WorkspaceState::Failed, Some(error)))
+    .await
+    .unwrap();
     workspace
 }
 
@@ -1980,6 +2006,7 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
+            .spaces
             .workspace_by_id(&claimed[0].workspace_id)
             .await
             .is_err()

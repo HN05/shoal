@@ -20,7 +20,9 @@ async fn removal_waits_for_queued_workspace_creation() {
     let mut creating = Box::pin(async move {
         let git = creating_manager.gates.lock_git(&creating_repo.id).await;
         creating_manager
+            .spaces
             .create_branch_workspace(
+                &*creating_manager,
                 &creating_repo,
                 "racing".into(),
                 "racing".into(),
@@ -53,7 +55,7 @@ async fn removal_waits_for_queued_workspace_creation() {
     assert_eq!(removal.workspaces_removed, 1);
     assert!(!workspace.path.exists());
     assert!(manager.repositories.list().await.unwrap().is_empty());
-    assert!(manager.list_workspaces().await.unwrap().is_empty());
+    assert!(manager.spaces.list_workspaces().await.unwrap().is_empty());
     assert!(!repo.path.exists());
     assert!(!repo.workspaces_dir.exists());
 }
@@ -72,7 +74,8 @@ async fn removal_takes_a_workspace_its_preparation_has_yet_to_create() {
         ..Default::default()
     };
     let workspace = manager
-        .create_workspace_with(&repo.id, "racing".into(), None, new)
+        .spaces
+        .create_workspace_with(&*manager, &repo.id, "racing".into(), None, new)
         .await
         .unwrap();
     assert_eq!(workspace.state, WorkspaceState::Preparing);
@@ -83,11 +86,17 @@ async fn removal_takes_a_workspace_its_preparation_has_yet_to_create() {
         .await
         .unwrap();
     assert_eq!(removal.workspaces_removed, 1);
-    assert!(manager.list_workspaces().await.unwrap().is_empty());
+    assert!(manager.spaces.list_workspaces().await.unwrap().is_empty());
     assert!(!repo.path.exists());
     // The preparation, which waited for the removal, finds nothing to create.
     let selector = SpaceSelector::id(&workspace.id);
-    assert!(manager.create_pending_worktree(&selector).await.is_err());
+    assert!(
+        manager
+            .spaces
+            .create_pending_worktree(&*manager, &selector)
+            .await
+            .is_err()
+    );
     assert!(!workspace.path.exists());
 }
 
@@ -101,7 +110,14 @@ async fn removal_takes_a_child_being_prepared_below_a_parent_listed_first() {
         .await
         .unwrap();
     let parent = manager
-        .create_workspace_with(&repo.id, "a-parent".into(), None, Default::default())
+        .spaces
+        .create_workspace_with(
+            &*manager,
+            &repo.id,
+            "a-parent".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let new = crate::daemon::workspace::NewWorkspace {
@@ -110,7 +126,8 @@ async fn removal_takes_a_child_being_prepared_below_a_parent_listed_first() {
         ..Default::default()
     };
     let child = manager
-        .create_workspace_with(&repo.id, "b-child".into(), None, new)
+        .spaces
+        .create_workspace_with(&*manager, &repo.id, "b-child".into(), None, new)
         .await
         .unwrap();
     assert_eq!(child.state, WorkspaceState::Preparing);
@@ -121,7 +138,7 @@ async fn removal_takes_a_child_being_prepared_below_a_parent_listed_first() {
         .await
         .unwrap();
     assert_eq!(removal.workspaces_removed, 2);
-    assert!(manager.list_workspaces().await.unwrap().is_empty());
+    assert!(manager.spaces.list_workspaces().await.unwrap().is_empty());
     assert!(!parent.path.exists());
     assert!(!repo.path.exists());
 }
@@ -136,7 +153,14 @@ async fn removal_takes_a_child_being_prepared_below_a_chat_in_a_workspace_listed
         .await
         .unwrap();
     let top = manager
-        .create_workspace_with(&repo.id, "a-top".into(), None, Default::default())
+        .spaces
+        .create_workspace_with(
+            &*manager,
+            &repo.id,
+            "a-top".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let below_top = crate::daemon::workspace::NewWorkspace {
@@ -144,7 +168,8 @@ async fn removal_takes_a_child_being_prepared_below_a_chat_in_a_workspace_listed
         ..Default::default()
     };
     let host = manager
-        .create_workspace_with(&repo.id, "b-host".into(), None, below_top)
+        .spaces
+        .create_workspace_with(&*manager, &repo.id, "b-host".into(), None, below_top)
         .await
         .unwrap();
     let chat = manager
@@ -162,7 +187,8 @@ async fn removal_takes_a_child_being_prepared_below_a_chat_in_a_workspace_listed
         ..Default::default()
     };
     let child = manager
-        .create_workspace_with(&repo.id, "c-child".into(), None, below_chat)
+        .spaces
+        .create_workspace_with(&*manager, &repo.id, "c-child".into(), None, below_chat)
         .await
         .unwrap();
     assert_eq!(child.state, WorkspaceState::Preparing);
@@ -173,7 +199,7 @@ async fn removal_takes_a_child_being_prepared_below_a_chat_in_a_workspace_listed
         .await
         .unwrap();
     assert_eq!(removal.workspaces_removed, 3);
-    assert!(manager.list_workspaces().await.unwrap().is_empty());
+    assert!(manager.spaces.list_workspaces().await.unwrap().is_empty());
     assert!(!repo.path.exists());
 }
 
@@ -195,7 +221,8 @@ async fn removal_takes_a_chat_in_the_checkout_with_the_workspace_below_it() {
         ..Default::default()
     };
     let child = manager
-        .create_workspace_with(&repo.id, "child".into(), None, below_chat)
+        .spaces
+        .create_workspace_with(&*manager, &repo.id, "child".into(), None, below_chat)
         .await
         .unwrap();
 
@@ -205,12 +232,17 @@ async fn removal_takes_a_chat_in_the_checkout_with_the_workspace_below_it() {
         .await
         .unwrap();
     assert_eq!(removal.workspaces_removed, 1);
-    assert!(manager.chats().await.unwrap().is_empty());
+    assert!(manager.spaces.chats().await.unwrap().is_empty());
     // The removal journals each space, so a request for it names the
     // repository it went with.
     let repository = format!("removed with its repository {}", repo.id);
     for id in [&chat.id, &child.id] {
-        let refused = manager.space_by_id(id).await.unwrap_err().to_string();
+        let refused = manager
+            .spaces
+            .space_by_id(id)
+            .await
+            .unwrap_err()
+            .to_string();
         assert!(refused.contains(&repository), "{refused}");
     }
 }

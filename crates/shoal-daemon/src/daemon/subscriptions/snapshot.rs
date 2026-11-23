@@ -229,7 +229,7 @@ async fn sessions(manager: &Manager, spaces: &[Space]) -> Result<Vec<Record>> {
     for space in spaces {
         records.push(Record::Sessions(ReportedSessions {
             space_id: space.id.clone(),
-            sessions: manager.reported_sessions(&space.id).await?,
+            sessions: manager.spaces.reported_sessions(&space.id).await?,
         }));
     }
     Ok(records)

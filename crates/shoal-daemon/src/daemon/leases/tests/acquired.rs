@@ -420,9 +420,11 @@ async fn an_agent_ending_during_a_stop_releases_its_leases_once_the_stop_ends() 
     fixture.acquire("agent", Some(&caller)).await;
     let manager = &fixture.manager;
     let stopping = crate::state::WorkspaceState::Stopping;
-    let reserved = (manager.reserve_lifecycle(&fixture.workspace.id, stopping))
-        .await
-        .unwrap();
+    let reserved = (manager
+        .spaces
+        .reserve_lifecycle(&fixture.workspace.id, stopping))
+    .await
+    .unwrap();
 
     manager
         .agents
@@ -431,9 +433,11 @@ async fn an_agent_ending_during_a_stop_releases_its_leases_once_the_stop_ends() 
     let agent = Acquirer::Agent { execution_id };
     assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
 
-    (manager.set_state(&fixture.workspace.id, reserved, None))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .set_state(&fixture.workspace.id, reserved, None))
+    .await
+    .unwrap();
     manager
         .leases
         .release_ended_leases_of(&**manager, &fixture.workspace.id)
@@ -485,9 +489,11 @@ async fn a_simulator_release_a_lifecycle_operation_holds_off_waits() {
     fixture.lease_simulator("agent", agent).await;
     let manager = &fixture.manager;
     let stopping = crate::state::WorkspaceState::Stopping;
-    (manager.reserve_lifecycle(&fixture.workspace.id, stopping))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .reserve_lifecycle(&fixture.workspace.id, stopping))
+    .await
+    .unwrap();
 
     let selector = fixture.selector();
     let released = manager
@@ -565,6 +571,10 @@ async fn releasing_an_ended_agents_leases_leaves_the_workspace_idle() {
 
     assert_eq!(fixture.permits().await, []);
     assert_eq!(fixture.simulators().await, Vec::<String>::new());
-    let active_at = manager.active_at(&fixture.workspace.id).await.unwrap();
+    let active_at = manager
+        .spaces
+        .active_at(&fixture.workspace.id)
+        .await
+        .unwrap();
     assert_eq!(active_at, Some(crate::time::UnixTime::from_seconds(1)));
 }

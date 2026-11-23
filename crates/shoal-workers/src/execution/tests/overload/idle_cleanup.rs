@@ -15,24 +15,30 @@ async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
     let id = stop_agent_in(&manager, &workspace, AgentState::Idle).await;
     wait_restore_waits(&manager, id.as_str()).await;
     let snapshot = manager
-        .cleanup_candidacy(&workspace.id)
+        .spaces
+        .cleanup_candidacy(&*manager, &workspace.id)
         .await
         .unwrap()
         .unwrap();
     assert!(
         manager
-            .merged_snapshot(&workspace.id)
+            .spaces
+            .merged_snapshot(&*manager, &workspace.id)
             .await
             .unwrap()
             .is_some()
     );
-    bounded(manager.remove_on_request(&SpaceSelector::id(&workspace.id), snapshot))
-        .await
-        .unwrap();
+    bounded(manager.spaces.remove_on_request(
+        &*manager,
+        &SpaceSelector::id(&workspace.id),
+        snapshot,
+    ))
+    .await
+    .unwrap();
     // Removal cancelled the restore, so the waiting wrapper exits.
     bounded(launched).await.unwrap().unwrap();
     assert!(queue_is_empty(&manager).await);
-    let removed = manager.removed_workspaces().await.unwrap();
+    let removed = manager.spaces.removed_workspaces().await.unwrap();
     let agents = &removed[0].agents;
     assert_eq!(agents.len(), 1);
     assert_eq!(agents[0].execution, id);
@@ -78,7 +84,8 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     let id = stop_agent_in(&manager, &workspace, AgentState::Idle).await;
     wait_restore_waits(&manager, id.as_str()).await;
     let snapshot = manager
-        .cleanup_candidacy(&workspace.id)
+        .spaces
+        .cleanup_candidacy(&*manager, &workspace.id)
         .await
         .unwrap()
         .unwrap();
@@ -86,7 +93,8 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
-                .remove_on_request(&SpaceSelector::id(&id), snapshot)
+                .spaces
+                .remove_on_request(&*manager, &SpaceSelector::id(&id), snapshot)
                 .await
         }
     });
@@ -125,12 +133,17 @@ async fn a_restore_of_an_agent_stopped_mid_turn_keeps_its_workspace() {
     let id = stop_agent_in(&manager, &workspace, AgentState::Working).await;
     wait_restore_waits(&manager, id.as_str()).await;
     assert_eq!(
-        manager.cleanup_candidacy(&workspace.id).await.unwrap(),
+        manager
+            .spaces
+            .cleanup_candidacy(&*manager, &workspace.id)
+            .await
+            .unwrap(),
         Err(CleanupReason::Recovering)
     );
     assert!(
         manager
-            .merged_snapshot(&workspace.id)
+            .spaces
+            .merged_snapshot(&*manager, &workspace.id)
             .await
             .unwrap()
             .is_none()
@@ -173,7 +186,8 @@ async fn stop_agent_in(
     turn: AgentState,
 ) -> ExecutionId {
     let id = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]

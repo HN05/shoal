@@ -1,0 +1,136 @@
+//! The spaces of Shoal's daemon: the records of workspaces and chats and the
+//! tree they form, the marks and progress they report, their worktrees and
+//! the files they send, their lifecycle, removal and cleanup, the startup
+//! audit of what they own, and their restores, conversions, moves and
+//! launches. [`Spaces`] holds what they keep in memory and offers their
+//! operations; what they need of the rest of the daemon is the interface in
+//! [`daemon`].
+use std::sync::Arc;
+
+use shoal_coordination::{alerts, approvals, changes, scope, threads};
+use shoal_core::{
+    agents, caches, config, daemon_handoff, daemon_owner, env, execution, fetched_copies, fsutil,
+    git, git_profile, hooks, paths, presets, process, refusal, removal, repository, service,
+    sessions, shoal_dirs, start_plan, terminal, transfer, workers,
+};
+use shoal_daemon_base::{
+    allocation, blockers, config_state::ConfigState, events, file_access, file_access::FileAccess,
+    frames, gates, gates::Gates, item_numbers, jobs, log, notifications,
+    notifications::Notifications, signals::Signals, stops,
+};
+use shoal_forge_types as forge;
+use shoal_protocol::{agent, links, model, protocol, state, time, validate};
+use shoal_store::{self as store, Store};
+
+pub mod absorb;
+pub mod carried_commits;
+pub mod carried_sessions;
+pub mod chat_marks;
+pub mod chats;
+pub mod cleanup;
+pub mod completion_cleanup;
+pub mod conversions;
+pub mod coordinated;
+pub mod daemon;
+pub mod holds;
+pub mod hook_settings;
+pub mod hub_moves;
+pub mod imported_sessions;
+pub mod launches;
+pub mod leftovers;
+pub mod lifecycle;
+pub mod moves;
+pub mod ownership;
+#[cfg(any(test, feature = "test-support"))]
+mod per_daemon;
+pub mod pr_gate;
+pub mod progress;
+pub mod quarantine;
+pub mod ready_marks;
+pub mod recovery;
+pub mod restore;
+pub mod space_processes;
+pub mod space_removal;
+pub mod spaces;
+pub mod starts;
+pub mod startup_audit;
+pub mod target_checks;
+pub mod tmp_dirs;
+pub mod tree;
+pub mod untracked;
+pub mod workspace;
+pub mod workspace_files;
+pub mod workspace_usage;
+
+/// The spaces service, which `Manager` holds.
+pub struct Spaces {
+    pub store: Store,
+    pub gates: Arc<Gates>,
+    pub config: Arc<ConfigState>,
+    pub notifications: Arc<Notifications>,
+    pub signals: Arc<Signals>,
+    pub paths: paths::Paths,
+    pub file_access: Arc<FileAccess>,
+    /// How the cleanup sweep last went.
+    pub cleanup_health: cleanup::CleanupHealth,
+    /// How the idle sleep pass last went.
+    pub idle_sleep_health: cleanup::CleanupHealth,
+    /// The spaces the cleanup sweep removed, which it reports.
+    pub cleanup_removals: cleanup::Removed,
+    /// The progress sections being published to linked items.
+    pub publications: progress::Publications,
+    /// What each workspace's worktree uses of the disk.
+    pub usage: workspace::usage::Usage,
+    /// The leftovers of removed spaces still being deleted.
+    pub leftovers: leftovers::Leftovers,
+    /// The agents conversions hand over between spaces.
+    pub conversion_handovers: conversions::Handovers,
+    /// The spaces whose removal is under way.
+    pub space_removals: spaces::Removing,
+    /// The spaces whose completion cleanup is under way.
+    pub completed_owners: spaces::Removing,
+    /// The commits workspaces carry for another, held until they land.
+    pub carried_holds: carried_commits::CarriedHolds,
+    /// What other subsystems record of a space, which the spaces read and
+    /// write in their own transactions.
+    pub records: Arc<dyn daemon::Records>,
+}
+
+impl Spaces {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "what the spaces share with the daemon's other subsystems"
+    )]
+    pub fn new(
+        store: Store,
+        gates: Arc<Gates>,
+        config: Arc<ConfigState>,
+        notifications: Arc<Notifications>,
+        signals: Arc<Signals>,
+        paths: paths::Paths,
+        file_access: Arc<FileAccess>,
+        space_removals: spaces::Removing,
+        records: Arc<dyn daemon::Records>,
+    ) -> Self {
+        Self {
+            store,
+            gates,
+            config,
+            notifications,
+            signals,
+            paths,
+            file_access,
+            cleanup_health: Default::default(),
+            idle_sleep_health: cleanup::CleanupHealth::of("Idle sleep"),
+            cleanup_removals: Default::default(),
+            publications: Default::default(),
+            usage: Default::default(),
+            leftovers: Default::default(),
+            conversion_handovers: Default::default(),
+            space_removals,
+            completed_owners: Default::default(),
+            carried_holds: Default::default(),
+            records,
+        }
+    }
+}

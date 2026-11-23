@@ -2,7 +2,7 @@
 //! of its answer; sending it is the same for every request.
 use anyhow::Result;
 use futures_util::{FutureExt, future::BoxFuture};
-use tokio::{io::AsyncWrite, net::UnixStream, sync::OwnedRwLockReadGuard};
+use tokio::{io::AsyncWrite, net::UnixStream};
 
 use shoal_protocol::hub::routing::Queued;
 
@@ -15,9 +15,7 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// The guard a request holds while it runs, which keeps a daemon update from
-/// restarting the daemon under it.
-pub(super) type OperationGuard = OwnedRwLockReadGuard<()>;
+pub(crate) use shoal_daemon_base::frames::{OperationGuard, hangup, write_frames};
 
 /// What a request that keeps its connection does with it, given the stream,
 /// the request's ID and its operation guard.
@@ -176,17 +174,6 @@ pub(super) async fn reply(
     Err(error)
 }
 
-/// Write `response` in the frames it takes.
-pub(super) async fn write_frames(
-    stream: &mut (impl AsyncWrite + Unpin),
-    response: Response,
-) -> Result<()> {
-    for frame in response.frames()? {
-        protocol::write(stream, &frame).await?;
-    }
-    Ok(())
-}
-
 /// Send each page, then `ok`.
 async fn write_pages(stream: &mut UnixStream, request_id: u64, pages: Vec<Body>) -> Result<()> {
     for page in pages {
@@ -216,49 +203,4 @@ pub(super) async fn answer_wait(
         return Ok(());
     };
     protocol::write(&mut stream, &Response::new(request_id, body)).await
-}
-
-/// The most bytes one frame carries in base64, with room for the rest of
-/// the frame.
-pub(crate) const CHUNK: usize = (protocol::MAX_FRAME - (8 << 10)) / 4 * 3;
-
-/// Where an answer that goes on writes its frames: its client's
-/// connection.
-pub(crate) struct Frames<'a> {
-    manager: &'a Manager,
-    writer: tokio::net::unix::OwnedWriteHalf,
-    id: u64,
-}
-
-impl<'a> Frames<'a> {
-    /// The frames answering the request `id` on `writer`.
-    pub(crate) fn new(
-        manager: &'a Manager,
-        writer: tokio::net::unix::OwnedWriteHalf,
-        id: u64,
-    ) -> Self {
-        Self {
-            manager,
-            writer,
-            id,
-        }
-    }
-
-    /// Send `body` under a daemon operation of its own, so the answer holds
-    /// off a restart only while it writes; `false` once a restart holds
-    /// operations off, which closes the answer.
-    pub(crate) async fn send(&mut self, body: Body) -> Result<bool> {
-        let Some(_operation) = self.manager.gates.try_operation() else {
-            return Ok(false);
-        };
-        protocol::write(&mut self.writer, &Response::new(self.id, body)).await?;
-        Ok(true)
-    }
-}
-
-/// Wait until the client hangs up. A client sends nothing after its request,
-/// so anything readable means it closed the connection.
-pub(crate) async fn hangup(stream: &mut (impl tokio::io::AsyncRead + Unpin)) {
-    let mut closed = [0u8; 1];
-    let _ = tokio::io::AsyncReadExt::read(stream, &mut closed).await;
 }

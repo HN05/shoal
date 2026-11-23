@@ -1,0 +1,135 @@
+//! The records an absorbed space hands over: its links, attached files and
+//! open threads go to the space that takes its work, and the requests
+//! bound to its branch and commit are withdrawn. Issue proposals belong to
+//! the repository and stay.
+use crate::Spaces;
+use crate::daemon::Daemon;
+use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
+
+use super::parties::Parties;
+use crate::{
+    forge::items::link::LinkKind,
+    model::{Relation, SpaceLinks},
+    {links::pr::Action, scope::Caller},
+};
+use shoal_protocol::{
+    approvals::{DecisionStatus, Target},
+    item_numbers::ItemNumber,
+    space_names::SpaceSelector,
+};
+
+/// What the space that takes the work took over.
+pub(super) struct TakenOver {
+    pub(super) links: SpaceLinks,
+    pub(super) files: Vec<String>,
+    pub(super) threads: Vec<ItemNumber>,
+    pub(super) withdrawn: Vec<ItemNumber>,
+    pub(super) warnings: Vec<String>,
+}
+
+impl Spaces {
+    /// Hand the target's records over to the space that takes its work,
+    /// linking its items there as `caller` may.
+    pub(super) async fn take_over(
+        &self,
+        daemon: &dyn Daemon,
+        parties: &Parties,
+        caller: Option<&Caller>,
+    ) -> Result<TakenOver> {
+        let (from, to) = (&parties.target.id, &parties.into.id);
+        let withdrawn = self.withdraw_branch_requests(daemon, from).await?;
+        let (links, warnings) = self.move_links(daemon, from, to, caller).await?;
+        let files = self.copy_attached_files(daemon, from, to).await?;
+        let copies = (files.iter()).map(|(old, file)| (*old, file.id)).collect();
+        let threads = daemon
+            .coordination()
+            .move_open_threads(daemon, from, to, copies)
+            .await?;
+        let files = files.into_iter().map(|(_, file)| file.name).collect();
+        Ok(TakenOver {
+            links,
+            files,
+            threads,
+            withdrawn,
+            warnings,
+        })
+    }
+
+    /// Withdraw the pending PR proposals and push requests of the space
+    /// `id`, which its branch and commit bind, returning their numbers.
+    async fn withdraw_branch_requests(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+    ) -> Result<Vec<ItemNumber>> {
+        let selector = SpaceSelector::id(id);
+        let requests = daemon
+            .coordination()
+            .approval_requests(daemon, Some(&selector))
+            .await?;
+        let mut withdrawn = Vec::new();
+        for request in requests {
+            let bound = matches!(request.target, Target::PrOpen | Target::Push);
+            if request.space_id == *id && request.status == DecisionStatus::Pending && bound {
+                let request = daemon
+                    .coordination()
+                    .withdraw_approval(daemon, &selector, request.number)
+                    .await?;
+                withdrawn.push(request.number);
+            }
+        }
+        Ok(withdrawn)
+    }
+
+    /// Unlink the items of the space `from` and link them to the space `to`
+    /// as they were, returning them with a warning for each that could not
+    /// be linked there.
+    async fn move_links(
+        &self,
+        daemon: &dyn Daemon,
+        from: &SpaceId,
+        to: &SpaceId,
+        caller: Option<&Caller>,
+    ) -> Result<(SpaceLinks, Vec<String>)> {
+        let (id, records) = (from.clone(), self.records.clone());
+        let links = (self.store)
+            .run(move |db| records.space_links(db, &id))
+            .await?;
+        self.unlink_all(daemon, from, &links).await?;
+        let mut warnings = daemon.relink_space(to, &links, caller).await;
+        for pr in &links.prs {
+            let url = pr.url.clone().into();
+            let watch = Action::Watch {
+                url,
+                title: pr.title.clone(),
+            };
+            if let Err(error) = daemon.set_pr(&SpaceSelector::id(to), watch).await {
+                warnings.push(format!("cannot link PR {}: {error:#}", pr.url));
+            }
+        }
+        Ok((links, warnings))
+    }
+
+    /// Unlink every item `links` lists from the space `id`.
+    async fn unlink_all(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        links: &SpaceLinks,
+    ) -> Result<()> {
+        let selector = SpaceSelector::id(id);
+        let linked = [
+            (Relation::Assigned, Some(LinkKind::Issue), &links.issues),
+            (Relation::Assigned, Some(LinkKind::Pr), &links.prs),
+            (Relation::Opened, None, &links.opened),
+            (Relation::Related, None, &links.related),
+        ];
+        for (relation, kind, items) in linked {
+            if !items.is_empty() {
+                daemon.unlink_items(&selector, relation, kind, None).await?;
+            }
+        }
+        Ok(())
+    }
+}

@@ -29,7 +29,13 @@ async fn the_assignee_stays_while_another_space_of_the_login_links_the_issue() {
     // Removing the last space that links it takes it back.
     let selector = SpaceSelector::id(&second.id);
     (fixture.manager)
-        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .spaces
+        .remove_selected(
+            &*fixture.manager,
+            &selector,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert_eq!(fixture.changes(), [json!(["shoal-user"]), json!([])]);
@@ -43,7 +49,13 @@ async fn an_assignee_a_removal_cannot_take_back_notifies_the_user() {
     fixture.link(workspace).await;
     let selector = SpaceSelector::id(&workspace.id);
     (fixture.manager)
-        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .spaces
+        .remove_selected(
+            &*fixture.manager,
+            &selector,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let notifications = fixture.manager.notifications.list(true, 10).await.unwrap();
@@ -69,9 +81,14 @@ async fn a_moved_space_leaves_its_assignee_to_the_other_machine() {
         .await
         .unwrap();
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
-        .await
-        .unwrap();
+    (manager.spaces.remove_selected(
+        &**manager,
+        &selector,
+        UnsavedWork::default(),
+        InspectionPolicy::GitOnly,
+    ))
+    .await
+    .unwrap();
     assert_eq!(fixture.changes(), [json!(["shoal-user"])]);
 }
 
@@ -83,9 +100,14 @@ async fn a_restored_space_takes_back_the_assignee_shoal_added_before() {
     fixture.link(workspace).await;
     // The removal could not take it back, so the forge still shows it.
     fixture.refuse(Refuse::Removing);
-    (manager.remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly))
-        .await
-        .unwrap();
+    (manager.spaces.remove_selected(
+        &**manager,
+        &selector,
+        UnsavedWork::default(),
+        InspectionPolicy::GitOnly,
+    ))
+    .await
+    .unwrap();
     fixture.refuse(Refuse::Nothing);
     let restored = manager.restore_workspace(&selector).await.unwrap();
     fixture.unlink(&restored.opened.workspace).await;
@@ -167,7 +189,7 @@ async fn a_scoped_relink_checks_its_related_items_as_links_do() {
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     let related = |workspace: Workspace| workspace.links.related.len();
     assert_eq!(
-        related(manager.workspace_by_id(&workspace.id).await.unwrap()),
+        related(manager.spaces.workspace_by_id(&workspace.id).await.unwrap()),
         0
     );
     // The user's relink, as a restore makes, records it as it was.
@@ -179,7 +201,7 @@ async fn a_scoped_relink_checks_its_related_items_as_links_do() {
         .is_empty()
     );
     assert_eq!(
-        related(manager.workspace_by_id(&workspace.id).await.unwrap()),
+        related(manager.spaces.workspace_by_id(&workspace.id).await.unwrap()),
         1
     );
 }

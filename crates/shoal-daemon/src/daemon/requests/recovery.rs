@@ -20,18 +20,22 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        RecoveryMethod::Checkpoint { workspace, name } => {
-            Body::Checkpoint(manager.take_checkpoint(&workspace, name).await?)
-        }
+        RecoveryMethod::Checkpoint { workspace, name } => Body::Checkpoint(
+            manager
+                .spaces
+                .take_checkpoint(&**manager, &workspace, name)
+                .await?,
+        ),
         RecoveryMethod::Checkpoints { workspace, after } => {
-            Body::Checkpoints(manager.checkpoints(&workspace, after).await?)
+            Body::Checkpoints(manager.spaces.checkpoints(&workspace, after).await?)
         }
         RecoveryMethod::RestoreCheckpoint {
             workspace,
             checkpoint,
         } => Body::RestoredCheckpoint(
             manager
-                .restore_checkpoint(&workspace, checkpoint, caller)
+                .spaces
+                .restore_checkpoint(&**manager, &workspace, checkpoint, caller)
                 .await?,
         ),
         RecoveryMethod::Saved { space } => {
@@ -44,7 +48,8 @@ pub(super) async fn handle(
         }
         RecoveryMethod::Reconcile { workspace, options } => Body::Reconciled(
             manager
-                .reconcile_workspaces(workspace.as_ref(), options)
+                .spaces
+                .reconcile_workspaces(&**manager, workspace.as_ref(), options)
                 .await?,
         ),
     }))

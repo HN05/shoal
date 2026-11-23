@@ -195,7 +195,9 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     signal_stop(&manager, &open.id, "ended");
     stop(&manager, &open.id, "manual", STOPPED);
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&done.id),
             Done::default(),
             &Attacher::User,
@@ -237,7 +239,7 @@ async fn entry(manager: &Manager, execution: &str) -> QueueEntry {
 /// Why the agent of the workspace `name` is asleep and what wakes it.
 async fn asleep(manager: &Manager, name: &str) -> Option<Asleep> {
     let id = manager.named(name).await;
-    manager.workspace(&id).await.unwrap().asleep
+    manager.spaces.workspace(&id).await.unwrap().asleep
 }
 
 /// The record of an agent load stopped mid-turn.
@@ -417,9 +419,11 @@ async fn queueing_a_done_chats_restore_withdraws_its_completion() {
     let repo = register(&manager, &temp, "repo").await;
     let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
     let selector = SpaceSelector::id(&chat.id);
-    (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .mark_space_done(&*manager, &selector, Done::default(), &Attacher::User))
+    .await
+    .unwrap();
     stop(&manager, &chat.id, "stopped-agent", STOPPED);
 
     (manager
@@ -428,7 +432,7 @@ async fn queueing_a_done_chats_restore_withdraws_its_completion() {
     .await
     .unwrap();
 
-    assert_eq!(manager.completion(&chat.id).await.unwrap(), None);
+    assert_eq!(manager.spaces.completion(&chat.id).await.unwrap(), None);
 }
 
 #[tokio::test]
@@ -595,9 +599,20 @@ async fn a_queued_restore_of_an_idle_agent_keeps_its_workspace_from_no_cleanup()
     signal_stop(&manager, &working.id, "working-agent");
     manager.agents.dispatch_queue(&*manager).await.unwrap();
     assert!(entry(&manager, "idle-agent").await.waits_for_update);
-    assert!(manager.cleanup_candidacy(&idle.id).await.unwrap().is_ok());
+    assert!(
+        manager
+            .spaces
+            .cleanup_candidacy(&*manager, &idle.id)
+            .await
+            .unwrap()
+            .is_ok()
+    );
     assert_eq!(
-        manager.cleanup_candidacy(&working.id).await.unwrap(),
+        manager
+            .spaces
+            .cleanup_candidacy(&*manager, &working.id)
+            .await
+            .unwrap(),
         Err(crate::model::CleanupReason::Recovering)
     );
 
@@ -618,7 +633,11 @@ async fn a_queued_restore_of_an_idle_agent_keeps_its_workspace_from_no_cleanup()
     manager.agents.dispatch_queue(&*manager).await.unwrap();
     assert_eq!(entry(&manager, "idle-agent").await.state, Queued);
     assert_eq!(
-        manager.cleanup_candidacy(&idle.id).await.unwrap(),
+        manager
+            .spaces
+            .cleanup_candidacy(&*manager, &idle.id)
+            .await
+            .unwrap(),
         Err(crate::model::CleanupReason::Recovering)
     );
 }
@@ -755,7 +774,9 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
         .await
         .unwrap();
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&finished.id),
             Done::default(),
             &Attacher::User,

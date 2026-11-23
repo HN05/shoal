@@ -19,8 +19,11 @@ impl Manager {
         &self,
         selector: &SpaceSelector,
     ) -> Result<Option<MergeWarning>> {
-        let workspace = self.workspace(selector).await?;
-        let recorded = self.recorded_changed_on_both_sides(&workspace.id).await?;
+        let workspace = self.spaces.workspace(selector).await?;
+        let recorded = self
+            .spaces
+            .recorded_changed_on_both_sides(&workspace.id)
+            .await?;
         let Some(recorded) = recorded.filter(|recorded| !recorded.files.is_empty()) else {
             return Ok(None);
         };

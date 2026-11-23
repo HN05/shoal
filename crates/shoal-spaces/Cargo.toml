@@ -1,0 +1,33 @@
+[package]
+name = "shoal-spaces"
+version.workspace = true
+description = "The spaces of Shoal's daemon: their records and tree, workspaces and chats, their lifecycle, removal and cleanup, and their restores, conversions, moves and launches"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# The fixtures the daemon's tests of spaces share.
+test-support = []
+
+[dependencies]
+anyhow.workspace = true
+fs2 = "0.4"
+futures-util.workspace = true
+rusqlite = { workspace = true, features = ["bundled"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+shoal-coordination.workspace = true
+shoal-core.workspace = true
+shoal-daemon-base.workspace = true
+shoal-forge.workspace = true
+shoal-forge-types = { workspace = true, features = ["rusqlite"] }
+shoal-ids = { workspace = true, features = ["rusqlite"] }
+shoal-protocol = { workspace = true, features = ["rusqlite"] }
+shoal-refs = { workspace = true, features = ["rusqlite"] }
+shoal-schedule = { workspace = true, features = ["rusqlite"] }
+shoal-store.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "process", "rt", "sync", "time"] }

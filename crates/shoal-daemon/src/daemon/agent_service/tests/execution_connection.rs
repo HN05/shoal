@@ -215,7 +215,8 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
     assert!(!manager.agents.executions().has_unattachable());
     // The detached execution awaits reattachment; the stopped one is gone.
     let executions = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions;
@@ -294,7 +295,8 @@ async fn running_executions_leave_daemon_operations_idle() {
     bounded(executing).await.unwrap().unwrap();
     drop(update);
     let executions = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions;
@@ -367,7 +369,8 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
     assert_eq!(plan.scope_token, registered.scope_token);
     assert_eq!(plan.environment, registered.environment);
     let executions = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions;
@@ -399,7 +402,8 @@ async fn refused_agent(manager: &Arc<Manager>, workspace: &crate::model::Workspa
             .collect()
     };
     let recorded = ids(manager
-        .inspect_workspace(&selector)
+        .spaces
+        .inspect_workspace(&**manager, &selector)
         .await
         .unwrap()
         .executions);
@@ -433,7 +437,8 @@ async fn refused_agent(manager: &Arc<Manager>, workspace: &crate::model::Workspa
         panic!("the agent was admitted: {:?}", response.body);
     };
     let executions = ids(manager
-        .inspect_workspace(&selector)
+        .spaces
+        .inspect_workspace(&**manager, &selector)
         .await
         .unwrap()
         .executions);
@@ -494,7 +499,14 @@ async fn no_agent_starts_in_a_workspace_a_chats_agent_moves_to() {
     };
     // The chat's agent works on where it ran, its turn not yet ended.
     let workspace = manager
-        .create_converted_workspace(converting, "fix-login".into(), None, Default::default())
+        .spaces
+        .create_converted_workspace(
+            &*manager,
+            converting,
+            "fix-login".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
 

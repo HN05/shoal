@@ -31,7 +31,7 @@ impl Messages for Manager {
     }
 
     fn undelivered_leftovers(&self, id: &SpaceId, room: usize) -> Result<Vec<Leftover>> {
-        self.leftovers.undelivered(id, room)
+        self.spaces.leftovers.undelivered(id, room)
     }
 
     fn watch_messages(&self) -> watch::Receiver<u64> {

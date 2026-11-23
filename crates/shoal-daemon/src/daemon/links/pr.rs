@@ -13,7 +13,9 @@ use crate::{
     model::Workspace,
 };
 use shoal_forge::{RepoRequests, review::status::StatusRequests, transport::account::Account};
-pub(crate) use shoal_protocol::links::pr::{Action, Registration, RegistrationKind};
+#[cfg(test)]
+pub(crate) use shoal_protocol::links::pr::Action;
+pub(crate) use shoal_protocol::links::pr::{Registration, RegistrationKind};
 
 /// Prefixes errors from moving stacked workspaces, which a later sweep clears.
 const STACK_ERROR: &str = "could not move the workspaces stacked on it";
@@ -26,7 +28,7 @@ impl Manager {
     /// workspace does not skip the others.
     pub async fn sweep_prs(&self) -> Result<()> {
         let mut failed = crate::daemon::cleanup::SpaceFailures::default();
-        for listed in self.list_workspaces().await? {
+        for listed in self.spaces.list_workspaces().await? {
             if let Err(error) = self.sweep_listed_prs(&listed).await {
                 failed.push(&listed.id, &listed.name, &error);
             }
@@ -57,7 +59,7 @@ impl Manager {
             return Ok(true);
         }
         for stacked in &listed.stacked_workspaces {
-            let Some(stacked) = self.find_workspace(&stacked.id).await? else {
+            let Some(stacked) = self.spaces.find_workspace(&stacked.id).await? else {
                 continue;
             };
             if self
@@ -78,7 +80,7 @@ impl Manager {
         let locked = |id: &SpaceId| listed.stacked_workspaces.iter().any(|held| held.id == *id);
         let stacked = listed.stacked_workspaces.iter().map(|stacked| &stacked.id);
         let guard = self.gates.lock_prs(stacked.chain([&listed.id])).await;
-        let Some(workspace) = self.find_workspace(&listed.id).await? else {
+        let Some(workspace) = self.spaces.find_workspace(&listed.id).await? else {
             return Ok(None);
         };
         let unchanged = workspace
@@ -100,7 +102,13 @@ impl Manager {
                 let cleanup = Cleanup::Pr {
                     acknowledged: false,
                 };
-                return (self.announce_removal(workspace, cleanup, &Err::<(), _>(error))).await;
+                return (self.spaces.announce_removal(
+                    self,
+                    workspace,
+                    cleanup,
+                    &Err::<(), _>(error),
+                ))
+                .await;
             }
         };
         // A base stays until its stacked workspaces moved; a failure retries next sweep.
@@ -137,7 +145,7 @@ impl Manager {
             restacked.context(STACK_ERROR)?;
             settings?;
             let verified = async {
-                self.verify_worktree(workspace).await?;
+                self.spaces.verify_worktree(self, workspace).await?;
                 current_head(workspace).await
             };
             let head = self
@@ -152,13 +160,21 @@ impl Manager {
             }
             // A merge only the forge has shown yet has its runs looked up
             // once the next poll records it, which then keeps the space.
-            if self.keep_reason(&workspace.id).await?.is_some()
-                || !self.completion_allows_cleanup(workspace).await?
+            if self
+                .spaces
+                .keep_reason(self, &workspace.id)
+                .await?
+                .is_some()
+                || !self
+                    .spaces
+                    .completion_allows_cleanup(self, workspace)
+                    .await?
                 || self.links.merge_unseen(self, &workspace.id).await?
             {
                 return Ok(false);
             }
-            self.remove_merged(&SpaceSelector::id(&workspace.id), &head)
+            self.spaces
+                .remove_merged(self, &SpaceSelector::id(&workspace.id), &head)
                 .await
         }
         .await;
@@ -166,7 +182,9 @@ impl Manager {
             let acknowledged =
                 matches!(registration.kind, RegistrationKind::Acknowledgement { .. });
             let cleanup = Cleanup::Pr { acknowledged };
-            self.announce_removal(workspace, cleanup, &result).await?;
+            self.spaces
+                .announce_removal(self, workspace, cleanup, &result)
+                .await?;
         }
         registration.error = result.err().map(|error| format!("{error:#}"));
         self.save_registration(&workspace.id, &registration).await?;
@@ -208,7 +226,7 @@ impl Manager {
                     return Ok(true);
                 }
                 // Only an explicit done is waited on; merged cleanup covers the rest.
-                let Some(completion) = self.completion(&workspace.id).await? else {
+                let Some(completion) = self.spaces.completion(&workspace.id).await? else {
                     return Ok(false);
                 };
                 if !self.all_prs_merged(workspace, urls, head).await? {
@@ -248,7 +266,8 @@ impl Manager {
         }
         // A branch rebased after its PR merged has new commits for the same changes.
         let merged = self
-            .default_branch_has_head(workspace)
+            .spaces
+            .default_branch_has_head(self, workspace)
             .await
             .context("merged PRs do not contain HEAD; could not check the default branch")?;
         ensure!(

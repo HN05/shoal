@@ -1,0 +1,414 @@
+//! Branches removal kept because only they had some commits. Cleanup deletes
+//! each once a remote or the default branch has those commits too, the user
+//! deletes the rest on request, and a branch that moved, went away or belongs
+//! to a workspace again is forgotten.
+use crate::Spaces;
+use crate::daemon::Daemon;
+use shoal_ids::repository_ids::RepositoryId;
+use std::path::Path;
+
+use anyhow::{Context, Result, bail, ensure};
+use rusqlite::params;
+use shoal_refs::{BranchName, CommitId};
+
+use crate::{
+    git::{
+        self,
+        default_branch::{DefaultBranch, DefaultBranchLookup},
+    },
+    log,
+    model::{BranchTarget, KeptBranch, Repository, Workspace},
+    time::UnixTime,
+};
+
+/// A remembered branch, at the commit removal left it on.
+#[derive(Debug, Clone)]
+pub struct Record {
+    pub repository_id: RepositoryId,
+    pub branch: BranchName,
+    pub head: CommitId,
+    pub kept_at: UnixTime,
+}
+
+/// Where a kept branch's commits may also be.
+#[derive(Debug, Clone, Copy)]
+enum Evidence<'a> {
+    /// The remote-tracking refs, which may be stale: enough to show a count.
+    TrackingRefs,
+    /// What the remotes advertise now and this repository has, for deleting
+    /// without asking.
+    Advertised(&'a [git::RemoteHead]),
+}
+
+/// What a kept branch is now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Status {
+    /// Deleted, moved, made symbolic, the default branch or a workspace's:
+    /// no longer Shoal's to delete.
+    Released,
+    /// Checked out by a worktree Shoal does not manage, or the start of a
+    /// rebase or bisect in one.
+    CheckedOut,
+    /// The branch a workspace builds on, which keeps it while that
+    /// workspace does.
+    BuiltOn,
+    /// Still at the kept commit, with this many commits only it has.
+    Kept { unkept_commits: u64 },
+}
+
+impl Spaces {
+    /// Remember a branch the removal of `workspace` kept, unless it is the
+    /// default branch, which Shoal never deletes.
+    pub async fn remember_kept_branch(
+        &self,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
+        outcome: &super::super::lifecycle::WorktreeRemoval,
+    ) -> Result<()> {
+        // Only the workspace's own branch is its to delete later; a worktree
+        // switched onto another leaves that one alone.
+        let Some(branch) = outcome
+            .branch
+            .clone()
+            .filter(|branch| workspace.branch() == Some(branch))
+            .filter(|_| !outcome.branch_outcome.is_deleted())
+        else {
+            return Ok(());
+        };
+        let repo = daemon
+            .repository(crate::repository::Selector::from(workspace.repository()))
+            .await?;
+        let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
+            .await
+            .ok();
+        if default.as_ref() == Some(&branch) {
+            return Ok(());
+        }
+        let Some(head) = git::status::local_branch_commit(&repo.path, &branch).await? else {
+            return Ok(());
+        };
+        self.save_kept_branch(Record {
+            repository_id: repo.id,
+            branch,
+            head,
+            kept_at: UnixTime::now(),
+        })
+        .await
+    }
+
+    /// Repositories with kept branches, in a stable order.
+    pub async fn kept_branch_repositories(&self) -> Result<Vec<RepositoryId>> {
+        self.store
+            .run(|db| {
+                let mut statement = db.prepare(
+                    "SELECT DISTINCT repository_id FROM kept_branches ORDER BY repository_id",
+                )?;
+                let ids = statement
+                    .query_map([], |row| row.get(0))?
+                    .collect::<rusqlite::Result<Vec<RepositoryId>>>()?;
+                Ok(ids)
+            })
+            .await
+    }
+
+    /// Delete the repository's kept branches whose commits the default branch
+    /// or one of `heads`, which the remotes advertise now, has. The caller has
+    /// fetched the default branch.
+    pub async fn delete_kept_branches_kept_elsewhere(
+        &self,
+        daemon: &dyn Daemon,
+        repository_id: &RepositoryId,
+        heads: &[git::RemoteHead],
+    ) -> Result<()> {
+        let repo = daemon
+            .repository(crate::repository::Selector::from(repository_id))
+            .await?;
+        // Creation opens branches under the same gate.
+        let _git = self.gates.lock_git(&repo.id).await;
+        // An unresolved default branch could be any of them.
+        let Ok(default) =
+            git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached).await
+        else {
+            return Ok(());
+        };
+        let present = git::present_heads(&repo.path, heads).await?;
+        let evidence = Evidence::Advertised(&present);
+        for (record, status) in self.kept_statuses(&repo, Some(&default), evidence).await? {
+            if status == (Status::Kept { unkept_commits: 0 }) {
+                git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;
+                self.forget_kept_branch(&record).await?;
+                log!(
+                    "deleted kept branch {}: a remote or the default branch has its commits",
+                    record.branch
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Every kept branch Shoal could delete, with the commits no
+    /// remote-tracking ref or the default branch has. The count reads refs
+    /// that may be stale, so a branch it shows none for is listed too.
+    /// The kept branches, only those of the repository `repository` selects.
+    pub async fn list_kept_branches(
+        &self,
+        daemon: &dyn Daemon,
+        repository: Option<&str>,
+    ) -> Result<Vec<KeptBranch>> {
+        let only = match repository {
+            Some(selector) => Some(
+                daemon
+                    .repository(crate::repository::Selector::from(selector))
+                    .await?
+                    .id,
+            ),
+            None => None,
+        };
+        let mut listed = Vec::new();
+        for repository_id in self.kept_branch_repositories().await? {
+            if only.as_ref().is_some_and(|only| *only != repository_id) {
+                continue;
+            }
+            let repo = daemon
+                .repository(crate::repository::Selector::from(&repository_id))
+                .await?;
+            let _git = self.gates.lock_git(&repo.id).await;
+            let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
+                .await
+                .ok();
+            let statuses = self
+                .kept_statuses(&repo, default.as_ref(), Evidence::TrackingRefs)
+                .await?;
+            for (record, status) in statuses {
+                if let Status::Kept { unkept_commits } = status {
+                    listed.push(kept_branch(&repo, record, unkept_commits).await?);
+                }
+            }
+        }
+        Ok(listed)
+    }
+
+    /// Delete the targets with the commits only they have, checking every
+    /// one before deleting any. A target must be a kept branch still at the
+    /// commit removal left it on and the user saw, not checked out, in a
+    /// repository whose default branch resolves.
+    pub async fn delete_kept_branches(
+        &self,
+        daemon: &dyn Daemon,
+        targets: Vec<BranchTarget>,
+    ) -> Result<Vec<KeptBranch>> {
+        let mut repository_ids: Vec<_> = targets
+            .iter()
+            .map(|target| target.repository_id.clone())
+            .collect();
+        repository_ids.sort();
+        repository_ids.dedup();
+        // Each repository's gate stays held until its branches are gone;
+        // taking them in order keeps two requests from waiting on each other.
+        let mut gates = Vec::new();
+        let mut chosen = Vec::new();
+        for repository_id in &repository_ids {
+            let repo = daemon
+                .repository(crate::repository::Selector::from(repository_id))
+                .await?;
+            gates.push(self.gates.lock_git(&repo.id).await);
+            // An unresolved default branch could be any of them.
+            let default = git::default_branch::locate(&repo.path, DefaultBranchLookup::Cached)
+                .await
+                .context("the default branch is unknown, and could be any kept branch")?;
+            let statuses = self
+                .kept_statuses(&repo, Some(&default), Evidence::TrackingRefs)
+                .await?;
+            for target in targets.iter().filter(|t| &t.repository_id == repository_id) {
+                let (record, status) = statuses
+                    .iter()
+                    .find(|(record, _)| record.branch == target.branch)
+                    .with_context(|| format!("{} is not a branch Shoal kept", target.branch))?;
+                ensure!(
+                    record.head == target.head,
+                    "{} changed since it was listed; list kept branches again",
+                    target.branch
+                );
+                let unkept_commits = match status {
+                    Status::Kept { unkept_commits } => *unkept_commits,
+                    Status::CheckedOut => bail!(
+                        "{} is checked out; switch that checkout away before deleting it",
+                        target.branch
+                    ),
+                    Status::BuiltOn => bail!(
+                        "a workspace builds on {}; remove it or change its base first",
+                        target.branch
+                    ),
+                    Status::Released => {
+                        bail!("{} is no longer a branch Shoal kept", target.branch)
+                    }
+                };
+                chosen.push((repo.clone(), record.clone(), unkept_commits));
+            }
+        }
+        let mut deleted = Vec::new();
+        for (repo, record, unkept_commits) in chosen {
+            let branch = kept_branch(&repo, record.clone(), unkept_commits).await?;
+            git::branch::delete_at(&repo.path, &record.branch, &record.head).await?;
+            self.forget_kept_branch(&record).await?;
+            deleted.push(branch);
+        }
+        Ok(deleted)
+    }
+
+    /// Every remembered branch of the repository with its status,
+    /// forgetting the released ones. The caller holds the repository's Git
+    /// gate; `default` is its default branch when that resolves.
+    async fn kept_statuses(
+        &self,
+        repo: &Repository,
+        default: Option<&DefaultBranch>,
+        evidence: Evidence<'_>,
+    ) -> Result<Vec<(Record, Status)>> {
+        let workspaces = self.workspace_branches(&repo.id).await?;
+        let mut statuses = Vec::new();
+        for record in self.kept_records(&repo.id).await? {
+            let status = kept_status(&repo.path, &record, default, &workspaces, evidence).await?;
+            if status == Status::Released {
+                self.forget_kept_branch(&record).await?;
+            }
+            statuses.push((record, status));
+        }
+        Ok(statuses)
+    }
+
+    /// Store the record, replacing an earlier one of the same branch.
+    async fn save_kept_branch(&self, record: Record) -> Result<()> {
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "INSERT INTO kept_branches(repository_id,branch,head,kept_at) VALUES (?1,?2,?3,?4)
+                        ON CONFLICT(repository_id,branch) DO UPDATE
+                        SET head=excluded.head, kept_at=excluded.kept_at",
+                    params![
+                        record.repository_id,
+                        record.branch,
+                        record.head,
+                        record.kept_at
+                    ],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    pub async fn kept_records(&self, repository_id: &RepositoryId) -> Result<Vec<Record>> {
+        let repository_id = repository_id.to_owned();
+        self.store
+            .run(move |db| {
+                let mut statement = db.prepare(
+                    "SELECT repository_id,branch,head,kept_at FROM kept_branches
+                        WHERE repository_id=?1 ORDER BY kept_at, branch",
+                )?;
+                let records = statement
+                    .query_map([repository_id], |row| {
+                        Ok(Record {
+                            repository_id: row.get(0)?,
+                            branch: row.get(1)?,
+                            head: row.get(2)?,
+                            kept_at: row.get(3)?,
+                        })
+                    })?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok(records)
+            })
+            .await
+    }
+
+    async fn forget_kept_branch(&self, record: &Record) -> Result<()> {
+        let (repository_id, branch) = (record.repository_id.clone(), record.branch.clone());
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "DELETE FROM kept_branches WHERE repository_id=?1 AND branch=?2",
+                    params![repository_id, branch],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// The branches of the repository's workspaces, and the local branches
+    /// they build on.
+    async fn workspace_branches(&self, repository_id: &RepositoryId) -> Result<WorkspaceBranches> {
+        let workspaces = self.list_workspaces().await?;
+        let workspaces =
+            (workspaces.iter()).filter(|workspace| workspace.repository() == repository_id);
+        let mut branches = WorkspaceBranches::default();
+        for workspace in workspaces {
+            branches.own.extend(workspace.part.branch().cloned());
+            let base = (workspace.checkout.base_ref()).and_then(git::strip_local);
+            branches.bases.extend(base.map(BranchName::from));
+        }
+        Ok(branches)
+    }
+}
+
+/// The branches a repository's workspaces are on, and those they build on.
+#[derive(Debug, Default)]
+struct WorkspaceBranches {
+    own: Vec<BranchName>,
+    bases: Vec<BranchName>,
+}
+
+async fn kept_status(
+    repo: &Path,
+    record: &Record,
+    default: Option<&DefaultBranch>,
+    workspaces: &WorkspaceBranches,
+    evidence: Evidence<'_>,
+) -> Result<Status> {
+    if default.is_some_and(|default| default.name == record.branch)
+        || workspaces.own.contains(&record.branch)
+    {
+        return Ok(Status::Released);
+    }
+    let branch = record.branch.clone();
+    let commit = git::status::local_branch_commit(repo, &branch).await?;
+    if commit.as_ref().map(CommitId::as_str) != Some(record.head.as_str())
+        || git::branch::is_symbolic(repo, &branch).await?
+    {
+        return Ok(Status::Released);
+    }
+    if git::checkout_of(repo, &branch, git::run).await?.is_some()
+        || git::branch::in_operation(repo, &branch).await?
+    {
+        return Ok(Status::CheckedOut);
+    }
+    if workspaces.bases.contains(&record.branch) {
+        return Ok(Status::BuiltOn);
+    }
+    let unkept_commits = match (default, evidence) {
+        (Some(default), Evidence::Advertised(heads)) => {
+            git::status::unkept_commits_by(repo, record.head.as_str(), &default.name, heads).await?
+        }
+        (Some(default), Evidence::TrackingRefs) => {
+            git::status::unkept_commits(repo, record.head.as_str(), default).await?
+        }
+        (None, _) => git::status::unretained_commits(repo, record.head.as_str(), &[]).await?,
+    };
+    Ok(Status::Kept { unkept_commits })
+}
+
+async fn kept_branch(repo: &Repository, record: Record, unkept_commits: u64) -> Result<KeptBranch> {
+    let (committed_at, subject) =
+        git::branch::commit_summary(&repo.path, record.head.as_str()).await?;
+    Ok(KeptBranch {
+        repository_id: record.repository_id,
+        repository: repo
+            .name
+            .clone()
+            .unwrap_or_else(|| repo.path.display().to_string()),
+        branch: record.branch,
+        head: record.head,
+        kept_at: record.kept_at,
+        unpushed_commits: unkept_commits,
+        committed_at,
+        subject,
+    })
+}

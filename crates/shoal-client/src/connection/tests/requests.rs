@@ -89,7 +89,7 @@ async fn a_chats_agent_asks_to_hold_its_own_chat() {
         )
         .await
         .unwrap();
-    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+    let token = daemon.manager.spaces.chat_scope(&chat.id).await.unwrap();
     let agent = daemon.connector().scope(token);
     let hold = HoldMethod::HoldAcquire {
         space: SpaceSelector::id(&chat.id),
@@ -377,7 +377,9 @@ async fn a_scoped_start_reopens_only_a_workspace_below_its_own() {
     let existing = daemon.workspace("api").await;
     let child = daemon
         .manager
+        .spaces
         .create_child(
+            &*daemon.manager,
             &SpaceSelector::id(&existing.id),
             "child".into(),
             None,
@@ -557,7 +559,7 @@ async fn a_chats_agent_starts_workspaces_below_its_chat() {
         )
         .await
         .unwrap();
-    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+    let token = daemon.manager.spaces.chat_scope(&chat.id).await.unwrap();
     let agent = daemon.connector().scope(token);
     let create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
     let started: StartedWorkspace = connection::request(&agent, create).await.unwrap();
@@ -582,7 +584,9 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
     let parent = daemon.workspace("parent").await;
     let child = daemon
         .manager
+        .spaces
         .create_child(
+            &*daemon.manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

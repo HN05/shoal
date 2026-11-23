@@ -24,7 +24,9 @@ async fn tree(temp: &tempfile::TempDir, manager: &Manager) -> (Workspace, Worksp
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

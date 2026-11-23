@@ -22,6 +22,6 @@ pub(super) async fn acting(
     };
     // One the hub lists on another machine, as the chat of a request that
     // machine forwarded here, which only it has.
-    let id = manager.space_id_anywhere(&from).await?;
+    let id = manager.spaces.space_id_anywhere(manager, &from).await?;
     Ok(Some(Caller::of_space(id)))
 }

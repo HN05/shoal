@@ -95,7 +95,8 @@ async fn a_shared_workspace_keeps_the_turn_of_the_agent_that_reported_last() {
     assert_eq!(states[&ids[0]], None);
     assert_eq!(states[&ids[1]], Some(AgentState::Working));
     let status = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(

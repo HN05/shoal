@@ -72,6 +72,7 @@ impl TestDaemon {
 
     pub async fn scope_token(&self, workspace: &Workspace) -> ScopeToken {
         self.manager
+            .spaces
             .issue_scope(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()

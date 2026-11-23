@@ -91,7 +91,7 @@ async fn a_scoped_run_follows_the_triggers_permission() {
         (RunOutcome::Started, RunOrigin::Manual)
     );
     // The launch opened the chat the run names.
-    let chats = manager.chats().await.unwrap();
+    let chats = manager.spaces.chats().await.unwrap();
     assert!(
         chats
             .iter()

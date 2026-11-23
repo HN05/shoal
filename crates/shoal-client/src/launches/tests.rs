@@ -151,7 +151,15 @@ async fn a_launch_refuses_what_it_cannot_start_before_it_creates_anything() {
         let error = crate::launches::launch(&app, launch).await.unwrap_err();
         assert!(format!("{error:#}").contains(refusal), "{error:#}");
     }
-    assert!(daemon.manager.list_workspaces().await.unwrap().is_empty());
+    assert!(
+        daemon
+            .manager
+            .spaces
+            .list_workspaces()
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 /// The launches `daemon` queued in its chats, oldest first.
@@ -199,7 +207,7 @@ async fn an_app_starts_a_chat_whose_agent_the_daemon_resolves() {
     // repository's and its mode's.
     let named = format!("{} chat", daemon.repository.display_name());
     assert_eq!(chat.name.as_str(), named);
-    let chats = daemon.manager.chats().await.unwrap();
+    let chats = daemon.manager.spaces.chats().await.unwrap();
     assert!(chats.iter().any(|recorded| recorded.id == chat.id));
 }
 

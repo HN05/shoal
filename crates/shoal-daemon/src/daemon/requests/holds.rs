@@ -33,19 +33,28 @@ pub(super) async fn handle(
             name,
             reason,
         } if caller.is_some_and(|caller| SpaceSelector::id(&caller.space_id) == space) => manager
-            .request_hold(&space, name, reason)
+            .spaces
+            .request_hold(&**manager, &space, name, reason)
             .await?
             .into_body(Body::Hold),
         HoldMethod::HoldAcquire {
             space,
             name,
             reason,
-        } => Body::Hold(manager.acquire_hold(&space, name, reason, placer).await?),
+        } => Body::Hold(
+            manager
+                .spaces
+                .acquire_hold(&**manager, &space, name, reason, placer)
+                .await?,
+        ),
         HoldMethod::HoldRelease { space, name } => {
-            manager.release_hold_as(caller, &space, name).await?;
+            manager
+                .spaces
+                .release_hold_as(&**manager, caller, &space, name)
+                .await?;
             Body::Ok
         }
-        HoldMethod::HoldList { space } => Body::Holds(manager.holds(&space).await?),
+        HoldMethod::HoldList { space } => Body::Holds(manager.spaces.holds(&space).await?),
     }))
 }
 

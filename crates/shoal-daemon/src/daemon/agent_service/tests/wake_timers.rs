@@ -81,9 +81,11 @@ async fn waking_the_agent_and_finishing_the_work_cancel_its_timer() {
         .await
         .unwrap();
     assert_eq!(undone.wake_at, None);
-    (manager.mark_space_done(&done, Done::default(), &Attacher::User))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .mark_space_done(&*manager, &done, Done::default(), &Attacher::User))
+    .await
+    .unwrap();
     assert_eq!(fire_in(&manager, 30).await, None);
     for selector in [&woken, &done] {
         assert!(messages(&manager, selector).await.is_empty());

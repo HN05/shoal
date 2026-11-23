@@ -56,6 +56,7 @@ async fn a_failed_launch_stays_on_its_space_with_its_error() {
     let next = add(&manager, &repo, "next").await.entry.unwrap();
     assert_eq!(next.state, QueueState::Starting);
     let workspace = manager
+        .spaces
         .workspace_by_id(entry.space().unwrap())
         .await
         .unwrap();
@@ -116,6 +117,7 @@ async fn a_new_launch_or_the_spaces_removal_ends_its_failed_launch() {
     limit_globally(&manager, 2);
     let replaced = failed_workspace_launch(&manager, &repo, "replaced").await;
     let workspace = manager
+        .spaces
         .workspace_by_id(replaced.space().unwrap())
         .await
         .unwrap();
@@ -131,9 +133,14 @@ async fn a_new_launch_or_the_spaces_removal_ends_its_failed_launch() {
 
     let removed = failed_workspace_launch(&manager, &repo, "removed").await;
     let selector = SpaceSelector::id(removed.space().unwrap());
-    (manager.remove_selected(&selector, UnsavedWork::All, InspectionPolicy::GitOnly))
-        .await
-        .unwrap();
+    (manager.spaces.remove_selected(
+        &*manager,
+        &selector,
+        UnsavedWork::All,
+        InspectionPolicy::GitOnly,
+    ))
+    .await
+    .unwrap();
     let names: Vec<_> = states(&manager)
         .await
         .into_iter()
@@ -157,7 +164,9 @@ async fn a_chats_failed_launch_keeps_the_chat() {
         parent: None,
         priority: None,
     };
-    let chat = manager.start_new_chat(Some((&repo.id).into()), None, chat);
+    let chat = manager
+        .spaces
+        .start_new_chat(&*manager, Some((&repo.id).into()), None, chat);
     let chat = chat.await.unwrap();
     let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
     let request = crate::start_plan::queued_agent_request(&chat, launch, None).unwrap();
@@ -175,7 +184,7 @@ async fn a_chats_failed_launch_keeps_the_chat() {
     .await
     .unwrap();
 
-    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
+    assert!(manager.spaces.chat_by_id(&chat.id).await.unwrap().is_some());
     let entries = manager.agents.queue_entries(&*manager).await.unwrap();
     let [failed] = entries.as_slice() else {
         panic!("{entries:?}");
@@ -283,9 +292,11 @@ async fn a_permission_change_refused_for_one_launch_changes_none() {
     let repo = register(&manager, &temp, "repo").await;
     let child = create(&manager, &repo, "child").await;
     let failed = crate::state::WorkspaceState::Failed;
-    (manager.set_state(&child.id, failed, Some("setup failed".into())))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .set_state(&child.id, failed, Some("setup failed".into())))
+    .await
+    .unwrap();
     let waiting = manager
         .agents
         .queue_add(&*manager, launch_in(&child, false))
@@ -325,7 +336,9 @@ async fn a_coordinator_changes_the_permissions_of_a_failed_chat_below_it() {
         parent: Some(parent.id.clone()),
         priority: None,
     };
-    let child = manager.start_new_chat(Some((&repo.id).into()), None, child);
+    let child = manager
+        .spaces
+        .start_new_chat(&*manager, Some((&repo.id).into()), None, child);
     let child = child.await.unwrap();
     let caller = crate::daemon::scope::Caller {
         space_id: parent.id.clone(),

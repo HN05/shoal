@@ -156,7 +156,9 @@ async fn a_finished_assignment_cancels_its_retry() {
     )
     .await;
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -166,7 +168,8 @@ async fn a_finished_assignment_cancels_its_retry() {
     assert_eq!(retry(&manager, &workspace).await, None);
     // Withdrawing completion does not bring the old retry back.
     manager
-        .undo_space_done(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .undo_space_done(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(deliver_now(&manager).await, None);
@@ -339,7 +342,7 @@ async fn a_repository_setting_decides_whether_its_agents_retry() {
 async fn a_chats_failed_turn_waits_past_its_reset_until_the_chat_is_done() {
     let (_temp, manager) = manager().await;
     let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", None, None).await;
-    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+    let execution = manager.spaces.workspace_executions(&chat.id).await.unwrap()[0]
         .id
         .clone();
     let selector = SpaceSelector::id(&chat.id);
@@ -385,7 +388,8 @@ async fn a_chats_failed_turn_waits_past_its_reset_until_the_chat_is_done() {
     fail(TurnFailure::Overloaded).await.unwrap();
     assert!(pending().await.unwrap().is_some());
     manager
-        .mark_space_done(&selector, Done::default(), &Attacher::User)
+        .spaces
+        .mark_space_done(&*manager, &selector, Done::default(), &Attacher::User)
         .await
         .unwrap();
     assert_eq!(pending().await.unwrap(), None);

@@ -42,7 +42,7 @@ pub(super) async fn targeted(
         return None;
     }
     // One this machine cannot read is left to its handler's refusal.
-    if manager.holds_space(&space).await.unwrap_or(true) {
+    if manager.spaces.holds_space(&space).await.unwrap_or(true) {
         return None;
     }
     if !matches!(manager.hub.machine_of(manager, &space).await, Ok(Some(_))) {

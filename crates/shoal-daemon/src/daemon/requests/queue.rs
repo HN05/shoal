@@ -108,9 +108,12 @@ pub(super) async fn handle(
             }
             Body::QueueEntry(entry)
         }
-        QueueMethod::SetPriority { space, priority } => {
-            Body::Prioritized(manager.set_priority(caller, &space, priority).await?)
-        }
+        QueueMethod::SetPriority { space, priority } => Body::Prioritized(
+            manager
+                .spaces
+                .set_priority(&**manager, caller, &space, priority)
+                .await?,
+        ),
         QueueMethod::QueueRestore {
             workspace,
             execution,

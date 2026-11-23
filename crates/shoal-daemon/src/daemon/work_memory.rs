@@ -27,7 +27,10 @@ impl Manager {
     pub(crate) fn work_limit(&self) -> Option<WorkLimit> {
         let limit = limit(&self.config())?;
         let now = tokio::time::Instant::now();
-        let sampled = self.usage.with_workspaces(|usages| usages.memory(now));
+        let sampled = self
+            .spaces
+            .usage
+            .with_workspaces(|usages| usages.memory(now));
         Some(WorkLimit { limit, sampled })
     }
 }

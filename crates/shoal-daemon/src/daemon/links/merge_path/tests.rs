@@ -107,7 +107,9 @@ async fn an_open_linked_pr_takes_the_merge_and_refuses_a_local_one() {
     let selector = SpaceSelector::id(&f.workspace.id);
     let refused = f
         .manager
+        .spaces
         .preview_merge(
+            &*f.manager,
             &selector,
             &crate::model::MergeOptions {
                 push: Some(false),

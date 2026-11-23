@@ -2628,6 +2628,7 @@ dependencies = [
  "shoal-reviews",
  "shoal-runner",
  "shoal-schedule",
+ "shoal-spaces",
  "shoal-store",
  "shoal-subprocess",
  "tempfile",
@@ -2945,6 +2946,31 @@ dependencies = [
  "shoal-ids",
  "shoal-states",
  "shoal-time",
+]
+
+[[package]]
+name = "shoal-spaces"
+version = "0.20.6"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "futures-util",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shoal-coordination",
+ "shoal-core",
+ "shoal-daemon-base",
+ "shoal-forge",
+ "shoal-forge-types",
+ "shoal-ids",
+ "shoal-protocol",
+ "shoal-refs",
+ "shoal-schedule",
+ "shoal-store",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

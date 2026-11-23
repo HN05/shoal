@@ -191,9 +191,11 @@ pub async fn chat_fixture(
         parent: None,
         priority: None,
     };
-    let chat = (manager.start_new_chat(Some(repository.into()), None, new))
-        .await
-        .unwrap();
+    let chat = (manager
+        .spaces
+        .start_new_chat(manager, Some(repository.into()), None, new))
+    .await
+    .unwrap();
     (chat, checkout)
 }
 
@@ -286,7 +288,8 @@ pub fn wait_paused<'a>(
 /// Report `session` from the workspace's running agent, as its hooks do.
 pub async fn report_session(manager: &Manager, workspace: &crate::model::Workspace, session: &str) {
     let execution = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]
@@ -358,7 +361,8 @@ pub async fn restart(manager: &Manager) -> Arc<Manager> {
 /// The executions the daemon records for `workspace`.
 pub async fn executions(manager: &Manager, workspace: &crate::model::Workspace) -> Vec<Execution> {
     manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions

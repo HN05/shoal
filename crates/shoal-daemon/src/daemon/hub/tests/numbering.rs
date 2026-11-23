@@ -16,7 +16,11 @@ use crate::{
 };
 
 /// Record a chat `id` as a new space is, and its number.
-fn record(tx: &Transaction<'_>, id: &str) -> Result<SpaceNumber> {
+fn record(
+    tx: &Transaction<'_>,
+    records: &dyn shoal_spaces::daemon::Records,
+    id: &str,
+) -> Result<SpaceNumber> {
     let (id, name) = (SpaceId::from(id), SpaceName::from(id));
     let new = spaces::records::NewSpace {
         id: &id,
@@ -28,7 +32,7 @@ fn record(tx: &Transaction<'_>, id: &str) -> Result<SpaceNumber> {
         narrowing: &PermissionsConfig::default(),
         created_at: crate::time::UnixTime::now(),
     };
-    spaces::records::record(tx, &new)
+    spaces::records::record(tx, records, &new)
 }
 
 fn spares(numbers: &[u32]) -> Numbering {
@@ -41,13 +45,18 @@ fn spares(numbers: &[u32]) -> Numbering {
 #[tokio::test]
 async fn a_machine_of_a_hub_numbers_new_spaces_from_its_spares() -> Result<()> {
     let (_root, manager) = crate::daemon::test_support::manager().await;
+    let records = manager.spaces.records.clone();
     let numbers = (manager.store)
-        .write(|tx| {
-            let alone = record(tx, "alone")?;
+        .write(move |tx| {
+            let alone = record(tx, &*records, "alone")?;
             keep_spares(tx, &spares(&[1, 4]))?;
             // A spare a space here holds is passed over, and once none is
             // left a space takes the number above the highest here.
-            let numbers = [alone, record(tx, "spare")?, record(tx, "above")?];
+            let numbers = [
+                alone,
+                record(tx, &*records, "spare")?,
+                record(tx, &*records, "above")?,
+            ];
             Ok(numbers.map(SpaceNumber::get))
         })
         .await?;
@@ -130,7 +139,14 @@ async fn a_renumbered_space_takes_its_threads_and_their_waits_along() -> Result<
         .await?;
     let mut numbers = Vec::new();
     for id in [&asker.id, &other.id] {
-        numbers.push(manager.space(&SpaceSelector::id(id)).await?.number.get());
+        numbers.push(
+            manager
+                .spaces
+                .space(&SpaceSelector::id(id))
+                .await?
+                .number
+                .get(),
+        );
     }
     assert_eq!(numbers, [4, 2]);
     let proposal = (manager.store).read(|tx| {
@@ -167,12 +183,13 @@ async fn an_imported_space_keeps_the_number_the_hub_kept_for_it() -> Result<()> 
             .keep_imported_number(&SpaceId::from(id), number)
             .await?;
     }
+    let records = manager.spaces.records.clone();
     let numbers = (manager.store)
-        .write(|tx| {
+        .write(move |tx| {
             let numbers = [
-                record(tx, "here")?,
-                record(tx, "moved")?,
-                record(tx, "taken")?,
+                record(tx, &*records, "here")?,
+                record(tx, &*records, "moved")?,
+                record(tx, &*records, "taken")?,
             ];
             Ok(numbers.map(SpaceNumber::get))
         })
@@ -185,9 +202,13 @@ async fn an_imported_space_keeps_the_number_the_hub_kept_for_it() -> Result<()> 
 #[tokio::test]
 async fn a_machine_reserves_the_numbers_it_holds_without_a_space() -> Result<()> {
     let (_root, manager) = crate::daemon::test_support::manager().await;
+    let records = manager.spaces.records.clone();
     let reserved = (manager.store)
-        .write(|tx| {
-            let (gone, here) = (record(tx, "gone")?, record(tx, "here")?);
+        .write(move |tx| {
+            let (gone, here) = (
+                record(tx, &*records, "gone")?,
+                record(tx, &*records, "here")?,
+            );
             // Issue proposals outlive the space that made them, whose number
             // they keep.
             for (key, space, number) in [("of-gone", "gone", gone), ("of-here", "here", here)] {

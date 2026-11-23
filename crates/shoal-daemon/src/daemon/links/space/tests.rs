@@ -49,7 +49,11 @@ async fn chat(
         parent: None,
     };
     let repository = repository.map(|repository| repository.id.clone().into());
-    let chat = manager.start_new_chat(repository, None, new).await.unwrap();
+    let chat = manager
+        .spaces
+        .start_new_chat(&**manager, repository, None, new)
+        .await
+        .unwrap();
     manager.run_chat_agent(chat, None).await.unwrap()
 }
 
@@ -192,7 +196,7 @@ async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_
         },
         link: false,
     };
-    let token = manager.chat_scope(&master.id).await.unwrap();
+    let token = manager.spaces.chat_scope(&master.id).await.unwrap();
     let mut method = open();
     crate::daemon::scope::authorize(&manager, Some(&token), &mut method)
         .await
@@ -211,7 +215,7 @@ async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_
         (chat, repository),
         (SpaceSelector::id(&master.id), repos[0].id.clone())
     );
-    let scoped = manager.chat_scope(&planning.id).await.unwrap();
+    let scoped = manager.spaces.chat_scope(&planning.id).await.unwrap();
     let refused = crate::daemon::scope::authorize(&manager, Some(&scoped), &mut open()).await;
     assert!(refused.is_err());
 }
@@ -232,7 +236,7 @@ async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itse
             limit: 10,
         },
     };
-    let token = manager.chat_scope(&master.id).await.unwrap();
+    let token = manager.spaces.chat_scope(&master.id).await.unwrap();
     let mut method = list();
     crate::daemon::scope::authorize(&manager, Some(&token), &mut method)
         .await
@@ -251,7 +255,7 @@ async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itse
         (chat, repository),
         (SpaceSelector::id(&master.id), repos[1].id.clone())
     );
-    let scoped = manager.chat_scope(&planning.id).await.unwrap();
+    let scoped = manager.spaces.chat_scope(&planning.id).await.unwrap();
     let refused = crate::daemon::scope::authorize(&manager, Some(&scoped), &mut list()).await;
     assert!(refused.is_err());
 }

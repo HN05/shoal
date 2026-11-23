@@ -21,10 +21,10 @@ impl Manager {
     /// progress, forget the queue's that cleared, and clear the spaces'.
     pub(crate) async fn poll_blockers(&self) -> Result<()> {
         let mut targets: HashSet<Target> = self.agents.queued_forge_blockers().await?;
-        targets.extend(self.progress_forge_blockers().await?);
+        targets.extend(self.spaces.progress_forge_blockers().await?);
         let lookups = self.look_up_blockers(targets).await;
         let forgotten = self.agents.forget_cleared_launch_blockers(&lookups).await;
-        let cleared = self.clear_progress_blockers(&lookups).await?;
+        let cleared = self.spaces.clear_progress_blockers(self, &lookups).await?;
         for space in &cleared {
             self.tell_cleared(space).await;
         }
@@ -39,7 +39,7 @@ impl Manager {
     /// reads it once it runs again.
     async fn tell_cleared(&self, cleared: &Cleared) {
         let selector = SpaceSelector::id(&cleared.space);
-        let progress = match self.space_progress(&selector).await {
+        let progress = match self.spaces.space_progress(&selector).await {
             Ok(progress) => progress,
             Err(error) => {
                 log!("blockers of {} cleared, unread: {error:#}", cleared.space);
@@ -54,7 +54,7 @@ impl Manager {
     /// blocked, what blocks it.
     pub(crate) async fn tell_still_blocked(&self, id: &SpaceId) {
         let selector = SpaceSelector::id(id);
-        let progress = match self.space_progress(&selector).await {
+        let progress = match self.spaces.space_progress(&selector).await {
             Ok(progress) => progress.filter(Progress::blocked),
             Err(error) => {
                 log!("blockers of {id} unread for its restore: {error:#}");
@@ -70,7 +70,7 @@ impl Manager {
     /// Send the agent of the space `selector` names `text`, from Shoal.
     async fn tell(&self, selector: &SpaceSelector, text: String) {
         let sent = async {
-            let id = self.space(selector).await?.id;
+            let id = self.spaces.space(selector).await?.id;
             let kind = crate::daemon::alerts::AlertKind::BlockersChanged;
             self.agents.queue_agent_message(&id, kind, text).await
         };

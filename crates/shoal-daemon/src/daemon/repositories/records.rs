@@ -1,6 +1,6 @@
 //! The records of other subsystems the repositories read and write in
 //! their own transactions.
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use anyhow::Result;
 use rusqlite::{Connection, Transaction, params};
@@ -17,11 +17,14 @@ use crate::{
     state::{QueueKind, QueueState, WorkspaceState},
 };
 
-pub(crate) struct RepositoryRecords;
+/// The records of the daemon's other subsystems, as the repositories read
+/// and write them in their own transactions, with the spaces' records of
+/// theirs.
+pub(crate) struct RepositoryRecords(pub(crate) Arc<dyn shoal_spaces::daemon::Records>);
 
 impl Records for RepositoryRecords {
     fn workspaces(&self, db: &Connection) -> Result<Vec<Workspace>> {
-        super::super::workspace::workspaces_within(db, None)
+        super::super::workspace::workspaces_within(db, &*self.0, None)
     }
 
     fn removal_depth(&self, db: &Connection, id: &SpaceId) -> Result<u32> {

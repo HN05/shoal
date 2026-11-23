@@ -1,0 +1,89 @@
+//! Durable rename intent: the reserved branch a workspace is moving to.
+use crate::Spaces;
+use anyhow::Result;
+use rusqlite::{Connection, OptionalExtension, params};
+use shoal_ids::space_ids::SpaceId;
+use shoal_refs::BranchName;
+
+use crate::{git, model::Workspace};
+
+/// The branch a workspace takes once Git has renamed it; its name stays.
+pub(super) struct RenameIntent {
+    pub branch: BranchName,
+}
+
+impl RenameIntent {
+    /// Reserve the branch inside the caller's transaction.
+    pub(super) fn record(&self, db: &Connection, workspace_id: &SpaceId) -> Result<()> {
+        db.execute(
+            "INSERT INTO workspace_renames(workspace_id,branch) VALUES (?1,?2)",
+            params![workspace_id, self.branch],
+        )?;
+        Ok(())
+    }
+}
+
+impl Spaces {
+    pub(super) async fn rename_intent(
+        &self,
+        workspace_id: &SpaceId,
+    ) -> Result<Option<RenameIntent>> {
+        let id = workspace_id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT branch FROM workspace_renames WHERE workspace_id=?1",
+                        [id],
+                        |row| {
+                            Ok(RenameIntent {
+                                branch: row.get(0)?,
+                            })
+                        },
+                    )
+                    .optional()?)
+            })
+            .await
+    }
+
+    /// Take the intended identity and move dependent bases to the new branch,
+    /// releasing the reservation in the same transaction.
+    pub(super) async fn commit_rename(
+        &self,
+        workspace: &Workspace,
+        intent: RenameIntent,
+    ) -> Result<()> {
+        let id = workspace.id.clone();
+        let repository_id = workspace.repository_id.clone();
+        let old_base = git::local_ref(workspace.require_branch("renaming a branch")?);
+        self.store
+            .write(move |tx| {
+                tx.execute(
+                    "UPDATE workspaces SET branch=?2 WHERE id=?1",
+                    params![id, intent.branch],
+                )?;
+                tx.execute(
+                    "UPDATE workspaces SET base_ref=?3
+                     WHERE id IN (SELECT id FROM spaces WHERE repository_id=?1) AND base_ref=?2",
+                    params![repository_id, old_base, git::local_ref(&intent.branch)],
+                )?;
+                release(tx, &id)?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Release the reservation and keep the recorded identity.
+    pub(super) async fn cancel_rename(&self, workspace_id: &SpaceId) -> Result<()> {
+        let id = workspace_id.to_owned();
+        self.store.run(move |db| release(db, &id)).await
+    }
+}
+
+fn release(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
+    db.execute(
+        "DELETE FROM workspace_renames WHERE workspace_id=?1",
+        [workspace_id],
+    )?;
+    Ok(())
+}

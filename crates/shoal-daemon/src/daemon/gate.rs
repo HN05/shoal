@@ -24,7 +24,7 @@ use crate::{forge::items::link::Selection, model::Space, protocol::ItemContext};
 
 impl Requesters for Manager {
     fn space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>> {
-        Box::pin(self.space_by_id(id))
+        Box::pin(self.spaces.space_by_id(id))
     }
 
     fn view_items<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Viewed>> {

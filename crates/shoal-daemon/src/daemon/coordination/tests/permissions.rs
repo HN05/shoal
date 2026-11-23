@@ -27,7 +27,7 @@ async fn another_machine_resolves_a_nested_chat_without_a_repository_as_its_own_
         .unwrap();
     let master = chat(&manager, "master", "orchestrate", None, None).await;
     let nested = chat(&manager, "nested", "chat", None, Some(&master.id)).await;
-    let nested = manager.space_by_id(&nested.id).await.unwrap();
+    let nested = manager.spaces.space_by_id(&nested.id).await.unwrap();
     let here = manager
         .coordination
         .space_permissions(&*manager, &nested.id, Some(&repo.id));

@@ -77,7 +77,7 @@ impl Manager {
             if stopped.spaces.iter().any(|space| space.id == id) {
                 continue;
             }
-            match self.space(&SpaceSelector::id(&id)).await {
+            match self.spaces.space(&SpaceSelector::id(&id)).await {
                 Ok(space) => stopped.spaces.push(space),
                 Err(error) => {
                     log!("stop as the daemon exits: space {id} unavailable: {error:#}");

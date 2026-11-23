@@ -54,7 +54,8 @@ async fn changed_on_both_sides() -> (
     fs::write(workspace.path.join("feature"), "new\n").unwrap();
     commit(&workspace.path, "feature");
     manager
-        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .spaces
+        .check_conflicts(&*manager, &SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     (root, manager, workspace)
@@ -74,7 +75,10 @@ async fn a_branch_merge_warns_only_at_the_checked_head() {
     );
     assert_eq!(warning.files, ["version"]);
 
-    let current = manager.current_changed_on_both_sides(&workspace).await;
+    let current = manager
+        .spaces
+        .current_changed_on_both_sides(&workspace)
+        .await;
     assert!(current.unwrap().is_some());
 
     fs::write(workspace.path.join("feature"), "newer\n").unwrap();
@@ -86,7 +90,10 @@ async fn a_branch_merge_warns_only_at_the_checked_head() {
             .unwrap()
             .is_none()
     );
-    let current = manager.current_changed_on_both_sides(&workspace).await;
+    let current = manager
+        .spaces
+        .current_changed_on_both_sides(&workspace)
+        .await;
     assert!(
         current.unwrap().is_none(),
         "status shows no check of an earlier head"
@@ -102,6 +109,7 @@ async fn a_branch_merge_ignores_a_check_against_a_base_workspaces_branch() {
         .await
         .unwrap();
     manager
+        .spaces
         .set_base_workspace(
             &SpaceSelector::id(&workspace.id),
             Some(base.name.to_string()),
@@ -111,7 +119,8 @@ async fn a_branch_merge_ignores_a_check_against_a_base_workspaces_branch() {
     fs::write(base.path.join("version"), "3\n").unwrap();
     commit(&base.path, "version");
     let check = manager
-        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .spaces
+        .check_conflicts(&*manager, &SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     assert_eq!(Some(check.target), base.branch().map(ToString::to_string));

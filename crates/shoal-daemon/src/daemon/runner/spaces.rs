@@ -13,21 +13,21 @@ use crate::{
 
 impl Spaces for Manager {
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
-        Box::pin(Manager::present_spaces(self))
+        Box::pin(self.spaces.present_spaces(self))
     }
 
     fn workspace_usage(&self, id: &SpaceId) -> Option<WorkspaceUsage> {
-        Manager::workspace_usage(self, id)
+        self.spaces.workspace_usage(id)
     }
 
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
-        Box::pin(Manager::workspace_by_id(self, id))
+        Box::pin(self.spaces.workspace_by_id(id))
     }
 
     fn select_space_id<'a>(
         &'a self,
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<SpaceId>> {
-        Box::pin(async move { Ok(self.space(selector).await?.id) })
+        Box::pin(async move { Ok(self.spaces.space(selector).await?.id) })
     }
 }

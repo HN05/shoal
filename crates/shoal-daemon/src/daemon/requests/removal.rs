@@ -74,12 +74,12 @@ pub(super) async fn handle(
     }
     Ok(Answer::Body(match method {
         RemovalMethod::RemovedSpaces => {
-            let listed = manager.restorable_spaces(caller).await;
+            let listed = manager.spaces.restorable_spaces(&**manager, caller).await;
             return Ok(Answer::pages(listed, Body::RemovedSpaces));
         }
-        RemovalMethod::RemovedSpace { space } => {
-            Body::RemovedSpaces(vec![manager.restorable_space(&space).await?])
-        }
+        RemovalMethod::RemovedSpace { space } => Body::RemovedSpaces(vec![
+            manager.spaces.restorable_space(&**manager, &space).await?,
+        ]),
         RemovalMethod::StopTargets => {
             let targets = manager
                 .agents
@@ -107,7 +107,7 @@ pub(super) async fn handle(
         }
         RemovalMethod::CheckStop { space } => {
             // A chat has no lifecycle state that refuses a stop.
-            if let ByKind::Workspace(workspace) = manager.space(&space).await?.by_kind() {
+            if let ByKind::Workspace(workspace) = manager.spaces.space(&space).await?.by_kind() {
                 manager.agents.check_stop(&**manager, &workspace).await?
             }
             Body::Ok
@@ -118,7 +118,8 @@ pub(super) async fn handle(
             requester,
         } => Body::StoppedProcesses(
             manager
-                .stop_space_processes(&space, selection, identity_of(requester))
+                .spaces
+                .stop_space_processes(&**manager, &space, selection, identity_of(requester))
                 .await?,
         ),
         RemovalMethod::CheckRemoval {
@@ -126,7 +127,8 @@ pub(super) async fn handle(
             include_changes,
         } => Body::RemovalCheck(Box::new(
             manager
-                .check_manual_removal(&space, include_changes)
+                .spaces
+                .check_manual_removal(&**manager, &space, include_changes)
                 .await?,
         )),
         RemovalMethod::RemoveSpace {
@@ -140,28 +142,60 @@ pub(super) async fn handle(
             Body::RemovalResult(match (above, releases) {
                 (Some(cause), _) => {
                     let confirmed = unsaved.children();
-                    (manager.remove_as_child(&space, (cause, !releases), confirmed)).await?
+                    (manager.spaces.remove_as_child(
+                        &**manager,
+                        &space,
+                        (cause, !releases),
+                        confirmed,
+                    ))
+                    .await?
                 }
-                (None, true) => manager.remove_selected(&space, unsaved, inspection).await?,
-                (None, false) => manager.remove_unheld(&space, unsaved, inspection).await?,
+                (None, true) => {
+                    manager
+                        .spaces
+                        .remove_selected(&**manager, &space, unsaved, inspection)
+                        .await?
+                }
+                (None, false) => {
+                    manager
+                        .spaces
+                        .remove_unheld(&**manager, &space, unsaved, inspection)
+                        .await?
+                }
             })
         }
         RemovalMethod::StartRemoval { space, unsaved } => {
             let release_holds = releases_holds(manager, caller, &space).await?;
-            (manager.start_removal(&space, unsaved, caller, release_holds)).await?;
+            (manager.spaces.start_removal(
+                &manager.daemon(),
+                &space,
+                unsaved,
+                caller,
+                release_holds,
+            ))
+            .await?;
             Body::Ok
         }
-        RemovalMethod::AbsorbSpace(absorb) => {
-            Body::Absorbed(Box::new(manager.absorb_space(&absorb, caller).await?))
-        }
+        RemovalMethod::AbsorbSpace(absorb) => Body::Absorbed(Box::new(
+            manager
+                .spaces
+                .absorb_space(&manager.daemon(), &absorb, caller)
+                .await?,
+        )),
         RemovalMethod::Cleanup { dry_run, selection } => {
-            Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
+            Body::Cleanup(cleanup::on_request(&**manager, dry_run, &selection).await?)
         }
-        RemovalMethod::RestoreSpace { space } => {
-            Body::RestoredSpace(manager.restore_space(&space, caller).await?)
-        }
+        RemovalMethod::RestoreSpace { space } => Body::RestoredSpace(
+            manager
+                .spaces
+                .restore_space(&**manager, &space, caller)
+                .await?,
+        ),
         RemovalMethod::DropRestoredSessions { space } => {
-            manager.drop_restored_sessions(&space).await?;
+            manager
+                .spaces
+                .drop_restored_sessions(&**manager, &space)
+                .await?;
             Body::Ok
         }
         RemovalMethod::ExportRemovedSpace {
@@ -170,7 +204,8 @@ pub(super) async fn handle(
             carrying,
         } => Body::ExportedSpace(
             manager
-                .export_removed_space(&space, file, &carrying)
+                .spaces
+                .export_removed_space(&**manager, &space, file, &carrying)
                 .await?,
         ),
         RemovalMethod::CopySpace {
@@ -180,7 +215,8 @@ pub(super) async fn handle(
             carrying,
         } => Body::ExportedSpace(
             manager
-                .copy_space(&space, checkpoint, file, &carrying)
+                .spaces
+                .copy_space(&**manager, &space, checkpoint, file, &carrying)
                 .await?,
         ),
         RemovalMethod::ExportMovingSpace {
@@ -196,25 +232,33 @@ pub(super) async fn handle(
                 carrying,
                 again,
             };
-            Body::ExportedSpace(manager.export_moving_space(&space, packing).await?)
+            Body::ExportedSpace(
+                manager
+                    .spaces
+                    .export_moving_space(&**manager, &space, packing)
+                    .await?,
+            )
         }
         RemovalMethod::EndMovedSpace { space } => {
-            Body::RemovalResult(manager.end_moved_space(&space).await?)
+            Body::RemovalResult(manager.spaces.end_moved_space(&**manager, &space).await?)
         }
         RemovalMethod::AbandonMove { space } => {
-            Body::MoveAbandoned(manager.abandon_move(&space).await?)
+            Body::MoveAbandoned(manager.spaces.abandon_move(&**manager, &space).await?)
         }
         RemovalMethod::DeliverMove { space } => {
-            Body::ImportedMove(manager.deliver_move(&space).await?)
+            Body::ImportedMove(manager.spaces.deliver_move(&**manager, &space).await?)
         }
-        RemovalMethod::DeliverCopy { space, destination } => {
-            Body::ImportedMove(manager.deliver_copy(&space, &destination).await?)
-        }
+        RemovalMethod::DeliverCopy { space, destination } => Body::ImportedMove(
+            manager
+                .spaces
+                .deliver_copy(&**manager, &space, &destination)
+                .await?,
+        ),
         RemovalMethod::SettleMove { space } => {
-            Body::MoveSettled(manager.settle_move(&space).await?)
+            Body::MoveSettled(manager.spaces.settle_move(&**manager, &space).await?)
         }
         RemovalMethod::TakenRecords { space, carrying } => {
-            Body::RemovedSpaces(manager.taken_records(&space, &carrying).await?)
+            Body::RemovedSpaces(manager.spaces.taken_records(&space, &carrying).await?)
         }
         RemovalMethod::DeliverRemovedSpace {
             space,
@@ -223,7 +267,8 @@ pub(super) async fn handle(
             ticket,
         } => Body::RemovedDelivered(
             manager
-                .deliver_removed(&space, &destination, &carrying, &ticket)
+                .spaces
+                .deliver_removed(&**manager, &space, &destination, &carrying, &ticket)
                 .await?,
         ),
         RemovalMethod::SettleRemovedMove {
@@ -233,19 +278,25 @@ pub(super) async fn handle(
             ticket,
         } => Body::MoveSettled(
             manager
-                .settle_removed_move(&space, &carried, &machine, &ticket)
+                .spaces
+                .settle_removed_move(&**manager, &space, &carried, &machine, &ticket)
                 .await?,
         ),
         RemovalMethod::ReleaseHeldMove { space } => {
-            manager.release_held_move(&space).await?;
+            manager.spaces.release_held_move(&**manager, &space).await?;
             Body::Ok
         }
         RemovalMethod::ReadHeldPackage { space, copy } => {
-            let package = manager.held_package(&space, copy).await?;
+            let package = manager.spaces.held_package(&space, copy).await?;
             let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.send_held_package(stream, request_id, package, guard)
-            }));
+            return Ok(Answer::connection(
+                move |stream, request_id, guard| async move {
+                    manager
+                        .spaces
+                        .send_held_package(stream, request_id, package, guard)
+                        .await
+                },
+            ));
         }
         RemovalMethod::ImportPackage(import) => {
             return import_package(manager, *import, caller).await;
@@ -263,9 +314,14 @@ pub(super) async fn handle(
                 from,
                 removed,
             };
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.receive_move(stream, request_id, receiving, guard)
-            }));
+            return Ok(Answer::connection(
+                move |stream, request_id, guard| async move {
+                    manager
+                        .spaces
+                        .receive_move(&*manager, stream, request_id, receiving, guard)
+                        .await
+                },
+            ));
         }
     }))
 }
@@ -289,7 +345,10 @@ async fn import_package(
         ));
     };
     let input = PackageInput::File(file.clone());
-    let imported = manager.import_package(&import, input, caller).await?;
+    let imported = manager
+        .spaces
+        .import_package(&**manager, &import, input, caller)
+        .await?;
     Ok(Answer::Body(Body::ImportedPackage(imported)))
 }
 
@@ -305,7 +364,10 @@ async fn import_streamed(
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
     let replying = stream.into_std()?;
     let input = PackageInput::Connection(replying.try_clone()?);
-    let imported = manager.import_package(import, input, caller).await;
+    let imported = manager
+        .spaces
+        .import_package(manager, import, input, caller)
+        .await;
     replying.set_nonblocking(true)?;
     let mut stream = UnixStream::from_std(replying)?;
     let body = match imported {
@@ -360,7 +422,8 @@ async fn stop_space(
     }
     if let UntrackedProcesses::Stop { requester } = stop.processes {
         let untracked = manager
-            .stop_space_processes(space, Selection::Processes, identity_of(requester))
+            .spaces
+            .stop_space_processes(manager, space, Selection::Processes, identity_of(requester))
             .await?;
         stopped.other_processes = untracked.processes;
     }
@@ -479,7 +542,10 @@ impl Scoped for RemovalMethod {
             | RemovalMethod::TakenRecords { space, .. }
             | RemovalMethod::DeliverRemovedSpace { space, .. }
             | RemovalMethod::SettleRemovedMove { space, .. } => {
-                manager.ensure_restorable_by(space, caller).await?;
+                manager
+                    .spaces
+                    .ensure_restorable_by(manager, space, caller)
+                    .await?;
                 Ok(None)
             }
             // Cleaning up and moving spaces is the `admin` permission's.
@@ -518,13 +584,16 @@ async fn moves_to_joined_machine(
         // A copy for a joined machine goes among the packages delivered
         // from here, as a move there does.
         RemovalMethod::CopySpace { space, file, .. } => {
-            manager.copies_for_joined_machine(caller, space, file).await
+            manager
+                .spaces
+                .copies_for_joined_machine(caller, space, file)
+                .await
         }
         RemovalMethod::DeliverCopy { space, .. } => {
-            manager.copies_other_than_own(caller, space).await
+            manager.spaces.copies_other_than_own(caller, space).await
         }
         RemovalMethod::EndMovedSpace { space } => {
-            let joined = manager.moves_to_joined_machine(space).await?;
+            let joined = manager.spaces.moves_to_joined_machine(space).await?;
             if joined {
                 manager
                     .coordination
@@ -535,7 +604,9 @@ async fn moves_to_joined_machine(
         }
         RemovalMethod::AbandonMove { space }
         | RemovalMethod::DeliverMove { space }
-        | RemovalMethod::SettleMove { space } => manager.moves_to_joined_machine(space).await,
+        | RemovalMethod::SettleMove { space } => {
+            manager.spaces.moves_to_joined_machine(space).await
+        }
         _ => Ok(false),
     }
 }

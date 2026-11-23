@@ -78,7 +78,7 @@ impl Manager {
                 space,
                 repository: None,
             }) => {
-                let space = self.space(&space).await;
+                let space = self.spaces.space(&space).await;
                 space.context("find the space to act in")?.repository_id
             }
         })

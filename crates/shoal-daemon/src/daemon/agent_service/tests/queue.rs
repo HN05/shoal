@@ -98,10 +98,12 @@ pub(super) async fn preparing(manager: &Manager, repository: &Repository, name: 
         .await
         .unwrap();
     let id = workspace.id.clone();
-    (manager.set_state(&id, WorkspaceState::Preparing, None))
-        .await
-        .unwrap();
-    manager.workspace_by_id(&id).await.unwrap()
+    (manager
+        .spaces
+        .set_state(&id, WorkspaceState::Preparing, None))
+    .await
+    .unwrap();
+    manager.spaces.workspace_by_id(&id).await.unwrap()
 }
 
 /// Whether the daemon started `id`, passing the queuing terminal's Herdr variables.
@@ -207,7 +209,9 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     assert!(!started(&second.id));
 
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -991,7 +995,9 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1014,7 +1020,8 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     // A launch that has yet to start keeps its workspace from cleanup.
     assert_eq!(
         manager
-            .cleanup_reason(&crate::model::Space::from(child.clone()))
+            .spaces
+            .cleanup_reason(&*manager, &crate::model::Space::from(child.clone()))
             .await,
         crate::model::CleanupReason::QueuedAgent
     );
@@ -1071,7 +1078,9 @@ async fn a_scoped_caller_holds_reads_and_fails_only_the_launches_it_reaches() {
         vouched: None,
     };
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "own".into(),
             None,
@@ -1140,7 +1149,9 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -1198,6 +1209,7 @@ async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
     // Removal reserves the workspace before its final checks; the queue
     // insertion then refuses the launch in the same transaction.
     manager
+        .spaces
         .reserve_lifecycle(&child.id, crate::state::WorkspaceState::Removing)
         .await
         .unwrap();
@@ -1304,7 +1316,12 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     let restore = entries.iter().find(|entry| entry.name == "idle").unwrap();
     assert_eq!(restore.state, Queued);
     assert!(restore.waits_for_update);
-    let asleep = manager.workspace_by_id(&idle.id).await.unwrap().asleep;
+    let asleep = manager
+        .spaces
+        .workspace_by_id(&idle.id)
+        .await
+        .unwrap()
+        .asleep;
     assert_eq!(
         asleep.map(|asleep| (asleep.reason, asleep.wakes_when)),
         Some((
@@ -1668,7 +1685,9 @@ async fn a_oneshot_run_starts_beside_the_agents_without_a_slot() {
         .consume_queue_entry(&first.id, &workspace.id)
         .await;
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Done::default(),
             &Attacher::User,
@@ -1766,6 +1785,7 @@ async fn launch_waiting_for_setup() -> (tempfile::TempDir, Arc<Manager>, Workspa
         .await
         .unwrap();
     manager
+        .spaces
         .set_state(
             &child.id,
             WorkspaceState::Failed,
@@ -1796,6 +1816,7 @@ async fn launch_waiting_for_setup() -> (tempfile::TempDir, Arc<Manager>, Workspa
 /// post-setup hook, as a retried setup does, readying it.
 async fn retry_setup(manager: &Manager, workspace: &Workspace) -> String {
     manager
+        .spaces
         .set_state(&workspace.id, WorkspaceState::Ready, None)
         .await
         .unwrap();
@@ -1916,6 +1937,7 @@ async fn a_launch_left_waiting_for_setup_frees_the_slot_of_the_start_that_failed
         .await
         .unwrap();
     manager
+        .spaces
         .set_state(
             &child.id,
             WorkspaceState::Failed,
@@ -1939,7 +1961,7 @@ async fn a_launch_left_waiting_for_setup_frees_the_slot_of_the_start_that_failed
 
 #[tokio::test]
 async fn a_start_gives_its_queue_entry_the_workspace_it_reopens() {
-    use crate::daemon::operations::starts::{Opening, Preparing};
+    use crate::daemon::starts::{Opening, Preparing};
     use crate::protocol::operations::WorkspaceStart;
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
@@ -1968,7 +1990,14 @@ async fn a_start_gives_its_queue_entry_the_workspace_it_reopens() {
         env: None,
     };
     let started = manager
-        .start_workspace((&repo.id).into(), opening, preparing, None)
+        .spaces
+        .start_workspace(
+            &manager.daemon(),
+            (&repo.id).into(),
+            opening,
+            preparing,
+            None,
+        )
         .await
         .unwrap();
     let _worker = (started.operation.as_deref()).map(crate::daemon::operations::fake::take);
@@ -1991,6 +2020,7 @@ async fn a_launch_waits_for_a_setup_the_daemon_never_started() {
     // Its setup was refused before it registered, so it stays preparing
     // with nothing running.
     manager
+        .spaces
         .set_state(&child.id, WorkspaceState::Preparing, None)
         .await
         .unwrap();

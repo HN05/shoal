@@ -76,10 +76,18 @@ pub(super) async fn handle(
         ThreadMethod::PostInChat {
             space,
             thread: number,
-        } => Body::ChatMarked(manager.mark_chat_post(caller, &space, number).await?),
+        } => Body::ChatMarked(
+            manager
+                .spaces
+                .mark_chat_post(&**manager, caller, &space, number)
+                .await?,
+        ),
         ThreadMethod::RepliedInChat { space, prompt } => {
             let execution = caller.and_then(Caller::execution_id);
-            manager.reply_in_chat(&space, execution, prompt).await?;
+            manager
+                .spaces
+                .reply_in_chat(&**manager, &space, execution, prompt)
+                .await?;
             Body::Ok
         }
         ThreadMethod::ForwardThread {

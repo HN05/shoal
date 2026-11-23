@@ -288,7 +288,9 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager, "parent").await;
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -446,10 +448,14 @@ async fn a_message_to_all_from_a_coordinator_reaches_the_chats_below_it_not_bein
             parent: below.then(|| parent.id.clone()),
         };
         let repository = Some(parent.repository().clone().into());
-        let chat = manager.start_new_chat(repository, None, new).await.unwrap();
+        let chat = manager
+            .spaces
+            .start_new_chat(&*manager, repository, None, new)
+            .await
+            .unwrap();
         chats.push(manager.run_chat_agent(chat, None).await.unwrap());
     }
-    let _removal = manager.space_removals.reserve(&chats[1].id).unwrap();
+    let _removal = manager.spaces.space_removals.reserve(&chats[1].id).unwrap();
     let reached = manager
         .coordination
         .send_all_message(
@@ -555,7 +561,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
             .await
             .unwrap();
     }
-    let chats = manager.chats().await.unwrap();
+    let chats = manager.spaces.chats().await.unwrap();
     let paused = chats.iter().find(|chat| chat.name == "paused").unwrap();
     manager.agents.end_executions(&*manager, &paused.id).await;
     let reached = manager
@@ -661,7 +667,9 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
         .unwrap();
     assert!(copy.exists(), "a delivered message keeps its files");
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -677,7 +685,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
         })
         .await
         .unwrap();
-    manager.expire_results().await.unwrap();
+    manager.spaces.expire_results(&*manager).await.unwrap();
     assert!(!copy.exists());
 }
 
@@ -812,7 +820,9 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
+                .spaces
                 .remove_selected(
+                    &*manager,
                     &SpaceSelector::id(&id),
                     crate::removal::UnsavedWork::default(),
                     crate::removal::InspectionPolicy::GitOnly,
@@ -1008,7 +1018,9 @@ async fn an_upward_alert_s_longer_titles_count_toward_its_coordinator_s_queue() 
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager, "parent").await;
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

@@ -73,9 +73,12 @@ pub(super) async fn handle(
             }
             Body::Sent(sent)
         }
-        AlertMethod::AlertInChat { to, attachments } => {
-            Body::ChatMarked(manager.mark_chat_alert(caller, to, attachments).await?)
-        }
+        AlertMethod::AlertInChat { to, attachments } => Body::ChatMarked(
+            manager
+                .spaces
+                .mark_chat_alert(&**manager, caller, to, attachments)
+                .await?,
+        ),
         AlertMethod::WithdrawAlert { id, space, from } => {
             let acting = acting(manager, caller, from).await?;
             let withdrawn = manager.coordination.withdraw_alert(

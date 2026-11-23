@@ -21,7 +21,13 @@ async fn agents(names: &[&str], assignees: &[&str], config: &str) -> Fixture {
 async fn remove(fixture: &Fixture, workspace: &Workspace) {
     let selector = SpaceSelector::id(&workspace.id);
     (fixture.manager)
-        .remove_selected(&selector, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .spaces
+        .remove_selected(
+            &*fixture.manager,
+            &selector,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
 }
@@ -246,11 +252,17 @@ async fn done_takes_the_agent_account_off_and_undoing_it_puts_it_back() {
     fixture.link_as(workspace, Assigner::Agent).await;
     let selector = SpaceSelector::id(&workspace.id);
     let done = Done::default();
-    (manager.mark_space_done(&selector, done, &Attacher::User))
+    (manager
+        .spaces
+        .mark_space_done(&**manager, &selector, done, &Attacher::User))
+    .await
+    .unwrap();
+    manager.links.settle_requested_agents(&**manager).await;
+    manager
+        .spaces
+        .undo_space_done(&**manager, &selector)
         .await
         .unwrap();
-    manager.links.settle_requested_agents(&**manager).await;
-    manager.undo_space_done(&selector).await.unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(
         fixture.changes(),
@@ -266,9 +278,14 @@ async fn a_chats_agent_gives_up_its_issue_once_done() {
     let chat = crate::daemon::test_support::chat(manager, "plan", "plan", repository, None).await;
     fixture.link_space(&chat.id, Assigner::User).await;
     let done = Done::default();
-    (manager.mark_space_done(&SpaceSelector::id(&chat.id), done, &Attacher::User))
-        .await
-        .unwrap();
+    (manager.spaces.mark_space_done(
+        &**manager,
+        &SpaceSelector::id(&chat.id),
+        done,
+        &Attacher::User,
+    ))
+    .await
+    .unwrap();
     manager.links.settle_requested_agents(&**manager).await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
@@ -286,7 +303,11 @@ async fn a_chat_without_a_repository_settles_nothing() {
             .unwrap()
             .is_none()
     );
-    let space = manager.space(&SpaceSelector::id(&chat.id)).await.unwrap();
+    let space = manager
+        .spaces
+        .space(&SpaceSelector::id(&chat.id))
+        .await
+        .unwrap();
     let removed = manager
         .links
         .settle_removed_agents(&**manager, &space, &[])

@@ -5,30 +5,39 @@ pub(crate) use shoal_agents::oom_scores;
 pub(crate) use shoal_agents::{capacity, overload, queue as agent_queue, queued_starts};
 pub(crate) use shoal_agents::{
     control as agents, execution_connection, executions, idle_wakes, lost_reports, messages,
-    places, restart_recovery, restarts, shutdown_stop, stopped_work, turn_retry, turn_state,
-    wake_timers, warnings,
+    restart_recovery, restarts, shutdown_stop, stopped_work, turn_retry, turn_state, wake_timers,
+    warnings,
 };
 pub(crate) use shoal_coordination::{alerts, approvals, changes, threads};
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications, retention, signals,
 };
-pub(crate) use shoal_leases::{allocation, containers, resources};
-mod absorb;
+pub(crate) use shoal_leases::{allocation, resources};
+pub(crate) use shoal_spaces::{
+    conversions, holds, hub_moves, imported_sessions, moves, ownership, progress, quarantine,
+    ready_marks, restore, space_processes, spaces, starts, tree,
+};
+pub use shoal_spaces::{workspace, workspace_files};
+// The daemon's tests reach the spaces' modules, and those of the services
+// they test with, as the daemon's own.
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use shoal_agents::places;
+#[cfg(test)]
+pub(crate) use shoal_leases::containers;
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) use shoal_spaces::chats;
+#[cfg(test)]
+pub(crate) use shoal_spaces::{
+    carried_sessions, launches, leftovers, lifecycle, recovery, startup_audit, tmp_dirs, untracked,
+};
 mod agent_service;
 mod answer;
 mod apps;
 mod auto_update;
 pub(crate) mod blockers;
-mod carried_commits;
-mod carried_sessions;
-pub(crate) mod chat_marks;
-pub(crate) mod chats;
 pub mod cleanup;
-pub(crate) mod completion_cleanup;
 mod connections;
 mod contribution_holds;
-pub(crate) mod conversions;
-mod coordinated;
 mod coordination;
 mod daemon_exit;
 pub(crate) mod demos;
@@ -40,38 +49,20 @@ pub(crate) mod fake_workers;
 pub(crate) mod forge_hosts;
 pub(crate) mod gate;
 mod git_logins;
-pub(crate) mod holds;
-mod hook_settings;
 pub(crate) mod hub;
-mod hub_moves;
 mod idle_sleep;
-mod imported_sessions;
-mod launches;
 mod leases;
-pub mod leftovers;
-mod lifecycle;
 pub mod links;
 #[cfg(target_os = "linux")]
 mod logind;
 mod logs;
 pub mod manager;
-mod moves;
 pub(crate) mod operations;
-mod ownership;
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) mod per_daemon;
-mod pr_gate;
-pub(crate) mod progress;
-mod quarantine;
-pub(crate) mod ready_marks;
-pub mod recovery;
 mod relayed;
 mod releases;
-
 mod repositories;
 mod repository_removals;
 mod requests;
-mod restore;
 mod retention_periods;
 pub(crate) mod reviews;
 pub(crate) mod runner;
@@ -79,11 +70,8 @@ pub mod scope;
 mod shared_repositories;
 mod shutdown_lock;
 mod sleep_lock;
-pub(crate) mod space_processes;
-mod space_removal;
-pub(crate) mod spaces;
+mod space_service;
 mod startup;
-mod startup_audit;
 pub(crate) use shoal_store as store;
 mod subscriptions;
 pub(crate) mod target_checks;
@@ -95,16 +83,11 @@ pub(crate) mod test_daemon;
 // Other crates' tests read only some of the daemon's own fixtures.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod test_support;
-mod tmp_dirs;
-mod tree;
 
 mod turn_ends;
-mod untracked;
 mod viewer_terminals;
 mod walked_away;
 mod work_memory;
-pub mod workspace;
-pub mod workspace_files;
 mod workspace_usage;
 
 use shoal_protocol::scope_tokens::ScopeToken;
@@ -259,12 +242,9 @@ pub async fn run(
     spawn_supervised(&mut background, &manager, "turn retries", |manager| {
         turn_retry::run(manager.agents.clone())
     });
-    spawn_supervised(
-        &mut background,
-        &manager,
-        "interrupted moves",
-        moves::finish_interrupted,
-    );
+    spawn_supervised(&mut background, &manager, "interrupted moves", |manager| {
+        moves::finish_interrupted(manager.daemon())
+    });
     spawn_supervised(&mut background, &manager, "lost hook reports", |manager| {
         lost_reports::run(manager.agents.clone(), manager)
     });
@@ -275,12 +255,9 @@ pub async fn run(
         "sequential restarts",
         |manager| restarts::run_line(manager.agents.clone(), manager),
     );
-    spawn_supervised(
-        &mut background,
-        &manager,
-        "progress sections",
-        progress::run,
-    );
+    spawn_supervised(&mut background, &manager, "progress sections", |manager| {
+        progress::run(manager.daemon())
+    });
     spawn_supervised(&mut background, &manager, "agent assignees", |manager| {
         shoal_links::issue::agent_settles::run(manager.links.clone(), manager)
     });
@@ -405,7 +382,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     }
     let hosts = manager.learn_recorded_forge_hosts();
     startup.step("learning forge hosts", hosts).await?;
-    let audit = manager.audit_worktrees();
+    let audit = manager.spaces.audit_worktrees(&*manager);
     startup.step("auditing worktrees", audit).await?;
     // Before requests, so no surviving start worker finds its readings held.
     let recovery_starts = manager.agents.return_recovery_starts();
@@ -414,7 +391,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
         recovery_starts,
     ))
     .await?;
-    let removals = manager.restore_interrupted_removals();
+    let removals = manager.spaces.restore_interrupted_removals();
     if let Err(error) = startup
         .step("restoring files of interrupted removals", removals)
         .await
@@ -428,7 +405,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     {
         log!("{error:#}");
     }
-    let imports = manager.remove_interrupted_imports();
+    let imports = manager.spaces.remove_interrupted_imports(&*manager);
     if let Err(error) = startup
         .step("removing interrupted imports' packages", imports)
         .await

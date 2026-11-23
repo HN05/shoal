@@ -20,19 +20,30 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         DiffMethod::DiffBase { workspace } => {
-            let mut base = manager.diff_base(&workspace).await?;
+            let mut base = manager.spaces.diff_base(&**manager, &workspace).await?;
             base.machine = super::forwarded::answering_machine(manager, scope).await?;
             Body::DiffBase(base)
         }
-        DiffMethod::Conflicts { workspace, target } => {
-            Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
-        }
+        DiffMethod::Conflicts { workspace, target } => Body::Conflicts(
+            manager
+                .spaces
+                .check_conflicts(&**manager, &workspace, target)
+                .await?,
+        ),
         DiffMethod::Diff { workspace, display } => {
-            let diff = manager.start_diff(&workspace, display).await?;
+            let diff = manager
+                .spaces
+                .start_diff(&**manager, &workspace, display)
+                .await?;
             let manager = manager.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                manager.stream_diff(stream, request_id, diff, guard)
-            }));
+            return Ok(Answer::connection(
+                move |stream, request_id, guard| async move {
+                    manager
+                        .spaces
+                        .stream_diff(stream, request_id, diff, guard)
+                        .await
+                },
+            ));
         }
     }))
 }

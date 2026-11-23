@@ -1,0 +1,210 @@
+use crate::daemon::manager::Manager;
+use shoal_protocol::space_names::SpaceSelector;
+use std::sync::Arc;
+
+use crate::daemon::test_support::{chat, manager, repository};
+use crate::model::{RestoredChat, RestoredSpace, Workspace};
+use crate::removal::{InspectionPolicy, UnsavedWork};
+
+/// A manager with a registered repository and a workspace in it.
+async fn with_workspace() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    (root, manager, workspace)
+}
+
+/// Restore the removed space `id`, which must be a chat.
+async fn restore_chat(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> RestoredChat {
+    match manager
+        .spaces
+        .restore_space(manager, &SpaceSelector::id(id), None)
+        .await
+    {
+        Ok(RestoredSpace::Chat(restored)) => *restored,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_removed_chat_comes_back_under_its_id_below_its_parent() {
+    let (_root, manager, parent) = with_workspace().await;
+    let repo = manager
+        .repositories
+        .repository(parent.repository())
+        .await
+        .unwrap();
+    let removed = chat(&manager, "notes", "plan", Some(&repo), Some(&parent.id)).await;
+    let selector = SpaceSelector::id(&removed.id);
+    manager
+        .spaces
+        .remove_selected(
+            &*manager,
+            &selector,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+
+    let restored = restore_chat(&manager, &removed.id).await;
+    let chat = restored.chat;
+    assert_eq!(chat.id, removed.id);
+    assert_eq!(chat.name, removed.name);
+    assert_eq!(chat.mode, removed.mode);
+    assert!(!chat.running);
+    assert_eq!(chat.parent.map(|parent| parent.id), Some(parent.id));
+    assert!(manager.spaces.removed_spaces().await.unwrap().is_empty());
+    let id = chat.id.clone();
+    let last: String = (manager.store)
+        .run(move |db| {
+            Ok(db.query_row(
+                "SELECT json_extract(record,'$.kind') FROM space_events
+                    WHERE space_id=?1 ORDER BY id DESC LIMIT 1",
+                [&id],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(last, "restored");
+}
+
+#[tokio::test]
+async fn a_removed_chat_keeps_its_running_agent_with_its_session() {
+    let (_root, manager, parent) = with_workspace().await;
+    let repo = manager
+        .repositories
+        .repository(parent.repository())
+        .await
+        .unwrap();
+    let removed = chat(&manager, "notes", "plan", Some(&repo), None).await;
+    crate::daemon::test_support::report_session(&manager, &removed.id, "s1").await;
+    let selector = SpaceSelector::id(&removed.id);
+    manager
+        .spaces
+        .remove_selected(
+            &*manager,
+            &selector,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+
+    let records = manager.spaces.removed_spaces().await.unwrap();
+    let [record] = records.as_slice() else {
+        panic!("{records:?}");
+    };
+    let sessions: Vec<_> = (record.agents.iter())
+        .map(|agent| {
+            agent
+                .record
+                .session
+                .as_ref()
+                .map(|session| session.as_str())
+        })
+        .collect();
+    assert_eq!(sessions, [Some("s1")]);
+    let restored = restore_chat(&manager, &removed.id).await;
+    assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
+}
+
+#[tokio::test]
+async fn a_chat_in_a_removed_workspace_restores_once_that_workspace_does() {
+    let (_root, manager, workspace) = with_workspace().await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let removed = manager
+        .start_chat_in_workspace(&selector, "review".into(), "claude".into(), None)
+        .await
+        .unwrap();
+    (manager.spaces.remove_selected(
+        &*manager,
+        &selector,
+        UnsavedWork::All,
+        InspectionPolicy::GitOnly,
+    ))
+    .await
+    .unwrap();
+    assert_eq!(manager.spaces.removed_spaces().await.unwrap().len(), 2);
+
+    let refused = (manager
+        .spaces
+        .restore_space(&*manager, &SpaceSelector::id(&removed.id), None))
+    .await
+    .unwrap_err();
+    let command = format!("shoal restore {} {}", workspace.id, removed.id);
+    assert!(format!("{refused:#}").contains(&command), "{refused:#}");
+
+    manager.restore_workspace(&selector).await.unwrap();
+    let restored = restore_chat(&manager, &removed.id).await;
+    let place = restored
+        .chat
+        .workdir
+        .workspace()
+        .map(|workspace| workspace.id.clone());
+    assert_eq!(place, Some(workspace.id));
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_gets_back_the_session_files_its_root_dir_kept() {
+    let (root, manager) = manager().await;
+    let removed = chat(&manager, "notes", "chat", None, None).await;
+    manager
+        .spaces
+        .remove_selected(
+            &*manager,
+            &SpaceSelector::id(&removed.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let record = manager.spaces.removed_spaces().await.unwrap().remove(0);
+    let contents = root.path().join("carried");
+    std::fs::write(&contents, "{}\n").unwrap();
+    let carried = shoal_protocol::transcripts::CarriedSessionFile {
+        file: shoal_protocol::transcripts::SessionFile {
+            agent: "claude".into(),
+            session: "s1".into(),
+            path: "project/s1.jsonl".into(),
+            size: 3,
+        },
+        contents,
+    };
+    let record = manager
+        .spaces
+        .keep_imported_sessions(&*manager, record, std::slice::from_ref(&carried))
+        .await
+        .unwrap();
+    let kept = record.clone();
+    (manager.store)
+        .run(move |db| crate::daemon::restore::records::record(db, &kept))
+        .await
+        .unwrap();
+
+    let restored = restore_chat(&manager, &removed.id).await;
+    let [handed] = restored.session_files.as_slice() else {
+        panic!("{:?}", restored.session_files);
+    };
+    assert_eq!(handed.file, carried.file);
+    let root_dir = record.chat().unwrap().root_dir.clone().unwrap();
+    assert!(handed.contents.starts_with(root_dir.join(".sessions")));
+    assert_eq!(std::fs::read_to_string(&handed.contents).unwrap(), "{}\n");
+
+    // Once the caller put them in place, the daemon deletes them.
+    manager
+        .spaces
+        .drop_restored_sessions(&*manager, &SpaceSelector::id(&removed.id))
+        .await
+        .unwrap();
+    assert!(!handed.contents.exists());
+}

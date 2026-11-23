@@ -30,15 +30,15 @@ impl Spaces for Manager {
     }
 
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
-        Box::pin(Manager::space(self, selector))
+        Box::pin(self.spaces.space(selector))
     }
 
     fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
-        Box::pin(Manager::find_space(self, id))
+        Box::pin(self.spaces.find_space(id))
     }
 
     fn verify_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::verify_space(self, space))
+        Box::pin(self.spaces.verify_space(self, space))
     }
 
     fn linked_items<'a>(
@@ -59,7 +59,7 @@ impl Spaces for Manager {
         selection: &'a Selection,
         elsewhere: bool,
     ) -> BoxFuture<'a, Result<Selected>> {
-        Box::pin(Manager::select_items(self, space, selection, elsewhere))
+        Box::pin(self.spaces.select_items(self, space, selection, elsewhere))
     }
 
     fn acting_settings<'a>(&'a self, space: &'a LinkSpace) -> BoxFuture<'a, Result<Effective>> {
@@ -117,7 +117,7 @@ impl Spaces for Manager {
     ) -> BoxFuture<'a, Result<Vec<Workspace>>> {
         Box::pin(async move {
             let root = self.coordination.reach_root(Some(caller)).await?;
-            self.list_workspaces_within(root.as_ref()).await
+            self.spaces.list_workspaces_within(root.as_ref()).await
         })
     }
 
@@ -126,19 +126,19 @@ impl Spaces for Manager {
     }
 
     fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
-        Box::pin(Manager::workspace(self, selector))
+        Box::pin(self.spaces.workspace(selector))
     }
 
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
-        Box::pin(Manager::workspace_by_id(self, id))
+        Box::pin(self.spaces.workspace_by_id(id))
     }
 
     fn find_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Workspace>>> {
-        Box::pin(Manager::find_workspace(self, id))
+        Box::pin(self.spaces.find_workspace(id))
     }
 
     fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::verify_worktree(self, workspace))
+        Box::pin(self.spaces.verify_worktree(self, workspace))
     }
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
@@ -150,7 +150,7 @@ impl Spaces for Manager {
         id: &'a RepositoryId,
         branch: &'a BranchName,
     ) -> BoxFuture<'a, Result<Option<SpaceId>>> {
-        Box::pin(Manager::branch_owner_in(self, id, branch))
+        Box::pin(self.spaces.branch_owner_in(id, branch))
     }
 
     fn pull_workspace<'a>(
@@ -159,7 +159,7 @@ impl Spaces for Manager {
         url: &'a ItemRef,
         number: PullNumber,
     ) -> BoxFuture<'a, Result<Option<Workspace>>> {
-        Box::pin(Manager::pull_workspace(self, id, url, number))
+        Box::pin(self.spaces.pull_workspace(id, url, number))
     }
 
     fn proposing_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>> {
@@ -167,7 +167,7 @@ impl Spaces for Manager {
     }
 
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
-        Box::pin(Manager::present_spaces(self))
+        Box::pin(self.spaces.present_spaces(self))
     }
 
     fn watched_conflicts<'a>(
@@ -175,7 +175,10 @@ impl Spaces for Manager {
         selector: &'a SpaceSelector,
         only_sensitive: bool,
     ) -> BoxFuture<'a, Result<Option<ConflictCheck>>> {
-        Box::pin(Manager::watched_conflicts(self, selector, only_sensitive))
+        Box::pin(
+            self.spaces
+                .watched_conflicts(self, selector, only_sensitive),
+        )
     }
 }
 
@@ -199,6 +202,6 @@ impl Watches for Manager {
 
     // A PR's progress section follows its draft state.
     fn draft_changed(&self, id: &SpaceId) {
-        self.publications.request(id);
+        self.spaces.publications.request(id);
     }
 }

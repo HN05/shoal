@@ -211,6 +211,7 @@ fn stopped_agent(manager: &Manager, workspace: &Workspace) -> std::path::PathBuf
 /// The space record of `workspace`, which a replacing launch reads.
 async fn space_of(manager: &Manager, workspace: &Workspace) -> crate::model::Space {
     manager
+        .spaces
         .space(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()

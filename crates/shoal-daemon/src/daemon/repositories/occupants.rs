@@ -13,7 +13,7 @@ impl Occupants for Manager {
     }
 
     fn ensure_no_import_in(&self, imports: ShoalDir) -> BoxFuture<'_, Result<()>> {
-        Box::pin(Manager::ensure_no_import_in(self, imports))
+        Box::pin(self.spaces.ensure_no_import_in(imports))
     }
 
     fn stop_reviews<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, ()> {
@@ -36,8 +36,8 @@ impl Occupants for Manager {
         Box::pin(async move {
             self.links.delete_proposal_files(repo).await?;
             super::super::imported_sessions::remove_imported_sessions(repo).await?;
-            self.delete_repository_fetched(repo).await?;
-            self.delete_repository_files(repo).await
+            self.spaces.delete_repository_fetched(repo).await?;
+            self.spaces.delete_repository_files(repo).await
         })
     }
 }

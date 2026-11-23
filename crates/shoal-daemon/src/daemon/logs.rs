@@ -96,7 +96,7 @@ impl Manager {
     async fn nearest_existing(&self, id: &SpaceId) -> Result<Option<SpaceId>> {
         let mut space = id.clone();
         for _ in 0..REMOVED_ANCESTORS {
-            if self.space_by_id(&space).await.is_ok() {
+            if self.spaces.space_by_id(&space).await.is_ok() {
                 return Ok(Some(space));
             }
             let removed = space.clone();
@@ -111,7 +111,7 @@ impl Manager {
     /// The ID of the space `selector` names: one that exists, else a
     /// removed one whose events the journal keeps.
     async fn log_space(&self, selector: &SpaceSelector) -> Result<SpaceId> {
-        let error = match self.space(selector).await {
+        let error = match self.spaces.space(selector).await {
             Ok(space) => return Ok(space.id.clone()),
             Err(error) => error,
         };

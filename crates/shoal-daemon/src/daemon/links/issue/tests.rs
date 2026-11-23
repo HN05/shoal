@@ -58,7 +58,12 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         )
         .await
         .unwrap();
-    let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
+    let links = manager
+        .spaces
+        .workspace_by_id(&workspace.id)
+        .await
+        .unwrap()
+        .links;
     let issue = links.issue().unwrap();
     assert_eq!(issue.url.url(), url);
     assert_eq!(issue.title.as_deref(), Some("Show titles"));
@@ -104,14 +109,16 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     );
     assert!(
         manager
-            .cleanup_snapshot(&workspace.id)
+            .spaces
+            .cleanup_snapshot(&*manager, &workspace.id)
             .await
             .unwrap()
             .is_none()
     );
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     let inspected = reopened
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(&*reopened, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     let numbers = |issues: &[Registration]| -> Vec<u64> {
@@ -152,7 +159,12 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         .await
         .unwrap();
     assert_eq!(numbers(&registrations), [317]);
-    let links = reopened.workspace_by_id(&workspace.id).await.unwrap().links;
+    let links = reopened
+        .spaces
+        .workspace_by_id(&workspace.id)
+        .await
+        .unwrap()
+        .links;
     assert!(links.issues[0].title.is_none());
     // An issue linked again comes after those still assigned.
     reopened

@@ -1,0 +1,273 @@
+//! Renaming a workspace's Git branch, reconciling durable rename intent
+//! with Git without replaying a ref mutation.
+mod intent;
+
+use super::super::target_checks;
+use crate::Spaces;
+use crate::daemon::Daemon;
+use crate::refusal::{Reason, Refusal};
+use crate::{
+    git,
+    model::{Head, Workspace},
+    state::WorkspaceState,
+    store,
+};
+use anyhow::{Result, bail, ensure};
+use intent::RenameIntent;
+use rusqlite::params;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_refs::BranchName;
+
+impl Spaces {
+    pub async fn rename_branch(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        branch: &str,
+        caller_execution: Option<&ExecutionId>,
+    ) -> Result<Workspace> {
+        let (initial, _completion) = self.lock_pr_gate(selector).await?;
+        let (repo, _git) = daemon
+            .lock_repository(crate::repository::Selector::from(initial.repository()))
+            .await?;
+        let workspace = self.workspace_by_id(&initial.id).await?;
+        let _resources = self.gates.resource_guard(
+            &workspace.id,
+            if caller_execution.is_some() {
+                super::super::gates::GuardMode::Shared
+            } else {
+                super::super::gates::GuardMode::Exclusive
+            },
+        )?;
+        let workspace = self
+            .finish_pending_rename(daemon, workspace, caller_execution)
+            .await?;
+        let current = workspace.require_branch("renaming a branch")?.to_owned();
+        self.verify_rename_source(daemon, &workspace, &repo.path)
+            .await?;
+        git::check_branch_name(branch)?;
+        ensure!(
+            !git::branch::is_reserved_name(branch),
+            "branch name is ambiguous as a Git revision: {branch}"
+        );
+        if branch == current {
+            return Ok(workspace);
+        }
+        let (old_name, new_name) = (current.clone(), BranchName::from(branch));
+        ensure!(
+            !git::ref_exists(&repo.path, &git::local_ref(&new_name)).await?,
+            Refusal::new(
+                Reason::NameTaken,
+                format!("local branch already exists: {branch}")
+            )
+        );
+        self.reserve_workspace_rename(&workspace, branch, caller_execution)
+            .await?;
+        let result = git::branch::rename(&workspace.path, &old_name, &new_name).await;
+        // Git may have completed even if capturing its output failed. Inspect
+        // the owned worktree instead of blindly rolling back a ref mutation.
+        if let Err(error) = self
+            .finish_workspace_rename(daemon, &workspace, false)
+            .await
+        {
+            self.set_state(
+                &workspace.id,
+                crate::state::WorkspaceState::Failed,
+                Some(format!(
+                    "rename needs repair: {error:#}; run shoal branch rename again to finish it"
+                )),
+            )
+            .await?;
+            return Err(error);
+        }
+        self.set_state(&workspace.id, crate::state::WorkspaceState::Ready, None)
+            .await?;
+        self.touch(&workspace.id).await;
+        result?;
+        self.workspace_by_id(&workspace.id).await
+    }
+
+    async fn verify_rename_source(
+        &self,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
+        checkout: &std::path::Path,
+    ) -> Result<()> {
+        target_checks::ready(workspace, workspace.state).require()?;
+        self.verify_worktree(daemon, workspace).await?;
+        let recorded = workspace.require_branch("renaming a branch")?;
+        let actual = git::head_branch(&workspace.path).await?;
+        ensure!(
+            actual.as_ref() == Some(recorded),
+            "worktree is not on its recorded branch"
+        );
+        let default = git::default_branch::resolve(
+            checkout,
+            git::default_branch::DefaultBranchLookup::Cached,
+        )
+        .await?;
+        ensure!(
+            *recorded != default,
+            "cannot rename the repository default branch"
+        );
+        ensure!(
+            !git::worktrees(checkout, git::run_isolated)
+                .await?
+                .iter()
+                .any(|tree| tree.is_branch(recorded) && tree.path != workspace.path),
+            "branch is also checked out in another worktree"
+        );
+        Ok(())
+    }
+
+    async fn reserve_workspace_rename(
+        &self,
+        workspace: &Workspace,
+        branch: &str,
+        caller_execution: Option<&ExecutionId>,
+    ) -> Result<()> {
+        let workspace = workspace.clone();
+        let intent = RenameIntent {
+            branch: branch.to_owned().into(),
+        };
+        let caller_execution = caller_execution.cloned();
+        self.store
+            .write(move |tx| {
+                store::require_ready(tx, &workspace.id)?;
+                ensure!(
+                    !store::exists(
+                        tx,
+                        "SELECT 1 FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id!=?2)",
+                        params![workspace.id, caller_execution]
+                    )?,
+                    "workspace has other active or unknown executions; stop them before renaming"
+                );
+                store::ensure_branch_available(
+                    tx,
+                    workspace.repository(),
+                    Some(intent.branch.as_str()),
+                    Some(&workspace.id),
+                )?;
+                intent.record(tx, &workspace.id)?;
+                tx.execute(
+                    "UPDATE workspaces SET state=?2 WHERE id=?1",
+                    params![workspace.id, crate::state::WorkspaceState::Reconciling],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Finish a rename an earlier attempt left unfinished before starting
+    /// another. The caller holds the repository Git gate and the workspace's
+    /// resource guard, so the lifecycle is reserved in the store directly.
+    async fn finish_pending_rename(
+        &self,
+        daemon: &dyn Daemon,
+        workspace: Workspace,
+        caller_execution: Option<&ExecutionId>,
+    ) -> Result<Workspace> {
+        if self.rename_intent(&workspace.id).await?.is_none() {
+            return Ok(workspace);
+        }
+        self.reserve_rename_repair(&workspace, caller_execution)
+            .await?;
+        let finished = self
+            .finish_workspace_rename(daemon, &workspace, false)
+            .await;
+        let (state, error) = match &finished {
+            Ok(_) => (WorkspaceState::Ready, None),
+            Err(error) => (
+                WorkspaceState::Failed,
+                Some(format!("rename needs repair: {error:#}")),
+            ),
+        };
+        self.set_state(&workspace.id, state, error).await?;
+        finished?;
+        self.workspace_by_id(&workspace.id).await
+    }
+
+    /// Move a ready or failed workspace without executions other than the
+    /// caller's into reconciling for finishing its pending rename, without
+    /// the resource guard its caller already holds.
+    async fn reserve_rename_repair(
+        &self,
+        workspace: &Workspace,
+        caller_execution: Option<&ExecutionId>,
+    ) -> Result<()> {
+        let (id, workspace) = (workspace.id.clone(), workspace.clone());
+        let caller_execution = caller_execution.cloned();
+        self.store
+            .write(move |tx| {
+                ensure!(
+                    !store::exists(
+                        tx,
+                        "SELECT 1 FROM executions WHERE space_id=?1 AND (?2 IS NULL OR id!=?2)",
+                        params![id, caller_execution]
+                    )?,
+                    "workspace has other active or unknown executions; stop them before renaming"
+                );
+                let state: WorkspaceState =
+                    tx.query_row("SELECT state FROM workspaces WHERE id=?1", [&id], |row| {
+                        row.get(0)
+                    })?;
+                target_checks::settled(&workspace, state).require()?;
+                tx.execute(
+                    "UPDATE workspaces SET state=?2 WHERE id=?1",
+                    params![id, WorkspaceState::Reconciling],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    pub async fn ensure_no_pending_rename(&self, id: &SpaceId) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| store::ensure_no_pending_rename(db, &id))
+            .await
+    }
+
+    /// Caller holds the repository Git gate and has reserved the lifecycle.
+    /// An unchanged branch cancels intent; a completed Git rename commits it.
+    /// Other HEADs and unverifiable ownership retain intent for human repair.
+    pub async fn finish_workspace_rename(
+        &self,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
+        reclaim: bool,
+    ) -> Result<bool> {
+        let Some(intent) = self.rename_intent(&workspace.id).await? else {
+            return Ok(false);
+        };
+        let recorded = workspace.require_branch("renaming a branch")?;
+        let actual = git::head_branch(&workspace.path)
+            .await?
+            .filter(|actual| actual == recorded || *actual == intent.branch);
+        let Some(actual) = actual else {
+            bail!(
+                "unfinished rename expected branch {recorded} or {}; check out one of them, then retry",
+                intent.branch
+            );
+        };
+        if let Err(error) = self.verify_worktree(daemon, workspace).await {
+            ensure!(
+                reclaim,
+                "unfinished rename ownership cannot be verified: {error:#}; check the worktree at {}, then reclaim it with shoal adopt {}",
+                workspace.path.display(),
+                workspace.path.display()
+            );
+            let mut candidate = workspace.clone();
+            candidate.head = Head::Branch(actual.clone());
+            self.reclaim_worktree(daemon, &candidate).await?;
+        }
+        if actual == intent.branch {
+            self.commit_rename(workspace, intent).await?;
+        } else {
+            self.cancel_rename(&workspace.id).await?;
+        }
+        Ok(true)
+    }
+}

@@ -54,7 +54,8 @@ pub(super) async fn tree() -> Tree {
         let parent = SpaceSelector::id(&parent.id);
         async move {
             manager
-                .create_child(&parent, name, None, Default::default())
+                .spaces
+                .create_child(&*manager, &parent, name, None, Default::default())
                 .await
                 .unwrap()
         }
@@ -177,9 +178,11 @@ async fn a_rename_keeps_a_full_thread_within_one_response() {
         }
     }
     let renamed = SpaceName::parse(&"w".repeat(shoal_protocol::space_names::MAX_SPACE_NAME_LEN));
-    (manager.rename_space(&SpaceSelector::id(&tree.beside.id), &renamed.unwrap()))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .rename_space(&SpaceSelector::id(&tree.beside.id), &renamed.unwrap()))
+    .await
+    .unwrap();
     let kept = manager
         .coordination
         .thread(&**manager, None, full(&thread))
@@ -198,7 +201,11 @@ async fn a_space_being_removed_starts_no_wait() {
     let manager = &tree.manager;
     let child = caller(&tree.child);
     let thread = open(manager, Some(&child), None).await;
-    let _removal = manager.space_removals.reserve(&tree.child.id).unwrap();
+    let _removal = manager
+        .spaces
+        .space_removals
+        .reserve(&tree.child.id)
+        .unwrap();
     let asked = manager.coordination.post_to_thread(
         &**manager,
         Some(&child),
@@ -245,9 +252,11 @@ async fn a_marked_turn_posts_nothing_in_a_thread_that_went_elsewhere() {
         }),
         ..caller(&tree.parent)
     };
-    (manager.mark_chat_post(Some(&agent), &selector, full(&thread)))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .mark_chat_post(&**manager, Some(&agent), &selector, full(&thread)))
+    .await
+    .unwrap();
     let child = SpaceSelector::id(&tree.child.id);
     (manager.coordination.forward_thread(
         &**manager,
@@ -302,7 +311,8 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
         .forward_thread(&**manager, Some(&child), full(&thread), None, None))
     .await
     .unwrap();
-    let removing = crate::daemon::coordination::CoordinationRecords(manager.space_removals.clone());
+    let removing =
+        crate::daemon::coordination::CoordinationRecords(manager.spaces.space_removals.clone());
     let (id, reply) = (thread.id, post("8080"));
     let posted = manager
         .store
@@ -364,7 +374,8 @@ async fn the_user_s_threads_list_past_larger_newer_threads() {
 /// Remove the space `id`, its unsaved work and all.
 async fn remove(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) {
     use crate::removal::{InspectionPolicy, UnsavedWork};
-    (manager.remove_selected(
+    (manager.spaces.remove_selected(
+        manager,
         &SpaceSelector::id(id),
         UnsavedWork::All,
         InspectionPolicy::GitOnly,
@@ -398,7 +409,9 @@ async fn restored_after_removals(child_first: bool) -> Thread {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -415,11 +428,17 @@ async fn restored_after_removals(child_first: bool) -> Thread {
         false => [&parent.id, &child.id],
     };
     for id in order {
-        (manager.restore_space(&SpaceSelector::id(id), None))
-            .await
-            .unwrap();
+        (manager
+            .spaces
+            .restore_space(&*manager, &SpaceSelector::id(id), None))
+        .await
+        .unwrap();
     }
-    let parent = manager.space(&SpaceSelector::id(&parent.id)).await.unwrap();
+    let parent = manager
+        .spaces
+        .space(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     let number = ThreadNumber::Full(shoal_protocol::item_numbers::ItemNumber {
         space: parent.number,
         item: thread.number.item,
@@ -448,7 +467,9 @@ async fn a_coordinator_posts_in_its_chat_only_in_threads_it_takes_part_in() {
         ..caller(&tree.parent)
     };
     let selector = SpaceSelector::id(&tree.parent.id);
-    let marked = manager.mark_chat_post(Some(&agent), &selector, full(&thread));
+    let marked = manager
+        .spaces
+        .mark_chat_post(&**manager, Some(&agent), &selector, full(&thread));
     assert!(marked.await.is_err());
 }
 
@@ -460,9 +481,11 @@ async fn done_closes_the_threads_a_space_holds_and_its_undo_reopens_them() {
     send(manager, None, &thread, "How far along are you?").await;
     let selector = SpaceSelector::id(&tree.beside.id);
 
-    (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .mark_space_done(&**manager, &selector, Done::default(), &Attacher::User))
+    .await
+    .unwrap();
     let closed = manager
         .coordination
         .thread(&**manager, None, full(&thread))
@@ -480,7 +503,11 @@ async fn done_closes_the_threads_a_space_holds_and_its_undo_reopens_them() {
         "{told:?}"
     );
 
-    manager.undo_space_done(&selector).await.unwrap();
+    manager
+        .spaces
+        .undo_space_done(&**manager, &selector)
+        .await
+        .unwrap();
     let reopened = manager
         .coordination
         .thread(&**manager, None, full(&thread))
@@ -501,9 +528,11 @@ async fn a_thread_resolved_otherwise_stays_resolved_when_done_is_undone() {
     let thread = open(manager, None, Some(&tree.beside)).await;
     send(manager, None, &thread, "How far along are you?").await;
     let selector = SpaceSelector::id(&tree.beside.id);
-    (manager.mark_space_done(&selector, Done::default(), &Attacher::User))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .mark_space_done(&**manager, &selector, Done::default(), &Attacher::User))
+    .await
+    .unwrap();
     let answered = Some(OutcomeKind::Answered);
     (manager.coordination.resolve_thread(
         &**manager,
@@ -516,7 +545,11 @@ async fn a_thread_resolved_otherwise_stays_resolved_when_done_is_undone() {
     ))
     .await
     .unwrap();
-    manager.undo_space_done(&selector).await.unwrap();
+    manager
+        .spaces
+        .undo_space_done(&**manager, &selector)
+        .await
+        .unwrap();
     let kept = manager
         .coordination
         .thread(&**manager, None, full(&thread))
@@ -560,9 +593,11 @@ async fn a_marked_turn_posts_its_final_message_which_a_reply_in_the_chat_answers
             .await
             .unwrap();
     };
-    (manager.mark_chat_post(Some(&agent), &selector, full(&thread)))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .mark_chat_post(&**manager, Some(&agent), &selector, full(&thread)))
+    .await
+    .unwrap();
     end_turn("Postgres or SQLite?\n\nI lean towards SQLite.").await;
     // The mark lasts one turn.
     end_turn("Still waiting.").await;
@@ -583,9 +618,14 @@ async fn a_marked_turn_posts_its_final_message_which_a_reply_in_the_chat_answers
     );
     assert!(posted.waits_for_user());
 
-    (manager.reply_in_chat(&selector, Some(&tree.agent), Some("SQLite it is".into())))
-        .await
-        .unwrap();
+    (manager.spaces.reply_in_chat(
+        &**manager,
+        &selector,
+        Some(&tree.agent),
+        Some("SQLite it is".into()),
+    ))
+    .await
+    .unwrap();
     let replied = manager
         .coordination
         .thread(&**manager, None, full(&thread))

@@ -32,9 +32,11 @@ async fn a_prompt_the_user_submits_counts_as_interaction() {
         .await
         .unwrap();
     let (id, execution) = (workspace.id, execution.plan.id);
-    (manager.reply_in_chat(&SpaceSelector::id(&id), Some(&execution), None))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .reply_in_chat(&*manager, &SpaceSelector::id(&id), Some(&execution), None))
+    .await
+    .unwrap();
     let engagement = manager.store.read(move |db| engagement::get(db, &id));
     assert!(engagement.await.unwrap().interacted_at.is_some());
 }

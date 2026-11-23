@@ -34,9 +34,11 @@ async fn a_scoped_removal_takes_the_user_s_holds_as_user_holds_allows() {
     let scoped = caller(&master.id);
     for id in [&notes.id, &worker.id] {
         let selector = SpaceSelector::id(id);
-        (manager.acquire_hold(&selector, "keep".into(), None, HoldPlacer::User))
-            .await
-            .unwrap();
+        (manager
+            .spaces
+            .acquire_hold(&*manager, &selector, "keep".into(), None, HoldPlacer::User))
+        .await
+        .unwrap();
         let mut method = RemovalMethod::RemoveSpace {
             space: selector,
             unsaved: UnsavedWork::default(),
@@ -45,6 +47,6 @@ async fn a_scoped_removal_takes_the_user_s_holds_as_user_holds_allows() {
         };
         method.scope(&manager, &scoped).await.unwrap();
         handle(&manager, method, Some(&scoped)).await.unwrap();
-        assert!(manager.find_space(id).await.unwrap().is_none());
+        assert!(manager.spaces.find_space(id).await.unwrap().is_none());
     }
 }

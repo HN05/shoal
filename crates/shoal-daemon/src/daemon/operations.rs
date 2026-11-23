@@ -3,7 +3,6 @@
 //! ID. The worker reports its steps and its end; what its processes write
 //! arrives on its standard streams. An ended operation can be followed for
 //! [`RETAIN`].
-pub(crate) mod starts;
 mod worker;
 
 use shoal_ids::space_ids::SpaceId;
@@ -251,8 +250,8 @@ impl Manager {
         let selector = (spec.workspace_mut())
             .ok_or_else(|| anyhow::anyhow!("a move starts with its own request"))?;
         let workspace = match unmerge {
-            true => self.unmerge_workspace(selector).await?,
-            false => self.workspace(selector).await?,
+            true => self.spaces.unmerge_workspace(selector).await?,
+            false => self.spaces.workspace(selector).await?,
         }
         .id;
         *selector = SpaceSelector::id(&workspace);
@@ -356,12 +355,12 @@ impl Manager {
             return self.operation(&named.id, caller).await;
         };
         if !self.has_operation(&named.id) {
-            self.space(space).await?;
+            self.spaces.space(space).await?;
         }
         let entry = self.operation(&named.id, caller).await?;
         let works_in = match space.given_id() {
             Some(id) => *id == entry.workspace,
-            None => self.space(space).await?.id == entry.workspace,
+            None => self.spaces.space(space).await?.id == entry.workspace,
         };
         ensure!(
             works_in,
@@ -397,13 +396,14 @@ impl Manager {
                 entry.push(Progress::Step { step });
             }
             Report::Ended(ended) => {
-                self.keep_preparation_end(&entry.workspace, id, &ended)
+                self.spaces
+                    .keep_preparation_end(&entry.workspace, id, &ended)
                     .await;
                 // Kept first, so what reads the end while it is told finds it.
                 entry.update(|state| state.reported = Some(ended.clone()));
                 match entry.kind {
-                    OperationKind::FinishMove => self.tell_finished_move(&ended).await,
-                    OperationKind::Move => self.tell_move_after_turn(id, &ended).await,
+                    OperationKind::FinishMove => self.spaces.tell_finished_move(self, &ended).await,
+                    OperationKind::Move => self.spaces.tell_move_after_turn(self, id, &ended).await,
                     _ => {}
                 }
             }

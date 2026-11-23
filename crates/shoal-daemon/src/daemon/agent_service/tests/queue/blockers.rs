@@ -53,7 +53,9 @@ async fn space(manager: &Manager, name: &str) -> Blocker {
 
 async fn remove(manager: &Manager, workspace: &Workspace) {
     manager
+        .spaces
         .remove_selected(
+            manager,
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
@@ -75,7 +77,9 @@ async fn launches_start_on_a_blocker_once_it_is_done_at_its_head() {
     assert_eq!(ui.blockers, ["api"]);
 
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&api.id),
             Done::default(),
             &Attacher::User,
@@ -90,7 +94,9 @@ async fn launches_start_on_a_blocker_once_it_is_done_at_its_head() {
     assert_eq!(entry(&manager, &ui.id).await.blockers, ["api"]);
 
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&api.id),
             Done::default(),
             &Attacher::User,
@@ -121,7 +127,9 @@ async fn launches_blocked_by_a_chat_start_once_it_is_done_or_removed() {
     assert_eq!(ui.blockers, ["notes"]);
 
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&notes.id),
             Done::default(),
             &Attacher::User,
@@ -139,7 +147,9 @@ async fn launches_blocked_by_a_chat_start_once_it_is_done_or_removed() {
     let docs = add_blocked(&manager, &repo, "docs", vec![blocker]).await;
     manager.agents.end_executions(&*manager, &talk.id).await;
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&talk.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
@@ -235,7 +245,9 @@ async fn issue_blockers_wait_for_closure_or_a_done_workspace_linking_them() {
         ["fix or pending"]
     );
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&fix.id),
             Done::default(),
             &Attacher::User,
@@ -289,7 +301,9 @@ async fn done_blockers_build_on_the_one_that_contains_the_others() {
     .await;
     for workspace in [&lower, &separate, &upper] {
         manager
+            .spaces
             .mark_space_done(
+                &*manager,
                 &SpaceSelector::id(&workspace.id),
                 Done::default(),
                 &Attacher::User,

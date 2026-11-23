@@ -51,20 +51,30 @@ async fn releasing_the_user_s_hold_follows_the_user_holds_permission() {
     .await;
     let selector = SpaceSelector::id(&worker.id);
     let hold = || async {
-        (manager.acquire_hold(&selector, "keep".into(), None, HoldPlacer::User))
-            .await
-            .unwrap();
+        (manager
+            .spaces
+            .acquire_hold(&*manager, &selector, "keep".into(), None, HoldPlacer::User))
+        .await
+        .unwrap();
     };
     hold().await;
     // The worker proposes releasing the user's hold; the master releases it.
     let asking = caller(&worker.id);
-    let release = manager.release_hold_as(Some(&asking), &selector, "keep".into());
+    let release =
+        manager
+            .spaces
+            .release_hold_as(&*manager, Some(&asking), &selector, "keep".into());
     let request = undecided(release.await);
     assert_eq!(request.target, Target::Action(PermissionKey::UserHolds));
-    (manager.release_hold_as(Some(&caller(&master.id)), &selector, "keep".into()))
-        .await
-        .unwrap();
-    assert!(manager.holds(&selector).await.unwrap().is_empty());
+    (manager.spaces.release_hold_as(
+        &*manager,
+        Some(&caller(&master.id)),
+        &selector,
+        "keep".into(),
+    ))
+    .await
+    .unwrap();
+    assert!(manager.spaces.holds(&selector).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -86,14 +96,19 @@ async fn an_approval_to_release_a_hold_covers_only_the_space_it_names() {
             crate::daemon::test_support::workspace_below(&manager, &repo, "child", &lead.id, None)
                 .await;
         let selector = SpaceSelector::id(&child.id);
-        (manager.acquire_hold(&selector, "keep".into(), None, HoldPlacer::User))
-            .await
-            .unwrap();
+        (manager
+            .spaces
+            .acquire_hold(&*manager, &selector, "keep".into(), None, HoldPlacer::User))
+        .await
+        .unwrap();
         held.push(selector);
     }
     let leading = caller(&lead.id);
-    let release =
-        |index: usize| manager.release_hold_as(Some(&leading), &held[index], "keep".into());
+    let release = |index: usize| {
+        manager
+            .spaces
+            .release_hold_as(&*manager, Some(&leading), &held[index], "keep".into())
+    };
     let first = undecided(release(0).await);
     (manager.coordination.decide_approval(
         &*manager,

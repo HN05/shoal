@@ -76,7 +76,9 @@ async fn deleting_by_name_needs_a_workspace() {
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
     manager
+        .spaces
         .add_attached_files(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             vec![file.into()],
             &Attacher::User,
@@ -99,6 +101,7 @@ async fn deleting_by_name_needs_a_workspace() {
     );
     assert_eq!(
         manager
+            .spaces
             .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
@@ -117,7 +120,7 @@ async fn a_chats_agent_lists_and_deletes_its_own_chats_files() {
         .await
         .unwrap();
     let chat = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
-    let token = manager.chat_scope(&chat.id).await.unwrap();
+    let token = manager.spaces.chat_scope(&chat.id).await.unwrap();
     for method in [
         FileMethod::ListFiles {
             space: SpaceSelector::id(&chat.id),

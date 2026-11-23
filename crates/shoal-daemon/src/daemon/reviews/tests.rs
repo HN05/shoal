@@ -246,7 +246,9 @@ async fn removing_the_workspace_stops_its_review() {
     }
     let mut ended = manager.reviews.ends();
     manager
+        .spaces
         .remove_selected(
+            &**manager,
             &SpaceSelector::id(&fixture.workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,
@@ -271,7 +273,9 @@ async fn the_coordinating_agent_hears_one_line() {
     let manager = &fixture.manager;
     let parent = &fixture.workspace;
     let child = manager
+        .spaces
         .create_child(
+            &**manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -318,7 +322,9 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     let manager = &fixture.manager;
     let parent = &fixture.workspace;
     let child = manager
+        .spaces
         .create_child(
+            &**manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -589,9 +595,11 @@ async fn all_holds_the_users_own_commands_too() {
     assert!(refused.contains(head.short()), "{refused}");
     // require_for_ready stays off.
     let selector = SpaceSelector::id(&workspace.id);
-    (manager.mark_ready(&selector, Default::default(), None))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .mark_ready(&**manager, &selector, Default::default(), None))
+    .await
+    .unwrap();
 }
 
 /// The frames the daemon answers `method` with, and the JSON their review
@@ -765,7 +773,9 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         .await
         .unwrap();
     let workspace = manager
+        .spaces
         .create_commit_workspace(
+            &*manager,
             (&repo.id).into(),
             (None, None),
             crate::protocol::CommitStart::Revision(None),

@@ -216,7 +216,8 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     // workspace taking its name gets none of them.
     let unread = send("PR #14 is ready to merge").await;
     let renamed = manager
-        .rename_branch(&SpaceSelector::id(&sender.id), "renamed", None)
+        .spaces
+        .rename_branch(&*manager, &SpaceSelector::id(&sender.id), "renamed", None)
         .await
         .unwrap();
     // The renamed workspace keeps its directory, so the new one needs another.
@@ -287,7 +288,8 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
     // the message is recorded.
     let about = About::space(&sender.name, &sender.id);
     manager
-        .rename_branch(&SpaceSelector::id(&sender.id), "renamed", None)
+        .spaces
+        .rename_branch(&*manager, &SpaceSelector::id(&sender.id), "renamed", None)
         .await
         .unwrap();
     let path = Some(temp.path().join("successor"));
@@ -347,7 +349,9 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,
@@ -395,6 +399,7 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         "png"
     );
     let attached = manager
+        .spaces
         .attached_files(&SpaceSelector::id(&child.id))
         .await
         .unwrap();
@@ -459,7 +464,9 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
     assert_eq!(std::fs::read_to_string(copy).unwrap(), "png");
 
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&child.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
@@ -508,6 +515,7 @@ async fn a_message_to_the_user_sends_a_limited_number_of_files() {
     assert!(sent.is_err());
     assert!(
         manager
+            .spaces
             .attached_files(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()

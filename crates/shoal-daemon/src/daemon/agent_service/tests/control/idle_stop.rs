@@ -430,7 +430,11 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         step: None,
         reason: "Needs the API".into(),
     };
-    manager.set_progress(&selector, change).await.unwrap();
+    manager
+        .spaces
+        .set_progress(&*manager, &selector, change)
+        .await
+        .unwrap();
     manager
         .agents
         .stop_idle_agents(&*manager, UnixTime::now())
@@ -555,7 +559,11 @@ async fn a_blocked_agent_stops_once_its_turn_ends_and_waits_for_the_space_to_cle
         blocker,
         step: None,
     };
-    manager.set_progress(&selector, remove).await.unwrap();
+    manager
+        .spaces
+        .set_progress(&*manager, &selector, remove)
+        .await
+        .unwrap();
     assert!(
         manager
             .agents
@@ -671,9 +679,11 @@ async fn a_blocked_chats_idle_agent_stops_until_its_space_clears() {
         step: None,
         reason: "Needs the API".into(),
     };
-    (manager.set_progress(&SpaceSelector::id(&chat.id), change))
-        .await
-        .unwrap();
+    (manager
+        .spaces
+        .set_progress(&*manager, &SpaceSelector::id(&chat.id), change))
+    .await
+    .unwrap();
 
     manager
         .agents
@@ -897,7 +907,13 @@ async fn an_agent_the_user_is_away_from_sleeps_to_make_room_for_queued_work() {
         unreachable!()
     };
     manager
-        .set_priority(None, &SpaceSelector::id(&urgent.id), Priority::URGENT)
+        .spaces
+        .set_priority(
+            &*manager,
+            None,
+            &SpaceSelector::id(&urgent.id),
+            Priority::URGENT,
+        )
         .await
         .unwrap();
     (manager

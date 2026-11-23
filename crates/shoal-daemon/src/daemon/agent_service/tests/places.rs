@@ -41,7 +41,8 @@ async fn an_execution_reports_where_it_runs() -> Result<()> {
         )
         .await?;
     let executions = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
         .await?
         .executions;
     assert_eq!(executions.len(), 1);

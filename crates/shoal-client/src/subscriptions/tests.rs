@@ -139,7 +139,9 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     until(&mut subscription, changed(RecordKind::Repository)).await;
 
     manager
+        .spaces
         .acquire_hold(
+            &**manager,
             &SpaceSelector::id(&workspace.id),
             "quay".into(),
             None,
@@ -225,7 +227,9 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     .await;
 
     manager
+        .spaces
         .remove_selected(
+            &**manager,
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -275,7 +279,9 @@ async fn the_user_keeps_seeing_an_issue_proposal_its_workspace_left() {
     let proposal = store_issue_proposal(&daemon.manager, &workspace.clone().into()).await;
     daemon
         .manager
+        .spaces
         .remove_selected(
+            &*daemon.manager,
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -305,7 +311,7 @@ async fn a_chats_subscription_follows_the_issues_it_proposed() {
         .unwrap();
     let other = daemon.workspace("other").await;
     store_issue_proposal(&daemon.manager, &other.into()).await;
-    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+    let token = daemon.manager.spaces.chat_scope(&chat.id).await.unwrap();
     let connector = daemon.connector().scope(token);
     let mut subscription = subscribe(connector, &[Topic::Approvals]).await;
     let records = snapshot(&mut subscription).await;
@@ -472,7 +478,7 @@ async fn a_session_an_agent_reports_reaches_a_subscription() {
         until(&mut subscription, reported(workspace.id.clone(), session)).await;
     }
 
-    let execution = manager.workspace_executions(&chat.id).await.unwrap()[0]
+    let execution = manager.spaces.workspace_executions(&chat.id).await.unwrap()[0]
         .id
         .clone();
     manager
@@ -548,12 +554,14 @@ async fn a_log_subscription_follows_one_space_within_its_scope() {
     assert!(!records.is_empty());
     daemon
         .manager
+        .spaces
         .rename_space(&SpaceSelector::id(&own.id), &"Login fix".into())
         .await
         .unwrap();
     // Another space's entries stay out.
     daemon
         .manager
+        .spaces
         .rename_space(&SpaceSelector::id(&other.id), &"Other".into())
         .await
         .unwrap();
@@ -654,6 +662,7 @@ async fn a_revoked_scope_token_ends_its_subscriptions() {
     snapshot(&mut subscription).await;
     daemon
         .manager
+        .spaces
         .revoke_scope(&SpaceSelector::id(&workspace.id), token.clone())
         .await
         .unwrap();
@@ -661,7 +670,9 @@ async fn a_revoked_scope_token_ends_its_subscriptions() {
     assert_eq!(code(refused.err().unwrap()), ErrorCode::ScopeDenied);
     daemon
         .manager
+        .spaces
         .acquire_hold(
+            &*daemon.manager,
             &SpaceSelector::id(&workspace.id),
             "quay".into(),
             None,
@@ -722,7 +733,9 @@ async fn a_daemon_quiescing_for_an_update_closes_a_subscription_instead_of_writi
     let _quiesced = daemon.manager.gates.quiesce().await;
     daemon
         .manager
+        .spaces
         .acquire_hold(
+            &*daemon.manager,
             &SpaceSelector::id(&workspace.id),
             "quay".into(),
             None,
@@ -746,7 +759,9 @@ async fn after_a_restart_the_subscription_resyncs() {
     daemon.restart().await;
     daemon
         .manager
+        .spaces
         .acquire_hold(
+            &*daemon.manager,
             &SpaceSelector::id(&workspace.id),
             "quay".into(),
             None,

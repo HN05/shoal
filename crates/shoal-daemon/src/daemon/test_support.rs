@@ -7,6 +7,7 @@ pub(crate) use crate::test_support::*;
 use crate::{daemon::manager::Manager, paths::Paths};
 use shoal_ids::space_ids::SpaceId;
 
+mod chats;
 // The overload tests in `shoal-workers` read the rest of it.
 #[cfg_attr(not(feature = "test-support"), allow(dead_code))]
 pub mod overload;
@@ -38,7 +39,10 @@ pub async fn import_file_as(
         claim: crate::transfer::Claim::Plain,
     };
     let input = super::restore::PackageInput::File(file);
-    manager.import_package(&import, input, caller).await
+    manager
+        .spaces
+        .import_package(manager, &import, input, caller)
+        .await
 }
 
 /// Keep the temporary root alive until all manager operations have finished.
@@ -84,7 +88,11 @@ pub async fn chat(
         parent: parent.cloned(),
     };
     let repository = repository.map(|repository| repository.id.clone().into());
-    let chat = manager.start_new_chat(repository, None, new).await.unwrap();
+    let chat = manager
+        .spaces
+        .start_new_chat(&**manager, repository, None, new)
+        .await
+        .unwrap();
     manager.run_chat_agent(chat, None).await.unwrap()
 }
 
@@ -135,7 +143,7 @@ pub(crate) async fn track_agent(
 /// as its hooks' report with its execution keeps it, leaving its turn state
 /// as it is.
 pub async fn report_session(manager: &Manager, id: &SpaceId, session: &str) {
-    let executions = manager.workspace_executions(id).await.unwrap();
+    let executions = manager.spaces.workspace_executions(id).await.unwrap();
     let mut agents = executions
         .iter()
         .filter(|execution| execution.agent.is_some());
@@ -150,7 +158,7 @@ pub async fn report_session(manager: &Manager, id: &SpaceId, session: &str) {
 /// recorded as the child of its execution, which a stop of it signals.
 pub async fn agent_process(manager: &Manager, id: &SpaceId) -> ProcessGroup {
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
-    let executions = manager.workspace_executions(id).await.unwrap();
+    let executions = manager.spaces.workspace_executions(id).await.unwrap();
     let [execution] = executions.as_slice() else {
         panic!("one execution runs the agent: {executions:?}");
     };
@@ -177,7 +185,8 @@ pub async fn workspace_below(
         ..Default::default()
     };
     let workspace = manager
-        .create_workspace_with(&repository.id, name.into(), None, new)
+        .spaces
+        .create_workspace_with(manager, &repository.id, name.into(), None, new)
         .await
         .unwrap();
     let id = workspace.id.clone();
@@ -275,7 +284,8 @@ impl Manager {
             path,
             ..Default::default()
         };
-        self.create_workspace_with(repository, name, base, new)
+        self.spaces
+            .create_workspace_with(self, repository, name, base, new)
             .await
     }
 
@@ -285,7 +295,7 @@ impl Manager {
         &self,
         selector: &shoal_protocol::space_names::SpaceSelector,
     ) -> anyhow::Result<crate::model::RestoredWorkspace> {
-        match self.restore_space(selector, None).await? {
+        match self.spaces.restore_space(self, selector, None).await? {
             crate::model::RestoredSpace::Workspace(restored) => Ok(*restored),
             crate::model::RestoredSpace::Chat(_) => anyhow::bail!("restored a chat"),
         }
@@ -295,8 +305,8 @@ impl Manager {
     /// they make: a workspace, a chat, else a removed workspace, by its ID,
     /// since a name never selects one. A name no space has selects nothing.
     pub async fn named(&self, name: &str) -> shoal_protocol::space_names::SpaceSelector {
-        let spaces = self.present_spaces().await.unwrap();
-        let removed = self.removed_workspaces().await.unwrap();
+        let spaces = self.spaces.present_spaces(self).await.unwrap();
+        let removed = self.spaces.removed_workspaces().await.unwrap();
         let id = (spaces.into_iter())
             .find(|space| space.name == name)
             .map(|space| space.id)
@@ -464,8 +474,11 @@ pub fn names(spaces: &[shoal_protocol::alerts::Recipient]) -> Vec<&str> {
 /// identity. This test, which runs the daemon, did not start it, so it is
 /// not the daemon's own. Its ID, which [`ended`] waits on.
 pub async fn chat_process(manager: &Manager, chat: &crate::model::Chat) -> u32 {
-    let repository = manager.chat_repository(chat).await.unwrap();
-    let directory = manager.chat_tmp_dir(repository.as_ref(), chat).unwrap();
+    let repository = manager.spaces.chat_repository(manager, chat).await.unwrap();
+    let directory = manager
+        .spaces
+        .chat_tmp_dir(repository.as_ref(), chat)
+        .unwrap();
     let output = unmarked("sh")
         .args(["-c", "sleep 6021 </dev/null >/dev/null 2>&1 & echo $!"])
         .env(crate::env::SPACE, &chat.id)
@@ -558,14 +571,16 @@ pub async fn move_to_file(
         carrying: carrying.clone(),
         again: false,
     };
-    let packing = manager.export_moving_space(selector, packing);
+    let packing = manager
+        .spaces
+        .export_moving_space(manager, selector, packing);
     let exported = match packing.await {
         Ok(exported) => exported,
         Err(error) => {
-            let _ = manager.abandon_move(selector).await;
+            let _ = manager.spaces.abandon_move(manager, selector).await;
             return Err(error);
         }
     };
-    let removal = manager.end_moved_space(selector).await?;
+    let removal = manager.spaces.end_moved_space(manager, selector).await?;
     Ok((exported, removal))
 }

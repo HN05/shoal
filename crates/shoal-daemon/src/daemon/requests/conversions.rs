@@ -41,13 +41,19 @@ pub(super) async fn handle(
             };
             Body::WorkspaceStarted(
                 manager
-                    .convert_to_workspace(&chat, conversion, env, caller)
+                    .spaces
+                    .convert_to_workspace(&manager.daemon(), &chat, conversion, env, caller)
                     .await?,
             )
         }
         ConversionMethod::ConvertToChat { workspace, mode } => Body::Workspace(
             manager
-                .convert_to_chat(&workspace, mode.unwrap_or_else(crate::model::chat_mode))
+                .spaces
+                .convert_to_chat(
+                    &**manager,
+                    &workspace,
+                    mode.unwrap_or_else(crate::model::chat_mode),
+                )
                 .await?,
         ),
     }))

@@ -43,7 +43,7 @@ mod workspaces;
 use anyhow::Result;
 use shoal_protocol::scope_tokens::ScopeToken;
 
-use super::{Server, answer::Answer, scope::Caller};
+use super::{Server, answer::Answer, scope::Caller, target_checks::Checked};
 use crate::protocol::Operation;
 
 /// Answer a request from `caller`, whose scope token is `scope`; one
@@ -75,7 +75,10 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
     scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
-    server.manager.check_target(&operation, caller).await?;
+    let check = (operation.target_check(), operation.target());
+    (server.manager.spaces)
+        .check_target(&*server.manager, check.0, check.1, caller)
+        .await?;
     match operation {
         Operation::Daemon(method) => daemon::handle(server, method).await,
         Operation::Repository(method) => {

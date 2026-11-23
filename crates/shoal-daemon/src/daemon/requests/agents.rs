@@ -99,10 +99,15 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        AgentMethod::SetProgress { space, change } => {
-            Body::Progress(manager.set_progress(&space, change).await?)
+        AgentMethod::SetProgress { space, change } => Body::Progress(
+            manager
+                .spaces
+                .set_progress(&**manager, &space, change)
+                .await?,
+        ),
+        AgentMethod::Progress { space } => {
+            Body::Progress(manager.spaces.space_progress(&space).await?)
         }
-        AgentMethod::Progress { space } => Body::Progress(manager.space_progress(&space).await?),
         AgentMethod::Sleep {
             space,
             sleep,
@@ -405,5 +410,8 @@ async fn acknowledge_delivery(
     (manager.agents)
         .mark_agent_messages_delivered(&**manager, selector, messages)
         .await?;
-    manager.acknowledge_leftovers(selector, leftovers).await
+    manager
+        .spaces
+        .acknowledge_leftovers(selector, leftovers)
+        .await
 }

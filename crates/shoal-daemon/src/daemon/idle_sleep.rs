@@ -28,6 +28,6 @@ pub(super) async fn run(manager: Arc<Manager>) {
         if let Some(failed) = logged.new_failures(&result) {
             log!("idle sleep: {failed}");
         }
-        manager.record_idle_sleep(result).await;
+        manager.spaces.record_idle_sleep(&*manager, result).await;
     }
 }

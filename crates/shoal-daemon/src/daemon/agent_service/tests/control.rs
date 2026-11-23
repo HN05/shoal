@@ -72,8 +72,16 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         fs::read_to_string(workspace.path.join("exits")).unwrap(),
         "helper||false\n"
     );
-    assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+    assert!(
+        manager
+            .spaces
+            .completion(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
     manager
+        .spaces
         .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
         .await
         .unwrap();
@@ -149,7 +157,7 @@ async fn a_chats_agent_exit_hook_runs_where_it_works_and_skips_a_removal() {
     let ran = format!("{}|claude|0|hello\n", workdir.display());
     assert_eq!(fs::read_to_string(&exits).unwrap(), ran);
 
-    let _removal = manager.space_removals.reserve(&chat.id).unwrap();
+    let _removal = manager.spaces.space_removals.reserve(&chat.id).unwrap();
     (manager
         .agents
         .post_agent_exit(&*manager, &space, &"claude".into(), Some(0), true))
@@ -208,7 +216,9 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .await
         .unwrap();
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             Done {
                 cleanup: true,
@@ -245,7 +255,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .await
         .unwrap();
     assert!(!workspace.path.exists());
-    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
+    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
 }
 
 #[tokio::test]
@@ -393,7 +403,8 @@ async fn inspection_and_agent_list_report_an_agent_awaiting_its_restore() {
         .await;
     let stopped = || async {
         let inspection = manager
-            .inspect_workspace(&SpaceSelector::id(&workspace.id))
+            .spaces
+            .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
             .await
             .unwrap();
         let listed = manager.agents.running_agents().await.unwrap();
@@ -512,7 +523,8 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     assert!(!*first.stop.borrow());
     assert!(!*command.stop.borrow());
     let retained = manager
-        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .spaces
+        .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     assert_eq!(retained.workspace.state, workspace.state);
@@ -623,7 +635,9 @@ async fn overload_stops_idle_agents_lowest_rank_first_before_working_ones() {
     }
     // The agent idle longest ranks higher, so the other idle one goes first.
     manager
+        .spaces
         .set_priority(
+            &*manager,
             None,
             &SpaceSelector::id(&agents[1].0.id),
             shoal_schedule::priority::Priority::URGENT,
@@ -847,12 +861,16 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
             std::time::Duration::ZERO,
         )
         .await;
-    let recorded = manager.workspace_by_id(&workspace.id).await.unwrap();
+    let recorded = manager.spaces.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(
         recorded.mode.as_ref().map(|mode| mode.as_str()),
         Some("plan")
     );
-    let executions = manager.workspace_executions(&workspace.id).await.unwrap();
+    let executions = manager
+        .spaces
+        .workspace_executions(&workspace.id)
+        .await
+        .unwrap();
     assert_eq!(
         executions[0].mode.as_ref().map(|mode| mode.as_str()),
         Some("plan")
@@ -1027,7 +1045,9 @@ async fn coordinator_and_child(
         .await
         .unwrap();
     let child = manager
+        .spaces
         .create_child(
+            manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

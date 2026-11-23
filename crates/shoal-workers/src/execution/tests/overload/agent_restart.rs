@@ -58,7 +58,7 @@ async fn restart_in_place_restores_the_agent_under_the_permissions_given() {
     assert!(workspace.path.join("restored").is_file());
     // The space records the restarted agent's narrowing, which its
     // permission checks read.
-    let recorded = manager.workspace_by_id(&workspace.id).await.unwrap();
+    let recorded = manager.spaces.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(recorded.narrowing, change.applied_to(Default::default()));
     serving.abort();
 }
@@ -321,7 +321,9 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
     manager
+        .spaces
         .mark_space_done(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             shoal_protocol::assignments::Done::default(),
             &shoal_protocol::files::Attacher::User,
@@ -347,7 +349,14 @@ async fn a_restart_in_a_new_wrapper_keeps_a_done_workspaces_completion() {
     let renewed = run_child(renewed);
     bounded(restarted).await.unwrap().unwrap();
     wait_start_handled(&manager, &workspace).await;
-    assert!(manager.completion(&workspace.id).await.unwrap().is_some());
+    assert!(
+        manager
+            .spaces
+            .completion(&workspace.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
     bounded(manager.agents.stop_space(
         &*manager,
         &SpaceSelector::id(&workspace.id),

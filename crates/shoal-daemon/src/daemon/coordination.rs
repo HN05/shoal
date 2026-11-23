@@ -56,30 +56,30 @@ impl Coordinators for Manager {
 
 impl Spaces for Manager {
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
-        Box::pin(Manager::space(self, selector))
+        Box::pin(self.spaces.space(selector))
     }
 
     fn space_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>> {
-        Box::pin(Manager::space_by_id(self, id))
+        Box::pin(self.spaces.space_by_id(id))
     }
 
     fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
-        Box::pin(Manager::find_space(self, id))
+        Box::pin(self.spaces.find_space(id))
     }
 
     fn space_anywhere<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Located>> {
-        Box::pin(Manager::space_anywhere(self, selector))
+        Box::pin(self.spaces.space_anywhere(self, selector))
     }
 
     fn space_id_anywhere<'a>(
         &'a self,
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<SpaceId>> {
-        Box::pin(Manager::space_id_anywhere(self, selector))
+        Box::pin(self.spaces.space_id_anywhere(self, selector))
     }
 
     fn spaces_within<'a>(&'a self, root: Option<&'a SpaceId>) -> BoxFuture<'a, Result<Vec<Space>>> {
-        Box::pin(Manager::spaces_within(self, root))
+        Box::pin(self.spaces.spaces_within(self, root))
     }
 
     fn find_spaces<'a>(
@@ -87,31 +87,31 @@ impl Spaces for Manager {
         target: &'a SpaceTarget,
         among: Vec<Space>,
     ) -> BoxFuture<'a, Result<Vec<Space>>> {
-        Box::pin(Manager::find_spaces(self, target, among))
+        Box::pin(self.spaces.find_spaces(target, among))
     }
 
     fn being_removed(&self, space: &Space) -> bool {
-        Manager::being_removed(self, space)
+        self.spaces.being_removed(space)
     }
 
     fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
-        Box::pin(Manager::workspace(self, selector))
+        Box::pin(self.spaces.workspace(selector))
     }
 
     fn find_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Workspace>>> {
-        Box::pin(Manager::find_workspace(self, id))
+        Box::pin(self.spaces.find_workspace(id))
     }
 
     fn list_workspaces(&self) -> BoxFuture<'_, Result<Vec<Workspace>>> {
-        Box::pin(Manager::list_workspaces(self))
+        Box::pin(self.spaces.list_workspaces())
     }
 
     fn chat_home<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<SpaceId>>> {
-        Box::pin(Manager::chat_home(self, id))
+        Box::pin(self.spaces.chat_home(id))
     }
 
     fn user_holds<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(Manager::user_holds(self, id))
+        Box::pin(self.spaces.user_holds(id))
     }
 
     fn hold_decision_guard<'a>(
@@ -120,7 +120,10 @@ impl Spaces for Manager {
         approve: bool,
     ) -> BoxFuture<'a, Result<Option<Box<dyn Send>>>> {
         Box::pin(async move {
-            let guard = Manager::hold_decision_guard(self, request, approve).await?;
+            let guard = self
+                .spaces
+                .hold_decision_guard(self, request, approve)
+                .await?;
             Ok(guard.map(|guard| Box::new(guard) as Box<dyn Send>))
         })
     }
@@ -130,13 +133,13 @@ impl Spaces for Manager {
         request: &'a ApprovalRequest,
         approve: bool,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::ensure_merge_current(self, request, approve))
+        Box::pin(self.spaces.ensure_merge_current(self, request, approve))
     }
 }
 
 impl Files for Manager {
     fn attacher<'a>(&'a self, caller: Option<&'a Caller>) -> BoxFuture<'a, Attacher> {
-        Box::pin(Manager::attacher(self, caller))
+        Box::pin(self.spaces.attacher(self, caller))
     }
 
     fn attach_files<'a>(
@@ -149,12 +152,14 @@ impl Files for Manager {
     ) -> BoxFuture<'a, Result<Attaching>> {
         Box::pin(async move {
             let space = space.clone().into();
-            Manager::attach_files(self, &space, source, message, files, attacher).await
+            self.spaces
+                .attach_files(self, &space, source, message, files, attacher)
+                .await
         })
     }
 
     fn sent_files(&self, paths: Vec<PathBuf>) -> BoxFuture<'_, Result<Vec<SentFile>>> {
-        Box::pin(Manager::sent_files(self, paths))
+        Box::pin(self.spaces.sent_files(paths))
     }
 
     fn queue_with_files<'a>(
@@ -166,26 +171,27 @@ impl Files for Manager {
     ) -> BoxFuture<'a, Result<i64>> {
         Box::pin(async move {
             let (id, text) = (space.id.clone(), alert.message.clone());
-            self.queue_attached(space.into(), &text, attachments, |copies| {
-                let alert = NewAlert {
-                    attachments: copies.iter().map(|copy| copy.path.clone()).collect(),
-                    ..alert
-                };
-                let attacher = attacher.clone();
-                let record = Box::new(move |tx: &Transaction<'_>, id: &SpaceId| {
-                    let source = FileSource::Message;
-                    crate::daemon::workspace_files::record(tx, id, source, &attacher, &copies)
-                });
-                self.agents.queue_copied(&id, alert, record)
-            })
-            .await
+            self.spaces
+                .queue_attached(self, space.into(), &text, attachments, |copies| {
+                    let alert = NewAlert {
+                        attachments: copies.iter().map(|copy| copy.path.clone()).collect(),
+                        ..alert
+                    };
+                    let attacher = attacher.clone();
+                    let record = Box::new(move |tx: &Transaction<'_>, id: &SpaceId| {
+                        let source = FileSource::Message;
+                        crate::daemon::workspace_files::record(tx, id, source, &attacher, &copies)
+                    });
+                    self.agents.queue_copied(&id, alert, record)
+                })
+                .await
         })
     }
 }
 
 impl Agents for Manager {
     fn tracked_agents(&self) -> BoxFuture<'_, TrackedAgents> {
-        Box::pin(Manager::tracked_agents(self))
+        Box::pin(self.spaces.tracked_agents(self))
     }
 
     fn running_agent_workspaces(&self) -> BoxFuture<'_, Vec<SpaceId>> {

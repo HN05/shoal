@@ -83,6 +83,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
     assert!(waiting.since >= working.since);
     assert_eq!(
         manager
+            .spaces
             .workspace_by_id(&workspace.id)
             .await
             .unwrap()
@@ -100,6 +101,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
         .unwrap();
     assert_eq!(
         manager
+            .spaces
             .workspace_by_id(&workspace.id)
             .await
             .unwrap()
@@ -168,6 +170,7 @@ async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
     set_execution(ExecutionState::Unknown).await.unwrap();
     assert_eq!(
         manager
+            .spaces
             .workspace_by_id(&workspace.id)
             .await
             .unwrap()
@@ -179,6 +182,7 @@ async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
     set_execution(ExecutionState::Running).await.unwrap();
     assert_eq!(
         manager
+            .spaces
             .workspace_by_id(&workspace.id)
             .await
             .unwrap()
@@ -210,7 +214,9 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         )
         .await;
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&own.id),
             "child".into(),
             None,
@@ -253,7 +259,11 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
     }
     // The refused report leaves the child without an agent of its own, so
     // the coordinating agent still receives its activity.
-    let delegated = manager.delegated_spaces(&own.id).await.unwrap();
+    let delegated = manager
+        .spaces
+        .delegated_spaces(&*manager, &own.id)
+        .await
+        .unwrap();
     assert_eq!(
         delegated.iter().map(|w| &w.name).collect::<Vec<_>>(),
         [&child.name]

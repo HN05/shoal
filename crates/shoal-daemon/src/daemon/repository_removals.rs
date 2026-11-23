@@ -63,7 +63,7 @@ impl Manager {
             return RepositoryRemovalPreview::try_from(body);
         }
         let repository = self.repositories.repository(selector).await?;
-        let of_repository = (self.present_spaces().await?.into_iter())
+        let of_repository = (self.spaces.present_spaces(self).await?.into_iter())
             .filter(|space| space.repository_id.as_ref() == Some(&repository.id));
         let spaces = (stream::iter(of_repository))
             .map(|space| self.space_work(space))
@@ -101,7 +101,9 @@ impl Manager {
         let work = match space.kind().has_worktree() {
             true => {
                 let selector = SpaceSelector::id(&space.id);
-                let inspected = self.check_removal(&selector, InspectionPolicy::GitOnly);
+                let inspected =
+                    self.spaces
+                        .check_removal(self, &selector, InspectionPolicy::GitOnly);
                 (inspected.await.ok()).map(|inspection| WorktreeWork {
                     dirty: inspection.check.dirty,
                     unpushed_commits: inspection.check.unpushed_commits,

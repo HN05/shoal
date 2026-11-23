@@ -109,7 +109,7 @@ async fn new_workspaces_start_from_the_default_branch_build() {
         "initial\nedit\n"
     );
     // Shoal's own seed worktree is never listed as untracked.
-    let untracked = manager.untracked_worktrees().await.unwrap();
+    let untracked = manager.spaces.untracked_worktrees(&*manager).await.unwrap();
     assert!(untracked.is_empty(), "{untracked:?}");
 
     manager
@@ -580,7 +580,7 @@ async fn a_start_releases_the_git_gate_before_its_seed_step() {
     // Creation records the workspace under the Git gate.
     let id = tokio::time::timeout(Duration::from_secs(60), async {
         loop {
-            if let Some(workspace) = manager.list_workspaces().await.unwrap().pop() {
+            if let Some(workspace) = manager.spaces.list_workspaces().await.unwrap().pop() {
                 return workspace.id;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -592,7 +592,7 @@ async fn a_start_releases_the_git_gate_before_its_seed_step() {
         .await
         .expect("creation releases the Git gate before its seed step");
     drop(git);
-    let workspace = manager.workspace_by_id(&id).await.unwrap();
+    let workspace = manager.spaces.workspace_by_id(&id).await.unwrap();
     assert_eq!(workspace.state, WorkspaceState::Preparing);
     crate::test_support::assert_pending(manager.gates.wait_for_creation(&repo.id, &id)).await;
     drop(swap);
@@ -646,7 +646,8 @@ async fn a_copy_s_starting_checkpoint_holds_the_seed_it_started_with() {
         .unwrap();
     // Taken before the first build, so it holds no output.
     let checkpoint = manager
-        .take_checkpoint(&SpaceSelector::id(&source.id), None)
+        .spaces
+        .take_checkpoint(&*manager, &SpaceSelector::id(&source.id), None)
         .await
         .unwrap();
     manager.repositories.refresh_seeds(&*manager).await;
@@ -659,7 +660,9 @@ async fn a_copy_s_starting_checkpoint_holds_the_seed_it_started_with() {
         checkpoint: Some(checkpoint.number),
     };
     let copy = manager
+        .spaces
         .create_copy(
+            &*manager,
             (&repo.id).into(),
             &request,
             crate::daemon::workspace::CopyPlace::Branch(None),

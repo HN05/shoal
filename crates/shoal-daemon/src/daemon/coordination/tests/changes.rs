@@ -388,9 +388,15 @@ async fn a_space_that_forwards_a_thread_works_for_it_no_longer() {
     let fixture = fixture().await;
     let manager = &fixture.manager;
     let parent = SpaceSelector::id(&fixture.workspace.id);
-    let child = (manager.create_child(&parent, "child".into(), None, Default::default()))
-        .await
-        .unwrap();
+    let child = (manager.spaces.create_child(
+        &**manager,
+        &parent,
+        "child".into(),
+        None,
+        Default::default(),
+    ))
+    .await
+    .unwrap();
     let (to, child_agent) = (
         SpaceSelector::id(&child.id),
         caller_in(&SpaceSelector::id(&child.id)),
@@ -545,7 +551,12 @@ async fn a_change_in_no_thread_expires_as_checkpoints_do() {
         .write(|tx| Ok(tx.execute("UPDATE space_changes SET made_at=0", [])?))
         .await
         .unwrap();
-    fixture.manager.expire_checkpoints().await.unwrap();
+    fixture
+        .manager
+        .spaces
+        .expire_checkpoints(&*fixture.manager)
+        .await
+        .unwrap();
     assert_eq!(fixture.recorded().await, ["1 agent text lib.rs:2"]);
 }
 

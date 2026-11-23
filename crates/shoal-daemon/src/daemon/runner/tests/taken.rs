@@ -49,7 +49,11 @@ async fn a_job_of_the_claimed_run_goes_on_and_its_claim_names_it() {
         (claimed.job.job.id, claimed.job.job.name.as_str()),
         (JobId::new(12), "docs")
     );
-    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&job.workspace_id)
+        .await
+        .unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.head
@@ -68,7 +72,11 @@ async fn a_job_of_another_run_waits_until_its_workspace_is_at_that_runs_commit()
     let (job, directory) = report(manager, 2).await;
     manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("prepared").exists());
-    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&job.workspace_id)
+        .await
+        .unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.topic
@@ -93,7 +101,11 @@ async fn a_workspace_that_cannot_move_fails_the_job() {
     // Run 3 cannot be read, and stopping the job still cancels it.
     let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.url().ends_with("/actions/runs/3"));
-    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&job.workspace_id)
+        .await
+        .unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.head
@@ -106,7 +118,11 @@ async fn a_job_of_the_claimed_run_keeps_the_checkout_its_steps_made() {
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, directory) = report(manager, 1).await;
-    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&job.workspace_id)
+        .await
+        .unwrap();
     git(
         &workspace.path,
         &["checkout", "-q", "--detach", &fixture.topic],
@@ -130,7 +146,11 @@ async fn a_job_whose_commit_cannot_be_fetched_still_names_its_run() {
     // Stopping the job cancels the run it took, not the claimed one.
     let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.url().ends_with("/actions/runs/4"));
-    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&job.workspace_id)
+        .await
+        .unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.head
@@ -148,7 +168,11 @@ async fn a_job_whose_name_cannot_be_read_still_runs_at_its_runs_commit() {
     let claimed = manager.runner.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.url().ends_with("/actions/runs/5"));
     assert_eq!(claimed.job.job.id, JobId::new(11));
-    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&job.workspace_id)
+        .await
+        .unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.topic
@@ -186,7 +210,11 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
 
     manager.runner.follow_taken_jobs(&**manager).await.unwrap();
     assert!(directory.join("prepared").exists());
-    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&job.workspace_id)
+        .await
+        .unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.topic

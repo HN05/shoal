@@ -102,7 +102,9 @@ async fn an_idle_agent_has_work_from_a_child_without_its_own_agent() {
     let (temp, manager) = manager().await;
     let parent = workspace(&manager, &temp).await;
     let child = manager
+        .spaces
         .create_child(
+            &*manager,
             &SpaceSelector::id(&parent.id),
             "child".into(),
             None,

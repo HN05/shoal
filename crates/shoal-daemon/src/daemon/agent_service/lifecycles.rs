@@ -18,7 +18,7 @@ impl Lifecycles for Manager {
         state: WorkspaceState,
         error: Option<String>,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.set_state(id, state, error))
+        Box::pin(self.spaces.set_state(id, state, error))
     }
 
     fn reserve_lifecycle<'a>(
@@ -26,7 +26,7 @@ impl Lifecycles for Manager {
         id: &'a SpaceId,
         state: WorkspaceState,
     ) -> BoxFuture<'a, Result<WorkspaceState>> {
-        Box::pin(self.reserve_lifecycle(id, state))
+        Box::pin(self.spaces.reserve_lifecycle(id, state))
     }
 
     fn reserved_since<'a>(
@@ -34,15 +34,15 @@ impl Lifecycles for Manager {
         id: &'a SpaceId,
         seen: Option<Generation>,
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(self.reserved_since(id, seen))
+        Box::pin(self.spaces.reserved_since(id, seen))
     }
 
     fn lifecycle_generation<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Generation>> {
-        Box::pin(self.lifecycle_generation(id))
+        Box::pin(self.spaces.lifecycle_generation(id))
     }
 
     fn check_lifecycle<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.check_lifecycle(id))
+        Box::pin(self.spaces.check_lifecycle(id))
     }
 
     fn await_reservation_end<'a>(
@@ -50,25 +50,25 @@ impl Lifecycles for Manager {
         id: &'a SpaceId,
         wanted: &'a (dyn Fn() -> Result<()> + Send + Sync),
     ) -> BoxFuture<'a, Result<Generation>> {
-        Box::pin(self.await_reservation_end(id, wanted))
+        Box::pin(self.spaces.await_reservation_end(id, wanted))
     }
 
     fn ensure_no_pending_rename<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.ensure_no_pending_rename(id))
+        Box::pin(self.spaces.ensure_no_pending_rename(id))
     }
 
     fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.verify_worktree(workspace))
+        Box::pin(self.spaces.verify_worktree(self, workspace))
     }
 
     fn reopen_workspace<'a>(
         &'a self,
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<OpenedWorkspace>> {
-        Box::pin(self.reopen_workspace(selector))
+        Box::pin(self.spaces.reopen_workspace(self, selector))
     }
 
     fn refresh_admitted<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()> {
-        Box::pin(self.refresh_admitted(workspace))
+        Box::pin(self.spaces.refresh_admitted(self, workspace))
     }
 }

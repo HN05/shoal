@@ -28,24 +28,24 @@ use crate::{
 
 impl Spaces for Manager {
     fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {
-        Box::pin(Manager::workspace(self, selector))
+        Box::pin(self.spaces.workspace(selector))
     }
 
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>> {
-        Box::pin(Manager::workspace_by_id(self, id))
+        Box::pin(self.spaces.workspace_by_id(id))
     }
 
     fn touch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()> {
-        Box::pin(Manager::touch(self, id))
+        Box::pin(self.spaces.touch(id))
     }
 
     fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::verify_worktree(self, workspace))
+        Box::pin(self.spaces.verify_worktree(self, workspace))
     }
 
     fn fail_setup<'a>(&'a self, id: &'a SpaceId, message: String) -> BoxFuture<'a, Result<()>> {
         let (ready, failed) = (WorkspaceState::Ready, WorkspaceState::Failed);
-        Box::pin(self.set_state_if(id, ready, failed, Some(message)))
+        Box::pin(self.spaces.set_state_if(id, ready, failed, Some(message)))
     }
 }
 
@@ -66,7 +66,7 @@ impl Settings for Manager {
         workspace: &'a Workspace,
         kind: HookKind,
     ) -> BoxFuture<'a, Result<Option<PathBuf>>> {
-        Box::pin(self.workspace_hook(workspace, kind))
+        Box::pin(self.spaces.workspace_hook(self, workspace, kind))
     }
 
     fn run_hook<'a>(
@@ -82,7 +82,10 @@ impl Settings for Manager {
                 .await?;
             let repository = workspace.repository();
             let environment =
-                (self.hook_environment(workspace, Some(repository), &settings)).await?;
+                (self
+                    .spaces
+                    .hook_environment(self, workspace, Some(repository), &settings))
+                .await?;
             hooks::run_detached(hook, workspace, executable, &self.paths, &environment).await
         })
     }

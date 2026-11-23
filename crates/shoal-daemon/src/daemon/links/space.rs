@@ -10,23 +10,11 @@ use shoal_links::space::LinkSpace;
 use crate::{
     config::Effective,
     daemon::{manager::Manager, store},
-    model::{Repository, Space},
+    model::Repository,
 };
 use shoal_forge::RepoRequests;
 
 impl Manager {
-    /// Verify a workspace's worktree before a request relies on it; a
-    /// chat owns no worktree to verify, nor does a workspace whose worktree
-    /// is still to be created, which reads its forge in the checkout.
-    pub(crate) async fn verify_space(&self, space: &Space) -> Result<()> {
-        match space.to_workspace() {
-            Some(workspace) if !workspace.checkout.unborn() => {
-                self.verify_worktree(&workspace).await
-            }
-            _ => Ok(()),
-        }
-    }
-
     /// The registered repository `named` names, as OWNER/NAME on its forge
     /// or by URL; none for another repository or without a name. A name two
     /// registrations answer to is refused, naming both.

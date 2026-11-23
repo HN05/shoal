@@ -10,7 +10,10 @@ use std::{collections::HashSet, sync::Arc};
 
 impl Operations for Manager {
     fn start_waiting_preparations(self: Arc<Self>) -> BoxFuture<'static, Result<()>> {
-        Box::pin(async move { Manager::start_waiting_preparations(&self).await })
+        Box::pin(async move {
+            let daemon = self.daemon();
+            self.spaces.start_waiting_preparations(&daemon).await
+        })
     }
 
     fn tell_start_warnings<'a>(
@@ -18,7 +21,7 @@ impl Operations for Manager {
         space: &'a Space,
         warnings: &'a [String],
     ) -> BoxFuture<'a, ()> {
-        Box::pin(self.tell_start_warnings(space, warnings))
+        Box::pin(self.spaces.tell_start_warnings(self, space, warnings))
     }
 
     fn pushing_operations(&self) -> Box<dyn Fn(&str) -> bool + Send + Sync> {

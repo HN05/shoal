@@ -196,7 +196,9 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     );
 
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -223,7 +225,7 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
         })
         .await
         .unwrap();
-    manager.expire_checkpoints().await.unwrap();
+    manager.spaces.expire_checkpoints(&*manager).await.unwrap();
     // Upstream moving on after the last workspace leaves nothing here unkept.
     let upstream = root.path().join("upstream");
     std::fs::write(upstream.join("later"), "later\n").unwrap();
@@ -271,7 +273,9 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
     let report = root.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     manager
+        .spaces
         .add_attached_files(
+            &*manager,
             &SpaceSelector::id(&chat.id),
             vec![report.into()],
             &crate::daemon::workspace_files::Attacher::User,
@@ -280,7 +284,9 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         .unwrap();
     manager.agents.end_executions(&*manager, &chat.id).await;
     manager
+        .spaces
         .remove_selected(
+            &*manager,
             &SpaceSelector::id(&chat.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,

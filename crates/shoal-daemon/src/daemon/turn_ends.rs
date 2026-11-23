@@ -27,14 +27,14 @@ impl Manager {
     /// Do what waits for the end of an agent's turn, for each space whose
     /// agent's turn ended.
     async fn act_on_turn_ends(self: &Arc<Self>) {
-        if let Err(error) = self.relocate_finished_turns().await {
+        if let Err(error) = self.spaces.relocate_finished_turns(&**self).await {
             log!("conversions: {error:#}");
         }
         let daemon: Arc<dyn shoal_agents::daemon::Daemon> = self.clone();
         if let Err(error) = self.agents.restart_finished_turns(&daemon).await {
             log!("restarts: {error:#}");
         }
-        if let Err(error) = self.start_moves_after_turns().await {
+        if let Err(error) = self.spaces.start_moves_after_turns(&**self).await {
             log!("moves after turns: {error:#}");
         }
     }

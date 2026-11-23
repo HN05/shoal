@@ -47,6 +47,7 @@ async fn a_claimed_job_whose_pr_moved_on_has_its_run_cancelled_without_a_workspa
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(
         manager
+            .spaces
             .list_workspaces()
             .await
             .unwrap()

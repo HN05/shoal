@@ -27,8 +27,11 @@ impl shoal_runner::daemon::Executions for Manager {
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Vec<StoppedProcess>>> {
         Box::pin(async move {
-            let workspace = self.workspace_by_id(id).await?;
-            (self.stop_workspace_untracked(&workspace, Selection::Processes, None)).await
+            let workspace = self.spaces.workspace_by_id(id).await?;
+            (self
+                .spaces
+                .stop_workspace_untracked(self, &workspace, Selection::Processes, None))
+            .await
         })
     }
 
@@ -38,9 +41,12 @@ impl shoal_runner::daemon::Executions for Manager {
         first: BoxFuture<'a, Result<()>>,
     ) -> BoxFuture<'a, Result<Vec<StoppedProcess>>> {
         Box::pin(async move {
-            let workspace = self.workspace_by_id(id).await?;
+            let workspace = self.spaces.workspace_by_id(id).await?;
             let processes = Selection::Processes;
-            (self.stop_workspace_untracked_after(&workspace, processes, None, first)).await
+            (self
+                .spaces
+                .stop_workspace_untracked_after(self, &workspace, processes, None, first))
+            .await
         })
     }
 
@@ -52,7 +58,7 @@ impl shoal_runner::daemon::Executions for Manager {
     }
 
     fn workspace_has_executions<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(Manager::workspace_has_executions(self, id))
+        Box::pin(self.spaces.workspace_has_executions(id))
     }
 
     fn job_execution_runs<'a>(
@@ -68,7 +74,7 @@ impl shoal_runner::daemon::Executions for Manager {
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Option<ExecutionId>>> {
         Box::pin(async move {
-            let executions = self.workspace_executions(id).await?;
+            let executions = self.spaces.workspace_executions(id).await?;
             Ok(executions.into_iter().next().map(|execution| execution.id))
         })
     }
@@ -109,8 +115,9 @@ impl Manager {
         workspace_id: &SpaceId,
         id: &ExecutionId,
     ) -> Result<bool> {
-        let workspace = self.workspace_by_id(workspace_id).await?;
+        let workspace = self.spaces.workspace_by_id(workspace_id).await?;
         let execution = self
+            .spaces
             .workspace_executions(workspace_id)
             .await?
             .into_iter()

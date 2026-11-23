@@ -42,6 +42,7 @@ shoal-repositories = { path = "crates/shoal-repositories" }
 shoal-reviews = { path = "crates/shoal-reviews" }
 shoal-runner = { path = "crates/shoal-runner" }
 shoal-schedule = { path = "crates/shoal-schedule" }
+shoal-spaces = { path = "crates/shoal-spaces" }
 shoal-states = { path = "crates/shoal-states" }
 shoal-store = { path = "crates/shoal-store" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }

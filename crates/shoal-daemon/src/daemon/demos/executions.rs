@@ -21,11 +21,11 @@ use crate::{
 
 impl Spaces for Manager {
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
-        Box::pin(Manager::space(self, selector))
+        Box::pin(self.spaces.space(selector))
     }
 
     fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
-        Box::pin(Manager::find_space(self, id))
+        Box::pin(self.spaces.find_space(id))
     }
 }
 
