@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use anyhow::{Context as _, Result, ensure};
 
 use crate::client::connection::CommandPaths;
-use shoal_core::transfer::{Carrying, MoveDestination, MoveOrder, MoveReport, SpaceMoved};
+use shoal_core::transfer::{
+    Carrying, MoveDestination, MoveOrder, MoveReport, SpaceMoved, held_copies, package_name,
+};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::RemovedSpace;
 use shoal_protocol::space_names::SpaceSelector;
@@ -44,6 +46,29 @@ pub(super) fn reserve(
     );
     tempfile::NamedTempFile::new_in(directory)
         .with_context(|| format!("create a file in {}", directory.display()))?;
+    Ok(file)
+}
+
+/// The file the package of a copy of the space `id` goes to on its way to
+/// `destination`, as [`reserve`] finds a move's, except that one held for
+/// the joined machine that started the copy waits apart from the package of
+/// a move, refusing a copy while an earlier one's package waits there.
+pub(super) fn reserve_copy(
+    paths: &CommandPaths,
+    destination: &MoveDestination,
+    id: &SpaceId,
+) -> Result<PathBuf> {
+    let MoveDestination::Held = destination else {
+        return reserve(paths, destination, id);
+    };
+    let directory = held_copies(&paths.move_packages());
+    std::fs::create_dir_all(&directory)
+        .with_context(|| format!("create {}", directory.display()))?;
+    let file = directory.join(package_name(id));
+    ensure!(
+        !file.exists(),
+        "a copy of it waits for the machine that started it already; copy it again once that one has it"
+    );
     Ok(file)
 }
 

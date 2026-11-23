@@ -298,6 +298,13 @@ pub fn package_name(id: &SpaceId) -> String {
     format!("{id}.shoal")
 }
 
+/// The directory among the packages in `staging` where the package of a
+/// copy, named as a move's, waits until the joined machine that started it
+/// reads it, apart from the package of a move of the same space.
+pub fn held_copies(staging: &Path) -> PathBuf {
+    staging.join("copies")
+}
+
 shoal_states::states!(
     /// How far a recorded move got, which tells a daemon restarted during
     /// it how to finish it.

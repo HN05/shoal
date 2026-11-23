@@ -25,7 +25,7 @@ mod carried;
 mod copy;
 mod kept;
 mod moving;
-pub(crate) use moving::MovePacking;
+pub(crate) use moving::{HELD_FOR_READER, MovePacking};
 mod records;
 mod retiring;
 mod staying;

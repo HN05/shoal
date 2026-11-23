@@ -302,6 +302,23 @@ fn a_file_the_command_cannot_create_refuses_another_machine_s_move_before_it_sta
     assert_eq!(moved["failed"], json!([]), "{moved}");
 }
 
+#[test]
+fn a_copy_of_another_machine_s_space_goes_to_a_file_and_leaves_no_package_there() {
+    let (hub, laptop, desk, laptop_id, _) = machines("");
+    let work = laptop_work(&hub, &laptop, &laptop_id);
+    let file = hub.root.path().join("copy.shoal");
+
+    let copied = hub.ok(&["move", &work, "--keep", "-o", file.to_str().unwrap()]);
+
+    assert_eq!(copied["failed"], json!([]), "{copied}");
+    assert!(own_spaces(&laptop).iter().any(|space| space["id"] == work));
+    let copies = laptop.root.path().join("state/moves/copies");
+    let left = fs::read_dir(&copies).map_or(0, Iterator::count);
+    assert_eq!(left, 0, "{}", copies.display());
+    let restored = desk.ok(&["restore", "--from", file.to_str().unwrap(), "--no-resume"]);
+    assert_ne!(restored["space"]["id"], work, "{restored}");
+}
+
 /// Whether `machine` keeps a removal record of the space `id`.
 fn keeps_removed(machine: &Base, id: &str) -> bool {
     let removed = machine.ok(&["restore"])["removed"].clone();

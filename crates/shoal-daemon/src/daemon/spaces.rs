@@ -51,7 +51,7 @@ mod directories;
 pub(crate) mod done;
 mod environment;
 mod export;
-pub(crate) use export::MovePacking;
+pub(crate) use export::{HELD_FOR_READER, MovePacking};
 mod find;
 mod hooks;
 mod listing;

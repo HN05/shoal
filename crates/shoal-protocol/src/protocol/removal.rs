@@ -172,10 +172,15 @@ pub enum RemovalMethod {
         space: SpaceSelector,
         destination: crate::transfer::MachineDestination,
     },
-    /// The package of the recorded move of `space` that holds it here for
-    /// the joined machine that started it: answered with its size, then
-    /// its bytes on the request's connection.
-    ReadHeldPackage { space: SpaceSelector },
+    /// The package of `space` held here for the joined machine that
+    /// started its move: the recorded move's, or with `copy` a copy's,
+    /// which goes once read; answered with its size, then its bytes on the
+    /// request's connection.
+    ReadHeldPackage {
+        space: SpaceSelector,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        copy: bool,
+    },
     /// Give back the recorded move of `space` that holds its package here
     /// for the joined machine that started it, which could not take it:
     /// `space` stays here, its agents' restores queued.
@@ -287,7 +292,7 @@ impl RemovalMethod {
             | Self::AbandonMove { space }
             | Self::DeliverMove { space }
             | Self::DeliverCopy { space, .. }
-            | Self::ReadHeldPackage { space }
+            | Self::ReadHeldPackage { space, .. }
             | Self::ReleaseHeldMove { space }
             | Self::SettleMove { space } => Some(Target::Space(space)),
             Self::AbsorbSpace(absorb) => Some(Target::Space(&absorb.space)),

@@ -240,8 +240,8 @@ pub(super) async fn handle(
             manager.release_held_move(&space).await?;
             Body::Ok
         }
-        RemovalMethod::ReadHeldPackage { space } => {
-            let package = manager.held_package(&space).await?;
+        RemovalMethod::ReadHeldPackage { space, copy } => {
+            let package = manager.held_package(&space, copy).await?;
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
                 manager.send_held_package(stream, request_id, package, guard)
@@ -595,7 +595,7 @@ fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
         | RemovalMethod::DeliverMove { space }
         | RemovalMethod::DeliverCopy { space, .. }
         | RemovalMethod::SettleMove { space }
-        | RemovalMethod::ReadHeldPackage { space }
+        | RemovalMethod::ReadHeldPackage { space, .. }
         | RemovalMethod::ReleaseHeldMove { space }
         | RemovalMethod::DropRestoredSessions { space } => Some(space),
         _ => None,

@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime};
+
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
@@ -39,4 +41,26 @@ async fn a_held_move_waits_for_its_reader_once_packed_until_its_time_is_up() {
         .unwrap();
 
     assert!(!manager.held_for_reader().await.unwrap().contains(&work.id));
+}
+
+#[test]
+fn only_copies_written_before_their_reader_s_time_ran_out_go() {
+    let directory = tempfile::tempdir().unwrap();
+    let copy = directory.path().join("copy.shoal");
+    std::fs::write(&copy, "package").unwrap();
+
+    super::remove_written_before(directory.path(), SystemTime::UNIX_EPOCH).unwrap();
+    assert!(copy.exists());
+
+    let later = SystemTime::now() + Duration::from_secs(60);
+    super::remove_written_before(directory.path(), later).unwrap();
+    assert!(!copy.exists());
+}
+
+#[test]
+fn no_copies_waiting_leave_nothing_to_remove() {
+    let directory = tempfile::tempdir().unwrap();
+    let missing = directory.path().join("copies");
+
+    super::remove_written_before(&missing, SystemTime::now()).unwrap();
 }

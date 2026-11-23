@@ -5150,8 +5150,9 @@ command, which copies the package to standard output and then ends the
 space. A space another joined machine runs goes the same way: that machine
 packs it and keeps its package until this machine's daemon has read it
 through the hub and written the file, or the command standard output, and
-then ends it there; it goes to a file of its own, not a directory, and
-`--keep` copies it with `--machine`. It
+then ends it there, or for `--keep` deletes the copy's package there, which
+it also deletes when no machine reads it within 30 minutes; it goes to a
+file of its own, not a directory. It
 refuses before ending anything when the file exists, when the daemon cannot
 create a file in its directory within 30 seconds, or when `-` would stream from
 a place that closes with the space. A workspace is removed as `shoal rm`

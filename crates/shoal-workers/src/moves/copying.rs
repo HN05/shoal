@@ -18,7 +18,7 @@ pub(super) async fn copy_one(
     space: &Space,
     steps: &impl Steps,
 ) -> Result<SpaceMoved> {
-    let file = super::packages::reserve(paths, &order.destination, &space.id)?;
+    let file = super::packages::reserve_copy(paths, &order.destination, &space.id)?;
     steps.reached(Step::MovePacking).await;
     let selector = SpaceSelector::id(&space.id);
     let (checkpoint, carrying) = (order.checkpoint, order.carrying());

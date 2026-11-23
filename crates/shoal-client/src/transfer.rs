@@ -75,16 +75,18 @@ pub async fn abandon_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<
     request(daemon, RemovalMethod::AbandonMove { space }).await
 }
 
-/// Write into `into` the package the recorded move of `space` holds on the
-/// machine that runs it for the one that started it, refusing a stream that
-/// ends before the whole package arrived.
+/// Write into `into` the package of `space` that the machine which runs it
+/// holds for the one that started its move: the recorded move's, or with
+/// `copy` a copy's, which goes there once read; refusing a stream that ends
+/// before the whole package arrived.
 pub async fn read_held_package(
     daemon: &impl Daemon,
     space: SpaceSelector,
+    copy: bool,
     into: &mut impl std::io::Write,
 ) -> Result<()> {
-    let (mut stream, first) =
-        open_buffered(daemon, RemovalMethod::ReadHeldPackage { space }).await?;
+    let method = RemovalMethod::ReadHeldPackage { space, copy };
+    let (mut stream, first) = open_buffered(daemon, method).await?;
     let size = match first.into_result()? {
         protocol::Body::HeldPackage(size) => size,
         body => return Err(body.unexpected("HeldPackage")),

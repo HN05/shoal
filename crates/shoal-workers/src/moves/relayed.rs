@@ -1,14 +1,15 @@
-//! A move to a file of a space another joined machine runs. That machine
-//! packs the space and holds its package, which this one reads over the
-//! hub and writes where the caller named; for a file it then ends the
-//! space there, and the command that copies a package to its standard
-//! output ends it once copied, as for a space of this machine.
+//! A move to a file of a space another joined machine runs, or of a copy
+//! of it. That machine packs the space and holds its package, which this
+//! one reads over the hub and writes where the caller named; for a file it
+//! then ends the space there, and the command that copies a package to its
+//! standard output ends it once copied, as for a space of this machine. A
+//! copy's package goes there once read, and the space keeps running.
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, bail};
 
 use super::Steps;
 use crate::{
@@ -57,10 +58,6 @@ pub(super) async fn run(
     order: &MoveOrder,
     steps: &impl Steps,
 ) -> Result<MoveReport> {
-    ensure!(
-        !order.keep,
-        "a copy of another machine's space goes to a joined machine, not a file; copy it with --machine, or from that machine"
-    );
     let reserved = Reserved::new(&order.destination)?;
     let held = MoveOrder {
         destination: MoveDestination::Held,
@@ -132,8 +129,8 @@ impl Reserved {
 }
 
 /// Write the package of `packed`, which its machine holds, into `reserved`,
-/// and end the space there when `order` moves it to a file this command
-/// keeps no hold of.
+/// and end the space there when `order` moves it, rather than a copy, to a
+/// file this command keeps no hold of.
 async fn deliver(
     paths: &CommandPaths,
     order: &MoveOrder,
@@ -141,8 +138,8 @@ async fn deliver(
     reserved: Reserved,
 ) -> Result<SpaceMoved> {
     let selector = SpaceSelector::id(&packed.id);
-    let file = take_package(paths, selector.clone(), reserved).await?;
-    if let MoveDestination::File { .. } = order.destination {
+    let file = take_package(paths, selector.clone(), order.keep, reserved).await?;
+    if let (MoveDestination::File { .. }, false) = (&order.destination, order.keep) {
         let ending = crate::client::transfer::end_moved(paths, selector).await;
         packed.removal = Some(ending.with_context(|| both_places(&file, &packed.id))?);
     }
@@ -151,18 +148,20 @@ async fn deliver(
 }
 
 /// Write the package the machine of the space `space` holds into
-/// `reserved`; one that does not arrive whole leaves no file, and gives the
-/// move back there, where the space stays with its agents' restores queued.
+/// `reserved`, a `copy`'s or a move's; one that does not arrive whole
+/// leaves no file, and gives a move back there, where the space stays with
+/// its agents' restores queued.
 async fn take_package(
     paths: &CommandPaths,
     space: SpaceSelector,
+    copy: bool,
     mut reserved: Reserved,
 ) -> Result<PathBuf> {
-    let read = crate::client::transfer::read_held_package(paths, space.clone(), &mut reserved.file);
-    let Err(error) = read.await else {
+    let reading = crate::client::transfer::read_held_package;
+    let Err(error) = reading(paths, space.clone(), copy, &mut reserved.file).await else {
         return Ok(reserved.path);
     };
-    if let Err(released) = crate::client::transfer::release_held_move(paths, space).await {
+    if !copy && let Err(released) = crate::client::transfer::release_held_move(paths, space).await {
         super::warn(&format!("warning: {released:#}"));
     }
     let error = error.context("its package did not arrive, so it stays where it runs");

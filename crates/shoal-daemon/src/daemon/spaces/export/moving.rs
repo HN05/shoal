@@ -27,8 +27,8 @@ use crate::time::UnixTime;
 
 /// How long a move holds its package for the joined machine that started
 /// it, after packing and after each read, before Shoal finishes it as one
-/// whose reader went.
-const HELD_FOR_READER: Duration = Duration::from_secs(30 * 60);
+/// whose reader went, and a copy's package waits for its reader.
+pub(crate) const HELD_FOR_READER: Duration = Duration::from_secs(30 * 60);
 
 /// What a move packs a space for: its `destination`, the spaces below it
 /// that go with it as `carrying` says, and the `unsaved` work the caller
