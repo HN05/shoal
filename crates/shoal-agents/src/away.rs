@@ -171,6 +171,22 @@ impl Agents {
         }
     }
 
+    /// The spaces a hand-over once the user walked away takes: those with
+    /// something to do, and the workspace whose worktree each such chat
+    /// runs in, which the chat can only go with.
+    pub(crate) async fn spaces_to_hand_over(
+        &self,
+        daemon: &dyn Daemon,
+    ) -> Result<HashSet<SpaceId>> {
+        let mut spaces = self.spaces_with_work().await?;
+        let worktrees: Vec<SpaceId> = (daemon.present_spaces().await?.iter())
+            .filter(|space| spaces.contains(&space.id))
+            .filter_map(|space| space.within().cloned())
+            .collect();
+        spaces.extend(worktrees);
+        Ok(spaces)
+    }
+
     /// The spaces with something to do: an agent working on a turn, or
     /// waiting in the queue to be restored. A queued launch, whose agent
     /// never ran, has nothing a package carries, so it waits here.

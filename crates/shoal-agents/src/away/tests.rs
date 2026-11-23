@@ -174,3 +174,37 @@ async fn coming_back_after_a_shutdown_stopped_work_keeps_its_hold() {
     assert!(agents.agent_queue.holds_admission());
     assert_eq!(daemon.stays.load(Ordering::SeqCst), 0);
 }
+
+#[tokio::test]
+async fn a_working_chat_takes_the_workspace_whose_worktree_it_runs_in() {
+    let (fixture, working, idle) = handing_over().await;
+    let chat: Space = serde_json::from_value(serde_json::json!({
+        "id": "chat",
+        "name": "talk",
+        "repository_id": "repo",
+        "workdir": {
+            "kind": "worktree",
+            "workspace": {"id": idle.id, "name": "idle", "branch": "idle"},
+            "path": "/work",
+        },
+        "kind": "chat",
+        "started_at": 1,
+    }))
+    .unwrap();
+    fixture.daemon.spaces.lock().unwrap().push(chat);
+    (fixture.agents.store)
+        .run(|db| {
+            db.execute(
+                "INSERT INTO space_agent_state(space_id,state,since) VALUES ('chat','working',1)",
+                [],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let spaces = (fixture.agents.spaces_to_hand_over(&*fixture.daemon))
+        .await
+        .unwrap();
+    let chat: shoal_ids::space_ids::SpaceId = "chat".into();
+    assert_eq!(spaces, [chat, idle.id, working.id].into());
+}

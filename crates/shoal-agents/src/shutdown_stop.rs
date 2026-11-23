@@ -140,7 +140,7 @@ impl Agents {
         }
         // A CI job's runner stops with its job, which ends apart.
         let left = daemon.job_workspaces().await;
-        let handing = self.handing(shutdown).await;
+        let handing = self.handing(daemon, shutdown).await;
         let stops = |space: &Space| !left.contains(&space.id) && handing.takes(space);
         let spaces = self.stop_every_target(daemon, shutdown.moment(), stops, |space| async move {
             self.stop_keeping_restores(daemon, &SpaceSelector::id(&space), shutdown.request())
@@ -168,15 +168,18 @@ impl Agents {
     /// earlier hand-over sent: every space, or once the user walked away
     /// or before the machine sleeps, those with something to do, none when
     /// they cannot be read.
-    async fn handing(&self, shutdown: Shutdown) -> Handing {
+    async fn handing(&self, daemon: &dyn Daemon, shutdown: Shutdown) -> Handing {
         let gone = self.presences.gone();
         if shutdown.ends_work() {
             return Handing::AllBut(gone);
         }
-        let spaces = self.spaces_with_work().await.unwrap_or_else(|error| {
-            log!("hand-over: the spaces with something to do are unreadable: {error:#}");
-            HashSet::new()
-        });
+        let spaces = self
+            .spaces_to_hand_over(daemon)
+            .await
+            .unwrap_or_else(|error| {
+                log!("hand-over: the spaces with something to do are unreadable: {error:#}");
+                HashSet::new()
+            });
         Handing::Only(spaces.difference(&gone).cloned().collect())
     }
 
