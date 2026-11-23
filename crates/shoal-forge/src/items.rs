@@ -4,6 +4,7 @@ pub mod assignment;
 pub mod attach;
 pub mod comment;
 pub mod create;
+pub(crate) mod discussion;
 pub mod issue;
 pub mod item;
 pub mod list;

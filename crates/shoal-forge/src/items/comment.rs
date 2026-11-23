@@ -7,10 +7,10 @@ use crate::{
         Items,
         action::Acted,
         attach::{AttachSteps, Holder},
+        discussion::Views,
         item::ItemRequests,
         reaction::Subject,
     },
-    review::view::Views,
     transport::{account::Account, api::TransportRequests},
     updates::Edited,
 };

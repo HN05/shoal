@@ -7,8 +7,10 @@ use crate::{
         forgejo::threads::{review_comments, thread_key, threads},
         github_rest,
     },
-    items::item::ItemSteps,
-    review::view::{login, review_comment, review_state, text_field},
+    items::{
+        discussion::{login, review_comment, review_state, text_field},
+        item::ItemSteps,
+    },
     transport::{
         account::Account,
         api::{Request, TransportRequests},

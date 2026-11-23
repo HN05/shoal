@@ -9,11 +9,11 @@ use crate::{
     conventions::draft::DraftMarker,
     items::{
         create::Head,
+        discussion::{labels, login, required, text_field},
         item::{ItemRequests, ItemSteps, text, user_names},
         reaction::{Listed, Subject},
         review::reviewers::team_name,
     },
-    review::view::{labels, login, required, text_field},
     transport::{
         account::Account,
         api::{Request, TransportRequests, encode},

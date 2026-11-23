@@ -7,8 +7,10 @@ use crate::{
         github::threads::{GitHubThread, threads},
         github_rest,
     },
-    items::item::ItemSteps,
-    review::view::{login, review_comment, review_state, text_field},
+    items::{
+        discussion::{login, review_comment, review_state, text_field},
+        item::ItemSteps,
+    },
     transport::{account::Account, api::TransportRequests},
 };
 use shoal_forge_types::review::view::{AutoMerge, Details, Review};

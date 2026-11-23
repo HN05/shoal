@@ -8,11 +8,11 @@ use serde_json::{Value, json};
 use super::GitHub;
 use crate::{
     backends::rest::read_pull,
-    items::item::ItemRequests,
-    review::{
-        status::{StatusRecords, Statuses, github_reviews},
-        view::{Views, login},
+    items::{
+        discussion::{Views, login},
+        item::ItemRequests,
     },
+    review::status::{StatusRecords, Statuses, github_reviews},
     transport::{
         account::Account,
         api::{Request, TransportRequests},

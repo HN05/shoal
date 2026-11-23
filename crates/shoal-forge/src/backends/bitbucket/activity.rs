@@ -5,11 +5,11 @@ use serde_json::Value;
 use super::{Bitbucket, listed, roots};
 use crate::{
     backends::rest::{self, RestReads, fingerprints},
-    items::item::{ItemSteps, text},
-    review::{
-        status::{Statuses, Verdict},
-        view::Views,
+    items::{
+        discussion::Views,
+        item::{ItemSteps, text},
     },
+    review::status::{Statuses, Verdict},
     transport::{account::Account, api::TransportRequests, backend::LoginHint},
     updates::{Activity, Entry, HeadCheck, Snapshot},
 };

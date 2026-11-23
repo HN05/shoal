@@ -5,10 +5,8 @@ use serde_json::Value;
 use super::{Forgejo, actions};
 use crate::{
     backends::rest::{self, RestReads, fingerprints},
-    review::{
-        status::{Statuses, Verdict, forgejo_reviews},
-        view::{Views, login},
-    },
+    items::discussion::{Views, login},
+    review::status::{Statuses, Verdict, forgejo_reviews},
     transport::{
         account::Account,
         api::{Request, TransportRequests},
