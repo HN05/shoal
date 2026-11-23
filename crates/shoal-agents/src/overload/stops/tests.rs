@@ -33,3 +33,20 @@ async fn a_restarted_demo_waits_for_recovery_before_load_picks_it_again() {
     recovery.publish(Some(recovery.epoch()));
     assert!(fixture.agents.frees(&*fixture.daemon, &demo, Pressure::Cpu));
 }
+
+/// Memory pressure stops an asleep agent's running lease where no work is
+/// left to stop, one at a time; CPU load leaves them.
+#[tokio::test]
+async fn memory_pressure_stops_asleep_agents_running_leases_one_at_a_time() {
+    use std::sync::atomic::Ordering;
+    let fixture = Fixture::new().await;
+    let daemon = &*fixture.daemon;
+    daemon.asleep_leases.store(2, Ordering::SeqCst);
+    let stop = |pressure| fixture.agents.stop_for_overload(daemon, pressure);
+
+    assert!(!stop(Pressure::Cpu).await);
+    assert!(stop(Pressure::Memory).await);
+    assert_eq!(daemon.asleep_leases.load(Ordering::SeqCst), 1);
+    assert!(stop(Pressure::Memory).await);
+    assert!(!stop(Pressure::Memory).await);
+}

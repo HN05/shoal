@@ -291,6 +291,8 @@ pub(crate) struct StandIn {
     pub(crate) handing_gate: tokio::sync::RwLock<()>,
     /// How often the machine told the hub it stays.
     pub(crate) stays: std::sync::atomic::AtomicUsize,
+    /// The running leases asleep agents hold, which memory pressure stops.
+    pub(crate) asleep_leases: std::sync::atomic::AtomicUsize,
 }
 
 impl StandIn {
@@ -929,6 +931,14 @@ impl Leases for StandIn {
 
     fn release_ended_leases_of<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
+    }
+
+    fn stop_a_sleepers_running_lease(&self) -> BoxFuture<'_, bool> {
+        use std::sync::atomic::Ordering;
+        let taken = (self.asleep_leases).try_update(Ordering::SeqCst, Ordering::SeqCst, |held| {
+            held.checked_sub(1)
+        });
+        Box::pin(async move { taken.is_ok() })
     }
 
     fn give_demo_its_leases<'a>(

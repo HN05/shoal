@@ -250,7 +250,11 @@ always, so agents stop only once no job runs; a demo or an agent of a mode that
 is not light, under memory pressure only where its space's processes use at
 least 64 MiB at the latest usage sample, or have none sampled. A
 light agent never stops for its own sake, but stopping an agent first stops
-every running agent below it, light ones included. A running
+every running agent below it, light ones included. Under memory pressure,
+before it would stop an agent, and when nothing in the order is left to stop,
+it stops one simulator or containers an asleep agent
+[keeps](#leases-while-asleep), the asleep agent ranking lowest in the agent
+queue first, and stops an agent only once no asleep agent holds one. A running
 [reviewer](#local-reviews) stops before any of them. A stopped CI job ends as
 one whose runner outlived its run does: Shoal stops its workspace's processes,
 then its runner, and its end in the workspace's [log](#space-log) says what it was
@@ -7582,7 +7586,9 @@ running, a simulator or containers, stops once the agent has slept past
 30 by default, counted from when its harness stopped; `0` stops them as it goes
 to sleep, and waking it while its restore still waits in the agent queue does
 not restart the count. A stopped simulator shuts down with its apps and data
-kept. Resource and repository permits stay.
+kept. Resource and repository permits stay. Under memory pressure,
+[overload protection](#overload-protection) stops them sooner, before it stops
+any agent.
 
 The agent's first message once it runs again names each lease Shoal took back
 while it slept and why, with the `shoal acquire` that gets it back, which

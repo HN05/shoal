@@ -36,10 +36,15 @@ impl Agents {
                     self.restart_demo_for(daemon, stop, execution, pressure)
                         .await
                 }
-                // It picks among the agents itself, and its stop starts a
-                // new recovery epoch.
+                // An asleep agent's running lease goes before any agent,
+                // which it picks among itself, and whose stop starts a new
+                // recovery epoch.
                 Work::Agent { .. } => {
-                    return self.stop_agent_for_overload(daemon, pressure, turns).await;
+                    if self.stop_asleep_lease_for(daemon, pressure).await {
+                        true
+                    } else {
+                        return self.stop_agent_for_overload(daemon, pressure, turns).await;
+                    }
                 }
             };
             if stopped {
@@ -47,7 +52,22 @@ impl Agents {
                 return true;
             }
         }
-        false
+        // With no agent to stop, an asleep agent's lease may still free some.
+        let stopped = self.stop_asleep_lease_for(daemon, pressure).await;
+        if stopped {
+            self.overload_recovery.reset();
+        }
+        stopped
+    }
+
+    /// Stop one running lease of an asleep agent for `pressure`, as only
+    /// memory pressure stops them, returning whether one stopped.
+    async fn stop_asleep_lease_for(&self, daemon: &dyn Daemon, pressure: Pressure) -> bool {
+        let stopped = pressure == Pressure::Memory && daemon.stop_a_sleepers_running_lease().await;
+        if stopped {
+            log!("{}: stopped an asleep agent's lease", pressure.reason());
+        }
+        stopped
     }
 
     /// Whether stopping `stop` for its own sake frees what `pressure`

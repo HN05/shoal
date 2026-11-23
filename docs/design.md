@@ -4208,7 +4208,10 @@ left. An asleep agent's lease that keeps something running, a booted
 simulator or started containers, still costs the machine, so the cleanup
 sweep stops it once the agent has slept past `[sleep] keep_leases_minutes`,
 counted from when its restore entered the agent queue, which it leaves only as
-the agent runs again; permits cost nothing while held and stay. The agent reads
+the agent runs again; permits cost nothing while held and stay. Under memory
+pressure, overload protection stops one such lease, the lowest-ranked asleep
+agent's first, wherever it would stop an agent, and stops an agent only once
+no asleep agent holds one: an asleep agent loses less than a running one. The agent reads
 each lease Shoal took back in a message that waits for its next turn without
 waking it. A lease whose workspace another lifecycle or resource operation holds then, such
 as the stop that ended the agent or a resource hook, waits for it to end; the

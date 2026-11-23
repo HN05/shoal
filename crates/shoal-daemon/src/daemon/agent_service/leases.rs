@@ -17,6 +17,18 @@ impl Leases for Manager {
         Box::pin(self.leases.release_ended_leases_of(self, id))
     }
 
+    fn stop_a_sleepers_running_lease(&self) -> BoxFuture<'_, bool> {
+        Box::pin(async {
+            let stopped = self.leases.stop_a_sleepers_running_lease(self).await;
+            stopped.unwrap_or_else(|error| {
+                crate::daemon::log!(
+                    "asleep agents' leases unread under memory pressure: {error:#}"
+                );
+                false
+            })
+        })
+    }
+
     fn give_demo_its_leases<'a>(
         &'a self,
         execution: &'a ExecutionId,

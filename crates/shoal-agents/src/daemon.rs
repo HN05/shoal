@@ -563,6 +563,10 @@ pub trait Leases: Send + Sync {
     /// them.
     fn release_ended_leases_of<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 
+    /// Stop one running lease of the lowest-ranked asleep agent that holds
+    /// one, to free memory, returning whether one stopped.
+    fn stop_a_sleepers_running_lease(&self) -> BoxFuture<'_, bool>;
+
     /// Give the demo of `execution` in the space `id` its leases.
     fn give_demo_its_leases<'a>(
         &'a self,
