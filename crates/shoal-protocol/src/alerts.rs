@@ -114,6 +114,9 @@ states!(AlertKind {
     SystemShutdown => "system_shutdown",
     /// The daemon stopped tracked work before a signal ended it.
     DaemonStopped => "daemon_stopped",
+    /// The daemon handed spaces with something to do over to other
+    /// machines, once the user walked away or before the machine slept.
+    HandedOver => "handed_over",
     /// The sleep inhibitor `keep_awake` holds could not start or ended.
     KeepAwakeFailed => "keep_awake_failed",
     /// The daemon removed a contribution repository nothing was left of.

@@ -720,6 +720,21 @@ go on: only a working turn keeps the machine awake then, and it sleeps once
 they end, its sleep announcement handing what is left to the
 [hub](#hub). Queued work waits for the user's return.
 
+Under `handover`, nothing keeps the machine awake while the user is there.
+Once they walk away, or once the machine is about to sleep, as when its lid
+closes, the queue admits nothing new and placement skips the machine, as
+under `finish`, and on a machine joined to a hub, not the hub's own, the
+spaces with something to do, an agent working on a turn or waiting in the
+queue, go to other machines as a [shutdown's hand-over](#hub) sends them:
+their agents stop as `shoal stop` stops them, saving their sessions, and
+each space's final package goes to the hub, which places it and continues it
+there, a chat in a workspace's worktree going with that workspace. The
+machine stays awake until the hub confirms every package, or for at most 10
+minutes, before a sleep only within the platform's allowance, then may
+sleep; an alert says where each space went. Once the user is back, the
+machine admits work again and retires its copies of the spaces that went.
+Spaces with nothing to do stay, and the sleep announcement covers them.
+
 Linux holds a `systemd-inhibit` lock on sleep, idle and the lid switch,
 which logind and idle daemons that honour its inhibitors obey; macOS runs
 `caffeinate -i -s`, which prevents idle sleep and, on AC power, system sleep,
@@ -1176,8 +1191,10 @@ machine cannot remove raises a `space_conflict` alert naming the error and
 `shoal rm <id>`, and the hub asks it again the next time it connects.
 
 A machine joined to a hub hands its spaces over as it shuts down, whether
-it is `always_on` or `intermittent`; the hub's own machine and a machine in
-no hub keep theirs. Once the stop before the shutdown saved its agents, it
+it is `always_on` or `intermittent`, and under
+[`keep_awake = "handover"`](#keeping-the-machine-awake) those with something
+to do once its user walks away; the hub's own machine and a machine in no
+hub keep theirs. Once the stop before the shutdown saved its agents, it
 sends the hub the final package of every workspace whose worktree is ready,
 but one a CI job runs in, and every chat, all at once, until a second
 before logind's `InhibitDelayMaxSec` ends, or for a signal for 15 seconds,
@@ -1191,7 +1208,7 @@ machine has read that choice and tells the hub it leaves the space there,
 that machine imports the package under the space's ID, as `shoal restore`
 of a kept package does, and queues its agents' restores, which continue
 their sessions. A chat in a workspace's worktree goes where that workspace
-went, once it has continued there, and stays when the workspace stays. The `system_shutdown` or `daemon_stopped` alert names, for
+went, once it has continued there, and stays when the workspace stays. The `system_shutdown`, `daemon_stopped` or `handed_over` alert names, for
 each space, the machine it went to, or that it stays and why: its package
 did not reach the hub in time, no machine can take it, or the hub cannot
 be reached. A space whose leaving the hub did not acknowledge in time may

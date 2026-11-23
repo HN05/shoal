@@ -48,7 +48,7 @@ async fn follow(manager: &Manager, mut platform: impl Platform) {
     loop {
         let acts = manager.config().machine.keep_awake.stops_when_away();
         let away = acts && walked_away(&mut platform, &mut failure).await;
-        manager.agents.user_away(away);
+        manager.agents.user_away(manager, away).await;
         tokio::time::sleep(INTERVAL).await;
     }
 }

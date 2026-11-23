@@ -330,7 +330,23 @@ for the machine it went to; a chat in a workspace's worktree goes only with
 that workspace. A space that lags more stays for the alert and a manual
 restore; the machine retires the copies taken over once it wakes, and one
 that wakes within the 10 minutes keeps everything. The hub keeps a sleep
-in its store, and these numbers are fixed, not settings. Space numbers form
+in its store, and these numbers are fixed, not settings. What a machine
+does once its user walks away, by closing its lid or, without one, leaving
+it idle as long as the platform reads as idle, is `[machine] keep_awake`:
+`off` sleeps as usual, leaving its work to the sleep's announcement;
+`finish` admits nothing new, keeps the machine awake only while a turn
+works and then lets it sleep; `handover` admits nothing new and hands its
+spaces with something to do over as a shutdown does, the walk-away or the
+sleep's announcement, whichever comes first, starting it, holding the
+machine awake until the hub confirms their packages, at most 10 minutes,
+and retiring its copies once the user is back; `on` carries on. While the
+user is there, `finish` and `on` keep the machine awake while agents
+work, and `off` and `handover` hold nothing. A machine that admits nothing
+new says so in its capacity, which placement skips. The daemon reads the
+lid and idle state every few seconds only under `finish` and `handover`.
+`keep_awake` was a boolean; reading or editing a global config file
+rewrites `true` and `false` to `on` and `off`, and a file Shoal may not
+write fails to load. Space numbers form
 one sequence across the hub's machines, which the hub holds: it answers
 each report with a few spares it keeps for that machine, which numbers a
 new space from them without waiting for the hub, and once none is left, as

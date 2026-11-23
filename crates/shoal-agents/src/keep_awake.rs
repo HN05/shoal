@@ -97,6 +97,8 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
 pub enum Work {
     /// None does.
     None,
+    /// Handing spaces over to other machines, whatever agents do.
+    HandingOver,
     /// An agent working on a turn.
     Turns,
     /// An agent working on a turn, or idle while an open PR whose activity
@@ -108,7 +110,9 @@ pub enum Work {
 /// where `presence` says.
 fn held_for(level: KeepAwake, presence: Presence) -> Work {
     match level {
-        KeepAwake::Off | KeepAwake::Handover => Work::None,
+        KeepAwake::Off => Work::None,
+        KeepAwake::Handover if presence.handing_over => Work::HandingOver,
+        KeepAwake::Handover => Work::None,
         KeepAwake::Finish if presence.away => Work::Turns,
         KeepAwake::Finish | KeepAwake::On => Work::TurnsAndWatches,
     }
@@ -117,8 +121,10 @@ fn held_for(level: KeepAwake, presence: Presence) -> Work {
 /// Whether agents have the work that holds the inhibitor, `held_for`, or
 /// `None` when the lookup failed and the current hold should stay.
 async fn wanted(agents: &Agents, held_for: Work) -> Option<bool> {
-    if held_for == Work::None {
-        return Some(false);
+    match held_for {
+        Work::None => return Some(false),
+        Work::HandingOver => return Some(true),
+        Work::Turns | Work::TurnsAndWatches => {}
     }
     match agents.agents_have_work(held_for).await {
         Ok(work) => Some(work),
@@ -149,7 +155,7 @@ fn agents_have_work(
 ) -> Result<bool> {
     for (id, state) in turn_state::all(db)? {
         let work = match (state, work) {
-            (AgentState::Working, Work::Turns | Work::TurnsAndWatches) => true,
+            (AgentState::Working, _) => true,
             (AgentState::Idle, Work::TurnsAndWatches) => {
                 records.receives_open_pr_activity(db, &id, running)?
             }

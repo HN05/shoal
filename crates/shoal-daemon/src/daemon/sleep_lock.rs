@@ -75,15 +75,22 @@ async fn follow(manager: &Arc<Manager>, mut events: impl PowerEvents) {
     }
 }
 
-/// Hold the agent queue, queue running reviews again, and by `deadline`
-/// end the running CI jobs to rerun and tell the hub that the machine
-/// sleeps, closing its link until it wakes.
+/// Hold the agent queue, queue running reviews again, under
+/// `keep_awake = "handover"` hand the spaces with something to do over,
+/// and by `deadline` end the running CI jobs to rerun and tell the hub
+/// that the machine sleeps, closing its link until it wakes.
 async fn prepare_for_sleep(manager: &Arc<Manager>, deadline: Instant) {
     log!("sleep lock: the machine goes to sleep");
     manager.agents.agent_queue().sleep(true);
     manager.reviews.stop_for_sleep().await;
     let jobs = end_jobs(manager, deadline);
-    tokio::join!(manager.hub.announce_sleep(&**manager, deadline), jobs);
+    let announced = async {
+        (manager.agents)
+            .hand_over_before_sleep(&**manager, deadline)
+            .await;
+        manager.hub.announce_sleep(&**manager, deadline).await;
+    };
+    tokio::join!(announced, jobs);
 }
 
 /// End the running CI jobs to rerun, waiting for that until `deadline`; a

@@ -1,6 +1,8 @@
 //! Stopping tracked work before the system or the daemon shuts down, as
 //! `shoal stop --all` does, while the daemon and wrappers still run to save
-//! it, then handing the spaces over to other machines of the hub.
+//! it, then handing the spaces over to other machines of the hub; and the
+//! same for the spaces with something to do once the user walks away under
+//! `keep_awake = "handover"`.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashSet, time::Duration};
@@ -51,6 +53,10 @@ pub enum Shutdown {
     System,
     /// A signal ends the daemon, as a logout or a service manager's stop sends.
     Daemon,
+    /// The user walked away under `keep_awake = "handover"`.
+    Away,
+    /// The machine goes to sleep under `keep_awake = "handover"`.
+    Sleep,
 }
 
 impl Shutdown {
@@ -58,6 +64,8 @@ impl Shutdown {
         StopRequest::shutdown(match self {
             Self::System => "the system is shutting down",
             Self::Daemon => "the Shoal daemon is stopping",
+            Self::Away => "the user walked away from this machine",
+            Self::Sleep => "this machine is going to sleep",
         })
     }
 
@@ -66,6 +74,8 @@ impl Shutdown {
         match self {
             Self::System => "before the system shut down",
             Self::Daemon => "before the Shoal daemon stopped",
+            Self::Away => "once you walked away from this machine",
+            Self::Sleep => "before this machine slept",
         }
     }
 
@@ -73,12 +83,14 @@ impl Shutdown {
         match self {
             Self::System => AlertKind::SystemShutdown,
             Self::Daemon => AlertKind::DaemonStopped,
+            Self::Away | Self::Sleep => AlertKind::HandedOver,
         }
     }
 
     /// Whether the stop also ends CI jobs, to rerun: a system shutdown ends
     /// them, while the daemon's own end leaves them to the next daemon, since
-    /// the forge's runner does their work.
+    /// the forge's runner does their work, and a machine its user left runs
+    /// them until it sleeps.
     fn ends_jobs(self) -> bool {
         matches!(self, Self::System)
     }
@@ -117,7 +129,7 @@ impl Agents {
         }
         // A CI job's runner stops with its job, which ends apart.
         let left = daemon.job_workspaces().await;
-        let handing = Handing::Every;
+        let handing = self.handing(shutdown).await;
         let stops = |space: &Space| !left.contains(&space.id) && handing.takes(space);
         let spaces = self.stop_every_target(daemon, shutdown.moment(), stops, |space| async move {
             self.stop_keeping_restores(daemon, &SpaceSelector::id(&space), shutdown.request())
@@ -134,6 +146,20 @@ impl Agents {
         (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
         *finished = true;
         stopped
+    }
+
+    /// The spaces a stop before `shutdown` hands over: every space, or
+    /// once the user walked away or before the machine sleeps, those with
+    /// something to do, none when they cannot be read.
+    async fn handing(&self, shutdown: Shutdown) -> Handing {
+        if matches!(shutdown, Shutdown::System | Shutdown::Daemon) {
+            return Handing::Every;
+        }
+        let spaces = self.spaces_with_work().await.unwrap_or_else(|error| {
+            log!("hand-over: the spaces with something to do are unreadable: {error:#}");
+            HashSet::new()
+        });
+        Handing::Only(spaces)
     }
 
     /// Admit queued agents again once the shutdown that stopped work was
@@ -327,6 +353,8 @@ pub enum HandoverWindow {
     /// This long once the stop ended, which the service manager's stop
     /// timeout leaves it besides the daemon's own drain.
     Own(Duration),
+    /// Until this moment, by which the platform sleeps.
+    Until(Instant),
 }
 
 impl HandoverWindow {
@@ -336,6 +364,7 @@ impl HandoverWindow {
         match self {
             Self::Shared(window) => started + window.saturating_sub(HANDOVER_MARGIN),
             Self::Own(budget) => Instant::now() + budget,
+            Self::Until(deadline) => deadline,
         }
     }
 }
