@@ -1,12 +1,12 @@
 //! systemd-logind's view of the user's presence, over the system bus: its
-//! `LidClosed` on a machine with a lid, and otherwise the idle hint of the
-//! user's sessions, which their desktop sets once it reads them as idle.
+//! `LidClosed` and `Docked` on a machine with a lid, and the idle hint of
+//! the user's sessions, which their desktop sets once it reads them as idle.
 //! The user's hint, unlike the manager's, ignores the idle inhibitor that
 //! keep-awake holds.
 use anyhow::{Context, Result};
 use zbus::proxy::CacheProperties;
 
-use super::Platform;
+use super::{Lid, Platform};
 use crate::daemon::{log, logind::LoginProxy};
 
 #[zbus::proxy(
@@ -22,9 +22,11 @@ pub(super) trait User {
 /// machine has one.
 const INPUT_DEVICES: &str = "/proc/bus/input/devices";
 
-pub(super) enum Logind {
-    Lid(LoginProxy<'static>),
-    Idle(UserProxy<'static>),
+pub(super) struct Logind {
+    manager: LoginProxy<'static>,
+    user: UserProxy<'static>,
+    /// Whether the machine has a lid, which the kernel lists once.
+    lid: bool,
 }
 
 /// logind, when the system bus reaches it.
@@ -49,9 +51,7 @@ impl Logind {
             .cache_properties(CacheProperties::No)
             .build()
             .await?;
-        if has_lid(&std::fs::read_to_string(INPUT_DEVICES).unwrap_or_default()) {
-            return Ok(Self::Lid(manager));
-        }
+        let lid = has_lid(&std::fs::read_to_string(INPUT_DEVICES).unwrap_or_default());
         // SAFETY: getuid has no preconditions and cannot fail.
         let uid = unsafe { libc::getuid() };
         let path = manager.get_user(uid).await.context("find the user")?;
@@ -60,16 +60,23 @@ impl Logind {
             .cache_properties(CacheProperties::No)
             .build()
             .await?;
-        Ok(Self::Idle(user))
+        Ok(Self { manager, user, lid })
     }
 }
 
 impl Platform for Logind {
-    async fn walked_away(&mut self) -> Result<bool> {
-        Ok(match self {
-            Self::Lid(manager) => manager.lid_closed().await?,
-            Self::Idle(user) => user.idle_hint().await?,
-        })
+    async fn lid(&mut self) -> Result<Option<Lid>> {
+        if !self.lid {
+            return Ok(None);
+        }
+        Ok(Some(Lid {
+            closed: self.manager.lid_closed().await?,
+            docked: self.manager.docked().await?,
+        }))
+    }
+
+    async fn idle(&mut self) -> Result<bool> {
+        Ok(self.user.idle_hint().await?)
     }
 }
 

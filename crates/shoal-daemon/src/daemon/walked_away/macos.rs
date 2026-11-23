@@ -1,12 +1,13 @@
 //! macOS's view of the user's presence, as `ioreg` and `pmset` print it:
-//! IOKit's `AppleClamshellState` on a Mac with a lid, and otherwise the
-//! time since the user's last input against the system's idle sleep timer.
+//! IOKit's `AppleClamshellState` and `AppleClamshellCausesSleep` on a Mac
+//! with a lid, and the time since the user's last input against the
+//! system's idle sleep timer.
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use tokio::process::Command;
 
-use super::{Platform, readings};
+use super::{Lid, Platform, readings};
 
 /// The longest a reading may take.
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
@@ -18,11 +19,12 @@ pub(super) async fn connect() -> Option<Mac> {
 }
 
 impl Platform for Mac {
-    async fn walked_away(&mut self) -> Result<bool> {
+    async fn lid(&mut self) -> Result<Option<Lid>> {
         let root = read("ioreg", &["-r", "-k", "AppleClamshellState", "-d", "1"]).await?;
-        if let Some(closed) = readings::clamshell_closed(&root) {
-            return Ok(closed);
-        }
+        Ok(readings::lid(&root))
+    }
+
+    async fn idle(&mut self) -> Result<bool> {
         let Some(timer) = readings::sleep_timer(&read("pmset", &["-g"]).await?) else {
             return Ok(false);
         };

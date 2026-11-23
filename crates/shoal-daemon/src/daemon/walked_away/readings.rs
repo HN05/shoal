@@ -2,10 +2,23 @@
 //! input and the idle sleep timer.
 use std::time::Duration;
 
-/// Whether the lid is closed, from `ioreg -r -k AppleClamshellState -d 1`;
-/// none on a Mac without a lid, which lists no `AppleClamshellState`.
-pub(super) fn clamshell_closed(ioreg: &str) -> Option<bool> {
-    match property(ioreg, "AppleClamshellState")? {
+use super::Lid;
+
+/// The lid, from `ioreg -r -k AppleClamshellState -d 1`; none on a Mac
+/// without one, which lists no `AppleClamshellState`. A closed lid that
+/// does not sleep the Mac, as with an external display, is docked.
+pub(super) fn lid(ioreg: &str) -> Option<Lid> {
+    let closed = yes(property(ioreg, "AppleClamshellState")?)?;
+    let sleeps = property(ioreg, "AppleClamshellCausesSleep").and_then(yes);
+    Some(Lid {
+        closed,
+        docked: sleeps == Some(false),
+    })
+}
+
+/// An IOKit boolean as `ioreg` prints it.
+fn yes(value: &str) -> Option<bool> {
+    match value {
         "Yes" => Some(true),
         "No" => Some(false),
         _ => None,

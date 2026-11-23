@@ -3,12 +3,13 @@ use super::*;
 #[test]
 fn the_lid_reads_from_the_root_domain_and_is_none_without_one() {
     let laptop = "+-o IOPMrootDomain  <class IOPMrootDomain>\n    {\n      \"AppleClamshellCausesSleep\" = Yes\n      \"AppleClamshellState\" = No\n    }\n";
-    assert_eq!(clamshell_closed(laptop), Some(false));
-    assert_eq!(
-        clamshell_closed(&laptop.replace("State\" = No", "State\" = Yes")),
-        Some(true)
-    );
-    assert_eq!(clamshell_closed(""), None);
+    let lid = |closed, docked| Some(Lid { closed, docked });
+    assert_eq!(super::lid(laptop), lid(false, false));
+    let closed = laptop.replace("State\" = No", "State\" = Yes");
+    assert_eq!(super::lid(&closed), lid(true, false));
+    let docked = closed.replace("Sleep\" = Yes", "Sleep\" = No");
+    assert_eq!(super::lid(&docked), lid(true, true));
+    assert_eq!(super::lid(""), None);
 }
 
 #[test]

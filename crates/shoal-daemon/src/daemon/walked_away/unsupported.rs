@@ -2,7 +2,7 @@
 //! always counts as present.
 use anyhow::Result;
 
-use super::Platform;
+use super::{Lid, Platform};
 
 pub(super) enum Unsupported {}
 
@@ -11,7 +11,11 @@ pub(super) async fn connect() -> Option<Unsupported> {
 }
 
 impl Platform for Unsupported {
-    async fn walked_away(&mut self) -> Result<bool> {
+    async fn lid(&mut self) -> Result<Option<Lid>> {
+        match *self {}
+    }
+
+    async fn idle(&mut self) -> Result<bool> {
         match *self {}
     }
 }

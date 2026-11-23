@@ -1,6 +1,6 @@
 //! systemd-logind's manager over the system bus, whose delay locks and
 //! announcements hold off a shutdown or a sleep until the daemon is ready,
-//! and which says whether the lid is closed.
+//! and which says whether the lid is closed and the machine docked.
 use std::time::Duration;
 
 use zbus::OwnedFd;
@@ -20,6 +20,9 @@ pub(super) trait Login {
 
     #[zbus(property)]
     fn lid_closed(&self) -> zbus::Result<bool>;
+
+    #[zbus(property)]
+    fn docked(&self) -> zbus::Result<bool>;
 
     fn get_user(&self, uid: u32) -> zbus::Result<zbus::OwnedObjectPath>;
 
