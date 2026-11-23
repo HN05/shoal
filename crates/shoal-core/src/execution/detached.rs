@@ -61,8 +61,8 @@ pub struct DetachedExecution {
 impl DetachedExecution {
     /// Leave the execution running and return its launch. The wrapper is
     /// this process's child, so a task waits on it to reap it once it exits:
-    /// dropping it leaves that to Tokio's orphan queue, which has left the
-    /// daemon's wrappers zombies for days.
+    /// dropping it leaves that to Tokio's orphan queue, which may never reap
+    /// it.
     pub fn detach(mut self) -> DetachedLaunch {
         tokio::spawn(async move {
             if let Err(error) = self.wrapper.wait().await {
