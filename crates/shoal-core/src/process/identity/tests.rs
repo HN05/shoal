@@ -969,3 +969,39 @@ async fn an_unreaped_leader_does_not_keep_its_group_alive() -> Result<()> {
     assert!(!exited?, "the zombie leader does not");
     Ok(())
 }
+
+#[test]
+fn children_include_those_that_exited_unreaped() -> Result<()> {
+    let mut running = std::process::Command::new("sleep").arg("60").spawn()?;
+    let mut exited = std::process::Command::new("true").spawn()?;
+    // Wait for its exit, leaving it a zombie until the wait below.
+    let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+    // SAFETY: waitid writes only the info, which outlives the call.
+    let waited = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            exited.id(),
+            &mut info,
+            libc::WEXITED | libc::WNOWAIT,
+        )
+    };
+    ensure!(
+        waited == 0,
+        "wait for the child: {}",
+        std::io::Error::last_os_error()
+    );
+    let listed = children();
+    running.kill()?;
+    running.wait()?;
+    exited.wait()?;
+    let listed = listed?;
+    assert!(
+        listed.contains(&running.id()),
+        "running child missing from {listed:?}"
+    );
+    assert!(
+        listed.contains(&exited.id()),
+        "exited child missing from {listed:?}"
+    );
+    Ok(())
+}

@@ -344,6 +344,29 @@ pub(super) fn group_members(group: u32) -> Result<Vec<u32>> {
     Ok(members)
 }
 
+/// The PIDs of `parent`'s children, including zombies. A record that does
+/// not parse names no child of it.
+pub(super) fn children(parent: u32) -> Result<Vec<u32>> {
+    let parent = parent.to_string();
+    let mut children = Vec::new();
+    for entry in std::fs::read_dir("/proc")? {
+        let Some(pid) = entry?
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let Some(stat) = read_process_stat(&format!("/proc/{pid}/stat"))? else {
+            continue;
+        };
+        if stat_fields(&stat).is_ok_and(|fields| fields.get(1) == Some(&parent.as_str())) {
+            children.push(pid);
+        }
+    }
+    Ok(children)
+}
+
 /// Whether `own`, a birth's boot and start time, is not before `other`: one
 /// of another boot is before it, and one whose start time does not parse is
 /// not.

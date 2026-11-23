@@ -141,7 +141,7 @@ struct Server {
 pub async fn run(
     paths: Paths,
     managed: bool,
-    handoff: Option<crate::daemon_handoff::Handoff>,
+    mut handoff: Option<crate::daemon_handoff::Handoff>,
 ) -> Result<()> {
     // Read before an upgrade can replace it, as the update below is, since
     // wrappers continue only from the binary the daemon runs.
@@ -149,6 +149,9 @@ pub async fn run(
     let update = auto_update::Update::new(managed);
     paths.prepare()?;
     let descriptors = connections::raise_descriptor_limit();
+    if let Some(handoff) = &mut handoff {
+        handoff.reap_inherited_children();
+    }
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
     let startup = startup::Startup::begin(ownership.listen()?);
     log!("shoal daemon listening on {}", paths.socket.display());

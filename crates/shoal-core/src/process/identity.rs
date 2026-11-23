@@ -118,6 +118,12 @@ fn lineage(pid: u32) -> Result<Option<Lineage>> {
     platform::lineage(pid)
 }
 
+/// This process's children, those that exited and wait to be reaped
+/// included.
+pub fn children() -> Result<Vec<u32>> {
+    platform::children(std::process::id())
+}
+
 /// This process's ancestors, nearest first, until init or a reparented
 /// (daemonized) process ends the chain.
 pub(crate) fn ancestors() -> impl Iterator<Item = u32> {

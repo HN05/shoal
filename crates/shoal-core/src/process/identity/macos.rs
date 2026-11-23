@@ -477,6 +477,13 @@ pub(super) fn group_members(group: u32) -> Result<Vec<u32>> {
     listed_pids(PROC_PGRP_ONLY, group)
 }
 
+/// The PIDs of `parent`'s children, including zombies.
+pub(super) fn children(parent: u32) -> Result<Vec<u32>> {
+    // PROC_PPID_ONLY in sys/proc_info.h.
+    const PROC_PPID_ONLY: u32 = 6;
+    listed_pids(PROC_PPID_ONLY, parent)
+}
+
 /// The PIDs other than init's that `proc_listpids` lists for `kind` and
 /// `argument`, including zombies.
 fn listed_pids(kind: u32, argument: u32) -> Result<Vec<u32>> {
