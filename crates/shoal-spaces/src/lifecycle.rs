@@ -24,3 +24,6 @@ pub use abandoned::fail_interrupted_removals;
 pub use policy::Removal;
 use policy::{Retention, Stage};
 pub use worktree::{WorktreeRemoval, not_ready};
+
+#[cfg(test)]
+mod tests;

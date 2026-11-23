@@ -104,3 +104,6 @@ fn remove_stale_socket(paths: &Paths) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

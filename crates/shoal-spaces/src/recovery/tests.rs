@@ -1,9 +1,10 @@
-use crate::daemon::recovery::*;
+use crate::recovery::*;
+use crate::stand_in::Fixture;
 use crate::state::ExecutionState;
 use crate::state::WorkspaceState;
 use anyhow::Result;
+use shoal_core::test_support::{git, repository};
 
-use crate::daemon::test_support::{git, manager, repository};
 use anyhow::Context;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{sync::Arc, time::Duration};
@@ -12,11 +13,10 @@ use tokio::time::timeout;
 #[tokio::test]
 async fn recovery_reads_only_its_executions_without_inspection_details() -> Result<()> {
     for stop in [false, true] {
-        let (_root, manager) = manager().await;
-        let path = repository(_root.path(), "repo");
+        let manager = Fixture::new().await;
+        let path = repository(manager.root.path(), "repo");
         let repo = manager
-            .repositories
-            .register(path.to_string_lossy().into_owned().into(), None, None)
+            .register_repository(path.to_string_lossy().into_owned().into(), None, None)
             .await?;
         let workspace = manager
             .create_workspace(&repo.id, "recovery".into(), None, None, None)
@@ -76,11 +76,10 @@ async fn recovery_reads_only_its_executions_without_inspection_details() -> Resu
 
 #[tokio::test]
 async fn failed_repair_restores_the_state_it_reserved_from() -> Result<()> {
-    let (_root, manager) = manager().await;
-    let path = repository(_root.path(), "repo");
+    let manager = Fixture::new().await;
+    let path = repository(manager.root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(path.to_string_lossy().into_owned().into(), None, None)
+        .register_repository(path.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "original".into(), None, None, None)
@@ -116,7 +115,7 @@ async fn failed_repair_restores_the_state_it_reserved_from() -> Result<()> {
         .await?;
     let queued = Arc::strong_count(&gate);
     let second = {
-        let manager = manager.clone();
+        let manager = manager.daemon.clone();
         let id = workspace.id.clone();
         tokio::spawn(async move {
             manager

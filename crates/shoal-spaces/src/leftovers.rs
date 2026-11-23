@@ -204,3 +204,6 @@ impl LeftoverExt for Leftover {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

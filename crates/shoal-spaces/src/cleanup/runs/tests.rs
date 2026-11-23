@@ -1,12 +1,13 @@
-use crate::daemon::events::ShoalEventDetails;
-use crate::daemon::events::ShoalEventKind;
+use crate::events::ShoalEventDetails;
+use crate::events::ShoalEventKind;
+use crate::stand_in::Fixture;
 use shoal_protocol::space_names::SpaceName;
 
-use crate::daemon::{events::EventItem, test_support::manager};
+use crate::events::EventItem;
 
 #[tokio::test]
 async fn a_pass_is_recorded_after_removals_or_with_new_failures() {
-    let (_temp, manager) = manager().await;
+    let manager = Fixture::new().await;
     manager.spaces.record_cleanup_run(None).await;
     manager
         .spaces

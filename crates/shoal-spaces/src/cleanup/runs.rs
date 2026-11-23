@@ -40,3 +40,6 @@ impl Spaces {
         crate::events::record_shoal(&self.store, details).await;
     }
 }
+
+#[cfg(test)]
+mod tests;

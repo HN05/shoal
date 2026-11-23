@@ -119,3 +119,6 @@ fn failed_at_startup(workspace: &Workspace) -> bool {
             .as_deref()
             .is_some_and(|error| error.starts_with(STARTUP_OWNERSHIP_FAILURE))
 }
+
+#[cfg(test)]
+mod tests;

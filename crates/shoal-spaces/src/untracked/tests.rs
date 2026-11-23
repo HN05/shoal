@@ -1,5 +1,5 @@
-use crate::daemon::untracked::*;
 use crate::git;
+use crate::untracked::*;
 use std::collections::HashSet;
 use std::path::PathBuf;
 

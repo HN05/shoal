@@ -1,7 +1,7 @@
-use crate::daemon::ownership::*;
 use crate::daemon_owner;
+use crate::ownership::*;
 use crate::paths::Paths;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 #[test]
 fn the_lock_names_the_daemon_that_holds_it() -> Result<()> {

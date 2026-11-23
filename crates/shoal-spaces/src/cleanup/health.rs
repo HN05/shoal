@@ -288,3 +288,6 @@ impl Spaces {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

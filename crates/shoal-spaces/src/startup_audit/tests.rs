@@ -1,17 +1,18 @@
-use crate::daemon::startup_audit::*;
+use crate::stand_in::Fixture;
+use crate::startup_audit::*;
 use crate::state::WorkspaceState;
 use anyhow::Result;
+use shoal_core::test_support::repository;
 
-use crate::daemon::test_support::{manager, repository};
 use shoal_ids::space_ids::SpaceId;
 
 #[tokio::test]
 async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {
-    let (temp, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut workspaces = Vec::new();
@@ -45,7 +46,7 @@ async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {
         .unwrap();
 
     let state = |id: SpaceId| {
-        let manager = manager.clone();
+        let manager = manager.daemon.clone();
         async move { manager.spaces.workspace_by_id(&id).await.unwrap() }
     };
     let mounted = state(workspaces[0].id.clone()).await;
@@ -61,11 +62,11 @@ async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {
 
 #[tokio::test]
 async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_finishes() {
-    let (temp, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -76,9 +77,10 @@ async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_fin
     // run out its time limit.
     tokio::time::pause();
     let stalled = manager
+        .spaces
         .file_access
         .checked(
-            &manager.notifications,
+            &manager.spaces.notifications,
             &workspace.path,
             std::future::pending::<Result<()>>(),
         )
@@ -101,7 +103,7 @@ async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_fin
     let skipped = manager.spaces.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(skipped.state, WorkspaceState::Failed);
     tokio::time::pause();
-    tokio::time::advance(crate::daemon::file_access::RECHECK_AFTER).await;
+    tokio::time::advance(crate::file_access::RECHECK_AFTER).await;
     tokio::time::resume();
     manager
         .spaces
@@ -110,5 +112,5 @@ async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_fin
         .unwrap();
     let ready = manager.spaces.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(ready.state, WorkspaceState::Ready);
-    assert_eq!(manager.file_access.stalls(), []);
+    assert_eq!(manager.spaces.file_access.stalls(), []);
 }

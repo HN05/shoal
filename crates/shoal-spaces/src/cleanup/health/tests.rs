@@ -1,9 +1,10 @@
-use crate::daemon::cleanup::health::*;
-use crate::daemon::notifications::AlertKind;
+use crate::cleanup::health::*;
+use crate::notifications::AlertKind;
+use crate::stand_in::Fixture;
 use shoal_daemon_base::failures::SweepFailures;
 use std::time::Duration;
 
-use crate::daemon::cleanup::SpaceFailures;
+use crate::cleanup::SpaceFailures;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -99,12 +100,12 @@ fn health_keeps_workspace_failures_to_their_workspace() {
 
 #[tokio::test]
 async fn failing_passes_notify_once_and_show_where_they_belong() {
-    use crate::daemon::test_support::{manager, repository};
-    let (temp, manager) = manager().await;
+    use crate::stand_in::repository;
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut workspaces = Vec::new();
@@ -127,7 +128,7 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
     for _ in 0..2 {
         manager.spaces.record_sweep(&*manager, pass()).await;
     }
-    let notifications = manager.notifications.list(true, 100).await.unwrap();
+    let notifications = manager.spaces.notifications.list(true, 100).await.unwrap();
     let cleanup: Vec<_> = (notifications.iter())
         .filter(|notification| notification.kind == AlertKind::CleanupFailed)
         .map(|notification| notification.space.as_deref())
@@ -164,14 +165,14 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
 
 #[tokio::test]
 async fn idle_sleep_reports_its_failures_as_cleanup_does_under_its_own_name() {
-    let (_root, manager) = crate::daemon::test_support::manager().await;
+    let manager = Fixture::new().await;
     manager
         .spaces
         .record_idle_sleep(&*manager, failed("idle agents", None, "store is locked"))
         .await;
     let problem = manager.spaces.cleanup_problem().unwrap();
     assert!(problem.starts_with("Idle sleep failed"), "{problem}");
-    let notifications = manager.notifications.list(true, 100).await.unwrap();
+    let notifications = manager.spaces.notifications.list(true, 100).await.unwrap();
     assert!(
         notifications
             .iter()

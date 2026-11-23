@@ -468,3 +468,6 @@ fn execution_notes(connected: bool, processes: &Processes) -> Vec<String> {
     }
     notes
 }
+
+#[cfg(test)]
+mod tests;

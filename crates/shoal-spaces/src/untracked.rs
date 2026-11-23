@@ -106,3 +106,6 @@ impl Spaces {
 fn is_path(worktree: &Path, path: &Path) -> bool {
     path == worktree || std::fs::canonicalize(worktree).is_ok_and(|real| real == path)
 }
+
+#[cfg(test)]
+mod tests;

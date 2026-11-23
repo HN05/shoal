@@ -177,3 +177,6 @@ impl Spaces {
 mod children;
 
 pub use children::CompletedAncestor;
+
+#[cfg(test)]
+mod tests;
