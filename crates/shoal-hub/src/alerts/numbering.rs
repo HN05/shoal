@@ -151,6 +151,12 @@ fn renumber(
     if !renumbered {
         return Ok(None);
     }
+    // A machine's numbers only grow, as a follow's place in them assumes,
+    // so a new alert never takes a spare below the new number.
+    tx.execute(
+        "UPDATE hub_alert_numbering SET taken=?1 WHERE taken<?1",
+        [to],
+    )?;
     Ok(unread_sent.map(|(sender, message)| Renumbered {
         from,
         to,
@@ -173,3 +179,6 @@ fn numbers(db: &Connection, query: &str) -> Result<Vec<i64>> {
     let numbers = statement.query_map(params![], |row| row.get(0))?;
     Ok(numbers.collect::<rusqlite::Result<_>>()?)
 }
+
+#[cfg(test)]
+mod tests;

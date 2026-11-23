@@ -445,7 +445,7 @@ impl Coordinators for StandIn {
 }
 
 /// The records of a store with no spaces in it.
-struct StandInRecords;
+pub(crate) struct StandInRecords;
 
 impl Records for StandInRecords {
     fn parent_id(&self, _: &Connection, _: &SpaceId) -> Result<Option<SpaceId>> {
