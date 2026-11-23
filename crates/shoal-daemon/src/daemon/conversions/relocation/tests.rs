@@ -430,6 +430,113 @@ async fn the_hand_over_continues_the_session_reported_after_the_conversion() {
 }
 
 #[tokio::test]
+async fn a_restart_that_exits_before_reporting_a_session_keeps_the_converted_one() {
+    let (root, manager) = manager().await;
+    let (workspace, mut process, _token, _issued) = converted(root.path(), &manager).await;
+    let selector = SpaceSelector::id(&workspace.id);
+    let idle = AgentState::Idle;
+    (manager
+        .agents
+        .set_agent_state(&*manager, &selector, idle, None, None))
+    .await
+    .unwrap();
+    manager.relocate_finished_turns().await.unwrap();
+    process.wait().unwrap();
+    let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
+    let [handed] = sessions.as_slice() else {
+        panic!("one last session to continue: {sessions:?}");
+    };
+    let record = LastSession::path(&manager.paths, &workspace.id, &handed.execution);
+
+    exit_before_reporting(&manager, &workspace.id, record).await;
+
+    let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
+    let [last] = sessions.as_slice() else {
+        panic!("one last session to continue: {sessions:?}");
+    };
+    assert_ne!(last.execution, handed.execution);
+    assert_eq!(
+        last.session.as_ref().map(ToString::to_string),
+        Some("s1".into())
+    );
+    assert!(last.converted);
+}
+
+/// Run, as `shoal resume` would, the restore of the agent of the space `id`
+/// saved at `record`, whose agent exits with 1 before its hooks report a
+/// session.
+async fn exit_before_reporting(
+    manager: &std::sync::Arc<Manager>,
+    id: &shoal_ids::space_ids::SpaceId,
+    record: std::path::PathBuf,
+) {
+    use crate::daemon::execution_connection::{ExecutionContext, execute};
+    use crate::protocol::{self, Control, ExecutionEvent, Response};
+    use tokio::io::BufReader;
+
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let (client, server) = tokio::net::UnixStream::pair().unwrap();
+    let agent = shoal_protocol::executions::TrackedAgent {
+        mode: ModeName::PLAN,
+        ..shoal_protocol::executions::TrackedAgent::named("claude")
+    };
+    let executing = tokio::spawn(execute(
+        server,
+        1,
+        manager.agents.clone(),
+        manager.clone(),
+        ExecutionContext {
+            space: SpaceSelector::id(id),
+            wrapper: wrapper.clone(),
+            kind: crate::daemon::executions::ExecutionKind::Command,
+            agent: Some(agent),
+            recover: false,
+            reattach: true,
+            caller: None,
+            queue_entry: None,
+            demo: None,
+            origin: None,
+            merge: None,
+        },
+        manager.gates.owned_operation().await,
+    ));
+    let mut wrapper_side = BufReader::new(client);
+    let _: Response = protocol::read_buffered(&mut wrapper_side).await.unwrap();
+    let started = ExecutionEvent::Started {
+        child: None,
+        group_id: wrapper.pid,
+        restored: true,
+        restored_from: vec![record.clone()],
+        reports_status: false,
+    };
+    protocol::write(wrapper_side.get_mut(), &started)
+        .await
+        .unwrap();
+    let control: Control = protocol::read_buffered(&mut wrapper_side).await.unwrap();
+    assert!(matches!(control, Control::Started), "{control:?}");
+    // The wrapper consumes the record it restores once its start is
+    // acknowledged.
+    crate::execution::recovery::consume(&record).unwrap();
+    let finished = ExecutionEvent::Finished {
+        exit_code: 1,
+        memory: None,
+    };
+    protocol::write(wrapper_side.get_mut(), &finished)
+        .await
+        .unwrap();
+    loop {
+        match protocol::read_buffered(&mut wrapper_side).await.unwrap() {
+            Control::Finished { .. } => break,
+            Control::ProgramStatus { .. } => {}
+            control => panic!("expected the execution to finish, got {control:?}"),
+        }
+    }
+    executing.await.unwrap().unwrap();
+}
+
+#[tokio::test]
 async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");

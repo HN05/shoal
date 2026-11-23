@@ -13,6 +13,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
+pub mod carried;
 pub mod changes;
 pub mod claim;
 
@@ -396,9 +397,9 @@ fn write_record(
     let directory = paths.space_state(space_id);
     std::fs::create_dir_all(&directory)?;
     let path = record_path(paths, space_id, id);
-    record.session = record
-        .session
-        .or_else(|| reported_session(paths, space_id, id));
+    if record.session.is_none() {
+        record = carried::continued(paths, space_id, id).kept_in(record);
+    }
     // A later save without a field, such as shutdown racing an overload stop
     // or the daemon's handoff after the wrapper's, keeps the value saved first,
     // and never moves the stage back.
@@ -682,14 +683,16 @@ pub fn held_sessions(paths: &Paths, space_id: &SpaceId) -> Vec<AgentSessionId> {
     }
     let stopped = stopped_agents(paths, space_id).unwrap_or_default();
     held.extend(stopped.into_iter().filter_map(|agent| agent.record.session));
+    held.extend(carried::sessions(paths, space_id));
     let last = LastSession::all(paths, space_id).unwrap_or_default();
     held.extend(last.into_iter().filter_map(|last| last.session));
     held
 }
 
-/// Forget the session of an execution that has ended.
+/// Forget the session of an execution that has ended, and what it carried.
 pub fn forget_session(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Result<()> {
-    consume(&session_path(paths, space_id, id))
+    consume(&session_path(paths, space_id, id))?;
+    carried::forget(paths, space_id, id)
 }
 
 /// Operations on the client type [`LastSession`] that only the `shoal` command uses.
@@ -704,7 +707,7 @@ pub trait LastSessionExt: Sized {
     fn path(paths: &Paths, space_id: &SpaceId, execution: &ExecutionId) -> PathBuf;
 
     /// Save execution `id` of `agent`, which last reported `turn`, as one
-    /// of the space's last sessions.
+    /// of the space's last sessions, continuing the session it continued.
     fn save(
         paths: &Paths,
         space_id: &SpaceId,
@@ -756,13 +759,14 @@ impl LastSessionExt for LastSession {
         id: &ExecutionId,
         turn: Option<AgentState>,
     ) -> Result<()> {
+        let carried = carried::continued(paths, space_id, id);
         Self {
             execution: id.to_owned(),
             agent: agent.name.normalized(),
-            session: reported_session(paths, space_id, id),
-            moved: false,
-            copied: None,
-            converted: false,
+            session: carried.session,
+            moved: carried.moved,
+            copied: carried.copied,
+            converted: carried.converted,
             origin: None,
             stop: None,
             turn,

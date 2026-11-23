@@ -362,10 +362,12 @@ impl Manager {
     }
 
     /// The session the agent that runs or ran as `execution` in the space
-    /// `id` reported last: while it runs, else as its last session kept it
+    /// `id` continues: while it runs, the one it reported last or else
+    /// carried from the agent it restored, else as its last session kept it
     /// when it exited.
     fn latest_session(&self, id: &SpaceId, execution: &ExecutionId) -> Option<AgentSessionId> {
-        recovery::reported_session(&self.paths, id, execution).or_else(|| {
+        let carried = recovery::carried::continued(&self.paths, id, execution);
+        carried.session.or_else(|| {
             let path = LastSession::path(&self.paths, id, execution);
             LastSession::load(&path).ok().flatten()?.session
         })

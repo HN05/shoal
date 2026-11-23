@@ -1071,7 +1071,10 @@ keeps one per agent, so resuming several stopped together restores each; a new
 agent replaces them, since the user moved on, while a restored one consumes
 only its own, which the wrapper says when it registers.
 Built-in agents resume the session ID their hooks report, since the workspace's
-latest session may belong to another agent.
+latest session may belong to another agent. A restored agent carries the
+session of the record it restores, with how its space changed, such as a
+conversion, until its hooks report one, so a restore that exits or stops
+before then leaves that session to resume, not one without it.
 
 Use short transactions for atomic claims. Closed Shoal enums with matching display and
 wire names use one macro to share explicit spellings across conversions and reject

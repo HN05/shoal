@@ -495,10 +495,13 @@ async fn relay(
                 if let Some(tracked) = agent {
                     if !restored {
                         agents.forget_last_sessions(&space.id);
-                    } else if !resumed_here && *unqueued {
-                        // A restore the agent queue starts withdrew it when queued
-                        // if `shoal resume` asked for it.
-                        daemon.reopen_for_resume(&space.id).await;
+                    } else {
+                        agents.carry_restored_session(&space.id, execution_id, &restored_from);
+                        if !resumed_here && *unqueued {
+                            // A restore the agent queue starts withdrew it when
+                            // queued if `shoal resume` asked for it.
+                            daemon.reopen_for_resume(&space.id).await;
+                        }
                     }
                     agents.agent_started(execution_id).await;
                     let started = AgentEvent {

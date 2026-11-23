@@ -381,6 +381,23 @@ impl Agents {
             .await;
     }
 
+    /// Keep, for the agent `execution` of the space `space_id`, the session
+    /// that the saved agent among the records at `restored_from` it
+    /// restores carries, so it stays the space's until the agent reports its
+    /// own. Read it before the start is acknowledged: the wrapper then
+    /// consumes the records.
+    pub fn carry_restored_session(
+        &self,
+        space_id: &SpaceId,
+        execution: &ExecutionId,
+        restored_from: &[std::path::PathBuf],
+    ) {
+        use crate::execution::recovery::carried;
+        if let Err(error) = carried::carry(&self.paths, space_id, execution, restored_from) {
+            log!("session that {execution} restores not carried: {error:#}");
+        }
+    }
+
     /// Forget a finished agent's reported session, first keeping it, with
     /// the `turn` it ended in, as one of the last sessions of the space
     /// `space_id` when the agent `exited` on its own before the assignment
