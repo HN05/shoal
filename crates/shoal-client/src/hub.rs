@@ -4,7 +4,7 @@
 //! output.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
-    hub::{HubUpdate, Left, Member, Membership, Overview, pairing::Pairing, placement::Asked},
+    hub::{HubUpdate, Left, Membership, Overview, Revoked, pairing::Pairing, placement::Asked},
     paths::Paths,
     protocol::{self, HubMethod, JoinVia, Response},
 };
@@ -43,7 +43,7 @@ pub async fn members(daemon: &impl Daemon) -> Result<Overview> {
 
 /// Revoke the credential of the machine or device `member` names by ID or
 /// name.
-pub async fn revoke(daemon: &impl Daemon, member: String) -> Result<Member> {
+pub async fn revoke(daemon: &impl Daemon, member: String) -> Result<Revoked> {
     request(daemon, HubMethod::RevokeHubMember { member }).await
 }
 

@@ -365,6 +365,26 @@ pub enum HubRole {
     },
 }
 
+/// A member whose credential the hub revoked, with the settings whose
+/// values it fetched from other machines' commands, which it may still
+/// hold, so they need rotating.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Revoked {
+    pub member: Member,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fetched: Vec<Fetched>,
+}
+
+/// A setting whose value a machine fetched from another machine's command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Fetched {
+    pub setting: String,
+    /// The name of the machine that ran the command.
+    pub machine: String,
+    /// When the machine last fetched it.
+    pub last_at: UnixTime,
+}
+
 /// What `shoal hub leave` did.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Left {

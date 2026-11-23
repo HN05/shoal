@@ -4,7 +4,7 @@
 //! requests and events one machine sends another.
 use anyhow::{Result, anyhow};
 use shoal_protocol::hub::{
-    Member, MemberKind, Overview,
+    Member, MemberKind, Overview, Revoked,
     link::{Call, Reply},
     pairing::Pairing,
     sleep::Clocks,
@@ -65,7 +65,7 @@ impl Hub {
         let reply = super::session::reply(self.answer_call(daemon, member, call, calls).await);
         let revoked_itself = match &reply {
             Reply::Left => true,
-            Reply::Revoked(revoked) => revoked.id == member.id,
+            Reply::Revoked(revoked) => revoked.member.id == member.id,
             _ => false,
         };
         let held = Held {
@@ -341,16 +341,16 @@ impl Hub {
 
     /// Revoke the credential of the member `selector` names, ending its
     /// link, unless it is the `caller`'s, which ends once the caller has
-    /// read the reply.
+    /// read the reply, with the settings it fetched from other machines.
     pub(super) async fn revoke_member(
         &self,
         selector: &str,
         caller: Option<&MemberId>,
-    ) -> Result<Member> {
+    ) -> Result<Revoked> {
         let own = self.hub_identity().await?.public.clone();
         let selector = selector.to_owned();
         let _admission = self.admissions.lock().await;
-        let member = self
+        let revoked = self
             .store
             .write(move |tx| {
                 let member = members::select(tx, &selector, &own)?;
@@ -367,14 +367,15 @@ impl Hub {
                 takeovers::forget(tx, &member.id)?;
                 packages::forget_sleep(tx, &member.id)?;
                 packages::forget(tx, &member.id)?;
-                Ok(member)
+                let fetched = super::value_fetches::of(tx, &member.id)?;
+                Ok(Revoked { member, fetched })
             })
             .await?;
-        if caller != Some(&member.id) {
-            self.links.stop(&member.id);
+        if caller != Some(&revoked.member.id) {
+            self.links.stop(&revoked.member.id);
         }
         self.delete_ended_packages().await;
-        Ok(member)
+        Ok(revoked)
     }
 
     /// Revoke the credential of `member`, which leaves: its link stays
@@ -409,12 +410,16 @@ impl Hub {
 
     /// Revoke the member `selector` names, on the hub itself or through
     /// this machine's link.
-    pub async fn revoke_hub_member(&self, daemon: &dyn Daemon, selector: String) -> Result<Member> {
+    pub async fn revoke_hub_member(
+        &self,
+        daemon: &dyn Daemon,
+        selector: String,
+    ) -> Result<Revoked> {
         if self.is_hub(daemon) {
             return self.revoke_member(&selector, None).await;
         }
         match self.through_hub(Call::Revoke { member: selector }).await? {
-            Reply::Revoked(member) => Ok(member),
+            Reply::Revoked(revoked) => Ok(revoked),
             reply => Err(unexpected(reply)),
         }
     }

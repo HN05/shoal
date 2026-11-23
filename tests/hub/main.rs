@@ -379,7 +379,7 @@ fn a_machine_that_revokes_itself_hears_that_it_did() {
     let membership = laptop.join_through_command(&hub, "laptop");
     laptop.connected();
     let revoked = laptop.json(&["hub", "revoke", membership["member"].as_str().unwrap()]);
-    assert_eq!(revoked["id"], membership["member"]);
+    assert_eq!(revoked["member"]["id"], membership["member"]);
     laptop.role_once(|role| {
         (role["problem"].as_str()).is_some_and(|problem| problem.contains("revoked"))
     });

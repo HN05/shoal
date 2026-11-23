@@ -1044,7 +1044,8 @@ rotated one applies at once, and the machine that asked keeps the last one in
 memory, never on disk, using it while the named machine cannot be reached;
 without one, reading the setting fails, naming the machine and the setting. The
 hub records which settings each machine fetched from which, and when, never the
-values. Agent tools' own logins, such as Claude Code's and Codex's, are files
+values: `shoal hub revoke` stops a machine from asking again and lists the
+settings it fetched, to rotate, since a value it received cannot be taken back. Agent tools' own logins, such as Claude Code's and Codex's, are files
 those tools own and are not shared: their rotating refresh tokens would log out
 the other copy.
 

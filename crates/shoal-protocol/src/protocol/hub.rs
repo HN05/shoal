@@ -28,7 +28,7 @@ pub enum HubMethod {
     /// Answers with [`super::Body::HubUpdate`].
     UpdateHub,
     /// Revoke the credential of the member `member` names by ID or name.
-    /// Answers with [`super::Body::HubMember`].
+    /// Answers with [`super::Body::HubRevoked`].
     RevokeHubMember { member: String },
     /// Long-lived, on the hub's machine: register the caller as the placer
     /// an `external` placement policy asks, in place of the one before,

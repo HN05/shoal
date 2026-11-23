@@ -571,7 +571,7 @@ pub enum Call {
 pub enum Reply {
     Pairing(Pairing),
     Members(Overview),
-    Revoked(super::Member),
+    Revoked(super::Revoked),
     Left,
     Updated(super::HubUpdate),
     Reported(Numbering),

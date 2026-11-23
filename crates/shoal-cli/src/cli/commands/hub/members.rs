@@ -1,7 +1,7 @@
 //! `shoal hub ls` and `shoal hub revoke`: the hub's listener and members,
 //! and what `shoal status` says of the hub role.
 use anyhow::Result;
-use shoal_protocol::hub::{HubRole, Listener, Member, Overview};
+use shoal_protocol::hub::{HubRole, Listener, Member, Overview, Revoked};
 
 use crate::{
     cli::{
@@ -74,15 +74,38 @@ fn state(member: &Member, now: UnixTime) -> (String, Style) {
     }
 }
 
-/// Revoke a member's credential.
+/// Revoke a member's credential, naming the settings whose values it
+/// fetched from other machines, which it may still hold.
 pub(super) async fn revoke(ctx: &Context, member: String) -> Result<i32> {
-    let member = crate::client::hub::revoke(&ctx.paths, member).await?;
-    let message = format!(
+    let revoked = crate::client::hub::revoke(&ctx.paths, member).await?;
+    let message = revoked_message(&revoked, UnixTime::now());
+    ctx.emit_styled(Style::Success, &message, &revoked)?;
+    Ok(0)
+}
+
+/// What `hub revoke` says of `revoked` at `now`: the member, and each
+/// setting it fetched from another machine, to rotate.
+fn revoked_message(revoked: &Revoked, now: UnixTime) -> String {
+    let member = &revoked.member;
+    let mut message = format!(
         "Revoked the credential of {} {} ({})",
         member.kind, member.name, member.id
     );
-    ctx.emit_styled(Style::Success, &message, &member)?;
-    Ok(0)
+    if !revoked.fetched.is_empty() {
+        message.push_str(&format!(
+            "\n{} may still hold these values it fetched; rotate them:",
+            member.name
+        ));
+    }
+    for fetched in &revoked.fetched {
+        message.push_str(&format!(
+            "\n  {} from {}, last {}",
+            fetched.setting,
+            fetched.machine,
+            fetched.last_at.local_ago(now)
+        ));
+    }
+    message
 }
 
 /// What `shoal status` says of the hub role the daemon takes.

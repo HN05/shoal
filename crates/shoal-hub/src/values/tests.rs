@@ -79,6 +79,23 @@ async fn a_machine_gets_what_another_prints_and_the_hub_records_the_setting() {
 }
 
 #[tokio::test]
+async fn revoking_a_machine_names_the_settings_it_fetched() {
+    let (_root, hub, laptop, _) = hub().await;
+    ask(&hub, &laptop).await;
+
+    let revoked = hub.revoke_member("laptop", None).await.unwrap();
+
+    let fetched: Vec<_> = (revoked.fetched.iter())
+        .map(|fetched| (fetched.setting.as_str(), fetched.machine.as_str()))
+        .collect();
+    let hub_name = crate::process::machine::hostname();
+    assert_eq!(
+        fetched,
+        [("machine.proxies.gateway.key", hub_name.as_str())]
+    );
+}
+
+#[tokio::test]
 async fn a_device_has_no_machine_run_a_command() {
     let (_root, hub, _, phone) = hub().await;
 

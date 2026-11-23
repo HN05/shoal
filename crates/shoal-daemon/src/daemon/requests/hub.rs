@@ -37,7 +37,7 @@ pub(super) async fn handle(
         HubMethod::UpdateHub => Body::HubUpdate(manager.hub.update_hub(&**manager).await?),
         HubMethod::HubMembers => Body::HubOverview(manager.hub.hub_overview(&**manager).await?),
         HubMethod::RevokeHubMember { member } => {
-            Body::HubMember(manager.hub.revoke_hub_member(&**manager, member).await?)
+            Body::HubRevoked(manager.hub.revoke_hub_member(&**manager, member).await?)
         }
         HubMethod::ServePlacement => {
             let registration = manager.hub.serve_placement(&**manager)?;
