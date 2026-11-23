@@ -1955,7 +1955,8 @@ question` or `request` opens a thread outside the review, delivered at once. A
 comment's `--code` may point at unsaved lines, since a reference keeps its own
 file version.
 
-`review submit` submits your pending review of `--space`, else your only one, at
+`review submit` submits your pending review of `--space`, else of the space it
+runs in, else your only one, at
 the workspace's HEAD, with a summary of up to 4 KiB from `--body` or
 `--body-file`: the workspace's agent receives it as one message with each
 comment, and the agent coordinating the

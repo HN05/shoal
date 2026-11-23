@@ -3,17 +3,25 @@
 use anyhow::{Context as _, Result};
 
 use crate::client::reviews;
-use crate::{cli::context::Context, model::Chat, reviews::ReviewId};
+use crate::{
+    cli::{context::Context, ui},
+    model::Chat,
+    reviews::ReviewId,
+};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Cancel review `id`, else the caller's only pending review when no space
-/// is named, else the space's pending, queued or running one: a chat's is
-/// that of one of its linked PRs.
+/// Cancel review `id`, else the caller's pending review of the space named
+/// or this runs in, or its queued or running one, a chat's that of one of
+/// its linked PRs; outside every space, the caller's only pending review.
 pub(super) async fn cancel(
     ctx: &Context,
     id: Option<ReviewId>,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
+    let space = match (id, space) {
+        (None, None) => ui::space_here(ctx, ui::Workspaces::Below).await?,
+        (_, space) => space,
+    };
     let pending = match (id, &space) {
         (None, None) => super::writing::only_pending(ctx).await?,
         _ => None,

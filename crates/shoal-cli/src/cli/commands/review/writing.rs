@@ -45,6 +45,10 @@ pub(super) async fn submit(
     body: BodyArgs,
 ) -> Result<i32> {
     let summary = read_body(body)?.map(|summary| summary.trim_end().to_owned());
+    let space = match space {
+        Some(space) => Some(space),
+        None => pending_here(ctx).await?,
+    };
     let review = reviews::submit(space, approve, summary)
         .send(&ctx.paths)
         .await?;
@@ -58,8 +62,19 @@ pub(super) async fn submit(
     Ok(0)
 }
 
-/// The caller's only pending review, which a cancel without a review or a
-/// space drops; none without one.
+/// The space this runs in when the caller has a pending review of it, which
+/// a submit without a space submits before the caller's only one.
+async fn pending_here(ctx: &Context) -> Result<Option<SpaceSelector>> {
+    let Some(SpaceSelector::Id(here)) = ui::space_here(ctx, ui::Workspaces::Below).await? else {
+        return Ok(None);
+    };
+    let pending = reviews::pending().send(&ctx.paths).await?;
+    let reviewed = pending.iter().any(|review| review.workspace_id == here);
+    Ok(reviewed.then_some(SpaceSelector::Id(here)))
+}
+
+/// The caller's only pending review, which a cancel outside every space
+/// drops; none without one.
 pub(super) async fn only_pending(ctx: &Context) -> Result<Option<ReviewId>> {
     let pending = reviews::pending().send(&ctx.paths).await?;
     match pending.as_slice() {
