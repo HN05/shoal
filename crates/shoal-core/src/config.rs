@@ -436,11 +436,15 @@ fn template_directories(paths: &Paths) -> Result<[PathBuf; 2]> {
     Ok([directory.join(shared::TEMPLATES_DIR), directory.to_owned()])
 }
 
-/// The text of the config file at `path`, empty while there is none.
+/// The text of the global config file at `path`, in the shape this Shoal
+/// reads; empty while there is no file.
 fn read_file(path: &Path) -> Result<String> {
     let text =
         crate::fsutil::read_optional(path).with_context(|| format!("read {}", path.display()))?;
-    Ok(text.unwrap_or_default())
+    Ok(crate::config_file::upgrade::upgraded(
+        path,
+        text.unwrap_or_default(),
+    ))
 }
 
 /// Named templates shipped in this binary, independent of the source checkout.

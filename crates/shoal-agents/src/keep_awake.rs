@@ -7,7 +7,7 @@ use std::{process::Stdio, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, anyhow};
 use rusqlite::Connection;
-use shoal_core::config::Config;
+use shoal_core::config::{Config, machine::KeepAwake};
 use shoal_daemon_base::alerts::AlertKind;
 use tokio::{
     io::AsyncReadExt,
@@ -88,7 +88,7 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
 /// Whether to hold the inhibitor under `config`, or `None` when the lookup
 /// failed and the current hold should stay.
 async fn wanted(agents: &Agents, config: &Config) -> Option<bool> {
-    if !config.machine.keep_awake {
+    if !matches!(config.machine.keep_awake, KeepAwake::Finish | KeepAwake::On) {
         return Some(false);
     }
     match agents.agents_have_work().await {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::machine::KeepAwake;
 
 fn message(error: Error) -> String {
     error.to_string()
@@ -10,10 +11,10 @@ fn the_global_file_splits_into_machine_and_repository_settings() {
         machine,
         repository,
     } = global(
-        "agent.default = 'claude'\n[machine]\nkeep_awake = true\n[cleanup.auto]\nenabled = false\n",
+        "agent.default = 'claude'\n[machine]\nkeep_awake = 'on'\n[cleanup.auto]\nenabled = false\n",
     )
     .unwrap();
-    assert!(machine.read().unwrap().keep_awake);
+    assert_eq!(machine.read().unwrap().keep_awake, KeepAwake::On);
     assert!(repository.agent.default.is_some());
     assert_eq!(repository.cleanup.auto.enabled, Some(false));
 }
@@ -32,7 +33,7 @@ fn unknown_keys_fail_with_their_position_in_either_part() {
 #[test]
 fn keys_in_the_wrong_file_name_the_file_they_belong_in() {
     let error =
-        message(repository("terminal.focus = true\n[machine]\nkeep_awake = true\n").unwrap_err());
+        message(repository("terminal.focus = true\n[machine]\nkeep_awake = 'on'\n").unwrap_err());
     assert!(error.contains("line 2"), "{error}");
     assert!(error.contains("[machine]"), "{error}");
 }

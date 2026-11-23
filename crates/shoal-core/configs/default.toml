@@ -38,10 +38,12 @@
 # CPU and memory thresholds in [machine.overload] and dynamic agent admission.
 # load = "balanced"
 
-# Keep the machine from sleeping, including when a laptop's lid closes, while
-# an agent is working or waits on a watched open PR. macOS still sleeps on a
-# closed lid without an external display.
-# keep_awake = false
+# What the machine does once you walk away, closing its lid or leaving it
+# idle: "off" sleeps; "handover" hands spaces with work to other machines of
+# the hub, then sleeps; "finish" lets running turns end, then sleeps; "on"
+# carries on, keeping the machine awake while agents work. macOS still sleeps
+# on a closed lid without an external display.
+# keep_awake = "off"
 
 # Whether this machine stays reachable, for the hub it joined or takes:
 # "always_on", "intermittent", or "auto" for the hub's guess from how

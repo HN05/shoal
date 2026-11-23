@@ -20,6 +20,7 @@ use crate::config::{
 use crate::paths::Paths;
 
 pub mod copies;
+pub(crate) mod upgrade;
 mod user_config;
 
 pub use user_config::refuse_user_config;
@@ -44,6 +45,7 @@ fn edit_held(
     let text = fsutil::read_optional(&path)
         .with_context(|| format!("read {}", path.display()))?
         .unwrap_or_default();
+    let text = upgrade::upgrade(&text).unwrap_or(text);
     let edited = edit::apply(&text, changes)?;
     check(&edited)?;
     replace(path, &edited)

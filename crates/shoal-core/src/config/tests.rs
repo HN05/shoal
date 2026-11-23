@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::machine::KeepAwake;
 use crate::test_support::write_beside_global_config;
 
 const TEMPLATE: &str = include_str!("../../configs/default.toml");
@@ -138,13 +139,11 @@ fn load_sets_overload_defaults_on_the_machine_only() {
 #[test]
 fn keep_awake_is_a_machine_setting() {
     let paths = Paths::for_test("/home/test");
-    assert!(
-        Config::parse("[machine]\nkeep_awake = true", &paths)
-            .unwrap()
-            .machine
-            .keep_awake
-    );
-    assert!(crate::config::repo::parse("keep_awake = true").is_err());
+    let machine = Config::parse("[machine]\nkeep_awake = 'handover'", &paths)
+        .unwrap()
+        .machine;
+    assert_eq!(machine.keep_awake, KeepAwake::Handover);
+    assert!(crate::config::repo::parse("keep_awake = 'on'").is_err());
 }
 
 #[test]

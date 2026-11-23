@@ -23,6 +23,45 @@ shoal_states::states! {
     }
 }
 
+shoal_states::states! {
+    /// `keep_awake`: what this machine does once the user walks away from
+    /// it, by closing its lid or leaving it idle.
+    #[derive(Default)]
+    KeepAwake: Variants {
+        /// Sleep as usual.
+        #[default]
+        Off => "off",
+        /// Admit nothing new and hand the spaces with something to do over
+        /// to other machines, then sleep.
+        Handover => "handover",
+        /// Admit nothing new and let running turns finish, then sleep.
+        Finish => "finish",
+        /// Carry on as while the user is there.
+        On => "on",
+    }
+}
+
+impl KeepAwake {
+    /// A level by its name, refusing any other value, such as the boolean
+    /// an earlier Shoal took, with the names it takes.
+    fn deserialize<'de, D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = String::deserialize(deserializer).ok();
+        let level = Self::ALL
+            .iter()
+            .find(|level| Some(level.as_str()) == name.as_deref());
+        level.copied().ok_or_else(|| {
+            let names: Vec<String> = Self::ALL
+                .iter()
+                .map(|level| format!("\"{level}\""))
+                .collect();
+            serde::de::Error::custom(format!("keep_awake takes {}", names.join(", ")))
+        })
+    }
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Machine {
@@ -30,8 +69,9 @@ pub struct Machine {
     pub root_dir: Option<PathBuf>,
     /// How hard Shoal may load this machine; sets `[machine.overload]` defaults.
     pub load: overload::Load,
-    /// Hold off sleep, including from a closed laptop lid, while agents have work.
-    pub keep_awake: bool,
+    /// What this machine does once the user walks away from it.
+    #[serde(deserialize_with = "KeepAwake::deserialize")]
+    pub keep_awake: KeepAwake,
     /// Whether this machine stays reachable for lasting work, which the hub
     /// guesses under `auto`.
     pub availability: shoal_protocol::hub::availability::AvailabilitySetting,

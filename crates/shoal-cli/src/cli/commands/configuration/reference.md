@@ -84,7 +84,7 @@ max_jobs = "dynamic"     # Or a number from 0
 schedule = "balanced"    # "balanced", "speed" or "cache"
 load = "balanced"        # "light", "balanced" or "full"
 memory_limit = "24GiB"   # Or a share of RAM, such as "75%"; no default
-keep_awake = false       # Keep the machine from sleeping while agents work
+keep_awake = "off"       # "off", "handover", "finish" or "on"
 availability = "auto"    # "auto", "always_on" or "intermittent"
 ```
 
@@ -118,8 +118,14 @@ use the whole machine. On Linux the kernel enforces it on the work slice;
 elsewhere only memory protection does, so with `[machine.overload.memory]`
 disabled it does nothing there. It applies after `shoal config reload`.
 
-`keep_awake` keeps the machine from sleeping while an agent works or waits on
-a watched PR; see [keeping the machine awake](../../../../../../docs/reference.md#keeping-the-machine-awake).
+`keep_awake` chooses what the machine does once the user walks away from it,
+closing its lid or leaving it idle: `off` sleeps as usual; `handover` admits
+nothing new and hands the spaces with something to do over to other machines
+of the hub, then sleeps; `finish` admits nothing new and lets running turns
+end, then sleeps; `on` carries on, keeping the machine from sleeping while an
+agent works or waits on a watched PR. While the user is there, `finish` and
+`on` keep the machine from sleeping while agents work, and `off` and
+`handover` do not; see [keeping the machine awake](../../../../../../docs/reference.md#keeping-the-machine-awake).
 
 `availability` tells the [hub](../../../../../../docs/reference.md#hub) this
 machine joined, or takes, whether it stays reachable: `always_on`,

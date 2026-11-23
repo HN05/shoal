@@ -1,6 +1,7 @@
 use super::*;
 use crate::config::{
     MachineLimit,
+    machine::KeepAwake,
     repo::{ConfigLayer, ConfigLayers},
     resolve::Stack,
 };
@@ -40,11 +41,11 @@ fn each_option_takes_the_global_file_over_the_shared_one() {
 fn machine_keys_merge_table_by_table_with_references_across_files() {
     let (_home, paths) = home(
         "[machine]\nmax_heavy_agents = 4\n[machine.hub]\nescalate_after_minutes = 5\n",
-        "[machine]\nkeep_awake = true\nmax_jobs = { same_as = 'max_heavy_agents' }\n\
+        "[machine]\nkeep_awake = 'finish'\nmax_jobs = { same_as = 'max_heavy_agents' }\n\
          [machine.hub]\nauto_update = false\nescalate_after_minutes = 60\n",
     );
     let machine = Config::load(&paths).unwrap().machine;
-    assert!(machine.keep_awake);
+    assert_eq!(machine.keep_awake, KeepAwake::Finish);
     assert_eq!(machine.max_jobs, MachineLimit::Fixed(4));
     assert!(!machine.hub.auto_update);
     assert_eq!(machine.hub.escalate_after_minutes, 5);
