@@ -1757,7 +1757,12 @@ is the only command that starts an agent, so `create` creates worktrees alone: a
 `start` run in a space, a workspace or a chat, gives a child an agent of its own
 through the agent queue, and `start --fork` gives it the parent's agent
 from a fork of its session, the one the caller's agent or else the parent's only
-agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
+agent reported last, so the parent need not restate what it learned. A fork
+of the same model reads the parent's prompt cache, but re-reads its whole
+context on each of the child's requests and fills its context window sooner,
+so `start` keeps a fresh agent as its default, and the shipped `work` rule
+tells agents to fork for a short task that needs their context and to start
+fresh for long work or a task most of it does not concern; the daemon starts every launch in an existing
 workspace itself, detached, unless `start --here` has the caller start it, and the agent
 holds its own space's scope, never the caller's, and
 scoped callers may queue only for the workspaces their scope reaches but their

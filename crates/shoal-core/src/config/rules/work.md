@@ -4,4 +4,5 @@ Run `shoal thread switch <thread>` before working on a thread, so your changes g
 Resolve each local review finding's thread with `shoal thread resolve`.
 Set your status line with `shoal progress` at each milestone and when you are blocked.
 Give separate work its own space.
+Start a child for a short task that needs what you know, such as an investigation or a review, with `shoal start --fork`, which gives it your context and prompt cache; start a fresh agent for long work or when most of your context does not concern its task.
 Open an issue you fix in your own space with `shoal issue open --link`, and link one you take on later with `shoal link issue <number> assigned`.

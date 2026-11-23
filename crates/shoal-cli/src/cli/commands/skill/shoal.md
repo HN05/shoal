@@ -80,7 +80,9 @@ queue opens, and returns once the chat is recorded, with its agent's entry. Outs
 spaces. Without a terminal, as from a tool call, and from inside a space, agents
 start detached; `--here` runs one in the calling terminal, once its workspace
 is prepared, until it exits, as the new space's own agent. `--fork` starts the caller's
-own agent from a fork of its session, so it needs only its task after `--`.
+own agent from a fork of its session, so it needs only its task after `--`;
+running the same model, the child reads the parent's prompt cache instead of
+writing the conversation again.
 `--machine <name or ID>` starts the space on another machine of the hub, below
 the caller there too, where that machine's queue starts its agent in the
 background; it clones the repository where that machine has none, carries
