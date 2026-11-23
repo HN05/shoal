@@ -1964,7 +1964,8 @@ its changes are attributed there, and says so in the thread; you check them and
 resolve it with an outcome of the table above, or reply. Only threads Shoal opens
 are resolved by their holder. `review cancel` drops a pending review with its
 comments, by its writer or you; without a review or `--space` it drops your only
-pending one. Removing the space that writes a review drops it. For the review
+pending one. Removing the space that writes a review, or the workspace it
+reviews, drops it. For the review
 gates above, a submitted review covers the commit it recorded once every comment
 is resolved, and one without comments only when it approves. Reviews on the forge
 stay there; they are not mirrored.

@@ -76,6 +76,14 @@ pub fn pending_by(db: &Connection, writer: &Writer) -> Result<Vec<ReviewId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The pending reviews of the workspace `workspace`, whoever writes them.
+pub fn pending_of_workspace(db: &Connection, workspace: &SpaceId) -> Result<Vec<ReviewId>> {
+    Ok(db
+        .prepare("SELECT id FROM reviews WHERE workspace_id=?1 AND state=?2 ORDER BY id")?
+        .query_map(params![workspace, ReviewState::Pending], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Who writes review `id`, unless Shoal's reviewer does.
 pub fn writer(db: &Connection, id: ReviewId) -> Result<Option<Writer>> {
     let found: Option<(Sender, Option<SpaceId>)> = db

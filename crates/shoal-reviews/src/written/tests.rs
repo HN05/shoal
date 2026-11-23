@@ -124,3 +124,18 @@ async fn a_review_without_comments_covers_its_commit_only_when_it_approves() {
     // A space above wrote it, so no coordinator is told of it.
     assert!(fixture.daemon.notices.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn removing_the_reviewed_workspace_drops_its_pending_reviews_with_their_comments() {
+    let fixture = fixture().await;
+    let review = fixture.start(Writer::Space("parent".into())).await.unwrap();
+    fixture.records.comment(review.id, "Unclear name");
+    let (records, workspace) = (fixture.records.clone(), fixture.workspace.id.clone());
+    let dropped = fixture.reviews.store.write(move |tx| {
+        drop_pending_of_removed(tx, &*records, &workspace)?;
+        crate::store::load(tx, &*records, review.id)
+    });
+    let dropped = dropped.await.unwrap().unwrap();
+    assert_eq!(dropped.state, ReviewState::Cancelled);
+    assert!(fixture.records.threads.lock().unwrap().is_empty());
+}

@@ -207,11 +207,18 @@ fn verdict(approve: bool, comments: usize) -> Verdict {
     }
 }
 
-/// Cancel the pending reviews `writer` wrote, with their threads, as the
-/// removal of the space that wrote them does in its transaction.
-pub fn drop_written_by(tx: &Transaction<'_>, records: &dyn Records, writer: &Writer) -> Result<()> {
+/// Cancel the pending reviews the space `space` writes, and those of it,
+/// with their threads, as its removal does in its transaction: their
+/// comments reached nobody, and a restore could never submit them.
+pub fn drop_pending_of_removed(
+    tx: &Transaction<'_>,
+    records: &dyn Records,
+    space: &SpaceId,
+) -> Result<()> {
+    let mut pending = store::pending_by(tx, &Writer::Space(space.clone()))?;
+    pending.extend(store::pending_of_workspace(tx, space)?);
     let now = UnixTime::now();
-    for id in store::pending_by(tx, writer)? {
+    for id in pending {
         store::cancel(tx, id, now)?;
         records.drop_review_threads(tx, id)?;
     }

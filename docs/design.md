@@ -2930,7 +2930,8 @@ and Shoal's reviewer neither reads, reopens nor learns false positives from
 them. A submitted review covers its commit once its comments are resolved, and
 one without comments only when it approves, so a summary alone opens no gate. A
 space reviews the workspaces of its own machine, where its threads are numbered,
-and its removal drops what it was writing. Forge reviews stay on the forge.
+and its removal, or the reviewed workspace's, drops a pending review, whose
+comments a restore could never submit. Forge reviews stay on the forge.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the
