@@ -42,6 +42,11 @@ shoal_states::states! {
 }
 
 impl KeepAwake {
+    /// Whether this machine admits nothing new once the user walks away.
+    pub fn stops_when_away(self) -> bool {
+        matches!(self, Self::Handover | Self::Finish)
+    }
+
     /// A level by its name, refusing any other value, such as the boolean
     /// an earlier Shoal took, with the names it takes.
     fn deserialize<'de, D>(deserializer: D) -> Result<Self, D::Error>

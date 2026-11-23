@@ -1,5 +1,6 @@
 //! systemd-logind's manager over the system bus, whose delay locks and
-//! announcements hold off a shutdown or a sleep until the daemon is ready.
+//! announcements hold off a shutdown or a sleep until the daemon is ready,
+//! and which says whether the lid is closed.
 use std::time::Duration;
 
 use zbus::OwnedFd;
@@ -16,6 +17,11 @@ pub(super) trait Login {
 
     #[zbus(property, name = "InhibitDelayMaxUSec")]
     fn inhibit_delay_max_usec(&self) -> zbus::Result<u64>;
+
+    #[zbus(property)]
+    fn lid_closed(&self) -> zbus::Result<bool>;
+
+    fn get_user(&self, uid: u32) -> zbus::Result<zbus::OwnedObjectPath>;
 
     #[zbus(signal)]
     fn prepare_for_shutdown(&self, start: bool) -> zbus::Result<()>;

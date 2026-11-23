@@ -25,6 +25,7 @@ use shoal_forge_types as forge;
 use shoal_protocol::{agent, model, paths::Paths, protocol, state, time, validate};
 use shoal_store::Store;
 
+pub mod away;
 pub mod busy_cpu;
 pub mod capacity;
 pub mod control;
@@ -95,6 +96,8 @@ pub struct Agents {
     busy_cpu: busy_cpu::BusyCpu,
     /// What the agent queue keeps in memory.
     agent_queue: queue::AgentQueue,
+    /// Whether the user is away, as `keep_awake` acts on it.
+    presences: away::Presences,
     /// When agents protection stopped may start again.
     overload_recovery: overload_recovery::OverloadRecovery,
     /// Held while an agent is admitted to a workspace, until it is tracked,
@@ -144,6 +147,7 @@ impl Agents {
             shutdown_stopped: Default::default(),
             busy_cpu: Default::default(),
             agent_queue: Default::default(),
+            presences: Default::default(),
             overload_recovery: Default::default(),
             agent_admissions: Default::default(),
             proxy_retries: Default::default(),

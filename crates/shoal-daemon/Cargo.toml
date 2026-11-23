@@ -64,6 +64,10 @@ webpki-roots = "1"
 # systemd-logind's shutdown delay lock and announcements, over the system bus.
 zbus = { version = "6", default-features = false, features = ["tokio", "proxy"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# ioreg and pmset, which say whether the user walked away.
+shoal-subprocess.workspace = true
+
 [dev-dependencies]
 hmac = "0.13"
 shoal-agents = { workspace = true, features = ["test-support"] }

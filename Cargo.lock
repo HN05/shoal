@@ -2629,6 +2629,7 @@ dependencies = [
  "shoal-runner",
  "shoal-schedule",
  "shoal-store",
+ "shoal-subprocess",
  "tempfile",
  "tokio",
  "tokio-tungstenite",

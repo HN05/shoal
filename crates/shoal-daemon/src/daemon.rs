@@ -101,6 +101,7 @@ mod tree;
 mod turn_ends;
 mod untracked;
 mod viewer_terminals;
+mod walked_away;
 mod work_memory;
 pub mod workspace;
 pub mod workspace_files;
@@ -245,6 +246,7 @@ pub async fn run(
         shutdown_lock::run,
     );
     spawn_supervised(&mut background, &manager, "sleep lock", sleep_lock::run);
+    spawn_supervised(&mut background, &manager, "walked away", walked_away::run);
     spawn_supervised(&mut background, &manager, "agent queue", |manager| {
         queued_starts::run(manager.agents.clone(), manager)
     });
