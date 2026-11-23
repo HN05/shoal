@@ -440,7 +440,9 @@ pub fn list(db: &Connection, records: &dyn Records, ids: &[SpaceId]) -> Result<V
     Ok(listed)
 }
 
-/// The workspace's newest finished review of commit `head`.
+/// The workspace's newest finished review of commit `head` that judges it:
+/// any of Shoal's, or one its writer submitted with comments or approving
+/// the work, so a review that only comments never decides a gate.
 pub fn finished_at(
     db: &Connection,
     records: &dyn Records,
@@ -448,7 +450,8 @@ pub fn finished_at(
     head: &CommitId,
 ) -> Result<Option<Review>> {
     let id: Option<ReviewId> = db.query_row(
-        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND head=?2 AND state=?3",
+        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND head=?2 AND state=?3
+            AND (opener='shoal' OR verdict IS NOT 'comment')",
         params![workspace_id, head, ReviewState::Finished],
         |row| row.get(0),
     )?;

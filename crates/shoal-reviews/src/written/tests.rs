@@ -119,7 +119,11 @@ async fn a_review_without_comments_covers_its_commit_only_when_it_approves() {
     assert_eq!(commented.verdict, Some(Verdict::Comment));
     assert!(!fixture.covered().await);
     fixture.start(parent.clone()).await.unwrap();
-    fixture.submit(parent, true).await.unwrap();
+    fixture.submit(parent.clone(), true).await.unwrap();
+    assert!(fixture.covered().await);
+    // A later review that only comments never takes the gate back.
+    fixture.start(parent.clone()).await.unwrap();
+    fixture.submit(parent, false).await.unwrap();
     assert!(fixture.covered().await);
     // A space above wrote it, so no coordinator is told of it.
     assert!(fixture.daemon.notices.lock().unwrap().is_empty());

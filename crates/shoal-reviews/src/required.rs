@@ -104,8 +104,7 @@ impl Reviews {
             .await?;
         let missing = match &reviewed {
             Some(review) if review.covers() => return Ok(()),
-            Some(review) if review.unresolved().next().is_some() => unresolved(review, head),
-            Some(review) => unjudged(review, head, gate),
+            Some(review) => unresolved(review, head),
             None => format!(
                 "{} needs a finished review of {} first",
                 gate.command(),
@@ -207,18 +206,6 @@ fn pending(id: ReviewId, state: ReviewState) -> String {
         _ => "running",
     };
     format!("; review {id} is {state}, and shoal watch review {id} waits for it")
-}
-
-/// The refusal for a review of `head` the user or a space submitted
-/// without comments or approving it, which `gate` does not take.
-fn unjudged(review: &Review, head: &CommitId, gate: Gate) -> String {
-    format!(
-        "review {} of {} by {} neither approves nor comments; {} needs one that does",
-        review.id,
-        head.short(),
-        review.author.label(),
-        gate.command()
-    )
 }
 
 /// The refusal for a review of `head` whose threads are not all resolved,
