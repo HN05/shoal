@@ -58,7 +58,7 @@ impl Fixture {
     async fn merge_by(&self, push: bool, method: MergeMethod) -> (MergePlan, bool) {
         let selector = SpaceSelector::id(&self.workspace.id);
         let options = MergeOptions {
-            push,
+            push: Some(push),
             method: Some(method),
             ..MergeOptions::default()
         };

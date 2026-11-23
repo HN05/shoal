@@ -15,6 +15,7 @@ use shoal_reviews::required::Gate;
 
 use super::super::{manager::Manager, workspace::branches::UpstreamPolicy};
 use crate::{
+    config::repo::Merge,
     daemon::scope::Caller,
     forge::items::action::MergeMethod,
     fsutil::off_runtime,
@@ -53,6 +54,8 @@ struct MergeSource {
     method: MergeMethod,
     message: Option<String>,
     push: Option<MergePush>,
+    /// Whether the merge asks its caller before it pushes.
+    asks_before_push: bool,
 }
 
 impl Manager {
@@ -75,7 +78,8 @@ impl Manager {
             message: merge.message.as_deref(),
         };
         let onto = (&merge.default, &default_commit);
-        self.merge_preview(merged, onto, merge.push.as_ref()).await
+        let pushing = (merge.push.as_ref(), merge.asks_before_push);
+        self.merge_preview(merged, onto, pushing).await
     }
 
     /// Validate and refresh `caller`'s merge, which runs as `options` say
@@ -107,6 +111,7 @@ impl Manager {
             method,
             message,
             push,
+            asks_before_push: _,
         } = merge;
         let default_refresh = self.refresh_default(&repo, &default).await?;
         let checkout = clean_checkout(&repo, &default).await?;
@@ -129,7 +134,8 @@ impl Manager {
         })
     }
 
-    /// What merging `plan` does, for the approval of a scoped merge.
+    /// What merging `plan` does, for the approval of a scoped merge, which
+    /// asks there before it pushes.
     async fn plan_preview(&self, plan: &MergePlan) -> Result<MergePreview> {
         let merged = Merged {
             workspace: &plan.workspace,
@@ -139,7 +145,8 @@ impl Manager {
             message: plan.message.as_deref(),
         };
         let onto = (&plan.default_refresh.branch, &plan.default_refresh.commit);
-        self.merge_preview(merged, onto, plan.push.as_ref()).await
+        self.merge_preview(merged, onto, (plan.push.as_ref(), false))
+            .await
     }
 
     /// The checks `caller`'s merge as `options` say makes before it changes
@@ -152,7 +159,8 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<MergeSource> {
         let workspace = self.workspace(selector).await?;
-        let (method, message) = self.merge_method(&workspace, options).await?;
+        let settings = self.merge_settings(&workspace).await?;
+        let (method, message) = merge_method(&settings, options)?;
         self.ensure_merges_locally(&workspace).await?;
         let repo = self.repositories.repository(workspace.repository()).await?;
         ensure!(
@@ -176,10 +184,8 @@ impl Manager {
             git::resolve_commit(&workspace.path, &git::local_ref(&branch), git_run).await?;
         self.ensure_unmanaged_checkout(&repo, &default, "merge")
             .await?;
-        let push = match options.push {
-            true => Some(push_target(&repo, &default).await?),
-            false => None,
-        };
+        let (push, asks_before_push) =
+            merge_push(&repo, &default, (options, &settings), caller).await?;
         self.reviews
             .check(self, &workspace, Gate::Merge, &source, caller)
             .await?;
@@ -192,29 +198,17 @@ impl Manager {
             method,
             message,
             push,
+            asks_before_push,
         })
     }
 
-    /// The method and squash message `workspace` merges by as `options`
-    /// ask, else by its `[merge] method`, else by a merge commit or
-    /// fast-forward; refused where `[merge] enabled` turns local merges
-    /// off, as in a repository that merges only through PRs.
-    async fn merge_method(
-        &self,
-        workspace: &Workspace,
-        options: &MergeOptions,
-    ) -> Result<(MergeMethod, Option<String>)> {
+    /// The `[merge]` settings of `workspace` as this machine resolves them.
+    async fn merge_settings(&self, workspace: &Workspace) -> Result<Merge> {
         let settings = self
             .repositories
             .workspace_settings(self, workspace)
             .await?;
-        let settings = &settings.merge;
-        ensure!(
-            settings.enabled,
-            "local merges are turned off for this repository ([merge] enabled = false); open a PR with shoal pr open, then merge it with shoal merge"
-        );
-        let method = (options.method.or(settings.method)).unwrap_or(MergeMethod::Merge);
-        Ok((method, squash_message(method, options.message.as_deref())?))
+        Ok(settings.merge.clone())
     }
 
     /// Refuse a local merge of a workspace whose work merges through its
@@ -254,13 +248,14 @@ impl Manager {
     }
 
     /// What merging `merged` into the default branch `onto`, at its commit,
-    /// does: its commits, where it pushes, the sensitive files it brings to
-    /// a default branch that changed them too.
+    /// does: its commits, where it pushes, whether it asks before it does,
+    /// the sensitive files it brings to a default branch that changed them
+    /// too.
     async fn merge_preview(
         &self,
         merged: Merged<'_>,
         onto: (&BranchName, &CommitId),
-        push: Option<&MergePush>,
+        (push, asks_before_push): (Option<&MergePush>, bool),
     ) -> Result<MergePreview> {
         let (workspace, (default, default_commit)) = (merged.workspace, onto);
         let warning = self
@@ -281,6 +276,7 @@ impl Manager {
                 None => 0,
             },
             warning,
+            asks_before_push,
         })
     }
 
@@ -314,6 +310,37 @@ impl Manager {
         };
         self.managed_workspace_at(&path).await
     }
+}
+
+/// The method and squash message a workspace merges by as `options` ask,
+/// else by its `[merge] method` in `settings`, else by a merge commit or
+/// fast-forward; refused where `[merge] enabled` turns local merges off, as
+/// in a repository that merges only through PRs.
+fn merge_method(settings: &Merge, options: &MergeOptions) -> Result<(MergeMethod, Option<String>)> {
+    ensure!(
+        settings.enabled,
+        "local merges are turned off for this repository ([merge] enabled = false); open a PR with shoal pr open, then merge it with shoal merge"
+    );
+    let method = (options.method.or(settings.method)).unwrap_or(MergeMethod::Merge);
+    Ok((method, squash_message(method, options.message.as_deref())?))
+}
+
+/// Where `caller`'s merge pushes the default branch `default` of `repo`
+/// afterwards, as `options` say, else as `[merge] push` in `settings` says,
+/// and whether it asks the caller before it does, as `[merge] confirm`
+/// says. An agent's merge asks the user through its approval request
+/// instead.
+async fn merge_push(
+    repo: &Repository,
+    default: &BranchName,
+    (options, settings): (&MergeOptions, &Merge),
+    caller: Option<&Caller>,
+) -> Result<(Option<MergePush>, bool)> {
+    if !options.push.unwrap_or(settings.push) {
+        return Ok((None, false));
+    }
+    let push = push_target(repo, default).await?;
+    Ok((Some(push), settings.confirm && caller.is_none()))
 }
 
 /// `message`, refused for a merge by `method` other than a squash, or when

@@ -169,9 +169,10 @@ impl MergePush {
 /// user confirmed.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeOptions {
-    /// Push the default branch to its upstream afterwards.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub push: bool,
+    /// Whether to push the default branch to its upstream afterwards, else
+    /// as `[merge] push` says on the machine that merges.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<bool>,
     /// The method, else `[merge] method`, else a merge commit or
     /// fast-forward.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -229,6 +230,10 @@ pub struct MergePreview {
     /// them too, as the last check of the branch's head found them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<MergeWarning>,
+    /// Whether the merge asks its caller before it pushes: the user's that
+    /// pushes where `[merge] confirm` is on, on the machine that merges.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub asks_before_push: bool,
 }
 
 impl MergePreview {

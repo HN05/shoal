@@ -54,7 +54,7 @@ async fn read_only_scope_reads_without_changing() {
             // Its review gate may queue a review.
             Operation::Merging(MergingMethod::PreviewMerge {
                 workspace: space,
-                push: false,
+                push: Some(false),
                 method: None,
                 message: None,
             }),

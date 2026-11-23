@@ -13,11 +13,12 @@ pub enum MergingMethod {
     MergePath { space: SpaceSelector },
     /// What merging the workspace into the default branch by `method`,
     /// with a squash's `message`, does, after the checks the merge makes
-    /// before it changes anything; with `push`, the merge pushes the default
-    /// branch afterwards.
+    /// before it changes anything; `push` says whether the merge pushes the
+    /// default branch afterwards, else `[merge] push` there.
     PreviewMerge {
         workspace: SpaceSelector,
-        push: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        push: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         method: Option<crate::forge::items::action::MergeMethod>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

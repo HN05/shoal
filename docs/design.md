@@ -1889,7 +1889,10 @@ held by a managed workspace, and any checkout of it must be clean. It aborts a m
 that does not apply cleanly, leaving conflicts to a Git merge of the default branch into
 the workspace, or for a rebase merge, whose replay a merge does not resolve, a
 rebase of the workspace onto it. Merging holds the repository Git gate for the tracked execution; the
-daemon validates, resolves the push target and refreshes, and the CLI worker merges.
+daemon of the workspace's machine validates, resolves from its own settings
+whether and where the merge pushes and whether it asks first, and refreshes,
+and an operation worker there merges, so a merge or unmerge of another
+machine's workspace runs on that machine.
 Pushing publishes the merge where a local reset cannot reach it, so a merge
 that pushes asks the user first, after the daemon's checks and before it
 changes anything; it names the direction, since `git merge main` in a workspace

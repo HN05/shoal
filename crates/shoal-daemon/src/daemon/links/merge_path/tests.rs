@@ -110,7 +110,7 @@ async fn an_open_linked_pr_takes_the_merge_and_refuses_a_local_one() {
         .preview_merge(
             &selector,
             &crate::model::MergeOptions {
-                push: false,
+                push: Some(false),
                 ..Default::default()
             },
             None,

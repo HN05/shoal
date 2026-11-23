@@ -1578,7 +1578,7 @@ async fn begin_merge_as_agent(
     push: bool,
 ) -> anyhow::Result<crate::daemon::executions::StartedExecution> {
     let options = crate::model::MergeOptions {
-        push,
+        push: Some(push),
         ..Default::default()
     };
     begin_merge_by_agent(f, workspace, options).await
@@ -2040,7 +2040,7 @@ async fn unpushed_commits_count_against_a_remapped_upstream() {
         .preview_merge(
             &f.manager.named("worker").await,
             &crate::model::MergeOptions {
-                push: true,
+                push: Some(true),
                 ..Default::default()
             },
             None,
@@ -2059,7 +2059,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     fs::write(workspace.path.join("feature"), "work\n").unwrap();
     commit(&workspace.path, "feature");
     let confirmed = async || crate::model::MergeOptions {
-        push: true,
+        push: Some(true),
         method: None,
         message: None,
         confirmed: Some(
@@ -2067,7 +2067,7 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
                 .preview_merge(
                     &f.manager.named("worker").await,
                     &crate::model::MergeOptions {
-                        push: true,
+                        push: Some(true),
                         ..Default::default()
                     },
                     None,
@@ -2144,7 +2144,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
         commit(dir, "version");
     }
     let confirmed = async || crate::model::MergeOptions {
-        push: false,
+        push: Some(false),
         method: None,
         message: None,
         confirmed: Some(
@@ -2152,7 +2152,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
                 .preview_merge(
                     &f.manager.named("worker").await,
                     &crate::model::MergeOptions {
-                        push: false,
+                        push: Some(false),
                         ..Default::default()
                     },
                     None,
@@ -2238,7 +2238,7 @@ async fn all_refuses_the_users_merge_before_asking_about_it() {
     (f.manager.preview_merge(
         &selector,
         &crate::model::MergeOptions {
-            push: false,
+            push: Some(false),
             ..Default::default()
         },
         None,
@@ -2356,7 +2356,7 @@ impl Manager {
         let workspace = self.workspace(&selector).await?;
         let _guard = self.gates.lock_git(workspace.repository()).await;
         let options = crate::model::MergeOptions {
-            push,
+            push: Some(push),
             method: None,
             message: None,
             confirmed: None,

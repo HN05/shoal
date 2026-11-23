@@ -4149,7 +4149,8 @@ while a PR is open, close the PR. `-X` and `--message` apply to both,
 Scoped callers merge the work of the spaces below their own with `-s`, under
 their own `merge` and `push` permissions. The local merge of a workspace
 another machine of the hub runs, and its `unmerge`, run on that machine,
-into its checkout's default branch.
+into its checkout's default branch, under the `[merge]` settings that
+machine reads for the workspace.
 
 A local merge is for repositories without a pull-request flow. When the
 default branch has an upstream, Shoal fetches and fast-forwards it first,

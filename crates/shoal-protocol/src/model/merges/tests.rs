@@ -14,6 +14,7 @@ fn merge_preview_names_its_direction_push_and_warning() {
         push_to: None,
         unpushed: 0,
         warning: None,
+        asks_before_push: false,
     };
     let description = preview.description();
     assert!(description.contains("(1 commit)"), "{description}");
@@ -65,6 +66,7 @@ fn merge_preview_names_its_method_and_a_squash_s_subject() {
         push_to: None,
         unpushed: 0,
         warning: None,
+        asks_before_push: false,
     };
     let description = preview.description();
     for part in ["Squash fix-login", "as \"Fix login\""] {

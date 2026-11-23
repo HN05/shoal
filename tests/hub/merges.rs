@@ -7,7 +7,10 @@ use serde_json::Value;
 use super::{
     directory::{join, listed, machine, workspace},
     routing::{Tree, tree_across_machines},
-    support::{fixture::Base, git, git_with_identity, printed, shoal_binary},
+    support::{
+        fixture::{Base, home},
+        git, git_with_identity, printed, shoal_binary,
+    },
 };
 
 /// The hub and a laptop joined to it, with a workspace on the laptop that
@@ -47,6 +50,39 @@ fn the_user_s_terminal_merges_and_unmerges_a_workspace_on_another_machine() {
     let unmerged = hub.ok(&["unmerge", "-s", &there]);
     assert_eq!(unmerged["commit"], before.trim(), "{unmerged}");
     assert_eq!(main(), before);
+}
+
+/// Give `machine`'s repository an upstream for `main` in a bare repository
+/// beside it, returning that repository.
+fn upstream(machine: &Base) -> PathBuf {
+    let origin = machine.root.path().join("origin.git");
+    let repo = &machine.repo;
+    git(
+        repo,
+        &["clone", "-q", "--bare", ".", origin.to_str().unwrap()],
+    );
+    git(repo, &["remote", "add", "origin", origin.to_str().unwrap()]);
+    git(repo, &["fetch", "-q", "origin"]);
+    git(
+        repo,
+        &["branch", "-q", "--set-upstream-to=origin/main", "main"],
+    );
+    origin
+}
+
+#[test]
+fn a_merge_on_another_machine_pushes_and_asks_as_that_machine_s_config_says() {
+    // The hub's own config would neither push nor merge without asking.
+    let config = "[merge]\npush = true\nconfirm = false\n";
+    let laptop = Base::start(home(), config, "app", &[]);
+    let origin = upstream(&laptop);
+    let (hub, _laptop, there, path) = laptop_work(laptop);
+    let merged = hub.ok(&["merge", "-s", &there]);
+    assert_eq!(merged["pushed_to"], "origin", "{merged}");
+    assert_eq!(
+        git(&origin, &["rev-parse", "main"]),
+        git(&path, &["rev-parse", "HEAD"])
+    );
 }
 
 #[test]
