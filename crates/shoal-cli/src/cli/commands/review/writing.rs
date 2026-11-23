@@ -7,10 +7,7 @@ use super::super::items::content::read_body;
 use crate::cli::args::BodyArgs;
 use crate::cli::ui::{self, Acting, Fallback};
 use crate::client::reviews;
-use crate::{
-    cli::context::Context,
-    reviews::{Review, ReviewId},
-};
+use crate::{cli::context::Context, reviews::Review};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Start the caller's review of the workspace `space` names, else the
@@ -73,13 +70,14 @@ async fn pending_here(ctx: &Context) -> Result<Option<SpaceSelector>> {
     Ok(reviewed.then_some(SpaceSelector::Id(here)))
 }
 
-/// The caller's only pending review, which a cancel outside every space
-/// drops; none without one.
-pub(super) async fn only_pending(ctx: &Context) -> Result<Option<ReviewId>> {
+/// The workspace of the caller's only pending review, which a cancel
+/// outside every space drops there, on the machine that keeps it; none
+/// without one.
+pub(super) async fn only_pending(ctx: &Context) -> Result<Option<SpaceSelector>> {
     let pending = reviews::pending().send(&ctx.paths).await?;
     match pending.as_slice() {
         [] => Ok(None),
-        [review] => Ok(Some(review.id)),
+        [review] => Ok(Some(SpaceSelector::Id(review.workspace_id.clone()))),
         several => bail!(
             "you have pending reviews of {}; name the one to cancel",
             names(several)

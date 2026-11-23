@@ -25,7 +25,7 @@ pub(super) async fn cancel(
         (None, None) => match ui::space_here(ctx, ui::Workspaces::Below).await? {
             Some(here) => cancelled(ctx, Some(here), true).await?,
             None => match super::writing::only_pending(ctx).await? {
-                Some(id) => reviews::cancel(None, Some(id)),
+                Some(workspace) => reviews::cancel(Some(workspace), None),
                 None => cancelled(ctx, None, false).await?,
             },
         },
@@ -46,26 +46,26 @@ async fn cancelled(
     here: bool,
 ) -> Result<PreparedReview<Review>> {
     Ok(match (super::select(ctx, space).await?, here) {
-        (super::Space::Chat(chat), here) => {
-            reviews::cancel(None, Some(chat_cancelled(ctx, &chat, here).await?))
-        }
+        (super::Space::Chat(chat), here) => chat_cancelled(ctx, &chat, here).await?,
         (super::Space::Workspace(workspace), true) => reviews::cancel_here(workspace),
         (super::Space::Workspace(workspace), false) => reviews::cancel(Some(workspace), None),
     })
 }
 
-/// The review a cancellation of `chat` ends: the queued or running review
-/// of its linked PRs, else, `here` in the chat, the caller's only pending
-/// review.
-async fn chat_cancelled(ctx: &Context, chat: &Chat, here: bool) -> Result<ReviewId> {
+/// What a cancellation of `chat` sends: for the queued or running review
+/// of its linked PRs, else, `here` in the chat, for the caller's only
+/// pending review.
+async fn chat_cancelled(ctx: &Context, chat: &Chat, here: bool) -> Result<PreparedReview<Review>> {
     if let Some(id) = active_review(ctx, chat).await? {
-        return Ok(id);
+        return Ok(reviews::cancel(None, Some(id)));
     }
     let pending = match here {
         true => super::writing::only_pending(ctx).await?,
         false => None,
     };
-    pending.with_context(|| format!("no review of {}'s PRs is queued or running", chat.name))
+    let workspace = pending
+        .with_context(|| format!("no review of {}'s PRs is queued or running", chat.name))?;
+    Ok(reviews::cancel(Some(workspace), None))
 }
 
 /// The ID of the queued or running review of the chat's linked PRs.
