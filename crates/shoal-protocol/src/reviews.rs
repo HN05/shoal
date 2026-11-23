@@ -333,19 +333,24 @@ impl From<&Review> for ReviewStatus {
 }
 
 /// The findings of `threads` counted by severity, most severe first as
-/// [`Severity::ALL`] lists them, such as "1 blocker, 2 should-fix"; empty
-/// without findings.
+/// [`Severity::ALL`] lists them, then the comments without one, such as
+/// "1 blocker, 2 should-fix" or "3 comments"; empty without any.
 pub fn severity_counts(threads: &[Thread]) -> String {
-    Severity::ALL
-        .iter()
-        .filter_map(|severity| {
-            let count = (threads.iter())
-                .filter(|thread| thread.finding.is_some_and(|f| f.severity == *severity))
-                .count();
-            (count > 0).then(|| format!("{count} {severity}"))
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+    let count = |severity: Option<Severity>| {
+        (threads.iter())
+            .filter(|thread| thread.finding.is_some_and(|f| f.severity == severity))
+            .count()
+    };
+    let findings = (Severity::ALL.iter()).filter_map(|severity| {
+        let count = count(Some(*severity));
+        (count > 0).then(|| format!("{count} {severity}"))
+    });
+    let comments = match count(None) {
+        0 => None,
+        1 => Some("1 comment".to_owned()),
+        count => Some(format!("{count} comments")),
+    };
+    findings.chain(comments).collect::<Vec<_>>().join(", ")
 }
 
 /// The note every delivered or posted review with findings ends with: the

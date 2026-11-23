@@ -96,7 +96,8 @@ impl Coordination {
     /// The side of `thread` `caller` takes: the opener's for the space that
     /// opened it, the holder's for the space that holds it or a space above
     /// that one, and for the user the opener's side of a thread the user
-    /// opened and else the holder's.
+    /// opened and else the holder's. A holder takes no side of a thread
+    /// that holds its posts, which it has not heard of yet.
     pub(super) async fn side(
         &self,
         daemon: &dyn Daemon,
@@ -115,6 +116,12 @@ impl Coordination {
         if let Holder::Space(holder) = &thread.holder
             && self.reaches(daemon, caller, &holder.id).await?
         {
+            ensure!(
+                !thread.held,
+                "thread {} is a comment of a pending review, which reaches its holder once the \
+                 review is submitted",
+                thread.number
+            );
             return Ok(Side::Holder);
         }
         bail!(

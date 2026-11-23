@@ -30,7 +30,8 @@ states!(
         /// the code its posts point at, and accepts the work once done.
         Request => "request",
         /// A reviewer's finding on the holder's code, which Shoal opens for
-        /// a local review and its holder resolves.
+        /// a local review and its holder resolves, or a comment of a review
+        /// the user or a space writes, which its opener resolves.
         Review => "review",
     }
 );
@@ -417,10 +418,11 @@ impl Resolving {
 }
 
 /// What a `review` thread is about: the review that opened it, while it
-/// exists, and how much its finding matters.
+/// exists, and how much its finding matters, as Shoal's reviewer judged it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Finding {
-    pub severity: crate::reviews::Severity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<crate::reviews::Severity>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<crate::reviews::ReviewId>,
 }
@@ -465,6 +467,10 @@ pub struct Thread {
     /// Whether its holder's agent works for it now, having switched to it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub working: bool,
+    /// Whether its posts are held, as a pending review's are, which reach
+    /// nobody until the review is submitted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub held: bool,
     /// What agents changed for it, one entry per turn, which its history
     /// shows between its posts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -565,8 +571,8 @@ impl Thread {
     /// and its name, on one line, such as
     /// `3.2 blocker at src/a.rs:4-6: Unchecked index`.
     pub fn finding_line(&self) -> String {
-        let severity =
-            (self.finding).map_or(String::new(), |finding| format!(" {}", finding.severity));
+        let severity = (self.finding.and_then(|finding| finding.severity))
+            .map_or(String::new(), |severity| format!(" {severity}"));
         let place = (self.about()).map_or(String::new(), |code| format!(" at {}", code.place()));
         format!("{}{severity}{place}: {}", self.number, self.one_line())
     }

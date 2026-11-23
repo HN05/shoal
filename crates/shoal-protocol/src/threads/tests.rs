@@ -42,6 +42,7 @@ fn thread(opener: Sender, holder: Holder, posts: Vec<Post>) -> Thread {
         posts,
         resolution: None,
         working: false,
+        held: false,
         changes: Vec::new(),
     }
 }

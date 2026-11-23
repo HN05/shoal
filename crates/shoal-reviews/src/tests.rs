@@ -226,7 +226,7 @@ async fn a_review_reads_the_committed_head_and_stores_its_findings() {
         thread.finding_line(),
         "1.1 should-fix at tracked:1: Unclear"
     );
-    assert_eq!(thread.finding.unwrap().severity, Severity::ShouldFix);
+    assert_eq!(thread.finding.unwrap().severity, Some(Severity::ShouldFix));
     let code = thread.about().unwrap();
     // The reviewer's lines are cut to the file's, whose version is kept.
     assert_eq!(

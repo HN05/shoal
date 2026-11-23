@@ -638,3 +638,29 @@ async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
     let forward = forwarded.posts.last().unwrap();
     assert_eq!(forward.forwarded_to.as_ref().unwrap().label(), "90 away");
 }
+
+#[tokio::test]
+async fn a_thread_that_holds_its_posts_reaches_nobody_and_its_holder_takes_no_side() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let thread = open(manager, None, Some(&tree.child)).await;
+    let id = thread.id;
+    (manager.store)
+        .write(move |tx| Ok(tx.execute("UPDATE threads SET held=1 WHERE id=?1", [id])?))
+        .await
+        .unwrap();
+    let posted = send(manager, None, &thread, "Call it retries").await;
+    assert!(posted.held);
+    assert!(alerts(manager, &tree.child).await.is_empty());
+    let child = caller(&tree.child);
+    let replied = manager.coordination.post_to_thread(
+        &**manager,
+        Some(&child),
+        full(&thread),
+        post("Done"),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    assert!(replied.await.is_err());
+}

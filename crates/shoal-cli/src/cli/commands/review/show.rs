@@ -211,7 +211,7 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
 /// A finding's thread: its number, severity, place and outcome, its title,
 /// then each post.
 fn render_thread(thread: &Thread, palette: Palette) {
-    let severity = thread.finding.map(|finding| finding.severity);
+    let severity = thread.finding.and_then(|finding| finding.severity);
     let style = match severity {
         Some(Severity::Blocker) => Style::Error,
         Some(Severity::ShouldFix) => Style::Warning,

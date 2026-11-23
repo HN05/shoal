@@ -98,6 +98,7 @@ impl Coordination {
                 let new = NewThread {
                     kind,
                     finding: None,
+                    held: false,
                     name: &name,
                     opener,
                     space_id: &space_id,

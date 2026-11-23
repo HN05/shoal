@@ -622,7 +622,7 @@ fn finding_thread(item: u32, name: &str, finding: &FindingThread<'_>) -> Thread 
         space: name.into(),
         kind: ThreadKind::Review,
         finding: Some(Finding {
-            severity: finding.severity,
+            severity: Some(finding.severity),
             review: Some(finding.review),
         }),
         name: finding.title.to_owned(),
@@ -632,6 +632,7 @@ fn finding_thread(item: u32, name: &str, finding: &FindingThread<'_>) -> Thread 
         posts: vec![StandInRecords::shoal_post(id, finding.body, vec![code])],
         resolution: None,
         working: false,
+        held: false,
         changes: Vec::new(),
     }
 }

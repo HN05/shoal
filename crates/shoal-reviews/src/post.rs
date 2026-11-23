@@ -172,7 +172,7 @@ fn reviewed(thread: &Thread) -> Option<(&str, Option<u64>)> {
 /// A finding's thread as the forge shows it: its severity, title and
 /// opening post, with its location when it is not a comment on that line.
 fn render(thread: &Thread, located: bool) -> String {
-    let label = match thread.finding.map(|finding| finding.severity) {
+    let label = match thread.finding.and_then(|finding| finding.severity) {
         Some(Severity::Blocker) => "Blocker",
         Some(Severity::ShouldFix) => "Should fix",
         Some(Severity::Nit) | None => "Nit",

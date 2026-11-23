@@ -2,7 +2,9 @@
 //! alerts, queued in the transaction that records the change, to the
 //! user, a space's agent or, for a holder on another machine, passed up
 //! there once it commits. Every alert about a thread names it as its
-//! subject, so withdrawing the thread takes back those still unread.
+//! subject, so withdrawing the thread takes back those still unread. A
+//! thread that holds its posts, as a pending review's does, reaches nobody;
+//! submitting the review tells its holder of them all at once.
 use crate::{Coordination, daemon::Daemon};
 
 use anyhow::Result;
@@ -96,8 +98,9 @@ fn alert(thread: &Thread, post: Option<&Post>, kind: AlertKind, message: String)
 
 /// Deliver `message` of `kind` about `thread` from `post` to `party`, the
 /// user in one line, in the caller's transaction; the alert's ID, none for
-/// a space on another machine. A space that takes no alert, as while it
-/// is being removed, is skipped and logged.
+/// a space on another machine or a thread that holds its posts. A space
+/// that takes no alert, as while it is being removed, is skipped and
+/// logged.
 pub(super) fn deliver(
     tx: &Transaction<'_>,
     outside: &dyn Records,
@@ -107,6 +110,9 @@ pub(super) fn deliver(
     texts: Texts,
     delivered: &mut Delivered,
 ) -> Result<Option<i64>> {
+    if thread.held {
+        return Ok(None);
+    }
     match to {
         Party::User => {
             let alert = alert(thread, post, texts.kind, texts.user);
@@ -374,6 +380,10 @@ fn hint(thread: &Thread, side: Side) -> String {
         ),
         (Side::Holder, ThreadKind::Request) => format!(
             "Once it is done, say what you did with `shoal send {number} \"<text>\"`, or there why you cannot; pass it on with `shoal thread forward {number}`."
+        ),
+        (Side::Holder, ThreadKind::Review) if thread.opener != Sender::Shoal => format!(
+            "Fix it, then say what you did with `shoal send {number} \"<text>\"`, or there why you would not; {} resolves it.",
+            thread.party(Side::Opener)
         ),
         (Side::Holder, ThreadKind::Review) => format!(
             "Settle it with `shoal thread resolve {number} fixed`, or `false-positive` or `wont-fix` with `--reason`, or `deferred` with `--issue`; discuss it with the reviewer with `shoal send {number} \"<text>\"`."

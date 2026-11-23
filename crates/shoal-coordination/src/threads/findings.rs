@@ -60,9 +60,10 @@ pub fn open(tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<()> {
     let new = NewThread {
         kind: ThreadKind::Review,
         finding: Some(Finding {
-            severity: finding.severity,
+            severity: Some(finding.severity),
             review: Some(finding.review),
         }),
+        held: false,
         name: &name,
         opener: Sender::Shoal,
         space_id: finding.workspace,

@@ -59,18 +59,22 @@ pub(super) fn row(thread: &Thread, palette: Palette) -> String {
     lines.join("\n")
 }
 
-/// The thread's kind, with a review's finding's severity and review.
+/// The thread's kind, with a review's finding's severity and review, and
+/// whether its posts are held until that review is submitted.
 fn kind(thread: &Thread) -> String {
-    match thread.finding {
-        None => thread.kind.to_string(),
-        Some(Finding {
-            severity,
-            review: None,
-        }) => format!("{} ({severity})", thread.kind),
-        Some(Finding {
-            severity,
-            review: Some(review),
-        }) => format!("{} ({severity}, review {review})", thread.kind),
+    let Some(Finding { severity, review }) = thread.finding else {
+        return thread.kind.to_string();
+    };
+    let review = review.map(|review| match thread.held {
+        true => format!("pending review {review}"),
+        false => format!("review {review}"),
+    });
+    let about: Vec<String> = (severity.map(|severity| severity.to_string()).into_iter())
+        .chain(review)
+        .collect();
+    match about.is_empty() {
+        true => thread.kind.to_string(),
+        false => format!("{} ({})", thread.kind, about.join(", ")),
     }
 }
 

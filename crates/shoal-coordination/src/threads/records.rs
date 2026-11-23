@@ -33,7 +33,7 @@ const THREADS: &str = "SELECT t.id,t.space_number,t.number,t.space_id,
         COALESCE(s.name,t.space_id) AS space,t.kind,t.name,t.created_at,t.opener,t.holder_id,
         COALESCE(h.name,t.holder_name) AS holder_name,
         COALESCE(h.number,t.holder_number) AS holder_number,t.outcome,t.resolved_by,t.resolver_id,
-        t.resolved_at,t.severity,t.review_id,EXISTS (SELECT 1 FROM space_current_thread c
+        t.resolved_at,t.severity,t.review_id,t.held,EXISTS (SELECT 1 FROM space_current_thread c
             WHERE c.thread_id=t.id AND c.space_id=t.holder_id) AS working
     FROM threads t LEFT JOIN spaces s ON s.id=t.space_id LEFT JOIN spaces h ON h.id=t.holder_id";
 
@@ -55,12 +55,9 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
             resolved_at: row.get("resolved_at")?,
         }),
     };
-    let finding = match row.get("severity")? {
-        Some(severity) => Some(Finding {
-            severity,
-            review: row.get("review_id")?,
-        }),
-        None => None,
+    let finding = match (row.get("severity")?, row.get("review_id")?) {
+        (None, None) => None,
+        (severity, review) => Some(Finding { severity, review }),
     };
     Ok(Thread {
         id: row.get("id")?,
@@ -79,6 +76,7 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
         posts: Vec::new(),
         resolution,
         working: row.get("working")?,
+        held: row.get("held")?,
         changes: Vec::new(),
     })
 }
@@ -283,12 +281,14 @@ pub(super) fn linkers(db: &Connection, id: i64) -> Result<Vec<SpaceId>> {
 }
 
 /// What a new thread is: its kind and name, who opened it, the space it is
-/// numbered in and who holds it, none for the user, and a `review` thread's
-/// finding. A space it names keeps the number and name it has now, which
-/// name it while this machine has no record of it.
+/// numbered in and who holds it, none for the user, a `review` thread's
+/// finding, and whether it holds its posts, as a pending review's does. A
+/// space it names keeps the number and name it has now, which name it while
+/// this machine has no record of it.
 pub struct NewThread<'a> {
     pub(super) kind: ThreadKind,
     pub(super) finding: Option<Finding>,
+    pub(super) held: bool,
     pub(super) name: &'a str,
     pub(super) opener: Sender,
     pub(super) space_id: &'a SpaceId,
@@ -300,8 +300,8 @@ pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result
     let number = item_numbers::next(tx, new.space_id)?;
     tx.execute(
         "INSERT INTO threads(space_id,space_number,number,kind,name,created_at,opener,holder_id,
-                holder_name,holder_number,severity,review_id)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+                holder_name,holder_number,severity,review_id,held)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
         params![
             new.space_id,
             number.space,
@@ -313,8 +313,9 @@ pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result
             new.holder.map(|holder| &holder.id),
             new.holder.and_then(|holder| holder.name.as_ref()),
             new.holder.and_then(|holder| holder.number),
-            new.finding.map(|finding| finding.severity),
-            new.finding.and_then(|finding| finding.review)
+            new.finding.and_then(|finding| finding.severity),
+            new.finding.and_then(|finding| finding.review),
+            new.held
         ],
     )?;
     let id = tx.last_insert_rowid();
