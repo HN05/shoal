@@ -1,4 +1,5 @@
-use crate::daemon::workspace::status::*;
+use crate::stand_in::Fixture;
+use crate::workspace::status::*;
 use anyhow::Result;
 
 use shoal_protocol::space_names::SpaceSelector;
@@ -18,11 +19,11 @@ fn numstat_rejects_incomplete_records() {
 
 #[tokio::test]
 async fn status_reports_git_checks_that_stall_as_unavailable() {
-    let (temp, manager) = crate::daemon::test_support::manager().await;
-    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let checkout = crate::stand_in::repository(temp.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
@@ -45,9 +46,10 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
 
     tokio::time::pause();
     let stalled = manager
+        .spaces
         .file_access
         .checked(
-            &manager.notifications,
+            &manager.spaces.notifications,
             &workspace.path,
             std::future::pending::<Result<()>>(),
         )

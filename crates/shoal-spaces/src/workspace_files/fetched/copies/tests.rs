@@ -3,7 +3,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::daemon::workspace_files::fetched::copies::{remove_unchanged, remove_written_before};
+use crate::workspace_files::fetched::copies::{remove_unchanged, remove_written_before};
 use crate::{
     fetched_copies,
     shoal_dirs::{Contents, ShoalDir},

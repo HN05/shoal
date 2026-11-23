@@ -1,10 +1,12 @@
+use crate::stand_in::Fixture;
+
 #[tokio::test]
 async fn records_report_only_running_executions() {
-    let (root, manager) = crate::daemon::test_support::manager().await;
-    let path = crate::daemon::test_support::repository(root.path(), "repo");
+    let manager = Fixture::new().await;
+    let root = &manager.root;
+    let path = crate::stand_in::repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None)
+        .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

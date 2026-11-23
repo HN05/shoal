@@ -239,3 +239,6 @@ fn load_details(
     workspace.preparation_waits = crate::starts::preparation_waits(db, &workspace.id)?;
     records.load_workspace(db, workspace)
 }
+
+#[cfg(test)]
+mod tests;

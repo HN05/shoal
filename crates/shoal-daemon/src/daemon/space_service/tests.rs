@@ -2,7 +2,6 @@
 //! module tests the spaces module of the same path, flattened, through a
 //! whole daemon. The spaces' own tests run over a stand-in in the crate.
 mod absorb;
-mod carried_commits_retention;
 mod carried_sessions;
 mod chat_marks;
 mod chats;
@@ -72,27 +71,16 @@ mod tmp_dirs;
 mod tree;
 mod tree_move_up;
 mod untracked;
-mod workspace;
 mod workspace_branches;
 mod workspace_checkpoints;
 mod workspace_commits;
-mod workspace_conflicts;
 mod workspace_converted;
 mod workspace_copies;
-mod workspace_creation;
-mod workspace_fast_forward;
 mod workspace_files;
-mod workspace_files_fetched;
-mod workspace_files_fetched_copies;
-mod workspace_files_fetched_expiry;
 mod workspace_kept_branches;
-mod workspace_location;
 mod workspace_merge_pushed;
 mod workspace_merge_records;
 mod workspace_merge_unmerge;
-mod workspace_ownership;
 mod workspace_refresh;
 mod workspace_stack;
-mod workspace_status;
 mod workspace_usage;
-mod workspace_xcode;

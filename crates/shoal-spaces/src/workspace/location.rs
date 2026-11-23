@@ -152,3 +152,6 @@ fn ensure_unused(path: &Path) -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

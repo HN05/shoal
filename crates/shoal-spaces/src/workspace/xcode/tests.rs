@@ -1,13 +1,16 @@
+use crate::stand_in::Fixture;
+use crate::stand_in::configure;
 use crate::{
-    daemon::test_support::{commit, configure, manager, repository},
     presets::{self, derived_data, xcode},
     removal::{InspectionPolicy, UnsavedWork},
 };
+use shoal_core::test_support::{commit, repository};
 use std::{fs, time::SystemTime};
 
 #[tokio::test]
 async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     configure(
         &manager,
         "setup.presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
@@ -15,8 +18,7 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     .await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let mut worktrees = Vec::new();
@@ -33,15 +35,13 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     let directory = repo.workspaces_dir.clone();
     let left = derived_data::folder(&location, "App-gone", &directory.join("gone/App"));
     let moved = derived_data::folder(&location, "App-moved", &worktrees[1].join("App"));
-    let settings = manager
-        .repositories
-        .repository_settings(&repo.id)
+    let settings = crate::daemon::Repositories::repository_settings(&*manager, &repo.id)
         .await
         .unwrap();
     let cache = crate::caches::directories(&repo, &settings.caches).unwrap()[presets::XCODE_CACHE]
         .join("SourcePackages/unpinned");
     fs::create_dir_all(&cache).unwrap();
-    let old = SystemTime::now() - 2 * crate::daemon::workspace::xcode::CHECKOUTS_UNUSED_FOR;
+    let old = SystemTime::now() - 2 * crate::workspace::xcode::CHECKOUTS_UNUSED_FOR;
     fs::File::open(&cache).unwrap().set_modified(old).unwrap();
 
     // Creating a workspace or merging holds the gate.
@@ -82,7 +82,7 @@ async fn a_pin_file_that_cannot_be_read_stops_pruning() {
     let worktree = repository(root.path(), "repo");
     fs::write(worktree.join(xcode::PINS), "pins").unwrap();
     assert_eq!(
-        crate::daemon::workspace::xcode::worktree_pins(&worktree)
+        crate::workspace::xcode::worktree_pins(&worktree)
             .await
             .unwrap(),
         [b"pins"]
@@ -91,7 +91,7 @@ async fn a_pin_file_that_cannot_be_read_stops_pruning() {
     fs::remove_file(worktree.join(xcode::PINS)).unwrap();
     std::os::unix::fs::symlink(".", worktree.join(xcode::PINS)).unwrap();
     assert!(
-        crate::daemon::workspace::xcode::worktree_pins(&worktree)
+        crate::workspace::xcode::worktree_pins(&worktree)
             .await
             .is_err()
     );
@@ -99,7 +99,8 @@ async fn a_pin_file_that_cannot_be_read_stops_pruning() {
 
 #[tokio::test]
 async fn removal_prunes_package_checkouts_nothing_pins() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     configure(
         &manager,
         "setup.presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
@@ -109,8 +110,7 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
     fs::write(checkout.join(xcode::PINS), "main").unwrap();
     commit(&checkout, xcode::PINS);
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     for name in ["pinned", "removed"] {
@@ -126,9 +126,7 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
         fs::write(generated.join(xcode::PINS), name).unwrap();
         fs::write(workspace.path.join(".gitignore"), "App.xcodeproj/\n").unwrap();
     }
-    let settings = manager
-        .repositories
-        .repository_settings(&repo.id)
+    let settings = crate::daemon::Repositories::repository_settings(&*manager, &repo.id)
         .await
         .unwrap();
     let cache =
@@ -138,7 +136,7 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
             .join("SourcePackages")
             .join(xcode::checkouts_key(pins.as_bytes()))
     };
-    let old = SystemTime::now() - 2 * crate::daemon::workspace::xcode::CHECKOUTS_UNUSED_FOR;
+    let old = SystemTime::now() - 2 * crate::workspace::xcode::CHECKOUTS_UNUSED_FOR;
     for pins in ["main", "pinned", "removed", "recent"] {
         fs::create_dir_all(checkouts(pins)).unwrap();
         if pins != "recent" {
@@ -164,7 +162,8 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
 
 #[tokio::test]
 async fn removal_deletes_the_workspaces_derived_data_under_the_xcode_preset() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     configure(
         &manager,
         "setup.presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
@@ -172,8 +171,7 @@ async fn removal_deletes_the_workspaces_derived_data_under_the_xcode_preset() {
     .await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let location = derived_data::location(&manager.paths.home).unwrap();

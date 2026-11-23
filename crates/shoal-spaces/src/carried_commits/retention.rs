@@ -230,3 +230,6 @@ fn recorded_bases(
     let bases = bases.query_map([repository], |row| row.get(0))?;
     Ok(bases.collect::<rusqlite::Result<_>>()?)
 }
+
+#[cfg(test)]
+mod tests;

@@ -779,3 +779,6 @@ pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
         .optional()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

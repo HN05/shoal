@@ -584,3 +584,6 @@ fn moved_worktree(workspace: &Workspace, directory: &Path) -> Result<Option<Path
     }
     Ok(Some(path.to_owned()))
 }
+
+#[cfg(test)]
+mod tests;

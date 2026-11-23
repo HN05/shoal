@@ -109,3 +109,6 @@ struct Fetched {
     dir: ShoalDir,
     repository: Option<RepositoryId>,
 }
+
+#[cfg(test)]
+mod tests;

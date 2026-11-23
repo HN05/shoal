@@ -642,3 +642,6 @@ fn named_start(commit: CommitId, base: Option<&str>, reference: &str) -> Start {
         diff_ref: None,
     }
 }
+
+#[cfg(test)]
+mod tests;

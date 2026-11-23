@@ -112,3 +112,6 @@ fn entries(directory: &Path) -> Result<Vec<std::path::PathBuf>> {
         .collect::<std::io::Result<_>>()
         .with_context(|| format!("read {}", directory.display()))
 }
+
+#[cfg(test)]
+mod tests;

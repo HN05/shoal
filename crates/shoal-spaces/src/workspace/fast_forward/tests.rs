@@ -1,13 +1,10 @@
-use crate::daemon::manager::Manager;
 use crate::model::Workspace;
+use crate::stand_in;
 use crate::state::WorkspaceState;
-use std::sync::Arc;
-
-use crate::daemon::test_support::{git, manager, repository};
+use shoal_core::test_support::{git, repository};
 
 struct Fixture {
-    _root: tempfile::TempDir,
-    manager: Arc<Manager>,
+    manager: stand_in::Fixture,
     workspace: Workspace,
     /// The commit `origin/topic` names, one ahead of the workspace.
     pushed: String,
@@ -15,11 +12,11 @@ struct Fixture {
 
 impl Fixture {
     async fn new() -> Self {
-        let (root, manager) = manager().await;
+        let manager = stand_in::Fixture::new().await;
+        let root = &manager.root;
         let checkout = repository(root.path(), "repo");
         let repo = manager
-            .repositories
-            .register(checkout.to_str().unwrap().into(), None, None)
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
             .await
             .unwrap();
         let workspace = manager
@@ -32,7 +29,6 @@ impl Fixture {
         git(path, &["update-ref", "refs/remotes/origin/topic", &pushed]);
         git(path, &["reset", "--hard", "HEAD~1"]);
         Self {
-            _root: root,
             manager,
             workspace,
             pushed,

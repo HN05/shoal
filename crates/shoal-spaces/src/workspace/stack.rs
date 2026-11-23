@@ -296,3 +296,6 @@ fn converting_to_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
         [id],
     )
 }
+
+#[cfg(test)]
+mod tests;

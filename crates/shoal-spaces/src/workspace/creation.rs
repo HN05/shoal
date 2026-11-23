@@ -787,3 +787,6 @@ pub async fn existing_base(repo: &crate::model::Repository, branch: &BranchName)
 }
 
 mod pending;
+
+#[cfg(test)]
+mod tests;

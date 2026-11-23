@@ -208,3 +208,6 @@ impl Spaces {
             .map(String::from)
     }
 }
+
+#[cfg(test)]
+mod tests;

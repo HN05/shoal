@@ -86,3 +86,6 @@ impl Spaces {
         Ok(true)
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -197,3 +197,6 @@ pub fn parse_numstat(output: &str) -> Result<DiffSummary> {
     }
     Ok(summary)
 }
+
+#[cfg(test)]
+mod tests;

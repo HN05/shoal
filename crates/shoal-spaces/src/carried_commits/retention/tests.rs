@@ -1,3 +1,5 @@
+use crate::stand_in::{Fixture, block_worktrees};
+use shoal_core::test_support::{git, repository};
 use std::path::Path;
 
 use shoal_protocol::launches::{Carried, Launch, LaunchSource};
@@ -5,10 +7,6 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
 use crate::{
-    daemon::{
-        manager::Manager,
-        test_support::{block_worktrees, git, manager, repository},
-    },
     model::Repository,
     removal::{InspectionPolicy, UnsavedWork},
 };
@@ -30,16 +28,16 @@ fn carry(path: &Path, commit: &CommitId) {
     git(path, &["update-ref", &reference, commit.as_str()]);
 }
 
-async fn register(manager: &Manager, path: &Path) -> Repository {
+async fn register(manager: &Fixture, path: &Path) -> Repository {
     let source = path.to_str().unwrap().into();
-    (manager.repositories.register(source, None, None))
+    (manager.register_repository(source, None, None))
         .await
         .unwrap()
 }
 
 /// A registered repository with a commit past its branch that only a
 /// carried ref keeps.
-async fn carried_here(manager: &Manager, root: &Path) -> (Repository, CommitId) {
+async fn carried_here(manager: &Fixture, root: &Path) -> (Repository, CommitId) {
     let path = repository(root, "repo");
     let commit = unreferenced_commit(&path);
     carry(&path, &commit);
@@ -53,7 +51,8 @@ async fn carried(repo: &Repository) -> Vec<CommitId> {
 
 #[tokio::test]
 async fn a_failed_start_releases_the_commit_carried_for_it() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let (repo, commit) = carried_here(&manager, root.path()).await;
     manager
         .spaces
@@ -84,7 +83,8 @@ async fn a_failed_start_releases_the_commit_carried_for_it() {
 
 #[tokio::test]
 async fn a_workspace_keeps_its_carried_base_until_its_branch_holds_it() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let (repo, commit) = carried_here(&manager, root.path()).await;
     let blocked = block_worktrees(&repo.path);
     let base = Some(commit.to_string());
@@ -112,7 +112,8 @@ async fn a_workspace_keeps_its_carried_base_until_its_branch_holds_it() {
 
 #[tokio::test]
 async fn removing_the_workspace_that_waited_for_a_carried_base_releases_it() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let (repo, commit) = carried_here(&manager, root.path()).await;
     let blocked = block_worktrees(&repo.path);
     let base = Some(commit.to_string());
@@ -136,7 +137,8 @@ async fn removing_the_workspace_that_waited_for_a_carried_base_releases_it() {
 
 #[tokio::test]
 async fn a_start_releases_only_the_hold_of_the_repository_it_started_in() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let first = repository(root.path(), "first");
     let commit = unreferenced_commit(&first);
     git(&first, &["branch", "carried", commit.as_str()]);
@@ -186,7 +188,8 @@ async fn a_start_releases_only_the_hold_of_the_repository_it_started_in() {
 
 #[tokio::test]
 async fn the_first_sweep_releases_the_refs_a_restart_left_unheld() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let (repo, _) = carried_here(&manager, root.path()).await;
 
     manager
@@ -201,7 +204,8 @@ async fn the_first_sweep_releases_the_refs_a_restart_left_unheld() {
 
 #[tokio::test]
 async fn a_sweep_retries_a_release_that_failed() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let (repo, commit) = carried_here(&manager, root.path()).await;
     // Git refuses to delete a ref another process holds locked.
     let lock = repo

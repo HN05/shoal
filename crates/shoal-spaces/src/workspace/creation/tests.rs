@@ -1,19 +1,28 @@
-use crate::daemon::manager::Manager;
-use crate::daemon::workspace::creation::*;
 use crate::model::Workspace;
+use crate::stand_in::Fixture;
 use crate::state::WorkspaceState;
+use crate::workspace::creation::*;
 
 use shoal_protocol::space_names::SpaceSelector;
 use std::fs;
 
+/// The one workspace `manager` records.
+async fn only_workspace(manager: &Fixture) -> Workspace {
+    let workspaces = manager.spaces.list_workspaces().await.unwrap();
+    let [workspace] = workspaces.as_slice() else {
+        panic!("{workspaces:?}");
+    };
+    workspace.clone()
+}
 #[tokio::test]
 async fn existing_base_falls_back_only_when_the_default_ref_is_missing() {
-    let (root, manager) = crate::daemon::test_support::manager().await;
-    let path = crate::daemon::test_support::repository(root.path(), "repo");
+    let manager = Fixture::new().await;
+    let root = &manager.root;
+    let path = crate::stand_in::repository(root.path(), "repo");
     // The cached remote HEAD names the default branch without reading it.
-    crate::daemon::test_support::git(&path, &["switch", "-c", "topic"]);
-    crate::daemon::test_support::git(&path, &["remote", "add", "origin", "/missing"]);
-    crate::daemon::test_support::git(
+    crate::stand_in::git(&path, &["switch", "-c", "topic"]);
+    crate::stand_in::git(&path, &["remote", "add", "origin", "/missing"]);
+    crate::stand_in::git(
         &path,
         &[
             "symbolic-ref",
@@ -21,10 +30,9 @@ async fn existing_base_falls_back_only_when_the_default_ref_is_missing() {
             "refs/remotes/origin/main",
         ],
     );
-    let topic = crate::daemon::test_support::git(&path, &["rev-parse", "topic"]);
+    let topic = crate::stand_in::git(&path, &["rev-parse", "topic"]);
     let repo = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None)
+        .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     assert_eq!(
@@ -42,23 +50,14 @@ async fn existing_base_falls_back_only_when_the_default_ref_is_missing() {
     manager.store.shutdown().await;
 }
 
-/// The one workspace `manager` records.
-async fn only_workspace(manager: &Manager) -> Workspace {
-    let workspaces = manager.spaces.list_workspaces().await.unwrap();
-    let [workspace] = workspaces.as_slice() else {
-        panic!("{workspaces:?}");
-    };
-    workspace.clone()
-}
-
 #[tokio::test]
 async fn a_creation_that_fails_after_its_branch_stays_retryable() {
-    use crate::daemon::test_support::{block_worktrees, git, manager, repository};
-    let (root, manager) = manager().await;
+    use crate::stand_in::{block_worktrees, git, repository};
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None)
+        .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let blocked = block_worktrees(&path);
@@ -87,12 +86,12 @@ async fn a_creation_that_fails_after_its_branch_stays_retryable() {
 
 #[tokio::test]
 async fn a_failed_outside_copy_is_retried_from_its_source() {
-    use crate::daemon::test_support::{block_worktrees, git, manager, repository};
-    let (root, manager) = manager().await;
+    use crate::stand_in::{block_worktrees, git, repository};
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None)
+        .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let source = root.path().join("outside");
@@ -137,13 +136,13 @@ async fn a_failed_outside_copy_is_retried_from_its_source() {
 
 #[tokio::test]
 async fn a_retried_outside_copy_keeps_what_the_earlier_try_left() {
-    use crate::daemon::test_support::{git, manager, repository};
+    use crate::stand_in::{git, repository};
     use std::os::unix::fs::PermissionsExt;
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None)
+        .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let source = root.path().join("outside");
@@ -188,12 +187,12 @@ async fn a_retried_outside_copy_keeps_what_the_earlier_try_left() {
 
 #[tokio::test]
 async fn a_retried_copy_refuses_the_branch_an_earlier_try_made_where_the_source_was() {
-    use crate::daemon::test_support::{block_worktrees, commit, git, manager, repository};
-    let (root, manager) = manager().await;
+    use crate::stand_in::{block_worktrees, commit, git, repository};
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None)
+        .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let source = root.path().join("outside");
@@ -236,13 +235,13 @@ async fn a_retried_copy_refuses_the_branch_an_earlier_try_made_where_the_source_
 
 #[tokio::test]
 async fn a_retried_outside_copy_refuses_a_source_that_moved_past_its_worktree() {
-    use crate::daemon::test_support::{commit, git, manager, repository};
+    use crate::stand_in::{commit, git, repository};
     use std::os::unix::fs::PermissionsExt;
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let path = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None)
+        .register_repository(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let source = root.path().join("outside");

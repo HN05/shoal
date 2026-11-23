@@ -77,3 +77,6 @@ fn repository_of(located: &Located) -> Result<Option<Selector>> {
 
 pub mod copies;
 pub mod expiry;
+
+#[cfg(test)]
+mod tests;

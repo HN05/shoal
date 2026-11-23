@@ -300,3 +300,6 @@ async fn delete_derived_data(
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

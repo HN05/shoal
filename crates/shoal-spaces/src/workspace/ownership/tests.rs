@@ -1,19 +1,17 @@
-use crate::daemon::manager::Manager;
-use crate::daemon::workspace::ownership::*;
 use crate::git;
 use crate::model::Workspace;
+use crate::stand_in::Fixture;
+use crate::workspace::ownership::*;
 use anyhow::Result;
 use anyhow::ensure;
+use shoal_core::test_support::repository;
 use shoal_daemon_base::ownership::marked_owner;
 use shoal_protocol::space_names::SpaceSelector;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::{
-    daemon::test_support::{manager, repository},
-    state::WorkspaceState,
-};
+use crate::state::WorkspaceState;
 use shoal_daemon_base::ownership::OWNER_MARKER;
 
 fn workspace() -> Workspace {
@@ -26,6 +24,46 @@ fn workspace() -> Workspace {
     )
 }
 
+/// Open the FIFO at `path` for writing, which ends a wait to open it for
+/// reading; fails with `ENXIO` instead of waiting when no reader waits.
+fn open_writer(path: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    fs::OpenOptions::new()
+        .write(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(path)
+}
+
+/// A workspace on branch `name` of a new repository whose creation, as a
+/// restart cut it short, left the worktree Git created without recording or
+/// marking its admin directory: failed, with its pending worktree.
+async fn cut_short(name: &str) -> Result<(Fixture, Workspace)> {
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .await?;
+    let workspace = manager
+        .create_workspace(&repo.id, name.into(), None, None, None)
+        .await?;
+    fs::remove_file(git::git_dir(&workspace.path).await?.join(OWNER_MARKER))?;
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                r#"UPDATE workspaces SET state=?2,git_dir=NULL,
+                    pending_plan='{"source":{"kind":"new"}}' WHERE id=?1"#,
+                rusqlite::params![id, WorkspaceState::Failed],
+            )?;
+            Ok(())
+        })
+        .await?;
+    let workspace = manager.spaces.workspace_by_id(&workspace.id).await?;
+    Ok((manager, workspace))
+}
 #[test]
 fn a_marker_or_a_recorded_path_claims_an_admin_directory() -> Result<()> {
     let temp = tempfile::tempdir()?;
@@ -58,11 +96,11 @@ async fn a_marker_read_that_waits_in_open_leaves_the_runtime_thread_free() -> Re
         time::Duration,
     };
 
-    let (temp, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_string_lossy().into_owned().into(), None, None)
+        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
         .await?;
     let workspace = manager
         .create_workspace(&repo.id, "stalled".into(), None, None, None)
@@ -87,7 +125,7 @@ async fn a_marker_read_that_waits_in_open_leaves_the_runtime_thread_free() -> Re
     });
 
     let verified = tokio::spawn({
-        let (manager, workspace) = (manager.clone(), workspace.clone());
+        let (manager, workspace) = (manager.daemon.clone(), workspace.clone());
         async move { manager.spaces.verify_worktree(&*manager, &workspace).await }
     });
     // Opening the writer succeeds only once the read waits in open, so this
@@ -112,50 +150,9 @@ async fn a_marker_read_that_waits_in_open_leaves_the_runtime_thread_free() -> Re
     Ok(())
 }
 
-/// Open the FIFO at `path` for writing, which ends a wait to open it for
-/// reading; fails with `ENXIO` instead of waiting when no reader waits.
-fn open_writer(path: &Path) -> std::io::Result<fs::File> {
-    use std::os::unix::fs::OpenOptionsExt;
-
-    fs::OpenOptions::new()
-        .write(true)
-        .custom_flags(libc::O_NONBLOCK)
-        .open(path)
-}
-
-/// A workspace on branch `name` of a new repository whose creation, as a
-/// restart cut it short, left the worktree Git created without recording or
-/// marking its admin directory: failed, with its pending worktree.
-async fn cut_short(name: &str) -> Result<(tempfile::TempDir, std::sync::Arc<Manager>, Workspace)> {
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .repositories
-        .register(checkout.to_string_lossy().into_owned().into(), None, None)
-        .await?;
-    let workspace = manager
-        .create_workspace(&repo.id, name.into(), None, None, None)
-        .await?;
-    fs::remove_file(git::git_dir(&workspace.path).await?.join(OWNER_MARKER))?;
-    let id = workspace.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                r#"UPDATE workspaces SET state=?2,git_dir=NULL,
-                    pending_plan='{"source":{"kind":"new"}}' WHERE id=?1"#,
-                rusqlite::params![id, WorkspaceState::Failed],
-            )?;
-            Ok(())
-        })
-        .await?;
-    let workspace = manager.spaces.workspace_by_id(&workspace.id).await?;
-    Ok((temp, manager, workspace))
-}
-
 #[tokio::test]
 async fn a_retried_creation_records_the_admin_directory_a_cut_short_one_left() -> Result<()> {
-    let (_temp, manager, workspace) = cut_short("topic").await?;
+    let (manager, workspace) = cut_short("topic").await?;
     assert!(workspace.checkout.unborn());
     // A worktree whose creation is pending was never ready to be moved.
     assert_eq!(manager.spaces.missing_worktree(&workspace).await?, None);
@@ -177,7 +174,7 @@ async fn a_retried_creation_records_the_admin_directory_a_cut_short_one_left() -
 #[tokio::test]
 async fn removal_takes_the_worktree_a_cut_short_creation_left() -> Result<()> {
     use crate::removal::{InspectionPolicy, UnsavedWork};
-    let (_temp, manager, workspace) = cut_short("topic").await?;
+    let (manager, workspace) = cut_short("topic").await?;
     manager
         .spaces
         .remove_selected(
@@ -200,13 +197,10 @@ async fn removal_takes_the_worktree_a_cut_short_creation_left() -> Result<()> {
 
 #[tokio::test]
 async fn a_retried_creation_adds_again_what_a_cut_short_add_left() -> Result<()> {
-    let (_temp, manager, workspace) = cut_short("topic").await?;
+    let (manager, workspace) = cut_short("topic").await?;
     // Git keeps an add's admin directory locked until its checkout ends.
-    let repo = manager
-        .repositories
-        .repository(workspace.repository())
-        .await?;
-    crate::daemon::test_support::git(
+    let repo = manager.find_repository(workspace.repository()).await?;
+    crate::stand_in::git(
         &repo.path,
         &["worktree", "lock", workspace.path.to_str().unwrap()],
     );

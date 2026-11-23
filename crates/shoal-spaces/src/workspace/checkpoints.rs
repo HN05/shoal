@@ -745,3 +745,6 @@ pub fn workspace_checkpoints(db: &Connection, workspace_id: &SpaceId) -> Result<
     .map(|record| Ok(serde_json::from_str(&record?)?))
     .collect()
 }
+
+#[cfg(test)]
+mod tests;

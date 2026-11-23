@@ -412,3 +412,6 @@ async fn kept_branch(repo: &Repository, record: Record, unkept_commits: u64) -> 
         subject,
     })
 }
+
+#[cfg(test)]
+mod tests;

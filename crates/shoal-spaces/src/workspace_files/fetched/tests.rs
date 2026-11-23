@@ -1,13 +1,14 @@
-use crate::daemon::test_support::{manager, repository};
+use crate::stand_in::Fixture;
+use shoal_core::test_support::repository;
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn fetched_copies_go_beside_the_workspaces_of_their_repository() {
-    let (temp, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager

@@ -1,16 +1,17 @@
+use crate::stand_in::Fixture;
+use shoal_core::test_support::{commit, git, repository};
 use shoal_refs::BranchName;
 use std::{fs, path::Path};
 
-use crate::daemon::test_support::{commit, git, manager, repository};
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let repo = repository(root.path(), "repo");
     let repo_id = manager
-        .repositories
-        .register(repo.to_str().unwrap().into(), None, None)
+        .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
         .id;
@@ -111,14 +112,14 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
 
 #[tokio::test]
 async fn sensitive_paths_changed_on_both_sides_are_listed_until_the_target_has_heads_changes() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let repo = repository(root.path(), "repo");
     let listed = "[conflicts]\nsensitive = ['version', 'migrations/**', 'mine']\n";
     fs::write(repo.join(".shoal.toml"), listed).unwrap();
     commit(&repo, ".shoal.toml");
     let repo_id = manager
-        .repositories
-        .register(repo.to_str().unwrap().into(), None, None)
+        .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap()
         .id;

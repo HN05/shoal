@@ -1,12 +1,13 @@
-use crate::daemon::test_support::{manager, repository};
+use crate::stand_in::Fixture;
+use shoal_core::test_support::repository;
 
 #[tokio::test]
 async fn workspaces_stay_out_of_the_directories_shoal_keeps() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let checkout = repository(root.path(), "repo");
     let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let directory = repo.workspaces_dir.clone();
