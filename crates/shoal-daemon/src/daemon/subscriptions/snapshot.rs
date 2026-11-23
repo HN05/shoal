@@ -61,7 +61,7 @@ pub(super) async fn take(
         found.extend(sessions(manager, &visible.spaces).await?);
     }
     if topics.has(Topic::Threads) {
-        found.extend(threads(manager, &visible).await?);
+        found.extend(threads(manager, caller, &visible).await?);
     }
     if topics.has(Topic::Approvals) {
         found.extend(approvals(manager, caller, &visible).await?);
@@ -235,16 +235,25 @@ async fn sessions(manager: &Manager, spaces: &[Space]) -> Result<Vec<Record>> {
     Ok(records)
 }
 
-/// The open threads with a post of the visible spaces.
-async fn threads(manager: &Manager, visible: &Visible) -> Result<Vec<Record>> {
-    Ok(manager
-        .coordination
-        .open_threads()
-        .await?
-        .into_iter()
-        .filter(|thread| visible.contains(&thread.space_id))
-        .map(|thread| Record::Thread(Box::new(thread)))
-        .collect())
+/// The open threads with a post of the visible spaces, but a pending
+/// review's comments that `caller` does not read.
+async fn threads(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    visible: &Visible,
+) -> Result<Vec<Record>> {
+    let mut found = Vec::new();
+    for thread in manager.coordination.open_threads().await? {
+        if visible.contains(&thread.space_id)
+            && manager
+                .coordination
+                .reads_held(manager, caller, &thread)
+                .await?
+        {
+            found.push(Record::Thread(Box::new(thread)));
+        }
+    }
+    Ok(found)
 }
 
 /// Pending approval requests: all of them for the user, including issue

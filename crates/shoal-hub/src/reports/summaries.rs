@@ -69,6 +69,9 @@ impl Hub {
             .map(|saved| saved.space)
             .collect();
         let mut threads = daemon.open_threads().await?;
+        // Only a pending review's writer's side reads its comments, which
+        // another machine cannot check.
+        threads.retain(|thread| !thread.held);
         // Other machines read them, where their files' paths name nothing.
         let machine = self.machine_name(daemon).await;
         (threads.iter_mut()).for_each(|thread| thread.files_kept_on(&machine));
