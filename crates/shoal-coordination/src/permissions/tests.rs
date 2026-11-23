@@ -7,39 +7,21 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
     config::permissions::{Opening, OtherRepositories, PermissionSource, Pushes},
-    model::{Space, Workspace},
     scope::Caller,
     stand_in::Fixture,
 };
-
-async fn chat(
-    fixture: &Fixture,
-    name: &str,
-    mode: &str,
-    repository: Option<&RepositoryId>,
-    parent: Option<&SpaceId>,
-) -> Space {
-    fixture.chat(name, mode, repository, parent).await
-}
-
-async fn workspace(
-    fixture: &Fixture,
-    repository: &RepositoryId,
-    name: &str,
-    parent: &SpaceId,
-    mode: Option<String>,
-) -> Workspace {
-    let repository = repository.as_str();
-    (fixture.workspace_in(repository, name, Some(parent), mode.as_deref())).await
-}
 
 #[tokio::test]
 async fn a_space_never_has_more_than_the_space_above_it() {
     let fixture = Arc::new(Fixture::new().await);
     let repo = fixture.repository("repo").await;
-    let top = chat(&fixture, "top", "chat", Some(&repo), None).await;
-    let worker = workspace(&fixture, &repo, "worker", &top.id, Some("worker".into())).await;
-    let split = workspace(&fixture, &repo, "split", &worker.id, None).await;
+    let top = fixture.chat("top", "chat", Some(&repo), None).await;
+    let worker = fixture
+        .workspace_in(repo.as_str(), "worker", Some(&top.id), Some("worker"))
+        .await;
+    let split = fixture
+        .workspace_in(repo.as_str(), "split", Some(&worker.id), None)
+        .await;
     let of = |id: SpaceId| {
         let fixture = fixture.clone();
         let repository = repo.clone();
@@ -98,8 +80,10 @@ async fn a_chat_without_a_repository_resolves_in_the_repository_of_the_action() 
     let config = "[modes.orchestrate.permissions]\nmerge = 'propose'\n\
                   [modes.chat.permissions]\nmerge = 'direct'\n";
     fixture.set_local_config(&repo, config);
-    let master = chat(&fixture, "master", "orchestrate", None, None).await;
-    let child = chat(&fixture, "child", "chat", Some(&repo), Some(&master.id)).await;
+    let master = fixture.chat("master", "orchestrate", None, None).await;
+    let child = fixture
+        .chat("child", "chat", Some(&repo), Some(&master.id))
+        .await;
     let merge = |id: SpaceId, repository: Option<RepositoryId>| {
         let fixture = fixture.clone();
         async move {
@@ -133,8 +117,10 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
     let config = "[modes.review.permissions]\npush = 'propose'\n\
                   [modes.chat.permissions]\npush = 'deny'\n";
     fixture.set_local_config(&repo, config);
-    let top = chat(&fixture, "top", "chat", Some(&repo), None).await;
-    let child = workspace(&fixture, &repo, "child", &top.id, None).await;
+    let top = fixture.chat("top", "chat", Some(&repo), None).await;
+    let child = fixture
+        .workspace_in(repo.as_str(), "child", Some(&top.id), None)
+        .await;
     let launch = |mode: &'static str| {
         let (fixture, child) = (fixture.clone(), child.clone());
         async move {
@@ -169,9 +155,13 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
 async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
     let fixture = Arc::new(Fixture::new().await);
     let repo = fixture.repository("repo").await;
-    let top = chat(&fixture, "top", "chat", Some(&repo), None).await;
-    let worker = workspace(&fixture, &repo, "worker", &top.id, Some("worker".into())).await;
-    let split = workspace(&fixture, &repo, "split", &worker.id, None).await;
+    let top = fixture.chat("top", "chat", Some(&repo), None).await;
+    let worker = fixture
+        .workspace_in(repo.as_str(), "worker", Some(&top.id), Some("worker"))
+        .await;
+    let split = fixture
+        .workspace_in(repo.as_str(), "split", Some(&worker.id), None)
+        .await;
     fixture.give(&top.id, &["merge=propose"]);
     // Wider than the worker mode's merge and the chat's above it.
     let assignments = ["push=propose", "merge=direct"];
@@ -207,8 +197,12 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
     let worker = fixture
         .workspace_in(repo.as_str(), "worker", None, None)
         .await;
-    let child = workspace(&fixture, &repo, "child", &worker.id, Some("worker".into())).await;
-    let talk = chat(&fixture, "talk", "chat", Some(&repo), Some(&worker.id)).await;
+    let child = fixture
+        .workspace_in(repo.as_str(), "child", Some(&worker.id), Some("worker"))
+        .await;
+    let talk = fixture
+        .chat("talk", "chat", Some(&repo), Some(&worker.id))
+        .await;
     // The user gave both a merge the worker does not hold.
     fixture.give(&child.id, &["merge=direct"]);
     fixture.give(&talk.id, &["merge=direct"]);
@@ -293,9 +287,13 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
 async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     let fixture = Arc::new(Fixture::new().await);
     let repo = fixture.repository("repo").await;
-    let top = chat(&fixture, "top", "chat", Some(&repo), None).await;
-    let parent = workspace(&fixture, &repo, "parent", &top.id, Some("worker".into())).await;
-    let child = workspace(&fixture, &repo, "child", &parent.id, Some("worker".into())).await;
+    let top = fixture.chat("top", "chat", Some(&repo), None).await;
+    let parent = fixture
+        .workspace_in(repo.as_str(), "parent", Some(&top.id), Some("worker"))
+        .await;
+    let child = fixture
+        .workspace_in(repo.as_str(), "child", Some(&parent.id), Some("worker"))
+        .await;
     // The user gave the chat less push than the spaces below it.
     fixture.give(&top.id, &["push=propose"]);
     fixture.give(&parent.id, &["push=direct"]);
@@ -331,7 +329,9 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
 
     // A queued or registered agent or a restore that leaves a recorded key
     // out drops it.
-    let talk = chat(&fixture, "talk", "chat", Some(&repo), Some(&parent.id)).await;
+    let talk = fixture
+        .chat("talk", "chat", Some(&repo), Some(&parent.id))
+        .await;
     fixture.give(&talk.id, &["push=propose"]);
     let talk = fixture.space_of(&talk.id);
     let none = crate::config::permissions::PermissionsConfig::default();
@@ -374,7 +374,9 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
     // A dropped key falls back in the mode of the agent that drops it.
     let config = "[modes.review.permissions]\npush = 'deny'\n";
     fixture.set_local_config(&repo, config);
-    let quiet = workspace(&fixture, &repo, "quiet", &parent.id, Some("review".into())).await;
+    let quiet = fixture
+        .workspace_in(repo.as_str(), "quiet", Some(&parent.id), Some("review"))
+        .await;
     fixture.give(&quiet.id, &["push=deny"]);
     let quiet = SpaceSelector::id(&quiet.id);
     let review = "review".into();

@@ -273,17 +273,6 @@ impl Fixture {
             .await
             .unwrap()
     }
-
-    /// The caller of the space `id`'s agent.
-    pub(crate) fn caller(id: &SpaceId) -> Caller {
-        Caller {
-            space_id: id.clone(),
-            execution: None,
-            granted: None,
-            read_only: false,
-            vouched: None,
-        }
-    }
 }
 
 impl std::ops::Deref for Fixture {

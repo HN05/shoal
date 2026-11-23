@@ -38,7 +38,7 @@ async fn tree() -> Tree {
 }
 
 fn caller(workspace: &Workspace) -> Caller {
-    Fixture::caller(&workspace.id)
+    Caller::of_space(workspace.id.clone())
 }
 
 fn post(text: &str) -> NewPost {

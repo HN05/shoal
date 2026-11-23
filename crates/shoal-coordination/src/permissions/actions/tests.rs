@@ -57,13 +57,13 @@ async fn the_permission_takes_refuses_or_proposes_the_action() {
         .authorize_action(&**fixture, None, restart())
         .await
         .unwrap();
-    let direct = Fixture::caller(&parent.id);
+    let direct = Caller::of_space(parent.id.clone());
     fixture
         .coordination
         .authorize_action(&**fixture, Some(&direct), restart())
         .await
         .unwrap();
-    let denying = Fixture::caller(&worker.id);
+    let denying = Caller::of_space(worker.id.clone());
     let error = (fixture
         .coordination
         .authorize_action(&**fixture, Some(&denying), restart()))
@@ -74,7 +74,7 @@ async fn the_permission_takes_refuses_or_proposes_the_action() {
 
     // Propose asks the parent, which holds the key at direct; asking again
     // finds the same request.
-    let proposing = Fixture::caller(&child.id);
+    let proposing = Caller::of_space(child.id.clone());
     let request = undecided(
         fixture
             .coordination
@@ -135,7 +135,7 @@ async fn a_parent_without_the_key_at_direct_cannot_approve() {
     let request = undecided(
         (fixture.coordination.authorize_action(
             &**fixture,
-            Some(&Fixture::caller(&child.id)),
+            Some(&Caller::of_space(child.id.clone())),
             restart(),
         ))
         .await,
@@ -164,7 +164,11 @@ async fn a_parent_without_the_key_at_direct_cannot_approve() {
     let denied = undecided(
         fixture
             .coordination
-            .authorize_action(&**fixture, Some(&Fixture::caller(&child.id)), restart())
+            .authorize_action(
+                &**fixture,
+                Some(&Caller::of_space(child.id.clone())),
+                restart(),
+            )
             .await,
     );
     assert_eq!(denied.status, DecisionStatus::Denied);
@@ -177,7 +181,7 @@ async fn an_approved_command_takes_its_permission_s_actions_without_asking_again
     let config = "[permissions]\ndaemon = 'propose'\n";
     fixture.set_local_config(&repo, config);
     let chat = chat(&fixture, "chat", "chat", Some(&repo), None).await;
-    let asking = Fixture::caller(&chat.id);
+    let asking = Caller::of_space(chat.id.clone());
     let command = || Action::new(PermissionKey::Daemon, "shoal daemon stop");
     let request = undecided(
         fixture
@@ -239,7 +243,11 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     let request = undecided(
         fixture
             .coordination
-            .authorize_action(&**fixture, Some(&Fixture::caller(&worker.id)), setup())
+            .authorize_action(
+                &**fixture,
+                Some(&Caller::of_space(worker.id.clone())),
+                setup(),
+            )
             .await,
     );
     let routed = fixture
@@ -251,7 +259,10 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
 
     // The lead neither decides as the user nor holds admin at direct; the
     // master decides it, though it went to the lead.
-    let (leading, mastering) = (Fixture::caller(&lead.id), Fixture::caller(&master.id));
+    let (leading, mastering) = (
+        Caller::of_space(lead.id.clone()),
+        Caller::of_space(master.id.clone()),
+    );
     let refused = fixture.coordination.decide_approval_as(
         &**fixture,
         Some(&leading),
@@ -274,7 +285,7 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     assert_eq!(decided.await.unwrap().status, DecisionStatus::Approved);
     (fixture.coordination.authorize_action(
         &**fixture,
-        Some(&Fixture::caller(&worker.id)),
+        Some(&Caller::of_space(worker.id.clone())),
         setup(),
     ))
     .await
@@ -286,7 +297,11 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     let below = undecided(
         fixture
             .coordination
-            .authorize_action(&**fixture, Some(&Fixture::caller(&worker.id)), restart())
+            .authorize_action(
+                &**fixture,
+                Some(&Caller::of_space(worker.id.clone())),
+                restart(),
+            )
             .await,
     );
     let approving = fixture.coordination.decide_approval_as(
@@ -336,7 +351,7 @@ async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() 
     fixture.set_local_config(&repo, config);
     let master = chat(&fixture, "master", "orchestrate", None, None).await;
     let start = || "start the agent of worker now".to_owned();
-    let mastering = Fixture::caller(&master.id);
+    let mastering = Caller::of_space(master.id.clone());
     (fixture
         .coordination
         .authorize_beyond_limits(&**fixture, &mastering, start(), None))
@@ -364,12 +379,12 @@ async fn a_decider_without_a_repository_decides_as_the_action_s_repository_allow
     let request = undecided(
         fixture
             .coordination
-            .authorize_action(&**fixture, Some(&Fixture::caller(&below.id)), setup)
+            .authorize_action(&**fixture, Some(&Caller::of_space(below.id.clone())), setup)
             .await,
     );
     // The repository holds the master session's admin to propose, so it
     // may only deny or pass up what its global config would let it approve.
-    let mastering = Fixture::caller(&master.id);
+    let mastering = Caller::of_space(master.id.clone());
     let approving = fixture.coordination.decide_approval_as(
         &**fixture,
         Some(&mastering),
