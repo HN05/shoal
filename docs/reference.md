@@ -732,7 +732,8 @@ their agents stop as `shoal stop` stops them, saving their sessions, and
 each space's final package goes to the hub, which places it and continues it
 there, a chat in a workspace's worktree going with that workspace. The
 machine stays awake until the hub confirms every package, or for at most 10
-minutes, before a sleep only within the platform's allowance, then may
+minutes, before a sleep only within most of the platform's allowance,
+leaving the rest for the sleep's announcement, then may
 sleep; an alert says where each space went. Once the user is back, or the
 machine wakes from such a sleep, it admits work again and retires its copies
 of the spaces that went. A shutdown meanwhile hands over the rest.

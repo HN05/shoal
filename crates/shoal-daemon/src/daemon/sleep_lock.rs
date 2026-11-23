@@ -54,6 +54,10 @@ pub(super) trait PowerEvents {
 /// hold drops before the platform gives up waiting for it.
 const MARGIN: Duration = Duration::from_secs(1);
 
+/// The share of what is left of a sleep's allowance a hand-over before it
+/// may take, so the hub's sleep notice still goes out after it.
+const HANDOVER_SHARE: f64 = 0.75;
+
 pub(super) async fn run(manager: Arc<Manager>) {
     if let Some(events) = connect().await {
         follow(&manager, events).await;
@@ -76,17 +80,23 @@ async fn follow(manager: &Arc<Manager>, mut events: impl PowerEvents) {
 }
 
 /// Hold the agent queue, queue running reviews again, under
-/// `keep_awake = "handover"` hand the spaces with something to do over,
-/// and by `deadline` end the running CI jobs to rerun and tell the hub
-/// that the machine sleeps, closing its link until it wakes.
+/// `keep_awake = "handover"` hand the spaces with something to do over
+/// within [`HANDOVER_SHARE`] of the time left, and by `deadline` end the
+/// running CI jobs to rerun and tell the hub that the machine sleeps,
+/// closing its link until it wakes.
 async fn prepare_for_sleep(manager: &Arc<Manager>, deadline: Instant) {
     log!("sleep lock: the machine goes to sleep");
     manager.agents.agent_queue().sleep(true);
     manager.reviews.stop_for_sleep().await;
     let jobs = end_jobs(manager, deadline);
+    let now = Instant::now();
+    let handover_by = now
+        + deadline
+            .saturating_duration_since(now)
+            .mul_f64(HANDOVER_SHARE);
     let announced = async {
         (manager.agents)
-            .hand_over_before_sleep(&**manager, deadline)
+            .hand_over_before_sleep(&**manager, handover_by)
             .await;
         manager.hub.announce_sleep(&**manager, deadline).await;
     };
