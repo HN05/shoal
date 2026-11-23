@@ -2972,16 +2972,17 @@ threads are unresolved decides the gate over the others, since a later review
 settles none of them: an approval leaves the reviewer's findings to be
 resolved, and the agent's own review run leaves its writer's comments. A
 review lives on the reviewed workspace's machine, where the gates read it, and
-so do its comments: a space whose workspace runs on another machine has its
-comment opened there, numbered in the workspace as the user's are and naming
-the space as its opener, since its own space's numbers are its own machine's,
-and a thread it opens there without a kind is a question in its own space
-when it has no pending review of that workspace, which only that machine can
-tell, so it is refused while that machine cannot be asked, unless it names a
-kind. The
-reviewed workspace's removal, or its writer's on the same machine, drops a
-pending review, whose comments a restore could never submit; a writer's
-comments on another machine neither keep it from cleanup nor close with it. Forge reviews stay on the forge.
+so do its comments. A space reviewing a workspace on another machine has its
+comments opened there, numbered in the workspace as the user's are and naming
+the space as their opener, since its own space's numbers belong to its own
+machine. Only that machine knows whether the space has a pending review
+there, so a thread the space opens towards that workspace without a kind
+asks it first: without a review the thread is a question in the space's own
+space, and while that machine cannot be asked it is refused unless it names a
+kind. The reviewed workspace's removal, or its writer's on the same machine,
+drops a pending review, whose comments a restore could never submit. A
+writer's comments on another machine neither keep it from cleanup nor close
+with it. Forge reviews stay on the forge.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the

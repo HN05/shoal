@@ -708,7 +708,7 @@ async fn open_towards_offline(tree: &Tree, kind: &str) -> anyhow::Result<Thread>
 }
 
 #[tokio::test]
-async fn a_thread_without_a_kind_waits_for_the_machine_that_would_keep_its_review() {
+async fn a_thread_without_a_kind_is_refused_while_the_reviewing_machine_is_offline() {
     let tree = tree().await;
     let error = format!(
         "{:#}",
