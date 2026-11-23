@@ -1,10 +1,11 @@
 //! Who takes part in a thread and what each may do: a caller posts from
-//! the side it is on, the opener resolves, or the holder when Shoal opened
-//! the thread, and the holder forwards. A space reads a thread it took part
-//! in, or one a space its scope reaches took part in; the user reads every
-//! thread and acts for either side.
+//! the side it took part on, or on neither as a participant that reads the
+//! thread; the opener resolves, or the holder when Shoal opened the thread,
+//! and the holder forwards. A space reads a thread it took part in, or one
+//! a space its scope reaches took part in; the user reads every thread and
+//! acts for either side.
 use crate::{Coordination, daemon::Daemon};
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     space_names::SpaceSelector,
@@ -115,41 +116,82 @@ impl Coordination {
         }
     }
 
-    /// The side of `thread` `caller` takes: the opener's for the space that
-    /// opened it, the holder's for the space that holds it or a space above
-    /// that one, and for the user the opener's side of a thread the user
-    /// opened and else the holder's. A holder takes no side of a thread
-    /// that holds its posts, which it has not heard of yet.
-    pub(super) async fn side(
+    /// The side of `thread` whose current party `caller` acts for: the
+    /// opener's for the space that opened it, the holder's for the space
+    /// that holds it or a space above that one, and for the user the
+    /// opener's side of a thread the user opened and else the holder's;
+    /// none for any other space. A holder takes no side of a thread that
+    /// holds its posts, which it has not heard of yet.
+    async fn current_side(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
         thread: &Thread,
-    ) -> Result<Side> {
+    ) -> Result<Option<Side>> {
         let Some(caller) = caller else {
             return match thread.opener {
-                Sender::User => Ok(Side::Opener),
+                Sender::User => Ok(Some(Side::Opener)),
                 Sender::Space | Sender::Shoal => {
                     ensure_reached(thread)?;
-                    Ok(Side::Holder)
+                    Ok(Some(Side::Holder))
                 }
             };
         };
         if thread.opener_id() == Some(&caller.space_id) {
-            return Ok(Side::Opener);
+            return Ok(Some(Side::Opener));
         }
         if let Holder::Space(holder) = &thread.holder
             && self.reaches(daemon, caller, &holder.id).await?
         {
             ensure_reached(thread)?;
-            return Ok(Side::Holder);
+            return Ok(Some(Side::Holder));
         }
-        bail!(
-            "thread {} is between {} and {}; only they post in it",
-            thread.number,
-            thread.party(Side::Opener),
-            thread.party(Side::Holder)
-        )
+        Ok(None)
+    }
+
+    /// The side `caller` posts on in `thread`, which it reads: the side
+    /// whose current party it acts for, else the side it took part on
+    /// before, else none, as a participant. Nobody but the opener's side
+    /// posts in a thread that holds its posts.
+    pub(super) async fn posting_side(
+        &self,
+        daemon: &dyn Daemon,
+        caller: Option<&Caller>,
+        thread: &Thread,
+    ) -> Result<Option<Side>> {
+        let current = self.current_side(daemon, caller, thread).await?;
+        let side = match (current, caller) {
+            (Some(_), _) | (None, None) => current,
+            (None, Some(caller)) => {
+                let (id, space) = (thread.id, caller.space_id.clone());
+                (self.store)
+                    .read(move |db| records::earlier_side(db, id, &space))
+                    .await?
+            }
+        };
+        if side != Some(Side::Opener) {
+            ensure_reached(thread)?;
+        }
+        Ok(side)
+    }
+
+    /// The side of `thread` whose current party `caller` acts for, which
+    /// forwards that side's role and resolves; refused for any other
+    /// caller.
+    async fn acting_side(
+        &self,
+        daemon: &dyn Daemon,
+        caller: Option<&Caller>,
+        thread: &Thread,
+    ) -> Result<Side> {
+        (self.current_side(daemon, caller, thread).await?).with_context(|| {
+            format!(
+                "thread {} is between {} and {}; only they forward or resolve it",
+                thread.number,
+                thread.party(Side::Opener),
+                thread.party(Side::Holder)
+            )
+        })
     }
 
     /// The space `caller` speaks as: one of this machine's, or one the hub
@@ -186,7 +228,7 @@ impl Coordination {
         caller: Option<&Caller>,
         thread: &Thread,
     ) -> Result<Side> {
-        let side = self.side(daemon, caller, thread).await?;
+        let side = self.acting_side(daemon, caller, thread).await?;
         let resolver = match thread.opener {
             Sender::Shoal => Side::Holder,
             Sender::User | Sender::Space => Side::Opener,
@@ -208,7 +250,7 @@ impl Coordination {
         caller: Option<&Caller>,
         thread: &Thread,
     ) -> Result<()> {
-        let side = self.side(daemon, caller, thread).await?;
+        let side = self.acting_side(daemon, caller, thread).await?;
         ensure!(
             side == Side::Holder,
             "{} holds thread {} and forwards it",

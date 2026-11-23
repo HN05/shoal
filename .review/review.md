@@ -386,9 +386,11 @@ instead of the PR delivery guidance below.
   nonterminal output; interactive prompts preserve the shown request when deciding.
   A bare thread number names one of the caller's own space, and an approval
   number is always `S.N`. A space reads the threads it or a space its scope
-  reaches took part in, posts only from its side, resolves only what it opened
+  reaches took part in, posts from the side it took part on or as a
+  participant on neither, which takes no turn, resolves only what it opened
   (the holder one Shoal opened), and forwards only what it holds; a post's
-  alert goes to the other side and to the spaces that linked the thread.
+  alert goes to the current parties and the spaces that linked the thread but
+  the poster.
 - Resource approvals bind effective allocation settings and require an unscoped
   decision, or one by the nearest space above with an agent, of either kind, that
   the request was routed to: a workspace approves only with an approved grant

@@ -7475,7 +7475,7 @@ shoal unlink thread <S.N>
 
 A thread is a conversation between its opener, the user, a space or Shoal, and
 its holder, the user or a space, whoever is asked now, with posts from both
-sides. `shoal thread open` records an empty thread with a free-text name of one
+sides and from other spaces that read it. `shoal thread open` records an empty thread with a free-text name of one
 line and a kind, `question` or `request`, and prints its number;
 with `--code` it also makes its opening post, whose text is the name, pointing
 at that code. A question asks for an answer, and a request asks its holder to
@@ -7494,12 +7494,17 @@ choices, each one line, with the one it recommends and why, and files sent with
 `--attach` as alerts send them. `--choose N` picks the choice of that number
 the other side offered last, its text the post's unless given; text is never
 read as a choice number. A single argument without `--body-file` or a post's
-option is an [alert](#alerts)'s text. Each post reaches the other side as a
-`thread_posted` alert, an agent's with the choices and how to reply and yours in
-one line, and reaches the spaces that linked the thread; only the opener and
-the current holder receive posts. `--wait` blocks without a time limit until
-the other side posts or the thread is resolved, prints its posts, and marks
-their alerts read; it survives daemon restarts, waiting up to two minutes for a
+option is an [alert](#alerts)'s text. A space posts on the side it took part
+on: the opener's as its opener, the holder's as its holder, a space above it or
+an earlier holder. Any other space that reads the thread posts as a
+participant, on neither side: its post leaves whose turn it is, offers and
+picks no choices, and links the thread for that space. Each post reaches the
+other side's current party as a `thread_posted` alert, an agent's with the
+choices and how to reply and yours in one line, its own side's current party
+when someone else posted for it, both sides' for a participant's post, and the
+spaces that linked the thread; nobody receives their own post. `--wait` blocks
+without a time limit until a post comes from a side other than the caller's,
+or the thread is resolved, prints those posts, and marks their alerts read; it survives daemon restarts, waiting up to two minutes for a
 daemon that went away to return and know the caller's scope again, or 10
 seconds for one that was not running. A post that would make the thread longer
 than one response carries, about 56 KiB, is refused: open a new thread to go on.

@@ -284,6 +284,28 @@ pub(super) fn holders(db: &Connection, id: i64) -> Result<Vec<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The side of the thread `id` the space `space` took part on before,
+/// which it posts on still: the holder's for a space that held it.
+pub(super) fn earlier_side(db: &Connection, id: i64, space: &SpaceId) -> Result<Option<Side>> {
+    let held = shoal_store::exists(
+        db,
+        "SELECT 1 FROM thread_holders WHERE thread_id=?1 AND space_id=?2",
+        params![id, space],
+    )?;
+    Ok(held.then_some(Side::Holder))
+}
+
+/// Link the thread `id` for the space `space` while this machine has it,
+/// as a participant's post does.
+pub(super) fn link_here(tx: &Transaction<'_>, space: &SpaceId, id: i64) -> Result<()> {
+    tx.execute(
+        "INSERT OR IGNORE INTO thread_links(space_id,thread_id)
+            SELECT ?1,?2 WHERE EXISTS (SELECT 1 FROM spaces WHERE id=?1)",
+        params![space, id],
+    )?;
+    Ok(())
+}
+
 /// The spaces that linked the thread `id`.
 pub(super) fn linkers(db: &Connection, id: i64) -> Result<Vec<SpaceId>> {
     Ok(db

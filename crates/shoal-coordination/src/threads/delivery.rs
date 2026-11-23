@@ -40,6 +40,15 @@ impl Party {
             (Side::Opener, Sender::Shoal, _) => None,
         }
     }
+
+    /// Who sent `post`: its space, or the user; none for Shoal.
+    fn sender(post: &Post) -> Option<Self> {
+        match (&post.space, post.sender) {
+            (Some(space), _) => Some(Self::Space(space.id.clone())),
+            (None, Sender::User) => Some(Self::User),
+            (None, Sender::Space | Sender::Shoal) => None,
+        }
+    }
 }
 
 /// What a change of a thread delivered in its transaction, which the
@@ -395,9 +404,11 @@ fn hint(thread: &Thread, side: Side) -> String {
     }
 }
 
-/// Deliver the newest post of `thread` to the party on the other side and
-/// to the spaces that linked it but the sender's, recording on the post
-/// the alert that carried it to that party.
+/// Deliver the newest post of `thread` to the current party of the side
+/// across from it, then of its own side when someone else posted for that
+/// party, or of both sides for a participant's post, and to the spaces
+/// that linked it, each once and none to its sender, recording on the post
+/// the alert that carried it to the side across.
 pub(super) fn deliver_post(
     tx: &Transaction<'_>,
     outside: &dyn Records,
@@ -407,28 +418,30 @@ pub(super) fn deliver_post(
     let Some(post) = thread.posts.last() else {
         return Ok(());
     };
-    let Some(to) = post.side.map(Side::other) else {
-        return Ok(());
+    let mut reached: Vec<Party> = Party::sender(post).into_iter().collect();
+    let sides = match post.side {
+        Some(side) => [side.other(), side],
+        None => [Side::Holder, Side::Opener],
     };
-    let party = Party::of(thread, to);
-    if let Some(party) = &party
-        && let Some(alert) = deliver(
-            tx,
-            outside,
-            thread,
-            Some(post),
-            party,
-            Texts::post(thread, post, to),
-            delivered,
-        )?
-    {
-        super::records::set_alert(tx, post.id, alert)?;
+    for side in sides {
+        let Some(party) = Party::of(thread, side) else {
+            continue;
+        };
+        if reached.contains(&party) {
+            continue;
+        }
+        let texts = Texts::post(thread, post, side);
+        let alert = deliver(tx, outside, thread, Some(post), &party, texts, delivered)?;
+        if let Some(alert) = alert
+            && post.side.map(Side::other) == Some(side)
+        {
+            super::records::set_alert(tx, post.id, alert)?;
+        }
+        reached.push(party);
     }
-    let sender = post.space.as_ref().map(|space| &space.id);
     for linker in super::records::linkers(tx, thread.id)? {
-        let reached = party == Some(Party::Space(linker.clone()));
-        if !reached && Some(&linker) != sender {
-            let linker = Party::Space(linker);
+        let linker = Party::Space(linker);
+        if !reached.contains(&linker) {
             let texts = Texts::linked(thread, post, &linker);
             deliver(tx, outside, thread, Some(post), &linker, texts, delivered)?;
         }

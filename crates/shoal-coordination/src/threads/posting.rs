@@ -1,5 +1,6 @@
 //! Posting in a thread: the post's checks, the choice it picks, and
-//! recording and delivering it from the poster's side.
+//! recording and delivering it from the poster's side, or from a
+//! participant on neither.
 use crate::{Coordination, daemon::Daemon};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -52,8 +53,18 @@ fn validate(post: &NewPost) -> Result<()> {
 
 /// `post` with the choice it picks checked against the choices the other
 /// side of `thread` offered last, and its text that choice's when it has
-/// none.
-fn picked(thread: &Thread, side: Side, mut post: NewPost) -> Result<NewPost> {
+/// none. A participant's post, on neither `side`, offers no choices and
+/// picks none.
+fn picked(thread: &Thread, side: Option<Side>, mut post: NewPost) -> Result<NewPost> {
+    let Some(side) = side else {
+        ensure!(
+            post.choices.is_empty() && post.recommendation.is_none() && post.choice.is_none(),
+            "you post in thread {} as a participant, on neither side, which offers no choices \
+             and picks none",
+            thread.number
+        );
+        return Ok(post);
+    };
     let Some(choice) = post.choice else {
         return Ok(post);
     };
@@ -139,7 +150,8 @@ impl Opening {
 /// `id`, which must still be open, and deliver it; the thread as it is
 /// now. A post from the side of a space that opened the thread makes the
 /// thread wait, which keeps that space, so a space a removal reserved
-/// takes none.
+/// takes none. A participant's post links the thread for its space, which
+/// hears the replies.
 pub fn record_post(
     tx: &Transaction<'_>,
     id: i64,
@@ -151,11 +163,17 @@ pub fn record_post(
 ) -> Result<(Thread, Delivered)> {
     let thread = records::reread(tx, id)?;
     ensure_open(&thread)?;
-    if poster.side == Some(Side::Holder) {
-        records::ensure_held_by(&thread, &poster.seen)?;
-    }
-    if poster.side == Some(Side::Opener) && thread.opener == Sender::Space {
-        outside.require_taking_work(tx, &thread.space_id)?;
+    match poster.side {
+        Some(Side::Holder) => records::ensure_held_by(&thread, &poster.seen)?,
+        Some(Side::Opener) if thread.opener == Sender::Space => {
+            outside.require_taking_work(tx, &thread.space_id)?;
+        }
+        Some(Side::Opener) => {}
+        None => {
+            if let Some(space) = &poster.space {
+                records::link_here(tx, &space.id, id)?;
+            }
+        }
     }
     let recorded = records::insert_post(
         tx,
@@ -180,8 +198,8 @@ pub fn record_post(
 impl Coordination {
     /// Add `post` with copies of the files `attachments`, the places in
     /// code `code` and the changes `changes` to the thread `number` from
-    /// `caller`'s side, or the user's without a caller, and deliver it to
-    /// the other side.
+    /// the side `caller` posts on, or the user's without a caller, and
+    /// deliver it.
     #[allow(
         clippy::too_many_arguments,
         reason = "what the post says, beside the daemon"
@@ -200,10 +218,10 @@ impl Coordination {
         let code = self.new_code(daemon, caller, code).await?;
         let changes = self.named_changes(daemon, caller, None, &changes).await?;
         let thread = self.readable_thread(daemon, caller, number).await?;
-        let side = self.side(daemon, caller, &thread).await?;
+        let side = self.posting_side(daemon, caller, &thread).await?;
         let post = picked(&thread, side, post)?;
         validate(&post)?;
-        let poster = (self.poster(daemon, caller, Some(side), &thread.holder)).await?;
+        let poster = self.poster(daemon, caller, side, &thread.holder).await?;
         let files_space = self.files_space(daemon, &poster, &thread).await?;
         let attacher = daemon.attacher(caller).await;
         let text = post.text.clone();

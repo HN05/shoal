@@ -544,6 +544,114 @@ async fn a_space_that_linked_a_thread_receives_its_new_posts() {
 }
 
 #[tokio::test]
+async fn a_space_that_forwarded_a_question_still_answers_it_for_the_holder() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let (child, parent) = (caller(&tree.child), caller(&tree.parent));
+    let thread = open(fixture, Some(&child), None).await;
+    let asked = NewPost {
+        choices: vec!["Postgres".into(), "SQLite".into()],
+        ..post("Which database?")
+    };
+    (fixture.coordination.post_to_thread(
+        &**fixture,
+        Some(&child),
+        full(&thread),
+        asked,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
+    // The parent has no coordinator, so the thread goes up to the user.
+    (fixture
+        .coordination
+        .forward_thread(&**fixture, Some(&parent), full(&thread), None, None))
+    .await
+    .unwrap();
+    let before = alerts(fixture, &tree.child).await.len();
+
+    let answered = fixture
+        .coordination
+        .post_to_thread(
+            &**fixture,
+            Some(&parent),
+            full(&thread),
+            NewPost {
+                choice: Some(1),
+                ..NewPost::default()
+            },
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let answer = answered.last_post().unwrap();
+    assert_eq!(answer.side, Some(Side::Holder));
+    assert_eq!(answer.post.text, "Postgres");
+    assert_eq!(answered.awaits(), Some(Side::Opener));
+    let replies = alerts(fixture, &tree.child).await;
+    assert_eq!(replies.len(), before + 1, "{replies:?}");
+    // The user, who holds it, hears that the parent answered for it.
+    let told = users(fixture, AlertKind::ThreadPosted).await;
+    assert!(
+        told.iter().any(|alert| alert.contains("Postgres")),
+        "{told:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_participant_posts_to_both_sides_without_taking_a_turn() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    // The space beside has no agent, so a thread of the space below it goes
+    // to the user, and the space beside takes neither side.
+    let below = fixture.workspace("below", Some(&tree.beside.id)).await;
+    fixture.run_agent(&below.id);
+    let thread = open(fixture, Some(&caller(&below)), None).await;
+    send(fixture, Some(&caller(&below)), &thread, "Which port?").await;
+    let beside = caller(&tree.beside);
+    let choosing = fixture.coordination.post_to_thread(
+        &**fixture,
+        Some(&beside),
+        full(&thread),
+        NewPost {
+            choices: vec!["8080".into(), "9090".into()],
+            ..post("Pick one")
+        },
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    assert!(choosing.await.is_err());
+
+    let joined = send(fixture, Some(&beside), &thread, "8080 is free here").await;
+    assert_eq!(joined.last_post().unwrap().side, None);
+    assert!(joined.waits_for_user());
+    let heard = alerts(fixture, &below).await;
+    assert!(
+        heard
+            .iter()
+            .any(|alert| alert.contains("8080 is free here")),
+        "{heard:?}"
+    );
+    let told = users(fixture, AlertKind::ThreadPosted).await;
+    assert!(
+        told.iter().any(|alert| alert.contains("8080 is free here")),
+        "{told:?}"
+    );
+    // Posting linked the thread, so the participant hears the reply.
+    send(fixture, None, &thread, "Take 8080").await;
+    let replies = alerts(fixture, &tree.beside).await;
+    assert!(
+        replies.iter().any(|alert| alert.contains("Take 8080")),
+        "{replies:?}"
+    );
+}
+
+#[tokio::test]
 async fn a_bare_number_names_a_thread_of_the_callers_own_space() {
     let tree = tree().await;
     let fixture = &tree.fixture;

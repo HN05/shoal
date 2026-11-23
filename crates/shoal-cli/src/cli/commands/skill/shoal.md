@@ -643,12 +643,16 @@ asked now, with posts from both sides. `thread open` opens an empty thread
 with your coordinator, or else the user, or with `--space` a space below
 you; from the user's terminal it opens one with a space. Nobody hears of an
 empty thread; each post reaches the other side as an alert, waking an idle
-agent, and the user in one line. Inside a space, a bare number names a
+agent, and the user in one line. You post on the side you took part on, as
+its opener, its holder, a space above the holder or an earlier holder, which
+reaches that side's current party too; any other space that reads the
+thread posts as a participant, to both sides, without taking a turn, offering
+or picking choices, and hears the replies from then on. Inside a space, a bare number names a
 thread of that space; others take their full `S.N`. A post states its text,
 and may offer numbered choices with the one it recommends and why, or pick
 one the other side offered with `--choose`; text is never read as a choice
-number. `--wait` waits without a time limit for the other side's next post
-and prints it. `--in-chat` makes your turn's final message the post, for an
+number. `--wait` waits without a time limit for the next post from another
+side and prints it. `--in-chat` makes your turn's final message the post, for an
 agent with Shoal's hooks; a prompt the user submits in your chat answers it.
 A turn has one such mark, a post's or an alert's: another `--in-chat`
 replaces it and names the one it replaced.

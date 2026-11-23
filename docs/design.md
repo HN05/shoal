@@ -3460,9 +3460,10 @@ the agents of the spaces below their own, which they coordinate.
 Threads are how a space or the user asks for something whose answer is text,
 separate from approvals, whose answer is yes or no. A thread is a
 conversation between its opener, the user, a space or Shoal, and its holder,
-the user or a space, whoever is asked now, with posts from both sides, so a
-question can be discussed before it is settled, asked downward by the user or
-a parent of a child, and passed on to another agent. A thread has a typed
+the user or a space, whoever is asked now, with posts from both sides and
+from any other space that reads it, so a question can be discussed before it
+is settled, asked downward by the user or a parent of a child, and passed on
+to another agent. A thread has a typed
 kind, which decides the outcomes it takes: a `question` ends `answered`,
 optionally on a choice, a `request`, which asks its holder to do something,
 `done` once its opener accepts the work, and every kind `duplicate` of
@@ -3470,21 +3471,29 @@ another thread, `withdrawn` or `closed`, which only Shoal sets. Unknown kinds
 and outcomes are refused rather than kept as text. Editors draw a thread with
 a state that comes from what Shoal records rather than a field of its own:
 `working` while its holder's agent has switched to it, `queued` while its last
-post is its opener's, `waiting` while it is the holder's, else its outcome.
+post from a side is its opener's, `waiting` while it is the holder's, else its
+outcome.
 
 A space opens a thread with its coordinator, else the user, or with a space
 below it; the user opens one with a space. A thread lives on the machine of
 the space it is numbered in, while its holder may run on any machine of the
 hub, which carries the posts between them. An empty thread notifies no one
-and keeps nothing, so `thread open` only reserves its number. Each post
-reaches the other side as an alert, through the alert delivery hooks already
-use, waking an idle agent; the alert is queued in the transaction that
-records the post and names the thread as its subject. A post may offer
-numbered choices with a recommendation and a reason, or pick a choice the
-other side offered by number, never by parsing text, so `--choose 2` and a
-post that says "2" cannot be confused. `--wait` waits for the other side's
-next post and prints it, marking its alert read, for agents without Shoal's
-hooks; a wait an upgrade interrupts resumes after the same post.
+and keeps nothing, so `thread open` only reserves its number. A space posts
+on the side it took part on: the opener's as its opener, the holder's as its
+holder, a space above it or an earlier holder, so a coordinator that passed a
+question on still answers it. Any other space that reads the thread posts on
+neither side, as a participant: its post leaves whose turn it is, offers and
+picks no choices, and links the thread for it, so it hears the replies. Each
+post reaches the other side's current party as an alert, and its own side's
+when someone else posted for it, a participant's both, through the alert
+delivery hooks already use, waking an idle agent; the alert is queued in the
+transaction that records the post and names the thread as its subject. A post
+may offer numbered choices with a recommendation and a reason, or pick a
+choice the other side offered by number, never by parsing text, so
+`--choose 2` and a post that says "2" cannot be confused. `--wait` waits for
+the next post from a side other than the poster's and prints it, marking its
+alert read, for agents without Shoal's hooks; a wait an upgrade interrupts
+resumes after the same post.
 
 The holder forwards a thread down, to a space its scope reaches, or up, to its
 coordinator or the user, and the new holder reads what came before and
@@ -3499,8 +3508,8 @@ took part in, as the space it is numbered in, a holder or an earlier holder,
 or one a space its scope reaches took part in, and may link it to receive its
 new posts; reading delivers nothing.
 
-A thread waits while it is open and its last post came from the opener's
-side. A waiting thread keeps the space that opened it from unattended
+A thread waits while it is open and its last post from a side came from the
+opener's. A waiting thread keeps the space that opened it from unattended
 cleanup, as an agent waits on it, and ranks that space's queued work after
 the holder's. The inbox lists the threads whose turn is the user's. `done`
 closes every open thread the space is numbered in, opened or holds, on any
