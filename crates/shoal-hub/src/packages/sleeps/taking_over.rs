@@ -200,7 +200,8 @@ impl Hub {
                 .await;
                 break;
             }
-            self.redirect_held(id, from, &decision.machine).await;
+            self.redirect_held(daemon, id, (from, &decision.machine))
+                .await;
             went.push(label.as_str());
         }
         if !went.is_empty() {
@@ -218,15 +219,24 @@ impl Hub {
     }
 
     /// Hold for `to` what the hub held for the space `id` on `from`, which
-    /// `to` took over, and deliver it there.
-    async fn redirect_held(&self, id: &SpaceId, from: &MemberId, to: &MemberId) {
+    /// `to` took over, and deliver it there, here for the hub's own machine,
+    /// which has no link to deliver it over.
+    async fn redirect_held(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        (from, to): (&MemberId, &MemberId),
+    ) {
         let (space, from_id, to_id) = (id.clone(), from.clone(), to.clone());
         let moved = self
             .store
             .write(move |tx| queue::redirect(tx, &space, &from_id, &to_id));
-        match moved.await {
-            Ok(()) => self.wake_delivery(to),
-            Err(error) => log!("hub: could not pass on what it held for space {id}: {error:#}"),
+        if let Err(error) = moved.await {
+            return log!("hub: could not pass on what it held for space {id}: {error:#}");
+        }
+        match self.own_member().await {
+            Ok(own) if &own == to => self.deliver_held_here(daemon).await,
+            _ => self.wake_delivery(to),
         }
     }
 

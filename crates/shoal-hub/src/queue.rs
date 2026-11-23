@@ -78,7 +78,8 @@ impl Hub {
     ) {
         let delivery = self.deliveries.of(&member);
         loop {
-            self.deliver_held(&*daemon, &member, &delivery).await;
+            let to = Recipient::Link(&member);
+            self.deliver_held(&*daemon, to, &delivery).await;
             // What the hub holds meanwhile wakes it; a lost wake, at worst,
             // waits for the next look.
             tokio::select! {
@@ -92,12 +93,30 @@ impl Hub {
         }
     }
 
-    /// Deliver what the hub holds for `member`, oldest first, until none is
-    /// left or the link closes. A call that never left stays for the next
+    /// Deliver what the hub holds for its own machine, as for a space taken
+    /// over to it, answering each call here.
+    pub(super) async fn deliver_held_here(&self, daemon: &dyn Daemon) {
+        match self.own_member().await {
+            Ok(own) => {
+                let delivery = self.deliveries.of(&own);
+                (self.deliver_held(daemon, Recipient::Here(&own), &delivery)).await;
+            }
+            Err(error) => log!("hub: could not deliver what it held here: {error:#}"),
+        }
+    }
+
+    /// Deliver what the hub holds for `recipient`, oldest first, until
+    /// none is left or its link closes. A call that never left stays for the next
     /// link; one the machine received but never answered is not sent
     /// again, since it may have run, and its sender hears that it went
     /// unconfirmed, as of one the machine refused or that expired first.
-    async fn deliver_held(&self, daemon: &dyn Daemon, member: &MemberId, delivery: &Delivery) {
+    async fn deliver_held(
+        &self,
+        daemon: &dyn Daemon,
+        recipient: Recipient<'_>,
+        delivery: &Delivery,
+    ) {
+        let member = recipient.member();
         let _delivering = delivery.lock.lock().await;
         if let Err(error) = self.drop_expired(daemon).await {
             return log!("hub: could not drop expired calls: {error:#}");
@@ -121,10 +140,15 @@ impl Hub {
                 Err(error) => return log!("hub: could not read what it holds: {error:#}"),
             };
             let (seq, lapsed) = next;
-            let Some(calls) = self.links.calls(member) else {
-                return self.release_claim(seq).await;
+            let call = lapsed.held.call.clone();
+            let sent = match recipient {
+                Recipient::Here(_) => self.answer_hub_call(daemon, call).await,
+                Recipient::Link(member) => match self.links.calls(member) {
+                    Some(calls) => calls.call(call).await,
+                    None => return self.release_claim(seq).await,
+                },
             };
-            let outcome = match calls.call(lapsed.held.call.clone()).await {
+            let outcome = match sent {
                 Ok(reply) => refusal(&reply).map(|reason| HeldOutcome::Refused { reason }),
                 Err(error) if error.is::<Unsent>() => return self.release_claim(seq).await,
                 Err(error) if error.is::<Unanswered>() => Some(HeldOutcome::Unconfirmed),
@@ -174,6 +198,22 @@ impl Hub {
             self.tell_sender(daemon, lapsed, HeldOutcome::Expired).await;
         }
         Ok(())
+    }
+}
+
+/// The machine the hub delivers what it holds to: one over its link, or
+/// the hub's own, which answers here.
+#[derive(Clone, Copy)]
+enum Recipient<'a> {
+    Link(&'a MemberId),
+    Here(&'a MemberId),
+}
+
+impl<'a> Recipient<'a> {
+    fn member(self) -> &'a MemberId {
+        match self {
+            Self::Link(member) | Self::Here(member) => member,
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 use serde_json::json;
+use shoal_protocol::hub::link::Call;
 
 use super::*;
 
@@ -151,4 +152,45 @@ fn a_space_without_a_start_or_a_package_stays() {
     kept.get_mut(&id("unstarted")).unwrap().start = None;
     let groups = movable(&directory, &sleeper(&[]), &kept, &HashSet::new());
     assert_eq!(moved(groups), [["started"]]);
+}
+
+#[tokio::test]
+async fn what_a_takeover_passes_to_the_hub_s_own_machine_is_delivered_there() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = crate::packages::tests::hub(&root, "", &["laptop"]).await;
+    let own = hub.own_member().await.unwrap();
+    let told = json!({
+        "above": "plan", "for_user": false,
+        "record": {"alert": {"kind": "approval_decided", "message": "approved"}},
+    });
+    let call = Call::Tell {
+        told: serde_json::from_value(told).unwrap(),
+    };
+    let call = serde_json::to_string(&call).unwrap();
+    let now = UnixTime::now();
+    (hub.store)
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO hub_queue
+                    (member_id, sender_id, call, summary, queued_at, expires_at)
+                    VALUES ('laptop', 'laptop', ?1, 'a message', ?2, ?3)",
+                params![call, now, now + Duration::from_secs(60)],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let laptop = MemberId::from("laptop".to_owned());
+    let daemon = crate::stand_in::StandIn::default();
+    (hub.redirect_held(&daemon, &id("plan"), (&laptop, &own))).await;
+    // What is left for the hub's own machine; its sender hears of any
+    // refusal.
+    let held: i64 = (hub.store)
+        .read(move |tx| {
+            let count = "SELECT COUNT(*) FROM hub_queue WHERE member_id=?1";
+            Ok(tx.query_row(count, [&own], |row| row.get(0))?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(held, 0);
 }
