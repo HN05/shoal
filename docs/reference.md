@@ -728,7 +728,7 @@ Once they walk away, or once the machine is about to sleep, as when its lid
 closes, the queue admits nothing new and placement skips the machine, as
 under `finish`, and on a machine joined to a hub, not the hub's own, the
 spaces with something to do, an agent working on a turn or waiting in the
-queue, go to other machines as a [shutdown's hand-over](#hub) sends them:
+queue to be restored, go to other machines as a [shutdown's hand-over](#hub) sends them:
 their agents stop as `shoal stop` stops them, saving their sessions, and
 each space's final package goes to the hub, which places it and continues it
 there, a chat in a workspace's worktree going with that workspace. The

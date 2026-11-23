@@ -172,7 +172,8 @@ impl Agents {
     }
 
     /// The spaces with something to do: an agent working on a turn, or
-    /// waiting in the queue to start or be restored.
+    /// waiting in the queue to be restored. A queued launch, whose agent
+    /// never ran, has nothing a package carries, so it waits here.
     pub(crate) async fn spaces_with_work(&self) -> Result<HashSet<SpaceId>> {
         self.store
             .read(|tx| {
@@ -180,7 +181,7 @@ impl Agents {
                     .filter(|(_, state)| *state == AgentState::Working)
                     .map(|(id, _)| id);
                 let queued = (queued_rows(tx)?.into_iter())
-                    .filter(|row| row.kind != QueueKind::Job)
+                    .filter(|row| row.kind == QueueKind::Restore)
                     .filter_map(|row| row.workspace);
                 Ok(working.chain(queued).collect())
             })

@@ -62,10 +62,26 @@ async fn the_queue_admits_nothing_while_the_user_is_away() {
 }
 
 #[tokio::test]
-async fn a_space_has_something_to_do_while_its_agent_works() {
-    let (fixture, working, _) = handing_over().await;
+async fn a_space_has_something_to_do_while_its_agent_works_or_waits_to_be_restored() {
+    let (fixture, working, idle) = handing_over().await;
+    let launching = fixture.workspace("launching").await;
+    let (idle_id, launching_id) = (idle.id.clone(), launching.id.clone());
+    (fixture.agents.store)
+        .run(move |db| {
+            // A launch, whose agent never ran, has nothing to carry.
+            db.execute(
+                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,
+                     execution_id,state,created_at,seen_at,space_id) VALUES
+                 ('restore','restore','repo','restore','codex',NULL,'{}','execution','queued',0,99,?1),
+                 ('launch','launch','repo','launch','codex','{}','{}',NULL,'queued',0,99,?2)",
+                rusqlite::params![idle_id, launching_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     let spaces = fixture.agents.spaces_with_work().await.unwrap();
-    assert_eq!(spaces, [working.id].into());
+    assert_eq!(spaces, [working.id, idle.id].into());
 }
 
 #[tokio::test]
