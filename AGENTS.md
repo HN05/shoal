@@ -731,15 +731,13 @@ never instead of them.
 - When your work is a PR, run `shoal done` only after it merges and Shoal
   has reported the `ci.yml` run on `main` for its merge: until then, keep
   handling its reviews, CI results and merge conflicts. You are finished once
-  the run passes, or once another PR merges into `main` after yours, which
-  makes `main` no longer yours to fix. When the run fails, open or join its
-  `main-broken` issue at once, by steps 1 and 2 under CI, link it with
-  `shoal link issue <n> assigned` and open the PR that fixes `main` with
-  `Closes #<n>`; you are then finished only once the issue closes, since a
-  done workspace that links it clears every agent's blocker on it. When
-  merges cross and the runs of both fail, each merging agent does this, which
-  puts them on one issue that the first fix closes; the others then close
-  their fix PRs.
+  the run passes. When it fails, open or join its `main-broken` issue at
+  once, by steps 1 and 2 under CI, link it with `shoal link issue <n>
+  assigned` and open the PR that fixes `main` with `Closes #<n>`; you are
+  then finished only once the issue closes, since a done workspace that
+  links it clears every agent's blocker on it. When merges cross and the
+  runs of both fail, each merging agent does this, which puts them on one
+  issue that the first fix closes; the others then close their fix PRs.
 
 ## Shoal feedback
 
