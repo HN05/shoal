@@ -346,7 +346,7 @@ impl StandIn {
 }
 
 /// What a test reached that the stand-in does not offer.
-const NOT_HERE: &str = "coordination's stand-in has no such space";
+const NOT_HERE: &str = "coordination's stand-in does not offer";
 
 impl Coordinators for StandIn {
     fn tell<'a>(
