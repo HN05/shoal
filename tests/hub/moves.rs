@@ -389,6 +389,25 @@ fn a_move_of_two_machines_spaces_asks_what_the_other_ends_before_either_ends() {
     assert_eq!(packages_in(&directory).len(), 2, "{moved}");
 }
 
+#[test]
+fn a_space_another_machine_refuses_ends_none_here_even_with_yes() {
+    let (hub, laptop, _desk, laptop_id, _) = machines("");
+    let repo = laptop.repo.to_str().unwrap().to_owned();
+    laptop.ok(&["create", &repo, "--branch", "scratch", "--disposable"]);
+    let scratch = laptop.id("scratch");
+    listed(&hub, &scratch, &laptop_id);
+    let here = workspace(&hub, "here");
+    let directory = hub.root.path().join("moved");
+    let to = directory.to_str().unwrap();
+
+    let refused = hub.run(&["move", &scratch, &here, "-o", to, "--yes"]);
+
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    assert!(own_spaces(&hub).iter().any(|space| space["id"] == here));
+    assert!(own_spaces(&laptop).iter().any(|space| space["id"] == scratch));
+    assert_eq!(packages_in(&directory), Vec::<String>::new());
+}
+
 /// Whether `machine` keeps a removal record of the space `id`.
 fn keeps_removed(machine: &Base, id: &str) -> bool {
     let removed = machine.ok(&["restore"])["removed"].clone();
