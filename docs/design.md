@@ -214,9 +214,12 @@ their restores, conversions, moves and launches. The agents, links,
 repositories, hub, CI jobs, reviews, leases and demos it works with are its
 interface's, which also gives it coordination's service to call; what other
 subsystems record of a space it reads and writes in its own transactions
-through its interface's records. The cleanup sweep's order across
-subsystems, the request dispatch with each request kind's target check,
-and streaming an answer over a connection stay with the daemon.
+through its interface's records, and reads executions through the store's
+shared readers. The cleanup sweep's order across subsystems, the request
+dispatch with each request kind's target check, and the connections
+requests arrive on stay with the daemon, which gives an operation that
+streams its answer, such as a diff, a file or a followed session, the
+writer its frames go to.
 The walks up and down the tree of spaces, and
 whether a space on the way has an agent, are `shoal-store`'s, which every
 subsystem that follows the tree takes in its own transactions.
