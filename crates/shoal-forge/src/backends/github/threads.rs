@@ -7,8 +7,8 @@ use super::graphql::{graphql_nodes, next_cursor};
 use crate::transport::account::Account;
 use shoal_forge_types::{
     ForgeRepo,
+    items::review::thread::{Target, Thread},
     numbers::{CommentId, PullNumber},
-    review::thread::{Target, Thread},
 };
 
 /// A GitHub review thread, which only GraphQL reports.

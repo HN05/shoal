@@ -1,5 +1,7 @@
-//! A review to submit on a PR: a verdict, a body and comments on lines of
-//! its diff.
+//! Reviews of a PR: who it can ask, its review threads, and a review to
+//! submit on it, a verdict, a body and comments on lines of its diff.
+pub mod reviewers;
+pub mod thread;
 
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};

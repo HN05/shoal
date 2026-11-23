@@ -180,5 +180,5 @@ outputs!(
     crate::forge::items::item::Item,
     crate::forge::items::item::Opened,
     crate::forge::items::reaction::allowed::AllowedReactions,
-    crate::forge::review::reviewers::Reviewer,
+    crate::forge::items::review::reviewers::Reviewer,
 );

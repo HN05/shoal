@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::item_target;
 use crate::{
     cli::{args::changes::ItemSelector, client, context::Context},
-    forge::review::reviewers::Reviewer,
+    forge::items::review::reviewers::Reviewer,
 };
 
 pub(super) async fn reviewers(ctx: &Context, selector: &ItemSelector) -> Result<i32> {

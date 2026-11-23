@@ -4,9 +4,9 @@
 use std::fmt::Write as _;
 
 use anyhow::Result;
-use shoal_forge::{
-    items::{item::ItemRequests, review::HeadMoved},
-    review::diff::DiffRequests,
+use shoal_forge::items::{
+    item::ItemRequests,
+    review::{HeadMoved, diff::DiffRequests},
 };
 use shoal_refs::CommitId;
 

@@ -2,9 +2,14 @@
 //! them, so a client can offer the choices without knowing the forge.
 use anyhow::Result;
 
-use crate::{items::item::ItemRequests, review::Reviews, transport::account::Account};
+use crate::{
+    items::{item::ItemRequests, review::Reviews},
+    transport::account::Account,
+};
 use shoal_forge_types::{
-    ForgeRepo, items::link::ItemKind, numbers::PullNumber, review::reviewers::Reviewer,
+    ForgeRepo,
+    items::{link::ItemKind, review::reviewers::Reviewer},
+    numbers::PullNumber,
 };
 
 /// A reviewer name that names a team, split into its organization and team;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::review::diff::FileDiff;
+use crate::items::review::diff::FileDiff;
 use shoal_forge_types::items::review::LineComment;
 use shoal_forge_types::items::review::Side;
 

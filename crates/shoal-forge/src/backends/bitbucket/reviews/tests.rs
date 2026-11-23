@@ -46,7 +46,7 @@ fn the_diff_runs_from_the_merge_base_to_the_head() -> Result<()> {
 
 #[test]
 fn reviews_comment_on_each_line_then_post_the_body_and_the_verdict() -> Result<()> {
-    use crate::review::diff::FileDiff;
+    use crate::items::review::diff::FileDiff;
     use shoal_forge_types::items::review::{LineComment, ReviewVerdict, Side};
     let repo = ForgeRepo::parse("https://bitbucket.org/team/repo.git")?;
     let patch = "@@ -1,2 +1,2 @@\n-a\n+b\n c";

@@ -8,9 +8,8 @@ use super::{Bitbucket, listed, roots};
 use crate::{
     items::{
         item::{ItemSteps, text},
-        review::{PlacedReview, Submission},
+        review::{PlacedReview, Reviews, Submission, diff::Diff},
     },
-    review::{Reviews, diff::Diff},
     transport::{
         account::Account,
         api::{Request, TransportRequests},
@@ -21,14 +20,14 @@ use shoal_forge_types::{
     items::{
         item::Current,
         link::ItemKind,
-        review::{ReviewVerdict, Side},
+        review::{
+            ReviewVerdict, Side,
+            reviewers::Reviewer,
+            thread::{Target, Thread},
+        },
     },
     numbers::{CommentId, PullNumber},
     raw::HttpMethod,
-    review::{
-        reviewers::Reviewer,
-        thread::{Target, Thread},
-    },
 };
 
 impl Reviews for Bitbucket {

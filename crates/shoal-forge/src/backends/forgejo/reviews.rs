@@ -7,8 +7,7 @@ use serde_json::{Value, json};
 use super::{Forgejo, threads};
 use crate::{
     capability,
-    items::review::{PlacedReview, Submission},
-    review::{Reviews, diff::Diff},
+    items::review::{PlacedReview, Reviews, Submission, diff::Diff},
     transport::{
         account::Account,
         api::{Request, TransportRequests},
@@ -20,14 +19,14 @@ use shoal_forge_types::{
     capability::Capability,
     items::{
         item::Current,
-        review::{ReviewVerdict, Side},
+        review::{
+            ReviewVerdict, Side,
+            reviewers::Reviewer,
+            thread::{Target, Thread},
+        },
     },
     numbers::{CommentId, PullNumber},
     raw::HttpMethod,
-    review::{
-        reviewers::Reviewer,
-        thread::{Target, Thread},
-    },
 };
 
 mod reviewers;

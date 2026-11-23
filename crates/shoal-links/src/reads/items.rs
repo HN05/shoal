@@ -6,8 +6,11 @@ use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
     RepoRequests,
     capability::CapabilityRequests,
-    items::{issue::IssueRequests, item::ItemRequests},
-    review::{reviewers::ReviewerRequests, thread::ThreadRequests},
+    items::{
+        issue::IssueRequests,
+        item::ItemRequests,
+        review::{reviewers::ReviewerRequests, thread::ThreadRequests},
+    },
     transport::account::Account,
 };
 use shoal_forge_types::{
@@ -17,9 +20,9 @@ use shoal_forge_types::{
         issue::IssueDetails,
         link::{ItemKind, LinkKind, Selection},
         reference::{ItemInput, ItemRef},
+        review::{reviewers::Reviewer, thread::Thread},
     },
     numbers::CommentId,
-    review::{reviewers::Reviewer, thread::Thread},
 };
 use shoal_protocol::{
     model::{Selected, SelectedItem},

@@ -8,11 +8,10 @@ use super::{GitHub, threads};
 use crate::{
     items::{
         item::text,
-        review::{PlacedReview, Submission},
-    },
-    review::{
-        Reviews,
-        diff::{Diff, FileDiff},
+        review::{
+            PlacedReview, Reviews, Submission,
+            diff::{Diff, FileDiff},
+        },
     },
     transport::{
         account::Account,
@@ -24,14 +23,14 @@ use shoal_forge_types::{
     ForgeRepo,
     items::{
         item::Current,
-        review::{ReviewVerdict, Side},
+        review::{
+            ReviewVerdict, Side,
+            reviewers::Reviewer,
+            thread::{Target, Thread},
+        },
     },
     numbers::{CommentId, PullNumber},
     raw::HttpMethod,
-    review::{
-        reviewers::Reviewer,
-        thread::{Target, Thread},
-    },
 };
 
 mod reviewers;

@@ -3,14 +3,13 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    review::Reviews,
+    items::review::Reviews,
     transport::{account::Account, api::Request},
 };
 use shoal_forge_types::{
     ForgeRepo,
-    items::action::ThreadChange,
+    items::{action::ThreadChange, review::thread::Thread},
     numbers::{CommentId, PullNumber},
-    review::thread::Thread,
 };
 
 /// Reading and acting on review threads.

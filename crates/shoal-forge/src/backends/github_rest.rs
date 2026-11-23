@@ -11,11 +11,9 @@ use crate::{
         create::Head,
         item::{ItemRequests, ItemSteps, text, user_names},
         reaction::{Listed, Subject},
+        review::reviewers::team_name,
     },
-    review::{
-        reviewers::team_name,
-        view::{labels, login, required, text_field},
-    },
+    review::view::{labels, login, required, text_field},
     transport::{
         account::Account,
         api::{Request, TransportRequests, encode},

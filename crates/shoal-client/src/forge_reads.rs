@@ -19,10 +19,10 @@ use crate::{
             list::Search,
             reaction::allowed::AllowedReactions,
             revert::MergedPull,
+            review::{reviewers::Reviewer, thread::Thread},
         },
         numbers::CommentId,
         raw::RawRequest,
-        review::{reviewers::Reviewer, thread::Thread},
     },
 };
 use shoal_protocol::space_names::SpaceSelector;

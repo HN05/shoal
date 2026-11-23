@@ -16,9 +16,11 @@ use crate::{
         merging::Merging,
         milestone::MilestoneRequests,
         reaction::{ReactionRequests, Subject},
-        review::SubmitSteps,
+        review::{
+            SubmitSteps,
+            thread::{ThreadRequests, ThreadSteps},
+        },
     },
-    review::thread::{ThreadRequests, ThreadSteps},
     transport::{
         account::Account,
         api::{Request, TransportRequests},

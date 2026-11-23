@@ -1,5 +1,3 @@
-//! A PR's reviewers, reviews, review threads and state.
-pub mod reviewers;
+//! A PR's reviews and state, and item views.
 pub mod status;
-pub mod thread;
 pub mod view;

@@ -12,8 +12,8 @@ use crate::transport::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    items::review::thread::{Target, Thread},
     numbers::{CommentId, PullNumber},
-    review::thread::{Target, Thread},
 };
 
 /// How many reviews' comments are read at once; a burst of connections can

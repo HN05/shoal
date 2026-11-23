@@ -8,11 +8,10 @@ use super::{GitLab, notes};
 use crate::{
     items::{
         item::{ItemSteps, text},
-        review::{PlacedReview, Submission},
-    },
-    review::{
-        Reviews,
-        diff::{Bases, Diff, FileDiff, Placed},
+        review::{
+            PlacedReview, Reviews, Submission,
+            diff::{Bases, Diff, FileDiff, Placed},
+        },
     },
     transport::{
         account::Account,
@@ -22,13 +21,17 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
-    items::{item::Current, link::ItemKind, review::ReviewVerdict},
+    items::{
+        item::Current,
+        link::ItemKind,
+        review::{
+            ReviewVerdict,
+            reviewers::Reviewer,
+            thread::{Target, Thread},
+        },
+    },
     numbers::{CommentId, PullNumber},
     raw::HttpMethod,
-    review::{
-        reviewers::Reviewer,
-        thread::{Target, Thread},
-    },
 };
 
 impl Reviews for GitLab {

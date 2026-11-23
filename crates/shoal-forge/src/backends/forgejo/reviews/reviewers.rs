@@ -9,7 +9,7 @@ use crate::{
         api::{Request, TransportRequests},
     },
 };
-use shoal_forge_types::{ForgeRepo, review::reviewers::Reviewer};
+use shoal_forge_types::{ForgeRepo, items::review::reviewers::Reviewer};
 
 /// The users Forgejo offers as reviewers.
 pub(super) async fn users(repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
