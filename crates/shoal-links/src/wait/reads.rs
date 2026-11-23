@@ -5,9 +5,8 @@ use anyhow::Result;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use shoal_daemon_base::alerts::{About, NewAlert};
 use shoal_forge::{
-    transport::account::Account,
-    transport::limits::rate_limited,
-    updates::{Snapshot, UpdateRequests},
+    activity::ActivityRequests, transport::account::Account, transport::limits::rate_limited,
+    updates::Snapshot,
 };
 use shoal_forge_types::items::{link::Selection, reference::ItemRef};
 use shoal_protocol::alerts::AlertKind;

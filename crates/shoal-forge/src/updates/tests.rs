@@ -1,7 +1,10 @@
 use super::*;
 use crate::items::item::ItemSteps;
 use serde_json::json;
-use shoal_forge_types::items::link::{ItemKind, LinkKind};
+use shoal_forge_types::{
+    ForgeRepo,
+    items::link::{ItemKind, LinkKind},
+};
 
 #[test]
 fn activity_changes_report_finished_checks_without_waiting_for_the_set() {

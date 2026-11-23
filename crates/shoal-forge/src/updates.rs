@@ -10,42 +10,13 @@ use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
 use shoal_time::UnixTime;
 
-use crate::{
-    ci::run_view::RunViewRequests,
-    transport::{
-        account::Account,
-        limits::{RateLimited, rate_limited},
-    },
-};
+use crate::transport::limits::{RateLimited, rate_limited};
 use shoal_forge_types::{
-    ForgeRepo,
     activity::status::CheckResult,
-    backends::ForgeKind,
     ci::check_state::{self, CheckState},
-    items::{item::Current, link::LinkKind, reference::ItemNumber},
-    numbers::{IssueNumber, PullNumber},
+    items::{item::Current, link::LinkKind},
     updates::{SnapshotKind, SnapshotState, Update, UpdateKind},
 };
-
-/// How the forge reads an item's activity.
-#[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
-pub(crate) trait Activity {
-    /// An issue's state and discussion.
-    async fn issue_activity(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: IssueNumber,
-    ) -> Result<Snapshot>;
-
-    /// A PR's state, discussion, reviews, mergeability and checks.
-    async fn pr_activity(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: PullNumber,
-    ) -> Result<Snapshot>;
-}
 
 /// How long after a source's failure was reported another is not, however its
 /// error changes or it passes in between, so a source failing intermittently
@@ -569,7 +540,7 @@ impl Snapshot {
     }
 
     /// This snapshot, or the rate limit that left it incomplete.
-    fn complete(mut self) -> Result<Self> {
+    pub(crate) fn complete(mut self) -> Result<Self> {
         match self.limited.take() {
             Some(limit) => Err(limit.into()),
             None => Ok(self),
@@ -638,39 +609,6 @@ pub(crate) fn posted_key(
 /// The activity key of the discussion comment `id`.
 pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
     activity_key(DISCUSSION, id)
-}
-
-/// Reading what changed on watched items.
-#[shoal_forge_derive::extension(pub UpdateRequests)]
-impl ForgeRepo {
-    /// The activity of `item`, reading again only what `known`, the
-    /// activity already recorded of it, cannot have changed.
-    pub async fn item_activity(
-        &self,
-        account: &Account,
-        item: &shoal_forge_types::items::reference::ItemRef,
-        known: Option<&Snapshot>,
-    ) -> Result<Snapshot> {
-        match item.number() {
-            ItemNumber::Issue(number) => self.issue_activity(account, number).await,
-            ItemNumber::Pr(number) => self.activity(account, number).await,
-            ItemNumber::Run(_) => self.run_activity(account, item, known).await,
-        }
-    }
-
-    pub async fn issue_activity(&self, account: &Account, number: IssueNumber) -> Result<Snapshot> {
-        self.kind()
-            .issue_activity(self, account, number)
-            .await?
-            .complete()
-    }
-
-    pub async fn activity(&self, account: &Account, number: PullNumber) -> Result<Snapshot> {
-        self.kind()
-            .pr_activity(self, account, number)
-            .await?
-            .complete()
-    }
 }
 
 impl Snapshot {

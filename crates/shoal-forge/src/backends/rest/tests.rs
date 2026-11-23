@@ -1,5 +1,5 @@
 use super::*;
-use crate::updates::UpdateRequests;
+use crate::activity::ActivityRequests;
 use serde_json::json;
 
 #[test]

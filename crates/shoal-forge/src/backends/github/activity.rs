@@ -7,7 +7,10 @@ use serde_json::{Value, json};
 
 use super::GitHub;
 use crate::{
-    activity::status::{StatusRecords, Statuses, github_reviews},
+    activity::{
+        Activity,
+        status::{StatusRecords, Statuses, github_reviews},
+    },
     backends::rest::read_pull,
     items::{
         discussion::{Views, login},
@@ -18,7 +21,7 @@ use crate::{
         api::{Request, TransportRequests},
         backend::LoginHint,
     },
-    updates::{Activity, Check, DISCUSSION, Entry, Snapshot, id_text},
+    updates::{Check, DISCUSSION, Entry, Snapshot, id_text},
 };
 use shoal_forge_types::{
     ForgeRepo,

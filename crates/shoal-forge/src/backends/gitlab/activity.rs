@@ -4,7 +4,10 @@ use serde_json::Value;
 
 use super::{GitLab, latest_statuses, notes, status_state, username};
 use crate::{
-    activity::status::{Statuses, Verdict},
+    activity::{
+        Activity,
+        status::{Statuses, Verdict},
+    },
     backends::rest::{self, RestReads, fingerprints},
     items::{
         discussion::Views,
@@ -15,7 +18,7 @@ use crate::{
         api::{Request, TransportRequests},
         backend::LoginHint,
     },
-    updates::{Activity, Entry, HeadCheck, Snapshot},
+    updates::{Entry, HeadCheck, Snapshot},
 };
 use shoal_forge_types::{
     ForgeRepo,
