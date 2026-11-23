@@ -404,7 +404,11 @@ fn a_space_another_machine_refuses_ends_none_here_even_with_yes() {
 
     assert!(!refused.status.success(), "{}", printed(&refused));
     assert!(own_spaces(&hub).iter().any(|space| space["id"] == here));
-    assert!(own_spaces(&laptop).iter().any(|space| space["id"] == scratch));
+    assert!(
+        own_spaces(&laptop)
+            .iter()
+            .any(|space| space["id"] == scratch)
+    );
     assert_eq!(packages_in(&directory), Vec::<String>::new());
 }
 
