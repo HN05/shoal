@@ -2658,7 +2658,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                         rusqlite::params![replacement_owner, number.space, number.item],
                     )?;
                 } else {
-                    db.execute("UPDATE threads SET space_id=?1 WHERE space_number=?2 AND number=?3", rusqlite::params![replacement_owner, number.space, number.item])?;
+                    db.execute("UPDATE threads SET space_id=?1, opener_id=?1 WHERE space_number=?2 AND number=?3", rusqlite::params![replacement_owner, number.space, number.item])?;
                 }
                 Ok(())
             }).await.unwrap();
