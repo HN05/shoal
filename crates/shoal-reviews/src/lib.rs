@@ -23,6 +23,7 @@ use tokio::sync::{Notify, watch};
 use shoal_core::test_support;
 
 mod answer;
+mod carried;
 mod checkouts;
 mod code;
 pub mod daemon;

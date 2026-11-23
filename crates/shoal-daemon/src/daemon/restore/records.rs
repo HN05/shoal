@@ -28,6 +28,7 @@ fn kept_workspace(worktree: &Worktree, checkpoint: Checkpoint) -> RemovedKind {
         base: worktree.checkout.base().cloned(),
         head: worktree.head.clone(),
         setup_skipped: worktree.setup_skipped,
+        pending_review: None,
     }))
 }
 

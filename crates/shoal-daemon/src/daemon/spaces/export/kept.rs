@@ -1,9 +1,9 @@
 //! Packages of spaces that keep running here under their own IDs, as the
 //! hub keeps an intermittent machine's: a space as its removal would record
 //! it now, with its agents, which continue their sessions where the package
-//! is imported, a workspace at a new checkpoint. The state a package holds
-//! tells whether its space changed since: a workspace's HEAD and files, its
-//! agents' session files and its records.
+//! is imported, a workspace at a new checkpoint with its pending review. The
+//! state a package holds tells whether its space changed since: a
+//! workspace's HEAD and files, its agents' session files and its records.
 use std::{path::PathBuf, time::UNIX_EPOCH};
 
 use anyhow::Result;
@@ -25,7 +25,8 @@ impl Manager {
         space: &Space,
         file: PathBuf,
     ) -> Result<ExportedSpace> {
-        let record = self.record_now(space, None).await?;
+        let mut record = self.record_now(space, None).await?;
+        self.carry_review(&mut record).await?;
         let settings = self.agent_settings_of(std::iter::once(space)).await;
         let prepared = Prepared::of(self, record, Vec::new(), settings).await?;
         self.write_prepared(prepared, file).await
@@ -73,8 +74,8 @@ impl Manager {
 
     /// What the package of `space` keeps of its records: its name, mode,
     /// permissions, links, ready marks, holds, progress, wake timer and
-    /// parent, a workspace's branch and what it builds on, its open
-    /// threads and its queued work.
+    /// parent, a workspace's branch, what it builds on and its pending
+    /// review, its open threads and its queued work.
     async fn record_state(&self, space: &Space) -> Result<serde_json::Value> {
         let threads: Vec<_> = (self.coordination.open_threads().await?.into_iter())
             .filter(|thread| thread.space_id == space.id)
@@ -99,6 +100,7 @@ impl Manager {
             "base_workspace": space.to_workspace().and_then(|workspace| workspace.base_workspace.clone()),
             "threads": threads,
             "queued": queued,
+            "pending_review": self.reviews.pending(&space.id).await?,
         }))
     }
 }

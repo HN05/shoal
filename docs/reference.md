@@ -1773,7 +1773,11 @@ but takes no heavy slot; `shoal queue` does not list it. A review that
 the machine's sleep or a shutdown cuts off runs again: as the machine goes to
 sleep, Shoal stops each running reviewer and queues its review again, which
 starts over once the machine wakes, and a daemon that starts again queues
-each review that was running. A
+each review that was running. A workspace's package, which
+[`shoal move`](#move-a-space-to-another-machine) and the [hub](#hub) carry
+to another machine, holds its queued or running review, which the machine
+that continues the workspace queues again, with the same agent, model and
+target. A
 chat has no changes of its own; see [chat reviews](#chat-reviews) below.
 
 The reviewer is `--agent`, else [`[review] agent`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), else `agent.default`, else one you

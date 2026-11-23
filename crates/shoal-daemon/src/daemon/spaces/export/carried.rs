@@ -37,11 +37,24 @@ impl Manager {
     }
 
     /// What the removal of `space`, whose agents stopped, would record of
-    /// it, a workspace at a new checkpoint, for a move that ends it only
-    /// once another machine imported it.
+    /// it, a workspace at a new checkpoint with its pending review, for a
+    /// move that ends it only once another machine imported it.
     pub(super) async fn moving_record(&self, space: &Space) -> Result<RemovedSpace> {
         let checkpoint = self.move_checkpoint(space).await?;
-        (self.present_removal_record(&space.id, checkpoint, EventCause::Manual)).await
+        let mut record =
+            (self.present_removal_record(&space.id, checkpoint, EventCause::Manual)).await?;
+        self.carry_review(&mut record).await?;
+        Ok(record)
+    }
+
+    /// Keep in `record`, of a space that goes on elsewhere, a workspace's
+    /// queued or running review, which its import queues again.
+    pub(super) async fn carry_review(&self, record: &mut RemovedSpace) -> Result<()> {
+        let review = self.reviews.pending(&record.space_id).await?;
+        if let Ok(kept) = record.kept_workspace_mut() {
+            kept.pending_review = review;
+        }
+        Ok(())
     }
 
     /// The package, without its session files, of the space `record`

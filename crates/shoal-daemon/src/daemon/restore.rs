@@ -106,6 +106,7 @@ impl Manager {
                 .await,
         );
         let session_files = self.restore_agents(&removed, id, &mut warnings).await;
+        self.queue_carried_review(&removed, &mut warnings).await;
         if removed.saved_no_agent() {
             warnings.push(format!(
                 "{} saved no session of its agent, whose restore starts a new one",
@@ -119,6 +120,23 @@ impl Manager {
             warnings,
         };
         self.restored(place, restored).await
+    }
+
+    /// Queue again the review the package that `removed` records came in
+    /// carried, adding a warning to `warnings` when it cannot run here.
+    async fn queue_carried_review(&self, removed: &RemovedSpace, warnings: &mut Vec<String>) {
+        let Some(review) = removed
+            .workspace()
+            .and_then(|kept| kept.pending_review.clone())
+        else {
+            return;
+        };
+        let queued = (self.reviews).queue_carried(self, &removed.space_id, review);
+        if let Err(error) = queued.await {
+            warnings.push(format!(
+                "the review it carried is not queued here: {error:#}"
+            ));
+        }
     }
 
     /// Open the space `removed` records again in its place, below `parent`:

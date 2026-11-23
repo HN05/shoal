@@ -125,6 +125,17 @@ impl rusqlite::types::FromSql for ReviewId {
     }
 }
 
+/// A review queued or running in a workspace as a package of it was
+/// written, which the machine that imports the package queues again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CarriedReview {
+    pub target: ReviewTarget,
+    /// The agent asked to review.
+    pub agent: crate::agent::Agent,
+    #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
+    pub model: crate::agent::ModelChoice,
+}
+
 /// What a review covers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

@@ -2902,7 +2902,10 @@ for healthy readings, as a stopped agent's restore does. A review the machine's
 announced sleep would cut off stops the same way as the machine goes to sleep
 and asks for admission again, which the asleep queue gives once the machine
 wakes, without waiting for readings, and a daemon that starts again queues each
-review that was running. A chat has no worktree or branch, so it
+review that was running. A workspace's package carries its queued or running
+review among its records, so the machine that continues it after a move, a
+hand-over or a takeover queues the review again; the machine it left removes
+its copy, review and all. A chat has no worktree or branch, so it
 reviews no changes of its own: it names the workspace it reviews, or reviews
 its one linked PR as a PR target, and its reviews are those of its linked PRs. A PR target, named by URL or `--pr`, resolves a same-repository PR through the daemon's
 forge reads, as the agent account for a scoped caller and the user's logins otherwise, and

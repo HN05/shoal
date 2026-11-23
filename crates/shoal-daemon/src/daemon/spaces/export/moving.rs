@@ -306,7 +306,7 @@ impl Manager {
     /// Stop the agents of `space` and of the spaces below it that
     /// `carrying` carries and prepare their package, with every agent
     /// stopped there, as their removal would record them now: each
-    /// workspace at a new checkpoint.
+    /// workspace at a new checkpoint, with its pending review.
     async fn prepare_moving(&self, space: Space, carrying: &Carrying) -> Result<Prepared> {
         let carried = self.carried_by(&space.id, carrying).await?;
         carried::ensure_packable(&space, &carried)?;

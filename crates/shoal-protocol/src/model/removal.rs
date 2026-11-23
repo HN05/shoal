@@ -156,6 +156,11 @@ pub struct KeptWorkspace {
     /// Whether it was created without setup, which its restore skips too.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub setup_skipped: bool,
+    /// The review queued or running as a package of it that goes on
+    /// elsewhere was written, which its restore queues again; a removal
+    /// keeps none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_review: Option<crate::reviews::CarriedReview>,
 }
 
 impl RemovedSpace {

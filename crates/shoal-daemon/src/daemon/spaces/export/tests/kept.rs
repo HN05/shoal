@@ -2,12 +2,14 @@
 //! running while its package is written, and another machine continues it
 //! from the package under its ID; the machine then retires its copy.
 use super::transfer::{exporter, importer};
+use crate::reviews::ReviewTarget;
 use crate::{
     daemon::{restore::PackageInput, test_support},
     model::Space,
     transfer::{PackageImport, PackageSource},
 };
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn another_machine_continues_a_kept_package_under_its_id() {
@@ -35,6 +37,52 @@ async fn another_machine_continues_a_kept_package_under_its_id() {
         .await
         .unwrap();
     assert_eq!(imported.restored.id(), &plan.id);
+}
+
+/// A workspace's queued review goes with its package and is queued again
+/// where the package is imported.
+#[tokio::test]
+async fn a_kept_package_carries_a_workspace_s_queued_review() {
+    let (_source, exporting, repo, origin) = exporter().await;
+    let (_target, importing, _) = importer(&origin).await;
+    let reviewer = "[review]\nagent = 'fake'\n[agents.fake]\ncommand = ['true']\nreview = ['{prompt}', '{schema}']\n";
+    test_support::configure(&exporting, reviewer).await;
+    test_support::configure(&importing, reviewer).await;
+    let fix = exporting
+        .create_workspace(repo.id.clone(), "fix".into(), None, None, None)
+        .await
+        .unwrap();
+    let model = crate::agent::ModelChoice {
+        model: Some("opus".into()),
+        effort: None,
+    };
+    (exporting.reviews)
+        .queue(
+            exporting.as_ref(),
+            &SpaceSelector::id(&fix.id),
+            ReviewTarget::Workspace,
+            None,
+            model.clone(),
+        )
+        .await
+        .unwrap();
+    let space = space(&exporting, &fix.id).await;
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("fix.shoal");
+    (exporting.write_kept_package(&space, file.clone()))
+        .await
+        .unwrap();
+    let import = PackageImport {
+        package: PackageSource::File(file.clone()),
+        repository: None,
+        sessions: None,
+        claim: crate::transfer::Claim::Plain,
+    };
+    (importing.import_package(&import, PackageInput::File(file), None))
+        .await
+        .unwrap();
+    let queued = importing.reviews.pending(&fix.id).await.unwrap().unwrap();
+    assert_eq!((queued.agent.name(), queued.model), ("fake", model));
 }
 
 #[tokio::test]
