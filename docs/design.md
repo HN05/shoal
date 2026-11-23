@@ -2977,9 +2977,9 @@ comment opened there, numbered in the workspace as the user's are and naming
 the space as its opener, since its own space's numbers are its own machine's,
 and a thread it opens there without a kind is a question in its own space
 when it has no pending review of that workspace, which only that machine can
-tell, so the thread waits for it to be reachable or for an explicit kind. Its removal, or the
-reviewed workspace's, drops a pending review, whose comments a restore could
-never submit. Forge reviews stay on the forge.
+tell, so the thread waits for it to be reachable or for an explicit kind. The
+reviewed workspace's removal, or its writer's on the same machine, drops a
+pending review, whose comments a restore could never submit. Forge reviews stay on the forge.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the

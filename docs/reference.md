@@ -2025,8 +2025,8 @@ resolve it with an outcome of the table above, or reply. Only threads Shoal open
 are resolved by their holder. `review cancel` drops a pending review with its
 comments, by its writer or you; without a review or `--space` it acts on the
 space it runs in, and drops your only pending review where that space has no
-review to cancel or outside every space. Removing the space that writes a review, or the workspace it
-reviews, drops it. For the review
+review to cancel or outside every space. Removing the workspace a review is
+of, or the space that writes it on the same machine, drops it. For the review
 gates above, a submitted review covers the commit it recorded once every comment
 is resolved, and one without comments only when it approves; one that neither
 comments nor approves never decides a gate, and while any review of the commit
