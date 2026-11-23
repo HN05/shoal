@@ -229,3 +229,33 @@ async fn a_writer_takes_readers_leases_only_when_every_reader_sleeps() {
 fn permit_of(name: &str, acquirer: Acquirer) -> (String, Acquirer) {
     (name.to_owned(), acquirer)
 }
+
+/// A simulator a busy request takes while it holds the simulators' lock
+/// goes, or becomes the user's where its release fails, without waiting on
+/// that lock.
+#[tokio::test]
+async fn a_release_for_a_request_holding_the_simulators_lock_never_waits_on_it() {
+    let fixture = Fixture::new(POOL, "").await;
+    let asleep = SpaceId::generate();
+    let booting = shoal_protocol::sim::SimulatorState::Booting;
+    fixture
+        .record_simulator("booting", agent(&asleep), booting)
+        .await;
+    let long = Duration::from_secs(3600);
+    *fixture.daemon.sleepers.lock().unwrap() = vec![sleeper(&asleep, Duration::ZERO, long)];
+    let held = fixture.leases.list_simulators(None).await.unwrap();
+    let freeing = vec![held.into_iter().filter_map(Acquired::simulator).collect()];
+    let _lock = fixture.leases.gates.lock_simulators().await;
+
+    let given = (fixture.leases).give_to_request(
+        &fixture.daemon,
+        &fixture.workspace,
+        None,
+        freeing,
+        Device::ForRequest,
+    );
+    // A generous guard against a hang, never the behaviour asserted.
+    tokio::time::timeout(Duration::from_secs(120), given)
+        .await
+        .expect("the release waited on the lock its request holds");
+}

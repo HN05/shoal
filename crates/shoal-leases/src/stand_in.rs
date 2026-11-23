@@ -94,6 +94,18 @@ impl Fixture {
     /// `acquirer` acquired, without a device, so releasing it runs no
     /// simctl.
     pub(crate) async fn lease_simulator(&self, name: &str, acquirer: Acquirer) {
+        let leased = shoal_protocol::sim::SimulatorState::Leased;
+        self.record_simulator(name, acquirer, leased).await;
+    }
+
+    /// Record a simulator named `name` of the workspace in `state` that
+    /// `acquirer` claimed, without a device.
+    pub(crate) async fn record_simulator(
+        &self,
+        name: &str,
+        acquirer: Acquirer,
+        state: shoal_protocol::sim::SimulatorState,
+    ) {
         let sim = shoal_protocol::sim::Simulator {
             id: name.into(),
             udid: None,
@@ -103,7 +115,7 @@ impl Fixture {
             last_workspace_id: None,
             lease_name: Some(name.into()),
             reason: None,
-            state: shoal_protocol::sim::SimulatorState::Leased,
+            state,
             last_used: crate::time::UnixTime::now(),
             error: None,
             installed_apps: None,

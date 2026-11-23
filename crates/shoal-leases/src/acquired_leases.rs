@@ -276,24 +276,26 @@ impl Leases {
                 None
             }
             Err(error) => {
-                self.hand_to_user(daemon, &workspace, lease, &error).await;
+                (self.hand_to_user(daemon, &workspace, lease, &error, device)).await;
                 None
             }
         }
     }
 
-    /// Keep `lease`, whose release failed with `error`, as the user's, and
-    /// tell the user how to release it.
+    /// Keep `lease`, whose release that did what `device` says with a
+    /// simulator's failed with `error`, as the user's, and tell the user how
+    /// to release it.
     async fn hand_to_user(
         &self,
         daemon: &dyn Daemon,
         workspace: &Workspace,
         lease: &Acquired,
         error: &anyhow::Error,
+        device: Device,
     ) {
         let handed = match &lease.held {
             Held::Simulator { name } => {
-                (self.give_simulator_lease_to_user(&workspace.id, name)).await
+                (self.give_simulator_to_user_as(&workspace.id, name, device)).await
             }
             Held::Containers => self.give_containers_to_user(&workspace.id).await,
             Held::Permit { pool, name } => {

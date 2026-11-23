@@ -805,7 +805,21 @@ impl Leases {
         workspace: &SpaceId,
         name: &str,
     ) -> Result<()> {
-        let _guard = self.gates.lock_simulators().await;
+        (self.give_simulator_to_user_as(workspace, name, Device::Keep)).await
+    }
+
+    /// [`Self::give_simulator_lease_to_user`], under the simulators' lock
+    /// the caller holds already when `device` is for a request.
+    pub(crate) async fn give_simulator_to_user_as(
+        &self,
+        workspace: &SpaceId,
+        name: &str,
+        device: Device,
+    ) -> Result<()> {
+        let _guard = match device {
+            Device::ForRequest => None,
+            Device::Keep | Device::ShutDown => Some(self.gates.lock_simulators().await),
+        };
         let leased = self.list_simulators(Some(workspace)).await?.into_iter();
         if let Some(mut sim) = leased.into_iter().find(|s| s.is_leased_by(workspace, name)) {
             sim.acquirer = Acquirer::User;
