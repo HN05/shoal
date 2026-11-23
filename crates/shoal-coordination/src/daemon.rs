@@ -232,10 +232,6 @@ pub trait Hub: Send + Sync {
     /// The spaces of other machines that the space `root` reaches.
     fn reached_through_elsewhere<'a>(&'a self, root: &'a SpaceId) -> BoxFuture<'a, Vec<SpaceId>>;
 
-    /// How many threads the space `id` opened on other machines wait for
-    /// their holder, as the hub lists them.
-    fn waiting_elsewhere<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, usize>;
-
     /// Whether `caller` reaches the space `id` of another machine.
     fn reaches_elsewhere<'a>(
         &'a self,

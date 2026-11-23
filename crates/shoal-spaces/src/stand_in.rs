@@ -1345,6 +1345,10 @@ impl Hub for StandIn {
         Box::pin(async { Default::default() })
     }
 
+    fn waiting_elsewhere<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, usize> {
+        Box::pin(async { Default::default() })
+    }
+
     fn tell_machine<'a>(&'a self, _: &'a Member, _: Operation) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { bail!("{NOT_HERE}: tell_machine") })
     }
@@ -1900,10 +1904,6 @@ impl shoal_coordination::daemon::Hub for StandIn {
     }
 
     fn reached_through_elsewhere<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Vec<SpaceId>> {
-        Box::pin(async { Default::default() })
-    }
-
-    fn waiting_elsewhere<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, usize> {
         Box::pin(async { Default::default() })
     }
 

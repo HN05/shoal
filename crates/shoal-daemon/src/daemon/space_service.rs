@@ -1088,6 +1088,10 @@ impl shoal_spaces::daemon::Hub for Manager {
         Box::pin(self.hub.other_machines(self))
     }
 
+    fn waiting_elsewhere<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, usize> {
+        Box::pin(self.hub.waiting_elsewhere(self, id))
+    }
+
     fn tell_machine<'a>(
         &'a self,
         machine: &'a Member,

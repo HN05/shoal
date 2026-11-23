@@ -288,10 +288,6 @@ impl Hub for Manager {
         Box::pin(self.hub.reached_through_elsewhere(self, root))
     }
 
-    fn waiting_elsewhere<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, usize> {
-        Box::pin(self.hub.waiting_elsewhere(self, id))
-    }
-
     fn reaches_elsewhere<'a>(
         &'a self,
         caller: &'a Caller,

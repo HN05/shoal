@@ -865,6 +865,10 @@ pub trait Hub: Send + Sync {
     /// The joined machines other than this one; none in no hub.
     fn other_machines(&self) -> BoxFuture<'_, Vec<Member>>;
 
+    /// How many threads the space `id` opened on other machines wait for
+    /// their holder, as the hub lists them.
+    fn waiting_elsewhere<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, usize>;
+
     /// Have `machine` carry out `operation` for the user, once it and the
     /// hub can be reached, which hold it until then; an error it answered.
     fn tell_machine<'a>(

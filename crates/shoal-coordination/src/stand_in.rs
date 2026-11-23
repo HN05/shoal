@@ -601,10 +601,6 @@ impl Hub for StandIn {
         Box::pin(async { Vec::new() })
     }
 
-    fn waiting_elsewhere<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, usize> {
-        Box::pin(async { 0 })
-    }
-
     fn reaches_elsewhere<'a>(
         &'a self,
         _: &'a Caller,
