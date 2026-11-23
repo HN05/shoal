@@ -60,6 +60,11 @@ pub trait OriginExt {
     /// as the host reads its data; empty for a host with one server. Places
     /// of different servers may share an ID.
     fn server(&self) -> String;
+
+    /// Whether `other` names the same place: on the same host and server,
+    /// by the same ID and instance, whatever else each records of it, such
+    /// as who created it or the group it was in then.
+    fn same_place(&self, other: &Origin) -> bool;
 }
 
 impl OriginExt for Origin {
@@ -67,6 +72,13 @@ impl OriginExt for Origin {
         host(self.host)
             .map(|host| host.server(&self.data))
             .unwrap_or_default()
+    }
+
+    fn same_place(&self, other: &Origin) -> bool {
+        self.host == other.host
+            && self.place == other.place
+            && self.instance == other.instance
+            && self.server() == other.server()
     }
 }
 

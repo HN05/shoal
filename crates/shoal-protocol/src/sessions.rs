@@ -73,16 +73,6 @@ impl Origin {
     pub fn id(&self) -> &str {
         self.place.as_deref().unwrap_or_default()
     }
-
-    /// Whether `other` names the same place: on the same host and server,
-    /// by the same ID and instance, whoever created it.
-    pub fn same_place(&self, other: &Origin) -> bool {
-        self.host == other.host
-            && self.group == other.group
-            && self.place == other.place
-            && self.data == other.data
-            && self.instance == other.instance
-    }
 }
 
 /// Whose a place is, as the daemon knows it when asked for a space.

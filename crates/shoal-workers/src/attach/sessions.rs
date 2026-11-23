@@ -8,7 +8,7 @@ use super::{Attaching, Target};
 use crate::{
     client::connection::CommandPaths,
     resume::{self, Resumed, sessions::Starts},
-    sessions::Origin,
+    sessions::{Origin, OriginExt as _},
     terminal::Session,
 };
 use shoal_ids::space_ids::SpaceNumber;

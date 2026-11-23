@@ -9,7 +9,7 @@ use anyhow::Result;
 use crate::{
     config::Effective,
     model::{Execution, Protection, RunningAgent},
-    sessions::{HostName, Origin},
+    sessions::{HostName, Origin, OriginExt as _},
     terminal::{Elsewhere, Host, Places, Session, Sessions, enabled_host, named},
 };
 

@@ -15,7 +15,7 @@ use crate::{
         ui,
     },
     model::{RestartOutcome, RestartWait},
-    sessions::Origin,
+    sessions::{Origin, OriginExt as _},
     terminal,
 };
 
