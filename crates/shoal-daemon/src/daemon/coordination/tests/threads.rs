@@ -805,3 +805,15 @@ async fn a_submitted_review_reaches_its_holder_once_and_its_comments_then_post_a
         "{heard:?}"
     );
 }
+
+#[tokio::test]
+async fn a_bare_cancel_in_the_writers_own_space_drops_its_only_pending_review() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let writer = shoal_reviews::written::Writer::Space(tree.parent.id.clone());
+    let review = start_review(manager, &tree.child, writer).await;
+    let own = SpaceSelector::id(&tree.parent.id);
+    let by = Some(tree.parent.id.clone());
+    let cancelled = (manager.reviews).cancel(&**manager, Some(&own), None, by);
+    assert_eq!(cancelled.await.unwrap().id, review.id);
+}

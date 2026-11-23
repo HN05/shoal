@@ -1840,7 +1840,7 @@ finished: 1 blocker, 2 should-fix`.
 shoal review ls [space]       # Newest first; --repo R for a repository's
 shoal view review [ID]          # One review in full; default: the workspace's latest not pending
 shoal watch review [ID]         # Wait until it ends, then show it
-shoal review cancel [ID]        # Default: the space's pending, queued or running review; --space S
+shoal review cancel [ID]        # Default: the space's pending, queued or running review, else your only pending one; --space S
 shoal thread switch 3.4         # Changes from now on are for the finding
 shoal send 3.4 'It only happens on empty input'  # The reviewer answers in the thread
 shoal thread resolve 3.4 false-positive --reason 'The caller checks the length'
@@ -1970,7 +1970,8 @@ its changes are attributed there, and says so in the thread; you check them and
 resolve it with an outcome of the table above, or reply. Only threads Shoal opens
 are resolved by their holder. `review cancel` drops a pending review with its
 comments, by its writer or you; without a review or `--space` it acts on the
-space it runs in, and outside every space drops your only pending one. Removing the space that writes a review, or the workspace it
+space it runs in, and drops your only pending review where that space has no
+review to cancel or outside every space. Removing the space that writes a review, or the workspace it
 reviews, drops it. For the review
 gates above, a submitted review covers the commit it recorded once every comment
 is resolved, and one without comments only when it approves; one that neither

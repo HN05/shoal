@@ -223,8 +223,7 @@ pub enum ReviewCommand {
         repository: Option<String>,
     },
     /// Cancel a queued or running review, or drop a pending one with its
-    /// comments; defaults to the space's, else outside every space your
-    /// only pending review.
+    /// comments; defaults to the space's, else your only pending review.
     Cancel {
         /// Review ID.
         id: Option<ReviewId>,

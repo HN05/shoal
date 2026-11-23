@@ -68,18 +68,29 @@ impl Reviews {
         }
     }
 
-    /// The review of the workspace `selector` names that a cancel without an
-    /// ID ends: `writer`'s pending one, else its queued or running one.
+    /// The review a cancel without an ID ends, of the workspace `selector`
+    /// names: `writer`'s pending one, else its queued or running one, else,
+    /// with neither, `writer`'s only pending review of any workspace.
     async fn cancelled_of(
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
         writer: &Writer,
     ) -> Result<ReviewId> {
-        match self.pending_of(daemon, selector, writer).await? {
-            Some(id) => Ok(id),
-            None => self.active(daemon, selector).await,
+        if let Some(id) = self.pending_of(daemon, selector, writer).await? {
+            return Ok(id);
         }
+        let workspace = daemon.workspace(selector).await?;
+        if let Some(id) = self.active(&workspace.id).await? {
+            return Ok(id);
+        }
+        let only = self.only_pending(writer).await?;
+        only.with_context(|| {
+            format!(
+                "{} has no queued or running review, nor is any one review of yours pending",
+                workspace.name
+            )
+        })
     }
 
     /// Cancel the run of Shoal's review `id`, queued or running, for a
@@ -103,14 +114,11 @@ impl Reviews {
         self.review(daemon, id).await
     }
 
-    /// The ID of the workspace's queued or running review.
-    async fn active(&self, daemon: &dyn Daemon, selector: &SpaceSelector) -> Result<ReviewId> {
-        let workspace = daemon.workspace(selector).await?;
-        let id = workspace.id.clone();
+    /// The ID of the workspace `id`'s queued or running review.
+    async fn active(&self, id: &SpaceId) -> Result<Option<ReviewId>> {
+        let id = id.clone();
         let active = self.store.run(move |db| store::active(db, &id)).await?;
-        let (id, _) = active
-            .with_context(|| format!("{} has no queued or running review", workspace.name))?;
-        Ok(id)
+        Ok(active.map(|(id, _)| id))
     }
 
     /// Refuse while a review of the repository is queued or running, or

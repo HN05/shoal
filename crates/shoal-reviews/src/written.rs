@@ -167,6 +167,18 @@ impl Reviews {
             .await
     }
 
+    /// `writer`'s pending review when it has exactly one.
+    pub(crate) async fn only_pending(&self, writer: &Writer) -> Result<Option<ReviewId>> {
+        let writer = writer.clone();
+        let pending = (self.store)
+            .run(move |db| store::pending_by(db, &writer))
+            .await?;
+        Ok(match pending.as_slice() {
+            [id] => Some(*id),
+            _ => None,
+        })
+    }
+
     /// Who writes review `id`, unless Shoal's reviewer does.
     pub(crate) async fn writer_of(&self, id: ReviewId) -> Result<Option<Writer>> {
         self.store.run(move |db| store::writer(db, id)).await
