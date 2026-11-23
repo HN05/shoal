@@ -49,15 +49,19 @@ pub(in crate::cli) async fn post(ctx: &Context, mut posting: Posting) -> Result<
     let posted = posted.await?;
     let mine = posted.posts.last().context("the post was not recorded")?;
     if !wait {
-        let to = match mine.side {
-            Side::Opener => Side::Holder,
-            Side::Holder => Side::Opener,
+        let message = match mine.side {
+            Some(side) => format!(
+                "Posted in thread {}, for {}.",
+                posted.number,
+                posted.party(side.other())
+            ),
+            None => format!(
+                "Posted in thread {} as a participant, for {} and {}.",
+                posted.number,
+                posted.party(Side::Opener),
+                posted.party(Side::Holder)
+            ),
         };
-        let message = format!(
-            "Posted in thread {}, for {}.",
-            posted.number,
-            posted.party(to)
-        );
         ctx.emit(&message, &posted)?;
         return Ok(0);
     }
@@ -134,12 +138,7 @@ fn resume_arguments(after: i64) -> Vec<std::ffi::OsString> {
 /// Print the other side's posts after the post `after`, or how the thread
 /// was settled; printed here, their alerts need not reach the agent again.
 async fn print_reply(ctx: &Context, thread: &Thread, after: i64) -> Result<i32> {
-    let mine = (thread.posts.iter())
-        .find(|post| post.id == after)
-        .map(|post| post.side);
-    let replies: Vec<&Post> = (thread.posts.iter())
-        .filter(|post| post.id > after && Some(post.side) != mine && post.speaks())
-        .collect();
+    let replies: Vec<&Post> = (thread.replies_to(after).into_iter().flatten()).collect();
     let text = match (&replies[..], &thread.resolution) {
         ([], Some(resolution)) => format!(
             "Thread {} was {}.",

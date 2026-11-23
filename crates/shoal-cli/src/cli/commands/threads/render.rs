@@ -143,13 +143,14 @@ fn entry_lines(entry: &ChangeEntry, palette: Palette) -> Vec<String> {
         .collect()
 }
 
-/// A post, `number` among those that speak: who sent it, its text, and
-/// what it offers or picks.
+/// A post, `number` among those that speak: who sent it, as a participant
+/// on neither side too, its text, and what it offers or picks.
 fn post_lines(number: u32, post: &Post, palette: Palette) -> Vec<String> {
     let author = post.author();
     let heading = match &post.forwarded_to {
         Some(holder) => format!("{author} forwarded it to {}", holder.label()),
         None if post.in_chat => format!("#{number} {author}, in the chat"),
+        None if post.side.is_none() => format!("#{number} {author}, participating"),
         None => format!("#{number} {author}"),
     };
     let mut lines = vec![format!("  {}", palette.paint(Style::Muted, heading))];

@@ -58,7 +58,9 @@ fn picked(thread: &Thread, side: Side, mut post: NewPost) -> Result<NewPost> {
         return Ok(post);
     };
     let offered = (thread.posts.iter().rev())
-        .find(|earlier| earlier.side != side && !earlier.post.choices.is_empty())
+        .find(|earlier| {
+            earlier.side.is_some_and(|earlier| earlier != side) && !earlier.post.choices.is_empty()
+        })
         .map_or(&[][..], |earlier| &earlier.post.choices[..]);
     let text = (choice.checked_sub(1))
         .and_then(|index| offered.get(usize::try_from(index).ok()?))
@@ -72,10 +74,10 @@ fn picked(thread: &Thread, side: Side, mut post: NewPost) -> Result<NewPost> {
     Ok(post)
 }
 
-/// Who posts: the side it takes, and the space it posts from, none for
-/// the user.
+/// Who posts: the side it takes, none for a participant, and the space it
+/// posts from, none for the user.
 pub struct Poster {
-    pub side: Side,
+    pub side: Option<Side>,
     pub space: Option<ThreadSpace>,
     /// Who held the thread when the poster's side was checked.
     pub seen: Holder,
@@ -149,10 +151,10 @@ pub fn record_post(
 ) -> Result<(Thread, Delivered)> {
     let thread = records::reread(tx, id)?;
     ensure_open(&thread)?;
-    if poster.side == Side::Holder {
+    if poster.side == Some(Side::Holder) {
         records::ensure_held_by(&thread, &poster.seen)?;
     }
-    if poster.side == Side::Opener && thread.opener == Sender::Space {
+    if poster.side == Some(Side::Opener) && thread.opener == Sender::Space {
         outside.require_taking_work(tx, &thread.space_id)?;
     }
     let recorded = records::insert_post(
@@ -201,7 +203,7 @@ impl Coordination {
         let side = self.side(daemon, caller, &thread).await?;
         let post = picked(&thread, side, post)?;
         validate(&post)?;
-        let poster = self.poster(daemon, caller, side, &thread.holder).await?;
+        let poster = (self.poster(daemon, caller, Some(side), &thread.holder)).await?;
         let files_space = self.files_space(daemon, &poster, &thread).await?;
         let attacher = daemon.attacher(caller).await;
         let text = post.text.clone();
@@ -267,13 +269,14 @@ impl Coordination {
         }
     }
 
-    /// Who posts for `caller` on `side`, checked while `seen` held the
-    /// thread: its space, here or on another machine, or the user.
+    /// Who posts for `caller` on `side`, none for a participant, checked
+    /// while `seen` held the thread: its space, here or on another machine,
+    /// or the user.
     pub(super) async fn poster(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
-        side: Side,
+        side: Option<Side>,
         seen: &Holder,
     ) -> Result<Poster> {
         let space = match caller {

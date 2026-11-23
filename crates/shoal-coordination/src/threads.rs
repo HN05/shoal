@@ -212,7 +212,7 @@ impl Coordination {
         let code = self.new_code(daemon, caller, code).await?;
         // The opener's side is checked against no holder.
         let poster = self
-            .poster(daemon, caller, Side::Opener, &Holder::User)
+            .poster(daemon, caller, Some(Side::Opener), &Holder::User)
             .await?;
         Ok(Some(Opening { poster, code }))
     }

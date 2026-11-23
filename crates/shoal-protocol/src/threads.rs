@@ -1,6 +1,6 @@
 //! Threads: conversations between whoever opened one, the user, a space or
 //! Shoal, and whoever holds it now, the user or a space, with posts from
-//! both sides and a typed resolution.
+//! both sides and from other participants, and a typed resolution.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Context as _, Result, bail};
@@ -69,6 +69,16 @@ states!(
         Holder => "holder",
     }
 );
+
+impl Side {
+    /// The side across from this one.
+    pub fn other(self) -> Self {
+        match self {
+            Self::Opener => Self::Holder,
+            Self::Holder => Self::Opener,
+        }
+    }
+}
 
 states!(
     /// Which threads a listing shows.
@@ -324,7 +334,10 @@ pub struct NewPost {
 pub struct Post {
     pub id: i64,
     pub created_at: crate::time::UnixTime,
-    pub side: Side,
+    /// The side it came from; none for a participant's post, from a space
+    /// on neither side, which leaves whose turn it is as it was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<Side>,
     pub sender: Sender,
     /// The space that sent it, unless the user or Shoal did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -343,7 +356,8 @@ pub struct Post {
     /// Whether it is the final message of a turn in the sender's chat.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub in_chat: bool,
-    /// Whom it forwarded the thread to, with its text as the note.
+    /// Whom it forwarded its side's role in the thread to, with its text as
+    /// the note.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forwarded_to: Option<Holder>,
     /// The alert that carried it to whom it was for, until delivered.
@@ -496,17 +510,22 @@ impl Thread {
     }
 
     /// The side whose turn it is to post: the other side of its last post
-    /// that speaks, while it is open; none before its first post, or while
-    /// it holds its posts, which have reached nobody.
+    /// that speaks from a side, while it is open; none before its first
+    /// such post, or while it holds its posts, which have reached nobody.
     pub fn awaits(&self) -> Option<Side> {
         if !self.is_open() || self.held {
             return None;
         }
-        let last = self.posts.iter().rev().find(|post| post.speaks())?;
-        Some(match last.side {
-            Side::Opener => Side::Holder,
-            Side::Holder => Side::Opener,
-        })
+        Some(self.last_turn()?.side?.other())
+    }
+
+    /// The posts after the post `id` that answer it: those that speak from
+    /// a side other than its own; none when it has no post `id`.
+    pub fn replies_to(&self, id: i64) -> Option<impl Iterator<Item = &Post>> {
+        let side = self.posts.iter().find(|post| post.id == id)?.side;
+        Some((self.posts.iter()).filter(move |post| {
+            post.id > id && post.speaks() && post.side.is_some() && post.side != side
+        }))
     }
 
     /// Where it stands for editors.
@@ -595,6 +614,12 @@ impl Thread {
     /// The latest post, which a listing shows.
     pub fn last_post(&self) -> Option<&Post> {
         self.posts.iter().rev().find(|post| post.speaks())
+    }
+
+    /// The latest post from a side, which decides whose turn it is and is
+    /// the one that turn answers.
+    pub fn last_turn(&self) -> Option<&Post> {
+        (self.posts.iter().rev()).find(|post| post.speaks() && post.side.is_some())
     }
 
     /// What the user is told of its latest post, in one line, with how to

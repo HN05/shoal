@@ -862,6 +862,11 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 293 {
         db.execute_batch(include_str!("machine_pause.sql"))?;
     }
+    if version >= 294 {
+        db.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        participant_posts(&db)?;
+        db.execute_batch("PRAGMA foreign_keys=ON;")?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2545,7 +2550,7 @@ fn agent_leases_name_the_space_their_execution_ran_in() -> Result<()> {
             json_object('workspace_id','child','acquirer',json_object('kind','agent','execution_id','run')));",
     )?;
 
-    migrate(&mut db)?;
+    migrate_to(&mut db, 284)?;
 
     let acquirers: Vec<(String, String)> = db
         .prepare("SELECT id,acquirer_id FROM resource_leases ORDER BY id")?
@@ -4799,4 +4804,37 @@ async fn current_schema_reopen_preserves_active_operations() {
         let reopened = Store::open(path.clone()).await.unwrap();
         assert_eq!(reopened.run(operation_snapshot).await.unwrap(), before);
     }
+}
+
+#[test]
+fn migrated_posts_keep_their_side_and_new_ones_may_take_none() -> Result<()> {
+    let mut db = historical_database(293)?;
+    db.execute_batch(
+        "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener)
+            VALUES (1,'workspace',1,1,'question','Which?',1,'user');
+        INSERT INTO thread_posts(id,thread_id,created_at,side,sender,text)
+            VALUES (1,1,2,'opener','user','Which one?');
+        INSERT INTO thread_code(post_id,space_id,space_name,repository_id,path,latest_path,state)
+            VALUES (1,'workspace','worker','repo','a.rs','a.rs','unchanged');",
+    )?;
+
+    migrate(&mut db)?;
+
+    db.execute(
+        "INSERT INTO thread_posts(thread_id,created_at,sender,sender_id,text)
+            VALUES (1,3,'space','workspace','The first')",
+        [],
+    )?;
+    let sides: Vec<Option<String>> = db
+        .prepare("SELECT side FROM thread_posts ORDER BY id")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(sides, [Some("opener".to_owned()), None]);
+    let code: i64 = db.query_row(
+        "SELECT COUNT(*) FROM thread_code WHERE post_id=1",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(code, 1);
+    Ok(())
 }

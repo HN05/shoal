@@ -36,7 +36,7 @@ impl Coordination {
         }
         let holder = self.next_holder(daemon, &thread, to).await?;
         let poster = self
-            .poster(daemon, caller, Side::Holder, &thread.holder)
+            .poster(daemon, caller, Some(Side::Holder), &thread.holder)
             .await?;
         let id = thread.id;
         let outside = self.records.clone();

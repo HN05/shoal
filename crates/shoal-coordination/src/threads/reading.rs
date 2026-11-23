@@ -143,9 +143,10 @@ impl Coordination {
     }
 
     /// The thread `item` of the space `selector` names, which `caller`
-    /// reads, once the other side of the post `after` posts, or it is
-    /// resolved. The space's ID finds
-    /// it, since the hub may give the space another number meanwhile.
+    /// reads, once a post answers the post `after`, as
+    /// [`Thread::replies_to`] counts them, or it is resolved. The space's
+    /// ID finds it, since the hub may give the space another number
+    /// meanwhile.
     pub async fn await_post(
         &self,
         daemon: &dyn Daemon,
@@ -173,12 +174,10 @@ impl Coordination {
                 );
                 checked = true;
             }
-            let side = (thread.posts.iter())
-                .find(|post| post.id == after)
-                .map(|post| post.side)
-                .with_context(|| format!("thread {} has no post {after}", thread.number))?;
-            let answered = (thread.posts.iter())
-                .any(|post| post.id > after && post.side != side && post.speaks());
+            let answered = (thread.replies_to(after))
+                .with_context(|| format!("thread {} has no post {after}", thread.number))?
+                .next()
+                .is_some();
             if answered || !thread.is_open() {
                 return Ok(thread);
             }

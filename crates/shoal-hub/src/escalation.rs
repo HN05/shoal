@@ -176,7 +176,7 @@ struct Waiting {
 
 impl Waiting {
     fn of(thread: Thread) -> Option<Self> {
-        let since = thread.last_post()?.created_at;
+        let since = thread.last_turn()?.created_at;
         thread.is_waiting().then_some(Self { thread, since })
     }
 }

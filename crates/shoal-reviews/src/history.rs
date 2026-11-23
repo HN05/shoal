@@ -117,8 +117,9 @@ pub(crate) fn thread_entry(thread: &Thread) -> String {
     let mut text = format!("### Finding {}", thread.finding_line());
     for post in thread.posts.iter().filter(|post| post.speaks()) {
         let author = match post.side {
-            Side::Opener => "Reviewer",
-            Side::Holder => "Author",
+            Some(Side::Opener) => "Reviewer".to_owned(),
+            Some(Side::Holder) => "Author".to_owned(),
+            None => post.author(),
         };
         let _ = write!(text, "\n\n{author}: {}", post.post.text);
     }

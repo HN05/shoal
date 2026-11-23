@@ -10,7 +10,7 @@ use super::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-pub const SCHEMA_VERSION: i64 = 293;
+pub const SCHEMA_VERSION: i64 = 294;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -582,12 +582,13 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (291, include_str!("hub_user_alerts.sql"), None),
     (292, include_str!("hub_alert_marks.sql"), None),
     (293, include_str!("machine_pause.sql"), None),
+    (294, "", Some(participant_posts)),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
 /// own with foreign keys off, so dropping the old table deletes nothing that
 /// references it.
-const REBUILDS: &[i64] = &[150, 182, 200, 245];
+const REBUILDS: &[i64] = &[150, 182, 200, 245, 294];
 
 /// Names are labels that may repeat, so the tables of workspaces and chats
 /// lose the unique constraint on them, which only a rebuild removes.
@@ -621,6 +622,18 @@ pub(super) fn workspace_heads(db: &Connection) -> Result<()> {
         "made_for TEXT",
         "made_for TEXT CHECK(made_for IS NULL OR start_commit IS NOT NULL)
         CHECK((branch IS NULL) <> (start_commit IS NULL))",
+    )
+}
+
+/// A post may take neither side of its thread, as one from a space that
+/// reads the thread without taking part in it, which only a rebuild lets
+/// the table hold.
+pub(super) fn participant_posts(db: &Connection) -> Result<()> {
+    rebuild(
+        db,
+        "thread_posts",
+        "side TEXT NOT NULL CHECK(side IN ('opener','holder'))",
+        "side TEXT CHECK(side IN ('opener','holder'))",
     )
 }
 

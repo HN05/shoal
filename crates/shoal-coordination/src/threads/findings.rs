@@ -149,13 +149,14 @@ pub fn of_review(db: &Connection, review: ReviewId) -> Result<Vec<Thread>> {
 }
 
 /// The posts of their holders that end the open `review` threads Shoal
-/// opened for a review, counting the posts that speak, which wait for the
-/// reviewer's answer.
+/// opened for a review, counting the posts that speak from a side, which
+/// wait for the reviewer's answer.
 pub fn awaiting_answers(db: &Connection) -> Result<Vec<AwaitedPost>> {
     Ok(db
         .prepare(
             "SELECT t.id,p.id FROM threads t JOIN thread_posts p ON p.id=(SELECT id
-                    FROM thread_posts WHERE thread_id=t.id AND forwards=0 ORDER BY id DESC LIMIT 1)
+                    FROM thread_posts WHERE thread_id=t.id AND forwards=0 AND side IS NOT NULL
+                        ORDER BY id DESC LIMIT 1)
                 WHERE t.review_id IS NOT NULL AND t.kind='review' AND t.opener='shoal'
                 AND t.outcome IS NULL AND t.space_number IS NOT NULL AND p.side='holder'
                 ORDER BY t.id",
@@ -226,7 +227,7 @@ fn record_shoal_post(tx: &Transaction<'_>, id: i64, text: &str, code: &[NewCode]
     let new = NewRecord {
         thread: id,
         author: Author {
-            side: Side::Opener,
+            side: Some(Side::Opener),
             sender: Sender::Shoal,
             space: None,
         },

@@ -303,7 +303,7 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
     // The child's side was checked while it held the thread, which then
     // went up before its post was recorded.
     let poster = shoal_coordination::threads::posting::Poster {
-        side: Side::Holder,
+        side: Some(Side::Holder),
         space: Some(ThreadSpace::here(tree.child.id.clone())),
         seen: thread.holder.clone(),
     };

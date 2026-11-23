@@ -61,8 +61,8 @@ fn side_of(thread: &Thread, id: &SpaceId) -> Option<Side> {
     }
 }
 
-/// The open threads whose last post the space `space_id` made in its
-/// chat, each with that post, which a reply there answers.
+/// The open threads whose last post from a side the space `space_id` made
+/// in its chat, each with that post, which a reply there answers.
 fn answered_in_chat(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<(Thread, Post)>> {
     let open = records::query(
         tx,
@@ -76,7 +76,7 @@ fn answered_in_chat(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<(Thr
     Ok(open
         .into_iter()
         .filter_map(|thread| {
-            let last = thread.last_post()?.clone();
+            let last = thread.last_turn()?.clone();
             let ours = last.in_chat
                 && last
                     .space
@@ -100,9 +100,9 @@ pub fn record_replies(
     let text = chat_text(prompt, REPLIED);
     let mut delivered = Delivered::default();
     for (thread, post) in answered_in_chat(tx, space_id)? {
-        let side = match post.side {
-            Side::Opener => Side::Holder,
-            Side::Holder => Side::Opener,
+        // A post in a chat comes from a side, which only its parties take.
+        let Some(side) = post.side.map(Side::other) else {
+            continue;
         };
         let reply = NewPost {
             text: text.clone(),
@@ -113,7 +113,7 @@ pub fn record_replies(
             &records::NewRecord {
                 thread: thread.id,
                 author: records::Author {
-                    side,
+                    side: Some(side),
                     sender: Sender::User,
                     space: None,
                 },
@@ -208,7 +208,7 @@ impl Coordination {
                     return Ok((Delivered::default(), false));
                 };
                 let poster = Poster {
-                    side,
+                    side: Some(side),
                     space: Some(ThreadSpace::of(&space)),
                     seen: thread.holder.clone(),
                 };

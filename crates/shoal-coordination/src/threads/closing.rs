@@ -94,7 +94,7 @@ fn tell_opener(
         &NewRecord {
             thread: thread.id,
             author: Author {
-                side: Side::Holder,
+                side: Some(Side::Holder),
                 sender: Sender::Shoal,
                 space: None,
             },

@@ -811,26 +811,6 @@ CREATE TABLE threads (
         AND (outcome IS NULL) = (resolved_at IS NULL))
 );
 
-CREATE TABLE thread_posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-    created_at INTEGER NOT NULL,
-    side TEXT NOT NULL CHECK(side IN ('opener','holder')),
-    sender TEXT NOT NULL CHECK(sender IN ('user','space','shoal')),
-    sender_id TEXT,
-    sender_name TEXT,
-    text TEXT NOT NULL,
-    choices TEXT NOT NULL DEFAULT '[]',
-    recommendation TEXT,
-    reason TEXT,
-    choice INTEGER,
-    files TEXT NOT NULL DEFAULT '[]',
-    in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1)),
-    forwards INTEGER NOT NULL DEFAULT 0 CHECK(forwards IN (0,1)),
-    forwarded_to TEXT,
-    alert_id INTEGER
-, sender_number INTEGER, forwarded_name TEXT, forwarded_number INTEGER);
-
 CREATE TABLE thread_holders (
     thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
     space_id TEXT NOT NULL,
@@ -1136,6 +1116,26 @@ CREATE TABLE machine_pause (
     paused_at INTEGER NOT NULL
 );
 
+CREATE TABLE "thread_posts" (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    side TEXT CHECK(side IN ('opener','holder')),
+    sender TEXT NOT NULL CHECK(sender IN ('user','space','shoal')),
+    sender_id TEXT,
+    sender_name TEXT,
+    text TEXT NOT NULL,
+    choices TEXT NOT NULL DEFAULT '[]',
+    recommendation TEXT,
+    reason TEXT,
+    choice INTEGER,
+    files TEXT NOT NULL DEFAULT '[]',
+    in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1)),
+    forwards INTEGER NOT NULL DEFAULT 0 CHECK(forwards IN (0,1)),
+    forwarded_to TEXT,
+    alert_id INTEGER
+, sender_number INTEGER, forwarded_name TEXT, forwarded_number INTEGER);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1214,8 +1214,6 @@ CREATE INDEX threads_space ON threads(space_id, id);
 
 CREATE INDEX threads_holder ON threads(holder_id);
 
-CREATE INDEX thread_posts_thread ON thread_posts(thread_id, id);
-
 CREATE INDEX thread_code_post ON thread_code(post_id);
 
 CREATE INDEX thread_code_space ON thread_code(space_id);
@@ -1251,6 +1249,8 @@ CREATE UNIQUE INDEX reviews_pending ON reviews(workspace_id, opener, COALESCE(op
 CREATE INDEX threads_opener ON threads(opener_id) WHERE opener_id IS NOT NULL;
 
 CREATE INDEX hub_alert_numbers_member ON hub_alert_numbers(member_id, spare);
+
+CREATE INDEX thread_posts_thread ON thread_posts(thread_id, id);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind
@@ -1289,11 +1289,11 @@ INSERT INTO "sqlite_sequence" VALUES ('agent_queue', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('alerts', 0);
 
-INSERT INTO "sqlite_sequence" VALUES ('thread_posts', 0);
-
 INSERT INTO "sqlite_sequence" VALUES ('threads', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('thread_code', 0);
+
+INSERT INTO "sqlite_sequence" VALUES ('thread_posts', 0);
 
 INSERT INTO "journal_pruned" VALUES (0);
 
@@ -1750,21 +1750,6 @@ WHEN OLD.outcome IS NOT NEW.outcome AND NOT NEW.held BEGIN
     ) FROM space_event_records WHERE id=NEW.space_id;
 END;
 
-CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
-    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
-        '$.kind',iif(NEW.forwards,'thread_forwarded','thread_posted'),
-        '$.thread',json_object('space_number',t.space_number,'item',t.number,
-            'number',t.space_number||'.'||t.number,'name',t.name,'text',NEW.text,
-            'sender',COALESCE(NEW.sender_name,
-                CASE NEW.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END),
-            'to',CASE WHEN NOT NEW.forwards THEN NULL
-                WHEN NEW.forwarded_to IS NULL THEN 'the user'
-                ELSE COALESCE((SELECT name FROM spaces WHERE id=NEW.forwarded_to),
-                    NEW.forwarded_name, NEW.forwarded_to) END)
-    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id
-    WHERE t.id=NEW.thread_id AND NOT t.held;
-END;
-
 CREATE TRIGGER thread_released AFTER UPDATE OF held ON threads
 WHEN OLD.held AND NOT NEW.held BEGIN
     INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
@@ -1780,4 +1765,19 @@ WHEN OLD.held AND NOT NEW.held BEGIN
                 CASE p.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END))
     ) FROM thread_posts p JOIN space_event_records r ON r.id=NEW.space_id
     WHERE p.thread_id=NEW.id AND NOT p.forwards ORDER BY p.id;
+END;
+
+CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
+    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
+        '$.kind',iif(NEW.forwards,'thread_forwarded','thread_posted'),
+        '$.thread',json_object('space_number',t.space_number,'item',t.number,
+            'number',t.space_number||'.'||t.number,'name',t.name,'text',NEW.text,
+            'sender',COALESCE(NEW.sender_name,
+                CASE NEW.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END),
+            'to',CASE WHEN NOT NEW.forwards THEN NULL
+                WHEN NEW.forwarded_to IS NULL THEN 'the user'
+                ELSE COALESCE((SELECT name FROM spaces WHERE id=NEW.forwarded_to),
+                    NEW.forwarded_name, NEW.forwarded_to) END)
+    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id
+    WHERE t.id=NEW.thread_id AND NOT t.held;
 END;

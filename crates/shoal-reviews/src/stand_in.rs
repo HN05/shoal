@@ -480,7 +480,7 @@ impl StandInRecords {
             .unwrap();
         let id = thread.id * 100 + i64::try_from(thread.posts.len()).unwrap();
         let mut post = Self::shoal_post(id, text, Vec::new());
-        (post.side, post.sender) = (Side::Holder, Sender::Space);
+        (post.side, post.sender) = (Some(Side::Holder), Sender::Space);
         thread.posts.push(post);
     }
 
@@ -525,7 +525,7 @@ impl StandInRecords {
         Post {
             id,
             created_at: UnixTime::from_seconds(id),
-            side: Side::Opener,
+            side: Some(Side::Opener),
             sender: Sender::Shoal,
             space: None,
             post: NewPost {
@@ -639,7 +639,7 @@ impl Records for StandInRecords {
             .iter()
             .filter(|thread| thread.awaits() == Some(Side::Opener));
         Ok((waiting.filter_map(|thread| {
-            let post = thread.last_post()?.id;
+            let post = thread.last_turn()?.id;
             Some(AwaitedPost {
                 thread: thread.id,
                 post,

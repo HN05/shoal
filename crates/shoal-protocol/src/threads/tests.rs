@@ -8,6 +8,11 @@ fn number(space: u32, item: u32) -> ItemNumber {
 }
 
 fn post(id: i64, side: Side) -> Post {
+    on(id, Some(side))
+}
+
+/// A post on `side`, or a participant's on neither.
+fn on(id: i64, side: Option<Side>) -> Post {
     Post {
         id,
         created_at: crate::time::UnixTime::from_seconds(id),
@@ -89,6 +94,48 @@ fn a_forward_leaves_the_thread_waiting_for_its_holder() {
         vec![post(1, Side::Opener), forward],
     );
     assert!(forwarded.is_waiting());
+}
+
+#[test]
+fn a_participant_s_post_leaves_the_turn_where_it_was() {
+    let joined = thread(
+        Sender::Space,
+        Holder::User,
+        vec![post(1, Side::Opener), on(2, None)],
+    );
+    assert_eq!(joined.awaits(), Some(Side::Holder));
+    assert!(joined.waits_for_user());
+    assert_eq!(joined.last_turn().map(|post| post.id), Some(1));
+    let replies: Vec<i64> = (joined.replies_to(1).unwrap())
+        .map(|post| post.id)
+        .collect();
+    assert!(replies.is_empty());
+}
+
+#[test]
+fn a_participant_s_post_is_answered_by_either_side() {
+    let answered = thread(
+        Sender::Space,
+        Holder::User,
+        vec![
+            post(1, Side::Opener),
+            on(2, None),
+            on(3, None),
+            post(4, Side::Opener),
+        ],
+    );
+    let replies: Vec<i64> = (answered.replies_to(2).unwrap())
+        .map(|post| post.id)
+        .collect();
+    assert_eq!(replies, [4]);
+}
+
+#[test]
+fn a_participant_s_post_records_no_side() {
+    let joined = thread(Sender::Space, Holder::User, vec![on(1, None)]);
+    let json = serde_json::to_value(&joined).unwrap();
+    assert!(json["posts"][0].get("side").is_none());
+    assert_eq!(serde_json::from_value::<Thread>(json).unwrap(), joined);
 }
 
 #[test]

@@ -407,9 +407,8 @@ pub(super) fn deliver_post(
     let Some(post) = thread.posts.last() else {
         return Ok(());
     };
-    let to = match post.side {
-        Side::Opener => Side::Holder,
-        Side::Holder => Side::Opener,
+    let Some(to) = post.side.map(Side::other) else {
+        return Ok(());
     };
     let party = Party::of(thread, to);
     if let Some(party) = &party

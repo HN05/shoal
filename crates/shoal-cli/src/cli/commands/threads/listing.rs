@@ -94,11 +94,11 @@ fn picker_rows(threads: &[Thread]) -> Entries {
 }
 
 /// Show `thread` and post the user's reply: Enter alone takes the
-/// recommendation of its latest post, and cancels without one; Ctrl-C or
+/// recommendation of the latest post from a side, and cancels without one; Ctrl-C or
 /// end of input cancels.
 async fn reply(ctx: &Context, thread: Thread) -> Result<i32> {
     eprintln!("{}", render::details(&thread, Palette::stderr(ctx.json)));
-    let recommendation = (thread.last_post()).and_then(|post| post.post.recommendation.clone());
+    let recommendation = (thread.last_turn()).and_then(|post| post.post.recommendation.clone());
     let prompt = match &recommendation {
         Some(recommendation) => format!("Reply [{recommendation}]"),
         None => "Reply".to_owned(),

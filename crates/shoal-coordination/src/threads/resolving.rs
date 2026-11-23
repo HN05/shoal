@@ -148,11 +148,7 @@ fn tell_resolution(
     by: &str,
 ) -> Result<Delivered> {
     let mut delivered = Delivered::default();
-    let other = match side {
-        Side::Opener => Side::Holder,
-        Side::Holder => Side::Opener,
-    };
-    let Some(party) = Party::of(thread, other) else {
+    let Some(party) = Party::of(thread, side.other()) else {
         return Ok(delivered);
     };
     if !thread.posts.iter().any(Post::speaks) {

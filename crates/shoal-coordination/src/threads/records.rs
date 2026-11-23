@@ -368,9 +368,10 @@ pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result
     Ok(id)
 }
 
-/// Who sends a post, from which side, and the space it sends from.
+/// Who sends a post, from which side, none for a participant, and the
+/// space it sends from.
 pub(super) struct Author<'a> {
-    pub(super) side: Side,
+    pub(super) side: Option<Side>,
     pub(super) sender: Sender,
     pub(super) space: Option<&'a ThreadSpace>,
 }

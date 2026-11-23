@@ -262,7 +262,7 @@ impl Records for AgentRecords {
                 number: thread.number,
                 about: first_line(
                     thread
-                        .last_post()
+                        .last_turn()
                         .map_or(&thread.name, |post| &post.post.text),
                 ),
             }),

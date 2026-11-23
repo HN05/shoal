@@ -11,7 +11,7 @@ use shoal_protocol::{
 fn finding(item: u32, outcome: Option<Outcome>) -> Thread {
     let mut thread = crate::stand_in::finding(item, "src/a.rs", Severity::Blocker, "It breaks.");
     let mut reply = thread.posts[0].clone();
-    reply.side = Side::Holder;
+    reply.side = Some(Side::Holder);
     reply.post.text = "Only on empty input.".into();
     thread.posts.push(reply);
     thread.resolution = outcome.map(|outcome| Resolution {
