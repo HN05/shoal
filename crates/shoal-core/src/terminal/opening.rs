@@ -32,7 +32,7 @@ pub async fn show_place_elsewhere(
     name: &str,
     viewer: &Elsewhere<'_>,
 ) -> Result<()> {
-    let place = super::shown_elsewhere(place, viewer);
+    let place = super::shown_elsewhere(place, viewer).await;
     let places = named(place.host).places().with_context(|| {
         format!(
             "{name} runs in {} on machine {}, which shows no places elsewhere; open it there",

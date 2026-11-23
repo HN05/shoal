@@ -346,7 +346,8 @@ fn enabled_places<'a>(
 /// say how to return to it with `shoal attach <space>` when it outlives the
 /// attach. Returns whether its place still has a session once shown.
 pub async fn attach(space: &str, session: &Session) -> Result<bool> {
-    let (place, name) = shown(session, shown_here(&session.place));
+    let itself = shown_itself_here(&session.place);
+    let (place, name) = shown(session, shown_place(&session.place, itself));
     let (places, sessions) = keeping(place)?;
     places.show(place, name).await?;
     report_detach(sessions, space, name).await?;
@@ -361,7 +362,8 @@ pub async fn show_elsewhere(
     session: &Session,
     viewer: &Elsewhere<'_>,
 ) -> Result<bool> {
-    let (place, name) = shown(session, shown_elsewhere(&session.place, viewer));
+    let itself = shown_itself_elsewhere(viewer);
+    let (place, name) = shown(session, shown_place(&session.place, itself));
     let (places, sessions) = keeping(place)?;
     places.show_elsewhere(place, name, viewer).await?;
     report_detach(sessions, space, name).await?;
@@ -377,18 +379,56 @@ fn shown<'a>(session: &'a Session, shown: &'a Origin) -> (&'a Origin, &'a str) {
     }
 }
 
-/// What shows `place` on this terminal: the place itself where its host
-/// serves the terminal, otherwise the session nested in it, if any, which
-/// any terminal attaches to.
-pub fn shown_here(place: &Origin) -> &Origin {
-    shown_place(place, named(place.host).serves())
+/// What shows `place`, a place recorded for work Shoal runs, on this
+/// terminal: the place itself where its host serves the terminal and it
+/// still shows the session nested in it, otherwise that session, which any
+/// terminal attaches to.
+pub async fn shown_here(place: &Origin) -> &Origin {
+    let itself = shown_itself_here(place) && shows_nested(place).await;
+    shown_place(place, itself)
 }
 
 /// What shows `place` to `viewer`, a user on another machine: the place
-/// itself where their app for its host shows it, otherwise the session
-/// nested in it, if any.
-pub fn shown_elsewhere<'a>(place: &'a Origin, viewer: &Elsewhere<'_>) -> &'a Origin {
-    shown_place(place, viewer.app.is_some())
+/// itself where their app for its host shows it and it still shows the
+/// session nested in it, otherwise that session.
+pub async fn shown_elsewhere<'a>(place: &'a Origin, viewer: &Elsewhere<'_>) -> &'a Origin {
+    let itself = shown_itself_elsewhere(viewer) && shows_nested(place).await;
+    shown_place(place, itself)
+}
+
+/// Whether this terminal shows a place of `place`'s host itself: where the
+/// host serves it.
+fn shown_itself_here(place: &Origin) -> bool {
+    named(place.host).serves()
+}
+
+/// Whether `viewer` sees a place itself: where their app for its host
+/// shows it.
+fn shown_itself_elsewhere(viewer: &Elsewhere<'_>) -> bool {
+    viewer.app.is_some()
+}
+
+/// Whether `place` still shows the session nested in it, if any: until a
+/// detach there leaves the session without clients, the place's own client
+/// among them. A session its host cannot read counts as shown.
+async fn shows_nested(place: &Origin) -> bool {
+    let Some(nested) = place.nested.as_deref() else {
+        return true;
+    };
+    let Some(sessions) = named(nested.host).sessions() else {
+        return true;
+    };
+    match sessions.session_at(nested).await {
+        Ok(found) => still_shown(found.as_ref()),
+        Err(_) => true,
+    }
+}
+
+/// Whether a place shows `found`, the session nested in it as its host
+/// found it: while it has a client, or once it is gone, when the place
+/// shows what is left.
+fn still_shown(found: Option<&Session>) -> bool {
+    found.is_none_or(|session| session.clients > 0)
 }
 
 /// `place` where `itself`, otherwise the session nested in it, if any.

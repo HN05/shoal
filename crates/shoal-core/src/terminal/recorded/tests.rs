@@ -362,8 +362,9 @@ fn a_terminal_its_host_does_not_serve_attaches_to_the_nested_session() {
         machine: "studio",
         app,
     };
-    assert_eq!(shown_elsewhere(&pane, &viewer(Some("Rex"))), &pane);
-    assert_eq!(shown_elsewhere(&pane, &viewer(None)).host, HostName::Zmx);
+    let itself = |app| shown_itself_elsewhere(&viewer(app));
+    assert_eq!(shown_place(&pane, itself(Some("Rex"))), &pane);
+    assert_eq!(shown_place(&pane, itself(None)).host, HostName::Zmx);
 }
 
 #[test]
@@ -376,4 +377,14 @@ fn a_repeated_place_keeps_the_session_a_later_record_nests_there() {
     };
     let distinct = distinct_places(&[unrecorded(&bare), agent]);
     assert_eq!(distinct, [agent]);
+}
+
+#[test]
+fn a_place_stops_showing_its_nested_session_once_no_client_is_attached() {
+    let pane = pane_with("work");
+    let session = pane.nested.as_deref().unwrap();
+    let found = |clients| Session::open("work".into(), clients, session);
+    assert!(still_shown(Some(&found(1))));
+    assert!(!still_shown(Some(&found(0))));
+    assert!(still_shown(None));
 }
