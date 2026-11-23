@@ -208,9 +208,9 @@ pub enum ReviewCommand {
         /// count for the review gates.
         #[arg(long)]
         approve: bool,
-        /// A file holding the review's summary.
-        #[arg(long, value_name = "FILE")]
-        body_file: Option<PathBuf>,
+        /// The review's summary.
+        #[command(flatten)]
+        body: crate::cli::args::BodyArgs,
     },
     /// List reviews with their state and unresolved findings, newest first.
     Ls {

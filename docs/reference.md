@@ -1938,7 +1938,7 @@ owns the PR's branch.
 ```sh
 shoal review start [space]                           # A pending review of a workspace's work
 shoal thread open "Retries are unbounded" --code src/fetch.rs:40-52   # Its comment
-shoal review submit [--approve] [--body-file F] [-s space]
+shoal review submit [--approve] [--body T | --body-file F] [-s space]
 shoal review cancel                                  # Drop it with its comments
 ```
 
@@ -1955,8 +1955,9 @@ comment's `--code` may point at unsaved lines, since a reference keeps its own
 file version.
 
 `review submit` submits your pending review of `--space`, else your only one, at
-the workspace's HEAD, with the summary `--body-file` holds: the workspace's agent
-receives it as one message with each comment, and the agent coordinating the
+the workspace's HEAD, with a summary of up to 4 KiB from `--body` or
+`--body-file`: the workspace's agent receives it as one message with each
+comment, and the agent coordinating the
 workspace hears one line of a review you wrote. Its verdict is `approve` with
 `--approve`, else `request_changes` with comments, else `comment`. Comments then
 post as any thread does: the agent fixes, switching to the comment's thread so

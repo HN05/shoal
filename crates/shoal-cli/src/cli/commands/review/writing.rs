@@ -1,10 +1,10 @@
 //! `shoal review start` and `submit`: the caller's own review of a
 //! workspace's work, whose comments are the threads it opens towards that
 //! workspace until it submits them together.
-use std::path::PathBuf;
+use anyhow::{Result, bail};
 
-use anyhow::{Context as _, Result, bail};
-
+use super::super::items::content::read_body;
+use crate::cli::args::BodyArgs;
 use crate::cli::ui::{self, Acting, Fallback};
 use crate::client::reviews;
 use crate::{
@@ -36,23 +36,15 @@ pub(super) fn starting() -> Acting {
 }
 
 /// Submit the caller's pending review of the workspace `space` names, else
-/// its only one, with the summary `body_file` holds, approving the work
-/// when `approve`.
+/// its only one, with the summary `body` gives, approving the work when
+/// `approve`.
 pub(super) async fn submit(
     ctx: &Context,
     space: Option<SpaceSelector>,
     approve: bool,
-    body_file: Option<PathBuf>,
+    body: BodyArgs,
 ) -> Result<i32> {
-    let summary = match body_file {
-        Some(path) => Some(
-            std::fs::read_to_string(&path)
-                .with_context(|| format!("read {}", path.display()))?
-                .trim_end()
-                .to_owned(),
-        ),
-        None => None,
-    };
+    let summary = read_body(body)?.map(|summary| summary.trim_end().to_owned());
     let review = reviews::submit(space, approve, summary)
         .send(&ctx.paths)
         .await?;

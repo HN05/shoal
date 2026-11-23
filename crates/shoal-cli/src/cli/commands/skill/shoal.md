@@ -565,7 +565,7 @@ of the workspace's HEAD where that is the commit, and otherwise names
 ```sh
 shoal review start <space>          # A pending review of a workspace below you
 shoal thread open "Retries are unbounded" --space <space> --code src/fetch.rs:40-52
-shoal review submit [--approve] [--body-file F] [-s space]
+shoal review submit [--approve] [--body T | --body-file F] [-s space]
 shoal review cancel [<id>]          # Drop a pending review with its comments
 ```
 

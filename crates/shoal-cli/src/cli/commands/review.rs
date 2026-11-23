@@ -43,8 +43,8 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
         ReviewCommand::Submit {
             space,
             approve,
-            body_file,
-        } => writing::submit(ctx, space, approve, body_file).await,
+            body,
+        } => writing::submit(ctx, space, approve, body).await,
         ReviewCommand::Ls { space, repository } => show::list(ctx, space, repository).await,
         ReviewCommand::Cancel { id, space } => cancel::cancel(ctx, id, space).await,
     }

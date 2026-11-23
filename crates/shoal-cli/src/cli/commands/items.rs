@@ -14,7 +14,7 @@ use crate::{
     protocol::RepoTarget,
 };
 
-mod content;
+pub(super) mod content;
 mod context;
 mod list;
 mod open;
