@@ -77,13 +77,20 @@ impl RexServer {
 
     #[track_caller]
     fn json(&self, args: &[&str]) -> Value {
+        match self.answer(args) {
+            Ok(value) => value,
+            Err(failure) => panic!("rex {args:?}: {failure}"),
+        }
+    }
+
+    /// The JSON `rex` printed with `args`, or all it printed when it failed.
+    #[track_caller]
+    fn answer(&self, args: &[&str]) -> Result<Value, String> {
         let output = self.rex(args);
-        assert!(
-            output.status.success(),
-            "rex {args:?}: {}",
-            printed(&output)
-        );
-        serde_json::from_slice(&output.stdout).unwrap()
+        serde_json::from_slice(&output.stdout)
+            .ok()
+            .filter(|_| output.status.success())
+            .ok_or_else(|| printed(&output).to_string())
     }
 
     /// A new session's ID and its first block, a shell the user opened.
@@ -122,19 +129,24 @@ impl RexServer {
     /// The labels of `session`'s blocks.
     #[track_caller]
     fn blocks(&self, session: &str) -> Vec<String> {
-        self.listed_blocks(session, "label")
+        match self.listed_blocks(session, "label") {
+            Ok(labels) => labels,
+            Err(failure) => panic!("listing {session}'s blocks: {failure}"),
+        }
     }
 
-    /// The field `field` of each of `session`'s blocks.
+    /// The field `field` of each of `session`'s blocks, or all `rex`
+    /// printed when it failed.
     #[track_caller]
-    fn listed_blocks(&self, session: &str, field: &str) -> Vec<String> {
+    fn listed_blocks(&self, session: &str, field: &str) -> Result<Vec<String>, String> {
         let input = serde_json::json!({"session_id": session}).to_string();
-        self.json(&["api", "call", "session.list_blocks", &input])["blocks"]
+        let listed = self.answer(&["api", "call", "session.list_blocks", &input])?;
+        Ok(listed["blocks"]
             .as_array()
-            .unwrap()
-            .iter()
+            .into_iter()
+            .flatten()
             .map(|block| block[field].as_str().unwrap_or_default().to_owned())
-            .collect()
+            .collect())
     }
 
     /// The first block of `session`'s window labelled `label`.
@@ -168,24 +180,33 @@ impl RexServer {
     }
 
     /// The server's Rex and what each of its blocks shows, which tells why
-    /// a command a block runs never reached the daemon.
+    /// a command a block runs never reached the daemon. A `rex` call that
+    /// fails, as on a server that died, shows what it printed instead.
     fn report(&self) -> String {
-        let mut report = format!(
-            "rex version: {}",
-            printed(&self.rex(&["version", "--json"]))
-        );
-        let sessions = self.json(&["ls", "--json"]);
-        for session in sessions["sessions"].as_array().into_iter().flatten() {
-            let id = session["session_id"].as_str().unwrap_or_default();
-            for block in self.listed_blocks(id, "block_id") {
-                let screen = self.screen(&block);
-                report.push_str(&format!(
-                    "\n--- {block} in {} shows:\n{screen}",
-                    session["label"]
-                ));
-            }
+        let version = self.rex(&["version", "--json"]);
+        let sessions = match self.answer(&["ls", "--json"]) {
+            Ok(listed) => listed["sessions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|session| self.session_report(session))
+                .collect(),
+            Err(failure) => format!("\nrex ls: {failure}"),
+        };
+        format!("rex version: {}{sessions}", printed(&version))
+    }
+
+    /// What each block of the listed `session` shows.
+    fn session_report(&self, session: &Value) -> String {
+        let id = session["session_id"].as_str().unwrap_or_default();
+        let label = &session["label"];
+        match self.listed_blocks(id, "block_id") {
+            Ok(blocks) => blocks
+                .iter()
+                .map(|block| format!("\n--- {block} in {label} shows:\n{}", self.screen(block)))
+                .collect(),
+            Err(failure) => format!("\n--- the blocks of {label}: {failure}"),
         }
-        report
     }
 
     #[track_caller]
