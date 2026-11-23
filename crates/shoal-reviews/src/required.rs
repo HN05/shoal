@@ -11,7 +11,7 @@ use anyhow::{Result, bail};
 use crate::{
     Reviews,
     config::{Effective, repo::Requester},
-    daemon::Daemon,
+    daemon::{Daemon, Records},
     model::Workspace,
     reviews::{Author, Review, ReviewId, ReviewState, ReviewTarget},
     store,
@@ -80,11 +80,10 @@ impl Reviews {
         self.check_reviewed(workspace, gate, head).await
     }
 
-    /// Refuse unless a finished review of the workspace covers `head`, the
-    /// commit a command acts on, with every thread it opened or reopened
-    /// resolved, saying what is
-    /// missing: as [`Unreviewed`] without a review of it and with none
-    /// queued or running.
+    /// Refuse unless the review that [`deciding`] picks for `head`, the
+    /// commit a command acts on, covers it, saying what is missing: as
+    /// [`Unreviewed`] without a review of it and with none queued or
+    /// running.
     pub async fn check_reviewed(
         &self,
         workspace: &Workspace,
@@ -97,7 +96,7 @@ impl Reviews {
             .store
             .read(move |tx| {
                 Ok((
-                    store::finished_at(tx, &*records, &id, &covering)?,
+                    deciding(tx, &*records, &id, &covering)?,
                     store::active(tx, &id)?,
                 ))
             })
@@ -196,6 +195,23 @@ fn requester(caller: Option<&Caller>) -> Requester {
     match caller {
         Some(_) => Requester::Agent,
         None => Requester::User,
+    }
+}
+
+/// The review of the workspace `id` that decides a gate for `head`: one the
+/// user or a space wrote whose comments are not all resolved, since only
+/// its writer resolves them, else the newest that judges the commit.
+fn deciding(
+    db: &rusqlite::Connection,
+    records: &dyn Records,
+    id: &SpaceId,
+    head: &CommitId,
+) -> Result<Option<Review>> {
+    let commented = store::commented_at(db, records, id, head)?;
+    let outstanding = (commented.into_iter()).find(|review| review.unresolved().next().is_some());
+    match outstanding {
+        Some(review) => Ok(Some(review)),
+        None => store::finished_at(db, records, id, head),
     }
 }
 

@@ -440,6 +440,29 @@ pub fn list(db: &Connection, records: &dyn Records, ids: &[SpaceId]) -> Result<V
     Ok(listed)
 }
 
+/// The finished reviews of commit `head` that the user or a space wrote
+/// with comments, whose writers resolve them: until they do, no other
+/// review of the commit opens a gate.
+pub fn commented_at(
+    db: &Connection,
+    records: &dyn Records,
+    workspace_id: &SpaceId,
+    head: &CommitId,
+) -> Result<Vec<Review>> {
+    let ids: Vec<ReviewId> = db
+        .prepare(
+            "SELECT id FROM reviews WHERE workspace_id=?1 AND head=?2 AND state=?3
+                AND opener IS NOT 'shoal' ORDER BY id",
+        )?
+        .query_map(params![workspace_id, head, ReviewState::Finished], |row| {
+            row.get(0)
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    ids.into_iter()
+        .filter_map(|id| load(db, records, id).transpose())
+        .collect()
+}
+
 /// The workspace's newest finished review of commit `head` that judges it:
 /// any of Shoal's, or one its writer submitted with comments or approving
 /// the work, so a review that only comments never decides a gate.

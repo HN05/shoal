@@ -1895,8 +1895,9 @@ checked before the question it asks and before an agent's approval request,
 which a refused merge never makes. Each gate holds agents and the commands they run with `"agents"`,
 and your own commands too with `"all"`. A gate passes once a finished review covers HEAD exactly and every
 thread it opened or reopened is resolved, whatever the verdict, except that [one you or a
-space wrote](#your-own-reviews) without comments passes only when it approves, and
-one that neither comments nor approves is passed over. Otherwise the command is
+space wrote](#your-own-reviews) without comments passes only when it approves,
+one that neither comments nor approves is passed over, and one with unresolved
+comments decides over any other. Otherwise the command is
 refused, naming what is missing and listing the unresolved threads; without a
 review of the commit and with none queued or running, it queues a review of the
 workspace's HEAD, whose findings arrive as a message, where that is the commit and
@@ -1973,7 +1974,8 @@ space it runs in, and outside every space drops your only pending one. Removing 
 reviews, drops it. For the review
 gates above, a submitted review covers the commit it recorded once every comment
 is resolved, and one without comments only when it approves; one that neither
-comments nor approves never decides a gate. Reviews on the forge
+comments nor approves never decides a gate, and while a submitted review's
+comments are unresolved no other review of the commit opens one. Reviews on the forge
 stay there; they are not mirrored.
 
 ### Agents

@@ -2929,7 +2929,10 @@ attributed to it, since only threads Shoal opened are its holder's to settle,
 and Shoal's reviewer neither reads, reopens nor learns false positives from
 them. A submitted review covers its commit once its comments are resolved, and
 one without comments only when it approves, so a summary alone neither opens a
-gate nor closes one a covering review opened. A
+gate nor closes one a covering review opened; while its comments are
+unresolved it decides the gate over any other review of the commit, since
+only its writer resolves them and the agent's own review must not bypass
+them. A
 space reviews the workspaces of its own machine, where its threads are numbered,
 and its removal, or the reviewed workspace's, drops a pending review, whose
 comments a restore could never submit. Forge reviews stay on the forge.

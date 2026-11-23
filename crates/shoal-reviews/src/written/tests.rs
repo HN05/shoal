@@ -170,3 +170,21 @@ async fn a_pending_reviews_comments_are_its_writers_to_see() {
     assert_eq!(seen_by(review.clone(), &parent).threads.len(), 1);
     assert_eq!(seen_by(review, &Writer::User).threads.len(), 1);
 }
+
+#[tokio::test]
+async fn a_writers_unresolved_comments_keep_the_gate_closed_whatever_reviews_after() {
+    let fixture = fixture().await;
+    let review = fixture.start(Writer::User).await.unwrap();
+    let comment = fixture.records.comment(review.id, "Unclear name");
+    fixture.submit(Writer::User, false).await.unwrap();
+    // A later review of the same commit that approves leaves the comment
+    // to its writer.
+    fixture.start(Writer::Space("parent".into())).await.unwrap();
+    fixture
+        .submit(Writer::Space("parent".into()), true)
+        .await
+        .unwrap();
+    assert!(!fixture.covered().await);
+    fixture.records.resolve(comment, Some(Outcome::Fixed));
+    assert!(fixture.covered().await);
+}
