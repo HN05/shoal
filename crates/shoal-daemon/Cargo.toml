@@ -35,6 +35,7 @@ serde_json.workspace = true
 sha2 = "0.11"
 shoal-agents.workspace = true
 shoal-apps.workspace = true
+shoal-demos.workspace = true
 shoal-core.workspace = true
 shoal-daemon-base.workspace = true
 shoal-forge.workspace = true
@@ -67,6 +68,7 @@ hmac = "0.13"
 shoal-agents = { workspace = true, features = ["test-support"] }
 shoal-core = { workspace = true, features = ["test-support"] }
 shoal-daemon-base = { workspace = true, features = ["test-support"] }
+shoal-demos = { workspace = true, features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 shoal-hub = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }

@@ -11,7 +11,7 @@ use std::sync::Arc;
 impl Demos for Manager {
     fn running_demos(&self) -> BoxFuture<'_, Result<Vec<RunningDemo>>> {
         Box::pin(async {
-            let demos = self.demos(None).await?;
+            let demos = self.demos.list(self, None).await?;
             Ok((demos.into_iter())
                 .map(|demo| RunningDemo {
                     execution: demo.execution_id,
@@ -27,7 +27,7 @@ impl Demos for Manager {
         execution: &'a ExecutionId,
     ) -> BoxFuture<'a, Result<Option<u32>>> {
         Box::pin(async {
-            let viewer = self.running_viewer(execution).await?;
+            let viewer = self.demos.running_viewer(execution).await?;
             Ok(viewer.map(|viewer| viewer.process.pid))
         })
     }
@@ -36,7 +36,7 @@ impl Demos for Manager {
         &'a self,
         execution: &'a ExecutionId,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.retire_execution_viewer(execution))
+        Box::pin(self.demos.retire_execution_viewer(execution))
     }
 
     fn reported_end<'a>(
@@ -44,28 +44,28 @@ impl Demos for Manager {
         execution: &'a ExecutionId,
         exit_code: Option<i32>,
     ) -> BoxFuture<'a, Option<i32>> {
-        Box::pin(self.reported_end(execution, exit_code))
+        Box::pin(self.demos.reported_end(execution, exit_code))
     }
 
     fn unrun_demo_launch<'a>(
         &'a self,
         execution: &'a ExecutionId,
     ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(self.unrun_demo_launch(execution))
+        Box::pin(self.demos.unrun_launch(execution))
     }
 
     fn restart_demo_command<'a>(
         &'a self,
         execution: &'a ExecutionId,
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(self.restart_demo_command(execution))
+        Box::pin(self.demos.restart_command(self, execution))
     }
 
     fn viewer_spawn_lock(&self, execution: &ExecutionId) -> Arc<tokio::sync::Mutex<()>> {
-        self.viewers.spawn_lock(execution)
+        self.demos.viewer_spawn_lock(execution)
     }
 
     fn end_viewer(&self, execution: &ExecutionId) {
-        self.viewers.end(execution);
+        self.demos.end_viewer(execution);
     }
 }

@@ -23,11 +23,14 @@ pub(super) async fn handle(
         DemoMethod::ListDemos { workspace } => {
             Body::Demos(listed(manager, workspace.as_ref(), scope).await?)
         }
-        DemoMethod::DemoProgress { workspace, launch } => {
-            Body::DemoProgress(manager.demo_progress(&workspace, &launch).await?)
-        }
+        DemoMethod::DemoProgress { workspace, launch } => Body::DemoProgress(
+            manager
+                .demos
+                .progress(&**manager, &workspace, &launch)
+                .await?,
+        ),
         DemoMethod::StopDemos { workspace, name } => {
-            manager.stop_demos(&workspace, name).await?;
+            manager.demos.stop(&**manager, &workspace, name).await?;
             Body::Ok
         }
         DemoMethod::OpenDemoStream {
@@ -79,7 +82,7 @@ async fn listed(
     workspace: Option<&SpaceSelector>,
     scope: Option<&ScopeToken>,
 ) -> Result<Vec<Running>> {
-    let mut demos = manager.demos(workspace).await?;
+    let mut demos = manager.demos.list(manager, workspace).await?;
     let machine = super::forwarded::answering_machine(manager, scope).await?;
     for demo in &mut demos {
         demo.machine.clone_from(&machine);

@@ -37,7 +37,7 @@ impl Manager {
         done.check()?;
         // Before completion, whose cleanup may remove the space at once.
         if !done.keep_demos {
-            self.stop_demos(selector, None).await?;
+            self.demos.stop(self, selector, None).await?;
         }
         // Serialize cleanup choices with the PR and completion sweeps.
         let (space, _guard) = self.lock_space_gate(selector).await?;

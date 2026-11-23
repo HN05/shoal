@@ -54,8 +54,8 @@ pub struct Manager {
     pub apps: shoal_apps::Apps,
     /// The commits other machines carried here for launches on their way.
     pub(crate) carried_holds: crate::daemon::carried_commits::CarriedHolds,
-    /// The viewers of simulator demos someone opened.
-    pub(crate) viewers: super::demos::viewers::Viewers,
+    /// The demos executions run.
+    pub demos: shoal_demos::Demos,
 }
 
 impl Manager {
@@ -136,6 +136,7 @@ impl Manager {
             paths.clone(),
         ));
         let apps = shoal_apps::Apps::new(store.clone(), config_state.clone());
+        let demos = shoal_demos::Demos::new(store.clone(), paths.clone());
         Ok(Arc::new(Self {
             config_state,
             notifications,
@@ -164,7 +165,7 @@ impl Manager {
             hub,
             apps,
             carried_holds: Default::default(),
-            viewers: Default::default(),
+            demos,
         }))
     }
 

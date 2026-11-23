@@ -16,7 +16,7 @@ use crate::{
     daemon::{
         agent_queue, agents,
         approvals::{self, ApprovalRequest},
-        changes, demos, links,
+        changes, links,
         operations::starts,
         progress, ready_marks, scope,
         spaces::{self, Removing},
@@ -136,15 +136,15 @@ impl Records for AgentRecords {
         space: &SpaceId,
         launch: &Launch,
     ) -> Result<()> {
-        demos::record(tx, id, space, launch)
+        shoal_demos::records::record(tx, id, space, launch)
     }
 
     fn mark_demo_run(&self, tx: &Transaction<'_>, id: &ExecutionId) -> Result<()> {
-        demos::mark_run(tx, id)
+        shoal_demos::records::mark_run(tx, id)
     }
 
     fn demo_launch(&self, db: &Connection, id: &ExecutionId) -> Result<Option<Launch>> {
-        demos::execution_launch(db, id)
+        shoal_demos::records::execution_launch(db, id)
     }
 
     fn spaces(&self, db: &Connection) -> Result<Vec<SpaceFacts>> {

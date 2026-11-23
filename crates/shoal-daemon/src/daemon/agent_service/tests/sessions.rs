@@ -316,7 +316,8 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
         assert_eq!(host.closed()?, ["connected", "disconnected"]);
         assert!(
             manager
-                .demos(Some(&SpaceSelector::id(&workspace.id)))
+                .demos
+                .list(&*manager, Some(&SpaceSelector::id(&workspace.id)))
                 .await?
                 .is_empty()
         );
@@ -408,7 +409,8 @@ async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_works
         }
         assert!(
             manager
-                .demos(Some(&SpaceSelector::id(&workspace.id)))
+                .demos
+                .list(&*manager, Some(&SpaceSelector::id(&workspace.id)))
                 .await?
                 .is_empty()
         );
@@ -507,7 +509,8 @@ async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<(
     );
     assert_eq!(
         manager
-            .demos(Some(&SpaceSelector::id(&workspace.id)))
+            .demos
+            .list(&*manager, Some(&SpaceSelector::id(&workspace.id)))
             .await?
             .len(),
         1

@@ -26,6 +26,7 @@ shoal-config-derive = { path = "crates/shoal-config-derive" }
 shoal-core = { path = "crates/shoal-core" }
 shoal-daemon = { path = "crates/shoal-daemon" }
 shoal-daemon-base = { path = "crates/shoal-daemon-base" }
+shoal-demos = { path = "crates/shoal-demos" }
 shoal-forge = { path = "crates/shoal-forge" }
 shoal-forge-derive = { path = "crates/shoal-forge-derive" }
 shoal-forge-types = { path = "crates/shoal-forge-types" }

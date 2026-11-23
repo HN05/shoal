@@ -14,23 +14,23 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_core::config::repo::ConflictPolicy;
+use shoal_daemon_base::callers::Caller;
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_leases::{allocation::Allocation, ports::Acquisition};
-use shoal_protocol::{demos::Running, scope_tokens::ScopeToken, space_names::SpaceSelector};
+use shoal_protocol::{demos::Running, scope_tokens::ScopeToken};
 use tokio::{
+    net::TcpStream,
     process::{Child, Command},
     sync::Mutex as AsyncMutex,
     time::Instant,
 };
 
-use super::streaming::connect;
-use crate::daemon::log;
 use crate::{
-    config::repo::ConflictPolicy,
-    daemon::{manager::Manager, scope::Caller},
-    env,
+    Demos,
+    daemon::{Daemon, Executions, Joining, Ports, Reserved},
+    env, log,
     model::{ExecutionSpace, PortRequest},
     paths::{Paths, StateFiles as _},
     process::identity::{self as process, Identity, IdentityExt as _},
@@ -38,7 +38,7 @@ use crate::{
 };
 
 /// How often a starting viewer is checked for its port.
-const START_POLL: Duration = Duration::from_millis(100);
+pub(crate) const START_POLL: Duration = Duration::from_millis(100);
 /// A hang guard for a viewer that never takes a connection.
 const START_LIMIT: Duration = Duration::from_secs(60);
 /// How many checks, [`START_POLL`] apart, a stopped viewer's group gets to
@@ -66,10 +66,10 @@ type Locks = Mutex<HashMap<ExecutionId, Arc<AsyncMutex<()>>>>;
 
 /// A viewer the daemon started: the port it serves on, its process, which
 /// leads a process group of its own, and whether it serves yet.
-pub(crate) struct Viewer {
-    pub(crate) port: u16,
-    pub(crate) process: Identity,
-    pub(crate) serving: bool,
+pub struct Viewer {
+    pub port: u16,
+    pub process: Identity,
+    pub serving: bool,
 }
 
 impl Viewers {
@@ -93,10 +93,16 @@ fn lock(locks: &Locks, execution: &ExecutionId) -> Arc<AsyncMutex<()>> {
     locks.entry(execution.clone()).or_default().clone()
 }
 
-impl Manager {
+impl Demos {
     /// The port the viewer of the simulator demo `demo` serves on, started
-    /// on the demo's first open; refused for a demo whose viewer is off.
-    pub(crate) async fn open_viewer(&self, demo: &Running, caller: Option<&Caller>) -> Result<u16> {
+    /// on the demo's first open, as `caller` reserves it; refused for a
+    /// demo whose viewer is off.
+    pub async fn open_viewer(
+        &self,
+        daemon: &dyn Daemon,
+        demo: &Running,
+        caller: Option<&Caller>,
+    ) -> Result<u16> {
         let name = &demo.launch.name;
         if demo.launch.viewer_command.is_none() {
             let message =
@@ -109,10 +115,10 @@ impl Manager {
             return Ok(port);
         }
         // Reserved first, so the environment exports it.
-        let port = self.reserve_viewer_port(demo, caller).await?;
+        let port = reserve_viewer_port(daemon, demo, caller).await?;
         refuse_occupied(port, &demo.launch.name).await?;
-        let place = self.viewer_place(demo).await?;
-        let starting = self.spawn_recorded_viewer(demo, port, &place).await?;
+        let place = self.viewer_place(daemon, demo).await?;
+        let starting = (self.spawn_recorded_viewer(daemon, demo, port, &place)).await?;
         let process = starting.process.clone();
         if let Err(error) = starting.serve(port).await {
             self.forget_viewer(&demo.execution_id).await;
@@ -134,18 +140,14 @@ impl Manager {
     /// while no stop of the demo's survivors can take it for one.
     async fn spawn_recorded_viewer(
         &self,
+        daemon: &dyn Executions,
         demo: &Running,
         port: u16,
         place: &Place,
     ) -> Result<Starting> {
         let spawning = self.viewers.spawn_lock(&demo.execution_id);
         let _spawning = spawning.lock().await;
-        if self
-            .agents
-            .executions()
-            .completing(&demo.execution_id)
-            .is_some()
-        {
+        if daemon.completing(&demo.execution_id) {
             let message = format!("demo {} is stopping", demo.launch.name);
             return Err(Refusal::new(Reason::NotReady, message).into());
         }
@@ -186,7 +188,7 @@ impl Manager {
     }
 
     /// The viewer of the demo `execution` runs, while its process runs.
-    pub(crate) async fn running_viewer(&self, execution: &ExecutionId) -> Result<Option<Viewer>> {
+    pub async fn running_viewer(&self, execution: &ExecutionId) -> Result<Option<Viewer>> {
         let viewer = self.recorded_viewer(execution).await?;
         Ok(viewer.filter(|viewer| runs(&viewer.process)))
     }
@@ -217,7 +219,7 @@ impl Manager {
     /// Stop the viewer recorded for the demo `execution` runs, before the
     /// execution's records go; fails, so they stay, while its process group
     /// is not proven stopped.
-    pub(crate) async fn retire_execution_viewer(&self, execution: &ExecutionId) -> Result<()> {
+    pub async fn retire_execution_viewer(&self, execution: &ExecutionId) -> Result<()> {
         let Some(viewer) = self.recorded_viewer(execution).await? else {
             return Ok(());
         };
@@ -228,7 +230,7 @@ impl Manager {
     /// reported `exit_code`: none while its demo's viewer is not proven
     /// stopped, which keeps the execution's records, its end unproven, until
     /// recovery forgets it once the viewer is.
-    pub(crate) async fn reported_end(
+    pub async fn reported_end(
         &self,
         execution: &ExecutionId,
         exit_code: Option<i32>,
@@ -256,10 +258,12 @@ impl Manager {
 
     /// Where `demo`'s viewer runs: the demo's verified worktree, with the
     /// environment the demo's execution gives its commands, scope included.
-    async fn viewer_place(&self, demo: &Running) -> Result<Place> {
-        let home = self.agents.execution_home(self, &demo.workspace_id).await?;
-        let (home, configured, ports) = self.agents.joining_environment(home).await?;
-        let space = home.plan_space();
+    async fn viewer_place(&self, daemon: &dyn Executions, demo: &Running) -> Result<Place> {
+        let Joining {
+            space,
+            configured,
+            ports,
+        } = daemon.joining(&demo.workspace_id).await?;
         let execution = demo.execution_id.clone();
         let token = self
             .store
@@ -275,37 +279,11 @@ impl Manager {
         })
     }
 
-    /// The port reserved for `demo`'s viewer, under the demo's name, as
-    /// `caller` reserves it; refused while it waits for approval.
-    async fn reserve_viewer_port(&self, demo: &Running, caller: Option<&Caller>) -> Result<u16> {
-        let name = &demo.launch.name;
-        let request = PortRequest {
-            port: None,
-            env_var: None,
-            reason: Some(format!("The viewer of demo {name}")),
-            on_conflict: Some(ConflictPolicy::Auto),
-        };
-        let workspace = SpaceSelector::id(&demo.workspace_id);
-        let acquired = (self.leases)
-            .acquire_port(self, &workspace, name.clone(), request, caller)
-            .await?;
-        match acquired {
-            Acquisition::Allocation(Allocation::Granted(reservation)) => Ok(reservation.port),
-            Acquisition::Allocation(Allocation::Busy(message)) => bail!(message),
-            Acquisition::Allocation(Allocation::Approval(request)) => {
-                let message = format!(
-                    "the viewer of demo {name} waits for approval {} of its port; open the demo again once it is approved",
-                    request.number
-                );
-                Err(Refusal::new(Reason::NotReady, message).into())
-            }
-            Acquisition::Suggested(_) => {
-                bail!("no port could be reserved for the viewer of demo {name}")
-            }
-        }
-    }
-
-    async fn record_viewer(&self, execution: &ExecutionId, viewer: &Viewer) -> Result<()> {
+    pub(crate) async fn record_viewer(
+        &self,
+        execution: &ExecutionId,
+        viewer: &Viewer,
+    ) -> Result<()> {
         let execution = execution.clone();
         let (port, serving) = (viewer.port, viewer.serving);
         let process = serde_json::to_string(&viewer.process)?;
@@ -333,6 +311,48 @@ impl Manager {
         });
         if let Err(error) = forgotten.await {
             log!("viewer record not forgotten: {error:#}");
+        }
+    }
+
+    /// The lock the demo `execution` runs holds while its survivors stop or
+    /// its viewer spawns.
+    pub fn viewer_spawn_lock(&self, execution: &ExecutionId) -> Arc<AsyncMutex<()>> {
+        self.viewers.spawn_lock(execution)
+    }
+
+    /// Forget the viewer locks of the demo `execution` ran, which ended.
+    pub fn end_viewer(&self, execution: &ExecutionId) {
+        self.viewers.end(execution);
+    }
+}
+
+/// The port reserved for `demo`'s viewer, under the demo's name, as
+/// `caller` reserves it; refused while it waits for approval.
+async fn reserve_viewer_port(
+    daemon: &dyn Ports,
+    demo: &Running,
+    caller: Option<&Caller>,
+) -> Result<u16> {
+    let name = &demo.launch.name;
+    let request = PortRequest {
+        port: None,
+        env_var: None,
+        reason: Some(format!("The viewer of demo {name}")),
+        on_conflict: Some(ConflictPolicy::Auto),
+    };
+    let reserved = (daemon.reserve_port(&demo.workspace_id, name.clone(), request, caller)).await?;
+    match reserved {
+        Reserved::Port(port) => Ok(port),
+        Reserved::Busy(message) => anyhow::bail!(message),
+        Reserved::Approval(request) => {
+            let message = format!(
+                "the viewer of demo {name} waits for approval {} of its port; open the demo again once it is approved",
+                request.number
+            );
+            Err(Refusal::new(Reason::NotReady, message).into())
+        }
+        Reserved::Unreserved => {
+            anyhow::bail!("no port could be reserved for the viewer of demo {name}")
         }
     }
 }
@@ -404,7 +424,9 @@ async fn group_ended(group: u32) -> Result<()> {
         }
         tokio::time::sleep(START_POLL).await;
     }
-    bail!("processes of its process group {group} still run; stop them, then open the demo again")
+    anyhow::bail!(
+        "processes of its process group {group} still run; stop them, then open the demo again"
+    )
 }
 
 /// The live processes of process group `group` that carry the marker of
@@ -422,6 +444,16 @@ async fn group_members(execution: &ExecutionId, group: u32) -> Vec<Identity> {
     }
 }
 
+/// A connection to `port` on loopback: IPv4's, else IPv6's.
+pub async fn connect(port: u16) -> Result<TcpStream> {
+    match TcpStream::connect(("127.0.0.1", port)).await {
+        Ok(connection) => Ok(connection),
+        Err(v4) => TcpStream::connect(("::1", port))
+            .await
+            .map_err(|_| v4.into()),
+    }
+}
+
 /// Refuse a viewer `port` another process already listens on, which a
 /// new viewer's readiness would take for its own.
 async fn refuse_occupied(port: u16, demo: &str) -> Result<()> {
@@ -436,7 +468,7 @@ async fn refuse_occupied(port: u16, demo: &str) -> Result<()> {
 
 /// Whether `process` runs: alive under its recorded identity and not
 /// exited awaiting its parent.
-fn runs(process: &Identity) -> bool {
+pub(crate) fn runs(process: &Identity) -> bool {
     process::alive(process).unwrap_or(false) && !process::unreaped(process).unwrap_or(true)
 }
 

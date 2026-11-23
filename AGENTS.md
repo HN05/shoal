@@ -168,8 +168,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   the CI jobs this machine runs, `crates/shoal-links` for the issues,
   PRs and CI runs spaces link, `crates/shoal-repositories` for the
   registered repositories, their config layers, seeds and caches,
-  `crates/shoal-agents` for the agents the daemon runs, and
-  `crates/shoal-apps` for the settings and the store of apps built on Shoal.
+  `crates/shoal-agents` for the agents the daemon runs,
+  `crates/shoal-apps` for the settings and the store of apps built on Shoal,
+  and `crates/shoal-demos` for demos and their viewers.
   Its service, a field of `Manager`, holds what the subsystem
   keeps in memory and offers its operations; what it needs of other
   subsystems is an interface it declares, as the base does, which the daemon
@@ -189,8 +190,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-agents` on none but `shoal-core`, `shoal-daemon-base`,
   `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs`,
   `shoal-schedule`, `shoal-store` and `shoal-subprocess`; and `shoal-apps`
-  on none but `shoal-core`, `shoal-daemon-base`, `shoal-ids`,
-  `shoal-protocol` and `shoal-store`.
+  and `shoal-demos` on none but `shoal-core`, `shoal-daemon-base`,
+  `shoal-ids`, `shoal-protocol` and `shoal-store`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that

@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 
-use super::*;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
-        executions::ExecutionKind,
+        executions::{ExecutionKind, Save},
+        manager::Manager,
         scope::{self, Caller, ScopedExecution},
         test_support::{manager, repository},
         workspace_files::Attacher,
     },
+    demos::Launch,
     model::Workspace,
     protocol::DemoMethod,
 };
@@ -78,7 +79,7 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         )
         .await
         .unwrap();
-    let all = manager.demos(None).await.unwrap();
+    let all = manager.demos.list(&*manager, None).await.unwrap();
     assert_eq!(
         all.iter()
             .map(|demo| (demo.workspace.as_str(), demo.launch.name.as_str()))
@@ -88,7 +89,8 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     assert_eq!(all[0].execution_id, web.plan.id);
     assert_eq!(all[0].launch, launch("web"));
     let own = manager
-        .demos(Some(&SpaceSelector::id(&second.id)))
+        .demos
+        .list(&*manager, Some(&SpaceSelector::id(&second.id)))
         .await
         .unwrap();
     assert_eq!(own.len(), 1);
@@ -119,7 +121,8 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         .unwrap();
     assert!(
         manager
-            .demos(Some(&SpaceSelector::id(&first.id)))
+            .demos
+            .list(&*manager, Some(&SpaceSelector::id(&first.id)))
             .await
             .unwrap()
             .is_empty()
@@ -137,7 +140,8 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         .await
         .unwrap();
     let demos = manager
-        .demos(Some(&SpaceSelector::id(&first.id)))
+        .demos
+        .list(&*manager, Some(&SpaceSelector::id(&first.id)))
         .await
         .unwrap();
     assert_eq!(demos.len(), 1);
@@ -185,7 +189,8 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .unwrap();
 
     manager
-        .stop_demos(&SpaceSelector::id(&first.id), Some("web".into()))
+        .demos
+        .stop(&*manager, &SpaceSelector::id(&first.id), Some("web".into()))
         .await
         .unwrap();
     assert!(*web.stop.borrow_and_update());
@@ -199,14 +204,16 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
     assert_eq!(request.save, Save::Nothing);
 
     manager
-        .stop_demos(&SpaceSelector::id(&first.id), None)
+        .demos
+        .stop(&*manager, &SpaceSelector::id(&first.id), None)
         .await
         .unwrap();
     assert!(*tui.stop.borrow_and_update());
     assert!(!*command.stop.borrow_and_update());
     assert!(
         manager
-            .stop_demos(&SpaceSelector::id(&first.id), Some("Bad".into()))
+            .demos
+            .stop(&*manager, &SpaceSelector::id(&first.id), Some("Bad".into()))
             .await
             .is_err()
     );
@@ -326,12 +333,13 @@ async fn a_chat_lists_no_demos_of_its_own() {
         .unwrap();
     assert!(
         manager
-            .demos(Some(&SpaceSelector::id(&chat.id)))
+            .demos
+            .list(&*manager, Some(&SpaceSelector::id(&chat.id)))
             .await
             .unwrap()
             .is_empty()
     );
-    assert_eq!(manager.demos(None).await.unwrap().len(), 1);
+    assert_eq!(manager.demos.list(&*manager, None).await.unwrap().len(), 1);
 }
 
 #[tokio::test]
@@ -442,12 +450,14 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
     drop(started);
     manager.agents.detach_execution(&id).await;
     manager
-        .stop_demos(&SpaceSelector::id(&first.id), None)
+        .demos
+        .stop(&*manager, &SpaceSelector::id(&first.id), None)
         .await
         .unwrap();
     assert!(
         manager
-            .demos(Some(&SpaceSelector::id(&first.id)))
+            .demos
+            .list(&*manager, Some(&SpaceSelector::id(&first.id)))
             .await
             .unwrap()
             .is_empty()
@@ -480,62 +490,19 @@ async fn stopping_an_away_demo_between_runs_ends_its_record() {
     drop(started);
     manager.agents.detach_execution(&id).await;
     manager
-        .stop_demos(&SpaceSelector::id(&first.id), None)
+        .demos
+        .stop(&*manager, &SpaceSelector::id(&first.id), None)
         .await
         .unwrap();
     assert!(
         manager
-            .demos(Some(&SpaceSelector::id(&first.id)))
+            .demos
+            .list(&*manager, Some(&SpaceSelector::id(&first.id)))
             .await
             .unwrap()
             .is_empty()
     );
     assert!(away.wait().is_ok_and(|status| !status.success()));
-}
-
-#[tokio::test]
-async fn running_web_demos_list_their_url() {
-    let (temp, manager) = manager().await;
-    let (first, _) = workspaces(&manager, temp.path()).await;
-    let mut site = launch("site");
-    site.preset = Some(crate::demos::Preset::Web);
-    site.scheme = Some(crate::demos::Scheme::Https);
-    site.environment = BTreeMap::from([(crate::demos::PORT.into(), "49200".into())]);
-    let mut dns = launch("dns");
-    dns.preset = Some(crate::demos::Preset::Server);
-    dns.environment = site.environment.clone();
-    dns.id = "dns".into();
-    for demo in [site, dns] {
-        manager
-            .agents
-            .begin_execution_running(
-                &*manager,
-                first.id.as_str(),
-                None,
-                ExecutionKind::Command,
-                None,
-                Some(demo),
-            )
-            .await
-            .unwrap();
-    }
-    let urls: Vec<_> = manager
-        .demos(Some(&SpaceSelector::id(&first.id)))
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|demo| (demo.launch.name, demo.url))
-        .collect();
-    assert_eq!(
-        urls,
-        [
-            ("dns".to_owned(), None),
-            (
-                "site".to_owned(),
-                Some("https://localhost:49200".to_owned())
-            )
-        ]
-    );
 }
 
 /// The kinds and demos of the workspace's demo events, oldest first.
@@ -618,3 +585,5 @@ async fn demos_journal_their_first_run_and_their_end() {
     );
     assert_eq!(demo_events(&manager, &first.id).await, [started, stopped]);
 }
+
+mod viewers;

@@ -187,6 +187,14 @@ the revision its writer read and waking the watches of its app's entries.
 Answering them on the daemon's socket and the hub link, with a write's
 bytes that follow its request and the shared entries a hub keeps for the
 machines that joined it, stays with the daemon's connections.
+`shoal-demos` holds the demos executions run: its `Demos` service records
+each with its execution, lists them, stops them, runs a demo's command
+again, and starts, reuses and retires the viewers of simulator demos,
+keeping the locks that let a viewer's spawn and its demo's stop never
+overlap. The spaces they run in, the executions that run them and stop
+their processes, and the ports their viewers lease are its interface's;
+relaying a client's stream to a running demo stays with the daemon's
+connections.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

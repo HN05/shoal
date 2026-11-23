@@ -2591,6 +2591,7 @@ dependencies = [
  "shoal-apps",
  "shoal-core",
  "shoal-daemon-base",
+ "shoal-demos",
  "shoal-forge",
  "shoal-forge-types",
  "shoal-hub",
@@ -2634,6 +2635,24 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "shoal-demos"
+version = "0.20.6"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "libc",
+ "rusqlite",
+ "serde_json",
+ "shoal-core",
+ "shoal-daemon-base",
+ "shoal-ids",
+ "shoal-protocol",
+ "shoal-store",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

@@ -101,7 +101,7 @@ impl Agents for Manager {
         let execution = execution.to_owned();
         Box::pin(
             self.store
-                .read(move |db| super::demos::runs_demo(db, &execution)),
+                .read(move |db| shoal_demos::records::runs_demo(db, &execution)),
         )
     }
 

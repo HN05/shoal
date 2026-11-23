@@ -8,6 +8,7 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
+use shoal_demos::connect;
 use shoal_protocol::{
     attaching::Terminal,
     demos::{Kind, Running},
@@ -59,7 +60,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<OpenDemo> {
         crate::demos::validate_name(name)?;
-        let running = self.demos(Some(selector)).await?;
+        let running = self.demos.list(self, Some(selector)).await?;
         let Some(mut demo) = running.into_iter().find(|demo| demo.launch.name == name) else {
             let message = format!("space {selector} has no running demo {name}");
             return Err(Refusal::new(Reason::NotFound, message).into());
@@ -84,7 +85,7 @@ impl Manager {
         let port = match demo.kind {
             Kind::Server | Kind::Web => demo.launch.port(),
             Kind::Simulator => {
-                let port = self.open_viewer(demo, caller).await?;
+                let port = self.demos.open_viewer(self, demo, caller).await?;
                 demo.viewer = demo.launch.viewer(Some(port));
                 Some(port)
             }
@@ -176,16 +177,6 @@ async fn relay_port(
         () = revoked => {}
     }
     Ok(())
-}
-
-/// A connection to `port` on loopback: IPv4's, else IPv6's.
-pub(super) async fn connect(port: u16) -> Result<TcpStream> {
-    match TcpStream::connect(("127.0.0.1", port)).await {
-        Ok(connection) => Ok(connection),
-        Err(v4) => TcpStream::connect(("::1", port))
-            .await
-            .map_err(|_| v4.into()),
-    }
 }
 
 #[cfg(test)]
