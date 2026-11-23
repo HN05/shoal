@@ -48,8 +48,9 @@ pub(crate) fn agents_can_be_prompted(settings: &Effective) -> bool {
 }
 
 /// The session this process runs in, where an agent's wrapper can type a
-/// prompt for it: the place the daemon records for its execution, in a host
-/// that types into its places.
+/// prompt for it: the place the daemon records for its execution, or the
+/// session nested in it, which takes prompts whether or not the place still
+/// shows it, in a host that types into its places.
 #[derive(Clone)]
 pub struct PromptSession {
     place: Origin,
@@ -58,6 +59,10 @@ pub struct PromptSession {
 impl PromptSession {
     pub fn current() -> Option<Self> {
         let place = current_origin().filter(|place| place.place.is_some())?;
+        let place = match place.nested {
+            Some(nested) => *nested,
+            None => place,
+        };
         named(place.host).types()?;
         Some(Self { place })
     }
@@ -75,3 +80,6 @@ impl PromptSession {
         submit_prompt(&self.place, text).await
     }
 }
+
+#[cfg(test)]
+mod tests;
