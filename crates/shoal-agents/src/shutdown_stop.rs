@@ -282,12 +282,15 @@ impl Agents {
         };
         self.presences.leaving(&under_way);
         let handed = daemon.hand_over(deadline, handing).await;
-        self.presences.settled(&under_way);
+        let left = (handed.iter())
+            .filter(|(_, handed)| handed.left())
+            .map(|(space, _)| space.id.clone())
+            .collect();
+        self.presences.settled(&under_way, left);
         for (space, handed) in &handed {
             if !handed.left() {
                 continue;
             }
-            self.presences.went(&space.id);
             if let Err(error) = self.cancel_stopped_restores(daemon, &space.id).await {
                 log!(
                     "{} went to another machine, but its restores here stay: {error:#}",

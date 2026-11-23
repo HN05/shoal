@@ -56,21 +56,19 @@ impl Default for Presences {
 }
 
 impl Presences {
-    /// The space `id` went to another machine.
-    pub(crate) fn went(&self, id: &SpaceId) {
-        self.gone.lock().unwrap().insert(id.clone());
-    }
-
     /// The `spaces` are on their way to other machines, which a shutdown
     /// meanwhile leaves to that hand-over.
     pub(crate) fn leaving(&self, spaces: &HashSet<SpaceId>) {
         self.gone.lock().unwrap().extend(spaces.iter().cloned());
     }
 
-    /// The hand-over of `spaces` ended; [`Self::went`] names those that
-    /// left.
-    pub(crate) fn settled(&self, spaces: &HashSet<SpaceId>) {
-        self.gone.lock().unwrap().retain(|id| !spaces.contains(id));
+    /// The hand-over of `spaces` ended, and those `left` went to other
+    /// machines, at once, so no shutdown meanwhile finds one of them neither
+    /// under way nor gone.
+    pub(crate) fn settled(&self, spaces: &HashSet<SpaceId>, left: HashSet<SpaceId>) {
+        let mut gone = self.gone.lock().unwrap();
+        gone.retain(|id| !spaces.contains(id));
+        gone.extend(left);
     }
 
     /// The spaces a hand-over sent to other machines.
