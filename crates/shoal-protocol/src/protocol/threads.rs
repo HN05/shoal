@@ -83,9 +83,10 @@ pub enum ThreadMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         prompt: Option<String>,
     },
-    /// Give the thread the caller holds to the space `to` names, else to
-    /// the holder's coordinator or the user, with a note; the caller's
-    /// space stays linked to it unless `unlink`.
+    /// Give the caller's role in the thread, as its current opener or
+    /// holder, to the space `to` names, else to the caller's coordinator or
+    /// the user, with a note; the caller's space stays linked to it unless
+    /// `unlink`.
     ForwardThread {
         thread: ThreadNumber,
         #[serde(default, skip_serializing_if = "Option::is_none")]

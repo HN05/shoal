@@ -45,7 +45,8 @@ pub enum ThreadCommand {
         /// Space, a workspace or chat, to give it to; omit to pass it up.
         #[arg(short = 's', long)]
         space: Option<SpaceSelector>,
-        /// A note for the new holder, such as why it should answer.
+        /// A note for the new opener or holder, such as why it should take
+        /// the thread on.
         #[arg(long)]
         note: Option<String>,
         /// Receive none of its later posts, which a forwarder otherwise

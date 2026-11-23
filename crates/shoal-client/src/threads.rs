@@ -75,9 +75,9 @@ pub async fn replied_in_chat(
     request(daemon, ThreadMethod::RepliedInChat { space, prompt }).await
 }
 
-/// Forward the thread `thread` to `to`, else to its holder's coordinator or
-/// the user, with `note`, acting as the space `from`, which stays linked to
-/// it unless `unlink`.
+/// Forward the role in the thread `thread` of the space `from` acts as, its
+/// opener's or holder's, to `to`, else to that party's coordinator or the
+/// user, with `note`; `from` stays linked to it unless `unlink`.
 pub async fn forward(
     daemon: &impl Daemon,
     thread: ThreadNumber,

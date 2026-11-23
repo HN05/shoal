@@ -415,6 +415,30 @@ async fn the_user_passes_the_opener_s_role_of_its_thread_to_a_space() {
 }
 
 #[tokio::test]
+async fn an_earlier_opener_that_holds_the_thread_now_answers_as_its_holder() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let thread = open(fixture, None, Some(&tree.child)).await;
+    send(fixture, None, &thread, "Which port?").await;
+    let moved = forward(fixture, None, &thread, Some(&tree.sibling))
+        .await
+        .unwrap();
+    // The thread goes up from the child to the parent, then to the user,
+    // which opened it before.
+    forward(fixture, Some(&caller(&tree.child)), &moved, None)
+        .await
+        .unwrap();
+    let held = forward(fixture, Some(&caller(&tree.parent)), &moved, None)
+        .await
+        .unwrap();
+    assert_eq!(held.holder, shoal_protocol::threads::Holder::User);
+
+    let answered = send(fixture, None, &held, "8080").await;
+    assert_eq!(answered.last_post().unwrap().side, Some(Side::Holder));
+    assert_eq!(answered.awaits(), Some(Side::Opener));
+}
+
+#[tokio::test]
 async fn a_thread_the_user_opened_never_goes_back_to_the_user() {
     let tree = tree().await;
     let fixture = &tree.fixture;

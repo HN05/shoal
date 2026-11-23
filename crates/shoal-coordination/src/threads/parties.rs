@@ -151,11 +151,11 @@ impl Coordination {
         Ok(None)
     }
 
-    /// The side `caller` posts on in `thread`, which it reads: the
-    /// opener's for its opener, now or earlier, the holder's for the party
-    /// of that side now, which the user acts for, or an earlier holder,
-    /// else none, as a participant. Nobody but the opener's side posts in a
-    /// thread that holds its posts.
+    /// The side `caller` posts on in `thread`, which it reads: its own
+    /// side as the current opener or holder; else the opener's for an
+    /// earlier opener, the holder's for a space above the holder, the user
+    /// acting for it, or an earlier holder; else none, as a participant.
+    /// Nobody but the opener's side posts in a thread that holds its posts.
     pub(super) async fn posting_side(
         &self,
         daemon: &dyn Daemon,
@@ -163,7 +163,7 @@ impl Coordination {
         thread: &Thread,
     ) -> Result<Option<Side>> {
         let current = self.current_side(daemon, caller, thread).await?;
-        if current == Some(Side::Opener) {
+        if current == Some(Side::Opener) || holds(caller, thread) {
             return Ok(current);
         }
         let (id, space) = (thread.id, caller.map(|caller| caller.space_id.clone()));
@@ -246,6 +246,16 @@ impl Coordination {
             thread.number
         );
         Ok(side)
+    }
+}
+
+/// Whether `caller`, or the user without one, is the holder of `thread`
+/// itself, rather than a space above it.
+fn holds(caller: Option<&Caller>, thread: &Thread) -> bool {
+    match (caller, &thread.holder) {
+        (None, Holder::User) => true,
+        (Some(caller), Holder::Space(holder)) => holder.id == caller.space_id,
+        (None, Holder::Space(_)) | (Some(_), Holder::User) => false,
     }
 }
 
