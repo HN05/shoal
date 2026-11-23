@@ -302,3 +302,63 @@ async fn session_hosts_child() -> anyhow::Result<()> {
     assert_eq!(owners, HashSet::from(expected));
     Ok(())
 }
+
+/// A Herdr pane with zmx session `session` nested in it.
+fn pane_with(session: &str) -> Origin {
+    Origin {
+        nested: Some(Box::new(Origin::created(HostName::Zmx, session.into()))),
+        ..Origin::created(HostName::Herdr, "w1:p1".into())
+    }
+}
+
+#[test]
+fn a_session_nested_in_a_recorded_place_is_that_places() {
+    let pane = pane_with("work");
+    let agent = Recorded {
+        agent: Some(&"claude".into()),
+        ..unrecorded(&pane)
+    };
+    let session = Origin::created(HostName::Zmx, "work".into());
+    let other = Origin::created(HostName::Zmx, "other".into());
+    assert_eq!(
+        distinct_places(&[unrecorded(&session), agent, unrecorded(&other)]),
+        [agent, unrecorded(&other)]
+    );
+}
+
+#[test]
+fn a_place_with_a_nested_session_shows_while_either_is_open() {
+    let pane = pane_with("work");
+    let session = pane.nested.as_deref().unwrap();
+    let open = |clients, place: &Origin| Some(Session::open(place.id().into(), clients, place));
+    // The pane's own client of the session shows nothing elsewhere.
+    let unseen = with_nested(open(0, &pane), open(1, session)).unwrap();
+    assert_eq!((unseen.clients, &unseen.place), (0, &pane));
+    let elsewhere = with_nested(open(0, &pane), open(2, session)).unwrap();
+    assert_eq!(elsewhere.clients, 1);
+    // A pane whose session ended names none; a session whose pane closed
+    // is shown on its own.
+    let ended = with_nested(open(1, &pane), None).unwrap();
+    assert_eq!(ended.place.nested, None);
+    let outlived = with_nested(None, open(0, session)).unwrap();
+    assert_eq!(&outlived.place, session);
+    assert_eq!(with_nested(None, None), None);
+}
+
+#[test]
+fn a_terminal_its_host_does_not_serve_attaches_to_the_nested_session() {
+    let pane = pane_with("work");
+    let session = Session::open("Fix the login".into(), 1, &pane);
+    let (place, name) = shown(&session, shown_place(&session.place, true));
+    assert_eq!((place, name), (&pane, "Fix the login"));
+    let (place, name) = shown(&session, shown_place(&session.place, false));
+    assert_eq!((place.host, name), (HostName::Zmx, "work"));
+    let plain = Origin::created(HostName::Herdr, "w1:p2".into());
+    assert_eq!(shown_place(&plain, false), &plain);
+    let viewer = |app| Elsewhere {
+        machine: "studio",
+        app,
+    };
+    assert_eq!(shown_elsewhere(&pane, &viewer(Some("Rex"))), &pane);
+    assert_eq!(shown_elsewhere(&pane, &viewer(None)).host, HostName::Zmx);
+}

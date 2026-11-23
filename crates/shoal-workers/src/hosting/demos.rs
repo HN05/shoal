@@ -66,9 +66,11 @@ fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
     }
 }
 
-/// Show the demo `launch` describes in this terminal.
+/// Show the demo `launch` describes in this terminal, or the session it
+/// runs in nested in its place where that place's host does not serve this
+/// terminal.
 pub async fn open_demo(launch: &Launch) -> Result<()> {
-    let place = &launch.origin;
+    let place = crate::terminal::shown_here(&launch.origin);
     named(place.host)
         .places()
         .with_context(|| format!("{} cannot show demos", place.host))?

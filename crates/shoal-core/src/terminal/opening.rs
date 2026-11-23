@@ -25,12 +25,14 @@ pub async fn show_opened(
 
 /// Bring `place`, one a host opened, called `name`, before `viewer`, a user
 /// on another machine whose terminal is the one Shoal made here for this
-/// process, as its host shows a place there.
+/// process, as its host shows a place there, or the session nested in it
+/// where the viewer has no app for that host.
 pub async fn show_place_elsewhere(
     place: &Origin,
     name: &str,
     viewer: &Elsewhere<'_>,
 ) -> Result<()> {
+    let place = super::shown_elsewhere(place, viewer);
     let places = named(place.host).places().with_context(|| {
         format!(
             "{name} runs in {} on machine {}, which shows no places elsewhere; open it there",

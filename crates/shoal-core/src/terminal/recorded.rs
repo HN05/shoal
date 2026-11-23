@@ -49,12 +49,13 @@ impl<'a> Recorded<'a> {
 
 /// The agent sessions still open at `places` in the hosts `settings`
 /// enable, where the daemon recorded a space's executions running, or the
-/// places Shoal created for it. A session where a stopped agent waits to be
-/// restored says so, whichever place found it.
+/// places Shoal created for it, and in the sessions nested in them. A
+/// session where a stopped agent waits to be restored says so, whichever
+/// place found it.
 pub async fn sessions(settings: &Effective, places: &[Recorded<'_>]) -> Result<Vec<Session>> {
     let places = distinct_places(places);
     let origins: Vec<_> = places.iter().map(|recorded| recorded.place).collect();
-    let (found, failure) = open_at(&origins, |host| {
+    let (found, failure) = open_with_nested(&origins, |host| {
         enabled_host(settings, host).and_then(Host::sessions)
     })
     .await;
@@ -75,6 +76,51 @@ pub async fn sessions(settings: &Effective, places: &[Recorded<'_>]) -> Result<V
         .collect();
     mark_stopped(&mut sessions);
     Ok(sessions)
+}
+
+/// The session open at each of `places`, in order, as [`open_at`] finds
+/// them, each shown with the session nested in it as [`with_nested`] does.
+async fn open_with_nested(
+    places: &[&Origin],
+    sessions_of: impl Fn(HostName) -> Option<&'static dyn Sessions>,
+) -> (Vec<Option<Session>>, Option<anyhow::Error>) {
+    let nested = places.iter().filter_map(|place| place.nested.as_deref());
+    let asked: Vec<_> = places.iter().copied().chain(nested).collect();
+    let (found, failure) = open_at(&asked, sessions_of).await;
+    let mut found = found.into_iter();
+    let outer: Vec<_> = found.by_ref().take(places.len()).collect();
+    let shown = places
+        .iter()
+        .zip(outer)
+        .map(|(place, session)| {
+            let nested = place.nested.as_ref().and_then(|_| found.next().flatten());
+            with_nested(session, nested)
+        })
+        .collect();
+    (shown, failure)
+}
+
+/// The session a recorded place shows, from `outer`, the one open at the
+/// place, and `nested`, the one open in the session nested in it: the
+/// place's while it is open, attached while a terminal shows either, and
+/// naming the nested session only while that is open; else the nested
+/// session, which outlives the place.
+fn with_nested(outer: Option<Session>, nested: Option<Session>) -> Option<Session> {
+    match (outer, nested) {
+        (Some(outer), Some(nested)) => Some(Session {
+            // One client of the nested session is the place's own.
+            clients: outer.clients + nested.clients.saturating_sub(1),
+            ..outer
+        }),
+        (Some(outer), None) => Some(Session {
+            place: Origin {
+                nested: None,
+                ..outer.place.clone()
+            },
+            ..outer
+        }),
+        (None, nested) => nested,
+    }
 }
 
 /// Mark every one of `sessions` found at the place of a stopped agent, which
@@ -159,11 +205,18 @@ async fn open_at(
 /// `places` without repeats of a place: the same ID in the same host, its
 /// data, which tells servers of one host apart, and its instance, which tells
 /// a later place under a reused ID apart. A place keeps the agent any of its
-/// repeats records there.
+/// repeats records there, and a session another of them nests is that one's.
 fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
     let key = |place: &'a Origin| (place.host, place.id(), &place.data, &place.instance);
+    let nested: Vec<_> = (places.iter())
+        .filter_map(|recorded| recorded.place.nested.as_deref())
+        .map(key)
+        .collect();
     let mut distinct: Vec<Recorded<'a>> = Vec::new();
-    for recorded in places {
+    for recorded in places
+        .iter()
+        .filter(|recorded| !nested.contains(&key(recorded.place)))
+    {
         match distinct
             .iter_mut()
             .find(|kept| key(kept.place) == key(recorded.place))
@@ -287,10 +340,11 @@ fn enabled_places<'a>(
 /// say how to return to it with `shoal attach <space>` when it outlives the
 /// attach. Returns whether its place still has a session once shown.
 pub async fn attach(space: &str, session: &Session) -> Result<bool> {
-    let (places, sessions) = keeping(session)?;
-    places.show(&session.place, &session.name).await?;
-    report_detach(sessions, space, &session.name).await?;
-    Ok(still_open(sessions, &session.place).await)
+    let (place, name) = shown(session, shown_here(&session.place));
+    let (places, sessions) = keeping(place)?;
+    places.show(place, name).await?;
+    report_detach(sessions, space, name).await?;
+    Ok(still_open(sessions, place).await)
 }
 
 /// Show `session` to `viewer`, a user on another machine, through the host
@@ -301,17 +355,48 @@ pub async fn show_elsewhere(
     session: &Session,
     viewer: &Elsewhere<'_>,
 ) -> Result<bool> {
-    let (places, sessions) = keeping(session)?;
-    places
-        .show_elsewhere(&session.place, &session.name, viewer)
-        .await?;
-    report_detach(sessions, space, &session.name).await?;
-    Ok(still_open(sessions, &session.place).await)
+    let (place, name) = shown(session, shown_elsewhere(&session.place, viewer));
+    let (places, sessions) = keeping(place)?;
+    places.show_elsewhere(place, name, viewer).await?;
+    report_detach(sessions, space, name).await?;
+    Ok(still_open(sessions, place).await)
 }
 
-/// The host that keeps `session`, as it shows and reads its sessions.
-fn keeping(session: &Session) -> Result<(&'static dyn Places, &'static dyn Sessions)> {
-    let host = named(session.place.host);
+/// `shown`, `session`'s place or the session nested in it, with the name
+/// its host knows it by.
+fn shown<'a>(session: &'a Session, shown: &'a Origin) -> (&'a Origin, &'a str) {
+    match std::ptr::eq(shown, &session.place) {
+        true => (shown, &session.name),
+        false => (shown, shown.id()),
+    }
+}
+
+/// What shows `place` on this terminal: the place itself where its host
+/// serves the terminal, otherwise the session nested in it, if any, which
+/// any terminal attaches to.
+pub fn shown_here(place: &Origin) -> &Origin {
+    shown_place(place, named(place.host).serves())
+}
+
+/// What shows `place` to `viewer`, a user on another machine: the place
+/// itself where their app for its host shows it, otherwise the session
+/// nested in it, if any.
+pub fn shown_elsewhere<'a>(place: &'a Origin, viewer: &Elsewhere<'_>) -> &'a Origin {
+    shown_place(place, viewer.app.is_some())
+}
+
+/// `place` where `itself`, otherwise the session nested in it, if any.
+fn shown_place(place: &Origin, itself: bool) -> &Origin {
+    match &place.nested {
+        Some(nested) if !itself => nested,
+        _ => place,
+    }
+}
+
+/// The host that keeps the session at `place`, as it shows and reads its
+/// sessions.
+fn keeping(place: &Origin) -> Result<(&'static dyn Places, &'static dyn Sessions)> {
+    let host = named(place.host);
     match (host.places(), host.sessions()) {
         (Some(places), Some(sessions)) => Ok((places, sessions)),
         _ => anyhow::bail!("{} keeps no sessions", host.name()),

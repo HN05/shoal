@@ -51,7 +51,7 @@ pub(crate) use prompts::agents_can_be_prompted;
 pub use prompts::{CONTINUE_PROMPT, WAKE_PROMPT, send_keys, submit_prompt, submitted_by_shoal};
 pub use recorded::{
     KnownSessions, Recorded, attach, known_sessions, left_open, open_session_owners, report_detach,
-    session_owners, sessions, show_elsewhere,
+    session_owners, sessions, show_elsewhere, shown_elsewhere, shown_here,
 };
 pub(crate) use sessions::OwnerKind;
 pub use sessions::{Owner, Session, chat_session_name};
