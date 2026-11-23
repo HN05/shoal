@@ -7,7 +7,10 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
 
 use crate::{
-    items::{Items, action::ActionRequests, item::ItemRequests},
+    items::{
+        Items,
+        item::{ItemRequests, ItemSteps},
+    },
     review::status::{StatusRecords, Verdict},
     transport::{
         account::Account,

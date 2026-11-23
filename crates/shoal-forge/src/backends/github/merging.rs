@@ -7,7 +7,7 @@ use super::GitHub;
 use crate::{
     backends::github_rest,
     items::{
-        item::{ItemRequests, text},
+        item::{ItemSteps, text},
         merging::{Merging, subject_and_body},
         revert::NewRevert,
     },

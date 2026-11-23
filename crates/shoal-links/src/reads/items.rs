@@ -6,7 +6,7 @@ use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
     RepoRequests,
     capability::CapabilityRequests,
-    items::{action::ActionRequests, issue::IssueRequests},
+    items::{issue::IssueRequests, item::ItemRequests},
     review::{reviewers::ReviewerRequests, thread::ThreadRequests},
     transport::account::Account,
 };

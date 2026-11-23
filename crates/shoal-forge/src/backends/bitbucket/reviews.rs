@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::{Bitbucket, listed, roots};
 use crate::{
     items::{
-        item::{ItemRequests, text},
+        item::{ItemSteps, text},
         review::{PlacedReview, Submission},
     },
     review::{Reviews, diff::Diff},

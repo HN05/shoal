@@ -7,10 +7,9 @@ use crate::{
     capability::CapabilityRequests,
     items::{
         Items,
-        action::ActionRequests,
         attach::{AttachRequests, AttachSteps},
         create::{CreateSteps, Created, pending_edit},
-        item::ItemRequests,
+        item::{ItemRequests, ItemSteps},
         merging::{Merging, commit_shas},
     },
     transport::{account::Account, api::TransportRequests},

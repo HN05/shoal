@@ -6,7 +6,11 @@ use shoal_refs::{BranchName, CommitId};
 use crate::{
     MERGED_HINT,
     capability::{self, Supports},
-    items::{Items, action::ActionRequests, item::ItemRequests, revert::NewRevert},
+    items::{
+        Items,
+        item::{ItemRequests, ItemSteps},
+        revert::NewRevert,
+    },
     transport::{
         account::Account,
         api::{Request, TransportRequests},

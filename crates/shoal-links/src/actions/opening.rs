@@ -6,7 +6,7 @@ use anyhow::Result;
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
     conventions,
-    items::{action::ActionRequests, attach::AttachRequests, create::CreateRequests},
+    items::{attach::AttachRequests, create::CreateRequests, item::ItemRequests},
     transport::account::Account,
 };
 use shoal_forge_types::{

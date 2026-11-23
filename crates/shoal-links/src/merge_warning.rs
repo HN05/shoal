@@ -4,7 +4,7 @@
 //! one. A branch's local merge reads its own record the same way.
 use anyhow::{Context, Result, ensure};
 use shoal_daemon_base::callers::Caller;
-use shoal_forge::{RepoRequests, items::action::ActionRequests};
+use shoal_forge::{RepoRequests, items::item::ItemRequests};
 use shoal_forge_types::{
     ForgeRepo,
     items::{

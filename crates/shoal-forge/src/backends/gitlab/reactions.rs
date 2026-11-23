@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use super::{GitLab, username};
 use crate::{
     items::{
-        item::{ItemRequests, text},
+        item::{ItemSteps, text},
         reaction::{Listed, Reactions, Subject},
     },
     transport::{

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use anyhow::{Result, bail, ensure};
 use shoal_core::refusal::{Reason, Refusal};
 use shoal_daemon_base::callers::Caller;
-use shoal_forge::items::action::ActionRequests;
+use shoal_forge::items::item::ItemRequests;
 use shoal_forge_types::items::{
     link::{ItemKind, LinkKind},
     reference::{ItemInput, ItemRef},

@@ -3,7 +3,7 @@
 //! branch into the default branch.
 use anyhow::{Result, bail};
 use rusqlite::Connection;
-use shoal_forge::items::action::ActionRequests;
+use shoal_forge::items::item::ItemRequests;
 use shoal_forge_types::items::{item::ItemState, link::ItemKind, reference::ItemRef};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{

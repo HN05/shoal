@@ -10,7 +10,10 @@ use shoal_core::config::Effective;
 use shoal_daemon_base::{callers::Caller, events, gates::PrGuard};
 use shoal_forge::{
     conventions,
-    items::action::{ActionRequests, Sent},
+    items::{
+        action::{ActionRequests, Sent},
+        item::ItemRequests,
+    },
     transport::account::Account,
     updates::Edited,
 };

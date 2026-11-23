@@ -5,10 +5,7 @@ use serde_json::Value;
 use super::{GitLab, latest_statuses, notes, status_state, username};
 use crate::{
     backends::rest::{self, RestReads, fingerprints},
-    items::{
-        action::ActionSteps,
-        item::{ItemRequests, text},
-    },
+    items::item::{ItemSteps, text},
     review::{
         status::{Statuses, Verdict},
         view::Views,

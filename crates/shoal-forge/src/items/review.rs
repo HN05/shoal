@@ -12,7 +12,8 @@ use shoal_refs::CommitId;
 use crate::review::Reviews;
 use crate::{
     items::Items as _,
-    items::action::{Acted, ActionRequests, after_post},
+    items::action::{Acted, after_post},
+    items::item::ItemRequests,
     review::diff::{Bases, Diff, DiffRequests, Placed},
     transport::account::Account,
     transport::api::{Request, TransportRequests},

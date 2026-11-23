@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::{GitLab, notes};
 use crate::{
     items::{
-        item::{ItemRequests, text},
+        item::{ItemSteps, text},
         review::{PlacedReview, Submission},
     },
     review::{

@@ -8,8 +8,9 @@ use crate::{
     capability::CapabilityRequests,
     items::{
         Items,
-        action::{ActionRequests, ActionSteps},
+        action::ActionSteps,
         attach::{AttachRequests, AttachSteps, Pending},
+        item::ItemRequests,
     },
     transport::{
         account::Account,

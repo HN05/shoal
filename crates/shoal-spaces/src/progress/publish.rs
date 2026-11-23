@@ -29,7 +29,7 @@ use crate::{
     log,
     model::Relation,
 };
-use shoal_forge::items::action::ActionRequests;
+use shoal_forge::items::item::ItemRequests;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The shortest time between two publications of one space's progress.

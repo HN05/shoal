@@ -8,9 +8,8 @@ use crate::{
     ci::{CiCheck, check},
     conventions::draft::DraftMarker,
     items::{
-        action::ActionRequests,
         create::Head,
-        item::{ItemRequests, text, user_names},
+        item::{ItemRequests, ItemSteps, text, user_names},
         reaction::{Listed, Subject},
     },
     review::{

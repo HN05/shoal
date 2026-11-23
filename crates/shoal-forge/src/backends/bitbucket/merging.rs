@@ -5,7 +5,7 @@ use serde_json::json;
 use super::Bitbucket;
 use crate::{
     capability,
-    items::{item::ItemRequests, merging::Merging},
+    items::{item::ItemSteps, merging::Merging},
     transport::api::Request,
 };
 use shoal_forge_types::{

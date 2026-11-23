@@ -1,5 +1,5 @@
 use super::*;
-use crate::items::{Items, item::ItemRequests};
+use crate::items::{Items, item::ItemSteps};
 use serde_json::json;
 use shoal_forge_types::capability::Unsupported;
 

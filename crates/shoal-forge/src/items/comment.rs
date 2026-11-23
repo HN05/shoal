@@ -5,8 +5,9 @@ use anyhow::{Result, bail, ensure};
 use crate::{
     items::{
         Items,
-        action::{Acted, ActionRequests},
+        action::Acted,
         attach::{AttachSteps, Holder},
+        item::ItemRequests,
         reaction::Subject,
     },
     review::view::Views,

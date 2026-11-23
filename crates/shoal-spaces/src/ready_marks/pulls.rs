@@ -12,7 +12,7 @@ use crate::{
     forge::items::{item::unmarkable_reason, link::ItemKind},
     model::SkippedPr,
 };
-use shoal_forge::items::action::ActionRequests;
+use shoal_forge::items::item::ItemRequests;
 
 /// The linked PRs a mark covers that cannot be marked.
 #[derive(Default)]

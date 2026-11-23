@@ -9,7 +9,7 @@ use crate::{
         Job, Location, Operation,
         checks::{Checks, MAX_LOG_BYTES, NoJobLog},
     },
-    items::action::ActionSteps,
+    items::item::ItemSteps,
     transport::{
         account::Account,
         api::{Request, TIMEOUT, TransportRequests, curl_body},

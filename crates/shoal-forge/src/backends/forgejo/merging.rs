@@ -6,7 +6,7 @@ use super::Forgejo;
 use crate::{
     backends::github_rest,
     items::{
-        item::ItemRequests,
+        item::ItemSteps,
         merging::{Merging, subject_and_body},
     },
     transport::{

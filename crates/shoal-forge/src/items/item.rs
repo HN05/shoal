@@ -1,16 +1,22 @@
-//! An issue or PR as one REST read reports it, in the same shape for every
-//! forge: what an action returns and what planning an action reads.
+//! Reading an issue or PR as one REST read reports it, in the same shape for
+//! every forge: what an action returns and what planning an action reads.
 use anyhow::{Result, ensure};
 use serde_json::Value;
 
-use crate::{items::Items, transport::api::TransportRequests};
+use crate::{
+    items::Items,
+    transport::{
+        account::Account,
+        api::{Request, TransportRequests},
+    },
+};
 use shoal_forge_types::{
     ForgeRepo,
     items::{item::Current, link::ItemKind},
 };
 
 /// Reading issues and PRs.
-#[shoal_forge_derive::extension(pub(crate) ItemRequests)]
+#[shoal_forge_derive::extension(pub ItemRequests, pub(crate) ItemSteps)]
 impl ForgeRepo {
     /// The item's REST endpoint.
     pub(crate) fn item_endpoint(&self, kind: ItemKind, number: u64) -> String {
@@ -28,6 +34,34 @@ impl ForgeRepo {
             "the forge returned a different item than #{number}"
         );
         self.kind().current(self, kind, number, value)
+    }
+
+    /// Read an issue or PR.
+    pub async fn read(&self, account: &Account, kind: ItemKind, number: u64) -> Result<Current> {
+        let value = self.read_value(account, kind, number).await?;
+        self.current(kind, number, &value)
+    }
+
+    /// The item as the forge reports it, for the fields `Current` leaves out.
+    pub(crate) async fn read_value(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+    ) -> Result<serde_json::Value> {
+        self.send(account, &Request::get(self.item_endpoint(kind, number)))
+            .await
+    }
+
+    /// Whether `number` names an issue or a PR. Only forges that number both
+    /// in one sequence can tell; elsewhere the caller names the kind.
+    pub async fn item_kind(&self, account: &Account, number: u64) -> Result<ItemKind> {
+        ensure!(
+            self.kind().numbers_items_together(),
+            "this forge numbers issues and PRs separately; put issue or pr before #{number}"
+        );
+        let value = self.read_value(account, ItemKind::Issue, number).await?;
+        issue_read_kind(number, &value)
     }
 }
 

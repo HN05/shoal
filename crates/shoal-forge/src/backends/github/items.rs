@@ -10,7 +10,7 @@ use crate::{
         rest,
     },
     conventions::draft::DraftMarker,
-    items::{Items, create::Head, item::ItemRequests, reaction::Subject},
+    items::{Items, create::Head, item::ItemSteps, reaction::Subject},
     transport::{
         account::Account,
         api::{Request, TransportRequests, encode},

@@ -18,6 +18,7 @@ use shoal_forge::{
     items::{
         action::{ActionRequests, Sent},
         create::CreateRequests,
+        item::ItemRequests,
     },
     transport::account::Account,
 };

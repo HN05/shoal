@@ -2,7 +2,7 @@
 //! are checked against it before anything is posted.
 use anyhow::{Context, Result, bail, ensure};
 
-use crate::{items::action::ActionRequests, review::Reviews, transport::account::Account};
+use crate::{items::item::ItemRequests, review::Reviews, transport::account::Account};
 use shoal_forge_types::{
     ForgeRepo,
     items::{

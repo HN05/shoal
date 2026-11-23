@@ -7,7 +7,7 @@ use crate::{
         github::threads::{GitHubThread, threads},
         github_rest,
     },
-    items::action::ActionSteps,
+    items::item::ItemSteps,
     review::view::{login, review_comment, review_state, text_field},
     transport::{account::Account, api::TransportRequests},
 };

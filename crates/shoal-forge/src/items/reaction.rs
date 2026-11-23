@@ -8,8 +8,9 @@ use serde_json::Value;
 
 use crate::{
     items::{
-        action::{Acted, ActionRequests},
+        action::Acted,
         comment::{self, CommentRequests},
+        item::ItemRequests,
     },
     transport::{
         account::Account,

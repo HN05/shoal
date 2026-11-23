@@ -19,7 +19,7 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::{
-    items::{action::ActionRequests, comment::Found, create::Head, reaction::Subject},
+    items::{comment::Found, create::Head, item::ItemRequests, reaction::Subject},
     transport::{
         account::Account,
         api::Request,

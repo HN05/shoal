@@ -16,7 +16,7 @@ use shoal_refs::CommitId;
 use crate::{
     capability::CapabilityRequests,
     ci::checks::Checks,
-    items::action::ActionRequests,
+    items::item::ItemRequests,
     transport::{
         account::Account,
         api::{Request, TransportRequests},

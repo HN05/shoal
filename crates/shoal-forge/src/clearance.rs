@@ -8,7 +8,7 @@ use anyhow::Result;
 use crate::{
     ci::run_view::RunViewRequests,
     hosts::HostTypes,
-    items::{action::ActionRequests, reference::ReferenceRequests},
+    items::{item::ItemRequests, reference::ReferenceRequests},
     repo::default_branch::DefaultBranchRequests,
     transport::account::Account,
 };
