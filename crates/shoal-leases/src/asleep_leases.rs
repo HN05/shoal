@@ -76,9 +76,10 @@ impl Leases {
         Ok(false)
     }
 
-    /// Release one of the sets of leases in `freeing`, each of which would
-    /// grant a request for `workspace` from `caller` that capacity keeps
-    /// busy, once every lease in it is an asleep agent's that may yield to
+    /// Release one of the sets of leases in `freeing`, doing what `device`
+    /// says with a simulator's, each of which would grant a request for
+    /// `workspace` from `caller` that capacity keeps busy, once every lease
+    /// in it is an asleep agent's that may yield to
     /// the request: any for the user's, else one whose space's priority is
     /// no higher than the workspace's. The set whose highest-ranked holder
     /// ranks lowest goes, the smallest among equals. Whether it went.
@@ -88,6 +89,7 @@ impl Leases {
         workspace: &Workspace,
         caller: Option<&Caller>,
         freeing: Vec<Vec<Acquired>>,
+        device: Device,
     ) -> bool {
         let requester = caller.map(|_| &workspace.id);
         let sleepers = match daemon.sleepers(requester).await {
@@ -101,7 +103,7 @@ impl Leases {
             return false;
         };
         for lease in &given {
-            let released = self.release_acquired_lease(daemon, lease, Device::Keep);
+            let released = self.release_acquired_lease(daemon, lease, device);
             let Some(holding) = released.await else {
                 return false;
             };

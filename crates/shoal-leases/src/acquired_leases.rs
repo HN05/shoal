@@ -27,6 +27,17 @@ pub(crate) struct Acquired {
 }
 
 impl Acquired {
+    /// The simulator lease `sim` holds, none for an idle device.
+    pub(crate) fn simulator(sim: crate::sim::Simulator) -> Option<Self> {
+        Some(Self {
+            workspace: sim.workspace_id?,
+            acquirer: sim.acquirer,
+            held: Held::Simulator {
+                name: sim.lease_name?,
+            },
+        })
+    }
+
     /// The resource or repository permit `lease`.
     pub(crate) fn permit(lease: resources::ResourceLease) -> Self {
         Self {
@@ -201,15 +212,7 @@ impl Leases {
         let permits = self.store.read(|db| resources::leases(db, None)).await?;
         let permits = permits.into_iter().map(Acquired::permit);
         let simulators = self.list_simulators(None).await?.into_iter();
-        let simulators = simulators.filter_map(|sim| {
-            Some(Acquired {
-                workspace: sim.workspace_id?,
-                acquirer: sim.acquirer,
-                held: Held::Simulator {
-                    name: sim.lease_name?,
-                },
-            })
-        });
+        let simulators = simulators.filter_map(Acquired::simulator);
         let projects = self.store.read(|db| containers::records::list(db, None));
         let projects = (projects.await?.into_iter())
             .filter(|recorded| recorded.project.state.active())

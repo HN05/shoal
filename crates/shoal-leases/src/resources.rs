@@ -19,7 +19,9 @@ use crate::{
     gates::GuardMode,
     hooks::{Hook, HookKind},
     model::Workspace,
-    queue, store, validate,
+    queue,
+    sim::Device,
+    store, validate,
 };
 use shoal_daemon_base::approval_requests::ApprovalRequestExt;
 use shoal_protocol::acquirers::Acquirer;
@@ -416,10 +418,8 @@ impl Leases {
             && !claim.freeing.is_empty()
         {
             let freeing = permits(std::mem::take(&mut claim.freeing));
-            if self
-                .give_to_request(daemon, &workspace, caller, freeing)
-                .await
-            {
+            let given = self.give_to_request(daemon, &workspace, caller, freeing, Device::Keep);
+            if given.await {
                 claimed = self.claim_resource(daemon, &asked, place.ahead()).await;
             }
         }

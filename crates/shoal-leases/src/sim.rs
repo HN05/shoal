@@ -20,8 +20,8 @@ pub use shoal_protocol::sim::{
 use simctl::Inventory;
 
 use crate::{
-    Leases, allocation::Allocation, callers::Caller, daemon::Daemon, model::Workspace, queue,
-    state::WorkspaceState, store, time::UnixTime, validate,
+    Leases, acquired_leases::Acquired, allocation::Allocation, callers::Caller, daemon::Daemon,
+    model::Workspace, queue, state::WorkspaceState, store, time::UnixTime, validate,
 };
 use shoal_daemon_base::approval_requests::ApprovalRequestExt;
 use shoal_protocol::approvals;
@@ -109,7 +109,33 @@ impl SimulatorExt for Simulator {
     }
 }
 
+/// What an allocation came to, with the limit that keeps it busy where
+/// one does.
+struct SimClaim {
+    allocation: Allocation<Box<Simulator>>,
+    full: Option<Limit>,
+}
+
+impl From<Allocation<Box<Simulator>>> for SimClaim {
+    fn from(allocation: Allocation<Box<Simulator>>) -> Self {
+        Self {
+            allocation,
+            full: None,
+        }
+    }
+}
+
+/// A limit on simulators that keeps a request busy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Limit {
+    /// `max_booted`, which booted devices count against.
+    Booted,
+    /// `max_devices`, which every device counts against.
+    Devices,
+}
+
 /// The request asking for a simulator, as allocation weighs it.
+#[derive(Clone)]
 struct Claimant {
     /// Whose lease it becomes.
     acquirer: Acquirer,
@@ -281,9 +307,28 @@ impl Leases {
             approves: caller.is_some(),
             ahead: place.ahead(),
         };
-        let result = self
-            .allocate_simulator(daemon, workspace, request, &mut audit, claimant)
+        let mut result = self
+            .allocate_simulator(
+                daemon,
+                workspace.clone(),
+                request.clone(),
+                &mut audit,
+                claimant.clone(),
+            )
             .await;
+        // A device asleep agents hold goes to the request, which allocates
+        // again under the same lock.
+        let full = result.as_ref().ok().and_then(|claim| claim.full);
+        if let Some(limit) = full
+            && self
+                .give_simulator_to_request(daemon, &workspace, caller, limit)
+                .await
+        {
+            result = self
+                .allocate_simulator(daemon, workspace, request, &mut audit, claimant)
+                .await;
+        }
+        let result = result.map(|claim| claim.allocation);
         place.settle(&result);
         if let Ok(outcome) = &result {
             let space = (&workspace_name.0, &workspace_name.1);
@@ -305,7 +350,7 @@ impl Leases {
         request: SimRequest,
         audit: &mut Option<CleanRequest>,
         claimant: Claimant,
-    ) -> Result<Allocation<Box<Simulator>>> {
+    ) -> Result<SimClaim> {
         validate::name("simulator lease", &request.name)?;
         validate::reason("simulator", request.reason.as_deref())?;
         ensure!(
@@ -348,7 +393,7 @@ impl Leases {
                 sim.acquirer = renewed;
                 self.save_sim(sim).await?;
             }
-            return Ok(Allocation::Granted(Box::new(sim.clone())));
+            return Ok(Allocation::Granted(Box::new(sim.clone())).into());
         }
         let profile = profile.unwrap();
         // An exported scope has no execution, but its requests still need approval.
@@ -365,11 +410,11 @@ impl Leases {
                 request.reason.as_deref(),
             );
             if let Some(pending) = self.request_approval(approval).await? {
-                return Ok(Allocation::Approval(Box::new(pending)));
+                return Ok(Allocation::Approval(Box::new(pending)).into());
             }
         }
         if let Some(queued) = queue::behind(claimant.ahead, "simulators") {
-            return Ok(queued);
+            return Ok(queued.into());
         }
         // Cache live counts without booting stopped devices just to inspect them.
         if request.clean && records.len() >= limits.max_devices {
@@ -402,23 +447,27 @@ impl Leases {
         profile: Profile,
         plan: planning::Plan<'_>,
         audit: &mut Option<CleanRequest>,
-    ) -> Result<Allocation<Box<Simulator>>> {
+    ) -> Result<SimClaim> {
         let inventory = self.recheck_plan(&plan).await?;
         if !self
             .free_running_capacity(&plan, config.machine.simulators.max_booted, inventory)
             .await?
         {
-            return Ok(Allocation::Busy(
-                "simulator running limit reached; active leases or external simulators occupy all slots".into(),
-            ));
+            return Ok(SimClaim {
+                allocation: Allocation::Busy(
+                    "simulator running limit reached; active leases or external simulators occupy all slots".into(),
+                ),
+                full: Some(Limit::Booted),
+            });
         }
         for candidate in &plan.evictions {
             self.evict_sim(candidate, audit).await?;
         }
         if !plan.has_device_capacity {
-            return Ok(Allocation::Busy(
-                "all managed simulator devices are allocated".into(),
-            ));
+            return Ok(SimClaim {
+                allocation: Allocation::Busy("all managed simulator devices are allocated".into()),
+                full: Some(Limit::Devices),
+            });
         }
         let mut sim = plan
             .reusable
@@ -435,7 +484,49 @@ impl Leases {
         sim.finish_boot(workspace.id, &result);
         self.save_sim(&sim).await?;
         result?;
-        Ok(Allocation::Granted(Box::new(sim)))
+        Ok(Allocation::Granted(Box::new(sim)).into())
+    }
+
+    /// Give a request for `workspace` from `caller`, which `limit` keeps
+    /// busy, a simulator lease an asleep agent holds that frees it: a booted
+    /// device for the running limit, any device for the device limit, as
+    /// [`Self::give_to_request`] picks one. The caller holds the simulators'
+    /// lock. Whether one went.
+    async fn give_simulator_to_request(
+        &self,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
+        caller: Option<&Caller>,
+        limit: Limit,
+    ) -> bool {
+        let freeing = match self.freeing_simulators(limit).await {
+            Ok(freeing) => freeing,
+            Err(error) => {
+                crate::log!("simulators unread for a busy request: {error:#}");
+                return false;
+            }
+        };
+        (self.give_to_request(daemon, workspace, caller, freeing, Device::ForRequest)).await
+    }
+
+    /// Each leased simulator whose release frees what `limit` keeps busy,
+    /// alone.
+    async fn freeing_simulators(&self, limit: Limit) -> Result<Vec<Vec<Acquired>>> {
+        let inventory = match limit {
+            Limit::Booted => Some(simctl::inventory().await?),
+            Limit::Devices => None,
+        };
+        let frees = |sim: &Simulator| {
+            sim.state == SimulatorState::Leased
+                && inventory
+                    .as_ref()
+                    .is_none_or(|inventory| sim.is_booted(inventory))
+        };
+        let simulators = self.list_simulators(None).await?.into_iter();
+        Ok((simulators.filter(frees))
+            .filter_map(Acquired::simulator)
+            .map(|lease| vec![lease])
+            .collect())
     }
 
     /// A plan is not ownership evidence: confirm its devices are still unowned
@@ -591,7 +682,11 @@ impl Leases {
         holder: Option<&Acquirer>,
         then: Device,
     ) -> Result<bool> {
-        let guard = self.gates.lock_simulators().await;
+        let guard = match then {
+            // Its request holds the lock already.
+            Device::ForRequest => None,
+            Device::Keep | Device::ShutDown => Some(self.gates.lock_simulators().await),
+        };
         let released = (self.release_locked_simulator(daemon, selector, name, holder)).await?;
         let SimRelease::Released(idle) = released else {
             return Ok(false);
@@ -757,6 +852,9 @@ pub(crate) enum Device {
     Keep,
     /// Shut it down, keeping its apps and data, to free what it runs.
     ShutDown,
+    /// Keep it for the request that holds the simulators' lock and
+    /// allocates next, which may take this device.
+    ForRequest,
 }
 
 /// The simctl device name Shoal gives its own devices.
