@@ -5,7 +5,9 @@ use std::collections::HashSet;
 use anyhow::{Context as _, Result};
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
-use shoal_protocol::hub::directory::{Conflict, KeptFiles, Listed, Report, SpaceSummary};
+use shoal_protocol::hub::directory::{
+    Conflict, Keeps, Kept, KeptRemoved, Listed, Report, SpaceSummary,
+};
 
 use super::{super::members, numbers, repositories};
 use crate::packages::takeovers;
@@ -45,7 +47,7 @@ pub(super) fn apply(
 /// it; another machine's copy takes the place of each space it owned.
 pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute("DELETE FROM hub_space_claims WHERE member_id=?1", [member])?;
-    tx.execute("DELETE FROM hub_kept_files WHERE member_id=?1", [member])?;
+    tx.execute("DELETE FROM hub_kept_removed WHERE member_id=?1", [member])?;
     numbers::forget(tx, member)?;
     repositories::forget(tx, member)?;
     for space in held(tx, member)? {
@@ -77,26 +79,33 @@ pub(super) fn read(tx: &Transaction<'_>) -> Result<(Vec<Listed>, Vec<Conflict>)>
     Ok((spaces, conflicts(tx)?))
 }
 
-/// Record that `member` keeps the files of the removed spaces `kept`, and
-/// of no others.
-pub(super) fn keep_files(tx: &Transaction<'_>, member: &MemberId, kept: &[SpaceId]) -> Result<()> {
-    tx.execute("DELETE FROM hub_kept_files WHERE member_id=?1", [member])?;
-    let mut insert =
-        tx.prepare("INSERT OR IGNORE INTO hub_kept_files(space_id, member_id) VALUES (?1,?2)")?;
-    for space in kept {
-        insert.execute(params![space, member])?;
+/// Record that `member` keeps what `kept` lists of removed spaces, and
+/// nothing of others.
+pub(super) fn keep(tx: &Transaction<'_>, member: &MemberId, kept: &KeptRemoved) -> Result<()> {
+    tx.execute("DELETE FROM hub_kept_removed WHERE member_id=?1", [member])?;
+    let mut insert = tx.prepare(
+        "INSERT OR IGNORE INTO hub_kept_removed(space_id, member_id, keeps) VALUES (?1,?2,?3)",
+    )?;
+    for keeps in Keeps::ALL {
+        for space in kept.of(*keeps) {
+            insert.execute(params![space, member, keeps])?;
+        }
     }
     Ok(())
 }
 
-/// Every removed space whose files a machine keeps, with that machine.
-pub(super) fn kept_files(tx: &Transaction<'_>) -> Result<Vec<KeptFiles>> {
-    let mut statement =
-        tx.prepare("SELECT space_id, member_id FROM hub_kept_files ORDER BY space_id, member_id")?;
+/// Every removed space a machine keeps something of, with that machine
+/// and what it keeps.
+pub(super) fn kept(tx: &Transaction<'_>) -> Result<Vec<Kept>> {
+    let mut statement = tx.prepare(
+        "SELECT space_id, member_id, keeps FROM hub_kept_removed
+            ORDER BY space_id, member_id, keeps",
+    )?;
     let kept = statement.query_map([], |row| {
-        Ok(KeptFiles {
+        Ok(Kept {
             space: row.get(0)?,
             machine: row.get(1)?,
+            keeps: row.get(2)?,
         })
     })?;
     Ok(kept.collect::<rusqlite::Result<_>>()?)

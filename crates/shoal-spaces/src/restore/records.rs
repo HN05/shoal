@@ -286,6 +286,18 @@ impl Spaces {
     }
 }
 
+/// The IDs of the removed spaces whose removal records this machine keeps
+/// and has not expired.
+pub fn kept_record_ids(db: &Connection) -> Result<Vec<SpaceId>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT space_id FROM removed_spaces WHERE expires_at > unixepoch()
+                AND {GONE} ORDER BY space_id"
+        ))?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Give the removal record of the workspace `id`, which a conversion makes a
 /// chat keeping that ID, and its checkpoints an ID of their own, which its
 /// restore opens it under beside the chat; a disposable workspace has none.

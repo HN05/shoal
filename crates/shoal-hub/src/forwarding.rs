@@ -14,7 +14,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::{
         Member,
-        directory::Listed,
+        directory::{Keeps, Listed},
         link::{Call, Reply},
         routing::{Delivery, Forwarded, Vouched, VouchedSpace},
     },
@@ -39,9 +39,9 @@ pub struct Unanswered<'a> {
     pub method: Option<serde_json::Value>,
     pub forwarding: Forwarding,
     pub caller: Option<&'a Caller>,
-    /// Whether it acts on the space's attached files, which the machine
-    /// that keeps a removed space's answers.
-    pub files: bool,
+    /// What of a removed space it acts on, which the machine that keeps
+    /// that answers for the space; none for a live space alone.
+    pub kept: Option<Keeps>,
 }
 
 /// How another machine answered a forwarded request.
@@ -63,8 +63,9 @@ pub enum Elsewhere {
 impl Hub {
     /// The answer to `request`, which named `space` that this machine has
     /// none of, from the other machine the hub lists that space on, or for
-    /// a removed space's files, the one that keeps them; none when no other
-    /// machine has it, so the request's own refusal stands.
+    /// a removed space's record or files, the one that keeps what it acts
+    /// on; none when no other machine has it, so the request's own refusal
+    /// stands.
     pub async fn answer_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -73,8 +74,10 @@ impl Hub {
     ) -> Option<Result<Elsewhere>> {
         let (machine, listed) = match self.machine_of(daemon, space).await {
             Ok(Some(found)) => found,
-            Ok(None) if request.files => return self.answer_kept(daemon, space, request).await,
-            Ok(None) => return None,
+            Ok(None) => {
+                let keeps = request.kept?;
+                return self.answer_kept(daemon, space, keeps, request).await;
+            }
             // A space several machines have is refused as such.
             Err(error) if Reason::of(&error).is_some() => return Some(Err(error)),
             // A follow its client opens again, as after the hub restarted,
@@ -126,20 +129,22 @@ impl Hub {
         Ok(machine.map(|machine| (machine, listed.clone())))
     }
 
-    /// The answer to `request` for the files of the removed space `space`
-    /// names from the other machine that keeps them; none when no other
-    /// machine does.
+    /// The answer to `request` for what `keeps` says of the removed space
+    /// `space` names from the other machine that keeps it; none when no
+    /// other machine does.
     async fn answer_kept(
         &self,
         daemon: &dyn Daemon,
         space: &SpaceSelector,
+        keeps: Keeps,
         request: Unanswered<'_>,
     ) -> Option<Result<Elsewhere>> {
-        let machine = match self.keeper_of(daemon, space).await {
+        let machine = match self.keeper_of(daemon, space, keeps).await {
             Ok(machine) => machine?,
             Err(error) => {
+                let kept = keeps.as_str();
                 log!(
-                    "hub: could not find the machine that keeps the files of space {space}: {error:#}"
+                    "hub: could not find the machine that keeps the {kept} of space {space}: {error:#}"
                 );
                 return None;
             }
@@ -152,12 +157,13 @@ impl Hub {
         Some(forwarded.await)
     }
 
-    /// The other joined machine that keeps the files of the removed space
-    /// `selector` names by its ID, as the hub's directory lists it.
+    /// The other joined machine that keeps what `keeps` says of the removed
+    /// space `selector` names by its ID, as the hub's directory lists it.
     pub async fn keeper_of(
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
+        keeps: Keeps,
     ) -> Result<Option<Member>> {
         let Some(id) = selector.given_id() else {
             return Ok(None);
@@ -165,8 +171,9 @@ impl Hub {
         let Some((own, directory)) = self.hub_directory(daemon).await? else {
             return Ok(None);
         };
-        let mut kept = directory.kept_files.iter();
-        let keeper = kept.find(|kept| &kept.space == id && kept.machine != own);
+        let mut kept = directory.kept.iter();
+        let keeper =
+            kept.find(|kept| &kept.space == id && kept.keeps == keeps && kept.machine != own);
         Ok(keeper.and_then(|kept| directory.machine(&kept.machine).cloned()))
     }
 

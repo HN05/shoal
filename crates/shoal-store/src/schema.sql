@@ -1030,10 +1030,11 @@ CREATE TABLE hub_repositories (
     PRIMARY KEY(member_id, repository_id)
 );
 
-CREATE TABLE hub_kept_files (
+CREATE TABLE hub_kept_removed (
     space_id TEXT NOT NULL,
     member_id TEXT NOT NULL REFERENCES hub_members(id),
-    PRIMARY KEY(space_id, member_id)
+    keeps TEXT NOT NULL CHECK(keeps IN ('record','files')),
+    PRIMARY KEY(space_id, member_id, keeps)
 );
 
 CREATE TABLE hub_sleep_lags (

@@ -10,6 +10,7 @@
 
 use anyhow::Result;
 use shoal_protocol::{
+    hub::directory::Keeps,
     protocol::{self, Body, Forwarding, Operation, Response, Target},
     scope_tokens::ScopeToken,
     space_names::SpaceSelector,
@@ -71,13 +72,13 @@ fn target_space(target: Target<'_>, scope: Option<&ScopeToken>) -> Option<SpaceS
 }
 
 /// What a request for a space elsewhere goes on with: its method as its
-/// caller sent it, before its scope narrowed it, its scope token, and
-/// whether it acts on the space's attached files.
+/// caller sent it, before its scope narrowed it, its scope token, and what
+/// of a removed space it acts on.
 pub(super) struct Routing<'a> {
     method: Option<serde_json::Value>,
     forwarding: Forwarding,
     scope: Option<&'a ScopeToken>,
-    files: bool,
+    kept: Option<Keeps>,
 }
 
 impl<'a> Routing<'a> {
@@ -100,8 +101,17 @@ impl<'a> Routing<'a> {
             method,
             forwarding,
             scope,
-            files: matches!(operation.target(), Some(Target::Files(_))),
+            kept: kept(operation.target()),
         }))
+    }
+}
+
+/// What of a removed space a request for `target` acts on, which the
+/// machine that keeps it answers.
+fn kept(target: Option<Target<'_>>) -> Option<Keeps> {
+    match target? {
+        Target::Files(_) => Some(Keeps::Files),
+        Target::Space(_) | Target::Item(_) | Target::Acting(_) => None,
     }
 }
 
@@ -150,7 +160,7 @@ pub(super) async fn answer(
         method: routing.method,
         forwarding: routing.forwarding,
         caller: caller.as_ref(),
-        files: routing.files,
+        kept: routing.kept,
     };
     match server
         .manager

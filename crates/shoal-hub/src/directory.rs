@@ -11,7 +11,7 @@ use shoal_ids::{
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::hub::{
     Member, MemberKind,
-    directory::{Conflict, Directory, RegisteredRepository, Report},
+    directory::{Conflict, Directory, KeptRemoved, RegisteredRepository, Report},
     numbering::Numbering,
 };
 
@@ -26,11 +26,12 @@ pub(super) use records::{forget, owner};
 
 /// What a machine holds of the spaces it has not, which it reports with
 /// its spaces: the numbers no other space may take, as for a removed
-/// space's issue proposals, and the removed spaces whose files it keeps.
+/// space's issue proposals, and the removed spaces whose records or files
+/// it keeps.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Held {
     pub(crate) reserved: Vec<SpaceNumber>,
-    pub(crate) kept_files: Vec<SpaceId>,
+    pub(crate) kept: KeptRemoved,
 }
 
 impl Hub {
@@ -55,7 +56,7 @@ impl Hub {
                     repositories::replace(tx, &member, repositories)?;
                 }
                 numbers::replace_held(tx, &member)?;
-                records::keep_files(tx, &member, &held.kept_files)?;
+                records::keep(tx, &member, &held.kept)?;
                 Ok((conflicts, numbers::kept_for(tx, &member)?))
             })
             .await?;
@@ -131,18 +132,19 @@ impl Hub {
 
     /// The directory this daemon keeps as the hub: its machines, with
     /// whether each is connected and when it was last seen, their spaces,
-    /// and the removed ones whose files they keep, without the repositories
+    /// and the removed ones whose records or files they keep, without the
+    /// repositories
     /// [`Self::local_repositories`] lists.
     pub(super) async fn local_directory(&self, daemon: &dyn Daemon) -> Result<Directory> {
         let machines = self.local_machines(daemon).await?;
-        let ((spaces, conflicts), kept_files) = (self.store)
-            .read(|tx| Ok((records::read(tx)?, records::kept_files(tx)?)))
+        let ((spaces, conflicts), kept) = (self.store)
+            .read(|tx| Ok((records::read(tx)?, records::kept(tx)?)))
             .await?;
         Ok(Directory {
             machines,
             spaces,
             conflicts,
-            kept_files,
+            kept,
             ..Directory::default()
         })
     }

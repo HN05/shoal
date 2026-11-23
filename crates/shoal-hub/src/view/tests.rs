@@ -39,7 +39,7 @@ fn a_scope_sees_only_the_conflicts_over_the_spaces_it_reaches() {
         spaces: vec![listed("child", Some("mine")), listed("other", None)],
         conflicts: vec![conflict("mine"), conflict("child"), conflict("other")],
         repositories: Vec::new(),
-        kept_files: Vec::new(),
+        kept: Vec::new(),
     };
     let reached = [SpaceId::from("mine".to_owned())].into();
     within_reach(&mut directory, &reached);

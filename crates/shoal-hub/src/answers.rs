@@ -101,7 +101,7 @@ impl Hub {
             Call::Report {
                 report,
                 reserved,
-                kept_files,
+                kept,
                 capacity,
                 repositories,
                 power,
@@ -111,10 +111,7 @@ impl Hub {
                 let report = report.on_hub_clock(arrived(sent_at));
                 self.sleeps.powered(&member.id, power);
                 self.capacities.keep(&member.id, &report, capacity);
-                let held = directory::Held {
-                    reserved,
-                    kept_files,
-                };
+                let held = directory::Held { reserved, kept };
                 let held = (held, repositories);
                 Reply::Reported(
                     self.record_report(&**daemon, &member.id, report, held)

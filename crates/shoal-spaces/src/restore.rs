@@ -515,8 +515,8 @@ mod worktree;
 
 #[cfg(any(test, feature = "test-support"))]
 pub use records::RESTORE_CLAIM;
-pub use records::rehome_removed_chat;
 pub use records::rekey_converted;
+pub use records::{kept_record_ids, rehome_removed_chat};
 pub use worktree::{RestoredFiles, write_files};
 
 #[cfg(test)]

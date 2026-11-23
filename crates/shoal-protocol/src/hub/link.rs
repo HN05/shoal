@@ -322,7 +322,7 @@ pub enum Call {
     /// A machine's report of its spaces and repositories, with every
     /// number it holds without a space, as for a removed space's issue
     /// proposals, which no other space may take, every removed space whose
-    /// files it keeps, its capacity, which the hub places new spaces by,
+    /// record or files it keeps, its capacity, which the hub places new spaces by,
     /// once it measured it, and how it is powered, where it has a battery.
     /// Answered with [`Reply::Reported`] and the numbers the hub keeps for
     /// the machine.
@@ -330,8 +330,11 @@ pub enum Call {
         report: Report,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         reserved: Vec<SpaceNumber>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        kept_files: Vec<SpaceId>,
+        #[serde(
+            default,
+            skip_serializing_if = "super::directory::KeptRemoved::is_empty"
+        )]
+        kept: super::directory::KeptRemoved,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         capacity: Option<shoal_schedule::placement::snapshot::Capacity>,
         /// Every repository it registers, which replaces what the hub had

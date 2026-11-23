@@ -160,17 +160,54 @@ pub struct Conflict {
     pub since: UnixTime,
 }
 
-/// A removed space whose attached files a machine keeps, which a request
-/// for them reaches there.
+shoal_states::states! {
+    /// What a machine keeps of a removed space, which a request for it
+    /// reaches there.
+    Keeps: Variants {
+        /// Its removal record, which a move of it reads.
+        Record => "record",
+        /// Its attached files.
+        Files => "files",
+    }
+}
+
+/// A removed space of which a machine keeps what `keeps` says.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct KeptFiles {
+pub struct Kept {
     pub space: SpaceId,
     pub machine: MemberId,
+    pub keeps: Keeps,
+}
+
+/// The removed spaces a machine keeps something of, as it reports them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptRemoved {
+    /// Those whose removal record it keeps.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub records: Vec<SpaceId>,
+    /// Those whose attached files it keeps.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<SpaceId>,
+}
+
+impl KeptRemoved {
+    /// Whether it lists no space.
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty() && self.files.is_empty()
+    }
+
+    /// The spaces it lists of which the machine keeps what `keeps` says.
+    pub fn of(&self, keeps: Keeps) -> &[SpaceId] {
+        match keeps {
+            Keeps::Record => &self.records,
+            Keeps::Files => &self.files,
+        }
+    }
 }
 
 /// The hub's directory: its machines, every space and repository they
 /// reported, the space IDs two of them report, and the removed spaces
-/// whose files they keep.
+/// whose records or files they keep.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Directory {
     /// The joined machines, the hub's own among them, with when each was
@@ -182,7 +219,7 @@ pub struct Directory {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub repositories: Vec<ListedRepository>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub kept_files: Vec<KeptFiles>,
+    pub kept: Vec<Kept>,
 }
 
 impl Listed {
@@ -285,7 +322,7 @@ impl HubView {
             conflicts,
             repositories: _,
             // A view leaves them out.
-            kept_files: _,
+            kept: _,
         } = self.directory;
         let below = self.below_elsewhere.into_iter();
         (std::iter::once(ViewPart::Here(self.machine)))

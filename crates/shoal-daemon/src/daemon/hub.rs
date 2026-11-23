@@ -22,7 +22,7 @@ use shoal_protocol::{
     approvals::ApprovalRequest,
     config::permissions::Permissions,
     files::SentFile,
-    hub::{Member, routing::ChainedMode},
+    hub::{Member, directory::KeptRemoved, routing::ChainedMode},
     model::{QueueEntry, Repository, RunningAgent, Space},
     protocol::{AppMethod, Request},
     saved::SavedSummary,
@@ -380,8 +380,11 @@ impl Records for HubRecords {
         Ok(numbers.collect::<rusqlite::Result<_>>()?)
     }
 
-    fn kept_files(&self, db: &Connection) -> Result<Vec<SpaceId>> {
-        workspace_files::kept_ids(db)
+    fn kept_removed(&self, db: &Connection) -> Result<KeptRemoved> {
+        Ok(KeptRemoved {
+            records: shoal_spaces::restore::kept_record_ids(db)?,
+            files: workspace_files::kept_ids(db)?,
+        })
     }
 
     fn space_number(

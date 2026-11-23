@@ -209,7 +209,7 @@ impl Hub {
             .read(move |db| {
                 Ok(Held {
                     reserved: records.reserved_numbers(db)?,
-                    kept_files: records.kept_files(db)?,
+                    kept: records.kept_removed(db)?,
                 })
             })
             .await
@@ -237,7 +237,7 @@ impl Hub {
                 let call = Call::Report {
                     report,
                     reserved: held.reserved,
-                    kept_files: held.kept_files,
+                    kept: held.kept,
                     capacity,
                     repositories,
                     power,

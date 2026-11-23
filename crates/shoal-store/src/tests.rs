@@ -847,6 +847,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 288 {
         db.execute_batch(include_str!("hub_value_fetches.sql"))?;
     }
+    if version >= 289 {
+        db.execute_batch(include_str!("hub_kept_removed.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -4712,5 +4715,29 @@ fn migrated_secret_grants_bind_the_command_as_a_value() -> Result<()> {
             ),
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn kept_files_become_kept_removed_files() -> Result<()> {
+    let mut db = historical_database(288)?;
+    db.execute_batch(
+        "INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+            VALUES ('desk','machine','desk','key',0);
+        INSERT INTO hub_kept_files(space_id,member_id) VALUES ('gone','desk');",
+    )?;
+    migrate(&mut db)?;
+    let kept = db.query_row(
+        "SELECT space_id,member_id,keeps FROM hub_kept_removed",
+        [],
+        |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        },
+    )?;
+    assert_eq!(kept, ("gone".into(), "desk".into(), "files".into()));
     Ok(())
 }

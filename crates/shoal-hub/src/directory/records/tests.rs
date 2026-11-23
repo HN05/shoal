@@ -258,31 +258,44 @@ fn a_returning_machine_s_copy_of_a_space_taken_from_it_raises_no_conflict() {
     assert_eq!(listed(&mut db), [("a".into(), "desk".into())]);
 }
 
-/// Each removed space whose files a machine keeps, with that machine.
-fn kept(db: &mut Connection) -> Vec<(String, String)> {
+/// Each removed space a machine keeps something of, with that machine and
+/// what it keeps.
+fn kept_removed(db: &mut Connection) -> Vec<(String, String, Keeps)> {
     let tx = db.transaction().unwrap();
-    (kept_files(&tx).unwrap().into_iter())
-        .map(|kept| (kept.space.to_string(), kept.machine.to_string()))
+    (kept(&tx).unwrap().into_iter())
+        .map(|kept| (kept.space.to_string(), kept.machine.to_string(), kept.keeps))
         .collect()
 }
 
-fn keep(db: &mut Connection, member: &str, spaces: &[&str]) {
+fn report_kept(db: &mut Connection, member: &str, records: &[&str], files: &[&str]) {
+    let ids = |ids: &[&str]| {
+        ids.iter()
+            .map(|id| SpaceId::from((*id).to_owned()))
+            .collect()
+    };
+    let kept = KeptRemoved {
+        records: ids(records),
+        files: ids(files),
+    };
     let tx = db.transaction().unwrap();
-    let spaces: Vec<SpaceId> = spaces.iter().map(|id| (*id).to_owned().into()).collect();
-    keep_files(&tx, &MemberId::from(member.to_owned()), &spaces).unwrap();
+    keep(&tx, &MemberId::from(member.to_owned()), &kept).unwrap();
     tx.commit().unwrap();
 }
 
 #[test]
-fn a_machines_kept_files_replace_those_it_reported_before_until_it_is_forgotten() {
+fn what_a_machine_keeps_of_removed_spaces_replaces_its_last_report_until_it_is_forgotten() {
     let mut db = database();
-    keep(&mut db, "desk", &["a", "b"]);
-    keep(&mut db, "laptop", &["c"]);
-    keep(&mut db, "desk", &["b"]);
-    let expected = [("b".into(), "desk".into()), ("c".into(), "laptop".into())];
-    assert_eq!(kept(&mut db), expected);
+    report_kept(&mut db, "desk", &["a"], &["a", "b"]);
+    report_kept(&mut db, "laptop", &["c"], &[]);
+    report_kept(&mut db, "desk", &["b"], &["b"]);
+    let expected = [
+        ("b".into(), "desk".into(), Keeps::Files),
+        ("b".into(), "desk".into(), Keeps::Record),
+        ("c".into(), "laptop".into(), Keeps::Record),
+    ];
+    assert_eq!(kept_removed(&mut db), expected);
     let tx = db.transaction().unwrap();
     forget(&tx, &MemberId::from("laptop".to_owned())).unwrap();
     tx.commit().unwrap();
-    assert_eq!(kept(&mut db), [("b".into(), "desk".into())]);
+    assert_eq!(kept_removed(&mut db), expected[..2]);
 }

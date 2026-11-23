@@ -23,6 +23,7 @@ use shoal_protocol::{
     files::SentFile,
     hub::{
         Member,
+        directory::KeptRemoved,
         packages::Departure,
         reruns::{CutOffJob, CutOffRerun},
         routing::ChainedMode,
@@ -372,8 +373,9 @@ pub trait Records: Send + Sync {
     /// space's issue proposals.
     fn reserved_numbers(&self, db: &Connection) -> Result<Vec<SpaceNumber>>;
 
-    /// The removed spaces whose attached files this machine keeps.
-    fn kept_files(&self, db: &Connection) -> Result<Vec<SpaceId>>;
+    /// The removed spaces whose removal records or attached files this
+    /// machine keeps.
+    fn kept_removed(&self, db: &Connection) -> Result<KeptRemoved>;
 
     /// The name and number of the space `id`, while this machine has it.
     fn space_number(

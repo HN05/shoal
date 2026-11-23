@@ -27,6 +27,7 @@ use shoal_protocol::{
     files::SentFile,
     hub::{
         Member,
+        directory::KeptRemoved,
         reruns::{CutOffJob, CutOffRerun},
         routing::ChainedMode,
     },
@@ -467,8 +468,8 @@ impl Records for StandInRecords {
         Ok(Vec::new())
     }
 
-    fn kept_files(&self, _: &Connection) -> Result<Vec<SpaceId>> {
-        Ok(Vec::new())
+    fn kept_removed(&self, _: &Connection) -> Result<KeptRemoved> {
+        Ok(KeptRemoved::default())
     }
 
     fn space_number(
