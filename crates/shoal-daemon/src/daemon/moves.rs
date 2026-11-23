@@ -69,10 +69,11 @@ impl Manager {
     }
 
     /// Refuse a space `id` that is not here to move to `destination`: a
-    /// file or a joined machine takes a removed space too, and a file one
-    /// another joined machine runs, whose package this machine's worker
-    /// reads from there; a move to another machine, or one holding its
-    /// package for this machine's, goes to the machine that has the space.
+    /// file or a joined machine takes a removed space too, and a file or a
+    /// directory one another joined machine runs, whose package this
+    /// machine's worker reads from there; a move to another machine, or one
+    /// holding its package for this machine's, goes to the machine that has
+    /// the space.
     async fn ensure_movable(&self, id: &SpaceId, destination: &MoveDestination) -> Result<()> {
         let selector = SpaceSelector::id(id);
         let absent = match self.space(&selector).await {
@@ -91,10 +92,12 @@ impl Manager {
         match (self.space_anywhere(&selector).await?, destination) {
             (
                 Located::Elsewhere { .. },
-                MoveDestination::File { .. } | MoveDestination::Client { .. },
+                MoveDestination::File { .. }
+                | MoveDestination::Directory { .. }
+                | MoveDestination::Client { .. },
             ) => Ok(()),
             (Located::Elsewhere { machine, .. }, _) => anyhow::bail!(
-                "space {id} runs on machine {}; move it to a file of its own, or from that machine",
+                "space {id} runs on machine {}; move it to a file, or from that machine",
                 machine.name
             ),
             (Located::Here(_), _) => Err(absent),

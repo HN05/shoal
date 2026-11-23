@@ -5151,8 +5151,7 @@ space. A space another joined machine runs goes the same way: that machine
 packs it and keeps its package until this machine's daemon has read it
 through the hub and written the file, or the command standard output, and
 then ends it there, or for `--keep` deletes the copy's package there, which
-it also deletes when no machine reads it within 30 minutes; it goes to a
-file of its own, not a directory. It
+it also deletes when no machine reads it within 30 minutes. It
 refuses before ending anything when the file exists, when the daemon cannot
 create a file in its directory within 30 seconds, or when `-` would stream from
 a place that closes with the space. A workspace is removed as `shoal rm`
@@ -5204,7 +5203,10 @@ ending any: when one cannot be exported, it lists
 each refusal and ends nothing. It asks once, as a single export does, before
 ending them, then exports each space and lists the files it wrote; a
 failure there leaves the remaining ones to export, and the command exits 1
-naming each failed space.
+naming each failed space. The spaces other joined machines run go there as
+a single file's space does, each machine's after this machine's; with
+spaces of more than one machine, each other machine first checks its own
+without ending any, and the one question lists what each would end.
 
 `shoal move [space] --keep -o <file>` leaves the space and the spaces
 below it running and writes copies of them instead: a workspace at a new
@@ -5320,8 +5322,7 @@ ends. The daemon runs `ssh`, which never prompts there: the host must take a
 key that works without a prompt, as Git's fetches need, and a host alias is
 read from the SSH config of the machine that runs the move. On a machine
 joined to a hub, the move of another machine's space runs on that machine, as
-the user's, so its `ssh` reaches the host; `-o` writes no file for such a
-space, since that machine would write it. `--shoal <path>` names the program there when the remote shell's `PATH`
+the user's, so its `ssh` reaches the host. `--shoal <path>` names the program there when the remote shell's `PATH`
 lacks it, and `--no-resume` leaves the agents stopped there, a chat's as a
 workspace's. It checks the spaces as a batch export does and
 asks once before ending them. Each space then moves on its own, after the

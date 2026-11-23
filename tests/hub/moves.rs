@@ -319,6 +319,76 @@ fn a_copy_of_another_machine_s_space_goes_to_a_file_and_leaves_no_package_there(
     assert_ne!(restored["space"]["id"], work, "{restored}");
 }
 
+/// The package files in `directory`.
+fn packages_in(directory: &std::path::Path) -> Vec<String> {
+    let entries = fs::read_dir(directory).into_iter().flatten().flatten();
+    let names = entries.map(|entry| entry.file_name().to_string_lossy().into_owned());
+    names.filter(|name| name.ends_with(".shoal")).collect()
+}
+
+#[test]
+fn spaces_of_two_machines_go_to_a_directory_a_file_each() {
+    let (hub, laptop, desk, laptop_id, _) = machines("");
+    let work = laptop_work(&hub, &laptop, &laptop_id);
+    give_origin(&hub);
+    let here = workspace(&hub, "here");
+    let directory = hub.root.path().join("moved");
+
+    let moved = hub.ok(&["move", &work, &here, "-o", directory.to_str().unwrap()]);
+
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    assert!(own_spaces(&laptop).iter().all(|space| space["id"] != work));
+    assert!(own_spaces(&hub).iter().all(|space| space["id"] != here));
+    restores(&desk, &directory.join(format!("{work}.shoal")), &work);
+    restores(&desk, &directory.join(format!("{here}.shoal")), &here);
+}
+
+#[test]
+fn several_spaces_of_another_machine_go_to_a_directory_a_file_each() {
+    let (hub, laptop, _desk, laptop_id, _) = machines("");
+    let work = laptop_work(&hub, &laptop, &laptop_id);
+    let other = workspace(&laptop, "other");
+    listed(&hub, &other, &laptop_id);
+    let directory = hub.root.path().join("moved");
+
+    let moved = hub.ok(&["move", &work, &other, "-o", directory.to_str().unwrap()]);
+
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    let mut written = packages_in(&directory);
+    written.sort();
+    let mut expected = vec![format!("{work}.shoal"), format!("{other}.shoal")];
+    expected.sort();
+    assert_eq!(written, expected);
+    let left = own_spaces(&laptop);
+    assert!(
+        left.iter()
+            .all(|space| space["id"] != work && space["id"] != other)
+    );
+}
+
+#[test]
+fn a_move_of_two_machines_spaces_asks_what_the_other_ends_before_either_ends() {
+    let (hub, laptop, _desk, laptop_id, _) = machines("");
+    let work = laptop_work(&hub, &laptop, &laptop_id);
+    let repo = laptop.repo.to_str().unwrap().to_owned();
+    laptop.ok(&["create", &repo, "--branch", "below", "--parent", &work]);
+    let here = workspace(&hub, "here");
+    let directory = hub.root.path().join("moved");
+    let to = directory.to_str().unwrap();
+
+    let refused = hub.run(&["move", &work, &here, "-o", to]);
+
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("below"), "{}", printed(&refused));
+    assert!(own_spaces(&laptop).iter().any(|space| space["id"] == work));
+    assert!(own_spaces(&hub).iter().any(|space| space["id"] == here));
+    assert_eq!(packages_in(&directory), Vec::<String>::new());
+    let moved = hub.ok(&["move", &work, &here, "-o", to, "--yes"]);
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    assert_eq!(packages_in(&directory).len(), 2, "{moved}");
+}
+
 /// Whether `machine` keeps a removal record of the space `id`.
 fn keeps_removed(machine: &Base, id: &str) -> bool {
     let removed = machine.ok(&["restore"])["removed"].clone();

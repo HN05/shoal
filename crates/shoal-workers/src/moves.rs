@@ -121,7 +121,8 @@ async fn ordered_spaces(
 
 /// Refuse a move whose spaces had `refusals`, or that cannot take the
 /// `planned` spaces to its destination: a file takes one, and so does an
-/// earlier checkpoint, which names one workspace's.
+/// earlier checkpoint, which names one workspace's; a machine holds a
+/// package for each.
 fn ensure_takes(order: &MoveOrder, planned: &[Planned], refusals: &[String]) -> Result<()> {
     let verb = match order.keep {
         true => "copy",
@@ -136,9 +137,7 @@ fn ensure_takes(order: &MoveOrder, planned: &[Planned], refusals: &[String]) -> 
         order.checkpoint.is_none() || planned.len() == 1,
         "--checkpoint copies one workspace, whose checkpoints it numbers; name one"
     );
-    if let MoveDestination::File { .. } | MoveDestination::Client { .. } | MoveDestination::Held =
-        order.destination
-    {
+    if let MoveDestination::File { .. } | MoveDestination::Client { .. } = order.destination {
         ensure!(
             planned.len() == 1,
             "several spaces go to a file each; name a directory with -o"
@@ -179,18 +178,20 @@ async fn plan_space(
     Ok(Planned::Ending { checked, file })
 }
 
-/// Whether `order` moves to a file a space another joined machine runs,
-/// whose package that machine holds for this one to write.
+/// Whether `order` moves to files spaces other joined machines run, whose
+/// packages those machines hold for this one to write.
 pub async fn runs_elsewhere(paths: &CommandPaths, order: &MoveOrder) -> Result<bool> {
-    relayed::elsewhere(paths, order).await
+    Ok(!relayed::Relays::find(paths, order).await?.is_empty())
 }
 
 /// Run `order`: check its spaces, then move each, or a copy of it, going on
 /// after one fails, telling `steps` how far each got and printing a line
-/// for each; one that only checks them moves none.
+/// for each; one that only checks them moves none. Another machine's
+/// spaces go to files through that machine.
 pub async fn run(paths: &CommandPaths, order: MoveOrder, steps: &impl Steps) -> Result<MoveReport> {
-    if runs_elsewhere(paths, &order).await? {
-        return relayed::run(paths, &order, steps).await;
+    let relays = relayed::Relays::find(paths, &order).await?;
+    if !relays.is_empty() {
+        return relayed::run(paths, &order, relays, steps).await;
     }
     let planned = plan(paths, &order).await?;
     ensure_consent(&order, &planned)?;
@@ -202,18 +203,36 @@ pub async fn run(paths: &CommandPaths, order: MoveOrder, steps: &impl Steps) -> 
     }
     let several = planned.len() > 1;
     let mut report = MoveReport::default();
+    move_each(paths, &order, planned, steps, &mut report).await;
+    sum_up(&order, &report, several);
+    Ok(report)
+}
+
+/// Move each `planned` space as `order` says, or a copy of it, into
+/// `report`, going on after one fails.
+async fn move_each(
+    paths: &CommandPaths,
+    order: &MoveOrder,
+    planned: Vec<Planned>,
+    steps: &impl Steps,
+    report: &mut MoveReport,
+) {
     for planned in planned {
         let (id, name) = planned.identity();
         let moved = match steps.ensure_running() {
-            Ok(()) => move_planned(paths, &order, planned, steps).await,
+            Ok(()) => move_planned(paths, order, planned, steps).await,
             Err(cancelled) => Err(cancelled.context("it stays here")),
         };
-        record(&order, &mut report, (id, name), moved);
+        record(order, report, (id, name), moved);
     }
+}
+
+/// Print the line that sums up the move `order` that `report` describes,
+/// of `several` spaces or one that failed.
+fn sum_up(order: &MoveOrder, report: &MoveReport, several: bool) {
     if several || !report.failed.is_empty() {
-        say(&packages::summary(&order, &report));
+        say(&packages::summary(order, report));
     }
-    Ok(report)
 }
 
 /// Refuse, before anything ends, a move the caller did not consent to that
