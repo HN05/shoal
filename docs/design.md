@@ -2503,9 +2503,14 @@ which still keeps the disk rule below. Fixed limits keep dynamic admission's dis
 started on a nearly full disk is soon stopped by disk protection. Per-agent
 memory profiles remain a proposal. CI jobs go through the same admission and
 order: `machine.max_jobs` limits them apart from agents, and under `dynamic` a
-job is expected to use the memory its recent runs reached, which a job
+job is expected to use the most memory its runs reached, among those that
+ended in the last 3 days and its latest 5 whatever their age, which a job
 repeats far more closely than an agent, or an agent's before it has run, and
-takes the one staggered start an agent would. A job reaches its peak late,
+takes the one staggered start an agent would. A run cut short, as by load
+protection, used less than a whole one, so it may raise that estimate but
+never lowers it while a whole run's peak is within the window; only the latest
+5 runs would have let a few stopped runs push every whole one out, and each
+lower estimate admitted the job where it was stopped again. A job reaches its peak late,
 while it builds and runs tests, so until it ends it reserves what it has yet
 to use, its expected memory less what its workspace uses now: counting it
 only while it is young let each pass admit another job against memory the

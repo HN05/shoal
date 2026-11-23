@@ -1,8 +1,13 @@
 //! What each repository's CI jobs use: the peak resident memory of every
 //! run, read from its workspace's usage samples and kept per repository,
 //! workflow and job name, the cost a waiting or starting run of a job counts
-//! at in admission: the peak memory of its recent runs, none before it has
-//! run.
+//! at in admission: the highest peak among its runs that ended within
+//! [`RECENT_FOR`] and its latest [`RECENT_RUNS`] runs, none before it has
+//! run. A run cut short, as by load protection, uses less than a whole one,
+//! so it can raise a job's cost but never lower it below a whole run's
+//! still in the window; a peak lowers it only once it ages out.
+use std::time::Duration;
+
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use shoal_daemon_base::jobs::JobCost;
@@ -12,8 +17,12 @@ use shoal_protocol::model::QueuedJob;
 use super::ClaimedJob;
 use crate::{Runner, daemon::Daemon, time::UnixTime};
 
-/// How many of a job's latest runs its cost reads.
+/// How many of a job's latest runs its cost reads, whatever their age, so
+/// a job that has not run for a while keeps one.
 const RECENT_RUNS: i64 = 5;
+/// How long after it ended a run counts towards its job's cost, however
+/// many runs ended since.
+const RECENT_FOR: Duration = Duration::from_secs(3 * 24 * 60 * 60);
 
 impl Runner {
     /// Raise each claimed job's peak memory to what its workspace's latest
@@ -45,7 +54,7 @@ impl Runner {
 
     /// Keep the peak memory of the ended `job` as its latest run, unless no
     /// sample saw it run or it is kept already, as before a removal that is
-    /// tried again, forgetting runs older than [`RECENT_RUNS`].
+    /// tried again, forgetting the runs its cost no longer reads.
     pub async fn record_job_usage(&self, job: &ClaimedJob) -> Result<()> {
         let (id, repository) = (job.id.clone(), job.repository_id.clone());
         let (workflow, name) = key(&job.job);
@@ -69,11 +78,12 @@ impl Runner {
                     params![repository, workflow, name, now, memory],
                 )?;
                 tx.execute(
-                    "DELETE FROM ci_job_usage WHERE repository_id=?1 AND workflow=?2 AND name=?3
-                     AND rowid NOT IN (SELECT rowid FROM ci_job_usage
-                         WHERE repository_id=?1 AND workflow=?2 AND name=?3
-                         ORDER BY ended_at DESC, rowid DESC LIMIT ?4)",
-                    params![repository, workflow, name, RECENT_RUNS],
+                    &format!(
+                        "DELETE FROM ci_job_usage WHERE {JOB}
+                         AND rowid NOT IN (SELECT rowid FROM ci_job_usage WHERE {})",
+                        recent_runs()
+                    ),
+                    params![repository, workflow, name, RECENT_RUNS, now - RECENT_FOR],
                 )?;
                 Ok(())
             })
@@ -85,14 +95,16 @@ impl Runner {
     pub async fn job_cost(&self, repository_id: &RepositoryId, job: &QueuedJob) -> Result<JobCost> {
         let repository = repository_id.to_owned();
         let (workflow, name) = key(job);
+        let since = UnixTime::now() - RECENT_FOR;
         let peak: Option<i64> = self
             .store
             .run(move |db| {
                 Ok(db.query_row(
-                    "SELECT max(peak_memory) FROM (SELECT peak_memory
-                     FROM ci_job_usage WHERE repository_id=?1 AND workflow=?2 AND name=?3
-                     ORDER BY ended_at DESC, rowid DESC LIMIT ?4)",
-                    params![repository, workflow, name, RECENT_RUNS],
+                    &format!(
+                        "SELECT max(peak_memory) FROM ci_job_usage WHERE {}",
+                        recent_runs()
+                    ),
+                    params![repository, workflow, name, RECENT_RUNS, since],
                     |row| row.get(0),
                 )?)
             })
@@ -101,6 +113,19 @@ impl Runner {
             memory: peak.and_then(|peak| u64::try_from(peak).ok()),
         })
     }
+}
+
+/// The condition that selects the runs of the job of repository `?1`,
+/// workflow `?2` and name `?3`.
+const JOB: &str = "repository_id=?1 AND workflow=?2 AND name=?3";
+
+/// The condition that selects the runs of that job its cost reads: its
+/// latest `?4` and those that ended at `?5` or later.
+fn recent_runs() -> String {
+    format!(
+        "{JOB} AND (ended_at>=?5 OR rowid IN (SELECT rowid FROM ci_job_usage WHERE {JOB}
+         ORDER BY ended_at DESC, rowid DESC LIMIT ?4))"
+    )
 }
 
 /// The workflow and name that tell runs of one job apart from others.
