@@ -156,7 +156,8 @@ states!(EventKind {
     /// lists.
     AbsorbedSpace => "absorbed_space",
     /// The chat became a workspace, or the workspace a chat, as its
-    /// `space_kind` says, with the fields of the kind it became.
+    /// `space_kind` says, with the fields of the kind it became; or, with
+    /// `handoff`, another agent tool took the space's work over.
     Converted => "converted",
     /// The workspace's CI job ended other than as its run said: Shoal
     /// ended it, or the kernel's OOM killer killed processes of it, as its
@@ -282,6 +283,9 @@ pub struct EventDetails {
     /// The other side of an absorb, and what moved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub absorb: Option<Box<AbsorbEvent>>,
+    /// The sessions a handoff to another agent tool went from and to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<Box<HandoffEvent>>,
 }
 
 /// The kind of space that recorded an event, with what only that kind has.
@@ -332,6 +336,14 @@ mod present_or_null {
     ) -> Result<Option<Option<T>>, D::Error> {
         Option::deserialize(deserializer).map(Some)
     }
+}
+
+/// A handoff of a space's work from one agent tool to another: the session
+/// it stopped and the one the new tool started.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandoffEvent {
+    pub from: crate::transcripts::HandedOverSession,
+    pub to: crate::transcripts::HandedOverSession,
 }
 
 /// One side of an absorb: the space on the other side, how the absorbed

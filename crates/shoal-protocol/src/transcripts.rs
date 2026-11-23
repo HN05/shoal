@@ -60,6 +60,21 @@ pub struct ReportedSession {
     pub execution: Option<ExecutionId>,
     /// Whether the agent runs in this session now.
     pub current: bool,
+    /// The session of another tool whose work this one took over by a
+    /// handoff, as `shoal convert agent` makes one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continued_from: Option<HandedOverSession>,
+}
+
+/// A session on one side of a handoff of a space's work from one agent tool
+/// to another: the agent, the session it reported, if it reported one, and
+/// the tool whose format its files are in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandedOverSession {
+    pub agent: crate::agent::Agent,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<AgentSessionId>,
+    pub integration: IntegrationKind,
 }
 
 /// The sessions a space's agents reported, with what says where their

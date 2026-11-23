@@ -140,6 +140,7 @@ impl Layout {
                     path: copy.path,
                     bytes: metadata.len(),
                     title: file.title.clone(),
+                    session: None,
                 })
             })
             .collect::<Result<_>>()?;
@@ -233,13 +234,15 @@ impl Layout {
     }
 }
 
-/// One of Shoal's copies, with its size in bytes and the title it was
-/// given, as its record keeps it.
+/// One of Shoal's copies, with its size in bytes, the title it was given
+/// and the session file it copies, as its record keeps it.
 #[derive(Debug, Clone)]
 pub struct Copy {
     pub path: PathBuf,
     pub bytes: u64,
     pub title: Option<String>,
+    /// The session file it copies, for a handoff's copy.
+    pub session: Option<shoal_protocol::files::SessionCopy>,
 }
 
 /// The copies [`Layout::keep`] made or reused for one message.

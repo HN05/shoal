@@ -18,7 +18,7 @@ const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached
     (SELECT expires_at FROM removed_space_files r WHERE r.space_id=space_files.space_id),
     space_id IN (SELECT id FROM spaces WHERE kind='chat')
         OR space_id IN (SELECT space_id FROM removed_space_files WHERE chat),
-    space_id";
+    space_id,session";
 
 /// The owners of attached files that are gone.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
@@ -47,6 +47,16 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
             rusqlite::Error::FromSqlConversionFailure(8, rusqlite::types::Type::Text, error.into())
         })?,
         expires_at: row.get(9)?,
+        session: (row.get::<_, Option<String>>(12)?)
+            .map(|session| serde_json::from_str(&session))
+            .transpose()
+            .map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    12,
+                    rusqlite::types::Type::Text,
+                    error.into(),
+                )
+            })?,
     })
 }
 
@@ -80,13 +90,16 @@ pub fn record(
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
+        let session = (copy.session.as_ref())
+            .map(serde_json::to_string)
+            .transpose()?;
         tx.execute(
             "INSERT INTO space_files
                 (space_id,space,parent_id,repository_id,root_dir,source,name,title,path,bytes,
-                    created_at,attached_by)
+                    created_at,attached_by,session)
                 SELECT spaces.id,spaces.name,
                     (SELECT parent_id FROM space_parents WHERE space_id=?1),
-                    spaces.repository_id,chats.root_dir,?2,?3,?4,?5,?6,unixepoch(),?7
+                    spaces.repository_id,chats.root_dir,?2,?3,?4,?5,?6,unixepoch(),?7,?8
                 FROM spaces LEFT JOIN chats USING(id) WHERE spaces.id=?1
                 ON CONFLICT(path) DO UPDATE SET title=COALESCE(excluded.title,title)",
             params![
@@ -96,7 +109,8 @@ pub fn record(
                 copy.title,
                 copy.path.to_string_lossy(),
                 i64::try_from(copy.bytes)?,
-                attacher
+                attacher,
+                session
             ],
         )?;
     }

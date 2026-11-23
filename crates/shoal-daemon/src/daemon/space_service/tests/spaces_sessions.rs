@@ -64,6 +64,7 @@ fn reported(agent: &str, session: &str, execution: &str, current: bool) -> Repor
         session: session.into(),
         execution: Some(execution.into()),
         current,
+        continued_from: None,
     }
 }
 
@@ -216,6 +217,7 @@ async fn a_chat_lists_the_session_its_hooks_reported() -> Result<()> {
             session: "c1".into(),
             execution: Some(execution),
             current: false,
+            continued_from: None,
         }]
     );
     Ok(())

@@ -24,6 +24,7 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceName;
 
+pub mod agent_handoffs;
 #[cfg(test)]
 mod benchmark;
 mod chat_names;

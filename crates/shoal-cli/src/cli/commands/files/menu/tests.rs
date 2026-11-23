@@ -38,6 +38,7 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
         bytes: 960,
         created_at: UnixTime::from_seconds(0),
         attached_by: shoal_protocol::files::Attacher::User,
+        session: None,
         expires_at: None,
     };
     let rows = entries(std::slice::from_ref(&file));

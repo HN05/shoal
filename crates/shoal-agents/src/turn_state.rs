@@ -516,7 +516,7 @@ impl Agents {
     ) -> Result<Option<AgentStatus>> {
         let space = daemon.space(selector).await?;
         if let Some(session) = session {
-            self.record_agent_session(&space.id, execution.as_ref(), session)?;
+            (self.record_agent_session(&space.id, execution.as_ref(), session)).await?;
         }
         let made = made.unwrap_or_else(SystemTime::now);
         // A late turn's prompt cache, too, lives from when the turn ended.
@@ -546,9 +546,10 @@ impl Agents {
     }
 
     /// Record the agent `session` reported in the space `id` as the session
-    /// of the agent `execution` runs, for resuming it; a report without an
-    /// execution runs no agent of the space's.
-    fn record_agent_session(
+    /// of the agent `execution` runs, for resuming it, and as the one a
+    /// handoff to that agent's tool started; a report without an execution
+    /// runs no agent of the space's.
+    async fn record_agent_session(
         &self,
         id: &SpaceId,
         execution: Option<&ExecutionId>,
@@ -562,6 +563,12 @@ impl Agents {
         if let Some(execution) = execution
             && recovery::save_session(&self.paths, id, execution, &session)?
         {
+            let (space, execution) = (id.to_owned(), execution.to_owned());
+            (self.store)
+                .write(move |tx| {
+                    shoal_store::agent_handoffs::started(tx, &space, &execution, &session)
+                })
+                .await?;
             self.signals.agent_changed();
         }
         Ok(())

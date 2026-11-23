@@ -19,7 +19,21 @@ states!(FileSource {
     Alert => "alert",
     /// Sent with a post in a thread.
     Thread => "thread",
+    /// Copied from an agent's session when another agent tool took the
+    /// space's work over.
+    Handoff => "handoff",
 });
+
+/// The file of an agent's session that an attached file copies, as a
+/// handoff to another tool copies it: the session, the tool whose format it
+/// is in, and its path in that tool's session directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionCopy {
+    pub agent: crate::agent::Agent,
+    pub session: shoal_ids::agent_session_ids::AgentSessionId,
+    pub integration: crate::integrations::IntegrationKind,
+    pub file: PathBuf,
+}
 
 /// Who attached a file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -281,6 +295,9 @@ pub struct AttachedFile {
     pub bytes: u64,
     pub created_at: crate::time::UnixTime,
     pub attached_by: Attacher,
+    /// The session file it copies, for a handoff's copy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<SessionCopy>,
     /// When the file of a removed space is deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<crate::time::UnixTime>,

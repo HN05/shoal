@@ -75,15 +75,24 @@ impl Spaces {
 
     /// The sessions the agents of the space `id` reported, each once, those
     /// running now first: the session each of its agent executions last
-    /// reported, then those of its stopped agents and last sessions.
+    /// reported, then those of its stopped agents and last sessions, each
+    /// with the session a handoff made it continue from.
     pub async fn reported_sessions(&self, id: &SpaceId) -> Result<Vec<ReportedSession>> {
         let mut sessions = self.execution_sessions(id).await?;
         sessions.extend(stopped_sessions(&self.paths, id)?);
         sessions.extend(last_sessions(&self.paths, id)?);
+        let space = id.to_owned();
+        let mut handed_over = (self.store)
+            .read(move |db| crate::store::agent_handoffs::continued_from(db, &space))
+            .await?;
         let mut seen = BTreeSet::new();
         Ok(sessions
             .into_iter()
             .filter(|reported| seen.insert(reported.session.clone()))
+            .map(|reported| ReportedSession {
+                continued_from: handed_over.remove(&reported.session),
+                ..reported
+            })
             .collect())
     }
 
@@ -100,6 +109,7 @@ impl Spaces {
                     current: runs_agent(&execution),
                     agent: execution.agent?,
                     execution: Some(execution.id),
+                    continued_from: None,
                 })
             })
             .collect())
@@ -144,6 +154,7 @@ fn stopped_sessions(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ReportedSes
                 session: stopped.record.session?,
                 execution: Some(stopped.execution),
                 current: false,
+                continued_from: None,
             })
         })
         .collect())
@@ -159,6 +170,7 @@ fn last_sessions(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ReportedSessio
                 session: last.session?,
                 execution: Some(last.execution),
                 current: false,
+                continued_from: None,
             })
         })
         .collect())

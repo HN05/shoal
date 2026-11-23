@@ -182,6 +182,7 @@ fn reported(agent: &str, session: &str, execution: Option<&str>) -> ReportedSess
         session: session.into(),
         execution: execution.map(Into::into),
         current: execution.is_none(),
+        continued_from: None,
     }
 }
 
