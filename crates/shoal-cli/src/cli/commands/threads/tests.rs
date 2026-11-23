@@ -66,6 +66,9 @@ fn a_thread_shows_whose_turn_it_is_or_how_it_ended() {
     assert_eq!(render::status(&asked), "waiting for the user");
     let answered = thread(serde_json::json!([post("holder")]), None);
     assert_eq!(render::status(&answered), "waiting for cache");
+    let mut held = asked.clone();
+    held.held = true;
+    assert!(render::status(&held).starts_with("pending"));
     let withdrawn = serde_json::json!({
         "outcome": "withdrawn", "by": "space", "resolved_at": 0,
     });

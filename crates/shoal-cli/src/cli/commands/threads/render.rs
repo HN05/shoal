@@ -14,11 +14,13 @@ use crate::{
     client::output::alerts::hanging_indent,
 };
 
-/// Where `thread` stands: whose turn it is, and whether its holder's agent
-/// works for it, or how it was settled.
+/// Where `thread` stands: whose turn it is, held until its review is
+/// submitted, and whether its holder's agent works for it, or how it was
+/// settled.
 pub(super) fn status(thread: &Thread) -> String {
     let turn = match (&thread.resolution, thread.awaits()) {
         (Some(resolution), _) => return resolution.outcome.describe(),
+        (None, None) if thread.held => "pending until its review is submitted".into(),
         (None, None) => "empty".into(),
         (None, Some(side)) => format!("waiting for {}", thread.party(side)),
     };
