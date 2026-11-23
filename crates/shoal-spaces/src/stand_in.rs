@@ -243,7 +243,9 @@ impl StandIn {
             source: path.display().to_string(),
             last_used: 1,
             name: Some(name.to_string_lossy().into_owned()),
-            workspaces_dir: self.paths.home.join("shoal").join(name),
+            workspaces_dir: std::fs::canonicalize(&self.paths.home)?
+                .join("shoal")
+                .join(name),
             contribution: false,
             shared_url: None,
         };

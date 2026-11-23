@@ -22,7 +22,11 @@ async fn workspaces_stay_out_of_the_directories_shoal_keeps() {
             .spaces
             .workspace_location(&*manager, &repo, &directory.join(reserved))
             .await;
-        assert!(location.is_err(), "{reserved}");
+        assert!(
+            location.is_err(),
+            "{reserved} of {}: {location:?}",
+            directory.display()
+        );
     }
     manager
         .spaces
