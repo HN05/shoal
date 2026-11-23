@@ -90,7 +90,7 @@ async fn all_workspace_overviews_preserve_json_text_scope_and_exit_status() {
     for noun in ["port", "resource"] {
         for count in [1, 8] {
             for json in [true, false] {
-                let root = tempfile::tempdir_in("/tmp").unwrap();
+                let root = support::home::Home::new();
                 let listener = support::fake_daemon::bind_fake_daemon(root.path());
                 listener.set_nonblocking(true).unwrap();
                 let listener = UnixListener::from_std(listener).unwrap();

@@ -30,7 +30,7 @@ fn run_with_replies(
     env: &[(&str, &str)],
     replies: Vec<(bool, serde_json::Value)>,
 ) -> (Output, String) {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = support::home::Home::new();
     let (progress, drawn) = mpsc::channel();
     let server = (!replies.is_empty()).then(|| {
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
@@ -135,7 +135,7 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
 /// it leaves the state directory as it found it, without a socket.
 #[test]
 fn help_of_every_command_needs_no_daemon() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = support::home::Home::new();
     let state = root.path().join("state");
     std::fs::create_dir(&state).unwrap();
     let mut pending = vec![Vec::<String>::new()];
@@ -385,7 +385,7 @@ fn shoal_output_selects_the_format_of_results_and_errors() {
 /// which fails in JSON instead of confirming.
 #[test]
 fn shoal_output_json_refuses_to_prompt_on_a_terminal() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = support::home::Home::new();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
     let server = thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();

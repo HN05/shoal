@@ -71,7 +71,7 @@ fn success(output: Output) -> Vec<u8> {
 
 #[test]
 fn packaged_binary_runs_from_deleted_cwd_and_installs_skill_copies() {
-    let home = tempfile::tempdir_in("/tmp").unwrap();
+    let home = support::home::Home::new();
     let package = home.path().join("version one");
     let stable = home.path().join("opt");
     let bin = home.path().join("bin");

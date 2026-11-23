@@ -316,14 +316,14 @@ fn interactive_commands_refuse_their_arguments_before_prompting() {
 /// request's method and answers with its registered repository and a
 /// contribution's.
 struct FakeDaemon {
-    root: tempfile::TempDir,
+    root: support::home::Home,
     socket: PathBuf,
     server: thread::JoinHandle<Vec<String>>,
 }
 
 impl FakeDaemon {
     fn start() -> Self {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let root = support::home::Home::new();
         // The registered repository's checkout, whose branches a start on
         // one of them reads.
         std::fs::create_dir(root.path().join("registered")).unwrap();

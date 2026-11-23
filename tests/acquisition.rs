@@ -6,7 +6,7 @@ use support::printed;
 
 // Exercise the CLI protocol on every host without allocating real resources or simulators.
 fn acquire(kind: &str, queue: bool, json: bool, replies: Vec<Value>) -> (Output, Vec<Value>) {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = support::home::Home::new();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
     let server = thread::spawn(move || {
         let mut requests = Vec::new();

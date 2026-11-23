@@ -272,7 +272,7 @@ fn a_join_through_a_command_that_finds_no_shoal_names_the_fix() {
 
 #[test]
 fn daemon_connect_starts_no_daemon() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let output = command(root.path())
         .args(["daemon", "connect"])
         .output()

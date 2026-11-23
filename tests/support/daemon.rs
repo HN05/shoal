@@ -10,7 +10,7 @@ use std::{
 use crate::support;
 
 /// Own the child before checking readiness, so startup panics also reap it.
-/// Store this guard before its TempDir in fixtures: fields drop in declaration order.
+/// Store this guard before its home in fixtures: fields drop in declaration order.
 pub struct DaemonGuard {
     pub child: Child,
     /// The daemon's stderr, shown when the test fails.

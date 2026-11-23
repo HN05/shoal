@@ -570,7 +570,7 @@ fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
 
 #[test]
 fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
-    let shared = tempfile::tempdir_in("/tmp").unwrap();
+    let shared = support::home::Home::new();
     let config = format!("machine.root_dir = {:?}", shared.path().to_str().unwrap());
     let first = Fixture::with_config(Some(&config));
     let second = Fixture::with_config(Some(&config));

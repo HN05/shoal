@@ -69,7 +69,7 @@ fn workspaces(root: &Path) -> Vec<Value> {
 
 #[test]
 fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_turned_off() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = support::home::Home::new();
     let root = &fs::canonicalize(root.path()).unwrap();
     let repo = repository_with(root, "repo", &[("README", "runner\n")]);
     let head = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();

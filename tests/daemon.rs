@@ -22,7 +22,6 @@ use support::{
 };
 
 use serde_json::{Value, json};
-use tempfile::TempDir;
 
 struct Daemon {
     // Dropped first, so the daemon stops before its home goes.
@@ -60,7 +59,7 @@ impl Daemon {
 
 #[test]
 fn daemon_guard_reaps_child_when_a_test_panics() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let pid = std::cell::Cell::new(None);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let daemon = DaemonGuard::start(root.path(), &mut command(root.path()));
@@ -118,7 +117,7 @@ fn cli_connects_to_daemon_and_stops_it() {
 #[test]
 fn managed_update_preserves_pid_ownership_and_queued_requests() {
     use std::os::unix::fs::{MetadataExt, symlink};
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let launcher = root.path().join("shoal");
     let gate = root.path().join("replacement-started");
     let replacement = root.path().join("replacement");
@@ -195,7 +194,7 @@ fn managed_daemon_restarts_for_a_replacement_during_startup() {
         ffi::OsStrExt,
         fs::{OpenOptionsExt, symlink},
     };
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let launcher = root.path().join("shoal");
     let started = root.path().join("replacement-started");
     let replacement = root.path().join("replacement");
@@ -294,7 +293,7 @@ fn protocol_rejects_bad_clients_and_remains_available() {
 
 #[test]
 fn message_hook_gives_up_on_a_daemon_that_does_not_answer() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     // Connections queue without an answer, as with a daemon that is busy.
     let _listener = support::fake_daemon::bind_fake_daemon(root.path());
     let mut hook = support::cli(root.path())
@@ -323,7 +322,7 @@ fn socket_is_recovered_after_abrupt_exit() {
 
 #[test]
 fn refuses_to_replace_a_regular_file_at_socket_path() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     fs::create_dir(root.path().join("state")).unwrap();
     let socket = root.path().join("state/daemon.sock");
     fs::write(&socket, "keep me").unwrap();
@@ -382,7 +381,7 @@ fn failed_startup_recovery_never_serves() {
 
 #[test]
 fn install_preview_does_not_install_a_service() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let output = command(root.path())
         .args(["--json", "daemon", "install", "--dry-run"])
         .output()
@@ -457,7 +456,7 @@ impl Drop for IncompatibleDaemon {
 
 #[test]
 fn install_refuses_an_incompatible_daemon_without_an_installed_service() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let _daemon = IncompatibleDaemon::listen(root.path(), false);
     let output = command(root.path())
         .args(["daemon", "install"])
@@ -486,14 +485,14 @@ fn install_preserves_a_compatible_foreground_daemon() {
 /// OS command boundary is emulated: the installed definition and daemon are
 /// real, and no commands reach this machine's launchd/systemd instance.
 struct FakeServiceManager {
-    root: TempDir,
+    root: Home,
     bin: std::path::PathBuf,
     pid: std::path::PathBuf,
 }
 
 impl FakeServiceManager {
     fn new() -> Self {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let root = Home::new();
         let bin = root.path().join("bin");
         fs::create_dir(&bin).unwrap();
         let script = r#"#!/bin/sh
@@ -926,7 +925,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             Some(code) => code,
         }
         .to_owned();
-        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let root = Home::new();
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         let daemon = thread::spawn(move || {
             // `run` first lists workspaces to remember the one it runs in.
@@ -963,7 +962,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
 #[test]
 fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
     for count in [0, 205] {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let root = Home::new();
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         let daemon = thread::spawn(move || {
             let mut stream = support::fake_daemon::accept(&listener);
@@ -1011,7 +1010,7 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
 
 #[test]
 fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing_cleanup() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
     let worktree = |n: usize| json!({"repository_id": "repo", "path": format!("/repo/stray-{n}")});
     let sync = |n: usize| json!({"repository_id": format!("repo-{n}"), "failing_since": 1, "error": "offline"});
@@ -1123,7 +1122,7 @@ fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing
 
 #[test]
 fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
     // The daemon refuses three requests before the update replaces it.
     let daemon = thread::spawn(move || {
@@ -1182,7 +1181,7 @@ fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
 
 #[test]
 fn a_scoped_process_starts_no_daemon_while_none_answers_for_its_permission() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let root = Home::new();
     let output = support::cli(root.path())
         .env("SHOAL_SCOPE_TOKEN", "scope")
         .args(["daemon", "start"])
