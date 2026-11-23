@@ -40,7 +40,8 @@ impl Manager {
         &self,
         stream: UnixStream,
         request_id: u64,
-        (keeper, writing): (Keeper, Writing),
+        keeper: Keeper,
+        writing: Writing,
         scope: Option<ScopeToken>,
     ) -> Result<()> {
         let (reader, mut writer) = stream.into_split();
@@ -48,8 +49,13 @@ impl Manager {
         let holder = match keeper {
             Keeper::Here(holder) => holder,
             Keeper::Hub => {
-                let writing = (writing, scope.as_ref());
-                let at_hub = self.write_at_hub(&mut writer, &mut reader, request_id, writing);
+                let at_hub = self.write_at_hub(
+                    &mut writer,
+                    &mut reader,
+                    request_id,
+                    writing,
+                    scope.as_ref(),
+                );
                 return at_hub.await;
             }
         };
@@ -68,7 +74,8 @@ impl Manager {
         writer: &mut (impl AsyncWrite + Unpin),
         reader: &mut (impl AsyncBufRead + Unpin),
         request_id: u64,
-        (writing, scope): (Writing, Option<&ScopeToken>),
+        writing: Writing,
+        scope: Option<&ScopeToken>,
     ) -> Result<()> {
         let Writing { app, write, size } = writing;
         let method = AppMethod::WriteAppEntry {

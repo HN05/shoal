@@ -72,13 +72,15 @@ pub(super) async fn handle(
             app, write, size, ..
         } => {
             let manager = manager.clone();
-            let writing = (keeper, Writing { app, write, size });
+            let writing = Writing { app, write, size };
             let scope = scope.cloned();
             return Ok(Answer::connection(
                 move |stream, id, operation| async move {
                     // Held until the entry is written and answered.
                     let _operation = operation;
-                    manager.answer_write(stream, id, writing, scope).await
+                    manager
+                        .answer_write(stream, id, keeper, writing, scope)
+                        .await
                 },
             ));
         }

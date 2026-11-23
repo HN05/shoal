@@ -183,10 +183,11 @@ repositories record through its interface.
 `shoal-apps` holds what apps built on Shoal keep in it: its `Apps` service
 resolves an app's `[apps.<name>]` table over the config layers its
 interface reads, and keeps the app store's entries, writing each only from
-the revision its writer read and waking the watches of its app's entries.
-Answering them on the daemon's socket and the hub link, with a write's
-bytes that follow its request and the shared entries a hub keeps for the
-machines that joined it, stays with the daemon's connections.
+the revision its writer read, taking a write's bytes after its request,
+answering a hub member's requests and waking the watches of its app's
+entries. The socket and the hub link, the scope checks of a running
+watch, and sending a machine's writes of shared entries to its hub stay
+with the daemon's connections.
 `shoal-demos` holds the demos executions run: its `Demos` service records
 each with its execution, lists them, stops them, runs a demo's command
 again, and starts, reuses and retires the viewers of simulator demos,
