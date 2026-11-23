@@ -122,12 +122,18 @@ impl RexServer {
     /// The labels of `session`'s blocks.
     #[track_caller]
     fn blocks(&self, session: &str) -> Vec<String> {
+        self.listed_blocks(session, "label")
+    }
+
+    /// The field `field` of each of `session`'s blocks.
+    #[track_caller]
+    fn listed_blocks(&self, session: &str, field: &str) -> Vec<String> {
         let input = serde_json::json!({"session_id": session}).to_string();
         self.json(&["api", "call", "session.list_blocks", &input])["blocks"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|block| block["label"].as_str().unwrap_or_default().to_owned())
+            .map(|block| block[field].as_str().unwrap_or_default().to_owned())
             .collect()
     }
 
@@ -151,6 +157,35 @@ impl RexServer {
     #[track_caller]
     fn screen(&self, block: &str) -> String {
         String::from_utf8_lossy(&self.rex(&["capture", "-b", block]).stdout).into_owned()
+    }
+
+    /// Wait until `done`; a timeout fails the test with [`Self::report`].
+    #[track_caller]
+    fn wait_until(&self, what: &str, mut done: impl FnMut() -> bool) {
+        if try_wait_for(|| done().then_some(())).is_none() {
+            panic!("timed out waiting for {what}\n{}", self.report());
+        }
+    }
+
+    /// The server's Rex and what each of its blocks shows, which tells why
+    /// a command a block runs never reached the daemon.
+    fn report(&self) -> String {
+        let mut report = format!(
+            "rex version: {}",
+            printed(&self.rex(&["version", "--json"]))
+        );
+        let sessions = self.json(&["ls", "--json"]);
+        for session in sessions["sessions"].as_array().into_iter().flatten() {
+            let id = session["session_id"].as_str().unwrap_or_default();
+            for block in self.listed_blocks(id, "block_id") {
+                let screen = self.screen(&block);
+                report.push_str(&format!(
+                    "\n--- {block} in {} shows:\n{screen}",
+                    session["label"]
+                ));
+            }
+        }
+        report
     }
 
     #[track_caller]
@@ -204,7 +239,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     // The window's shell runs the add worker, which runs the agent in place.
     // The wrapper records its place once its execution registers, so wait
     // for the session itself.
-    wait_until("the agent to run in its window", || {
+    rex.wait_until("the agent to run in its window", || {
         fixture
             .ok(&["list"])
             .as_array()
@@ -215,15 +250,15 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     assert!(rex.windows(&session).contains(&"placed".to_owned()));
     // Every rex call above was a client that has since disconnected; the
     // agent keeps running in its block.
-    wait_for_agent(&fixture, "placed");
+    rex.wait_until(AGENT_RUNNING, || agent_running(&fixture, "placed"));
     // The place the agent's start opened records itself once its worker
     // runs there, which can follow the agent's registration.
-    wait_until("the place to record itself", || {
+    rex.wait_until("the place to record itself", || {
         sessions(&fixture, "placed") == ["placed"]
     });
     // The block starts with Shoal's launch step instead of having it typed.
     let placed = rex.block_in(&session, "placed");
-    wait_until("the agent's output to show", || {
+    rex.wait_until("the agent's output to show", || {
         rex.screen(&placed).contains("agent ran")
     });
     assert!(!rex.screen(&placed).contains("internal"));
@@ -235,11 +270,11 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
         &users,
         &format!("run --workspace {} -- sleep 600", fixture.id("placed")),
     );
-    wait_until("the user's command to run", || {
+    rex.wait_until("the user's command to run", || {
         executions(&fixture, "placed") == 2
     });
     fixture.ok(&["rm", "--wait", &fixture.id("placed"), "--yes"]);
-    wait_until("the window Shoal opened to close", || {
+    rex.wait_until("the window Shoal opened to close", || {
         !rex.windows(&session).contains(&"placed".to_owned())
     });
     assert!(rex.block_open(&users));
@@ -270,23 +305,23 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
     launch(&[
         "start", "--wait", repo, "--branch", "placed", "--agent", "pi",
     ]);
-    wait_for_agent(&fixture, "placed");
+    rex.wait_until(AGENT_RUNNING, || agent_running(&fixture, "placed"));
     // The split names itself, never the caller's window. The queue's start
     // records the place it opened once its worker runs there.
-    wait_until("the split to record its place", || {
+    rex.wait_until("the split to record its place", || {
         sessions(&fixture, "placed") == ["placed"]
     });
     assert_eq!(rex.windows(&session), windows);
     launch(&[
         "start", "--mode", "chat", repo, "--name", "talk", "--agent", "pi",
     ]);
-    wait_until("the chat to open beside the caller", || {
+    rex.wait_until("the chat to open beside the caller", || {
         rex.blocks(&session).len() == 3
     });
     assert_eq!(rex.windows(&session), windows);
 
     fixture.ok(&["rm", "--wait", &fixture.id("placed"), "--yes"]);
-    wait_until("the split Shoal opened to close", || {
+    rex.wait_until("the split Shoal opened to close", || {
         !rex.blocks(&session).contains(&"placed".to_owned())
     });
     assert!(rex.block_open(&users));
@@ -409,7 +444,7 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
             .unwrap()
             .to_owned()
     };
-    wait_until("the demo to run", || screen().contains("ready"));
+    rex.wait_until("the demo to run", || screen().contains("ready"));
     send_until_shown(
         "the demo to read its input",
         || {
@@ -425,7 +460,7 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
         "got hello",
     );
     demo(&["stop", "--workspace", &fixture.id("tried")]);
-    wait_until("the demo's window to close", || {
+    rex.wait_until("the demo's window to close", || {
         !rex.windows(&session)
             .iter()
             .any(|window| window.contains("demo"))
@@ -471,7 +506,7 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
         &block,
         &format!("run --workspace {} -- sleep 600", fixture.id("gone")),
     );
-    wait_until("the command's place to be recorded", || {
+    rex.wait_until("the command's place to be recorded", || {
         sessions(&fixture, "gone").len() == 1
     });
     let attach = || {

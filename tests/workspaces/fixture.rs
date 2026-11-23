@@ -485,29 +485,35 @@ pub(crate) fn executions(fixture: &Fixture, workspace: &str) -> usize {
         .len()
 }
 
-/// Wait until `workspace` finished setup with one execution, the
+/// What [`wait_for_agent`] waits for.
+pub(crate) const AGENT_RUNNING: &str = "setup to finish with the agent running";
+
+/// Wait until [`agent_running`].
+pub(crate) fn wait_for_agent(fixture: &Fixture, workspace: &str) {
+    wait_until(AGENT_RUNNING, || agent_running(fixture, workspace));
+}
+
+/// Whether `workspace` finished setup with one execution, the
 /// [`SLEEPING_AGENT`]'s. Setup runs as an execution of its own, and a
 /// status that says setup finished can still list it, while the add worker
 /// of a place a terminal host opened refreshes the workspace before its
 /// agent starts, keeping it `updating`; only the agent's name tells the
 /// agent's execution apart.
-pub(crate) fn wait_for_agent(fixture: &Fixture, workspace: &str) {
-    wait_until("setup to finish with the agent running", || {
-        if !fixture
-            .ok(&["list"])
+pub(crate) fn agent_running(fixture: &Fixture, workspace: &str) -> bool {
+    if !fixture
+        .ok(&["list"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|listed| listed["name"] == workspace)
+    {
+        return false;
+    }
+    let status = fixture.ok(&["status", &fixture.id(workspace)]);
+    status["setup_finished"] == true
+        && status["executions"]
             .as_array()
-            .unwrap()
-            .iter()
-            .any(|listed| listed["name"] == workspace)
-        {
-            return false;
-        }
-        let status = fixture.ok(&["status", &fixture.id(workspace)]);
-        status["setup_finished"] == true
-            && status["executions"]
-                .as_array()
-                .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
-    });
+            .is_some_and(|runs| runs.len() == 1 && runs[0]["agent"] == "pi")
 }
 
 pub(crate) fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
