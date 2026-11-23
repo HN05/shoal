@@ -28,6 +28,7 @@ impl Manager {
             return Paused::try_from(body);
         }
         let since = self.agents.pause().await?;
+        self.hub.capacity_changed();
         let (stopped, (), demos) = tokio::join!(
             self.agents.stop_for_pause(self),
             self.reviews.stop_to_run_later(),
@@ -50,6 +51,7 @@ impl Manager {
             return Unpaused::try_from(body);
         }
         let paused_since = self.agents.unpause(self).await?;
+        self.hub.capacity_changed();
         Ok(Unpaused { paused_since })
     }
 

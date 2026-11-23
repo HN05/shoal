@@ -601,7 +601,7 @@ where it did. Each machine reports its capacity with its spaces: its
 repositories by origin, its `max_heavy_agents`, the heavy agents its
 admission would start now, the memory new work may use, its waiting heavy
 agents and whether its user walked away from it while its `keep_awake` admits
-nothing new then or paused it, which every policy's machine skips, measured at most every 15 seconds and sent when it changes enough to
+nothing new then or paused it, which every policy's machine skips, measured at most every 15 seconds, and at once as a pause starts or ends, and sent when it changes enough to
 place by; the hub places from the latest report, not a live query, and keeps
 it in memory alone. `balanced` sends lasting work to `always_on` machines
 with room and otherwise keeps it on the caller's machine, beside its parent

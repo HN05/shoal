@@ -148,6 +148,8 @@ pub struct Hub {
     shared_local_configs: shared_local_configs::LocalConfigs,
     /// As the hub: the capacity each machine last reported.
     capacities: placement::Capacities,
+    /// Wakes the measuring of this machine's capacity before its time.
+    remeasure: tokio::sync::Notify,
     /// As the hub: the app registered as the placer.
     placers: placement::Placers,
     /// As the hub: wakes the reruns of the CI jobs machines cut off.
@@ -195,6 +197,7 @@ impl Hub {
             shared_repositories: Default::default(),
             shared_local_configs: Default::default(),
             capacities: Default::default(),
+            remeasure: Default::default(),
             placers: Default::default(),
             cut_off_jobs: Default::default(),
             alert_changes: Default::default(),

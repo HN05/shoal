@@ -2,8 +2,9 @@
 //! new spaces by: the origins of its repositories and its queue's room,
 //! and of how it is powered, which the hub reads a drop by. The machine
 //! measures both every [`MEASURE_EVERY`] beside its reports, so a report
-//! never waits for a measurement, and a change enough to place by, or any
-//! change of its power, sends one.
+//! never waits for a measurement, and at once when its admission changes,
+//! as once paused; a change enough to place by, or any change of its power,
+//! sends one.
 use std::{convert::Infallible, time::Duration};
 
 use anyhow::Result;
@@ -30,8 +31,9 @@ pub(super) struct Measured {
 }
 
 impl Hub {
-    /// Measure this machine's capacity and power every [`MEASURE_EVERY`]
-    /// into `measured`, whose receivers hear of it once its capacity moved
+    /// Measure this machine's capacity and power every [`MEASURE_EVERY`],
+    /// and at once when [told it changed](Self::capacity_changed), into
+    /// `measured`, whose receivers hear of it once its capacity moved
     /// enough to place by or its power changed, first once it is measured
     /// at all. A failed measurement of its capacity keeps the one before.
     pub(super) async fn keep_measuring(
@@ -58,8 +60,17 @@ impl Hub {
                 current.power = power;
                 changed
             });
-            tokio::time::sleep(MEASURE_EVERY).await;
+            tokio::select! {
+                () = tokio::time::sleep(MEASURE_EVERY) => {}
+                () = self.remeasure.notified() => {}
+            }
         }
+    }
+
+    /// Measure this machine's capacity again at once, since its admission
+    /// changed, as once its user paused or unpaused it.
+    pub fn capacity_changed(&self) {
+        self.remeasure.notify_one();
     }
 
     /// This machine's capacity now: its queue's room as `daemon` reads it,
