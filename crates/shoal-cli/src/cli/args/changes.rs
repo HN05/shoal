@@ -200,8 +200,8 @@ pub enum ReviewCommand {
     /// Submit your pending review: its comments reach the workspace's agent
     /// together, and the review gates count it at the workspace's HEAD.
     Submit {
-        /// Workspace whose pending review to submit; defaults to your only
-        /// one.
+        /// Workspace whose pending review to submit; defaults to the one
+        /// this runs in, else your only one.
         #[arg(short = 's', long)]
         space: Option<SpaceSelector>,
         /// Approve the work, which a review without comments needs to
@@ -223,7 +223,8 @@ pub enum ReviewCommand {
         repository: Option<String>,
     },
     /// Cancel a queued or running review, or drop a pending one with its
-    /// comments; defaults to your only pending review, else the space's.
+    /// comments; defaults to the space's, else outside every space your
+    /// only pending review.
     Cancel {
         /// Review ID.
         id: Option<ReviewId>,

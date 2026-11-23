@@ -1840,7 +1840,7 @@ finished: 1 blocker, 2 should-fix`.
 shoal review ls [space]       # Newest first; --repo R for a repository's
 shoal view review [ID]          # One review in full; default: the workspace's latest
 shoal watch review [ID]         # Wait until it ends, then show it
-shoal review cancel [ID]        # Default: your only pending review, else the space's queued or running one; --space S
+shoal review cancel [ID]        # Default: the space's pending, queued or running review; --space S
 shoal thread switch 3.4         # Changes from now on are for the finding
 shoal send 3.4 'It only happens on empty input'  # The reviewer answers in the thread
 shoal thread resolve 3.4 false-positive --reason 'The caller checks the length'
