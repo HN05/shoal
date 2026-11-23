@@ -25,6 +25,7 @@ LABELS = [  # name, colour, exclusive, description
     ("needs-plan",        "fbbf24", False, "Needs a plan settled with the owner before anyone implements it"),
     ("planned",           "16a34a", False, "The issue body holds a settled plan; an agent can implement it without input"),
     ("tracking",          "6e7781", False, "A standing issue a workflow rewrites and nobody closes"),
+    ("main-broken",       "dc2626", False, "The default branch fails CI; one issue per break"),
     ("complexity/tiny",   "fbcfe8", True,  "One file or a few call sites; the diff is obvious from the issue body"),
     ("complexity/small",  "f472b6", True,  "One module; the shape is settled and no schema or design text moves"),
     ("complexity/medium", "db2777", True,  "Crosses CLI and daemon, or changes persisted state, or leaves a decision on the way"),

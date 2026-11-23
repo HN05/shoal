@@ -656,8 +656,25 @@ flow. A PR description follows
 `.forgejo/pull_request_template.md`. Push the branch and let CI verify instead
 of running the full suite locally first.
 A failed check is a defect even when a rerun passes. Read its log, then fix the
-cause in its own commit or, when it lies outside the change, open an issue with
-the failing test and log excerpt; rerun only after that, never instead of it.
+cause in its own commit. When it lies outside the change, first rebase onto the
+current `main`, which often has the fix, and let CI run again. When it still
+fails and `main`'s own run (`shoal ci ls --branch main`) fails the same way, the
+break is `main`'s, and gets one issue:
+
+1. Under `shoal acquire resource main-broken --queue`, which a chat goes
+   without, comment your run on the issue `shoal issue ls --label main-broken`
+   lists, or else open one with that label, the failing test and a log
+   excerpt; then release the lease.
+2. After opening one, list them again: when an older one is open, close yours
+   as its duplicate with a comment linking it and move your run there, so that
+   every agent, on any machine, ends on the oldest.
+3. Block on the issue you end on with `shoal progress --add-blocker <issue>
+   --reason "main is broken"`: Shoal stops you and restores you once it
+   closes, to rebase and rerun.
+
+Any other failure outside the change gets an issue of its own with the failing
+test and log excerpt. Rerun a failed check only once its fix or issue exists,
+never instead of them.
 
 ## Committing
 
@@ -714,9 +731,13 @@ the failing test and log excerpt; rerun only after that, never instead of it.
 - When your work is a PR, run `shoal done` only after it merges and Shoal
   has reported the `ci.yml` run on `main` for its merge: until then, keep
   handling its reviews, CI results and merge conflicts. When that run fails,
-  open a PR that fixes `main`. You are finished once the run passes, or once
-  another PR merges into `main` after yours, which makes `main` no longer
-  yours to fix.
+  open or join its `main-broken` issue at once, by steps 1 and 2 under CI,
+  link it with `shoal link issue <n> assigned` and open the PR that fixes
+  `main` with `Closes #<n>`. When merges cross and the runs of both fail,
+  each merging agent does this, which puts them on one issue that the first
+  fix closes.
+  You are finished once the run passes, or once another PR merges into `main`
+  after yours, which makes `main` no longer yours to fix.
 
 ## Shoal feedback
 

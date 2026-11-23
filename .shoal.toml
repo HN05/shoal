@@ -8,3 +8,7 @@ presets = ["cargo"]
 
 [pr]
 watch_merge_runs = true
+
+[resources.main-broken]
+capacity = 1
+reason = "Searching for and opening the issue for a break of main, one agent at a time"
