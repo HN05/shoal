@@ -67,10 +67,30 @@ impl Hub {
             .await
     }
 
-    /// Give new spaces the smallest number free here again, once this
-    /// machine neither takes the hub role nor is a member of a hub.
+    /// Give new spaces the smallest number free here again, and forget the
+    /// other machines' alerts, once this machine neither takes the hub role
+    /// nor is a member of a hub.
     pub(super) async fn forget_numbering_unless_joined(&self) -> Result<()> {
-        self.store.write(forget_unless_joined).await
+        self.forget_hub_unless_joined(|_| Ok(())).await
+    }
+
+    /// Make `change` to this machine's membership, then stop numbering from
+    /// a hub's sequence and forget the other machines' alerts unless it is
+    /// still a member of a hub.
+    pub(super) async fn forget_hub_unless_joined(
+        &self,
+        change: impl FnOnce(&Transaction<'_>) -> Result<()> + Send + 'static,
+    ) -> Result<()> {
+        let forgot = (self.store)
+            .write(move |tx| {
+                change(tx)?;
+                forget_unless_joined(tx)
+            })
+            .await?;
+        if forgot {
+            self.notifications.forget_copies();
+        }
+        Ok(())
     }
 }
 
@@ -199,8 +219,8 @@ fn held(tx: &Transaction<'_>, number: SpaceNumber) -> Result<bool> {
 
 /// Stop numbering spaces and alerts from a hub's sequence unless this
 /// machine is a member of a hub that has not revoked it, as once it leaves
-/// one or gives up the hub role.
-pub fn forget_unless_joined(tx: &Transaction<'_>) -> Result<()> {
+/// one or gives up the hub role; whether it stopped.
+pub fn forget_unless_joined(tx: &Transaction<'_>) -> Result<bool> {
     let joined: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM hub_membership WHERE revoked=0)",
         [],
@@ -210,5 +230,5 @@ pub fn forget_unless_joined(tx: &Transaction<'_>) -> Result<()> {
         tx.execute("DELETE FROM hub_numbering", [])?;
         crate::alerts::numbering::forget(tx)?;
     }
-    Ok(())
+    Ok(!joined)
 }

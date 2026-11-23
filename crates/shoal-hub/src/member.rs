@@ -22,7 +22,6 @@ use tokio::sync::Notify;
 use super::{
     identity::Identity,
     membership::{self, Joined},
-    numbering,
     session::{self, Calls, End},
     shown,
 };
@@ -339,6 +338,7 @@ impl Hub {
                 never = self.keep_sending_outbox(&calls) => never,
                 never = self.keep_reporting(&**daemon, &calls) => never,
                 never = self.keep_reporting_alerts(&**daemon, &calls) => never,
+                never = self.keep_following_alerts(&calls) => never,
                 never = self.keep_describing(&calls) => never,
                 never = self.keep_packaging(&**daemon, &calls) => never,
                 never = self.keep_sharing(daemon, &calls) => never,
@@ -447,12 +447,7 @@ impl Hub {
     /// machines printed for it.
     async fn record_revoked(&self, member: &MemberId) -> Result<()> {
         let member = member.clone();
-        self.store
-            .write(move |tx| {
-                membership::revoked(tx, &member)?;
-                numbering::forget_unless_joined(tx)
-            })
-            .await?;
+        (self.forget_hub_unless_joined(move |tx| membership::revoked(tx, &member))).await?;
         self.config.values().forget_all();
         Ok(())
     }

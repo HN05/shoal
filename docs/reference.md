@@ -7268,6 +7268,15 @@ Kitty show as a desktop notification (tmux needs `allow-passthrough`); other
 terminals ignore it. `shoal status` outside a space mentions the user's unread
 alerts.
 
+On machines joined to a [hub](#hub), every machine shows the user's alerts from
+all of them, those recorded elsewhere as the hub last sent them while this
+machine cannot reach it. Lists order them by when they were recorded. A row,
+the followed stream's line and its terminal notification name the machine
+that keeps another machine's alert as `on <machine>` after its sender, and
+`--json` gives it as `machine`, its `id` and `name`. Following on several
+machines notifies on each for an alert still unread when it reaches it. A
+machine the hub revokes, or that leaves, takes its alerts with it.
+
 Identical unread alerts collapse into one: conflicts, cleanup failures and
 messages until read, while every agent exit is listed. A space holds at most
 50 unread alerts, which take at most 40 KiB as its agent receives them, with

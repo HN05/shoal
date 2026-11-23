@@ -229,6 +229,10 @@ pub struct Alert {
     /// Shoal's copies of the files attached to it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<crate::files::SentFile>,
+    /// The other joined machine that keeps it, for an alert to the user
+    /// another machine recorded; none for this machine's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<crate::hub::Machine>,
 }
 
 impl Alert {
@@ -261,6 +265,63 @@ impl Alert {
             Some(number) => crate::space_names::label(number, name),
             None => name.to_string(),
         })
+    }
+}
+
+/// Where a follow of the user's alerts stands: the highest number it
+/// delivered of this machine's alerts, and of each other joined machine's,
+/// whose numbers each come in their own order. Written as that number,
+/// then `,MACHINE=NUMBER` for each other machine.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AlertCursor {
+    pub here: i64,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub elsewhere: std::collections::BTreeMap<shoal_ids::member_ids::MemberId, i64>,
+}
+
+impl AlertCursor {
+    /// Whether a follow at this cursor delivered `alert` already.
+    pub fn passed(&self, alert: &Alert) -> bool {
+        let delivered = match &alert.machine {
+            None => self.here,
+            Some(machine) => self.elsewhere.get(&machine.id).copied().unwrap_or(0),
+        };
+        alert.id <= delivered
+    }
+
+    /// Move past `alert`, which the follow delivered.
+    pub fn deliver(&mut self, alert: &Alert) {
+        let delivered = match &alert.machine {
+            None => &mut self.here,
+            Some(machine) => self.elsewhere.entry(machine.id.clone()).or_default(),
+        };
+        *delivered = (*delivered).max(alert.id);
+    }
+}
+
+impl std::fmt::Display for AlertCursor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.here)?;
+        for (machine, number) in &self.elsewhere {
+            write!(f, ",{machine}={number}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::str::FromStr for AlertCursor {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> anyhow::Result<Self> {
+        let mut parts = text.split(',');
+        let here = parts.next().unwrap_or_default().trim().parse()?;
+        let mut elsewhere = std::collections::BTreeMap::new();
+        for part in parts {
+            let (machine, number) = (part.split_once('='))
+                .ok_or_else(|| anyhow::anyhow!("{part:?} is not MACHINE=NUMBER"))?;
+            elsewhere.insert(machine.to_owned().into(), number.parse()?);
+        }
+        Ok(Self { here, elsewhere })
     }
 }
 

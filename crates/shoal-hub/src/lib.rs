@@ -145,6 +145,9 @@ pub struct Hub {
     placers: placement::Placers,
     /// As the hub: wakes the reruns of the CI jobs machines cut off.
     cut_off_jobs: tokio::sync::Notify,
+    /// As the hub: the changes to its copies of the machines' alerts to
+    /// the user.
+    alert_changes: alerts::copies::Changes,
 }
 
 impl Hub {
@@ -185,6 +188,7 @@ impl Hub {
             capacities: Default::default(),
             placers: Default::default(),
             cut_off_jobs: Default::default(),
+            alert_changes: Default::default(),
         }
     }
 }
@@ -216,6 +220,7 @@ pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: boo
         hub.keep_taking_over_sleepers(&daemon),
         hub.keep_rerunning_cut_off_jobs(&*daemon),
         hub.keep_sharing_own(&daemon),
+        hub.keep_own_alert_copies(&*daemon),
         member::run(hub.clone(), daemon.clone()),
     );
 }

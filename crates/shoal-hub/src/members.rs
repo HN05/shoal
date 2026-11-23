@@ -88,6 +88,15 @@ pub fn find(tx: &Transaction<'_>, id: &MemberId, own: &PublicKey) -> Result<Opti
         .optional()?)
 }
 
+/// The name of the member `id`, revoked or not.
+pub fn name(tx: &Transaction<'_>, id: &MemberId) -> Result<Option<String>> {
+    Ok(tx
+        .query_row("SELECT name FROM hub_members WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?)
+}
+
 /// Every member the hub has not revoked, its own machine first.
 pub fn list(tx: &Transaction<'_>, own: &PublicKey) -> Result<Vec<Member>> {
     let query = format!(

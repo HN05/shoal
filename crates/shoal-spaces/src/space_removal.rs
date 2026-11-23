@@ -293,8 +293,8 @@ impl Spaces {
             .coordination()
             .announce_threads(daemon, deleted.threads)
             .await;
-        if let Some(id) = deleted.notification {
-            self.notifications.recorded(id);
+        if deleted.notification.is_some() {
+            self.notifications.recorded();
         }
         (self.release_removed_assignees(daemon, space, deleted.assignees, &deleted.issues)).await;
         if let (Some(_), Some(repository)) = (space.worktree(), &space.repository_id) {

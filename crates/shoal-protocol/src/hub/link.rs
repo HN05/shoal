@@ -349,10 +349,16 @@ pub enum Call {
         sent_at: UnixTime,
     },
     /// A machine's report of the alerts it keeps: the numbers the hub kept
-    /// for it that it has not used, and those its alerts took without the
-    /// hub. Answered with [`Reply::AlertsReported`] and the numbers the hub
+    /// for it that it has not used, those its alerts took without the hub,
+    /// and the user's alerts it keeps, which the hub keeps a copy of. Answered with [`Reply::AlertsReported`] and the numbers the hub
     /// keeps for the machine.
     ReportAlerts { report: AlertsReport },
+    /// The other machines' alerts to the user, which the hub writes on the
+    /// stream `stream` the member opened as
+    /// [`AlertCopies`](super::alerts::AlertCopies) lines: every one at
+    /// once, then each change as it comes, until the link closes. Answered
+    /// with [`Reply::Streaming`].
+    FollowAlerts { stream: u64 },
     /// What a machine says of itself, when its link opens and when its
     /// setting changes. Answered with [`Reply::Availability`].
     Describe { description: Description },

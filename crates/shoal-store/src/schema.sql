@@ -1122,6 +1122,13 @@ CREATE TABLE hub_alert_numbers (
     spare INTEGER NOT NULL CHECK(spare IN (0,1))
 );
 
+CREATE TABLE hub_user_alerts (
+    member_id TEXT NOT NULL,
+    id INTEGER NOT NULL,
+    alert TEXT NOT NULL,
+    PRIMARY KEY(member_id, id)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

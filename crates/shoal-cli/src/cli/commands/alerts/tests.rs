@@ -13,6 +13,7 @@ fn terminal_notification_is_one_osc_9_sequence_without_control_characters() {
         message: "claude exited\x07 with code 0\n".into(),
         read: false,
         files: Vec::new(),
+        machine: None,
     };
     assert_eq!(
         super::terminal_notification(&notification),
@@ -42,9 +43,35 @@ fn listed_alerts_name_the_files_sent_with_them() {
                 path: "/shoal/repo/.attachments/results/w/a.png".into(),
             },
         }],
+        machine: None,
     };
     assert_eq!(
         super::with_files("row", &notification),
         "row\n  Attached file: /shoal/repo/.attachments/results/w/a.png"
+    );
+}
+
+#[test]
+fn another_machine_s_alert_names_that_machine() {
+    let notification = shoal_protocol::alerts::Alert {
+        id: 1,
+        created_at: UnixTime::from_seconds(0),
+        sender: shoal_protocol::alerts::Sender::Shoal,
+        recipient: None,
+        space: Some("fix-login".into()),
+        space_id: None,
+        number: None,
+        kind: shoal_protocol::alerts::AlertKind::AgentExited,
+        message: "claude exited".into(),
+        read: false,
+        files: Vec::new(),
+        machine: Some(shoal_protocol::hub::Machine {
+            id: "m".to_owned().into(),
+            name: "desk".into(),
+        }),
+    };
+    assert_eq!(
+        super::terminal_notification(&notification),
+        "\x1b]9;Shoal fix-login on desk: claude exited\x07"
     );
 }

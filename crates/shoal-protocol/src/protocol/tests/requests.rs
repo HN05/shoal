@@ -244,7 +244,7 @@ const REQUESTS: &[&str] = &[
     r#"{"list_alerts":{"to":{"space":{"space":"fix"}},"unread_only":false,"limit":50}}"#,
     r#"{"mark_alerts_read":{"ids":[1,2]}}"#,
     r#""clear_alerts""#,
-    r#"{"watch_alerts":{"keep_unread":false,"after":3}}"#,
+    r#"{"watch_alerts":{"keep_unread":false,"after":{"here":3,"elsewhere":{"desk":7}}}}"#,
     r#"{"send_alert":{"to":{"space":{"space":"part"}},"message":"rebase","attachments":[{"path":"/work/log.txt","title":"Crash log"},{"path":"/work/shot.png"}]}}"#,
     r#"{"withdraw_alert":{"id":4}}"#,
     r#"{"git_credential":{"host":"git.example.com"}}"#,

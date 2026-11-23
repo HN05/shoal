@@ -21,7 +21,7 @@ use crate::{
     installed::{Executable, arguments::arguments_with},
 };
 use shoal_protocol::{
-    alerts::{Alert, Sender},
+    alerts::{Alert, AlertCursor, Sender},
     protocol::AlertsFor,
     space_names::SpaceSelector,
 };
@@ -39,7 +39,7 @@ struct Listing {
 /// terminal, or print them.
 pub(super) async fn list(ctx: &Context, args: AlertListArgs) -> Result<i32> {
     if args.follow {
-        return follow(ctx, args.keep_unread, args.resume.unwrap_or(0)).await;
+        return follow(ctx, args.keep_unread, args.resume.unwrap_or_default()).await;
     }
     let listing = listing(ctx, &args).await?;
     let shown = alerts::list(&ctx.paths, listing.to.clone(), args.unread, args.limit).await?;
@@ -183,7 +183,7 @@ pub(super) async fn withdraw(ctx: &Context, id: i64, space: Option<SpaceSelector
 /// the stream resumes after the last one printed. On a terminal, each one
 /// is also raised as a terminal notification so the emulator can show it
 /// while another window has focus.
-pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Result<i32> {
+pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: AlertCursor) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
     let executable = Executable::current();
     let mut watch = Watch::start(&ctx.paths, keep_unread, after).await?;
@@ -191,7 +191,7 @@ pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Resu
     let raise = !ctx.json && std::io::stdout().is_terminal();
     loop {
         let alert = watch.next(&ctx.paths).await.map_err(|error| {
-            let delivered = watch.delivered();
+            let delivered = watch.delivered().to_string();
             executable.resume_or(error, || arguments_with("--resume", Some(delivered)))
         })?;
         ctx.show(&alert, |alert| {
@@ -247,13 +247,17 @@ fn cells(alert: &Alert, now: crate::time::UnixTime) -> [ui::Cell; 5] {
 }
 
 /// Who sent the alert, or for Shoal's the space it is about; a space of
-/// another machine by its ID.
+/// another machine by its ID; then the other joined machine that keeps it.
 fn sender(alert: &Alert) -> String {
-    match (alert.sender, alert.space_label(), &alert.space_id) {
+    let sender = match (alert.sender, alert.space_label(), &alert.space_id) {
         (Sender::User, ..) => "user".to_owned(),
         (_, Some(space), _) => space,
         (Sender::Space, None, Some(id)) => id.to_string(),
         (_, None, _) => "shoal".to_owned(),
+    };
+    match &alert.machine {
+        Some(machine) => format!("{sender} on {}", machine.name),
+        None => sender,
     }
 }
 

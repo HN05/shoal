@@ -15,6 +15,7 @@ use crate::alerts::{self, COLUMNS, FROM, NewAlert};
 use crate::log;
 use crate::store::Store;
 pub use shoal_protocol::alerts::{Alert, AlertKind, Cleared, Sent};
+use shoal_protocol::{alerts::AlertCursor, hub::alerts::AlertCopies};
 
 /// Operations on the client type [`AlertKind`] that only the `shoal` command uses.
 trait AlertKindExt {
@@ -153,31 +154,65 @@ pub enum Source {
     Agent,
 }
 
-/// The notifications recorded for the user, and the watchers waiting for
-/// new ones.
+/// The notifications recorded for the user, the other joined machines'
+/// alerts to the user as the hub last sent them, and the watchers waiting
+/// for new ones.
 pub struct Notifications {
     store: Store,
-    /// The newest recorded notification ID.
-    recorded: watch::Sender<i64>,
+    /// Changes whenever an alert to the user is recorded here or another
+    /// machine's change.
+    changed: watch::Sender<u64>,
+    elsewhere: std::sync::Mutex<elsewhere::Elsewhere>,
 }
 
 impl Notifications {
     pub fn new(store: Store) -> Self {
         Self {
             store,
-            recorded: watch::channel(0).0,
+            changed: watch::channel(0).0,
+            elsewhere: Default::default(),
         }
     }
 
-    /// Wake `shoal alert list --follow` for the alert `id`, recorded in a
+    /// Wake `shoal alert list --follow` for an alert recorded in a
     /// transaction of another change.
-    pub fn recorded(&self, id: i64) {
-        self.recorded.send_replace(id);
+    pub fn recorded(&self) {
+        self.changed.send_modify(|changes| *changes += 1);
     }
 
-    /// Follow the newest recorded notification ID.
-    pub fn watch(&self) -> watch::Receiver<i64> {
-        self.recorded.subscribe()
+    /// Follow the changes of the user's alerts.
+    pub fn watch(&self) -> watch::Receiver<u64> {
+        self.changed.subscribe()
+    }
+
+    /// Take the other machines' alerts to the user the hub sent, so a new
+    /// alert numbered here past its spares passes theirs.
+    pub async fn take_copies(&self, copies: AlertCopies) -> Result<()> {
+        let highest = {
+            let mut elsewhere = self.elsewhere.lock().unwrap();
+            elsewhere.take(copies);
+            elsewhere.highest()
+        };
+        self.recorded();
+        if let Some(highest) = highest {
+            (self.store)
+                .write(move |tx| alerts::numbering::saw(tx, highest))
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Forget the other machines' alerts, as once this machine leaves its
+    /// hub.
+    pub fn forget_copies(&self) {
+        self.elsewhere.lock().unwrap().clear();
+        self.recorded();
+    }
+
+    /// The other machines' alerts to the user, as the hub last sent them.
+    pub fn copies(&self) -> Vec<Alert> {
+        let elsewhere = self.elsewhere.lock().unwrap();
+        elsewhere.alerts().cloned().collect()
     }
 
     /// Tell the agent coordinating the space `alert` names about it, or
@@ -221,15 +256,18 @@ impl Notifications {
     async fn record_for_user(&self, alert: NewAlert) -> Result<i64> {
         let recorded = self.store.write(move |tx| insert(tx, &alert)).await?;
         if recorded.new {
-            self.recorded(recorded.id);
+            self.recorded();
         }
         Ok(recorded.id)
     }
 
-    /// Oldest first. `unread_only` gives the oldest unread notifications, so a
-    /// backlog is shown in order across calls; otherwise the newest `limit`.
+    /// This machine's and the other machines' alerts to the user, in the
+    /// order they were recorded. `unread_only` gives the oldest unread
+    /// ones, so a backlog is shown in order across calls; otherwise the
+    /// newest `limit`.
     pub async fn list(&self, unread_only: bool, limit: u32) -> Result<Vec<Alert>> {
-        self.store
+        let here = self
+            .store
             .run(move |db| {
                 if unread_only {
                     return Ok(db
@@ -240,22 +278,26 @@ impl Notifications {
                         .query_map([limit], alerts::row)?
                         .collect::<rusqlite::Result<Vec<_>>>()?);
                 }
-                let mut newest = db
+                Ok(db
                     .prepare(&format!(
                         "SELECT {COLUMNS} FROM {FROM}
                             WHERE a.recipient_id IS NULL ORDER BY a.id DESC LIMIT ?1"
                     ))?
                     .query_map([limit], alerts::row)?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                newest.reverse();
-                Ok(newest)
+                    .collect::<rusqlite::Result<Vec<_>>>()?)
             })
-            .await
+            .await?;
+        let elsewhere = self.copies().into_iter();
+        let merged = merged(here, elsewhere.filter(|alert| !unread_only || !alert.read));
+        Ok(chosen(merged, unread_only, limit))
     }
 
-    /// Notifications after `after`, unread only, oldest first.
-    pub async fn after(&self, after: i64, limit: u32) -> Result<Vec<Alert>> {
-        self.store
+    /// The unread alerts to the user that `after` has not passed, this
+    /// machine's and the other machines', oldest first.
+    pub async fn after(&self, after: &AlertCursor, limit: u32) -> Result<Vec<Alert>> {
+        let here = after.here;
+        let here = self
+            .store
             .run(move |db| {
                 Ok(db
                     .prepare(&format!(
@@ -263,14 +305,20 @@ impl Notifications {
                             WHERE a.recipient_id IS NULL AND a.read=0 AND a.id>?1
                             ORDER BY a.id LIMIT ?2"
                     ))?
-                    .query_map(params![after, limit], alerts::row)?
+                    .query_map(params![here, limit], alerts::row)?
                     .collect::<rusqlite::Result<Vec<_>>>()?)
             })
-            .await
+            .await?;
+        let elsewhere = self.copies().into_iter();
+        let unread = elsewhere.filter(|alert| !alert.read && !after.passed(alert));
+        Ok(chosen(merged(here, unread), true, limit))
     }
 
+    /// How many alerts to the user are unread, this machine's and the
+    /// other machines'.
     pub async fn unread(&self) -> Result<u64> {
-        self.store
+        let here = self
+            .store
             .run(|db| {
                 let count: i64 = db.query_row(
                     "SELECT COUNT(*) FROM alerts WHERE recipient_id IS NULL AND read=0",
@@ -279,7 +327,9 @@ impl Notifications {
                 )?;
                 Ok(u64::try_from(count)?)
             })
-            .await
+            .await?;
+        let elsewhere = self.elsewhere.lock().unwrap();
+        Ok(here + elsewhere.alerts().filter(|alert| !alert.read).count() as u64)
     }
 
     /// Unread notifications about the workspace or chat `space_id`.
@@ -327,6 +377,43 @@ impl Notifications {
     }
 }
 
+/// Every alert to the user this machine keeps, by number.
+pub fn kept(db: &rusqlite::Connection) -> Result<Vec<Alert>> {
+    let mut statement = db.prepare(&format!(
+        "SELECT {COLUMNS} FROM {FROM} WHERE a.recipient_id IS NULL ORDER BY a.id"
+    ))?;
+    let alerts = statement.query_map([], alerts::row)?;
+    Ok(alerts.collect::<rusqlite::Result<_>>()?)
+}
+
+/// `here` and `elsewhere` in the order they were recorded.
+pub fn merged(here: Vec<Alert>, elsewhere: impl Iterator<Item = Alert>) -> Vec<Alert> {
+    let mut merged: Vec<Alert> = here.into_iter().chain(elsewhere).collect();
+    merged.sort_by(|a, b| {
+        let key = |alert: &Alert| {
+            let machine = alert.machine.as_ref().map(|machine| machine.id.clone());
+            (alert.created_at, machine, alert.id)
+        };
+        key(a).cmp(&key(b))
+    });
+    merged
+}
+
+/// Of `alerts`, in order, the oldest `limit` when `unread_only`, so a
+/// backlog is shown in order across calls, otherwise the newest `limit`.
+pub fn chosen(mut alerts: Vec<Alert>, unread_only: bool, limit: u32) -> Vec<Alert> {
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    match unread_only {
+        true => alerts.truncate(limit),
+        false => {
+            let start = alerts.len().saturating_sub(limit);
+            alerts.drain(..start);
+        }
+    }
+    alerts
+}
+
+mod elsewhere;
 mod retention;
 
 #[cfg(test)]

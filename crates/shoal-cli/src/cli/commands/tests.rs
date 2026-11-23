@@ -208,7 +208,8 @@ fn an_earlier_releases_alert_follower_hands_over_with_every_flag_it_took() {
     else {
         panic!("expected the earlier release's follow");
     };
-    assert_eq!((keep_unread, resume), (true, Some(7)));
+    let resume = resume.map(|cursor| cursor.to_string());
+    assert_eq!((keep_unread, resume.as_deref()), (true, Some("7")));
 }
 
 #[test]

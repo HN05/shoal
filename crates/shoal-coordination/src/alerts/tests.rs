@@ -108,7 +108,11 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
             "pool busy",
         )
         .await;
-    let after = fixture.notifications.after(last, 50).await.unwrap();
+    let past = |here| shoal_protocol::alerts::AlertCursor {
+        here,
+        ..Default::default()
+    };
+    let after = fixture.notifications.after(&past(last), 50).await.unwrap();
     assert_eq!(after.len(), 1);
     assert!(after[0].id > last && !after[0].read);
     // Clearing deletes read and unread ones; later ids keep increasing.
@@ -125,7 +129,7 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
     coordination
         .notify(daemon, None, AlertKind::AgentExited, "claude exited")
         .await;
-    let next = fixture.notifications.after(after[0].id, 50).await.unwrap();
+    let next = (fixture.notifications.after(&past(after[0].id), 50).await).unwrap();
     assert_eq!(next.len(), 1);
 }
 

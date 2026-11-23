@@ -108,7 +108,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     };
     let watch = AlertMethod::WatchAlerts {
         keep_unread: false,
-        after: 0,
+        after: Default::default(),
     };
     for refused in [Method::from(execute), watch.into()] {
         let reply = reply(&mut send(socket, refused).await).await;

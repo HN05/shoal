@@ -113,5 +113,6 @@ fn alert(text: &str) -> Alert {
         message: text.into(),
         read: false,
         files: Vec::new(),
+        machine: None,
     }
 }

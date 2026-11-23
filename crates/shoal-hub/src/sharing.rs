@@ -190,7 +190,7 @@ impl Hub {
     }
 
     /// Resolves once a reload ends this daemon's hub role.
-    async fn hub_role_ended(&self, daemon: &dyn Daemon) {
+    pub(crate) async fn hub_role_ended(&self, daemon: &dyn Daemon) {
         let mut reloaded = self.config.watch();
         while self.is_hub(daemon) {
             if reloaded.changed().await.is_err() {

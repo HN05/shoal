@@ -7,6 +7,7 @@ fn report(db: &mut Connection, member: &str, left: &[i64], unconfirmed: &[i64]) 
     let report = AlertsReport {
         spares: left.to_vec(),
         unconfirmed: unconfirmed.to_vec(),
+        users: None,
     };
     let numbering = number(&tx, &MemberId::from(member.to_owned()), &report).unwrap();
     tx.commit().unwrap();

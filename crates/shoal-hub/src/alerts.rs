@@ -1,20 +1,31 @@
 //! The alerts a hub's machines keep, numbered from one sequence across
 //! them: each machine reports what the hub needs of its alerts, at once
-//! once its link opens and then as they change, and numbers its new ones
-//! from the spares the answer brings. The hub's own machine reports to the
-//! hub here the same way.
+//! once its link opens and then as they change, the user's alerts among
+//! them, and numbers its new ones from the spares the answer brings. The
+//! hub keeps a copy of every machine's alerts to the user, which every
+//! machine follows. The hub's own machine reports to the hub here the same
+//! way.
 use anyhow::Result;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{
     alerts::AlertKind,
-    hub::alerts::{AlertNumbering, AlertsReport},
+    hub::alerts::{AlertCopies, AlertNumbering, AlertsReport},
 };
 
 use crate::{Hub, daemon::Daemon, log};
 
+pub(crate) mod copies;
+mod following;
 pub(crate) mod numbering;
 mod reporting;
 pub(crate) mod sequence;
+
+/// As the hub: drop the alerts of `member`, which it revoked, in the
+/// transaction that revokes it, and the numbers it kept for them.
+pub(crate) fn forget(tx: &rusqlite::Transaction<'_>, member: &MemberId) -> Result<()> {
+    copies::forget(tx, member)?;
+    sequence::forget(tx, member)
+}
 
 impl Hub {
     /// As the hub: take `member`'s report of its alerts, and answer with
@@ -22,12 +33,30 @@ impl Hub {
     pub(crate) async fn record_alert_report(
         &self,
         member: &MemberId,
-        report: AlertsReport,
+        mut report: AlertsReport,
     ) -> Result<AlertNumbering> {
         let member = member.clone();
-        (self.store)
-            .write(move |tx| sequence::number(tx, &member, &report))
-            .await
+        let users = report.users.take();
+        let (numbering, changed) = (self.store)
+            .write(move |tx| {
+                let changed = match users {
+                    Some(users) => copies::record(tx, &member, users)?,
+                    None => None,
+                };
+                Ok((sequence::number(tx, &member, &report)?, changed))
+            })
+            .await?;
+        if let Some(changed) = changed {
+            self.alert_changes.send(changed);
+        }
+        Ok(numbering)
+    }
+
+    /// As the hub: tell every machine following the alerts that `member`'s
+    /// went, once the hub revoked it.
+    pub(crate) fn alerts_dropped(&self, member: &MemberId) {
+        let machine = member.clone();
+        self.alert_changes.send(AlertCopies::Dropped { machine });
     }
 
     /// Number this machine's alerts as `numbering`, the hub's answer to

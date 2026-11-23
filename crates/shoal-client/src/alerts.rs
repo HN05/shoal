@@ -1,6 +1,6 @@
 //! Alerts: one-way notices to the user or a space's agent, from the user, a
 //! space or Shoal.
-use shoal_protocol::alerts::{Alert, Cleared, Sent};
+use shoal_protocol::alerts::{Alert, AlertCursor, Cleared, Sent};
 
 use anyhow::{Context, Result};
 
@@ -75,19 +75,24 @@ pub async fn withdraw(
     request(daemon, AlertMethod::WithdrawAlert { id, space, from }).await
 }
 
-/// The user's alerts the daemon records, as it records them, after the one
-/// last delivered, across daemon restarts. The daemon marks each read as it
-/// delivers it unless the watch keeps them unread.
+/// The user's alerts, this machine's and the other joined machines', as
+/// they come, past where the watch stands, across daemon restarts. The
+/// daemon marks each read as it delivers it unless the watch keeps them
+/// unread.
 pub struct Watch {
     stream: BufReader<UnixStream>,
     keep_unread: bool,
-    delivered: i64,
+    delivered: AlertCursor,
 }
 
 impl Watch {
-    /// Watch the alerts after `after`.
-    pub async fn start(daemon: &impl Daemon, keep_unread: bool, after: i64) -> Result<Self> {
-        let (stream, body) = open_buffered(daemon, watch(keep_unread, after)).await?;
+    /// Watch the alerts `after` has not passed.
+    pub async fn start(
+        daemon: &impl Daemon,
+        keep_unread: bool,
+        after: AlertCursor,
+    ) -> Result<Self> {
+        let (stream, body) = open_buffered(daemon, watch(keep_unread, after.clone())).await?;
         <()>::try_from(body)?;
         Ok(Self {
             stream,
@@ -96,20 +101,20 @@ impl Watch {
         })
     }
 
-    /// The ID of the last alert delivered, which a later watch
-    /// resumes after.
-    pub fn delivered(&self) -> i64 {
-        self.delivered
+    /// Where the watch stands, which a later watch resumes from.
+    pub fn delivered(&self) -> &AlertCursor {
+        &self.delivered
     }
 
-    /// The next alert, once the daemon records it.
+    /// The next alert, once it comes.
     pub async fn next(&mut self, daemon: &impl Daemon) -> Result<Alert> {
         loop {
             let response: Response = match protocol::read_buffered(&mut self.stream).await {
                 Ok(response) => response,
                 Err(error) if stream_closed(&error) => {
-                    let (keep_unread, after) = (self.keep_unread, self.delivered);
-                    let (stream, body) = reconnect(daemon, || watch(keep_unread, after)).await?;
+                    let (keep_unread, after) = (self.keep_unread, self.delivered.clone());
+                    let (stream, body) =
+                        reconnect(daemon, || watch(keep_unread, after.clone())).await?;
                     <()>::try_from(body)?;
                     self.stream = stream;
                     continue;
@@ -117,12 +122,12 @@ impl Watch {
                 Err(error) => return Err(error).context("daemon closed the alert stream"),
             };
             let alert = Alert::try_from(response.body)?;
-            self.delivered = alert.id;
+            self.delivered.deliver(&alert);
             return Ok(alert);
         }
     }
 }
 
-fn watch(keep_unread: bool, after: i64) -> AlertMethod {
+fn watch(keep_unread: bool, after: AlertCursor) -> AlertMethod {
     AlertMethod::WatchAlerts { keep_unread, after }
 }

@@ -16,6 +16,7 @@ fn sent_at(times: &[i64]) -> Vec<Alert> {
             message: format!("message {n}"),
             read: false,
             files: Vec::new(),
+            machine: None,
         })
         .collect()
 }

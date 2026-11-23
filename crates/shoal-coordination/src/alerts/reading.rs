@@ -1,6 +1,7 @@
 //! Reading alerts: listing those for the user, a space or every recipient a
 //! caller may read, and marking those a caller read.
 use crate::{Coordination, daemon::Daemon};
+use shoal_daemon_base::notifications::{chosen, merged};
 use shoal_daemon_base::permitted_actions::Action;
 use std::collections::{BTreeMap, HashSet};
 
@@ -35,7 +36,7 @@ impl Coordination {
             AlertsFor::Space { space } => {
                 let id = daemon.space(&space).await?.id;
                 let listed = move |db: &Transaction<'_>| listed(db, Some(&id), unread_only);
-                return Ok(newest(self.store.read(listed).await?, unread_only, limit));
+                return Ok(chosen(self.store.read(listed).await?, unread_only, limit));
             }
             AlertsFor::Every => self.store.read(move |db| listed(db, None, unread_only)),
         };
@@ -56,8 +57,15 @@ impl Coordination {
                 .as_ref()
                 .is_none_or(|ids| ids.contains(&recipient.id)),
         };
-        let alerts = every.await?.into_iter().filter(readable).collect();
-        Ok(newest(alerts, unread_only, limit))
+        let here = every.await?.into_iter().filter(&readable).collect();
+        let copies = match user {
+            true => self.notifications.copies(),
+            false => Vec::new(),
+        };
+        let elsewhere = copies
+            .into_iter()
+            .filter(|alert| !unread_only || !alert.read);
+        Ok(chosen(merged(here, elsewhere), unread_only, limit))
     }
 
     /// Mark exactly the alerts `ids` read: the user's, as `caller` may read
@@ -122,20 +130,6 @@ fn listed(db: &Connection, recipient: Option<&SpaceId>, unread_only: bool) -> Re
         None => statement.query_map([], super::row)?,
     };
     Ok(rows.collect::<rusqlite::Result<_>>()?)
-}
-
-/// Of `alerts`, oldest first, the oldest `limit` when `unread_only`, so a
-/// backlog is shown in order across calls, otherwise the newest `limit`.
-fn newest(mut alerts: Vec<Alert>, unread_only: bool, limit: u32) -> Vec<Alert> {
-    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
-    match unread_only {
-        true => alerts.truncate(limit),
-        false => {
-            let start = alerts.len().saturating_sub(limit);
-            alerts.drain(..start);
-        }
-    }
-    alerts
 }
 
 /// The space each of the alerts `ids` is for, none for the user; an alert

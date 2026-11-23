@@ -399,7 +399,13 @@ numbers its alerts took on their own, above the highest it knew once its
 spares ran out or before it joined, and the answer tops its spares up,
 confirms each such number no machine was given, and gives one another
 machine was given a new number, whose sending space's agent hears of an
-unread one. The daemon
+unread one. Each machine reports the user's alerts it keeps with its alert
+numbers, all of them once its link opens, which replaces what the hub had
+for it, then each change; the hub keeps a copy of every machine's, drops a
+revoked or departed machine's, and writes the other machines' on a stream
+each member keeps open on its link, all at once and then each change, which
+the member keeps in memory, never in its store, and keeps while its link is
+down; the hub's own machine reads the hub's copies. The daemon
 alone decides where a request runs: each request kind declares, with no
 default, whether it goes to the machine of the space it acts on, and every
 kind that only reads or changes Shoal's state does, while one that needs
@@ -3326,7 +3332,12 @@ that also raises the terminal's own notifications (OSC 9); `status`, in a
 space and outside one, only counts them. Recording Shoal's own never fails
 the operation it describes, repeated polled conflicts and identical alerts
 collapse until read, and scoped processes read the user's only as their
-`notifications` permission allows. An alert is separate from completion:
+`notifications` permission allows. On machines joined to a hub, the user's
+alerts are one set: the machine that records an alert keeps it and stays its
+authority, collapsing, retention and withdrawal included, while every
+machine shows every machine's, each another machine's naming that machine,
+in the order they were recorded rather than by number, and a followed stream
+keeps its place in each machine's numbers. An alert is separate from completion:
 telling the user a PR is ready neither ends the assignment nor affects
 cleanup. What a finished assignment found travels with its completion
 instead: `done --summary` records one line under the rule for an alert sent

@@ -122,6 +122,11 @@ impl Hub {
                 ensure_machine(member)?;
                 Reply::AlertsReported(self.record_alert_report(&member.id, report).await?)
             }
+            Call::FollowAlerts { stream } => {
+                let (out, _) = calls.streams().answering(stream, false);
+                self.serve_alert_copies(member.id.clone(), out);
+                Reply::Streaming
+            }
             Call::Claim {
                 space,
                 ticket,
@@ -364,7 +369,7 @@ impl Hub {
                 }
                 members::revoke(tx, &member.id)?;
                 directory::forget(tx, &member.id)?;
-                alerts::sequence::forget(tx, &member.id)?;
+                alerts::forget(tx, &member.id)?;
                 super::queue::forget(tx, &member.id)?;
                 takeovers::forget(tx, &member.id)?;
                 packages::forget_sleep(tx, &member.id)?;
@@ -376,26 +381,28 @@ impl Hub {
         if caller != Some(&revoked.member.id) {
             self.links.stop(&revoked.member.id);
         }
+        self.alerts_dropped(&revoked.member.id);
         self.delete_ended_packages().await;
         Ok(revoked)
     }
 
     /// Revoke the credential of `member`, which leaves: its link stays
     /// open for the reply, and the member then closes it.
-    async fn release_member(&self, member: &MemberId) -> Result<()> {
-        let member = member.clone();
+    async fn release_member(&self, id: &MemberId) -> Result<()> {
+        let member = id.clone();
         let _admission = self.admissions.lock().await;
         self.store
             .write(move |tx| {
                 members::revoke(tx, &member)?;
                 directory::forget(tx, &member)?;
-                alerts::sequence::forget(tx, &member)?;
+                alerts::forget(tx, &member)?;
                 super::queue::forget(tx, &member)?;
                 takeovers::forget(tx, &member)?;
                 packages::forget_sleep(tx, &member)?;
                 packages::forget(tx, &member)
             })
             .await?;
+        self.alerts_dropped(id);
         self.delete_ended_packages().await;
         Ok(())
     }

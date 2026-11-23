@@ -101,7 +101,7 @@ pub enum CoordinationCommand {
         #[arg(long)]
         keep_unread: bool,
         #[arg(long)]
-        resume: Option<i64>,
+        resume: Option<shoal_protocol::alerts::AlertCursor>,
         /// Kept from the listing the follower started as, which a follow
         /// does not read.
         #[arg(long)]
@@ -306,10 +306,10 @@ pub struct AlertListArgs {
     /// Print the list instead of opening the picker on a terminal.
     #[arg(short = 'p', long)]
     pub print: bool,
-    /// Continue following after this alert, as the installed release does
-    /// after an upgrade restarted the daemon.
+    /// Continue following past where an earlier follow stopped, as the
+    /// installed release does after an upgrade restarted the daemon.
     #[arg(long, hide = true, requires = "follow")]
-    pub resume: Option<i64>,
+    pub resume: Option<shoal_protocol::alerts::AlertCursor>,
     #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
     pub limit: u32,
 }

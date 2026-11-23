@@ -19,7 +19,6 @@ use crate::{
     daemon::Daemon,
     identity::{Identity, KeyPair},
     membership::{self, Joined},
-    numbering,
     refusal::{Reason, Refusal},
     time::UnixTime,
 };
@@ -157,12 +156,7 @@ impl Hub {
             return Err(Refusal::new(Reason::NotFound, "this machine joined no hub").into());
         };
         let revoked = joined.revoked || self.through_hub(Call::Leave).await.is_ok();
-        (self.store)
-            .write(|tx| {
-                membership::forget(tx)?;
-                numbering::forget_unless_joined(tx)
-            })
-            .await?;
+        self.forget_hub_unless_joined(membership::forget).await?;
         self.config.values().forget_all();
         self.member.wake.notify_one();
         Ok(Left {

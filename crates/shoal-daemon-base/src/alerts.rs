@@ -148,6 +148,7 @@ pub fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Alert> {
         message: row.get("message")?,
         read: row.get("read")?,
         files: files(row)?,
+        machine: None,
     })
 }
 

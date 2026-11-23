@@ -441,8 +441,8 @@ impl Coordination {
     /// Wake what waits for the alerts `delivered` recorded, and pass those
     /// for other machines up there.
     pub async fn announce_threads(&self, daemon: &dyn Daemon, delivered: Delivered) {
-        if let Some(id) = delivered.user.iter().max() {
-            self.notifications.recorded(*id);
+        if !delivered.user.is_empty() {
+            self.notifications.recorded();
         }
         if delivered.spaces {
             self.signals.message_queued();

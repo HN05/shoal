@@ -92,7 +92,7 @@ pub(in crate::cli::commands) async fn run(
             keep_unread,
             resume,
             ..
-        } => alerts::follow(&ctx, keep_unread, resume.unwrap_or(0)).await,
+        } => alerts::follow(&ctx, keep_unread, resume.unwrap_or_default()).await,
         CoordinationCommand::Files {
             command: Some(FilesCommand::Add { files, space }),
             ..

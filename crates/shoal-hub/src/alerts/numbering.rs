@@ -28,6 +28,7 @@ pub(crate) fn reported(db: &Transaction<'_>) -> Result<AlertsReport> {
         return Ok(AlertsReport {
             spares: Vec::new(),
             unconfirmed: numbers(db, "SELECT id FROM alerts ORDER BY id")?,
+            users: None,
         });
     }
     let spares = numbers(
@@ -44,6 +45,7 @@ pub(crate) fn reported(db: &Transaction<'_>) -> Result<AlertsReport> {
     Ok(AlertsReport {
         spares,
         unconfirmed,
+        users: None,
     })
 }
 

@@ -14,6 +14,7 @@ use super::super::{
 };
 use super::acting::acting;
 use crate::protocol::{self, AlertMethod, AlertTarget, AlertsFor, Body, Response};
+use shoal_protocol::alerts::AlertCursor;
 use shoal_protocol::space_names::SpaceSelector;
 
 pub(super) async fn handle(
@@ -163,30 +164,32 @@ impl Scoped for AlertMethod {
     }
 }
 
-/// Long-lived stream of the user's alerts: the unread backlog after
-/// `after`, then each new one as it is recorded, until the client hangs up.
+/// Long-lived stream of the user's alerts, this machine's and the other
+/// joined machines': the unread backlog `after` has not passed, then each
+/// new one as it comes, until the client hangs up.
 async fn watch_alerts(
     mut stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
     keep_unread: bool,
-    after: i64,
+    mut after: AlertCursor,
     startup: OperationGuard,
 ) -> Result<()> {
     let mut changed = manager.notifications.watch();
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
     drop(startup);
     let (mut reader, mut writer) = stream.split();
-    let mut delivered = after;
     loop {
         let operation = manager.gates.operation().await;
-        let batch = manager.notifications.after(delivered, 100).await?;
-        for notification in batch {
-            delivered = notification.id;
-            let response = Response::new(request_id, Body::Alert(notification));
+        let batch = manager.notifications.after(&after, 100).await?;
+        for alert in batch {
+            after.deliver(&alert);
+            let id = alert.id;
+            let here = alert.machine.is_none();
+            let response = Response::new(request_id, Body::Alert(alert));
             protocol::write(&mut writer, &response).await?;
-            if !keep_unread {
-                manager.notifications.mark_read(vec![delivered]).await?;
+            if !keep_unread && here {
+                manager.notifications.mark_read(vec![id]).await?;
             }
         }
         drop(operation);

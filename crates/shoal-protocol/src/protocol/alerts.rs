@@ -20,10 +20,14 @@ pub enum AlertMethod {
     MarkAlertsRead { ids: Vec<i64> },
     /// Deletes every alert to the user, read or not; answers with how many.
     ClearAlerts,
-    /// Long-lived: the user's unread alerts after `after`, then new ones as
-    /// they are recorded, each as a [`super::Body::Alert`] response and
+    /// Long-lived: the user's unread alerts, this machine's and the other
+    /// joined machines', that `after` has not passed, then new ones as they
+    /// come, oldest first, each as a [`super::Body::Alert`] response and
     /// marked read on delivery unless `keep_unread`.
-    WatchAlerts { keep_unread: bool, after: i64 },
+    WatchAlerts {
+        keep_unread: bool,
+        after: crate::alerts::AlertCursor,
+    },
     /// An alert from the caller, answered with where it went.
     SendAlert {
         to: AlertTarget,
@@ -99,9 +103,10 @@ pub enum AlertTarget {
 impl AlertMethod {
     /// Where the request runs when its space is another machine's: a
     /// message or a withdrawal goes to the recipient's machine, and a
-    /// message waits for it while it is offline; the user's alerts,
-    /// numbered records and the caller's own agent's turn are this
-    /// machine's own.
+    /// message waits for it while it is offline; the caller's own agent's
+    /// turn is this machine's own, and the user's alerts name no space,
+    /// since every machine keeps the other machines' as the hub sends
+    /// them.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::SendAlert { .. } => Forwarding::Queued,
