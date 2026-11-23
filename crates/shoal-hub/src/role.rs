@@ -90,7 +90,6 @@ impl Hub {
             .ok_or_else(|| anyhow::anyhow!("the hub's own machine is not recorded"))
     }
 
-    /// The ID of the hub's own machine, recording it the first time.
     /// As the hub: the machines connected now, its own among them, whose
     /// spaces no other machine takes over from the packages it keeps.
     pub(crate) async fn connected_machines(&self) -> std::collections::HashSet<MemberId> {
@@ -99,6 +98,7 @@ impl Hub {
         connected
     }
 
+    /// The ID of the hub's own machine, recording it the first time.
     pub(crate) async fn own_member(&self) -> Result<MemberId> {
         let own = self.hub_identity().await?.public.clone();
         let name = crate::process::machine::hostname();

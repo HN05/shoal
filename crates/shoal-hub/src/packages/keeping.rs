@@ -137,18 +137,38 @@ impl Hub {
     /// The package its machine writes up `up`, read to its end into a new
     /// file beside the kept ones, with its size.
     async fn receive_package(&self, mut up: Incoming) -> Result<(tempfile::NamedTempFile, u64)> {
-        let directory = self.package_directory();
-        let incoming = off_runtime::run(move || {
-            std::fs::create_dir_all(&directory)
-                .with_context(|| format!("create {}", directory.display()))?;
-            (tempfile::Builder::new()
-                .prefix(".incoming-")
-                .tempfile_in(&directory))
-            .with_context(|| format!("create a file in {}", directory.display()))
-        })
-        .await?;
+        let incoming = self.beside_packages(|builder, directory| {
+            (builder.tempfile_in(directory))
+                .with_context(|| format!("create a file in {}", directory.display()))
+        });
+        let incoming = incoming.await?;
         let size = up.write_to(incoming.reopen()?).await?;
         Ok((incoming, size))
+    }
+
+    /// A new directory beside the kept packages, for a package this machine
+    /// writes itself to take shape in before it takes its place.
+    pub(super) async fn incoming_package_directory(&self) -> Result<tempfile::TempDir> {
+        self.beside_packages(|builder, directory| {
+            (builder.tempdir_in(directory))
+                .with_context(|| format!("create a directory in {}", directory.display()))
+        })
+        .await
+    }
+
+    /// What `create` makes, with an incoming entry's name, in the directory
+    /// of the kept packages, which it creates first.
+    async fn beside_packages<T: Send + 'static>(
+        &self,
+        create: impl FnOnce(&tempfile::Builder<'_, '_>, &Path) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        let directory = self.package_directory();
+        off_runtime::run(move || {
+            std::fs::create_dir_all(&directory)
+                .with_context(|| format!("create {}", directory.display()))?;
+            create(tempfile::Builder::new().prefix(".incoming-"), &directory)
+        })
+        .await
     }
 
     /// Move `incoming`, which holds the package `sent` of `size` bytes, to

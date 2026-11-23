@@ -72,30 +72,14 @@ impl Hub {
         own: &MemberId,
         (space, within): (&Space, Option<&SpaceId>),
     ) -> Result<shoal_schedule::placement::snapshot::Request> {
-        let directory = self.package_directory();
-        let incoming = off_runtime::run(move || {
-            std::fs::create_dir_all(&directory)
-                .with_context(|| format!("create {}", directory.display()))?;
-            (tempfile::Builder::new()
-                .prefix(".incoming-")
-                .tempdir_in(&directory))
-            .with_context(|| format!("create a directory in {}", directory.display()))
-        })
-        .await?;
+        let incoming = self.incoming_package_directory().await?;
         let file = incoming.path().join("package.shoal");
         let built_at = UnixTime::now();
         // Taken before the package, so a copy that changes after it differs.
         let state = daemon.package_state(space).await?;
         let packaged = daemon.write_package(space, &file).await?;
         let start = daemon.package_start(space, &packaged).await?;
-        let path = file.clone();
-        let size = off_runtime::run(move || {
-            let metadata = std::fs::metadata(&path);
-            Ok(metadata
-                .with_context(|| format!("read {}", path.display()))?
-                .len())
-        })
-        .await?;
+        let size = file_size(&file).await?;
         let sent = Sent {
             member: own.clone(),
             space: space.id.clone(),
@@ -145,6 +129,18 @@ impl Hub {
         self.handovers.stays(&own);
         self.retire_own(daemon, &own).await;
     }
+}
+
+/// The size of the file at `path`, in bytes.
+async fn file_size(path: &std::path::Path) -> Result<u64> {
+    let path = path.to_owned();
+    off_runtime::run(move || {
+        let metadata = std::fs::metadata(&path);
+        Ok(metadata
+            .with_context(|| format!("read {}", path.display()))?
+            .len())
+    })
+    .await
 }
 
 #[cfg(test)]
