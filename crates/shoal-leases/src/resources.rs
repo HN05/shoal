@@ -16,7 +16,7 @@ use crate::{
     allocation::Allocation,
     callers::Caller,
     daemon::{Daemon, Records},
-    gates::GuardMode,
+    gates::{GuardMode, ResourceGuard},
     hooks::{Hook, HookKind},
     model::Workspace,
     queue,
@@ -418,12 +418,18 @@ impl Leases {
             && !claim.freeing.is_empty()
         {
             let freeing = permits(std::mem::take(&mut claim.freeing));
+            // Their releases take their workspaces' guards, this one's too.
+            claim.guard = None;
             let given = self.give_to_request(daemon, &workspace, caller, freeing, Device::Keep);
             if given.await {
                 claimed = self.claim_resource(daemon, &asked, place.ahead()).await;
             }
         }
-        let acquisition = claimed.map(|claim| claim.allocation);
+        // The guard stays until the hook that follows the claim has run.
+        let (acquisition, _resources) = match claimed {
+            Ok(claim) => (Ok(claim.allocation), claim.guard),
+            Err(error) => (Err(error), None),
+        };
         place.settle(&acquisition);
         let acquisition = acquisition?;
         if let Allocation::Granted(lease) = &acquisition
@@ -442,7 +448,8 @@ impl Leases {
 
     /// Claim the lease `claim` asks for in one transaction, with `ahead`
     /// queued requests that arrived earlier, under the workspace's resource
-    /// guard, exclusive when a hook runs after the claim. A hook in the
+    /// guard, exclusive when a hook runs after the claim, which the claim
+    /// keeps. A hook in the
     /// workspace holds the guard briefly; a queued request waits it out in
     /// place instead of failing.
     async fn claim_resource(
@@ -457,7 +464,7 @@ impl Leases {
             true => GuardMode::Exclusive,
             false => GuardMode::Shared,
         };
-        let _resources = match self.gates.resource_guard(&workspace.id, mode) {
+        let guard = match self.gates.resource_guard(&workspace.id, mode) {
             Ok(guard) => guard,
             Err(error) if claim.request.queue => {
                 return Ok(Allocation::Busy(error.to_string()).into());
@@ -476,11 +483,13 @@ impl Leases {
         let (scope, definition) = (claim.scope.clone(), claim.definition.clone());
         let request = claim.request.clone();
         let records = self.records.clone();
-        self.store
-            .run(move |db| {
-                acquire_lease(db, &*records, claimant, scope, definition, request, related)
-            })
-            .await
+        let claimed = self.store.run(move |db| {
+            acquire_lease(db, &*records, claimant, scope, definition, request, related)
+        });
+        Ok(Claim {
+            guard: Some(guard),
+            ..claimed.await?
+        })
     }
 
     pub async fn list_resources(
@@ -713,10 +722,12 @@ struct ResourceClaim<'a> {
 }
 
 /// What a claim came to, with the sets of held leases any one of which
-/// would grant it once released, where capacity keeps it busy.
+/// would grant it once released, where capacity keeps it busy, and the
+/// workspace's resource guard it was made under.
 struct Claim {
     allocation: Allocation<ResourceLease>,
     freeing: Vec<Vec<ResourceLease>>,
+    guard: Option<ResourceGuard>,
 }
 
 impl From<Allocation<ResourceLease>> for Claim {
@@ -724,6 +735,7 @@ impl From<Allocation<ResourceLease>> for Claim {
         Self {
             allocation,
             freeing: Vec::new(),
+            guard: None,
         }
     }
 }
@@ -856,6 +868,7 @@ fn acquire_lease(
         return Ok(Claim {
             allocation: busy()?,
             freeing: freeing::freeing(&definition, &request, &active),
+            guard: None,
         });
     }
     let lease = ResourceLease {
