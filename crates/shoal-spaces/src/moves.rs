@@ -174,8 +174,9 @@ impl Spaces {
     /// Let a scoped `caller` move the spaces `order` takes, refusing one its
     /// scope does not reach: to a joined machine as
     /// [`Self::authorize_joined_move`] says, else as its `admin` permission
-    /// allows, and never for a move another machine sent, since such a move
-    /// reaches outside the hub's trust.
+    /// allows. A move another machine sent only holds the packages for
+    /// that machine, which writes them where its caller named, since a
+    /// file, or a host `ssh` reaches, here lies outside the hub's trust.
     pub async fn authorize_move(
         &self,
         daemon: &dyn Daemon,
@@ -188,8 +189,8 @@ impl Spaces {
                 .await;
         }
         ensure!(
-            caller.vouched.is_none(),
-            "only the user moves spaces from another machine"
+            caller.vouched.is_none() || order.destination == MoveDestination::Held,
+            "a move another machine sends only holds its packages for that machine"
         );
         let mut repository = None;
         for id in &order.spaces {

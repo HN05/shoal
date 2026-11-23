@@ -74,3 +74,25 @@ async fn a_space_without_a_recorded_move_moves_to_no_joined_machine() {
             .unwrap()
     );
 }
+
+/// A caller on another machine has this machine hold a space's package for
+/// it as its `admin` permission allows, and never moves one to a file here.
+#[tokio::test]
+async fn another_machine_s_caller_has_a_package_held_as_admin_allows() {
+    use shoal_protocol::config::permissions::Acting;
+
+    let (_root, manager) = test_support::manager().await;
+    let chat = test_support::chat(&manager, "planner", "chat", None, None).await;
+    let held = order(&[&chat.id], MoveDestination::Held, false);
+    let file = MoveDestination::File {
+        path: "/nowhere/planner.shoal".into(),
+    };
+    let file = order(&[&chat.id], file, false);
+    let direct = test_support::vouched_admin(&manager, &chat.id, Acting::Direct).await;
+    let denied = test_support::vouched_admin(&manager, &chat.id, Acting::Deny).await;
+
+    let authorize = |caller, order| manager.spaces.authorize_move(&*manager, caller, order);
+    authorize(&direct, &held).await.unwrap();
+    assert!(authorize(&direct, &file).await.is_err());
+    assert!(authorize(&denied, &held).await.is_err());
+}

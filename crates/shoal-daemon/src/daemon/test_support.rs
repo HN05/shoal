@@ -402,6 +402,43 @@ pub(crate) fn caller_in(
     }
 }
 
+/// A process of a space on another machine, which vouches for it with the
+/// request it forwards: its scope reaches every space, and its permissions
+/// are those of the space `like` here but its `admin` permission, `admin`.
+pub(crate) async fn vouched_admin(
+    manager: &Manager,
+    like: &SpaceId,
+    admin: shoal_protocol::config::permissions::Acting,
+) -> crate::daemon::scope::Caller {
+    use shoal_protocol::{config::permissions::PermissionsConfig, hub::routing::VouchedSpace};
+    let permissions = manager
+        .coordination
+        .space_permissions(manager, like, None)
+        .await
+        .unwrap();
+    let admin = PermissionsConfig {
+        admin: Some(admin),
+        ..Default::default()
+    };
+    let space = SpaceId::generate();
+    let vouched = VouchedSpace {
+        space: space.clone(),
+        everywhere: true,
+        permissions: permissions.given(&admin),
+        granted: None,
+        read_only: false,
+        priority: shoal_schedule::priority::Priority::NORMAL,
+        chat_modes: Vec::new(),
+    };
+    crate::daemon::scope::Caller {
+        space_id: space,
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: Some(Arc::new(vouched)),
+    }
+}
+
 /// Have the space `id` ask `text` in a question thread it opens with its
 /// coordinator, else the user, as its agent does with `shoal thread open`
 /// and `shoal send`.

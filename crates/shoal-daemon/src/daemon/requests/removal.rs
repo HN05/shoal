@@ -559,6 +559,21 @@ impl Scoped for RemovalMethod {
                     .await?;
                 Ok(None)
             }
+            // A removed space's record, which names no space here to
+            // confine it to, goes to a caller that may restore it, as the
+            // held move that packed it checked.
+            RemovalMethod::ReadHeldPackage { space, .. }
+                if manager.spaces.space(space).await.is_err() =>
+            {
+                manager
+                    .spaces
+                    .ensure_restorable_by(manager, space, caller)
+                    .await?;
+                (manager.coordination)
+                    .administer(manager, caller, &*self, None)
+                    .await?;
+                Ok(None)
+            }
             // Cleaning up and moving spaces is the `admin` permission's.
             RemovalMethod::Cleanup { .. }
             | RemovalMethod::DropRestoredSessions { .. }
