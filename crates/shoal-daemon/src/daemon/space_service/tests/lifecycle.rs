@@ -99,6 +99,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
                 taking: None,
                 for_repository: false,
                 moved: None,
+                lives_on: false,
             },
             Removal::Automatic {
                 snapshot: Snapshot {
@@ -361,6 +362,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
                 taking: None,
                 for_repository: false,
                 moved: None,
+                lives_on: false,
             }
         };
         manager

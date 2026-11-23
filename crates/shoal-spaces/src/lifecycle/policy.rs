@@ -99,6 +99,10 @@ pub enum Removal<'a> {
         /// The checkpoints of a move's package, by workspace, when the
         /// removal ends a space another machine imported.
         moved: Option<&'a BTreeMap<SpaceId, CheckpointNumber>>,
+        /// It ends the space here only, which lives on on another machine
+        /// a move or a takeover gave it, so what other machines keep of it
+        /// stays.
+        lives_on: bool,
     },
     /// Idle, merged or disk-space cleanup, or the user's request to clean up;
     /// only safe, unchanged spaces may go.
@@ -116,13 +120,15 @@ pub enum Removal<'a> {
     /// The space's parent is being removed, which nothing about the space
     /// keeps: a worktree goes with its unsaved files once a checkpoint keeps
     /// them. `cause`, `refuse_holds`, the `confirmed` IDs of the spaces it
-    /// may take below it and the checkpoints of the move it ends, `moved`,
-    /// are the parent removal's.
+    /// may take below it, the checkpoints of the move it ends, `moved`, and
+    /// whether the spaces live on on another machine, `lives_on`, are the
+    /// parent removal's.
     Parent {
         cause: EventCause,
         refuse_holds: bool,
         confirmed: Option<&'a [SpaceId]>,
         moved: Option<&'a BTreeMap<SpaceId, CheckpointNumber>>,
+        lives_on: bool,
     },
     /// The workspace becomes the chat `chat`: its worktree goes once a
     /// checkpoint keeps its unsaved files, while its branch, its record
@@ -134,6 +140,20 @@ pub enum Removal<'a> {
 }
 
 impl<'a> Removal<'a> {
+    /// Whether it ends the space everywhere, unlike a conversion, which
+    /// keeps it, or the end here of one that lives on on another machine.
+    pub fn ends_space(self) -> bool {
+        !self.converts() && !self.lives_on()
+    }
+
+    /// Whether it ends here a space that lives on on another machine.
+    fn lives_on(self) -> bool {
+        match self {
+            Removal::Manual { lives_on, .. } | Removal::Parent { lives_on, .. } => lives_on,
+            _ => false,
+        }
+    }
+
     /// What this removal asks of the spaces below on other machines, as of
     /// its children here; none for a conversion, which keeps them.
     pub fn below_elsewhere(self) -> Option<BelowElsewhere<'a>> {
@@ -297,6 +317,7 @@ impl<'a> Removal<'a> {
             refuse_holds: self.refuses_holds(),
             confirmed: self.confirmed_children(),
             moved: self.moved(),
+            lives_on: self.lives_on(),
         }
     }
 

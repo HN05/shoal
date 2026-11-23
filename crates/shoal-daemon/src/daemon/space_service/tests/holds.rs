@@ -406,6 +406,7 @@ async fn a_hold_keeps_a_chat_until_it_is_released() {
         refuse_holds: true,
         confirmed: None,
         moved: None,
+        lives_on: false,
     };
     let Err(refused) = manager.spaces.reserve_space(&chat.id, parent).await else {
         panic!("the user's hold keeps the chat");

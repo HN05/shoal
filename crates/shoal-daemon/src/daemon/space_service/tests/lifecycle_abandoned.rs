@@ -60,6 +60,7 @@ async fn a_removal_whose_work_ends_early_fails_its_workspace() {
         taking: None,
         for_repository: false,
         moved: None,
+        lives_on: false,
     };
     // Its work ends, as a panic ends it, before it removes or retains it.
     drop(

@@ -90,13 +90,15 @@ impl Spaces {
             taking: None,
             for_repository: false,
             moved: None,
+            lives_on: false,
         };
         self.remove_requested(daemon, selector, removal).await
     }
 
-    /// Remove the space as [`Self::remove_selected`] does, taking only the
-    /// spaces `taking` names before it: one that appears in it or below it
-    /// meanwhile retains them all. Ending a move, it refuses at its last
+    /// End the space here as [`Self::remove_selected`] removes it, where it
+    /// lives on on another machine, taking only the spaces `taking` names
+    /// before it: one that appears in it or below it meanwhile retains them
+    /// all. Ending a move, it refuses at its last
     /// check, after the removal hooks, once a workspace differs from its
     /// checkpoint in `moved`, which the other machine imported.
     pub async fn remove_selected_taking(
@@ -115,6 +117,7 @@ impl Spaces {
             taking: Some(taking),
             for_repository: false,
             moved,
+            lives_on: true,
         };
         self.remove_requested(daemon, selector, removal).await
     }
@@ -134,6 +137,7 @@ impl Spaces {
             taking: None,
             for_repository: true,
             moved: None,
+            lives_on: false,
         };
         Ok(self.remove_space(daemon, id, removal).await?.result())
     }
@@ -154,6 +158,7 @@ impl Spaces {
             taking: None,
             for_repository: false,
             moved: None,
+            lives_on: false,
         };
         self.remove_requested(daemon, selector, removal).await
     }
@@ -220,6 +225,7 @@ impl Spaces {
             refuse_holds,
             confirmed,
             moved: None,
+            lives_on: false,
         };
         self.remove_requested(daemon, selector, removal).await
     }
@@ -537,7 +543,11 @@ impl Spaces {
         if space.worktree().is_none() {
             self.save_chat_removal_record(daemon, id, cause).await?;
         }
-        self.delete_space_record(daemon, space, cause).await
+        self.delete_space_record(daemon, space, cause).await?;
+        if removal.ends_space() {
+            self.tell_removed(daemon, space).await;
+        }
+        Ok(())
     }
 
     /// The spaces `removal` of the space `id` takes first: those below it,

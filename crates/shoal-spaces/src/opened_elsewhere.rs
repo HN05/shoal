@@ -13,7 +13,7 @@ use shoal_protocol::{
     threads::CloseCause,
 };
 
-use crate::{Spaces, daemon::Daemon, threads};
+use crate::{Spaces, daemon::Daemon, model::Space, threads};
 use anyhow::Result;
 
 /// What became of a space, which the other machines follow with the
@@ -45,6 +45,21 @@ impl Spaces {
         let machines = daemon.other_machines().await;
         let told = (machines.iter()).map(|machine| tell(daemon, machine, id, followed));
         join_all(told).await;
+    }
+
+    /// Have every other joined machine close the threads the removed
+    /// `space` opened or holds there and cancel its pending reviews there,
+    /// unless it is a CI job's disposable workspace, which runs no agent, so
+    /// it never wrote a review or opened a thread on another machine.
+    pub async fn tell_removed(&self, daemon: &dyn Daemon, space: &Space) {
+        if space
+            .to_workspace()
+            .is_some_and(|workspace| workspace.disposable)
+        {
+            return;
+        }
+        let closed = Followed::Closed(CloseCause::Removal);
+        self.tell_other_machines(daemon, &space.id, closed).await;
     }
 
     /// Close the threads here that the space `opener` of another machine

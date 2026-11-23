@@ -668,6 +668,7 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
         taking: None,
         for_repository: false,
         moved: None,
+        lives_on: false,
     };
     manager
         .spaces
@@ -703,6 +704,7 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
                 taking: None,
                 for_repository: false,
                 moved: None,
+                lives_on: false,
             },
         };
         assert!(
@@ -918,6 +920,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
                 taking: None,
                 for_repository: false,
                 moved: None,
+                lives_on: false,
             },
             false,
         ),
@@ -929,6 +932,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
                 taking: None,
                 for_repository: false,
                 moved: None,
+                lives_on: false,
             },
             true,
         ),
@@ -1460,6 +1464,7 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
         taking: None,
         for_repository: false,
         moved: None,
+        lives_on: false,
     };
     let (files, _) = removal_options(&check, manual(&confirmed), false);
     assert!(matches!(files, FileRemoval::CleanOnly));
@@ -1847,6 +1852,7 @@ fn removals_below_elsewhere_keep_the_cause_of_the_removal_they_are_part_of() {
         refuse_holds: false,
         confirmed: None,
         moved: None,
+        lives_on: false,
     };
     assert_eq!(cause(idle_child), EventCause::Idle);
     assert_eq!(cause(idle_child.of_child()), EventCause::Idle);
@@ -1857,6 +1863,25 @@ fn removals_below_elsewhere_keep_the_cause_of_the_removal_they_are_part_of() {
         taking: None,
         for_repository: false,
         moved: None,
+        lives_on: false,
     };
     assert_eq!(cause(asked.of_child()), EventCause::Manual);
+}
+
+#[test]
+fn a_space_that_lives_on_elsewhere_ends_here_only_with_the_spaces_it_takes() {
+    let ending = |lives_on| Removal::Manual {
+        unsaved: &UnsavedWork::All,
+        inspection: InspectionPolicy::GitOnly,
+        release_holds: true,
+        taking: None,
+        for_repository: false,
+        moved: None,
+        lives_on,
+    };
+    let (moved, removed) = (ending(true), ending(false));
+    assert!(!moved.ends_space());
+    assert!(!moved.of_child().ends_space());
+    assert!(removed.ends_space());
+    assert!(removed.of_child().ends_space());
 }

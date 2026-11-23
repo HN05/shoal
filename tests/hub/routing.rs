@@ -648,6 +648,25 @@ fn an_offline_machine_closes_a_finished_writer_s_comment_once_it_connects() {
 }
 
 #[test]
+fn a_space_moved_to_another_machine_keeps_holding_its_threads_there() {
+    let tree = tree_without_coordinator("");
+    let (hub, laptop) = (&tree.hub, &tree.laptop);
+    let repo = hub.repo.to_str().unwrap().to_owned();
+    hub.ok(&["create", &repo, "--branch", "holder"]);
+    let holder = hub.id("holder");
+    // The child's question reaches the user, who passes it to the space on
+    // the hub, which then holds a thread the laptop keeps.
+    let asked = ask(laptop, &tree.child);
+    hub.ok(&["thread", "forward", &asked, "--space", &holder]);
+    let moved = hub.ok(&["move", &holder, "--machine", "laptop"]);
+    assert_eq!(moved["failed"], json!([]), "{moved}");
+    // Its end on the hub is no removal: it holds the thread there still.
+    let thread = laptop.ok(&["view", "thread", &asked]);
+    assert!(thread["resolution"].is_null(), "{thread}");
+    assert_eq!(thread["holder"]["id"], holder.as_str(), "{thread}");
+}
+
+#[test]
 fn a_removed_writer_s_pending_review_on_another_machine_is_cancelled() {
     let tree = tree_across_machines();
     let (hub, laptop, coordinator) = (&tree.hub, &tree.laptop, &tree.coordinator);

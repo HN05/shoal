@@ -7,7 +7,6 @@ use crate::daemon::Daemon;
 use crate::daemon::Dropped;
 use crate::daemon::Records;
 use crate::forge::items::reference::ItemRef;
-use crate::opened_elsewhere::Followed;
 use crate::paths::StateFiles;
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
@@ -274,9 +273,7 @@ impl Spaces {
     /// Delete the record of `space`, which `cause` removed, and give the user
     /// what only it kept: the approval requests it had not decided, the
     /// messages it had not read and its attached files, which stay for the
-    /// retention period. Its open threads close, telling their openers,
-    /// here and, unless it ran no agent, on the other machines, which also
-    /// cancel its pending reviews there. The forge assignments only it kept go, and so do
+    /// retention period. Its open threads close, telling their openers. The forge assignments only it kept go, and so do
     /// the carried commits only a workspace's record kept.
     pub async fn delete_space_record(
         &self,
@@ -297,10 +294,6 @@ impl Spaces {
             .coordination()
             .announce_threads(daemon, deleted.threads)
             .await;
-        if !is_disposable(space) {
-            let closed = Followed::Closed(CloseCause::Removal);
-            self.tell_other_machines(daemon, &space.id, closed).await;
-        }
         if deleted.notification.is_some() {
             self.notifications.recorded();
         }
@@ -366,14 +359,6 @@ impl Spaces {
     fn delete_session_logs(&self, id: &shoal_ids::space_ids::SpaceId) {
         let _ = std::fs::remove_dir_all(self.paths.space_state(id));
     }
-}
-
-/// Whether `space` is a CI job's disposable workspace, which runs no agent,
-/// so it never wrote a review or opened a thread on another machine.
-fn is_disposable(space: &Space) -> bool {
-    space
-        .to_workspace()
-        .is_some_and(|workspace| workspace.disposable)
 }
 
 /// What [`delete_record`] gave the user.
