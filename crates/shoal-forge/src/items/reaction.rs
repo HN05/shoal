@@ -21,13 +21,13 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    activity::view::Details,
     backends::ForgeKind,
     items::{
         link::ItemKind,
         reaction::{Reaction, ReactionChange, allowed::AllowedReactions},
     },
     numbers::CommentId,
-    review::view::Details,
 };
 
 /// How the forge lists, adds and removes reactions.

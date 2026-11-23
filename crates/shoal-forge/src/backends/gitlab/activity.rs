@@ -4,12 +4,12 @@ use serde_json::Value;
 
 use super::{GitLab, latest_statuses, notes, status_state, username};
 use crate::{
+    activity::status::{Statuses, Verdict},
     backends::rest::{self, RestReads, fingerprints},
     items::{
         discussion::Views,
         item::{ItemSteps, text},
     },
-    review::status::{Statuses, Verdict},
     transport::{
         account::Account,
         api::{Request, TransportRequests},
@@ -19,6 +19,10 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    activity::{
+        status::PrStatus,
+        view::{AutoMerge, Comment, Details, PrDetails, Review, ReviewComment},
+    },
     ci::check_state::CheckState,
     items::{
         action::MergeMethod,
@@ -26,10 +30,6 @@ use shoal_forge_types::{
         link::ItemKind,
     },
     numbers::{CommentId, IssueNumber, PullNumber},
-    review::{
-        status::PrStatus,
-        view::{AutoMerge, Comment, Details, PrDetails, Review, ReviewComment},
-    },
 };
 
 impl Activity for GitLab {

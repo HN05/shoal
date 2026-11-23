@@ -4,24 +4,24 @@ use serde_json::Value;
 
 use super::{Bitbucket, listed, roots};
 use crate::{
+    activity::status::{Statuses, Verdict},
     backends::rest::{self, RestReads, fingerprints},
     items::{
         discussion::Views,
         item::{ItemSteps, text},
     },
-    review::status::{Statuses, Verdict},
     transport::{account::Account, api::TransportRequests, backend::LoginHint},
     updates::{Activity, Entry, HeadCheck, Snapshot},
 };
 use shoal_forge_types::{
     ForgeRepo,
-    ci::check_state::CheckState,
-    items::{item::Current, link::ItemKind},
-    numbers::{CommentId, IssueNumber, PullNumber},
-    review::{
+    activity::{
         status::PrStatus,
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
+    ci::check_state::CheckState,
+    items::{item::Current, link::ItemKind},
+    numbers::{CommentId, IssueNumber, PullNumber},
 };
 
 impl Activity for Bitbucket {

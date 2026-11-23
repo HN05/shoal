@@ -8,7 +8,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    forge::review::status::PrStatus,
+    forge::activity::status::PrStatus,
     model::{AgentStatus, Chat, Completion, Head},
 };
 use shoal_protocol::links::pr::RegistrationKind;

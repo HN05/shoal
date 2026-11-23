@@ -20,7 +20,7 @@ use crate::{
         backend::LoginHint,
     },
 };
-use shoal_forge_types::review::view::{Comment, Details, PrDetails};
+use shoal_forge_types::activity::view::{Comment, Details, PrDetails};
 use shoal_forge_types::{
     ForgeRepo,
     branches::OpenPull,

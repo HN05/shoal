@@ -13,9 +13,9 @@ use crate::{
     },
     client::views,
     forge::{
+        activity::view::{AutoMerge, Details, PrDetails, Review},
         ci::{checks::CheckLog, run_view::JobRef},
         items::{link::Selection, reaction::Reaction, reference::ItemRef},
-        review::view::{AutoMerge, Details, PrDetails, Review},
     },
     model::Relation,
     protocol::{ItemContext, RepoTarget},

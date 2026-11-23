@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use shoal_refs::CommitId;
 
 use crate::false_positives::FalsePositive;
-use crate::{forge::review::view::Details, reviews::Review};
+use crate::{forge::activity::view::Details, reviews::Review};
 use shoal_protocol::threads::{OutcomeKind, Side, Thread};
 
 /// The most a review's whole prompt holds: the built-in reviewers take it

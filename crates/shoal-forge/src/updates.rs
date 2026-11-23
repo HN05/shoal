@@ -19,11 +19,11 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    activity::status::CheckResult,
     backends::ForgeKind,
     ci::check_state::{self, CheckState},
     items::{item::Current, link::LinkKind, reference::ItemNumber},
     numbers::{IssueNumber, PullNumber},
-    review::status::CheckResult,
     updates::{SnapshotKind, SnapshotState, Update, UpdateKind},
 };
 

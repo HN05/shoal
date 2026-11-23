@@ -4,9 +4,9 @@ use serde_json::Value;
 
 use super::{Forgejo, actions};
 use crate::{
+    activity::status::{Statuses, Verdict, forgejo_reviews},
     backends::rest::{self, RestReads, fingerprints},
     items::discussion::{Views, login},
-    review::status::{Statuses, Verdict, forgejo_reviews},
     transport::{
         account::Account,
         api::{Request, TransportRequests},
@@ -16,13 +16,13 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
-    ci::check_state::CheckState,
-    items::{item::Current, link::ItemKind},
-    numbers::{IssueNumber, PullNumber},
-    review::{
+    activity::{
         status::PrStatus,
         view::{Details, Review},
     },
+    ci::check_state::CheckState,
+    items::{item::Current, link::ItemKind},
+    numbers::{IssueNumber, PullNumber},
 };
 
 mod view;

@@ -6,6 +6,7 @@ pub(crate) mod plain;
 use anyhow::{Context, Result, ensure};
 use shoal_forge_types::{
     ForgeRepo,
+    activity::view::ItemView,
     backends::ForgeKind,
     capability::Capability,
     ci::{CiAction, JobState, checks::CheckLog},
@@ -14,7 +15,6 @@ use shoal_forge_types::{
         reference::ItemRef,
     },
     numbers::{JobId, PullNumber},
-    review::view::ItemView,
 };
 use shoal_refs::CommitId;
 

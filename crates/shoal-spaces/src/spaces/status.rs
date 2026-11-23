@@ -11,7 +11,7 @@ use anyhow::Result;
 
 use crate::{
     config::permissions::Permissions,
-    forge::review::status::PrStatus,
+    forge::activity::status::PrStatus,
     model::{Completion, Space},
     repository, {approvals, store, threads, workspace_files},
 };

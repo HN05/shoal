@@ -8,7 +8,7 @@ use std::{
 
 use crate::client::output::error::{CommandError, ErrorDetail};
 use crate::{
-    forge::{ci::check_state::CheckState, review::status::ReviewState},
+    forge::{activity::status::ReviewState, ci::check_state::CheckState},
     operations::Failed,
     protocol::{ErrorCode, RemoteError},
     refusal::Reason,

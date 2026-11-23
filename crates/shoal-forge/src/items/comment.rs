@@ -16,9 +16,9 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    activity::view::Details,
     items::{comment::CommentEdit, link::ItemKind},
     numbers::CommentId,
-    review::view::Details,
 };
 
 /// A comment of an item as its view shows it.

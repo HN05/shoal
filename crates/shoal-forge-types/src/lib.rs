@@ -1,6 +1,7 @@
 //! What Shoal reads of a forge without sending it a request: repositories,
 //! issues, PRs and CI runs parsed from their URLs, and the data the
 //! requests in `shoal-forge` return, which the daemon's protocol carries.
+pub mod activity;
 pub mod backends;
 pub mod branches;
 pub mod capability;
@@ -12,7 +13,6 @@ pub mod items;
 pub mod numbers;
 pub mod raw;
 pub mod repo;
-pub mod review;
 pub mod updates;
 
 use anyhow::{Context, Result, ensure};

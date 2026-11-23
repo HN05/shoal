@@ -6,10 +6,10 @@ use serde_json::Value;
 use shoal_refs::BranchName;
 
 use crate::{
+    activity::status::{CheckResult, PrStatus, ReviewState},
     ci::{approval::WaitingRun, checks::CheckLog},
     items::{action::MergeMethod, link::ItemKind, reaction::Reaction, reference::ItemRef},
     numbers::CommentId,
-    review::status::{CheckResult, PrStatus, ReviewState},
 };
 
 /// A failed lookup leaves `details` empty, or the discussion it would have

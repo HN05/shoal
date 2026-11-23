@@ -8,7 +8,7 @@ use shoal_protocol::status::IssueStatus;
 use super::pr::{self, watched};
 use crate::{
     daemon::{forge_hosts::ForgeHosts, manager::Manager},
-    forge::{ForgeRepo, items::reference::ItemRef, review::status::PrStatus},
+    forge::{ForgeRepo, activity::status::PrStatus, items::reference::ItemRef},
 };
 
 impl Manager {

@@ -6,10 +6,10 @@ use anyhow::{Result, bail};
 use crate::{ci::approval::ApprovalRequests, transport::account::Account, updates::Snapshot};
 use shoal_forge_types::{
     ForgeRepo,
+    activity::status::{PrStatus, ReviewState},
     backends::ForgeKind,
     items::reference::ItemRef,
     numbers::PullNumber,
-    review::status::{PrStatus, ReviewState},
 };
 
 /// How the forge reads a PR's status.

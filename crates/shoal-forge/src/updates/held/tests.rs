@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::*;
 use shoal_forge_types::{
-    ci::check_state::CheckState, review::status::CheckResult, updates::UpdateKind,
+    activity::status::CheckResult, ci::check_state::CheckState, updates::UpdateKind,
 };
 
 /// An open PR at `head` with `checks` by name and state, `pending` unfinished.

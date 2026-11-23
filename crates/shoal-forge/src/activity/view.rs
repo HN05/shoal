@@ -3,17 +3,17 @@
 use anyhow::Result;
 
 use crate::{
+    activity::status::StatusRequests,
     capability::CapabilityRequests,
     items::{discussion::Views, merging::Merging, reaction::ReactionRequests},
-    review::status::StatusRequests,
     transport::account::Account,
 };
 use shoal_forge_types::{
     ForgeRepo,
+    activity::view::{Details, ItemView},
     capability::Capability,
     items::link::ItemKind,
     numbers::PullNumber,
-    review::view::{Details, ItemView},
 };
 
 /// Reading items as views.

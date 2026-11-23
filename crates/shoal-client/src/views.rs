@@ -8,13 +8,13 @@ use shoal_protocol::views::Viewed;
 use crate::{
     connection::{self, Daemon},
     forge::{
+        activity::view::ItemView,
         ci::{
             JobState,
             checks::CheckLog,
             run_view::{JobRef, RunJob, RunView},
         },
         items::link::{LinkKind, Selection},
-        review::view::ItemView,
     },
     output::view::{RunRead, Shown, ShownItem, ShownRun},
 };

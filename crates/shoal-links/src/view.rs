@@ -3,15 +3,15 @@
 use anyhow::Result;
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
-    ci::checks::CheckRequests, review::view::ViewRequests, transport::account::Account,
+    activity::view::ViewRequests, ci::checks::CheckRequests, transport::account::Account,
 };
 use shoal_forge_types::{
     ForgeRepo,
+    activity::view::ItemView,
     items::{
         link::Selection,
         reference::{ItemInput, ItemRef},
     },
-    review::view::ItemView,
 };
 use shoal_protocol::{model::SelectedItem, protocol::RepoTarget, views::Viewed};
 

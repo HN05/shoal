@@ -1,6 +1,6 @@
 use super::*;
+use shoal_forge_types::activity::view::{Comment, Review, ReviewComment};
 use shoal_forge_types::items::reaction::Reaction;
-use shoal_forge_types::review::view::{Comment, Review, ReviewComment};
 
 fn listed(content: &str, login: &str) -> Listed {
     Listed {

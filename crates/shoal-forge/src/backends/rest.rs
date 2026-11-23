@@ -7,11 +7,11 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
 
 use crate::{
+    activity::status::{StatusRecords, Verdict},
     items::{
         Items,
         item::{ItemRequests, ItemSteps},
     },
-    review::status::{StatusRecords, Verdict},
     transport::{
         account::Account,
         api::TransportRequests,
@@ -21,13 +21,13 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    activity::status::{PrState, PrStatus},
     items::{
         item::{Current, Item, ItemState},
         link::ItemKind,
         list::Search,
     },
     numbers::{IssueNumber, PullNumber},
-    review::status::{PrState, PrStatus},
 };
 
 /// What the forges reached through their REST APIs each read their own way,

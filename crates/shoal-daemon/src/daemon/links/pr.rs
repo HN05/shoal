@@ -9,10 +9,10 @@ use crate::{
     daemon::{
         forge_hosts::ForgeHosts, gates::PrGuard, manager::Manager, spaces::removal_notices::Cleanup,
     },
-    forge::{ForgeRepo, items::reference::ItemRef, review::status::PrStatus},
+    forge::{ForgeRepo, activity::status::PrStatus, items::reference::ItemRef},
     model::Workspace,
 };
-use shoal_forge::{RepoRequests, review::status::StatusRequests, transport::account::Account};
+use shoal_forge::{RepoRequests, activity::status::StatusRequests, transport::account::Account};
 #[cfg(test)]
 pub(crate) use shoal_protocol::links::pr::Action;
 pub(crate) use shoal_protocol::links::pr::{Registration, RegistrationKind};

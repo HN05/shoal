@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    forge::{ci::run_view::RunView, items::link::LinkKind, review::view::ItemView},
+    forge::{activity::view::ItemView, ci::run_view::RunView, items::link::LinkKind},
     output::outputs,
 };
 use shoal_protocol::{model::Relation, reviews::Review};

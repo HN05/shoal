@@ -133,7 +133,7 @@ pub fn misquoted(quoted: &str) -> String {
 
 /// An issue or PR as the opening lists it: its number, title, state and
 /// labels, its CI and review state for a PR, and its description.
-pub fn item(relation: &str, details: &crate::forge::review::view::Details, url: &str) -> String {
+pub fn item(relation: &str, details: &crate::forge::activity::view::Details, url: &str) -> String {
     let mut text = format!(
         "#{} {} ({relation}, {}): {url}\nLabels: {}\n",
         details.number,

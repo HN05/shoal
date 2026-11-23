@@ -5,10 +5,10 @@ use serde_json::Value;
 use crate::transport::account::Account;
 use shoal_forge_types::{
     ForgeRepo,
+    activity::view::{Details, Review, ReviewComment},
     backends::ForgeKind,
     items::link::ItemKind,
     numbers::CommentId,
-    review::view::{Details, Review, ReviewComment},
 };
 
 /// How the forge reads an item's content and discussion for a view.

@@ -5,7 +5,7 @@
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use anyhow::{Context, Result, anyhow};
-use shoal_forge::review::view::ViewRequests;
+use shoal_forge::activity::view::ViewRequests;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::time::UnixTime;
@@ -767,7 +767,7 @@ async fn pull_discussion(
     daemon: &dyn Daemon,
     workspace: &Workspace,
     url: &crate::forge::items::reference::ItemRef,
-) -> Option<crate::forge::review::view::Details> {
+) -> Option<crate::forge::activity::view::Details> {
     let (forge, account) = match daemon.forge_account(workspace).await {
         Ok(found) => found,
         Err(error) => {

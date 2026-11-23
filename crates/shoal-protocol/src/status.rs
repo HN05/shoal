@@ -46,7 +46,7 @@ pub struct SpaceStatus {
     pub attention: Attention,
     /// The current state of each watched PR.
     #[serde(default)]
-    pub prs: Vec<crate::forge::review::status::PrStatus>,
+    pub prs: Vec<crate::forge::activity::status::PrStatus>,
     /// The current state of each assigned issue.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub issue_states: Vec<IssueStatus>,

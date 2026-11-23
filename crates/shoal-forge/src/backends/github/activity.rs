@@ -7,12 +7,12 @@ use serde_json::{Value, json};
 
 use super::GitHub;
 use crate::{
+    activity::status::{StatusRecords, Statuses, github_reviews},
     backends::rest::read_pull,
     items::{
         discussion::{Views, login},
         item::ItemRequests,
     },
-    review::status::{StatusRecords, Statuses, github_reviews},
     transport::{
         account::Account,
         api::{Request, TransportRequests},
@@ -22,16 +22,16 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
+    activity::{
+        status::{PrState, PrStatus},
+        view::{Details, Review},
+    },
     ci::check_state::CheckState,
     items::{
         item::{Current, ItemState},
         link::ItemKind,
     },
     numbers::{IssueNumber, PullNumber},
-    review::{
-        status::{PrState, PrStatus},
-        view::{Details, Review},
-    },
 };
 
 mod view;

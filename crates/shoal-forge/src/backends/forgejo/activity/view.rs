@@ -16,7 +16,7 @@ use crate::{
         api::{Request, TransportRequests},
     },
 };
-use shoal_forge_types::review::view::{AutoMerge, Details, Review, ReviewComment};
+use shoal_forge_types::activity::view::{AutoMerge, Details, Review, ReviewComment};
 use shoal_forge_types::{
     ForgeRepo,
     items::link::ItemKind,

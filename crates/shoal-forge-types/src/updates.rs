@@ -28,7 +28,7 @@ pub struct Update {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub delivery: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub check: Option<crate::review::status::CheckResult>,
+    pub check: Option<crate::activity::status::CheckResult>,
     /// The child workspace whose item this is, when its parent's agent
     /// receives the update.
     #[serde(default, skip_serializing_if = "Option::is_none")]

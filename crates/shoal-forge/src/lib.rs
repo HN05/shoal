@@ -29,6 +29,7 @@ macro_rules! dispatch {
     };
 }
 
+pub mod activity;
 pub mod backends;
 pub mod branches;
 pub mod capability;
@@ -40,7 +41,6 @@ pub mod hosts;
 pub mod items;
 pub mod raw;
 pub mod repo;
-pub mod review;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod transport;

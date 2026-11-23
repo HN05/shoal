@@ -1,6 +1,6 @@
 use super::*;
+use shoal_forge_types::activity::view::{Comment, Review, ReviewComment};
 use shoal_forge_types::items::attach::Attachment;
-use shoal_forge_types::review::view::{Comment, Review, ReviewComment};
 
 #[test]
 fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies() {
