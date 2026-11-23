@@ -147,7 +147,7 @@ impl Tree {
             &*self.manager,
             None,
             name.into(),
-            ThreadKind::Question,
+            Some(ThreadKind::Question),
             Some(&parent),
             vec![],
         ))

@@ -3,7 +3,7 @@
 //! once it is reopened or resolved otherwise.
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_protocol::threads::{Outcome, Thread, ThreadKind};
+use shoal_protocol::threads::{Outcome, Sender, Thread, ThreadKind};
 use tokio::sync::MutexGuard;
 
 use crate::{
@@ -36,15 +36,15 @@ impl Reviews {
     /// Keep the finding's thread `thread` in its repository's false
     /// positives while `outcome` is one, or drop it from them. The file
     /// changes first, so an interrupted resolution leaves it with the newer
-    /// intent. None for a thread that is no finding, or whose workspace is
-    /// gone.
+    /// intent. None for a thread that is no finding of Shoal's reviewer, or
+    /// whose workspace is gone.
     pub async fn keep_false_positive(
         &self,
         daemon: &dyn Daemon,
         thread: &Thread,
         outcome: Option<&Outcome>,
     ) -> Result<Option<KeptFalsePositive<'_>>> {
-        if thread.kind != ThreadKind::Review {
+        if thread.kind != ThreadKind::Review || thread.opener != Sender::Shoal {
             return Ok(None);
         }
         let Ok(workspace) = daemon.workspace_by_id(&thread.space_id).await else {

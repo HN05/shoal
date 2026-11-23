@@ -13,9 +13,12 @@ use crate::threads::{NewPost, Resolving, ThreadKind, ThreadNumber, ThreadState};
 pub enum ThreadMethod {
     /// Open an empty thread from the caller, a space or the user, with the
     /// space `to` names, else with the caller's coordinator or the user.
+    /// Without a kind, it is a `review` thread of the caller's pending
+    /// review of the holder, else a question.
     OpenThread {
         name: String,
-        kind: ThreadKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<ThreadKind>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         to: Option<SpaceSelector>,
         /// The space the user acts as, as a session in it that Shoal did

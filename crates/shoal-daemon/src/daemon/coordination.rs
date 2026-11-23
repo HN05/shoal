@@ -456,6 +456,16 @@ impl Records for CoordinationRecords {
         self.0.require_taking_work(db, id)
     }
 
+    fn joined_review(
+        &self,
+        db: &Connection,
+        workspace: &SpaceId,
+        writer: Option<&SpaceId>,
+    ) -> Result<Option<shoal_protocol::reviews::ReviewId>> {
+        let writer = shoal_reviews::written::Writer::of(writer);
+        shoal_reviews::written::store::pending_of(db, workspace, &writer)
+    }
+
     fn place_approved_hold(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
         crate::daemon::holds::place_approved(tx, request, &self.0)
     }

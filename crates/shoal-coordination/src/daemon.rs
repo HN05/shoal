@@ -26,6 +26,7 @@ use shoal_protocol::hub::directory::HubView;
 use shoal_protocol::hub::routing::ChainedMode;
 use shoal_protocol::model::{Located, QueueEntry, Repository, Space, SpaceTarget, Workspace};
 use shoal_protocol::protocol::{Body, Operation};
+use shoal_protocol::reviews::ReviewId;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::threads::{Outcome, Thread};
@@ -394,6 +395,16 @@ pub trait Records: Send + Sync {
     /// Refuse new work, such as a thread, for the space `id` while a
     /// removal holds it or it is not ready.
     fn require_taking_work(&self, db: &Connection, id: &SpaceId) -> Result<()>;
+
+    /// The pending review of the workspace `workspace` that the space
+    /// `writer`, or the user without one, writes, which the threads it
+    /// opens towards that workspace join.
+    fn joined_review(
+        &self,
+        db: &Connection,
+        workspace: &SpaceId,
+        writer: Option<&SpaceId>,
+    ) -> Result<Option<ReviewId>>;
 
     /// Place the hold the approved `request` asks for.
     fn place_approved_hold(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()>;

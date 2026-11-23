@@ -108,7 +108,7 @@ pub(super) async fn open(
             manager,
             from,
             "Which database?".into(),
-            ThreadKind::Question,
+            Some(ThreadKind::Question),
             to.as_ref(),
             Vec::new(),
         )
@@ -616,7 +616,7 @@ async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
         &**manager,
         Some(&parent),
         "Which database?".into(),
-        ThreadKind::Question,
+        Some(ThreadKind::Question),
         Some(&away),
         Vec::new(),
     ))
@@ -637,6 +637,94 @@ async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
     assert_eq!(forwarded.holder.label(), "90 away");
     let forward = forwarded.posts.last().unwrap();
     assert_eq!(forward.forwarded_to.as_ref().unwrap().label(), "90 away");
+}
+
+/// Start `writer`'s pending review of `workspace`.
+async fn start_review(
+    manager: &Manager,
+    workspace: &Workspace,
+    writer: shoal_reviews::written::Writer,
+) -> shoal_protocol::reviews::Review {
+    let selector = SpaceSelector::id(&workspace.id);
+    (manager.reviews.start_written(manager, &selector, writer))
+        .await
+        .unwrap()
+}
+
+/// Open a thread named `name` of `kind`, or of none, from `from` towards
+/// `to`.
+async fn open_kind(
+    manager: &Manager,
+    from: Option<&Caller>,
+    to: &Workspace,
+    name: &str,
+    kind: Option<ThreadKind>,
+) -> Thread {
+    let to = SpaceSelector::id(&to.id);
+    (manager
+        .coordination
+        .open_thread(manager, from, name.into(), kind, Some(&to), Vec::new()))
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_parents_threads_towards_a_child_it_reviews_join_the_review_and_reach_nobody() {
+    let tree = tree().await;
+    let (manager, parent) = (&tree.manager, caller(&tree.parent));
+    let writer = shoal_reviews::written::Writer::Space(tree.parent.id.clone());
+    let review = start_review(manager, &tree.child, writer).await;
+    let thread = open_kind(manager, Some(&parent), &tree.child, "Unclear name", None).await;
+    assert_eq!(thread.kind, ThreadKind::Review);
+    assert_eq!(thread.finding.and_then(|f| f.review), Some(review.id));
+    assert!(thread.held);
+    send(manager, Some(&parent), &thread, "Call it retries").await;
+    assert!(alerts(manager, &tree.child).await.is_empty());
+    // Its holder has not heard of it, so it neither posts nor resolves.
+    let child = caller(&tree.child);
+    let posted = manager.coordination.post_to_thread(
+        &**manager,
+        Some(&child),
+        full(&thread),
+        post("Done"),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    assert!(posted.await.is_err());
+    // Another kind towards the child is delivered at once, outside the
+    // review, as is a thread towards a space it does not review.
+    let asked = open_kind(
+        manager,
+        Some(&parent),
+        &tree.child,
+        "Which?",
+        Some(ThreadKind::Question),
+    )
+    .await;
+    assert!(!asked.held && asked.finding.is_none());
+    send(manager, Some(&parent), &asked, "Postgres?").await;
+    assert_eq!(alerts(manager, &tree.child).await.len(), 1);
+    let elsewhere = open_kind(manager, Some(&parent), &tree.sibling, "Hi", None).await;
+    assert_eq!(elsewhere.kind, ThreadKind::Question);
+}
+
+#[tokio::test]
+async fn cancelling_a_pending_review_deletes_its_threads() {
+    let tree = tree().await;
+    let manager = &tree.manager;
+    let review = start_review(manager, &tree.child, shoal_reviews::written::Writer::User).await;
+    let thread = open_kind(manager, None, &tree.child, "Unclear name", None).await;
+    let child = SpaceSelector::id(&tree.child.id);
+    let cancelled = (manager.reviews).cancel(&**manager, Some(&child), None, None);
+    assert_eq!(cancelled.await.unwrap().id, review.id);
+    assert!(
+        manager
+            .coordination
+            .thread(&**manager, None, full(&thread))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]

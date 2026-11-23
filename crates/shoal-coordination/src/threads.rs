@@ -6,14 +6,17 @@
 //! numbers with approval requests, and keeps its number until that space
 //! goes. Posts from either side reach the other as alerts, and the spaces
 //! that linked the thread; the holder forwards it, and the opener resolves
-//! it with a typed outcome.
+//! it with a typed outcome. A thread its opener opens towards a workspace
+//! it has a pending review of joins that review and holds its posts until
+//! the review is submitted.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     code::NewCodeRef,
+    reviews::ReviewId,
     space_names::SpaceSelector,
-    threads::{Holder, Sender, Side, Thread, ThreadKind, ThreadSpace},
+    threads::{Finding, Holder, Sender, Side, Thread, ThreadKind, ThreadSpace},
 };
 
 use crate::{alerts::Recipients, notifications::Source, scope::Caller};
@@ -43,23 +46,25 @@ pub use records::thread_space;
 impl Coordination {
     /// Open a thread of `kind` named `name` from `caller`, or from the
     /// user without one, with the space `to` names, else with the caller's
-    /// coordinator or the user. An empty one notifies no one until its
-    /// first post; one about the places in code `code` gets its opening
-    /// post at once, named as the thread, which carries them.
+    /// coordinator or the user. Without a kind, it is a `review` thread of
+    /// the opener's pending review of its holder, which holds its posts,
+    /// else a question. An empty one notifies no one until its first post;
+    /// one about the places in code `code` gets its opening post at once,
+    /// named as the thread, which carries them.
     pub async fn open_thread(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
         name: String,
-        kind: ThreadKind,
+        kind: Option<ThreadKind>,
         to: Option<&SpaceSelector>,
         code: Vec<NewCodeRef>,
     ) -> Result<Thread> {
         crate::validate::message(&name).context("invalid thread name")?;
         ensure!(
-            kind != ThreadKind::Review,
-            "Shoal opens a review thread for each finding of a local review; start one with \
-             shoal review run"
+            kind != Some(ThreadKind::Review),
+            "a review thread joins a pending review: start one with shoal review start <space>, \
+             then open threads towards that space without --kind"
         );
         let (opener, space_id, holder) = match (caller, to) {
             // Numbered in the space it is opened with, on that space's
@@ -85,6 +90,7 @@ impl Coordination {
             }
         };
         let outside = self.records.clone();
+        let writer = caller.map(|caller| caller.space_id.clone());
         let opening = self.opening_post(daemon, caller, code).await?;
         let versioned = opening
             .as_ref()
@@ -95,10 +101,17 @@ impl Coordination {
                 // A space reserved for removal takes no thread its cleanup
                 // checks have not seen.
                 outside.require_taking_work(tx, &space_id)?;
+                let review = match (kind, &holder) {
+                    (None, Some(holder)) => {
+                        outside.joined_review(tx, &holder.id, writer.as_ref())?
+                    }
+                    _ => None,
+                };
+                let (kind, finding) = joining(kind, review);
                 let new = NewThread {
                     kind,
-                    finding: None,
-                    held: false,
+                    finding,
+                    held: review.is_some(),
                     name: &name,
                     opener,
                     space_id: &space_id,
@@ -155,6 +168,21 @@ impl Coordination {
             }
             Recipients::User | Recipients::Spaces(_) => None,
         })
+    }
+}
+
+/// The kind and finding of a thread of `kind`, or without one of a
+/// question, or a comment of the pending review `review` it joins.
+fn joining(kind: Option<ThreadKind>, review: Option<ReviewId>) -> (ThreadKind, Option<Finding>) {
+    match review {
+        Some(review) => (
+            ThreadKind::Review,
+            Some(Finding {
+                severity: None,
+                review: Some(review),
+            }),
+        ),
+        None => (kind.unwrap_or(ThreadKind::Question), None),
     }
 }
 

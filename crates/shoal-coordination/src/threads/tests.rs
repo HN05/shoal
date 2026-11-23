@@ -60,7 +60,7 @@ async fn open(fixture: &Fixture, from: Option<&Caller>, to: Option<&Workspace>) 
             &**fixture,
             from,
             "Which database?".into(),
-            ThreadKind::Question,
+            Some(ThreadKind::Question),
             to.as_ref(),
             Vec::new(),
         )
@@ -199,7 +199,7 @@ async fn the_user_opens_a_thread_only_with_a_space() {
             &*tree.fixture,
             None,
             "Which?".into(),
-            ThreadKind::Question,
+            Some(ThreadKind::Question),
             None,
             Vec::new(),
         )
@@ -208,7 +208,7 @@ async fn the_user_opens_a_thread_only_with_a_space() {
 }
 
 #[tokio::test]
-async fn only_shoal_opens_a_review_thread() {
+async fn a_review_thread_is_never_opened_by_its_kind() {
     let tree = tree().await;
     let to = SpaceSelector::id(&tree.child.id);
     let opened = (tree.fixture)
@@ -217,7 +217,7 @@ async fn only_shoal_opens_a_review_thread() {
             &*tree.fixture,
             None,
             "Unchecked length".into(),
-            ThreadKind::Review,
+            Some(ThreadKind::Review),
             Some(&to),
             Vec::new(),
         )

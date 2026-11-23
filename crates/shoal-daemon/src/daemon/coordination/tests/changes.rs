@@ -266,7 +266,7 @@ impl Fixture {
             &*self.manager,
             Some(&self.agent),
             name.into(),
-            ThreadKind::Request,
+            Some(ThreadKind::Request),
             None,
             Vec::new(),
         );
@@ -399,7 +399,7 @@ async fn a_space_that_forwards_a_thread_works_for_it_no_longer() {
         &**manager,
         Some(&fixture.agent),
         "Lex it".into(),
-        ThreadKind::Request,
+        Some(ThreadKind::Request),
         Some(&to),
         Vec::new(),
     );
@@ -433,7 +433,7 @@ async fn a_thread_shows_its_changes_and_whether_its_holder_works_for_it() {
         &**manager,
         None,
         "Fix the parser".into(),
-        ThreadKind::Request,
+        Some(ThreadKind::Request),
         Some(&to),
         Vec::new(),
     );

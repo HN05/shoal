@@ -22,7 +22,7 @@ fn a_thread_opened_as_a_space_targets_none_and_one_opened_with_a_space_acts_ther
     let open = |from: Option<SpaceSelector>, to: Option<SpaceSelector>| {
         Operation::Thread(ThreadMethod::OpenThread {
             name: "Which base?".to_owned(),
-            kind: ThreadKind::Question,
+            kind: Some(ThreadKind::Question),
             to,
             from,
             code: Vec::new(),

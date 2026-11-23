@@ -658,7 +658,7 @@ async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status()
             &*manager,
             Some(&asking),
             "Database".into(),
-            shoal_protocol::threads::ThreadKind::Question,
+            Some(shoal_protocol::threads::ThreadKind::Question),
             None,
             Vec::new(),
         )

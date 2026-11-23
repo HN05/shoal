@@ -140,7 +140,7 @@ async fn a_thread_opened_about_code_posts_it_at_once_from_a_buffer() {
             &**manager,
             Some(&parent),
             "Implement lex".into(),
-            ThreadKind::Request,
+            Some(ThreadKind::Request),
             Some(&to),
             vec![unsaved],
         )
@@ -369,7 +369,7 @@ async fn a_thread_whose_opening_post_is_refused_is_never_opened() {
             &**manager,
             Some(&child),
             "Too much".into(),
-            ThreadKind::Request,
+            Some(ThreadKind::Request),
             None,
             code,
         )

@@ -97,8 +97,8 @@ fn finding_code(db: &Connection, finding: &FindingThread<'_>) -> Result<NewCode>
 }
 
 /// Reopen the thread `number` with a post from Shoal saying `why`, when it
-/// is a `review` thread the workspace `workspace` holds resolved `fixed`;
-/// the thread's record ID, none for any other.
+/// is a `review` thread Shoal opened that the workspace `workspace` holds
+/// resolved `fixed`; the thread's record ID, none for any other.
 pub fn reopen(
     tx: &Transaction<'_>,
     workspace: &SpaceId,
@@ -114,7 +114,8 @@ pub fn reopen(
         .holder
         .space()
         .is_some_and(|holder| holder.id == *workspace);
-    if thread.kind != ThreadKind::Review || !fixed || !held {
+    let shoals = thread.kind == ThreadKind::Review && thread.opener == Sender::Shoal;
+    if !shoals || !fixed || !held {
         return Ok(None);
     }
     records::set_resolution(tx, thread.id, None)?;

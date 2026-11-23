@@ -406,7 +406,7 @@ pub(crate) async fn ask(
         manager,
         Some(&caller),
         text.into(),
-        ThreadKind::Question,
+        Some(ThreadKind::Question),
         None,
         Vec::new(),
     ))

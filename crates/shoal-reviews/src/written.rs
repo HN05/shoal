@@ -77,18 +77,6 @@ impl Reviews {
         Ok(reviews)
     }
 
-    /// `writer`'s pending review of the workspace `workspace`, which the
-    /// threads `writer` opens towards that workspace join, in their
-    /// transaction.
-    pub fn joined(
-        &self,
-        db: &Connection,
-        workspace: &SpaceId,
-        writer: &Writer,
-    ) -> Result<Option<ReviewId>> {
-        store::pending_of(db, workspace, writer)
-    }
-
     /// `writer`'s pending review of the workspace `selector` names.
     pub(crate) async fn pending_of(
         &self,

@@ -739,6 +739,16 @@ impl Records for StandIn {
         shoal_store::require_ready_space(db, id)
     }
 
+    /// No review is pending: the daemon's tests cover joining one.
+    fn joined_review(
+        &self,
+        _: &Connection,
+        _: &SpaceId,
+        _: Option<&SpaceId>,
+    ) -> Result<Option<shoal_protocol::reviews::ReviewId>> {
+        Ok(None)
+    }
+
     fn place_approved_hold(&self, _: &Transaction<'_>, _: &ApprovalRequest) -> Result<()> {
         Ok(())
     }

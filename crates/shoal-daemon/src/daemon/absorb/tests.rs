@@ -215,7 +215,7 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
             &*manager,
             Some(&caller),
             "Which database?".into(),
-            ThreadKind::Question,
+            Some(ThreadKind::Question),
             None,
             Vec::new(),
         )

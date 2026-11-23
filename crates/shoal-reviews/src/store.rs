@@ -488,8 +488,8 @@ fn latest_id(db: &Connection, workspace_id: &SpaceId) -> Result<Option<ReviewId>
     )?)
 }
 
-/// The workspace's reviews before `id` that returned findings, oldest
-/// first: the history a new review receives.
+/// The workspace's reviews by Shoal's reviewer before `id` that returned
+/// findings, oldest first: the history a new review receives.
 pub fn earlier(
     db: &Connection,
     records: &dyn Records,
@@ -497,7 +497,10 @@ pub fn earlier(
     id: ReviewId,
 ) -> Result<Vec<Review>> {
     let ids: Vec<ReviewId> = db
-        .prepare("SELECT id FROM reviews WHERE workspace_id=?1 AND id<?2 AND state=?3 ORDER BY id")?
+        .prepare(
+            "SELECT id FROM reviews WHERE workspace_id=?1 AND id<?2 AND state=?3
+                AND opener='shoal' ORDER BY id",
+        )?
         .query_map(params![workspace_id, id, ReviewState::Finished], |row| {
             row.get(0)
         })?

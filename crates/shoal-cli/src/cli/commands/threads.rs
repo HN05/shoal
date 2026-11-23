@@ -58,10 +58,11 @@ async fn acting_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
 /// Open the thread `name` of `kind` with the space `space` names, else with
 /// the caller's coordinator or the user; from the user's terminal with the
 /// current or a picked space. With `code`, its opening post points at it.
+/// Without a kind, it joins the caller's pending review of that space.
 pub(super) async fn open(
     ctx: &Context,
     name: String,
-    kind: ThreadKind,
+    kind: Option<ThreadKind>,
     space: Option<SpaceSelector>,
     code: Vec<CodeArg>,
 ) -> Result<i32> {
@@ -79,11 +80,16 @@ pub(super) async fn open(
         .await?;
     let number = thread.number;
     let holder = thread.party(Side::Holder);
-    let message = match thread.posts.is_empty() {
-        true => format!(
+    let review = (thread.finding.and_then(|finding| finding.review)).filter(|_| thread.held);
+    let message = match (review, thread.posts.is_empty()) {
+        (Some(review), _) => format!(
+            "Thread {number} is a comment of your pending review {review} of {holder}, which it \
+             reaches when you submit it with shoal review submit."
+        ),
+        (None, true) => format!(
             "Thread {number} opened with {holder}; post in it with shoal send {number} \"<text>\"."
         ),
-        false => format!("Thread {number} opened with {holder}, about its code."),
+        (None, false) => format!("Thread {number} opened with {holder}, about its code."),
     };
     ctx.emit(&message, &thread)?;
     Ok(0)
@@ -203,7 +209,7 @@ fn linked_thread(args: &[String], linked: bool) -> Result<ItemNumber> {
 /// What opening a thread of `kind` sends for the space a picker picks as
 /// its holder; its name and opener decide nothing of which spaces it
 /// reaches.
-pub(super) fn opening(kind: ThreadKind) -> Acting {
+pub(super) fn opening(kind: Option<ThreadKind>) -> Acting {
     Acting::request(move |to| threads::open(String::new(), kind, Some(to), None, Vec::new()))
 }
 

@@ -74,7 +74,7 @@ async fn ask(manager: &shoal_daemon::test_daemon::Manager, id: &SpaceId) -> Thre
         manager,
         Some(&caller),
         name,
-        ThreadKind::Question,
+        Some(ThreadKind::Question),
         None,
         Vec::new(),
     ))

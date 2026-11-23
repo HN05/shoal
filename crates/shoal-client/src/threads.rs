@@ -14,10 +14,11 @@ use crate::connection::{Daemon, Prepared, await_reply, request};
 
 /// Open a thread `name` of `kind` with the space `to`, else with the
 /// caller's coordinator or the user, acting as the space `from`: empty, or
-/// with an opening post pointing at the places in code `code`.
+/// with an opening post pointing at the places in code `code`. Without a
+/// kind it joins the caller's pending review of `to`, else is a question.
 pub fn open(
     name: String,
-    kind: ThreadKind,
+    kind: Option<ThreadKind>,
     to: Option<SpaceSelector>,
     from: Option<SpaceSelector>,
     code: Vec<NewCodeRef>,

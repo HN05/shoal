@@ -22,9 +22,11 @@ pub enum ThreadCommand {
     Open {
         /// A free-text name, such as "Which database should the cache use?"
         name: String,
-        /// What the thread is for, which decides how it can end.
-        #[arg(long, default_value = "question")]
-        kind: ThreadKind,
+        /// What the thread is for, which decides how it can end; without
+        /// it, a comment of your pending review of the space, else a
+        /// question.
+        #[arg(long)]
+        kind: Option<ThreadKind>,
         /// Space, a workspace or chat, that holds the thread.
         #[arg(short = 's', long)]
         space: Option<SpaceSelector>,
