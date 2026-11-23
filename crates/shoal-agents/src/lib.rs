@@ -94,6 +94,9 @@ pub struct Agents {
     /// Held through a stop before a shutdown; true once one finished, until
     /// a system shutdown is cancelled, so later ones leave the work alone.
     shutdown_stopped: tokio::sync::Mutex<bool>,
+    /// Held while a pause stops this machine's work and hands its spaces
+    /// over, which an unpause must not cut short.
+    pause_stop: tokio::sync::Mutex<()>,
     /// The busy CPU the overload monitor reads for job admission.
     busy_cpu: busy_cpu::BusyCpu,
     /// What the agent queue keeps in memory.
@@ -147,6 +150,7 @@ impl Agents {
             session_hosts,
             place_ownership: Default::default(),
             shutdown_stopped: Default::default(),
+            pause_stop: Default::default(),
             busy_cpu: Default::default(),
             agent_queue: Default::default(),
             presences: Default::default(),

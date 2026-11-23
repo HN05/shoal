@@ -56,3 +56,27 @@ async fn a_pause_hands_over_the_spaces_with_work_and_ends_ci_jobs() {
     let pause = JobStop::Pause.to_string();
     assert_eq!(*daemon.job_stops.lock().unwrap(), [pause]);
 }
+
+#[tokio::test]
+async fn an_unpause_is_refused_until_the_pause_s_hand_over_ends() {
+    let fixture = std::sync::Arc::new(Fixture::new().await);
+    let sending = fixture.daemon.handing_gate.write().await;
+    fixture.agents.pause().await.unwrap();
+    let stopping = tokio::spawn({
+        let fixture = fixture.clone();
+        async move { fixture.agents.stop_for_pause(&*fixture.daemon).await }
+    });
+    fixture.daemon.handing_started.notified().await;
+    assert!(fixture.agents.unpause(&*fixture.daemon).await.is_err());
+    assert!(fixture.agents.agent_queue.holds_admission());
+    drop(sending);
+    stopping.await.unwrap();
+    assert!(
+        fixture
+            .agents
+            .unpause(&*fixture.daemon)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}

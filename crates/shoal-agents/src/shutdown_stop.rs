@@ -118,6 +118,15 @@ impl Shutdown {
         }
     }
 
+    /// When the work that stays here continues, after how it does: once a
+    /// pause ends, or as soon as it can otherwise.
+    fn resumes_when(self) -> &'static str {
+        match self {
+            Self::Pause => " once shoal unpause admits work again",
+            Self::System | Self::Daemon | Self::Away | Self::Sleep => "",
+        }
+    }
+
     /// Why the machine hands its spaces over.
     fn leaving(self) -> Leaving {
         match self {
@@ -368,9 +377,7 @@ impl Agents {
             return Some(format!("Stopped work in {count} {spaces} {moment}"));
         }
         let mut continues = continuation(&self.awaiting_restore(&here).await);
-        if matches!(shutdown, Shutdown::Pause) {
-            continues.push_str(" once shoal unpause admits work again");
-        }
+        continues.push_str(shutdown.resumes_when());
         Some(format!(
             "Stopped work in {count} {spaces} {moment}; {continues}"
         ))

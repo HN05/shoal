@@ -14,6 +14,7 @@ use shoal_protocol::time::UnixTime;
 use crate::{
     Agents,
     daemon::Daemon,
+    refusal::{Reason, Refusal},
     shutdown_stop::{HandoverWindow, Shutdown},
 };
 
@@ -49,14 +50,24 @@ impl Agents {
     /// Stop every agent here as the machine is paused, handing the spaces
     /// with something to do over, and end the CI jobs to rerun.
     pub async fn stop_for_pause(&self, daemon: &dyn Daemon) {
+        let _stopping = self.pause_stop.lock().await;
         let window = HandoverWindow::Own(PAUSE_HANDOVER);
         (self.stop_for_shutdown_of(daemon, Shutdown::Pause, window)).await;
     }
 
     /// Unpause this machine: admit work again, which restores the agents
     /// the pause stopped here, and retire the copies of the spaces it
-    /// handed over. Returns since when it was paused, none when it was not.
+    /// handed over. Returns since when it was paused, none when it was not;
+    /// refused while the pause still stops work and hands spaces over,
+    /// since a space it sends may then run here as well.
     pub async fn unpause(&self, daemon: &dyn Daemon) -> Result<Option<UnixTime>> {
+        let Ok(_stopped) = self.pause_stop.try_lock() else {
+            return Err(Refusal::new(
+                Reason::NotReady,
+                "this machine's pause still stops its work and hands its spaces over; shoal unpause works once the handed_over alert says where they went",
+            )
+            .into());
+        };
         let was = self.store.write(clear_pause).await?;
         self.agent_queue.pause(None);
         if was.is_some() {

@@ -783,7 +783,9 @@ the forge while paused.
 
 `shoal unpause` admits work again: the queue restores the agents the pause
 stopped here, and the machine retires its copies of the spaces that went,
-as after any takeover. `shoal status` outside a space says since when the
+as after any takeover; while the pause still stops work and hands spaces
+over, until its alert arrives, an unpause is refused, since a space it
+sends would then run on two machines. `shoal status` outside a space says since when the
 machine is paused, and `shoal hub ls` names each paused machine with since
 when. `--machine` on either command pauses or unpauses another machine of
 the hub through it. Only the user's own terminal pauses or unpauses a
