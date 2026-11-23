@@ -549,7 +549,7 @@ impl Reviews {
     }
 
     /// Queue review `id`, whose run was stopped while it ran, again: to wait
-    /// for healthy readings unless the machine's sleep stopped it.
+    /// for healthy readings unless the machine's sleep or pause stopped it.
     async fn requeue_stopped(&self, id: ReviewId) -> Result<Pass> {
         let slept = self.slept.lock().unwrap().remove(&id);
         let requeued = (self.store)

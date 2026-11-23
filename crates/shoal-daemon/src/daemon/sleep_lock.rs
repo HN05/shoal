@@ -87,7 +87,7 @@ async fn follow(manager: &Arc<Manager>, mut events: impl PowerEvents) {
 async fn prepare_for_sleep(manager: &Arc<Manager>, deadline: Instant) {
     log!("sleep lock: the machine goes to sleep");
     manager.agents.agent_queue().sleep(true);
-    manager.reviews.stop_for_sleep().await;
+    manager.reviews.stop_to_run_later().await;
     let jobs = end_jobs(manager, deadline);
     let announced = async {
         (manager.agents)

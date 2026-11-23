@@ -324,7 +324,7 @@ async fn a_review_the_machines_sleep_stops_runs_again() {
     let mut admissions = fixture.daemon.admissions.subscribe();
     let queued = fixture.queue(None).await.unwrap();
     fixture.until(queued.id, ReviewState::Running).await;
-    fixture.reviews.stop_for_sleep().await;
+    fixture.reviews.stop_to_run_later().await;
     let asked = admissions.wait_for(|admissions| admissions.len() == 2);
     assert_eq!(*asked.await.unwrap(), [false, false]);
     // Once asked for again, it stays running until cancelled.

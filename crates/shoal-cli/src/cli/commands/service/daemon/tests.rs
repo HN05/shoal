@@ -11,6 +11,7 @@ fn status_names_failing_cleanup() {
         access_stalls: Vec::new(),
         cleanup_error: Some("Automatic cleanup failed 2 consecutive passes".into()),
         hub: None,
+        paused: None,
     };
     let message = status_message(&status);
     assert_eq!(
@@ -43,6 +44,7 @@ fn status_names_why_the_link_to_the_hub_is_down() {
             problem: Some("the hub revoked this machine's credential".into()),
             availability: None,
         }),
+        paused: None,
     };
     let message = status_message(&status);
     let line = message.lines().nth(1).unwrap_or_default();

@@ -51,3 +51,23 @@ async fn running_web_demos_list_their_url() {
         ]
     );
 }
+
+#[tokio::test]
+async fn stopping_every_demo_stops_those_of_every_workspace() {
+    let fixture = Fixture::new().await;
+    let (first, second) = (
+        fixture.workspace("first").await,
+        fixture.workspace("second").await,
+    );
+    let site = fixture.demo(&first.id, launch("site", "site")).await;
+    let tui = fixture.demo(&second.id, launch("tui", "tui")).await;
+    (fixture.demos)
+        .stop_all(&*fixture.daemon, "paused".into())
+        .await
+        .unwrap();
+    let mut asked = fixture.daemon.asked_to_stop.lock().unwrap().clone();
+    asked.sort();
+    let mut running = vec![site.execution_id, tui.execution_id];
+    running.sort();
+    assert_eq!(asked, running);
+}

@@ -93,6 +93,7 @@ async fn status(server: &Server) -> Result<DaemonStatus> {
         access_stalls: server.manager.file_access.stalls(),
         cleanup_error: server.manager.spaces.cleanup_problem(),
         hub: server.manager.hub.hub_role(&*server.manager).await?,
+        paused: server.manager.agents.paused_since(),
     })
 }
 

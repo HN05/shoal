@@ -147,6 +147,7 @@ impl Scoped for Operation {
             Operation::Trigger(method) => method.scope(manager, caller).await,
             Operation::Hub(method) => method.scope(manager, caller).await,
             Operation::App(method) => method.scope(manager, caller).await,
+            Operation::Machine(method) => method.scope(manager, caller).await,
         }
     }
 

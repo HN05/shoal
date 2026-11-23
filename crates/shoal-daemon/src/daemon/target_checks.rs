@@ -54,6 +54,7 @@ impl Checked for Operation {
             Self::Trigger(method) => method.target_check(),
             Self::Hub(method) => method.target_check(),
             Self::App(method) => method.target_check(),
+            Self::Machine(method) => method.target_check(),
         }
     }
 }

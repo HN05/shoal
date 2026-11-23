@@ -22,6 +22,7 @@ mod holds;
 mod hub;
 mod items;
 mod launches;
+mod machines;
 mod merging;
 mod operations;
 mod permissions;
@@ -125,5 +126,6 @@ pub(super) async fn handle(
         Operation::Trigger(method) => triggers::handle(&server.manager, method, caller).await,
         Operation::Hub(method) => hub::handle(&server.manager, method, caller).await,
         Operation::App(method) => apps::handle(&server.manager, method, scope).await,
+        Operation::Machine(method) => machines::handle(&server.manager, method).await,
     }
 }

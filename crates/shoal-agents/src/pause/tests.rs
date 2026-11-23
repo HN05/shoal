@@ -12,10 +12,11 @@ use crate::{stand_in::Fixture, state::AgentState};
 async fn a_pause_holds_admission_through_a_restart_until_unpaused() {
     let fixture = Fixture::new().await;
     let (agents, daemon) = (&fixture.agents, &*fixture.daemon);
-    let (since, _) = agents.pause(daemon).await.unwrap();
+    let since = agents.pause().await.unwrap();
+    agents.stop_for_pause(daemon).await;
     assert!(agents.agent_queue.holds_admission());
     // Pausing again keeps since when it is paused.
-    assert_eq!(agents.pause(daemon).await.unwrap().0, since);
+    assert_eq!(agents.pause().await.unwrap(), since);
     // A new daemon finds the pause in the store.
     agents.agent_queue.pause(None);
     agents.keep_pause().await.unwrap();
@@ -45,7 +46,7 @@ async fn a_pause_hands_over_the_spaces_with_work_and_ends_ci_jobs() {
             .await
             .unwrap();
     }
-    fixture.agents.pause(&*fixture.daemon).await.unwrap();
+    fixture.agents.stop_for_pause(&*fixture.daemon).await;
     let daemon = &fixture.daemon;
     assert_eq!(
         *daemon.handings.lock().unwrap(),

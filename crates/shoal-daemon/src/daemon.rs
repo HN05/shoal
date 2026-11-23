@@ -55,6 +55,7 @@ mod logind;
 mod logs;
 pub mod manager;
 pub(crate) mod operations;
+mod pause;
 mod relayed;
 mod releases;
 mod repositories;
@@ -384,6 +385,9 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     startup.step("learning forge hosts", hosts).await?;
     let audit = manager.spaces.audit_worktrees(&*manager);
     startup.step("auditing worktrees", audit).await?;
+    // Before requests and the agent queue, which admit nothing while paused.
+    let pause = manager.agents.keep_pause();
+    startup.step("reading this machine's pause", pause).await?;
     // Before requests, so no surviving start worker finds its readings held.
     let recovery_starts = manager.agents.return_recovery_starts();
     (startup.step(

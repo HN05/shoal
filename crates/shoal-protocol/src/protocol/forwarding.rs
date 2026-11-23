@@ -211,6 +211,7 @@ impl Operation {
             Self::Trigger(method) => method.forwarding(),
             Self::Hub(method) => method.forwarding(),
             Self::App(method) => method.forwarding(),
+            Self::Machine(method) => method.forwarding(),
         }
     }
 
@@ -258,6 +259,7 @@ impl Operation {
             Self::Trigger(method) => method.target(),
             Self::Hub(method) => method.target(),
             Self::App(method) => method.target(),
+            Self::Machine(method) => method.target(),
         }
     }
 

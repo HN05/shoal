@@ -64,8 +64,8 @@ pub struct Reviews {
     queued: Notify,
     /// Stops each review that has started to run.
     cancels: Mutex<HashMap<ReviewId, Arc<watch::Sender<bool>>>>,
-    /// The running reviews the machine's sleep stopped, until each is
-    /// queued again.
+    /// The running reviews the machine's sleep or pause stopped, until
+    /// each is queued again.
     slept: Mutex<std::collections::HashSet<ReviewId>>,
     /// The repository and run of each review whose checkout, a worktree of
     /// the repository, may exist, which outlives the review's records when

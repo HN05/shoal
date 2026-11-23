@@ -49,6 +49,7 @@ impl Fixture {
                 store,
                 spaces: Mutex::default(),
                 completing: Mutex::default(),
+                asked_to_stop: Mutex::default(),
                 ports: Mutex::default(),
             }),
             paths,
@@ -119,6 +120,8 @@ pub(crate) struct StandIn {
     completing: Mutex<HashSet<ExecutionId>>,
     /// The ports reserved, by name.
     ports: Mutex<BTreeMap<String, u16>>,
+    /// The executions asked to stop, whose wrappers all listen.
+    pub(crate) asked_to_stop: Mutex<Vec<ExecutionId>>,
 }
 
 impl StandIn {
@@ -185,7 +188,8 @@ impl Executions for StandIn {
         executions: Vec<ExecutionId>,
         _: String,
     ) -> BoxFuture<'_, Vec<ExecutionId>> {
-        Box::pin(async { executions })
+        self.asked_to_stop.lock().unwrap().extend(executions);
+        Box::pin(async { Vec::new() })
     }
 
     fn stop_disconnected<'a>(&'a self, _: &'a Execution, _: Proof) -> BoxFuture<'a, Result<()>> {

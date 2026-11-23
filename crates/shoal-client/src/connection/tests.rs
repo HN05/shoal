@@ -224,6 +224,7 @@ async fn typed_requests_extract_payloads_and_acknowledgements() {
         access_stalls: Vec::new(),
         cleanup_error: None,
         hub: None,
+        paused: None,
     };
     let status: DaemonStatus = reply(Response::new(1, Body::Status(status))).await.unwrap();
     assert_eq!(status.pid, 42);

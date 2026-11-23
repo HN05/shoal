@@ -107,6 +107,25 @@ impl Demos {
             .map(|demo| demo.execution_id)
             .collect();
         let reason = "stopped by shoal demo stop".to_owned();
+        self.stop_executions(daemon, executions, reason).await
+    }
+
+    /// Ask every demo of this machine to stop for `reason`, as
+    /// [`Self::stop`] stops a space's.
+    pub async fn stop_all(&self, daemon: &dyn Daemon, reason: String) -> Result<()> {
+        let demos = self.list(daemon, None).await?;
+        let executions = demos.into_iter().map(|demo| demo.execution_id).collect();
+        self.stop_executions(daemon, executions, reason).await
+    }
+
+    /// Ask the demos `executions` run to stop for `reason`, stopping the
+    /// verified processes of those whose wrappers are away.
+    async fn stop_executions(
+        &self,
+        daemon: &dyn Daemon,
+        executions: Vec<ExecutionId>,
+        reason: String,
+    ) -> Result<()> {
         let disconnected = daemon.ask_to_stop(executions, reason).await;
         for id in disconnected {
             if let Some(execution) = daemon.execution(&id).await? {

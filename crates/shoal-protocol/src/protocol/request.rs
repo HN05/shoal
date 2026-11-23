@@ -3,10 +3,10 @@ use super::{
     AgentMethod, AlertMethod, AppMethod, ApprovalMethod, AssignmentMethod, BranchMethod,
     ChangeMethod, ChatMethod, CiMethod, ConfigMethod, ContainerMethod, ConversionMethod,
     DaemonMethod, DemoMethod, DiffMethod, ExecutionMethod, ExitRequest, FileMethod, HoldMethod,
-    HubMethod, ItemMethod, LaunchMethod, MergingMethod, OperationMethod, PermissionMethod,
-    PlaceMethod, PortMethod, QueueMethod, Reattach, RecoveryMethod, RemovalMethod,
-    RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod, SpaceMethod,
-    SubscriptionMethod, ThreadMethod, TriggerMethod, VERSION, WorkspaceMethod,
+    HubMethod, ItemMethod, LaunchMethod, MachineMethod, MergingMethod, OperationMethod,
+    PermissionMethod, PlaceMethod, PortMethod, QueueMethod, Reattach, RecoveryMethod,
+    RemovalMethod, RepositoryMethod, ResourceMethod, ReviewMethod, SecretMethod, SimulatorMethod,
+    SpaceMethod, SubscriptionMethod, ThreadMethod, TriggerMethod, VERSION, WorkspaceMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -98,6 +98,7 @@ pub enum Operation {
     Trigger(TriggerMethod),
     Hub(HubMethod),
     App(AppMethod),
+    Machine(MachineMethod),
 }
 
 impl Method {
@@ -197,7 +198,8 @@ impl Operation {
             | Self::Resource(_)
             | Self::Simulator(_)
             | Self::Container(_)
-            | Self::Trigger(_) => Lifetime::Reply,
+            | Self::Trigger(_)
+            | Self::Machine(_) => Lifetime::Reply,
         }
     }
 }

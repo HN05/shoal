@@ -19,6 +19,9 @@ pub struct DaemonStatus {
     /// joined one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hub: Option<crate::hub::HubRole>,
+    /// Since when the user paused this machine, none while it is not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paused: Option<crate::time::UnixTime>,
 }
 
 /// The cause besides a slow system that file access timeouts name: a privacy

@@ -193,13 +193,13 @@ impl Reviews {
         }
     }
 
-    /// Stop the running reviews, which the machine's sleep would cut off,
-    /// queueing each again to run once the agent queue admits it after the
-    /// machine wakes.
-    pub async fn stop_for_sleep(&self) {
+    /// Stop the running reviews, which the machine's sleep would cut off
+    /// or its pause holds back, queueing each again to run once the agent
+    /// queue admits it after the machine wakes or is unpaused.
+    pub async fn stop_to_run_later(&self) {
         let running = match self.store.read(|db| store::running(db)).await {
             Ok(running) => running,
-            Err(error) => return log!("reviews to stop for sleep: {error:#}"),
+            Err(error) => return log!("reviews to stop and run later: {error:#}"),
         };
         let cancels = self.cancels.lock().unwrap();
         for id in running {

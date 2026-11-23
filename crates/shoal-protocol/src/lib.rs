@@ -33,6 +33,7 @@ pub mod list_status;
 pub mod log;
 pub mod model;
 pub mod paths;
+pub mod pause;
 pub mod priority;
 pub mod processes;
 pub mod profile;

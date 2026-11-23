@@ -35,16 +35,23 @@ impl Agents {
         self.agent_queue.paused_since()
     }
 
-    /// Pause this machine, keeping since when an earlier pause stands: hold
-    /// admission, then stop every agent here, handing the spaces with
-    /// something to do over, and end the CI jobs to rerun. Returns since
-    /// when it is paused and the spaces stopped.
-    pub async fn pause(&self, daemon: &dyn Daemon) -> Result<(UnixTime, StoppedSpaces)> {
-        let since = self.store.write(|tx| record_pause(tx, UnixTime::now())).await?;
+    /// Pause this machine, so it admits nothing new, keeping since when an
+    /// earlier pause stands; since when it is paused.
+    pub async fn pause(&self) -> Result<UnixTime> {
+        let since = self
+            .store
+            .write(|tx| record_pause(tx, UnixTime::now()))
+            .await?;
         self.agent_queue.pause(Some(since));
+        Ok(since)
+    }
+
+    /// Stop every agent here as the machine is paused, handing the spaces
+    /// with something to do over, and end the CI jobs to rerun; the spaces
+    /// stopped.
+    pub async fn stop_for_pause(&self, daemon: &dyn Daemon) -> StoppedSpaces {
         let window = HandoverWindow::Own(PAUSE_HANDOVER);
-        let stopped = (self.stop_for_shutdown_of(daemon, Shutdown::Pause, window)).await;
-        Ok((since, stopped))
+        (self.stop_for_shutdown_of(daemon, Shutdown::Pause, window)).await
     }
 
     /// Unpause this machine: admit work again, which restores the agents

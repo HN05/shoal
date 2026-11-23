@@ -240,6 +240,8 @@ response_bodies! {
     HubUpdate(crate::hub::HubUpdate),
     HubOverview(crate::hub::Overview),
     HubRevoked(crate::hub::Revoked),
+    MachinePaused(crate::pause::Paused),
+    MachineUnpaused(crate::pause::Unpaused),
     PlacementAsked(crate::hub::placement::Asked),
     Queued(crate::hub::routing::Queued),
     AppConfig(Option<toml::Table>),
