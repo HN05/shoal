@@ -358,6 +358,10 @@ pub struct Start<'a> {
     /// Variables the command needs from this process, since the place may
     /// start in an environment of its own.
     pub env: &'a [(&'a str, String)],
+    /// The host of the place this process runs in, where the new session
+    /// runs nested, attached in that place, keeping its variables; `None`
+    /// for a session or place of its own.
+    pub nested_in: Option<HostName>,
 }
 
 /// A demo a host starts in a new background place, as [`Start`] describes

@@ -44,6 +44,7 @@ pub async fn open_place(
         split: beside.split,
         argv: &worker,
         env: &plan_env(paths, plan, directive.as_ref())?,
+        nested_in: None,
     };
     let place = places.open(&start).await?;
     if let Some(directive) = directive {

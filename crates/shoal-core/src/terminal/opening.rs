@@ -123,6 +123,7 @@ pub async fn open_in_background(
         split: beside.split,
         argv,
         env,
+        nested_in: None,
     };
     places.open(&start).await.map(drop)
 }

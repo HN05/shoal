@@ -119,3 +119,45 @@ fn a_hosts_nested_zmx_overrides_the_top_level_one() {
     assert_eq!(nests(&tmux_only, HostName::Tmux), Some(HostName::Zmx));
     assert_eq!(nests(&tmux_only, HostName::Herdr), None);
 }
+
+#[test]
+fn only_a_place_its_host_serves_nests_agent_sessions() {
+    let resolved = |global: &str| {
+        let config = crate::config::Config::from_toml(global).unwrap();
+        config
+            .resolve(&crate::config::repo::ConfigLayers::default())
+            .unwrap()
+    };
+    let session_hosts = |settings, name| -> Vec<HostName> {
+        Configured::named(settings, name)
+            .session_hosts()
+            .map(Host::name)
+            .collect()
+    };
+    let nested = resolved("[terminal]\nnested_zmx = true\n[terminal.tmux]\nenabled = true\n");
+    let in_place = resolved("[terminal.tmux]\nenabled = true\n");
+    // SAFETY: nextest runs each test in a process of its own, whose other
+    // threads leave the environment alone.
+    unsafe {
+        forget_inherited_places();
+        std::env::set_var("TMUX", "/tmp/tmux-1000/default,4242,0");
+        std::env::set_var("TMUX_PANE", "%3");
+    }
+    assert_eq!(
+        session_hosts(&nested, HostName::Tmux),
+        [HostName::Tmux, HostName::Zmx]
+    );
+    assert_eq!(session_hosts(&in_place, HostName::Tmux), [HostName::Tmux]);
+    // A default host opens places of its own for a terminal it does not
+    // serve, which the option leaves alone.
+    assert_eq!(session_hosts(&nested, HostName::Herdr), [HostName::Herdr]);
+}
+
+#[test]
+fn a_nested_session_keeps_only_the_variables_of_the_place_it_nests_in() {
+    let dropped = nested_session_variables(HostName::Zmx, HostName::Tmux);
+    assert!(!dropped.contains(&"TMUX_PANE"));
+    assert!(dropped.contains(&"HERDR_PANE_ID"));
+    assert!(dropped.contains(&crate::env::SCOPE_TOKEN));
+    assert!(dropped.contains(&crate::env::NESTED_SESSION));
+}

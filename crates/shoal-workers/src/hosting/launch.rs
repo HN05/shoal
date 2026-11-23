@@ -16,9 +16,10 @@ use crate::{
     config::Effective,
     env,
     model::{Part, Space},
+    sessions::HostName,
     start_plan::{PlacePlan, open_place},
     terminal::{
-        Attaches, Configured, Owner, Placement, Places, Start, chat_session_name, current,
+        Attaches, Configured, Host, Owner, Placement, Places, Start, chat_session_name, current,
         left_open, place_env, report_detach,
     },
 };
@@ -70,8 +71,13 @@ pub async fn start_place(
 /// Where a tracked agent launched from this terminal runs apart from this
 /// process.
 enum AgentRun {
-    /// In a new session this terminal attaches to.
-    Session(&'static dyn Attaches),
+    /// In a new session of `host` this terminal attaches to, nested in a
+    /// place of `nested_in` that this process runs in, if any.
+    Session {
+        host: &'static dyn Host,
+        attaches: &'static dyn Attaches,
+        nested_in: Option<HostName>,
+    },
     /// In a new place of a host that does not serve this terminal, shown
     /// here.
     Place(&'static dyn Places),
@@ -79,12 +85,27 @@ enum AgentRun {
 
 impl AgentRun {
     /// Where `host` runs the agent, or `None` for in place, as in a place
-    /// of a host serving this terminal.
+    /// of a host serving this terminal that nests no sessions there.
     fn of(host: &Configured) -> Option<Self> {
-        if let Some(attaches) = host.host.attaches() {
-            return Some(Self::Session(attaches));
+        if let Some(session) = host.session_host()
+            && let Some(attaches) = session.attaches()
+        {
+            let nested_in = (session.name() != host.host.name()).then(|| host.host.name());
+            return Some(Self::Session {
+                host: session,
+                attaches,
+                nested_in,
+            });
         }
         host.places().filter(|_| !host.serves()).map(Self::Place)
+    }
+
+    /// The host whose place or session the agent's worker runs in.
+    fn host(&self, current: &Configured) -> HostName {
+        match self {
+            Self::Session { host, .. } => host.name(),
+            Self::Place(_) => current.host.name(),
+        }
     }
 }
 
@@ -165,7 +186,7 @@ pub async fn run_agent(
     let beside = current.beside(origin.as_ref());
     let worker = agent_worker(
         caller,
-        &current,
+        (run.host(&current), current.closes_when_done),
         space.owner,
         agent,
         (records, manual),
@@ -184,11 +205,17 @@ pub async fn run_agent(
         split: beside.split,
         argv: &worker,
         env: &env,
+        nested_in: None,
     };
     let left_running = match run {
-        AgentRun::Session(attaches) => {
+        AgentRun::Session {
+            attaches,
+            nested_in,
+            ..
+        } => {
             let start = Start {
                 label: &space.session,
+                nested_in,
                 ..start
             };
             let session = attaches.run_agent(&start, space.owner, &agent.name).await?;
@@ -208,18 +235,18 @@ pub async fn run_agent(
 }
 
 /// The worker that runs `agent`'s tracked `command` for `owner` in a place
-/// `host` opens, closing a workspace's with the workspace when config says
-/// so; a chat's goes with the chat's removal.
+/// or session the host named `name` opens, closing a workspace's with the
+/// workspace when config, which `closes_when_done` reads, says so; a chat's
+/// goes with the chat's removal.
 fn agent_worker(
     caller: Caller<'_>,
-    host: &Configured,
+    (name, closes_when_done): (HostName, bool),
     owner: Owner<'_>,
     agent: &TrackedAgent,
     (records, manual): (&[PathBuf], bool),
     command: &[OsString],
 ) -> Result<Vec<OsString>> {
-    let name = host.host.name();
-    let closes = host.closes_when_done && matches!(owner, Owner::Workspace(_));
+    let closes = closes_when_done && matches!(owner, Owner::Workspace(_));
     crate::workers::internal_command(
         caller.paths,
         false,

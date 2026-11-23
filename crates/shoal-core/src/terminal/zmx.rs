@@ -250,14 +250,23 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &crate::agent::Agent) -
 }
 
 /// Have `zmx attach` create the session `name` running `start`'s command.
+/// A session nested in another host's place keeps that place's variables
+/// and is marked nested, so Shoal there takes the place for its own.
 fn attach_new(zmx: &mut Command, name: &str, start: &Start<'_>) {
     zmx.arg(name)
         .args(start.argv)
         .current_dir(start.cwd)
         .envs(start.env.iter().map(|(name, value)| (name, value)))
         .env_remove(env::SHELL_DIRECTIVE);
-    for variable in super::hosts::foreign_place_variables(HostName::Zmx) {
+    let dropped = match start.nested_in {
+        Some(outer) => super::hosts::nested_session_variables(HostName::Zmx, outer),
+        None => super::hosts::foreign_place_variables(HostName::Zmx),
+    };
+    for variable in dropped {
         zmx.env_remove(variable);
+    }
+    if start.nested_in.is_some() {
+        zmx.env(env::NESTED_SESSION, HostName::Zmx.as_str());
     }
 }
 

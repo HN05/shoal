@@ -171,6 +171,21 @@ impl Configured {
         nests.then_some(nesting)
     }
 
+    /// The host that runs agents launched here in sessions this terminal
+    /// attaches to: this one where it does, or, in a place of its own it
+    /// serves, the host it nests sessions of in its places.
+    pub fn session_host(&self) -> Option<&'static dyn Host> {
+        self.session_hosts().find(|host| host.attaches().is_some())
+    }
+
+    /// The hosts that may run agents launched here in sessions, in order:
+    /// this one, then, in a place of its own it serves, the host it
+    /// nests sessions of there.
+    fn session_hosts(&self) -> impl Iterator<Item = &'static dyn Host> {
+        let nesting = self.nesting().filter(|_| self.serves());
+        std::iter::once(self.host).chain(nesting)
+    }
+
     /// Whether the host serves the terminal this process runs in. The host
     /// of a session nested in another host's place does not: that place's
     /// host serves it.
@@ -272,15 +287,15 @@ pub fn current(settings: &Effective) -> Configured {
 /// Whether an agent launched here runs in a session this terminal attaches
 /// to, leaving the caller's shell where it was once the terminal detaches.
 pub fn keeps_agents_in_sessions(settings: &Effective) -> bool {
-    current(settings).host.attaches().is_some()
+    current(settings).session_host().is_some()
 }
 
 /// The program an agent launch here under `settings` needs besides the
 /// agent's own: that of the host it runs in a session of.
 pub(crate) fn launcher_program(settings: &Effective) -> Option<&'static str> {
     current(settings)
-        .host
-        .attaches()
+        .session_host()
+        .and_then(Host::attaches)
         .map(Attaches::launcher_program)
 }
 
@@ -304,6 +319,19 @@ pub(super) fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
         .filter_map(Host::places)
         .flat_map(|other| other.place_variables().iter().copied())
         .chain(marks)
+        .collect()
+}
+
+/// The variables a session of `host`, nested in a place of `outer`, drops:
+/// those [`foreign_place_variables`] names but the ones naming `outer`'s
+/// place, which Shoal in the session takes for its own.
+pub(super) fn nested_session_variables(host: HostName, outer: HostName) -> Vec<&'static str> {
+    let kept = named(outer)
+        .places()
+        .map_or(&[][..], Places::place_variables);
+    foreign_place_variables(host)
+        .into_iter()
+        .filter(|variable| !kept.contains(variable))
         .collect()
 }
 

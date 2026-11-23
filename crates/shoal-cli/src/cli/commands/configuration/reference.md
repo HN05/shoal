@@ -826,6 +826,7 @@ within `key_window` does not run; a webhook without one takes its
 [terminal]
 focus = true             # Unset: focus only launches waiting for input
 close_when_done = true
+nested_zmx = false       # true runs agents and demos in zmx inside host places
 default_host = "zmx"     # "zmx", "herdr", "rex", "tmux" or "zellij"
 ```
 
@@ -834,11 +835,14 @@ unset, a workspace shell or an agent waiting for its first prompt takes it and
 an agent with input starts in the background; a [mode's](#modes-and-rules)
 `focus` overrides it for its launches. `close_when_done` closes the place Shoal
 opened for a workspace once `done` keeps the workspace and the agent finishes
-its turn. `default_host` is where launches from a terminal no host serves run:
+its turn. `nested_zmx` runs the agents and demos Shoal runs in a Herdr pane,
+Rex block, tmux pane or Zellij pane in a zmx session attached there, which
+`shoal attach` also reaches from any other terminal; it needs zmx 1.0.1 or
+later. `default_host` is where launches from a terminal no host serves run:
 detached zmx sessions, tabs on the local Herdr server, windows on the local Rex
 server, windows on the default tmux server, or Zellij sessions of their own;
 turning that host off runs them in place. Each host's table below overrides
-`close_when_done` for its own places; see [agents](../../../../../../docs/reference.md#agents).
+`close_when_done` and `nested_zmx` for its own places; see [agents](../../../../../../docs/reference.md#agents).
 
 ### Herdr
 
@@ -849,6 +853,7 @@ new_tab = true             # Open starts in a new tab inside Herdr
 workspace_name = "{repo}"  # The workspace for tabs Shoal opens outside Herdr
 tab_name = "{repo}: {branch}"  # Optional
 close_when_done = true     # Optional; over terminal.close_when_done
+nested_zmx = true          # Optional; over terminal.nested_zmx
 ```
 
 `tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, `{issue_title}` and
@@ -869,6 +874,7 @@ placement = "window"       # "split" opens beside the caller's block instead
 session_name = "{repo}"    # The session for windows Shoal opens outside one
 window_name = "{repo}: {branch}"  # Optional; as tab_name
 close_when_done = true     # Optional
+nested_zmx = true          # Optional
 ```
 
 `session_name` takes only `{repo}`. See [Rex](../../../../../../docs/reference.md#rex).
@@ -883,6 +889,7 @@ placement = "window"       # "split" opens beside the caller's pane instead
 session_name = "{repo}"    # The session for windows Shoal opens outside tmux
 window_name = "{repo}: {branch}"  # Optional; as tab_name
 close_when_done = true     # Optional
+nested_zmx = true          # Optional
 ```
 
 `session_name` takes only `{repo}`. See [tmux](../../../../../../docs/reference.md#tmux).
@@ -896,6 +903,7 @@ new_tab = true             # Open tabs beside the caller
 placement = "tab"          # "split" opens beside the caller's pane instead
 tab_name = "{repo}: {branch}"  # Optional
 close_when_done = true     # Optional
+nested_zmx = true          # Optional
 ```
 
 See [Zellij](../../../../../../docs/reference.md#zellij).
