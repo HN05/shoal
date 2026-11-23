@@ -187,6 +187,31 @@ pub enum ReviewCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Start your own review of a workspace's work.
+    ///
+    /// Threads you open towards it without --kind are its comments, which
+    /// reach its agent together when you submit it with shoal review
+    /// submit.
+    Start {
+        /// Workspace to review, by number or ID; defaults to the current
+        /// workspace or a picker.
+        space: Option<SpaceSelector>,
+    },
+    /// Submit your pending review: its comments reach the workspace's agent
+    /// together, and the review gates count it at the workspace's HEAD.
+    Submit {
+        /// Workspace whose pending review to submit; defaults to your only
+        /// one.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+        /// Approve the work, which a review without comments needs to
+        /// count for the review gates.
+        #[arg(long)]
+        approve: bool,
+        /// A file holding the review's summary.
+        #[arg(long, value_name = "FILE")]
+        body_file: Option<PathBuf>,
+    },
     /// List reviews with their state and unresolved findings, newest first.
     Ls {
         /// Space whose reviews to list, a workspace or a chat, whose reviews
@@ -197,7 +222,8 @@ pub enum ReviewCommand {
         #[arg(short = 'r', long = "repo", conflicts_with = "space")]
         repository: Option<String>,
     },
-    /// Cancel a queued or running review; defaults to the space's.
+    /// Cancel a queued or running review, or drop a pending one with its
+    /// comments; defaults to your only pending review, else the space's.
     Cancel {
         /// Review ID.
         id: Option<ReviewId>,

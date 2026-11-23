@@ -1,18 +1,24 @@
-//! `shoal review cancel`: cancel a queued or running review.
+//! `shoal review cancel`: cancel a queued or running review, or drop a
+//! pending one with its comments.
 use anyhow::{Context as _, Result};
 
 use crate::client::reviews;
 use crate::{cli::context::Context, model::Chat, reviews::ReviewId};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Cancel review `id`, else the space's queued or running one: a chat's is
+/// Cancel review `id`, else the caller's only pending review when no space
+/// is named, else the space's pending, queued or running one: a chat's is
 /// that of one of its linked PRs.
 pub(super) async fn cancel(
     ctx: &Context,
     id: Option<ReviewId>,
     space: Option<SpaceSelector>,
 ) -> Result<i32> {
-    let (workspace, id) = match id {
+    let pending = match (id, &space) {
+        (None, None) => super::writing::only_pending(ctx).await?,
+        _ => None,
+    };
+    let (workspace, id) = match id.or(pending) {
         Some(id) => (None, Some(id)),
         None => cancelled(ctx, space).await?,
     };

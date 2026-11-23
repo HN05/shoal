@@ -188,11 +188,15 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
         outln!();
         print_indented(summary, 2);
     }
-    if review.state == ReviewState::Finished {
+    if matches!(review.state, ReviewState::Finished | ReviewState::Pending) {
         let unresolved = review.unresolved().count();
+        let threads = match review.agent() {
+            Some(_) => "Findings",
+            None => "Comments",
+        };
         outln!();
         outln!(
-            "Findings: {}, {unresolved} unresolved",
+            "{threads}: {}, {unresolved} unresolved",
             review.threads.len()
         );
         for thread in &review.threads {

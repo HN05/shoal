@@ -2914,6 +2914,23 @@ fast-forwarding it to the pushed head; local commits ahead stay, divergence is r
 The daemon fast-forwards under a lifecycle reservation and the repository's Git gate,
 after verifying the recorded worktree and its branch, so a switched or replaced
 checkout is never moved.
+The user, or a parent agent within its scope, reviews a space's work the same
+way, so what the agent receives and what the gates count does not depend on
+who reviewed. Such a review is a review record naming its writer, which writes
+it pending: the threads its writer opens towards the workspace without a kind
+join it as `review` threads that hold their posts, numbered so editors show
+them, and submitting delivers them with the summary in one alert, as a local
+review's findings arrive, recording the workspace's HEAD then; a comment keeps
+its own file version, so it may point at unsaved lines. Joining by the pending
+review rather than a `--kind` lets an editor's first comment start the review
+and a submit action send it. An explicit kind opens an ordinary thread outside
+it. Its writer, the opener, resolves each comment after checking the changes
+attributed to it, since only threads Shoal opened are its holder's to settle,
+and Shoal's reviewer neither reads, reopens nor learns false positives from
+them. A submitted review covers its commit once its comments are resolved, and
+one without comments only when it approves, so a summary alone opens no gate. A
+space reviews the workspaces of its own machine, where its threads are numbered,
+and its removal drops what it was writing. Forge reviews stay on the forge.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the

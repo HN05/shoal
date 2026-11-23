@@ -1,5 +1,6 @@
-//! `shoal review`: run local reviews of workspaces and PRs, list and cancel
-//! them; their findings are threads, which `shoal thread` resolves.
+//! `shoal review`: run local reviews of workspaces and PRs, write your own,
+//! list and cancel them; their findings and comments are threads, which
+//! `shoal thread` resolves.
 use crate::cli::ui::Acting;
 use anyhow::Result;
 
@@ -17,6 +18,7 @@ use shoal_protocol::space_names::SpaceSelector;
 mod cancel;
 pub(super) mod show;
 mod start;
+mod writing;
 
 pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
     match command {
@@ -37,6 +39,12 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
             let reviewer = start::Reviewer::new(manual, agent, &model);
             start::start(ctx, target, reviewer, model, args).await
         }
+        ReviewCommand::Start { space } => writing::start(ctx, space).await,
+        ReviewCommand::Submit {
+            space,
+            approve,
+            body_file,
+        } => writing::submit(ctx, space, approve, body_file).await,
         ReviewCommand::Ls { space, repository } => show::list(ctx, space, repository).await,
         ReviewCommand::Cancel { id, space } => cancel::cancel(ctx, id, space).await,
     }
@@ -55,7 +63,10 @@ pub(super) fn acting(command: &ReviewCommand) -> Acting {
             agent.clone(),
             &model.clone().into(),
         )),
-        ReviewCommand::Ls { .. } | ReviewCommand::Cancel { .. } => showing(),
+        ReviewCommand::Start { .. } => writing::starting(),
+        ReviewCommand::Submit { .. } | ReviewCommand::Ls { .. } | ReviewCommand::Cancel { .. } => {
+            showing()
+        }
     }
 }
 

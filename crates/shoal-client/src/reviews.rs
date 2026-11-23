@@ -27,6 +27,30 @@ pub fn run(
     })
 }
 
+/// Start the caller's own review of `workspace`, or return its pending one.
+pub fn start(workspace: SpaceSelector) -> PreparedReview<Review> {
+    PreparedReview::new(ReviewMethod::StartReview { workspace })
+}
+
+/// The caller's pending reviews, oldest first.
+pub fn pending() -> PreparedReview<Vec<Review>> {
+    PreparedReview::new(ReviewMethod::PendingReviews)
+}
+
+/// Submit the caller's pending review of `workspace`, else its only one,
+/// with `summary`, approving the work when `approve`.
+pub fn submit(
+    workspace: Option<SpaceSelector>,
+    approve: bool,
+    summary: Option<String>,
+) -> PreparedReview<Review> {
+    PreparedReview::new(ReviewMethod::SubmitReview {
+        workspace,
+        approve,
+        summary,
+    })
+}
+
 /// Cancel the review `id`, or `workspace`'s queued or running one.
 pub fn cancel(workspace: Option<SpaceSelector>, id: Option<ReviewId>) -> PreparedReview<Review> {
     PreparedReview::new(ReviewMethod::CancelReview { workspace, id })

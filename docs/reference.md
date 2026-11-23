@@ -1840,7 +1840,7 @@ finished: 1 blocker, 2 should-fix`.
 shoal review ls [space]       # Newest first; --repo R for a repository's
 shoal view review [ID]          # One review in full; default: the workspace's latest
 shoal watch review [ID]         # Wait until it ends, then show it
-shoal review cancel [ID]        # Default: the space's queued or running review; --space S
+shoal review cancel [ID]        # Default: your only pending review, else the space's queued or running one; --space S
 shoal thread switch 3.4         # Changes from now on are for the finding
 shoal send 3.4 'It only happens on empty input'  # The reviewer answers in the thread
 shoal thread resolve 3.4 false-positive --reason 'The caller checks the length'
@@ -1894,7 +1894,8 @@ repository's PR the global config. A merge is
 checked before the question it asks and before an agent's approval request,
 which a refused merge never makes. Each gate holds agents and the commands they run with `"agents"`,
 and your own commands too with `"all"`. A gate passes once a finished review covers HEAD exactly and every
-thread it opened or reopened is resolved, whatever the verdict. Otherwise the command is
+thread it opened or reopened is resolved, whatever the verdict, except that [one you or a
+space wrote](#your-own-reviews) without comments passes only when it approves. Otherwise the command is
 refused, naming what is missing and listing the unresolved threads; without a
 review of the commit and with none queued or running, it queues a review of the
 workspace's HEAD, whose findings arrive as a message, where that is the commit and
@@ -1931,6 +1932,42 @@ naming one, reviews the chat's one linked PR as `--pr` would. A chat's reviews
 are those of its linked PRs: `review ls` lists them, and `review cancel`
 cancels the one queued or running. Their threads are held by the workspace that
 owns the PR's branch.
+
+### Your own reviews
+
+```sh
+shoal review start [space]                           # A pending review of a workspace's work
+shoal thread open "Retries are unbounded" --code src/fetch.rs:40-52   # Its comment
+shoal review submit [--approve] [--body-file F] [-s space]
+shoal review cancel                                  # Drop it with its comments
+```
+
+You, or a space's agent naming a workspace below it, review a workspace's work
+as the [local reviewer](#local-reviews) does. `review start` starts your pending
+review of the workspace, or returns the one you have; each writer has one per
+workspace, and a space reviews the workspaces below it on its own machine,
+never its own. While it is pending, a [thread](#threads) you open towards that
+workspace without `--kind`, with `--space` from a space, is its comment: a
+`review` thread with its number, which editors show, whose posts reach nobody
+and whose holder neither posts in, forwards nor resolves it yet. `--kind
+question` or `request` opens a thread outside the review, delivered at once. A
+comment's `--code` may point at unsaved lines, since a reference keeps its own
+file version.
+
+`review submit` submits your pending review of `--space`, else your only one, at
+the workspace's HEAD, with the summary `--body-file` holds: the workspace's agent
+receives it as one message with each comment, and the agent coordinating the
+workspace hears one line of a review you wrote. Its verdict is `approve` with
+`--approve`, else `request_changes` with comments, else `comment`. Comments then
+post as any thread does: the agent fixes, switching to the comment's thread so
+its changes are attributed there, and says so in the thread; you check them and
+resolve it with an outcome of the table above, or reply. Only threads Shoal opens
+are resolved by their holder. `review cancel` drops a pending review with its
+comments, by its writer or you; without a review or `--space` it drops your only
+pending one. Removing the space that writes a review drops it. For the review
+gates above, a submitted review covers the commit it recorded once every comment
+is resolved, and one without comments only when it approves. Reviews on the forge
+stay there; they are not mirrored.
 
 ### Agents
 
@@ -7255,11 +7292,13 @@ shoal unlink thread <S.N>
 A thread is a conversation between its opener, the user, a space or Shoal, and
 its holder, the user or a space, whoever is asked now, with posts from both
 sides. `shoal thread open` records an empty thread with a free-text name of one
-line and a kind, `question` by default or `request`, and prints its number;
+line and a kind, `question` or `request`, and prints its number;
 with `--code` it also makes its opening post, whose text is the name, pointing
 at that code. A question asks for an answer, and a request asks its holder to
-do something, such as implement the code it points at. Shoal alone opens a
-`review` thread, for each finding of a [local review](#local-reviews). From a space it
+do something, such as implement the code it points at. Without `--kind`, a
+thread towards a workspace you have a pending review of is a `review` thread,
+[its comment](#your-own-reviews), and otherwise a question; Shoal opens one for
+each finding of a [local review](#local-reviews). From a space it
 goes to the space's [coordinator](#child-workspaces), else to you, or with
 `--space` to a space the caller's scope reaches; from your terminal it goes to
 the space `--space` names, else the current or a picked one. An empty thread

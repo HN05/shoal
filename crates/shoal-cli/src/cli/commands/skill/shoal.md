@@ -560,6 +560,26 @@ reopened resolved. Without one, the refusal starts a review
 of the workspace's HEAD where that is the commit, and otherwise names
 `shoal review run <pr-url>`.
 
+### Your own review of a space below
+
+```sh
+shoal review start <space>          # A pending review of a workspace below you
+shoal thread open "Retries are unbounded" --space <space> --code src/fetch.rs:40-52
+shoal review submit [--approve] [--body-file F] [-s space]
+shoal review cancel [<id>]          # Drop a pending review with its comments
+```
+
+You, or the user, review a workspace's work as the reviewer does. While your
+review of a workspace is pending, a thread you open towards it without
+`--kind` is its comment, a `review` thread whose posts reach nobody yet; an
+explicit `--kind` opens a thread outside it. `review submit` records the
+workspace's HEAD and delivers the summary and every comment to its agent in one
+message. The agent fixes and says so in the thread; you, its opener, check the
+changes made for it and resolve it, or reply. A comment the user or a space
+above you opened is theirs to resolve, never yours. The review gates count a
+submitted review once every comment is resolved, and one without comments only
+with `--approve`.
+
 ## Ready marks
 
 A ready mark says that a space's agent needs the user before it can go on:
