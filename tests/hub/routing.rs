@@ -647,23 +647,42 @@ fn an_offline_machine_closes_a_finished_writer_s_comment_once_it_connects() {
     });
 }
 
-#[test]
-fn a_space_moved_to_another_machine_keeps_holding_its_threads_there() {
-    let tree = tree_without_coordinator("");
-    let (hub, laptop) = (&tree.hub, &tree.laptop);
+/// A space on the hub that holds a thread the laptop keeps: the child's
+/// question, which reaches the user, who passes it on to it; by ID, with
+/// the thread's number.
+fn holding_a_laptop_thread(tree: &Tree) -> (String, String) {
+    let hub = &tree.hub;
     let repo = hub.repo.to_str().unwrap().to_owned();
     hub.ok(&["create", &repo, "--branch", "holder"]);
     let holder = hub.id("holder");
-    // The child's question reaches the user, who passes it to the space on
-    // the hub, which then holds a thread the laptop keeps.
-    let asked = ask(laptop, &tree.child);
+    let asked = ask(&tree.laptop, &tree.child);
     hub.ok(&["thread", "forward", &asked, "--space", &holder]);
-    let moved = hub.ok(&["move", &holder, "--machine", "laptop"]);
+    (holder, asked)
+}
+
+#[test]
+fn a_space_moved_to_another_machine_keeps_holding_its_threads_there() {
+    let tree = tree_without_coordinator("");
+    let (holder, asked) = holding_a_laptop_thread(&tree);
+    let moved = tree.hub.ok(&["move", &holder, "--machine", "laptop"]);
     assert_eq!(moved["failed"], json!([]), "{moved}");
     // Its end on the hub is no removal: it holds the thread there still.
-    let thread = laptop.ok(&["view", "thread", &asked]);
+    let thread = tree.laptop.ok(&["view", "thread", &asked]);
     assert!(thread["resolution"].is_null(), "{thread}");
     assert_eq!(thread["holder"]["id"], holder.as_str(), "{thread}");
+}
+
+#[test]
+fn a_finished_holder_s_thread_on_another_machine_tells_its_opener_by_name() {
+    let tree = tree_without_coordinator("");
+    let (holder, asked) = holding_a_laptop_thread(&tree);
+    tree.hub.ok(&["done", &holder]);
+    wait_for("the laptop to close the thread", || {
+        (outcome_on(&tree.laptop, &asked) == "closed").then_some(())
+    });
+    let told = message_with(&tree.laptop, &tree.child, "finished its work");
+    let text = told["message"].as_str().unwrap();
+    assert!(text.contains("holder") && !text.contains(&holder), "{told}");
 }
 
 #[test]

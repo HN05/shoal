@@ -635,14 +635,19 @@ pub fn thread_space(db: &Connection, id: &SpaceId) -> Result<ThreadSpace> {
 /// The space `id` as text names it: by its number and name while it has
 /// them, else by its ID.
 pub(super) fn label(db: &Connection, id: &SpaceId) -> Result<String> {
+    Ok(named(db, id)?.unwrap_or_else(|| id.to_string()))
+}
+
+/// The space `id` as text names it, by its number and name while it has
+/// them, while this machine has its record.
+pub(super) fn named(db: &Connection, id: &SpaceId) -> Result<Option<String>> {
     let named: Option<(Option<shoal_ids::space_ids::SpaceNumber>, SpaceName)> = db
         .query_row("SELECT number,name FROM spaces WHERE id=?1", [id], |row| {
             Ok((row.get(0)?, row.get(1)?))
         })
         .optional()?;
-    Ok(match named {
-        Some((Some(number), name)) => shoal_protocol::space_names::label(number, &name),
-        Some((None, name)) => name.to_string(),
-        None => id.to_string(),
-    })
+    Ok(named.map(|named| match named {
+        (Some(number), name) => shoal_protocol::space_names::label(number, &name),
+        (None, name) => name.to_string(),
+    }))
 }

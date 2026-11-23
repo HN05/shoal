@@ -10,7 +10,9 @@ use crate::{Coordination, daemon::Daemon};
 use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::threads::{CloseCause, NewPost, Outcome, Resolution, Sender, Side, Thread};
+use shoal_protocol::threads::{
+    CloseCause, NewPost, Outcome, Resolution, Sender, Side, Thread, ThreadSpace,
+};
 
 use super::{
     delivery::{self, Delivered, Party, Texts},
@@ -36,7 +38,6 @@ pub fn close(
         ),
         [space_id],
     )?;
-    let label = records::label(tx, space_id)?;
     let resolution = Resolution {
         outcome: Outcome::Closed { cause },
         by: Sender::Shoal,
@@ -50,6 +51,7 @@ pub fn close(
         if opener.is_none() || opener == Some(Party::Space(space_id.clone())) {
             continue;
         }
+        let label = party_label(tx, thread, space_id)?;
         let text = match cause {
             CloseCause::Completion => {
                 format!("{label} finished its work, which closed the thread.")
@@ -59,6 +61,19 @@ pub fn close(
         tell_opener(tx, outside, thread, text, &mut delivered)?;
     }
     Ok((open.iter().map(|thread| thread.number).collect(), delivered))
+}
+
+/// How Shoal's post about `thread` names the space `space_id` that closed
+/// or reopened it: by its record here, else as the thread names it, as for
+/// a space of another machine.
+fn party_label(tx: &Transaction<'_>, thread: &Thread, space_id: &SpaceId) -> Result<String> {
+    if let Some(label) = records::named(tx, space_id)? {
+        return Ok(label);
+    }
+    let named = (thread.holder.space().into_iter())
+        .chain(&thread.opener_space)
+        .find(|space| space.id == *space_id);
+    Ok(named.map_or_else(|| space_id.to_string(), ThreadSpace::label))
 }
 
 /// Record Shoal's post `text` on the holder's side of `thread` and
@@ -118,7 +133,6 @@ pub fn reopen(
         ),
         params![space_id, cause],
     )?;
-    let label = records::label(tx, space_id)?;
     let mut delivered = Delivered::default();
     for thread in &closed {
         let closed_at = (thread.resolution.as_ref()).map(|resolution| resolution.resolved_at);
@@ -131,6 +145,7 @@ pub fn reopen(
             continue;
         };
         let reopened = records::reread(tx, thread.id)?;
+        let label = party_label(tx, thread, space_id)?;
         let texts = Texts::resolved(&reopened, &label);
         delivery::deliver(tx, outside, &reopened, None, &opener, texts, &mut delivered)?;
     }
