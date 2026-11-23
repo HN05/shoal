@@ -135,6 +135,9 @@ states!(AlertKind {
     AccessStalled => "access_stalled",
     /// A repository's runner could not register, be deleted or run a job.
     RunnerFailed => "runner_failed",
+    /// The runner reran on their forges CI jobs that the machine's sleep or
+    /// a shutdown cut off.
+    JobsRerun => "jobs_rerun",
     /// The current config format rejects a workspace's config file, which
     /// Shoal ignores.
     ConfigIgnored => "config_ignored",

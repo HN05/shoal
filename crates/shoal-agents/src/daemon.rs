@@ -509,9 +509,8 @@ pub trait Runner: Send + Sync {
     /// The workspaces jobs run in.
     fn job_workspaces(&self) -> BoxFuture<'_, HashSet<SpaceId>>;
 
-    /// Cancel the job of the space `id` before it stops, for `why`.
-    fn cancel_job_before_stopping<'a>(&'a self, id: &'a SpaceId, why: JobStop)
-    -> BoxFuture<'a, ()>;
+    /// End every running job for `why`, what cuts them off, to rerun.
+    fn stop_jobs_to_rerun(&self, why: JobStop) -> BoxFuture<'_, ()>;
 
     /// Cancel the job running in the space `selector` names, for `why`.
     fn cancel_job_in<'a>(

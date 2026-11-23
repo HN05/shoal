@@ -4733,15 +4733,21 @@ ended by Shoal: it stops every process of the job's workspace, including
 leftovers in other process groups or whose parent exited, then the runner,
 and records a `job_ended` event in the workspace's log. `shoal stop` says
 which run it asked the forge to cancel (`cancelled_run` with `--json`), and
-`shoal rm` of a running job's workspace, `shoal daemon stop`, and the stop
-before a system shutdown cancel the run before they stop the runner, while a
-signal to the daemon leaves the job running. A hangup or terminate signal to the
-job's wrapper, as a logout or a shutdown sends, has the wrapper ask the daemon
-to cancel the run before it stops the runner, which may report its job first;
-a wrapper the daemon does not answer within 15 seconds stops the runner
-without the cancel and says why in the job's log. The daemon's log records each stop
-of a job's runner with the job, its run, what stopped it and whether the run
-was cancelled. A job that cannot start is passed over with a
+`shoal rm` of a running job's workspace and `shoal daemon stop` cancel the run
+before they stop the runner, while a signal to the daemon leaves the job
+running. The machine going to sleep, the stop before a system shutdown and a
+hangup or terminate signal to the job's wrapper, as a logout or a shutdown
+sends, cut the job off instead, on every machine: Shoal ends it as
+[load protection](#overload-protection) does, cancelling that job alone, and
+reruns it on its forge as soon as its run has finished, at once where it
+already has, so any runner can take it, and a `jobs_rerun` alert names each
+such job once it reruns. A job its wrapper's signal cuts off is cancelled by
+the daemon before the wrapper stops the runner, which may report its job
+first; a wrapper the daemon does not answer within 15 seconds stops the runner
+without the cancel and says why in the job's log. A job on a machine that
+sleeps or drops without announcing it runs until the forge times it out. The
+daemon's log records each stop of a job's runner with the job, its run, what
+stopped it and whether the run or the job was cancelled. A job that cannot start is passed over with a
 `runner_failed` alert, and its workspace goes, also one whose
 checkout failed or a restart cut short; a removal that fails is tried again
 until it succeeds.

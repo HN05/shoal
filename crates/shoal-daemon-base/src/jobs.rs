@@ -15,10 +15,10 @@ pub enum JobStop {
     Stop,
     /// `shoal daemon stop`.
     DaemonStop,
-    /// A signal to the daemon.
-    DaemonSignal,
     /// The stop before a system shutdown.
     SystemShutdown,
+    /// The machine going to sleep.
+    Sleep,
     /// The removal of its workspace.
     Removal,
     /// Its runner outliving its finished run.
@@ -35,8 +35,8 @@ impl std::fmt::Display for JobStop {
         match self {
             Self::Stop => f.write_str("shoal stop"),
             Self::DaemonStop => f.write_str("shoal daemon stop"),
-            Self::DaemonSignal => f.write_str("a signal to the daemon"),
             Self::SystemShutdown => f.write_str("the system shutting down"),
+            Self::Sleep => f.write_str("the machine going to sleep"),
             Self::Removal => f.write_str("its workspace's removal"),
             Self::Overrun => f.write_str("its runner outliving its finished run"),
             Self::Overload(pressure) => f.write_str(pressure),

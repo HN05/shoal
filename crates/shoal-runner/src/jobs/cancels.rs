@@ -1,8 +1,9 @@
 //! Cancelling a claimed job's run on the forge as something stops its
-//! runner: `shoal stop` of its workspace, the workspace's removal, a daemon
-//! or system stop, or a signal ending its wrapper's session. A job ends only
-//! on the forge's word, so its run is cancelled first, and the forge's
-//! runner then stops; a forge that refuses is told to the user.
+//! runner: `shoal stop` of its workspace, the workspace's removal or a
+//! daemon stop. A job ends only on the forge's word, so its run is
+//! cancelled first, and the forge's runner then stops; a forge that refuses
+//! is told to the user. A signal ending its wrapper's session, as a logout
+//! or a shutdown sends, cuts the job off instead, which then reruns.
 use std::collections::HashSet;
 
 use anyhow::{Context as _, Result};
@@ -66,10 +67,10 @@ impl Runner {
         true
     }
 
-    /// Cancel on the forge the run of the job the execution of `caller`
-    /// runs, if it runs one, before `signal`, which ends its session, has
-    /// its wrapper stop the runner. Another execution in the job's
-    /// workspace, such as a step's command, cancels nothing.
+    /// Cancel on the forge the job the execution of `caller` runs, if it
+    /// runs one, to rerun, before `signal`, which ends its session, has its
+    /// wrapper stop the runner. Another execution in the job's workspace,
+    /// such as a step's command, cancels nothing.
     pub async fn cancel_job_for_signal(
         &self,
         daemon: &dyn Daemon,
@@ -87,7 +88,7 @@ impl Runner {
         if !runner {
             return Ok(());
         }
-        let cancelled = (self.cancel_for_stop(daemon, &job, JobStop::Signal(signal))).await;
+        let cancelled = (self.cancel_job_to_rerun(daemon, &job, JobStop::Signal(signal))).await;
         if let Err(error) = cancelled {
             self.notify_cancel_failed(&job, &error).await;
             return Err(error);

@@ -1,17 +1,21 @@
-//! CI jobs that load protection stops. Shoal ends one as it ends a job
-//! whose runner outlived its run, without cancelling its run, which would
-//! end the run's other jobs, recording why in the workspace's log. Before
-//! anything is signaled it records the job to rerun and has the forge
-//! cancel that job alone, which a forge whose runner protocol Shoal speaks
-//! does, so the job shows as cancelled rather than failed. Each pass then
-//! reruns it on its forge as soon as its run has finished there, whatever
-//! this machine's readings, and the forge offers the waiting job to every
-//! runner, each Shoal runner admitting it as any other. A rerun its run
-//! never allows within [`PATIENCE`] is given up.
+//! CI jobs Shoal ends so they run again elsewhere: one load protection
+//! stops, and each one the machine's sleep or a shutdown cuts off. Shoal
+//! ends one as it ends a job whose runner outlived its run, without
+//! cancelling its run, which would end the run's other jobs, recording why
+//! in the workspace's log. Before anything is signaled it records the job
+//! to rerun and has the forge cancel that job alone, which a forge whose
+//! runner protocol Shoal speaks does, so the job shows as cancelled rather
+//! than failed. Each pass then reruns it on its forge as soon as its run
+//! has finished there, whatever this machine's readings, and the forge
+//! offers the waiting job to every runner, each Shoal runner admitting it
+//! as any other. A sleep or shutdown tries the reruns at once too, since a
+//! run whose last running job it ended has finished, and the user hears of
+//! each job one cut off once it reruns. A rerun its run never allows within
+//! [`PATIENCE`] is given up.
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use futures_util::FutureExt as _;
+use futures_util::{FutureExt as _, future::join_all};
 use rusqlite::params;
 use shoal_daemon_base::{
     alerts::{About, NewAlert},
@@ -48,24 +52,27 @@ struct TakenJob {
     name: String,
 }
 
-/// A job protection stopped, waiting to rerun.
+/// A job Shoal ended, waiting to rerun.
 struct StoppedJob {
     run: ItemRef,
     id: JobId,
     name: String,
     repository_id: RepositoryId,
     stopped_at: UnixTime,
+    /// What cut it off, which its rerun tells the user; none for a stop of
+    /// load protection's.
+    cut_off_by: Option<String>,
 }
 
 impl Runner {
-    /// End the CI job running in the workspace `space` for `pressure`, the
-    /// reason load protection stops work, recording it to rerun once its run
+    /// End the CI job running in the workspace `space` for `cause`, load
+    /// protection or what cuts it off, recording it to rerun once its run
     /// has finished, returning whether a job ran there.
-    pub async fn stop_job_for_overload(
+    pub async fn stop_job_to_rerun(
         &self,
         daemon: &dyn Daemon,
         space: &SpaceId,
-        pressure: &'static str,
+        cause: JobStop,
     ) -> Result<bool> {
         let Some(job) = self.workspace_claim(space).await? else {
             return Ok(false);
@@ -73,49 +80,80 @@ impl Runner {
         if !self.job_execution_recorded(daemon, &job).await? {
             return Ok(false);
         }
-        // Named before the stop, which the forge has a bounded while to do.
-        let taken = tokio::time::timeout(IDENTIFY_LIMIT, self.taken_job(daemon, &job))
-            .await
-            .unwrap_or_else(|_| Err(anyhow::anyhow!("its forge did not answer in time")));
-        let (stopped, cancelled) = self
-            .interrupt_job(daemon, &job, taken.as_ref().ok())
-            .await?;
-        let reason = format!("stopped for {pressure}");
+        let taken = self.identified_job(daemon, &job).await;
+        let (stopped, cancelled) =
+            (self.interrupt_job(daemon, &job, taken.as_ref().ok(), cause)).await?;
+        let reason = format!("stopped for {cause}");
         (daemon.stop_job_runner(&job.workspace_id, reason.clone())).await?;
         let (name, run) = match &taken {
             Ok(taken) => (taken.name.clone(), taken.run.to_string()),
             Err(_) => (job.job.job.name.clone(), job.job.run.url.to_string()),
         };
-        let outcome = match (&taken, cancelled) {
-            (Ok(_), true) => "cancelled on its forge; reruns once its run has finished",
-            (Ok(_), false) => "reruns once its run has finished",
-            (Err(_), _) => "not rerun, since the job it took is unknown",
-        };
-        self.log_job_stop(&job, JobStop::Overload(pressure), outcome);
+        self.log_job_stop(&job, cause, rerun_outcome(taken.is_ok(), cancelled));
         if let Err(error) = taken {
-            let message = format!(
-                "CI job {name}, which protection stopped for {pressure}, is not rerun, since the job its runner took is unknown ({error:#}); rerun it on its forge from {run}"
-            );
-            self.alert_runner_failed(message).await;
+            self.alert_not_rerun(&name, cause, &error, &run).await;
         }
         let event = ended_job(name, run, reason, stopped);
         record_job_ended(&self.store, &job.workspace_id, event).await;
         Ok(true)
     }
 
-    /// Rerun the jobs protection stopped whose runs have finished, reading
-    /// their runs as often as a running job's.
+    /// End every running CI job for `cause`, the machine's sleep or a
+    /// shutdown, as [`Self::stop_job_to_rerun`] does, then rerun those whose
+    /// runs have finished already.
+    pub async fn stop_jobs_to_rerun(&self, daemon: &dyn Daemon, cause: JobStop) {
+        let jobs = match self.running_claims(daemon).await {
+            Ok(jobs) => jobs,
+            Err(error) => return log!("runner: running jobs unavailable for {cause}: {error:#}"),
+        };
+        let stops =
+            (jobs.iter()).map(|job| self.stop_job_to_rerun(daemon, &job.workspace_id, cause));
+        for (job, stopped) in jobs.iter().zip(join_all(stops).await) {
+            if let Err(error) = stopped {
+                log!(
+                    "runner: {} not stopped for {cause}: {error:#}",
+                    job.job.job.name
+                );
+            }
+        }
+        if let Err(error) = self.rerun_recorded_jobs(daemon).await {
+            log!("runner: reruns after {cause}: {error:#}");
+        }
+    }
+
+    /// Have the forge cancel alone the job the runner of `job` took, which
+    /// `cause`, a signal ending its wrapper's session, cuts off, recording
+    /// it to rerun; the wrapper then stops the runner. A job the forge does
+    /// not name is left to fail there, as [`Self::stop_job_to_rerun`]
+    /// leaves one.
+    pub(super) async fn cancel_job_to_rerun(
+        &self,
+        daemon: &dyn Daemon,
+        job: &ClaimedJob,
+        cause: JobStop,
+    ) -> Result<()> {
+        let taken = match self.identified_job(daemon, job).await {
+            Ok(taken) => taken,
+            Err(error) => {
+                self.log_job_stop(job, cause, rerun_outcome(false, false));
+                let (name, run) = (&job.job.job.name, job.job.run.url.to_string());
+                self.alert_not_rerun(name, cause, &error, &run).await;
+                return Ok(());
+            }
+        };
+        self.record_job_rerun(job, &taken, cause).await?;
+        let cancelled = self.cancel_stopping_job(daemon, job, &taken).await;
+        self.log_job_stop(job, cause, rerun_outcome(true, cancelled));
+        Ok(())
+    }
+
+    /// Rerun the jobs Shoal ended whose runs have finished, reading their
+    /// runs as often as a running job's.
     pub async fn rerun_stopped_jobs(&self, daemon: &dyn Daemon) -> Result<()> {
         if !self.jobs.take_reruns_read() {
             return Ok(());
         }
-        for job in self.stopped_jobs().await? {
-            let rerun = self.rerun(daemon, &job).await;
-            if self.rerun_settled(&job, rerun).await {
-                (self.forget_job_rerun(&job.run, job.id, &job.repository_id)).await?;
-            }
-        }
-        Ok(())
+        self.rerun_recorded_jobs(daemon).await
     }
 
     /// The claimed jobs whose runner's execution is recorded, which run
@@ -130,22 +168,51 @@ impl Runner {
         Ok(running)
     }
 
+    /// Rerun each job waiting to rerun whose run has finished, and tell the
+    /// user of those a sleep or shutdown cut off, one caller at a time, so
+    /// none reruns a job twice.
+    async fn rerun_recorded_jobs(&self, daemon: &dyn Daemon) -> Result<()> {
+        let _rerunning = self.jobs.rerunning.lock().await;
+        let mut reran = Vec::new();
+        for job in self.stopped_jobs().await? {
+            let rerun = self.rerun(daemon, &job).await;
+            if let (Ok(JobRerun::Rerun), Some(cause)) = (&rerun, &job.cut_off_by) {
+                reran.push(format!("{} of {}, cut off by {cause}", job.name, job.run));
+            }
+            if self.rerun_settled(&job, rerun).await {
+                (self.forget_job_rerun(&job.run, job.id, &job.repository_id)).await?;
+            }
+        }
+        self.notify_reruns(&reran).await;
+        Ok(())
+    }
+
+    /// The job the runner of `job` took, as its forge names it within
+    /// [`IDENTIFY_LIMIT`], before it stops.
+    async fn identified_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<TakenJob> {
+        tokio::time::timeout(IDENTIFY_LIMIT, self.taken_job(daemon, job))
+            .await
+            .unwrap_or_else(|_| Err(anyhow::anyhow!("its forge did not answer in time")))
+    }
+
     /// Stop the processes of `job`'s workspace under its lifecycle,
-    /// recording first that `taken`, when known, is to rerun and having its
-    /// forge cancel it, returning the processes stopped and whether the
-    /// forge cancelled it: a stop another lifecycle operation refuses
-    /// records and cancels nothing, and the record outlives a stop that
-    /// fails or a daemon that ends once anything may have been signaled.
+    /// recording first that `taken`, when known, is to rerun for `cause`
+    /// and having its forge cancel it, returning the processes stopped and
+    /// whether the forge cancelled it: a stop another lifecycle operation
+    /// refuses records and cancels nothing, and the record outlives a stop
+    /// that fails or a daemon that ends once anything may have been
+    /// signaled.
     async fn interrupt_job(
         &self,
         daemon: &dyn Daemon,
         job: &ClaimedJob,
         taken: Option<&TakenJob>,
+        cause: JobStop,
     ) -> Result<(Vec<shoal_protocol::events::StoppedProcess>, bool)> {
         let mut cancelled = false;
         let first = async {
             if let Some(taken) = taken {
-                self.record_job_rerun(job, taken).await?;
+                self.record_job_rerun(job, taken, cause).await?;
                 cancelled = self.cancel_stopping_job(daemon, job, taken).await;
             }
             Ok(())
@@ -225,16 +292,23 @@ impl Runner {
         })
     }
 
-    /// Record that the job `taken`, which `job`'s runner runs, is to rerun.
-    async fn record_job_rerun(&self, job: &ClaimedJob, taken: &TakenJob) -> Result<()> {
+    /// Record that the job `taken`, which `job`'s runner runs, is to rerun,
+    /// having stopped for `cause`.
+    async fn record_job_rerun(
+        &self,
+        job: &ClaimedJob,
+        taken: &TakenJob,
+        cause: JobStop,
+    ) -> Result<()> {
         let (run, id) = (taken.run.clone(), taken.id);
         let (name, repository) = (taken.name.clone(), job.repository_id.clone());
+        let cut_off_by = cut_off_by(cause);
         self.store
             .write(move |tx| {
                 tx.execute(
-                    "INSERT OR REPLACE INTO ci_job_reruns(run_url,job_id,job_name,repository_id,stopped_at)
-                     VALUES (?1,?2,?3,?4,?5)",
-                    params![run, id, name, repository, UnixTime::now()],
+                    "INSERT OR REPLACE INTO ci_job_reruns(run_url,job_id,job_name,repository_id,stopped_at,cut_off_by)
+                     VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![run, id, name, repository, UnixTime::now(), cut_off_by],
                 )?;
                 Ok(())
             })
@@ -247,7 +321,8 @@ impl Runner {
             .read(|db| {
                 Ok(db
                     .prepare(
-                        "SELECT run_url,job_id,job_name,repository_id,stopped_at FROM ci_job_reruns",
+                        "SELECT run_url,job_id,job_name,repository_id,stopped_at,cut_off_by
+                            FROM ci_job_reruns",
                     )?
                     .query_map([], |row| {
                         Ok(StoppedJob {
@@ -256,6 +331,7 @@ impl Runner {
                             name: row.get(2)?,
                             repository_id: row.get(3)?,
                             stopped_at: row.get(4)?,
+                            cut_off_by: row.get(5)?,
                         })
                     })?
                     .collect::<rusqlite::Result<_>>()?)
@@ -276,7 +352,7 @@ impl Runner {
         let expired = UnixTime::now().duration_since(job.stopped_at) >= PATIENCE;
         let failure = match rerun {
             Ok(JobRerun::Rerun) => {
-                log!("runner: reran {name} of run {run}, which protection stopped");
+                log!("runner: reran {name} of run {run}, which Shoal stopped");
                 return true;
             }
             Ok(JobRerun::Settled) => return true,
@@ -289,7 +365,7 @@ impl Runner {
             Err(error) => format!("{error:#}"),
         };
         let message = format!(
-            "CI job {name}, which protection stopped, was not rerun: {failure}; rerun {run} on its forge"
+            "CI job {name}, which Shoal stopped, was not rerun: {failure}; rerun {run} on its forge"
         );
         self.alert_runner_failed(message).await;
         true
@@ -314,9 +390,51 @@ impl Runner {
             .await
     }
 
-    /// Tell the user `message` about a job protection stopped.
+    /// Tell the user of the jobs a sleep or shutdown cut off that `reran`
+    /// names, if any.
+    async fn notify_reruns(&self, reran: &[String]) {
+        if reran.is_empty() {
+            return;
+        }
+        let message = format!(
+            "Reran CI jobs on their forges, where any runner can take them: {}",
+            reran.join("; ")
+        );
+        let alert = NewAlert::shoal(AlertKind::JobsRerun, About::default(), message);
+        self.notifications.notify_user(alert).await;
+    }
+
+    /// Tell the user that the job `name`, which Shoal stopped for `cause`,
+    /// is not rerun, since the job its runner took is unknown for `error`.
+    async fn alert_not_rerun(&self, name: &str, cause: JobStop, error: &anyhow::Error, run: &str) {
+        let message = format!(
+            "CI job {name}, which Shoal stopped for {cause}, is not rerun, since the job its runner took is unknown ({error:#}); rerun it on its forge from {run}"
+        );
+        self.alert_runner_failed(message).await;
+    }
+
+    /// Tell the user `message` about a job Shoal stopped.
     async fn alert_runner_failed(&self, message: String) {
         let alert = NewAlert::shoal(AlertKind::RunnerFailed, About::default(), message);
         self.notifications.notify_user(alert).await;
+    }
+}
+
+/// What a stop for `cause` records as what cut the job off, which its
+/// rerun tells the user: none for load protection's.
+fn cut_off_by(cause: JobStop) -> Option<String> {
+    match cause {
+        JobStop::Overload(_) => None,
+        cause => Some(cause.to_string()),
+    }
+}
+
+/// What Shoal's log says becomes of a job it stopped, whether the job its
+/// runner took is `known` and its forge `cancelled` it.
+fn rerun_outcome(known: bool, cancelled: bool) -> &'static str {
+    match (known, cancelled) {
+        (true, true) => "cancelled on its forge; reruns once its run has finished",
+        (true, false) => "reruns once its run has finished",
+        (false, _) => "not rerun, since the job it took is unknown",
     }
 }

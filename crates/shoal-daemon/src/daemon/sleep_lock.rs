@@ -5,12 +5,14 @@
 //! until the machine fully wakes, the agent queue admits nothing, and the
 //! hub link sends the notice and packages within the platform's allowance,
 //! then stays closed, so a dark wake, as macOS's Power Nap makes, neither
-//! starts work nor tells the hub the machine is back.
+//! starts work nor tells the hub the machine is back. Meanwhile the runner
+//! ends its running CI jobs to rerun, so other runners can take them.
 use std::{sync::Arc, time::Duration};
 
 use tokio::time::Instant;
 
 use super::{log, manager::Manager};
+use shoal_daemon_base::jobs::JobStop;
 
 #[cfg(target_os = "macos")]
 mod iokit;
@@ -59,7 +61,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 }
 
 /// Act on each announcement of a sleep or wake until announcements end.
-async fn follow(manager: &Manager, mut events: impl PowerEvents) {
+async fn follow(manager: &Arc<Manager>, mut events: impl PowerEvents) {
     while let Some(event) = events.next().await {
         match event {
             PowerEvent::Sleeping { hold, allowance } => {
@@ -72,12 +74,28 @@ async fn follow(manager: &Manager, mut events: impl PowerEvents) {
     }
 }
 
-/// Hold the agent queue and tell the hub by `deadline` that the machine
-/// sleeps, closing its link until it wakes.
-async fn prepare_for_sleep(manager: &Manager, deadline: Instant) {
+/// Hold the agent queue, and by `deadline` end the running CI jobs to
+/// rerun and tell the hub that the machine sleeps, closing its link until
+/// it wakes.
+async fn prepare_for_sleep(manager: &Arc<Manager>, deadline: Instant) {
     log!("sleep lock: the machine goes to sleep");
     manager.agents.agent_queue().sleep(true);
-    manager.hub.announce_sleep(manager, deadline).await;
+    let jobs = end_jobs(manager, deadline);
+    tokio::join!(manager.hub.announce_sleep(&**manager, deadline), jobs);
+}
+
+/// End the running CI jobs to rerun, waiting for that until `deadline`; a
+/// stop the sleep interrupts goes on once the machine wakes.
+async fn end_jobs(manager: &Arc<Manager>, deadline: Instant) {
+    let manager = manager.clone();
+    let ending = tokio::spawn(async move {
+        (manager.runner)
+            .stop_jobs_to_rerun(&*manager, JobStop::Sleep)
+            .await;
+    });
+    if tokio::time::timeout_at(deadline, ending).await.is_err() {
+        log!("sleep lock: CI jobs were still stopping as the machine went to sleep");
+    }
 }
 
 /// Open the hub link and the agent queue again once the machine woke.

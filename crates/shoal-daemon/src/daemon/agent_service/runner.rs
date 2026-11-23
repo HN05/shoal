@@ -52,14 +52,8 @@ impl Runner for Manager {
         Box::pin(self.runner.job_workspaces())
     }
 
-    fn cancel_job_before_stopping<'a>(
-        &'a self,
-        id: &'a SpaceId,
-        why: JobStop,
-    ) -> BoxFuture<'a, ()> {
-        Box::pin(async move {
-            self.runner.cancel_job_before_stopping(self, id, why).await;
-        })
+    fn stop_jobs_to_rerun(&self, why: JobStop) -> BoxFuture<'_, ()> {
+        Box::pin(self.runner.stop_jobs_to_rerun(self, why))
     }
 
     fn cancel_job_in<'a>(
@@ -75,7 +69,7 @@ impl Runner for Manager {
         id: &'a SpaceId,
         pressure: &'static str,
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(self.runner.stop_job_for_overload(self, id, pressure))
+        Box::pin((self.runner).stop_job_to_rerun(self, id, JobStop::Overload(pressure)))
     }
 
     fn wake_jobs(&self) {

@@ -24,9 +24,9 @@ mod load;
 mod memory;
 mod overrun;
 mod passes;
-mod protection;
 mod queue;
 mod registration;
+mod reruns;
 mod single_use;
 mod superseded;
 mod taken;
@@ -90,8 +90,10 @@ pub struct Runners {
     claiming: Mutex<HashSet<QueueEntryId>>,
     /// The runs of the running jobs, by queue entry.
     runs: Mutex<HashMap<QueueEntryId, RunCheck>>,
-    /// When the runs of the jobs protection stopped were last read.
+    /// When the runs of the jobs waiting to rerun were last read.
     reruns_read: Mutex<Option<Instant>>,
+    /// Held while the jobs waiting to rerun are rerun.
+    rerunning: tokio::sync::Mutex<()>,
     /// Admission admitted a job, or one ended.
     wake: Notify,
     /// Held while a claim writes a job's files and while the sweep of
@@ -175,7 +177,7 @@ impl Runners {
         lock(&self.claiming).contains(entry)
     }
 
-    /// Whether the runs of the jobs protection stopped are to be read, which
+    /// Whether the runs of the jobs waiting to rerun are to be read, which
     /// marks them read: as often as a running job's run.
     pub fn take_reruns_read(&self) -> bool {
         let mut read = lock(&self.reruns_read);

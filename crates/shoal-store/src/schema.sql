@@ -820,7 +820,7 @@ CREATE TABLE ci_job_reruns (
     job_id INTEGER NOT NULL,
     job_name TEXT NOT NULL,
     repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    stopped_at INTEGER NOT NULL,
+    stopped_at INTEGER NOT NULL, cut_off_by TEXT,
     PRIMARY KEY(run_url, job_id)
 );
 

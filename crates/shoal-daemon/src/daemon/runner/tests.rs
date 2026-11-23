@@ -1024,27 +1024,68 @@ async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
     assert_eq!(logged_stops(&fixture.manager), [JobStop::DaemonStop]);
 }
 
+/// The stop before a system shutdown cancels a running job alone on its
+/// forge and stops its runner, then reruns the job at once, since its run
+/// has finished, telling the user.
 #[tokio::test]
-async fn a_system_shutdown_cancels_a_jobs_run_and_stops_its_runner() {
-    let fixture = daemon_exit_with_runner(job("h3", 7, 3), Cancelling::SystemShutdown).await;
-    assert!(cancelled(&fixture, 3));
+async fn a_system_shutdown_ends_a_job_alone_and_reruns_it() {
+    let fixture = daemon_exit_with_runner(job("h6", 8, 6), Cancelling::SystemShutdown).await;
+    assert!(cancelled_alone(&fixture));
+    assert!(!cancelled(&fixture, 6));
     assert_eq!(logged_stops(&fixture.manager), [JobStop::SystemShutdown]);
+    assert_eq!(reruns(&fixture, 8), 1);
+    let told = alerts(&fixture.manager, AlertKind::JobsRerun).await;
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains("/team/repo/actions/runs/6"), "{told:?}");
+    assert!(told[0].contains("the system shutting down"), "{told:?}");
+}
+
+/// The machine going to sleep cancels a running job alone on its forge and
+/// stops its runner, and the job reruns, as before a shutdown.
+#[tokio::test]
+async fn the_machine_going_to_sleep_ends_a_job_alone_and_reruns_it() {
+    use crate::protocol::{self, Control, ExecutionEvent};
+
+    let fixture = fixture(vec![job("h6", 8, 6)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
+    let ConnectedRunner {
+        mut connection,
+        executing,
+    } = connect_runner(manager, &claimed[0].workspace_id, false).await;
+
+    let stopping = tokio::spawn({
+        let manager = manager.clone();
+        async move {
+            (manager.runner)
+                .stop_jobs_to_rerun(&*manager, JobStop::Sleep)
+                .await
+        }
+    });
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(&control, Control::Stop { .. }), "{control:?}");
+    let event = ExecutionEvent::Finished {
+        exit_code: 143,
+        memory: None,
+    };
+    protocol::write(connection.get_mut(), &event).await.unwrap();
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(control, Control::Finished { .. }), "{control:?}");
+    executing.await.unwrap().unwrap();
+    stopping.await.unwrap();
+    assert!(cancelled_alone(&fixture));
+    assert_eq!(logged_stops(manager), [JobStop::Sleep]);
+    assert_eq!(reruns(&fixture, 8), 1);
+    let told = alerts(manager, AlertKind::JobsRerun).await;
+    assert!(told[0].contains("the machine going to sleep"), "{told:?}");
 }
 
 #[tokio::test]
 async fn the_daemon_exiting_stops_a_jobs_runner_when_the_forge_refuses_to_cancel_its_run() {
     // The forge finds no run 1 to cancel.
     let fixture = daemon_exit_with_runner(job("h1", 4, 1), Cancelling::DaemonStop).await;
-    let failures: Vec<_> = fixture
-        .manager
-        .notifications
-        .list(true, 10)
-        .await
-        .unwrap()
-        .into_iter()
-        .filter(|notification| notification.kind == AlertKind::RunnerFailed)
-        .map(|notification| notification.message)
-        .collect();
+    let failures = alerts(&fixture.manager, AlertKind::RunnerFailed).await;
     assert_eq!(failures.len(), 1, "{failures:?}");
 }
 
@@ -1073,14 +1114,17 @@ async fn a_signal_to_the_daemon_leaves_a_jobs_runner_running_for_the_next_daemon
     assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
 }
 
+/// A signal ending a job's wrapper's session, as a shutdown sends, has the
+/// daemon cancel the job alone before the runner stops, and the job
+/// reruns once its run has finished.
 #[tokio::test]
-async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
+async fn a_signal_to_a_jobs_wrapper_cancels_its_job_alone_to_rerun() {
     use crate::{
         daemon::scope::{Caller, ScopedExecution},
         protocol::SessionSignal,
     };
 
-    let fixture = fixture(vec![job("h3", 7, 3)], "").await;
+    let fixture = fixture(vec![job("h6", 8, 6)], "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.runner.claimed_jobs().await.unwrap();
@@ -1126,23 +1170,56 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_run_before_the_runner_stops() {
         .cancel_job_for_signal(&**manager, Some(&step), SessionSignal::Terminate)
         .await
         .unwrap();
-    assert!(!cancelled(&fixture, 3));
+    assert!(!cancelled_alone(&fixture));
 
     (manager.runner)
         .cancel_job_for_signal(&**manager, Some(&wrapper), SessionSignal::Terminate)
         .await
         .unwrap();
-    assert!(cancelled(&fixture, 3));
+    assert!(cancelled_alone(&fixture));
+    assert!(!cancelled(&fixture, 6));
     assert_eq!(
         logged_stops(manager),
         [JobStop::Signal(SessionSignal::Terminate)]
     );
+    manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
+    assert_eq!(reruns(&fixture, 8), 1);
+    let told = alerts(manager, AlertKind::JobsRerun).await;
+    assert!(told[0].contains("SIGTERM"), "{told:?}");
 }
 
 /// What stopped each job whose stop Shoal's log recorded.
 fn logged_stops(manager: &Manager) -> Vec<JobStop> {
     let stops = manager.runner.jobs().stops.lock().unwrap();
     stops.iter().map(|(_, cause)| *cause).collect()
+}
+
+/// Whether the forge was asked, through its runner protocol, to cancel a
+/// job alone.
+fn cancelled_alone(fixture: &Fixture) -> bool {
+    (fixture.server.received().iter())
+        .any(|request| request.line.ends_with("RunnerService/UpdateTask"))
+}
+
+/// How often the forge was asked to rerun the job `id`.
+fn reruns(fixture: &Fixture, id: u64) -> usize {
+    let rerun = format!("POST /api/v1/repos/team/repo/actions/jobs/{id}/rerun");
+    (fixture.server.received().iter())
+        .filter(|request| request.line == rerun)
+        .count()
+}
+
+/// The messages of the user's alerts of `kind`.
+async fn alerts(manager: &Manager, kind: AlertKind) -> Vec<String> {
+    (manager
+        .notifications
+        .list(true, 10)
+        .await
+        .unwrap()
+        .into_iter())
+    .filter(|notification| notification.kind == kind)
+    .map(|notification| notification.message)
+    .collect()
 }
 
 /// Whether the forge was asked to cancel `run`.
@@ -1155,7 +1232,7 @@ fn cancelled(fixture: &Fixture, run: u64) -> bool {
         .any(|request| request.line == cancel)
 }
 
-/// How the daemon's exit cancels a running job's run and stops its runner.
+/// How the daemon's exit ends a running job and stops its runner.
 #[derive(Clone, Copy)]
 enum Cancelling {
     /// `shoal daemon stop`.
@@ -1285,8 +1362,14 @@ async fn daemon_exit_with_runner(job: Value, cancelling: Cancelling) -> Fixture 
             }
         }
     });
+    // A daemon stop saves what it stops; a job ended to rerun keeps nothing.
     let control: Control = read(&mut connection).await;
-    assert!(matches!(&control, Control::Pause { .. }), "{control:?}");
+    match cancelling {
+        Cancelling::DaemonStop => assert!(matches!(&control, Control::Pause { .. }), "{control:?}"),
+        Cancelling::SystemShutdown => {
+            assert!(matches!(&control, Control::Stop { .. }), "{control:?}")
+        }
+    }
     let event = ExecutionEvent::Finished {
         exit_code: 143,
         memory: None,
@@ -1485,16 +1568,12 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_its_run_fin
         .collect();
     assert_eq!(reasons, ["stopped for critical memory pressure"]);
 
-    let rerun = "POST /api/v1/repos/team/repo/actions/jobs/8/rerun";
-    let reruns = || {
-        (fixture.server.received().iter())
-            .filter(|request| request.line == rerun)
-            .count()
-    };
     assert!(manager.agents.overload_recovery().published().is_none());
     manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
     manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
-    assert_eq!(reruns(), 1);
+    assert_eq!(reruns(&fixture, 8), 1);
+    // Load protection's reruns tell nobody.
+    assert!(alerts(manager, AlertKind::JobsRerun).await.is_empty());
 }
 
 /// A stop another lifecycle operation of the job's workspace refuses
@@ -1515,7 +1594,7 @@ async fn a_refused_load_stop_leaves_a_job_no_rerun() {
     let memory = crate::daemon::overload::Pressure::Memory.reason();
     (manager
         .runner
-        .stop_job_for_overload(&**manager, &workspace, memory))
+        .stop_job_to_rerun(&**manager, &workspace, JobStop::Overload(memory)))
     .await
     .unwrap_err();
     let reruns: i64 = manager

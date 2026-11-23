@@ -2089,16 +2089,21 @@ from a service stop, leave it running for the next daemon to take its wrapper
 back, and its wrapper runs apart from the daemon's service, as every detached
 worker does, so the service manager's stop of the service leaves it running
 too. A job ends only on the forge's word, so stopping it, as `shoal daemon
-stop` and a system shutdown do, cancels its run there, as does its wrapper
-through the daemon, which keeps the forge's login, when a logout's or a
-shutdown's signal reaches it, and disk protection leaves it running. Load
-protection alone ends a job without
+stop` does, cancels its run there, and disk protection leaves it running.
+Load protection, and what cuts a job off on any machine, the machine's
+announced sleep, the stop before a system shutdown and a logout's or a
+shutdown's signal to its wrapper, which asks the daemon since the daemon
+keeps the forge's login, end a job without
 cancelling its run, which would end the run's other jobs too: before it
 signals anything, Shoal reports that job alone cancelled through the forge's
 runner protocol, as the runner it registered there, then stops the
 job's processes and its runner, whose report of the stopped step changes
 nothing, since the forge keeps a finished job's result. The job reruns once the
-run has finished, so the PR's check shows the job cancelled until then. On a
+run has finished, so the PR's check shows the job cancelled until then; a sleep
+or shutdown also tries at once, as the run whose last running job it ended has
+finished, and the user hears of each job either cut off once it reruns. A
+machine that drops without announcing it leaves its job to the forge's
+timeout. On a
 forge whose runner protocol Shoal does not speak, GitHub's, the forge fails
 the job once the runner reports the stopped step. Once the forge has finished the run,
 a runner that outlives it by a grace period, held open by a process a step

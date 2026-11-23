@@ -75,17 +75,9 @@ impl Shutdown {
         }
     }
 
-    /// What stops a CI job's runner, as Shoal's log names it.
-    fn job_stop(self) -> JobStop {
-        match self {
-            Self::System => JobStop::SystemShutdown,
-            Self::Daemon => JobStop::DaemonSignal,
-        }
-    }
-
-    /// Whether the stop also ends CI jobs: a system shutdown ends them, while
-    /// the daemon's own end leaves them to the next daemon, since the forge's
-    /// runner does their work.
+    /// Whether the stop also ends CI jobs, to rerun: a system shutdown ends
+    /// them, while the daemon's own end leaves them to the next daemon, since
+    /// the forge's runner does their work.
     fn ends_jobs(self) -> bool {
         matches!(self, Self::System)
     }
@@ -103,8 +95,9 @@ impl Agents {
     /// Stop the spaces `shoal stop --all` stops, each wrapper saving its
     /// agent before the stop and requesting restores that need no user,
     /// which the stop keeps with those already waiting, and leaving CI jobs
-    /// running unless `shutdown` ends them. Hold the agent queue until a
-    /// system shutdown is cancelled, so nothing starts again before it.
+    /// running unless `shutdown` ends them, each alone, to rerun. Hold the
+    /// agent queue until a system shutdown is cancelled, so nothing starts
+    /// again before it.
     /// Then, on a machine joined to a hub, hand every space over to the
     /// machines the hub places them on, sending what fits in `window`. The user learns where each space went and what
     /// to continue. An update waits for the stop. Once a stop before a
@@ -121,20 +114,18 @@ impl Agents {
         if *finished {
             return StoppedSpaces::default();
         }
-        let left = match shutdown.ends_jobs() {
-            true => HashSet::new(),
-            false => daemon.job_workspaces().await,
+        // A CI job's runner stops with its job, which ends apart.
+        let left = daemon.job_workspaces().await;
+        let spaces = self.stop_every_target(daemon, shutdown.moment(), &left, |space| async move {
+            self.stop_keeping_restores(daemon, &SpaceSelector::id(&space), shutdown.request())
+                .await
+        });
+        let jobs = async {
+            if shutdown.ends_jobs() {
+                daemon.stop_jobs_to_rerun(JobStop::SystemShutdown).await;
+            }
         };
-        let stopped = self
-            .stop_every_target(daemon, shutdown.moment(), &left, |space| async move {
-                // A CI job's run ends on its forge, before its runner stops.
-                daemon
-                    .cancel_job_before_stopping(&space, shutdown.job_stop())
-                    .await;
-                self.stop_keeping_restores(daemon, &SpaceSelector::id(&space), shutdown.request())
-                    .await
-            })
-            .await;
+        let (stopped, ()) = tokio::join!(spaces, jobs);
         let handed = (self.hand_over(daemon, window.deadline(started))).await;
         (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
         *finished = true;

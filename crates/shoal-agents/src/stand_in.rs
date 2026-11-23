@@ -861,7 +861,7 @@ impl Runner for StandIn {
         Box::pin(async { Default::default() })
     }
 
-    fn cancel_job_before_stopping<'a>(&'a self, _: &'a SpaceId, _: JobStop) -> BoxFuture<'a, ()> {
+    fn stop_jobs_to_rerun(&self, _: JobStop) -> BoxFuture<'_, ()> {
         Box::pin(async {})
     }
 
