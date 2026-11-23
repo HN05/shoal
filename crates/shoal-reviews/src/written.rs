@@ -266,7 +266,7 @@ fn ensure_below(workspace: &Workspace, writer: &Writer) -> Result<()> {
 }
 
 /// Refuse a space of another machine writing a review here, since the
-/// threads it opens are numbered in its own space there.
+/// threads it opens are numbered in its own space there (#3467).
 fn ensure_here(db: &Connection, records: &dyn Records, writer: &Writer) -> Result<()> {
     if let Writer::Space(id) = writer {
         records.space_name(db, id)?.with_context(|| {
