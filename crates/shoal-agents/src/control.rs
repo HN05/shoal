@@ -526,7 +526,8 @@ impl Agents {
 
     /// Track `name` as the agent of the execution `id` in `space`, named
     /// `space_name`, as its wrapper's registration does, without the
-    /// connection that would stop it.
+    /// connection that would stop it. It runs while the caller holds the
+    /// receiver of its stop, which this returns.
     #[cfg(test)]
     pub(crate) async fn track_unconnected(
         &self,
@@ -534,8 +535,9 @@ impl Agents {
         space: &SpaceId,
         space_name: &SpaceName,
         name: crate::agent::Agent,
-    ) {
+    ) -> watch::Receiver<bool> {
         let tracked = TrackedAgent::named(name);
+        let (stop, stopped) = watch::channel(false);
         let agent = Agent {
             name: tracked.name,
             model: tracked.model,
@@ -545,7 +547,7 @@ impl Agents {
             workspace_id: space.clone(),
             started: Instant::now(),
             recover: false,
-            stop: watch::channel(false).0,
+            stop,
             update_hold: None,
             restarts: Default::default(),
             typed_at: None,
@@ -553,6 +555,7 @@ impl Agents {
         (self.executions)
             .with_agents(|agents| agents.insert(id.clone(), agent))
             .await;
+        stopped
     }
 
     /// Have the tracked agent of `id` run under `narrowing`, which its

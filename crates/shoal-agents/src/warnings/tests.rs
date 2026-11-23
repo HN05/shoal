@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 #[tokio::test]
-async fn only_disk_warnings_wake_an_idle_agent() {
+async fn only_disk_warnings_wake_an_idle_agent_and_only_in_a_workspace() {
     let fixture = Arc::new(Fixture::new().await);
     let workspace = fixture.workspace("busy").await;
     let agent = fixture
@@ -35,6 +35,16 @@ async fn only_disk_warnings_wake_an_idle_agent() {
         )
         .await;
     let busy = SpaceSelector::id(&workspace.id);
+    let chat = fixture.chat("talk").await;
+    let _chat_agent = fixture
+        .agents
+        .track_unconnected(
+            &chat.as_str().into(),
+            &chat,
+            &"talk".into(),
+            crate::agent::Agent::from("claude"),
+        )
+        .await;
     // A tracked command runs beside the agent.
     let _command = fixture
         .agents
@@ -47,13 +57,9 @@ async fn only_disk_warnings_wake_an_idle_agent() {
         )
         .await
         .unwrap();
-    let wakes = || async {
-        fixture
-            .agents
-            .unread_messages(&workspace.id)
-            .await
-            .unwrap()
-            .wakes
+    let unread = |space| {
+        let agents = &fixture.agents;
+        async move { agents.unread_messages(space).await.unwrap() }
     };
     let settings = Overload::default();
     let mut warnings = Warnings::default();
@@ -78,7 +84,8 @@ async fn only_disk_warnings_wake_an_idle_agent() {
             .len(),
         2
     );
-    assert!(!wakes().await);
+    assert!(!unread(&workspace.id).await.wakes);
+    assert!(!unread(&chat).await.wakes);
     // An agent can free disk space without running anything.
     warnings
         .warn(
@@ -88,7 +95,12 @@ async fn only_disk_warnings_wake_an_idle_agent() {
             &disk(&settings, "1.0 GiB available at /"),
         )
         .await;
-    assert!(wakes().await);
+    assert!(unread(&workspace.id).await.wakes);
+    // A chat has no worktree to free space in: its agent reads the warning
+    // at its next turn.
+    let chat_unread = unread(&chat).await;
+    assert_eq!(chat_unread.alerts.len(), 3);
+    assert!(!chat_unread.wakes);
 }
 
 #[test]

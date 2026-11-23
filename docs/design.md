@@ -1037,16 +1037,18 @@ gave them, so a settled agent's memory includes the services its work
 started; other processes that leave the workspace's environment, such as
 work handed to a shared server, count for the machine only.
 Warnings come first: below each enabled protection's stop threshold, the daemon
-queues an alert for every workspace with a running agent, so agents
+queues an alert for every space with a running agent, so agents
 know of the load before anything stops. A memory or CPU warning is a heads-up
-that asks for no action, so agents keep to their work. Warnings repeat per signal and workspace only
+that asks for no action, so agents keep to their work. Warnings repeat per signal and space only
 after an interval and never stop, clean up or notify. A memory or CPU warning
 never wakes an idle agent, since it gives the agent nothing to do and a woken
 turn costs tokens; it waits for the agent's next update or turn. A disk warning
-wakes it, since deleting files frees space, but only in its own worktree and
+wakes a workspace's agent, since deleting files frees space, but only in its own worktree and
 only whole build outputs: other workspaces' files and the preset files beside
 them are in use by agents it cannot see, and part of a build's output leaves
-records the build tool takes as fresh for files that are gone.
+records the build tool takes as fresh for files that are gone. A chat's agent,
+with no worktree, has nothing to delete, so its disk warning waits for its next
+turn too.
 Their thresholds are not
 validated against stop thresholds, so lowering a stop threshold never invalidates
 an existing configuration.

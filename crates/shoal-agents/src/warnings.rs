@@ -4,7 +4,10 @@ use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
 
-use crate::{Agents, config::overload::Overload, log, messages::Delivery, shoal_dirs::Contents};
+use crate::{
+    Agents, config::overload::Overload, log, messages::Delivery, model::SpaceKind,
+    shoal_dirs::Contents,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Signal {
@@ -14,27 +17,30 @@ pub enum Signal {
 }
 
 impl Signal {
-    /// How its warning reaches an idle agent: a memory or CPU warning is a
-    /// heads-up that asks for nothing, so it waits for the agent's next turn,
-    /// while a disk warning wakes it to delete files.
-    fn delivery(self) -> Delivery {
-        match self {
-            Self::Memory | Self::Cpu => Delivery::NextTurn,
-            Self::Disk => Delivery::Wake,
+    /// How its warning reaches an idle agent in a space of `kind`: a disk
+    /// warning wakes a workspace's agent to delete files in its worktree,
+    /// while every other waits for the agent's next turn, a memory or CPU
+    /// warning being a heads-up that asks for nothing and a chat having no
+    /// worktree to delete files in.
+    fn delivery(self, kind: SpaceKind) -> Delivery {
+        match (self, kind) {
+            (Self::Disk, SpaceKind::Workspace) => Delivery::Wake,
+            _ => Delivery::NextTurn,
         }
     }
 }
 
-/// When each workspace was last warned about each signal.
+/// When each space was last warned about each signal.
 #[derive(Default)]
 pub struct Warnings {
     sent: HashMap<(SpaceId, Signal), Instant>,
 }
 
 impl Warnings {
-    /// Queue `message` for each workspace with a running agent that has not
+    /// Queue `message` for each space with a running agent that has not
     /// been warned about `signal` within the repeat interval, including agents
-    /// started since the last warning, delivered as [`Signal::delivery`] says.
+    /// started since the last warning, delivered as [`Signal::delivery`] says
+    /// for its space's kind.
     pub async fn warn(&mut self, agents: &Agents, now: Instant, signal: Signal, message: &str) {
         let repeat = Duration::from_secs(
             agents
@@ -48,9 +54,8 @@ impl Warnings {
         );
         self.sent
             .retain(|_, sent| now.duration_since(*sent) < repeat);
-        let delivery = signal.delivery();
-        for workspace_id in agents.running_agent_workspaces().await {
-            let key = (workspace_id, signal);
+        for (space_id, kind) in running_agent_spaces(agents).await {
+            let key = (space_id, signal);
             if self.sent.contains_key(&key) {
                 continue;
             }
@@ -59,13 +64,38 @@ impl Warnings {
                     &key.0,
                     shoal_daemon_base::alerts::AlertKind::LoadWarning,
                     message.into(),
-                    delivery,
+                    signal.delivery(kind),
                 )
                 .await
             {
                 log!("pressure warning not queued: {error:#}");
             }
             self.sent.insert(key, now);
+        }
+    }
+}
+
+/// Each space with a running agent, with its kind, while it is recorded;
+/// none when the spaces cannot be read, so the next check warns them.
+async fn running_agent_spaces(agents: &Agents) -> Vec<(SpaceId, SpaceKind)> {
+    let running = agents.running_agent_workspaces().await;
+    let records = agents.records.clone();
+    let kinds = agents
+        .store
+        .read(move |db| {
+            let kinds: HashMap<_, _> = (records.spaces(db)?.into_iter())
+                .map(|space| (space.id, space.kind))
+                .collect();
+            Ok(kinds)
+        })
+        .await;
+    match kinds {
+        Ok(kinds) => (running.into_iter())
+            .filter_map(|id| Some((id.clone(), *kinds.get(&id)?)))
+            .collect(),
+        Err(error) => {
+            log!("pressure warning not queued: {error:#}");
+            Vec::new()
         }
     }
 }
