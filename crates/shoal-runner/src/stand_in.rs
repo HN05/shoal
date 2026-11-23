@@ -33,6 +33,7 @@ use shoal_forge_types::{ForgeRepo, backends::ForgeKind, items::reference::ItemRe
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::PermissionKey,
+    hub::reruns::CutOffJob,
     launches::{Launch, LaunchSource},
     model::{QueueEntry, QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     paths::Paths,
@@ -85,6 +86,7 @@ impl Fixture {
             could_start: AtomicBool::new(true),
             admitted: Mutex::default(),
             executions: Mutex::default(),
+            handed: Mutex::default(),
         });
         let runner = runner(&root, &daemon).await;
         let record = daemon.repository.clone();
@@ -247,6 +249,9 @@ pub(crate) struct StandIn {
     pub(crate) admitted: Mutex<Vec<(QueueEntryId, RepositoryId, QueuedJob)>>,
     /// The executions the daemon records.
     pub(crate) executions: Mutex<crate::daemon::RecordedExecutions>,
+    /// The CI jobs cut off that the hub keeps, none for a machine in no
+    /// hub.
+    pub(crate) handed: Mutex<Option<Vec<CutOffJob>>>,
 }
 
 impl StandIn {
@@ -444,6 +449,14 @@ impl Forges for StandIn {
 
     fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
         Box::pin(async move { item.forge(&self.hosts()).await })
+    }
+}
+
+impl crate::daemon::Hub for StandIn {
+    fn hand_cut_off_jobs(&self, jobs: Vec<CutOffJob>) -> BoxFuture<'_, Result<bool>> {
+        let mut handed = self.handed.lock().unwrap();
+        let kept = handed.as_mut().map(|handed| handed.extend(jobs)).is_some();
+        Box::pin(async move { Ok(kept) })
     }
 }
 

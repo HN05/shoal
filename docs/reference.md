@@ -4837,7 +4837,11 @@ sends, cut the job off instead, on every machine: Shoal ends it as
 [load protection](#overload-protection) does, cancelling that job alone, and
 reruns it on its forge as soon as its run has finished, at once where it
 already has, so any runner can take it, and a `jobs_rerun` alert names each
-such job once it reruns. A job its wrapper's signal cuts off is cancelled by
+such job once it reruns. On a machine joined to a hub, a sleep or shutdown
+hands the jobs it cut off to the hub, which reruns them while the machine is
+away, through its own machine or another connected one with the user's login
+for the run's forge, and the machine never reruns them itself once it is back.
+A job its wrapper's signal cuts off is cancelled by
 the daemon before the wrapper stops the runner, which may report its job
 first; a wrapper the daemon does not answer within 15 seconds stops the runner
 without the cancel and says why in the job's log. A job on a machine that

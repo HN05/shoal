@@ -1,8 +1,8 @@
 //! What the triggers and the runner need of the rest of the daemon, which
 //! implements it: the registered repositories and their config, the agents
 //! a trigger's launch meets and starts, the permission a scoped caller acts
-//! with, the forges the runner registers on, and the agent queue's rows it
-//! changes in its own transactions.
+//! with, the forges the runner registers on, the hub it hands the jobs it
+//! cut off, and the agent queue's rows it changes in its own transactions.
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,6 +22,7 @@ use shoal_ids::{
 use shoal_protocol::{
     config::permissions::PermissionKey,
     events::StoppedProcess,
+    hub::reruns::CutOffJob,
     launches::{Launch, LaunchSource},
     model::{QueueEntry, QueuedJob, Repository, Space, Workspace, WorkspaceUsage},
     protocol::ItemContext,
@@ -262,10 +263,18 @@ pub trait RecordedJobWorkspace<'a>: Send {
     fn check_out(self: Box<Self>) -> BoxFuture<'a, Result<Workspace>>;
 }
 
+/// The hub this machine joined.
+pub trait Hub: Send + Sync {
+    /// Hand the hub `jobs`, which this machine cut off, to rerun in its
+    /// place, returning whether it keeps them now: false on the hub's own
+    /// machine and on one in no hub.
+    fn hand_cut_off_jobs(&self, jobs: Vec<CutOffJob>) -> BoxFuture<'_, Result<bool>>;
+}
+
 /// Everything the triggers and the runner need of the daemon, which each of
 /// their operations that reaches beyond them takes.
 pub trait Daemon:
-    Repositories + Agents + Permissions + Forges + Spaces + Workspaces + Executions + Coordinators
+    Repositories + Agents + Permissions + Forges + Spaces + Workspaces + Executions + Hub + Coordinators
 {
 }
 
@@ -277,6 +286,7 @@ impl<T> Daemon for T where
         + Spaces
         + Workspaces
         + Executions
+        + Hub
         + Coordinators
 {
 }

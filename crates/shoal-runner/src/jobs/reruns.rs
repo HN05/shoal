@@ -8,9 +8,12 @@
 //! than failed. Each pass then reruns it on its forge as soon as its run
 //! has finished there, whatever this machine's readings, and the forge
 //! offers the waiting job to every runner, each Shoal runner admitting it
-//! as any other. A sleep or shutdown tries the reruns at once too, since a
-//! run whose last running job it ended has finished, and the user hears of
-//! each job one cut off once it reruns. A rerun its run never allows within
+//! as any other. A sleep or shutdown first hands the jobs it cut off to the
+//! hub this machine joined, which reruns them in its place while it is
+//! away, and forgets those the hub keeps, so it never reruns one again once
+//! it is back; it tries the reruns of the rest at once, since a run whose
+//! last running job it ended has finished, and the user hears of each job
+//! one cut off once it reruns. A rerun its run never allows within
 //! [`PATIENCE`] is given up.
 use std::time::Duration;
 
@@ -68,6 +71,20 @@ struct StoppedJob {
     cut_off_by: Option<String>,
 }
 
+impl StoppedJob {
+    /// This job as the hub reruns it in this machine's place, none for one
+    /// load protection stopped, which this machine reruns.
+    fn cut_off(&self) -> Option<CutOffJob> {
+        Some(CutOffJob {
+            run: self.run.clone(),
+            job: self.id,
+            name: self.name.clone(),
+            cut_off_by: self.cut_off_by.clone()?,
+            stopped_at: self.stopped_at,
+        })
+    }
+}
+
 impl Runner {
     /// End the CI job running in the workspace `space` for `cause`, load
     /// protection or what cuts it off, recording it to rerun once its run
@@ -103,8 +120,8 @@ impl Runner {
     }
 
     /// End every running CI job for `cause`, the machine's sleep or a
-    /// shutdown, as [`Self::stop_job_to_rerun`] does, then rerun those whose
-    /// runs have finished already.
+    /// shutdown, as [`Self::stop_job_to_rerun`] does, hand the hub those
+    /// cut off, then rerun those left whose runs have finished already.
     pub async fn stop_jobs_to_rerun(&self, daemon: &dyn Daemon, cause: JobStop) {
         let jobs = match self.running_claims(daemon).await {
             Ok(jobs) => jobs,
@@ -120,9 +137,31 @@ impl Runner {
                 );
             }
         }
+        if let Err(error) = self.hand_over_cut_off_jobs(daemon).await {
+            log!("runner: the jobs cut off by {cause} rerun from here: {error:#}");
+        }
         if let Err(error) = self.rerun_recorded_jobs(daemon).await {
             log!("runner: reruns after {cause}: {error:#}");
         }
+    }
+
+    /// Hand the hub the jobs waiting to rerun that a sleep or shutdown cut
+    /// off, to rerun while this machine is away, and forget them once it
+    /// keeps them, so this machine never reruns one again.
+    async fn hand_over_cut_off_jobs(&self, daemon: &dyn Daemon) -> Result<()> {
+        let _rerunning = self.jobs.rerunning.lock().await;
+        let stopped = self.stopped_jobs().await?;
+        let cut_off: Vec<_> = (stopped.into_iter())
+            .filter_map(|job| Some((job.cut_off()?, job)))
+            .collect();
+        let handed = cut_off.iter().map(|(handed, _)| handed.clone()).collect();
+        if !daemon.hand_cut_off_jobs(handed).await? {
+            return Ok(());
+        }
+        for (_, job) in &cut_off {
+            (self.forget_job_rerun(&job.run, job.id, &job.repository_id)).await?;
+        }
+        Ok(())
     }
 
     /// Have the forge cancel alone the job the runner of `job` took, which
@@ -458,3 +497,6 @@ fn rerun_outcome(known: bool, cancelled: bool) -> &'static str {
         (false, _) => "not rerun, since the job it took is unknown",
     }
 }
+
+#[cfg(test)]
+mod tests;

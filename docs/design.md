@@ -2132,8 +2132,13 @@ runner protocol, as the runner it registered there, then stops the
 job's processes and its runner, whose report of the stopped step changes
 nothing, since the forge keeps a finished job's result. The job reruns once the
 run has finished, so the PR's check shows the job cancelled until then; a sleep
-or shutdown also tries at once, as the run whose last running job it ended has
-finished, and the user hears of each job either cut off once it reruns. A
+or shutdown hands the jobs it cut off to the hub the machine joined, which
+reruns each once its run has finished, through its own machine or else the
+first connected one with the user's login for the run's forge, and the machine
+forgets those the hub keeps, so it never reruns one again once it is back. A
+machine in no hub, the hub's own and one that cannot reach the hub keep them and
+also try at once, as the run whose last running job it ended has finished, and
+the user hears of each job either cut off once it reruns. A
 machine that drops without announcing it leaves its job to the forge's
 timeout. On a
 forge whose runner protocol Shoal does not speak, GitHub's, the forge fails

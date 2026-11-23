@@ -3,6 +3,7 @@
 mod agents;
 mod executions;
 mod forges;
+mod hub;
 mod job_workspaces;
 mod permissions;
 mod records;
