@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use anyhow::bail;
 use rusqlite::Connection;
-use shoal_store::tree::Receiver;
+use shoal_store::tree::{self, Receiver};
 
 use crate::{
     alerts::{NewAlert, Sent},
@@ -164,7 +164,7 @@ impl Coordination {
     ) -> Result<Recipients> {
         let (id, agents) = (from.clone(), daemon.tracked_agents().await);
         let receiver = (self.store)
-            .run(move |db| routing_coordinator(db, Some(id), source, &agents))
+            .run(move |db| coordinator(db, &id, source, &agents))
             .await?;
         Ok(match receiver {
             Some(Receiver::Here(coordinator)) => Recipients::Coordinator(coordinator),
@@ -258,22 +258,18 @@ struct WorkspaceAgents {
 
 /// The coordinator of the space `id` for an event from `source`: the
 /// nearest space above it with an agent, or the first one above on
-/// another machine. An event about no known space, which names repeat too
-/// much to find, has none.
-fn routing_coordinator(
+/// another machine.
+fn coordinator(
     db: &Connection,
-    id: Option<SpaceId>,
+    id: &SpaceId,
     source: Source,
-    agents: &shoal_store::tree::TrackedAgents,
-) -> Result<Option<shoal_store::tree::Receiver>> {
-    let Some(id) = id else {
-        return Ok(None);
-    };
-    if source == Source::Agent && !shoal_store::tree::has_running_agent(db, &id, agents)? {
+    agents: &tree::TrackedAgents,
+) -> Result<Option<Receiver>> {
+    if source == Source::Agent && !tree::has_running_agent(db, id, agents)? {
         return Ok(None);
     }
-    if let Some(coordinator) = shoal_store::tree::coordinator_of(db, &id, agents)? {
-        return Ok(Some(shoal_store::tree::Receiver::Here(coordinator)));
+    if let Some(coordinator) = tree::coordinator_of(db, id, agents)? {
+        return Ok(Some(Receiver::Here(coordinator)));
     }
-    Ok(shoal_store::tree::first_absent_above(db, &id)?.map(shoal_store::tree::Receiver::Elsewhere))
+    Ok(tree::first_absent_above(db, id)?.map(Receiver::Elsewhere))
 }
