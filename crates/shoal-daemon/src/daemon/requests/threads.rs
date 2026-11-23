@@ -117,7 +117,7 @@ pub(super) async fn handle(
         } => Body::SpaceThreads(
             manager
                 .coordination
-                .threads(&**manager, space.as_ref(), state, for_user)
+                .threads(&**manager, caller, space.as_ref(), state, for_user)
                 .await?,
         ),
         ThreadMethod::ShowThread { thread: number } => thread(

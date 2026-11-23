@@ -12,7 +12,7 @@ use super::super::{
 };
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_reviews::written::Writer;
+use shoal_reviews::written::{self, Writer};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -20,6 +20,7 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     let (reviews, daemon) = (&manager.reviews, &**manager);
+    let viewer = Writer::of(caller.map(|caller| &caller.space_id));
     let shown = match method {
         ReviewMethod::AwaitReview { workspace, id } => {
             let (manager, reviews) = (manager.clone(), manager.reviews.clone());
@@ -49,22 +50,17 @@ pub(super) async fn handle(
                 .await,
         ),
         ReviewMethod::StartReview { workspace } => {
-            let writer = Writer::of(caller.map(|caller| &caller.space_id));
-            pieces(reviews.start_written(daemon, &workspace, writer).await)
+            pieces(reviews.start_written(daemon, &workspace, viewer).await)
         }
         ReviewMethod::SubmitReview {
             workspace,
             approve,
             summary,
         } => {
-            let writer = Writer::of(caller.map(|caller| &caller.space_id));
-            let submitted = reviews.submit(daemon, workspace.as_ref(), writer, approve, summary);
+            let submitted = reviews.submit(daemon, workspace.as_ref(), viewer, approve, summary);
             pieces(submitted.await)
         }
-        ReviewMethod::PendingReviews => {
-            let writer = Writer::of(caller.map(|caller| &caller.space_id));
-            pieces(reviews.pending_reviews(daemon, writer).await)
-        }
+        ReviewMethod::PendingReviews => pieces(reviews.pending_reviews(daemon, viewer).await),
         ReviewMethod::CancelReview { workspace, id } => {
             let by = caller.map(|caller| caller.space_id.clone());
             pieces(reviews.cancel(daemon, workspace.as_ref(), id, by).await)
@@ -75,17 +71,24 @@ pub(super) async fn handle(
         } => pieces(
             async {
                 let ids = (reviews.workspaces(daemon, workspace.as_ref(), repository)).await?;
-                reviews.list(daemon, ids).await
+                let listed = reviews.list(daemon, ids).await?;
+                Ok(listed
+                    .into_iter()
+                    .map(|review| written::seen_by(review, &viewer))
+                    .collect::<Vec<_>>())
             }
             .await,
         ),
-        ReviewMethod::ShowReview { workspace, id } => pieces(match id {
-            Some(id) => reviews.review(daemon, id).await,
-            None => match named(workspace) {
-                Ok(workspace) => reviews.latest(daemon, &workspace).await,
-                Err(error) => Err(error),
-            },
-        }),
+        ReviewMethod::ShowReview { workspace, id } => pieces(
+            match id {
+                Some(id) => reviews.review(daemon, id).await,
+                None => match named(workspace) {
+                    Ok(workspace) => reviews.latest(daemon, &workspace).await,
+                    Err(error) => Err(error),
+                },
+            }
+            .map(|review| written::seen_by(review, &viewer)),
+        ),
     };
     Ok(Answer::pages(shown, Body::ReviewPieces))
 }

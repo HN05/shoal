@@ -42,10 +42,12 @@ impl Coordination {
     /// The threads the space `selector` names takes part in, else every
     /// thread, in `state`, only those whose turn is the user's with
     /// `for_user`, the newest that fit one response, with their code
-    /// followed to where it is now.
+    /// followed to where it is now; a pending review's comments only for
+    /// `caller` on their writer's side.
     pub async fn threads(
         &self,
         daemon: &dyn Daemon,
+        caller: Option<&Caller>,
         selector: Option<&SpaceSelector>,
         state: ThreadState,
         for_user: bool,
@@ -63,9 +65,15 @@ impl Coordination {
             .store
             .run(move |db| records::of_space(db, space.as_ref(), kept))
             .await?;
-        let threads = (threads.into_iter())
-            .filter(|thread| !for_user || thread.waits_for_user())
-            .collect();
+        let mut listed = Vec::new();
+        for thread in threads {
+            if (!for_user || thread.waits_for_user())
+                && self.reads_held(daemon, caller, &thread).await?
+            {
+                listed.push(thread);
+            }
+        }
+        let threads = listed;
         // Only the threads the listing returns follow their code; one a
         // rename made longer may leave out an older thread more.
         let mut listing = newest_that_fit(threads)?;

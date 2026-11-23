@@ -1949,8 +1949,10 @@ review of the workspace, or returns the one you have; each writer has one per
 workspace, and a space reviews the workspaces below it on its own machine,
 never its own. While it is pending, a [thread](#threads) you open towards that
 workspace without `--kind`, with `--space` from a space, is its comment: a
-`review` thread with its number, which editors show, whose posts reach nobody
-and whose holder neither posts in, forwards nor resolves it yet. `--kind
+`review` thread with its number, which your editor shows, whose posts reach
+nobody: until you submit, only you, the spaces that reach the writing space and
+the user read it, in threads and in the review, and its holder neither posts
+in, forwards nor resolves it. `--kind
 question` or `request` opens a thread outside the review, delivered at once. A
 comment's `--code` may point at unsaved lines, since a reference keeps its own
 file version.

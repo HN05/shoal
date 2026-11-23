@@ -348,13 +348,13 @@ async fn the_user_s_threads_list_past_larger_newer_threads() {
     let open = shoal_protocol::threads::ThreadState::Open;
     let all = manager
         .coordination
-        .threads(&**manager, None, open, false)
+        .threads(&**manager, None, None, open, false)
         .await
         .unwrap();
     assert!(!all.threads.iter().any(|thread| thread.id == asked.id));
     let mine = manager
         .coordination
-        .threads(&**manager, None, open, true)
+        .threads(&**manager, None, None, open, true)
         .await
         .unwrap();
     let numbers: Vec<_> = mine.threads.iter().map(|thread| thread.number).collect();
@@ -692,6 +692,37 @@ async fn a_parents_threads_towards_a_child_it_reviews_join_the_review_and_reach_
         Vec::new(),
     );
     assert!(posted.await.is_err());
+    assert!(
+        manager
+            .coordination
+            .thread(&**manager, Some(&child), full(&thread))
+            .await
+            .is_err()
+    );
+    let open = shoal_protocol::threads::ThreadState::Open;
+    let own = SpaceSelector::id(&tree.child.id);
+    let listed = (manager
+        .coordination
+        .threads(&**manager, Some(&child), Some(&own), open, false))
+    .await;
+    assert!(
+        listed
+            .unwrap()
+            .threads
+            .iter()
+            .all(|listed| listed.id != thread.id)
+    );
+    // Nor does the user take its holder's side.
+    let by_user = manager.coordination.post_to_thread(
+        &**manager,
+        None,
+        full(&thread),
+        post("Done"),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    assert!(by_user.await.is_err());
     // Another kind towards the child is delivered at once, outside the
     // review, as is a thread towards a space it does not review.
     let asked = open_kind(

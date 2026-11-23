@@ -153,3 +153,20 @@ async fn a_summary_leaves_its_message_room_for_the_comments() {
         (fixture.reviews).submit(&*fixture.daemon, None, Writer::User, true, Some(long));
     assert!(submitted.await.is_err());
 }
+
+#[tokio::test]
+async fn a_pending_reviews_comments_are_its_writers_to_see() {
+    let fixture = fixture().await;
+    let parent = Writer::Space("parent".into());
+    let review = fixture.start(parent.clone()).await.unwrap();
+    fixture.records.comment(review.id, "Unclear name");
+    let review = fixture
+        .reviews
+        .review(&*fixture.daemon, review.id)
+        .await
+        .unwrap();
+    let child = Writer::Space(fixture.workspace.id.clone());
+    assert!(seen_by(review.clone(), &child).threads.is_empty());
+    assert_eq!(seen_by(review.clone(), &parent).threads.len(), 1);
+    assert_eq!(seen_by(review, &Writer::User).threads.len(), 1);
+}

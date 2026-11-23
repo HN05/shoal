@@ -380,7 +380,7 @@ async fn a_thread_whose_opening_post_is_refused_is_never_opened() {
     let state = shoal_protocol::threads::ThreadState::All;
     let listed = manager
         .coordination
-        .threads(&**manager, Some(&selector), state, false)
+        .threads(&**manager, None, Some(&selector), state, false)
         .await
         .unwrap();
     assert!(listed.threads.is_empty(), "{:?}", listed.threads);
@@ -397,7 +397,7 @@ async fn a_listing_follows_only_the_threads_it_returns() {
     let for_user = tree
         .manager
         .coordination
-        .threads(&*tree.manager, None, state, true)
+        .threads(&*tree.manager, None, None, state, true)
         .await
         .unwrap();
     assert!(for_user.threads.is_empty());
@@ -409,7 +409,7 @@ async fn a_listing_follows_only_the_threads_it_returns() {
     let listed = tree
         .manager
         .coordination
-        .threads(&*tree.manager, None, state, false)
+        .threads(&*tree.manager, None, None, state, false)
         .await
         .unwrap();
     assert_eq!(

@@ -52,7 +52,8 @@ impl Coordination {
 
     /// Whether `caller` reads `thread`: the user reads every thread, and a
     /// space those that a space its scope reaches took part in, as the
-    /// space it is numbered in, a holder or an earlier holder.
+    /// space it is numbered in, a holder or an earlier holder, except a
+    /// pending review's comment, which only its writer's side reads.
     pub(super) async fn reads(
         &self,
         daemon: &dyn Daemon,
@@ -62,6 +63,9 @@ impl Coordination {
         let Some(caller) = caller else {
             return Ok(true);
         };
+        if thread.held {
+            return self.reads_held(daemon, Some(caller), thread).await;
+        }
         let id = thread.id;
         let mut parties = self.store.run(move |db| records::holders(db, id)).await?;
         parties.push(thread.space_id.clone());
@@ -93,6 +97,24 @@ impl Coordination {
         Ok(false)
     }
 
+    /// Whether `caller` reads `thread` as far as its posts are held: any
+    /// thread that holds none, and a pending review's comment for the user
+    /// and for a space that reaches the space that writes it.
+    pub async fn reads_held(
+        &self,
+        daemon: &dyn Daemon,
+        caller: Option<&Caller>,
+        thread: &Thread,
+    ) -> Result<bool> {
+        match (caller, thread.held, thread.opener) {
+            (None, _, _) | (_, false, _) => Ok(true),
+            (Some(caller), true, Sender::Space) => {
+                self.reaches(daemon, caller, &thread.space_id).await
+            }
+            (Some(_), true, Sender::User | Sender::Shoal) => Ok(false),
+        }
+    }
+
     /// The side of `thread` `caller` takes: the opener's for the space that
     /// opened it, the holder's for the space that holds it or a space above
     /// that one, and for the user the opener's side of a thread the user
@@ -105,10 +127,13 @@ impl Coordination {
         thread: &Thread,
     ) -> Result<Side> {
         let Some(caller) = caller else {
-            return Ok(match thread.opener {
-                Sender::User => Side::Opener,
-                Sender::Space | Sender::Shoal => Side::Holder,
-            });
+            return match thread.opener {
+                Sender::User => Ok(Side::Opener),
+                Sender::Space | Sender::Shoal => {
+                    ensure_reached(thread)?;
+                    Ok(Side::Holder)
+                }
+            };
         };
         if thread.opener == Sender::Space && caller.space_id == thread.space_id {
             return Ok(Side::Opener);
@@ -116,12 +141,7 @@ impl Coordination {
         if let Holder::Space(holder) = &thread.holder
             && self.reaches(daemon, caller, &holder.id).await?
         {
-            ensure!(
-                !thread.held,
-                "thread {} is a comment of a pending review, which reaches its holder once the \
-                 review is submitted",
-                thread.number
-            );
+            ensure_reached(thread)?;
             return Ok(Side::Holder);
         }
         bail!(
@@ -197,4 +217,16 @@ impl Coordination {
         );
         Ok(())
     }
+}
+
+/// Refuse the holder's side of `thread` while it holds its posts, as a
+/// pending review's comment does until the review is submitted.
+fn ensure_reached(thread: &Thread) -> Result<()> {
+    ensure!(
+        !thread.held,
+        "thread {} is a comment of a pending review, which reaches its holder once the review \
+         is submitted",
+        thread.number
+    );
+    Ok(())
 }

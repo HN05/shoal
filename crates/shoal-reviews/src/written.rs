@@ -12,7 +12,7 @@ use crate::{
     Reviews,
     daemon::{Daemon, Records},
     model::Workspace,
-    reviews::{Review, ReviewId, Verdict},
+    reviews::{Review, ReviewId, ReviewState, Verdict},
     validate,
 };
 
@@ -241,6 +241,15 @@ pub fn drop_pending_of_removed(
     Ok(())
 }
 
+/// `review` as `viewer` sees it: a pending review's comments are its
+/// writer's, and the user's, until it is submitted.
+pub fn seen_by(mut review: Review, viewer: &Writer) -> Review {
+    if review.state == ReviewState::Pending && !writes(&review, viewer) {
+        review.threads.clear();
+    }
+    review
+}
+
 /// Refuse `writer` reviewing `workspace` when it is that workspace: a
 /// space reviews the work of the spaces below it, which its scope reaches.
 fn ensure_below(workspace: &Workspace, writer: &Writer) -> Result<()> {
@@ -264,16 +273,20 @@ fn ensure_here(db: &Connection, records: &dyn Records, writer: &Writer) -> Resul
     Ok(())
 }
 
-/// Refuse `writer` acting on `review` unless it wrote it; the user acts on
-/// any.
-fn ensure_writes(review: &Review, writer: &Writer) -> Result<()> {
-    let wrote = match (&review.author, writer) {
+/// Whether `writer` wrote `review`, or is the user, who acts on any.
+fn writes(review: &Review, writer: &Writer) -> bool {
+    match (&review.author, writer) {
         (_, Writer::User) => true,
         (crate::reviews::Author::Space { space }, Writer::Space(id)) => space.id == *id,
         _ => false,
-    };
+    }
+}
+
+/// Refuse `writer` acting on `review` unless it wrote it; the user acts on
+/// any.
+fn ensure_writes(review: &Review, writer: &Writer) -> Result<()> {
     ensure!(
-        wrote,
+        writes(review, writer),
         "review {} is {}'s, who submits or cancels it",
         review.id,
         review.author.label()

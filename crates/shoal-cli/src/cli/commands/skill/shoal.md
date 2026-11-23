@@ -571,7 +571,8 @@ shoal review cancel [<id>]          # Drop a pending review with its comments
 
 You, or the user, review a workspace's work as the reviewer does. While your
 review of a workspace is pending, a thread you open towards it without
-`--kind` is its comment, a `review` thread whose posts reach nobody yet; an
+`--kind` is its comment, a `review` thread that only your side and the user
+read and whose posts reach nobody yet; an
 explicit `--kind` opens a thread outside it. `review submit` records the
 workspace's HEAD and delivers the summary and every comment to its agent in one
 message. The agent fixes and says so in the thread; you, its opener, check the

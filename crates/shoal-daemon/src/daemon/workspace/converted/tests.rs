@@ -189,7 +189,7 @@ async fn the_chats_open_threads_stay_with_the_space() {
     let open = shoal_protocol::threads::ThreadState::Open;
     let listed = manager
         .coordination
-        .threads(&*manager, Some(&selector), open, false)
+        .threads(&*manager, None, Some(&selector), open, false)
         .await
         .unwrap()
         .threads;
