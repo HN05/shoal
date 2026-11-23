@@ -121,3 +121,29 @@ async fn a_sleep_does_not_wait_for_a_hand_over_under_way() {
     drop(under_way);
     assert!(handings(&fixture).is_empty());
 }
+
+#[tokio::test]
+async fn a_shutdown_during_a_walk_away_hand_over_leaves_it_the_spaces_under_way() {
+    let (fixture, working, _) = handing_over().await;
+    let sending = fixture.daemon.handing_gate.write().await;
+    let walking_away = tokio::spawn({
+        let (agents, daemon) = (fixture.agents.clone(), fixture.daemon.clone());
+        async move { agents.user_away(&*daemon, true).await }
+    });
+    fixture.daemon.handing_started.notified().await;
+    // The shutdown's own hand-over waits at the gate too, so it gets there
+    // only if it did not wait for the first.
+    let shutdown = tokio::spawn({
+        let (agents, daemon) = (fixture.agents.clone(), fixture.daemon.clone());
+        async move {
+            let window = Duration::from_secs(60);
+            agents.stop_for_system_shutdown(&*daemon, window).await
+        }
+    });
+    fixture.daemon.handing_started.notified().await;
+    drop(sending);
+    shutdown.await.unwrap();
+    walking_away.await.unwrap();
+    let under_way = [working.id.clone()].into();
+    assert_eq!(handings(&fixture)[1], Handing::AllBut(under_way));
+}

@@ -29,5 +29,6 @@ fn a_hand_over_of_some_spaces_takes_the_chats_in_their_worktrees() {
     assert!(only.takes(&fix) && only.takes(&chat_in("fix")));
     assert!(!only.takes(&other) && !only.takes(&chat_in("other")));
     let all_but = Handing::AllBut([fix.id.clone()].into());
-    assert!(!all_but.takes(&fix) && all_but.takes(&other));
+    assert!(!all_but.takes(&fix) && !all_but.takes(&chat_in("fix")));
+    assert!(all_but.takes(&other));
 }

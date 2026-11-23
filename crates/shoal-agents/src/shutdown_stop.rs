@@ -124,7 +124,8 @@ impl Agents {
     /// user learns where each space went and what to continue. An update
     /// waits for the stop. Once a stop before a shutdown finished, later
     /// ones wait for it and leave the work alone; a hand-over once the user
-    /// walked away or before a sleep leaves a later shutdown its stop.
+    /// walked away or before a sleep leaves a later shutdown its stop, and
+    /// one that comes during its hand-over.
     /// Returns the spaces stopped.
     pub async fn stop_for_shutdown_of(
         &self,
@@ -133,7 +134,7 @@ impl Agents {
         window: HandoverWindow,
     ) -> StoppedSpaces {
         let started = Instant::now();
-        let mut finished = self.shutdown_stopped.lock().await;
+        let finished = self.shutdown_stopped.lock().await;
         if *finished {
             return StoppedSpaces::default();
         }
@@ -151,10 +152,15 @@ impl Agents {
             }
         };
         let (stopped, ()) = tokio::join!(spaces, jobs);
+        // A shutdown during a hand-over once the user walked away or
+        // before a sleep goes ahead, leaving alone the spaces under way.
+        let latch = shutdown.ends_work().then_some(finished);
         let deadline = window.deadline(started);
         let handed = (self.hand_over(daemon, deadline, handing)).await;
         (self.notify_shutdown_stop(daemon, shutdown, &stopped.spaces, &handed)).await;
-        *finished = shutdown.ends_work();
+        if let Some(mut finished) = latch {
+            *finished = true;
+        }
         stopped
     }
 
@@ -252,7 +258,13 @@ impl Agents {
         deadline: Instant,
         handing: Handing,
     ) -> Vec<(Space, Handed)> {
+        let under_way = match &handing {
+            Handing::Only(spaces) => spaces.clone(),
+            Handing::AllBut(_) => HashSet::new(),
+        };
+        self.presences.leaving(&under_way);
         let handed = daemon.hand_over(deadline, handing).await;
+        self.presences.settled(&under_way);
         for (space, handed) in &handed {
             if !handed.left() {
                 continue;

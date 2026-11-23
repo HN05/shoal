@@ -25,8 +25,8 @@ pub struct KeptPackage {
 /// The spaces a machine hands over.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Handing {
-    /// Every space but these, which an earlier hand-over sent, as it shuts
-    /// down.
+    /// Every space but these, which another hand-over sent or sends, with
+    /// the chats in their worktrees, as it shuts down.
     AllBut(HashSet<SpaceId>),
     /// These spaces, which have something to do, as its user walked away,
     /// with the chats in their worktrees, which follow them.
@@ -37,11 +37,15 @@ impl Handing {
     /// Whether the hand-over takes `space`.
     pub fn takes(&self, space: &Space) -> bool {
         match self {
-            Self::AllBut(gone) => !gone.contains(&space.id),
-            Self::Only(spaces) => {
-                spaces.contains(&space.id) || space.within().is_some_and(|w| spaces.contains(w))
-            }
+            Self::AllBut(gone) => !Self::named(gone, space),
+            Self::Only(spaces) => Self::named(spaces, space),
         }
+    }
+
+    /// Whether `spaces` holds `space`, or the workspace whose worktree the
+    /// chat `space` runs in.
+    fn named(spaces: &HashSet<SpaceId>, space: &Space) -> bool {
+        spaces.contains(&space.id) || space.within().is_some_and(|w| spaces.contains(w))
     }
 }
 

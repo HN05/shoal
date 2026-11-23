@@ -284,6 +284,11 @@ pub(crate) struct StandIn {
     pub(crate) handings: Mutex<Vec<shoal_protocol::hub::packages::Handing>>,
     /// Where the next hand-over says the spaces went.
     pub(crate) handed: Mutex<Vec<(Space, shoal_protocol::hub::packages::Handed)>>,
+    /// Told as each hand-over starts sending.
+    pub(crate) handing_started: tokio::sync::Notify,
+    /// A hand-over that started sending ends only while a test holds no
+    /// write lock on it.
+    pub(crate) handing_gate: tokio::sync::RwLock<()>,
     /// How often the machine told the hub it stays.
     pub(crate) stays: std::sync::atomic::AtomicUsize,
 }
@@ -993,7 +998,11 @@ impl crate::daemon::Handovers for StandIn {
     ) -> BoxFuture<'_, Vec<(Space, shoal_protocol::hub::packages::Handed)>> {
         self.handings.lock().unwrap().push(handing);
         let handed = std::mem::take(&mut *self.handed.lock().unwrap());
-        Box::pin(async move { handed })
+        self.handing_started.notify_one();
+        Box::pin(async move {
+            let _gate = self.handing_gate.read().await;
+            handed
+        })
     }
 
     fn stay(&self) -> BoxFuture<'_, ()> {

@@ -737,7 +737,8 @@ minutes, before a sleep only within most of the platform's allowance,
 leaving the rest for the sleep's announcement, then may
 sleep; an alert says where each space went. Once the user is back, or the
 machine wakes from such a sleep, it admits work again and retires its copies
-of the spaces that went. A shutdown meanwhile hands over the rest.
+of the spaces that went. A shutdown meanwhile, even during the hand-over,
+hands over the rest.
 Spaces with nothing to do stay, and the sleep announcement covers them.
 
 Linux holds a `systemd-inhibit` lock on sleep, idle and the lid switch,
