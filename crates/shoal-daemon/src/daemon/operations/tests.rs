@@ -288,7 +288,7 @@ async fn an_operation_named_with_its_space_is_found_here_after_its_space_left() 
     let gone = SpaceId::generate();
     let (id, _) = manager
         .operations
-        .register(gone.clone(), OperationKind::Move);
+        .register(gone.clone(), OperationKind::Move, None);
     let named = OperationRef::in_space(id.clone(), SpaceSelector::id(&gone));
     let entry = manager.named_operation(&named, None).await.unwrap();
     assert_eq!(entry.workspace, gone);
@@ -306,4 +306,44 @@ async fn an_operation_named_with_its_space_is_found_here_after_its_space_left() 
     };
     let absent = Refusal::absent_space(&refused);
     assert_eq!(absent, Some(&SpaceSelector::id(&gone)), "{refused:#}");
+}
+
+#[tokio::test]
+async fn a_scoped_caller_follows_and_reports_its_own_operation_in_a_space_no_longer_here() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let own = workspace(&manager, &repository, "own").await;
+    let other = workspace(&manager, &repository, "other").await;
+    let caller = |space: &Workspace| {
+        let manager = &manager;
+        let space = SpaceSelector::id(&space.id);
+        async move {
+            let token = manager.issue_scope(&space).await.unwrap();
+            manager.caller(&token).await.unwrap().unwrap()
+        }
+    };
+    let (starter, outsider) = (caller(&own).await, caller(&other).await);
+    // As a move's, once the space it moved left this machine and before
+    // the hub lists it at its destination, below the starter.
+    let gone = SpaceId::generate();
+    let id = manager
+        .spawn_operation(gone, setup(&own), None, Some(&starter))
+        .await
+        .unwrap();
+    let worker = fake::take(&id);
+    let acting = manager
+        .caller(worker.token.as_ref().unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let followed = manager.operation(&id, Some(&starter)).await;
+    let reported =
+        (manager.report_operation(&id, Report::Step(Step::SetupStarted), Some(&acting))).await;
+    let refused = manager.operation(&id, Some(&outsider)).await;
+
+    followed.unwrap();
+    reported.unwrap();
+    assert!(refused.is_err(), "another space followed it");
+    worker.exit(0);
 }

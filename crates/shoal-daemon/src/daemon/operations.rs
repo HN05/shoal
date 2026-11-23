@@ -47,6 +47,9 @@ pub(crate) struct Entry {
     /// The ID of the workspace it works in.
     pub workspace: SpaceId,
     pub kind: OperationKind,
+    /// The space of the scoped caller that started it, whose processes
+    /// follow it whatever became of the space it works in.
+    starter: Option<SpaceId>,
     state: Mutex<State>,
     changed: watch::Sender<()>,
 }
@@ -63,12 +66,19 @@ struct State {
 }
 
 impl Operations {
-    /// Record a new operation of `kind` in `workspace`.
-    fn register(&self, workspace: SpaceId, kind: OperationKind) -> (String, Arc<Entry>) {
+    /// Record a new operation of `kind` in `workspace`, started by a
+    /// process of the space `starter`, or by the user.
+    fn register(
+        &self,
+        workspace: SpaceId,
+        kind: OperationKind,
+        starter: Option<SpaceId>,
+    ) -> (String, Arc<Entry>) {
         let id = Uuid::new_v4().to_string();
         let entry = Arc::new(Entry {
             workspace,
             kind,
+            starter,
             state: Default::default(),
             changed: watch::Sender::new(()),
         });
@@ -168,6 +178,11 @@ impl Entry {
         self.push(Progress::Output { stream, line });
     }
 
+    /// Whether a process of `caller`'s space started it.
+    fn started_by(&self, caller: &Caller) -> bool {
+        self.starter.as_ref() == Some(&caller.space_id)
+    }
+
     /// Interrupt the worker, as an interrupt of the command that ran its
     /// work did; nothing once it exited.
     pub(crate) fn interrupt(&self) {
@@ -254,7 +269,8 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<String> {
         let token = caller.map(|caller| self.operations.issue(caller));
-        let (id, entry) = self.operations.register(workspace, spec.kind());
+        let starter = caller.map(|caller| caller.space_id.clone());
+        let (id, entry) = self.operations.register(workspace, spec.kind(), starter);
         let order = Order {
             id: id.clone(),
             spec,
@@ -299,18 +315,26 @@ impl Manager {
         self.operations.runs(id)
     }
 
-    /// Operation `id`, refusing a scoped caller one outside its tree.
+    /// Operation `id`, refusing a scoped caller one outside its tree that
+    /// its own space did not start.
     pub(crate) async fn operation(&self, id: &str, caller: Option<&Caller>) -> Result<Arc<Entry>> {
         let entry = self.operations.get(id).ok_or_else(|| {
             Refusal::new(Reason::NotFound, format!("operation {id} does not exist"))
         })?;
         if let Some(caller) = caller {
             ensure!(
-                self.reaches(caller, &entry.workspace).await?,
-                "workspace processes can only follow operations of their own space and those below it"
+                self.follows(caller, &entry).await?,
+                "workspace processes can only follow operations their space started or that work in their own space or one below it"
             );
         }
         Ok(entry)
+    }
+
+    /// Whether `caller` follows `entry`: one its own space started, as a
+    /// move it ran is whatever the hub lists of the space it moved
+    /// meanwhile, or one in a space its scope reaches.
+    async fn follows(&self, caller: &Caller, entry: &Entry) -> Result<bool> {
+        Ok(entry.started_by(caller) || self.reaches(caller, &entry.workspace).await?)
     }
 
     /// The operation `named` names, refusing a scoped caller one outside

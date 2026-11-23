@@ -545,7 +545,10 @@ detached as it starts queued agents, so the work goes on when the CLI or app tha
 asked for it goes. The worker acts with the caller's scope and, from the CLI, its
 environment without the secrets an agent launch exported, and runs the same tracked executions and hooks the CLI ran, under
 the same checks; what it and its processes write becomes the operation's output,
-and it reports typed steps and its end. The CLI starts an operation and follows
+and it reports typed steps and its end. A scoped process follows an operation
+of a space its scope reaches, and one its own space started whatever became of
+the space it works in, as a move's once that space left before the hub lists it
+at its destination. The CLI starts an operation and follows
 it through `shoal_client`, as an app does, showing its output where it showed
 it before, so the CLI and apps cannot drift. `shoal start`, `create` and apps open a
 workspace and start its preparation through one request, `StartWorkspace`,
