@@ -113,7 +113,10 @@ impl Operation {
                 launch.forwarded.get_or_insert_default();
             }
             // Its worker runs in that machine's daemon's environment.
-            Self::Operations(OperationMethod::StartMove { env, .. })
+            Self::Operations(
+                OperationMethod::StartMove { env, .. }
+                | OperationMethod::StartOperation { env, .. },
+            )
             | Self::Conversion(ConversionMethod::ConvertToWorkspace { env, .. }) => *env = None,
             // A process of this machine, which that machine has none of.
             Self::Removal(RemovalMethod::StopProcesses { requester, .. }) => *requester = None,

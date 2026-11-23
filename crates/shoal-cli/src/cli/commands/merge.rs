@@ -44,8 +44,8 @@ fn merging_pr(item: Option<ItemInput>, args: &MergeArgs) -> Acting {
 }
 
 /// What merging a space's work sends for the space a picker picks: a
-/// space without a PR merges in an operation on this machine, which its
-/// worktree's branch merges into.
+/// space without a PR merges in an operation on the machine that runs it,
+/// into the default branch of that machine's checkout.
 fn merging_work() -> Acting {
     Acting::request(|workspace| {
         let spec = OperationSpec::Merge {

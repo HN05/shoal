@@ -7,6 +7,7 @@ mod directory;
 mod files;
 mod following;
 mod handovers;
+mod merges;
 mod moves;
 mod numbers;
 mod placement;

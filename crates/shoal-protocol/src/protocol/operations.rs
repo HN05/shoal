@@ -455,6 +455,21 @@ impl OperationSpec {
         }
     }
 
+    /// The workspace whose machine runs the operation, wherever that is:
+    /// a merge's or an unmerge's, which change the default branch of that
+    /// machine's checkout. None for one that runs on the caller's machine,
+    /// in the caller's environment, as a preparation and a push do.
+    pub fn machine_space(&self) -> Option<&SpaceSelector> {
+        match self {
+            Self::Merge { workspace, .. } | Self::Unmerge { workspace } => Some(workspace),
+            Self::Prepare { .. }
+            | Self::OpenPull { .. }
+            | Self::Push { .. }
+            | Self::Move { .. }
+            | Self::FinishMove { .. } => None,
+        }
+    }
+
     pub fn kind(&self) -> OperationKind {
         match self {
             Self::Prepare { .. } => OperationKind::Prepare,
@@ -677,12 +692,16 @@ impl Failure {
 impl OperationMethod {
     /// A move goes to the machine of its spaces, as an operation the caller
     /// names with its space goes to that space's, whose events come on a
-    /// stream; the rest create spaces where the caller runs or report the
+    /// stream, and one that runs on its space's machine starts there; the
+    /// rest run or create spaces where the caller runs or report the
     /// caller's own operations.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::CancelOperation { .. } => Forwarding::Online,
             Self::StartMove { .. } | Self::FollowOperation { .. } => Forwarding::Streamed,
+            Self::StartOperation { spec, .. } if spec.machine_space().is_some() => {
+                Forwarding::Online
+            }
             Self::StartOperation { .. }
             | Self::StartWorkspace { .. }
             | Self::StartCreation { .. }
@@ -696,9 +715,9 @@ impl OperationMethod {
             Self::FollowOperation { operation, .. } | Self::CancelOperation { operation } => {
                 operation.space.as_ref().map(Target::Space)
             }
+            Self::StartOperation { spec, .. } => spec.machine_space().map(Target::Space),
             // It names its spaces by ID, as a set.
             Self::StartMove { .. }
-            | Self::StartOperation { .. }
             | Self::StartWorkspace { .. }
             | Self::StartCreation { .. }
             | Self::StartChild { .. }

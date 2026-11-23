@@ -79,3 +79,31 @@ fn a_request_with_files_attached_here_is_one_that_attaches_files() {
         "attachments": [{"path": "/tmp/chart.png"}]}, "link": false}});
     assert!(attaches_files(&issue));
 }
+
+#[test]
+fn an_unmerge_starts_on_its_workspace_s_machine_without_the_caller_s_environment() {
+    use crate::protocol::operations::{OperationSpec, Preparation};
+    let space = SpaceSelector::Number(8.into());
+    let start = |spec| {
+        Operation::Operations(OperationMethod::StartOperation {
+            spec,
+            env: Some([("HOME".to_owned(), "/caller".to_owned())].into()),
+        })
+    };
+    let mut unmerge = start(OperationSpec::Unmerge {
+        workspace: space.clone(),
+    });
+    assert_eq!(unmerge.target(), Some(Target::Space(&space)));
+    assert_eq!(unmerge.forwarding(), Forwarding::Online);
+    unmerge.leave_caller_machine();
+    let Operation::Operations(OperationMethod::StartOperation { env, .. }) = unmerge else {
+        unreachable!()
+    };
+    assert_eq!(env, None);
+    let prepare = start(OperationSpec::Prepare {
+        workspace: space,
+        steps: Preparation::default(),
+    });
+    assert_eq!(prepare.target(), None);
+    assert_eq!(prepare.forwarding(), Forwarding::Never);
+}

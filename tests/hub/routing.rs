@@ -51,15 +51,15 @@ fn working(machine: &Base, id: &str) {
 
 /// A coordinator workspace on the hub with an agent, and a child below it
 /// that moved to the laptop, by ID, with the laptop's.
-struct Tree {
-    hub: Base,
-    laptop: Base,
-    laptop_id: String,
-    coordinator: String,
-    child: String,
+pub(super) struct Tree {
+    pub(super) hub: Base,
+    pub(super) laptop: Base,
+    pub(super) laptop_id: String,
+    pub(super) coordinator: String,
+    pub(super) child: String,
 }
 
-fn tree_across_machines() -> Tree {
+pub(super) fn tree_across_machines() -> Tree {
     tree_below_hub_config("")
 }
 

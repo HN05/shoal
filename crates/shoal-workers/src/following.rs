@@ -61,9 +61,10 @@ pub struct Shown<'a> {
     pub json: bool,
 }
 
-/// Start `spec` in this process's environment, without its secrets, and
-/// follow it to its end below `display`, returning what it did. `json` says
-/// whether the process prints JSON.
+/// Start `spec` in this process's environment, without its secrets, or on
+/// the machine of the space it runs on, and follow it to its end below
+/// `display`, returning what it did. `json` says whether the process
+/// prints JSON.
 pub async fn run<T>(
     paths: &CommandPaths,
     json: bool,
@@ -74,8 +75,9 @@ where
     T: TryFrom<Outcome, Error = anyhow::Error>,
 {
     let env = crate::env::without_secrets();
+    let space = spec.machine_space().cloned();
     let id = crate::client::operations::start(paths, spec, env).await?;
-    follow_started(paths, json, display, OperationRef::here(id)).await
+    follow_started(paths, json, display, OperationRef { id, space }).await
 }
 
 /// Follow `operation`, which the daemon started for a request of this
