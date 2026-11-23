@@ -84,13 +84,16 @@ pub enum ThreadMethod {
         prompt: Option<String>,
     },
     /// Give the thread the caller holds to the space `to` names, else to
-    /// the holder's coordinator or the user, with a note.
+    /// the holder's coordinator or the user, with a note; the caller's
+    /// space stays linked to it unless `unlink`.
     ForwardThread {
         thread: ThreadNumber,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         to: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        unlink: bool,
         /// The space the user acts as, as a session in it that Shoal did
         /// not start does; a scoped caller acts as its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]

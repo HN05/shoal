@@ -415,9 +415,14 @@ async fn a_space_that_forwards_a_thread_works_for_it_no_longer() {
         .switch_thread(&**manager, Some(&child_agent), &to, Some(number)))
     .await
     .unwrap();
-    (manager
-        .coordination
-        .forward_thread(&**manager, Some(&child_agent), number, None, None))
+    (manager.coordination.forward_thread(
+        &**manager,
+        Some(&child_agent),
+        number,
+        None,
+        None,
+        false,
+    ))
     .await
     .unwrap();
     assert_eq!(

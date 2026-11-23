@@ -245,6 +245,7 @@ async fn a_holder_forwards_its_thread_up_and_down() {
             full(&thread),
             None,
             Some("You chose it".into()),
+            false,
         )
         .await
         .unwrap();
@@ -267,14 +268,19 @@ async fn a_holder_forwards_its_thread_up_and_down() {
             .await
             .is_ok()
     );
-    let again =
-        fixture
-            .coordination
-            .forward_thread(&**fixture, Some(&child), full(&thread), None, None);
+    let again = fixture.coordination.forward_thread(
+        &**fixture,
+        Some(&child),
+        full(&thread),
+        None,
+        None,
+        false,
+    );
     assert!(again.await.is_err());
 
     // Down, to a space below the new holder, which receives the posts
-    // from then on.
+    // from then on, as the child that forwarded it up still does, while
+    // the parent that unlinked does not.
     let sibling = SpaceSelector::id(&tree.sibling.id);
     let parent = caller(&tree.parent);
     fixture
@@ -285,17 +291,23 @@ async fn a_holder_forwards_its_thread_up_and_down() {
             full(&thread),
             Some(&sibling),
             None,
+            true,
         )
         .await
         .unwrap();
-    let before = alerts(fixture, &tree.child).await.len();
     send(fixture, None, &thread, "Any news?").await;
-    let news = alerts(fixture, &tree.sibling).await;
+    for linked in [&tree.sibling, &tree.child] {
+        let news = alerts(fixture, linked).await;
+        assert!(
+            news.iter().any(|alert| alert.contains("Any news?")),
+            "{news:?}"
+        );
+    }
+    let unlinked = alerts(fixture, &tree.parent).await;
     assert!(
-        news.iter().any(|alert| alert.contains("Any news?")),
-        "{news:?}"
+        !unlinked.iter().any(|alert| alert.contains("Any news?")),
+        "{unlinked:?}"
     );
-    assert_eq!(alerts(fixture, &tree.child).await.len(), before);
 }
 
 #[tokio::test]
@@ -307,10 +319,14 @@ async fn a_thread_the_user_opened_never_goes_back_to_the_user() {
     // The space has no coordinator, so passing the thread up would hand it
     // to the user who asked.
     let beside = caller(&tree.beside);
-    let up =
-        fixture
-            .coordination
-            .forward_thread(&**fixture, Some(&beside), full(&thread), None, None);
+    let up = fixture.coordination.forward_thread(
+        &**fixture,
+        Some(&beside),
+        full(&thread),
+        None,
+        None,
+        false,
+    );
     assert!(up.await.is_err());
     let kept = fixture
         .coordination
@@ -565,9 +581,14 @@ async fn a_space_that_forwarded_a_question_still_answers_it_for_the_holder() {
     .await
     .unwrap();
     // The parent has no coordinator, so the thread goes up to the user.
-    (fixture
-        .coordination
-        .forward_thread(&**fixture, Some(&parent), full(&thread), None, None))
+    (fixture.coordination.forward_thread(
+        &**fixture,
+        Some(&parent),
+        full(&thread),
+        None,
+        None,
+        false,
+    ))
     .await
     .unwrap();
     let before = alerts(fixture, &tree.child).await.len();

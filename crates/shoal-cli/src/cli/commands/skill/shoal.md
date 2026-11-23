@@ -629,7 +629,7 @@ shoal send <thread> "<text>" [--choice A --choice B --recommend A --reason R] \
   [--attach FILE] [--code PATH[:FIRST-LAST]] [--changes 12,14] [--body-file F] [--wait]
 shoal send <thread> --choose <N>     # Pick a choice the other side offered
 shoal send <thread> --in-chat        # Your turn's final message is the post
-shoal thread forward <thread> [--space <space>] [--note "<text>"]
+shoal thread forward <thread> [--space <space>] [--note "<text>"] [--unlink]
 shoal thread resolve <thread> answered [--choose N]   # A request: done; any: duplicate --of, withdrawn --reason
 shoal thread resolve <thread> --undo
 shoal thread list [--space <space>] [--state open|resolved|all]
@@ -672,7 +672,7 @@ something, such as implement the code it points at.
 
 The holder forwards a thread down, to a space it reaches, or up, to its
 coordinator or the user; the new holder reads what came before and receives
-the posts from then on. The opener resolves its thread: `answered` a
+the posts from then on, as you do too unless `--unlink`. The opener resolves its thread: `answered` a
 question, `done` a request once it accepts the work,
 `duplicate --of <thread>`, or `withdrawn`, which takes back the holder's
 unread alerts of it. A space reads the threads it or a space below it took

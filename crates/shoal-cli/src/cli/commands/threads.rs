@@ -108,15 +108,17 @@ fn code_refs(code: Vec<CodeArg>) -> Result<Vec<NewCodeRef>> {
         .collect())
 }
 
-/// Give the thread `number` to the space `space` names, else pass it up.
+/// Give the thread `number` to the space `space` names, else pass it up,
+/// staying linked to it unless `unlink`.
 pub(super) async fn forward(
     ctx: &Context,
     number: ThreadNumber,
     space: Option<SpaceSelector>,
     note: Option<String>,
+    unlink: bool,
 ) -> Result<i32> {
     let from = acting_space(ctx).await?;
-    let thread = threads::forward(&ctx.paths, number, space, note, from).await?;
+    let thread = threads::forward(&ctx.paths, number, space, note, unlink, from).await?;
     ctx.emit(
         &format!(
             "Thread {} forwarded to {}.",

@@ -7461,7 +7461,7 @@ shoal send <thread> "<text>" [--choice C]... [--recommend R --reason R] [--attac
 shoal send <thread> --body-file F    # The text from a file
 shoal send <thread> --choose N       # Pick a choice the other side offered
 shoal send <thread> --in-chat        # The turn's final message in the chat is the post
-shoal thread forward <thread> [--space S] [--note "<text>"]
+shoal thread forward <thread> [--space S] [--note "<text>"] [--unlink]
 shoal thread resolve <thread> <outcome> [--choose N | --of <thread> | --reason R]
 shoal thread resolve <thread> --undo
 shoal thread list [--space S] [--state open|resolved|all] [-p]
@@ -7561,7 +7561,8 @@ hook that does not pass one, posts that the agent wrote in its chat.
 reaches, or without `--space` up to the holder's coordinator, or you; never to
 its opener. The forward and its `--note` are a post naming the new holder,
 which receives a `thread_forwarded` alert with what the thread says so far and
-its posts from then on.
+its posts from then on. The forwarding space stays linked to the thread, so it
+receives its later posts too, unless `--unlink`.
 
 `shoal thread resolve` settles a thread with an outcome its kind takes:
 `answered`, for a question, with `--choose` naming the choice it settled on;

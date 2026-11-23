@@ -266,6 +266,7 @@ async fn a_marked_turn_posts_nothing_in_a_thread_that_went_elsewhere() {
         full(&thread),
         Some(&child),
         None,
+        false,
     ))
     .await
     .unwrap();
@@ -308,9 +309,14 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
         seen: thread.holder.clone(),
     };
     let child = caller(&tree.child);
-    (manager
-        .coordination
-        .forward_thread(&**manager, Some(&child), full(&thread), None, None))
+    (manager.coordination.forward_thread(
+        &**manager,
+        Some(&child),
+        full(&thread),
+        None,
+        None,
+        false,
+    ))
     .await
     .unwrap();
     let removing =
@@ -673,6 +679,7 @@ async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
         full(&given),
         Some(&away),
         None,
+        false,
     ))
     .await
     .unwrap();

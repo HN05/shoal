@@ -76,18 +76,21 @@ pub async fn replied_in_chat(
 }
 
 /// Forward the thread `thread` to `to`, else to its holder's coordinator or
-/// the user, with `note`, acting as the space `from`.
+/// the user, with `note`, acting as the space `from`, which stays linked to
+/// it unless `unlink`.
 pub async fn forward(
     daemon: &impl Daemon,
     thread: ThreadNumber,
     to: Option<SpaceSelector>,
     note: Option<String>,
+    unlink: bool,
     from: Option<SpaceSelector>,
 ) -> Result<Thread> {
     let method = ThreadMethod::ForwardThread {
         thread,
         to,
         note,
+        unlink,
         from,
     };
     Ok(*request::<Box<Thread>>(daemon, method).await?)

@@ -3497,7 +3497,9 @@ resumes after the same post.
 
 The holder forwards a thread down, to a space its scope reaches, or up, to its
 coordinator or the user, and the new holder reads what came before and
-receives the posts from then on. A forward is a post that names the new
+receives the posts from then on. The forwarder stays linked, since passing a
+question on rarely ends its interest in the answer, unless it unlinks. A
+forward is a post that names the new
 holder, with its note as text, so the thread's history shows who held it, and
 it does not count as an answer. The opener resolves its thread, or the holder
 of one Shoal opened, and the user may resolve any; withdrawing takes back the

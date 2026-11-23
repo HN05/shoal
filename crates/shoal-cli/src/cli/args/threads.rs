@@ -38,7 +38,7 @@ pub enum ThreadCommand {
     },
     /// Give a thread you hold to a space below you, or up to your
     /// coordinator or the user; the new holder receives its posts from then
-    /// on.
+    /// on, and so do you unless --unlink.
     Forward {
         /// Thread number, such as 3.2, or 2 for one of your own space.
         thread: ThreadNumber,
@@ -48,6 +48,10 @@ pub enum ThreadCommand {
         /// A note for the new holder, such as why it should answer.
         #[arg(long)]
         note: Option<String>,
+        /// Receive none of its later posts, which a forwarder otherwise
+        /// does.
+        #[arg(long)]
+        unlink: bool,
     },
     /// Settle a thread with an outcome, or reopen it with --undo; its
     /// opener resolves it, or its holder one Shoal opened, such as a

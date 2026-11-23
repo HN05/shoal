@@ -198,7 +198,8 @@ async fn thread(ctx: &Context, command: ThreadCommand) -> Result<i32> {
             thread,
             space,
             note,
-        } => threads::forward(ctx, thread, space, note).await,
+            unlink,
+        } => threads::forward(ctx, thread, space, note, unlink).await,
         ThreadCommand::Resolve {
             thread,
             outcome,

@@ -115,6 +115,7 @@ pub(super) async fn handle(
             thread: number,
             to,
             note,
+            unlink,
             from,
         } => {
             let acting = acting(manager, caller, from).await?;
@@ -124,6 +125,7 @@ pub(super) async fn handle(
                 number,
                 to.as_ref(),
                 note,
+                unlink,
             );
             thread(forwarded.await?)
         }

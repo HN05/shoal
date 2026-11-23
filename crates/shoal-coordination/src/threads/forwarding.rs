@@ -1,6 +1,7 @@
 //! Forwarding a thread: its holder gives it to a space its scope reaches,
 //! or up to its coordinator or the user, with a note, and the new holder
-//! hears what it says so far.
+//! hears what it says so far. The forwarder's space stays linked to it,
+//! hearing its later posts, unless it unlinks.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_protocol::{
@@ -18,7 +19,8 @@ use crate::scope::Caller;
 impl Coordination {
     /// Give the thread `number`, which `caller` holds, to the space `to`
     /// names, else to its holder's coordinator or the user, with `note` as
-    /// a post; the new holder receives the thread's posts from then on.
+    /// a post; the new holder receives the thread's posts from then on,
+    /// and so does the caller's space unless `unlink`.
     pub async fn forward_thread(
         &self,
         daemon: &dyn Daemon,
@@ -26,6 +28,7 @@ impl Coordination {
         number: ThreadNumber,
         to: Option<&SpaceSelector>,
         note: Option<String>,
+        unlink: bool,
     ) -> Result<Thread> {
         let thread = self.readable_thread(daemon, caller, number).await?;
         self.ensure_forwards(daemon, caller, &thread).await?;
@@ -63,6 +66,13 @@ impl Coordination {
                     },
                 )?;
                 records::set_holder(tx, id, holder.as_ref())?;
+                if let Some(forwarder) = &poster.space {
+                    if unlink {
+                        records::set_link(tx, &forwarder.id, id, false)?;
+                    } else {
+                        records::link_here(tx, &forwarder.id, id)?;
+                    }
+                }
                 let thread = records::reread(tx, id)?;
                 records::ensure_fits(&thread)?;
                 let mut delivered = Delivered::default();
