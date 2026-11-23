@@ -2208,6 +2208,24 @@ Shoal agent ran in it, as do sessions from Shoal versions without the label. An
 agent or chat launched in place refuses to start if Shoal cannot relabel the
 session.
 
+With [`[terminal] nested_zmx`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#terminal),
+or a host's own `nested_zmx`, an agent or chat that would run in place in a
+Herdr pane, Rex block, tmux pane or Zellij pane, and a demo a host runs in its
+places, runs in a zmx session attached there, named and labelled as above. It
+looks and works as before in that place, and from a terminal that host does
+not serve, such as over ssh, `shoal attach` and opening the demo attach to the
+session instead, where for Rex they would select the block in the Mac app; a
+Rex app on another machine still selects the block. Shoal inside the session
+takes the pane or block for its place: starts it queues open beside it, a
+restore runs there again in a new session, and `close_when_done`, removal and
+cleanup close it and the session, which also ends with its agent. The picker
+marks the space `attached` while the place shows it or another zmx client is
+attached. A launch that would nest refuses as above when zmx is missing or
+older than 1.0.1. The option changes nothing on a terminal no host serves or
+in a zmx session. Terminal protocols pass through zmx unchanged, so images and
+notifications behave as in the host, while a host that reads an agent's turn
+from its pane, as Herdr does, sees only zmx there.
+
 #### Herdr
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal start` looks up
@@ -2232,6 +2250,9 @@ With `--json`, a start beside the terminal prints the planned `workspace` and
 its `agent` once the host opens the launch's place. With `enabled = false` Shoal
 treats a Herdr pane as a plain terminal. A `tab_name`'s `{branch}` is the
 requested branch when the tab opens and the allocated branch after creation.
+With `nested_zmx`, agents, chats and demos run in zmx sessions attached in
+their panes, as [Agents](#agents) describes, and Herdr reads no turn from an
+agent without turn hooks there, as in a zmx session.
 
 Failures before agent execution leave the tab open. Agent exits leave the tab
 open so work can continue, and with shell integration its shell enters the
@@ -2274,7 +2295,9 @@ nothing shows on screen or in shell history. Your login shell starts in the
 block once the worker exits, as in a Herdr tab.
 
 [`[terminal.rex]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#rex) configures it; with `enabled = false` Shoal
-treats a Rex terminal as a plain terminal.
+treats a Rex terminal as a plain terminal. With `nested_zmx`, agents, chats
+and demos run in zmx sessions attached in their blocks, as [Agents](#agents)
+describes, so a terminal outside Rex, such as over ssh, attaches to them.
 
 With `[terminal] default_host = "rex"`, launches from a terminal no host serves
 open their windows in the `session_name` session on the local Rex server; Shoal reuses the oldest session with that label or creates it;
@@ -2315,7 +2338,9 @@ closing the terminal leaves the agent running. The new window runs the agent
 directly, with nothing typed on screen, then your login shell, which stays
 after the worker exits and enters the workspace as a Herdr tab's shell does. A place of a host
 that claims a terminal before tmux, such as a zmx session, keeps its own
-behavior inside tmux. [`[terminal.tmux]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#tmux) configures it.
+behavior inside tmux. [`[terminal.tmux]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#tmux) configures it;
+with `nested_zmx`, agents, chats and demos run in zmx sessions attached in
+their panes, as [Agents](#agents) describes.
 
 With `[terminal] default_host = "tmux"`, which also turns `enabled` on, launches
 from a terminal no host serves open their windows in the `session_name` session
@@ -2362,7 +2387,9 @@ terminal leaves the agent running. The new tab runs the agent directly, with
 nothing typed on screen, then your login shell, which stays after the worker
 exits and enters the workspace as a Herdr tab's shell does. A place of a host
 that claims a terminal before Zellij, such as a tmux pane, keeps its own
-behavior inside Zellij. [`[terminal.zellij]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#zellij) configures it.
+behavior inside Zellij. [`[terminal.zellij]`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#zellij) configures it;
+with `nested_zmx`, agents, chats and demos run in zmx sessions attached in
+their panes, as [Agents](#agents) describes.
 
 Zellij 0.45 drops a tab opened in a session no client shows, so a place for
 such a session opens as the first pane of a background session of its own,

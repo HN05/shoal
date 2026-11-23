@@ -2355,7 +2355,8 @@ and attach completion ask the host about for every host, together with the
 places Shoal created for each workspace, whose records outlive their sessions;
 the host never calls the daemon. A host
 declares the variables naming its places, and a zmx session drops the
-other hosts', so Shoal inside it never takes the caller's place for its own. A queued start
+other hosts', so Shoal inside it never takes the caller's place for its own,
+except a session nested in the place it runs in, which keeps that place's. A queued start
 falls back from its origin's group to its host's configured group on the same
 server, then to `terminal.default_host`; with that host turned off, a terminal no host
 serves runs work in place, and a queued start or a demo without another
@@ -2420,7 +2421,8 @@ user blocks the space, and one a coordinating agent holds does not, since
 between the agent's turns, so a new turn replaces them.
 
 tmux is an opt-in host for users who already work in it, so agents run in their
-tmux panes without a zmx session nested inside one. tmux draws panes through its
+tmux panes without a zmx session nested inside one unless `nested_zmx` asks
+for it. tmux draws panes through its
 own emulator, so images and notifications reach the outer terminal only through
 its passthrough, off by default, and an attach redraws tmux's screen; Shoal
 documents these limits rather than working around them. `terminal.tmux.enabled`
@@ -2525,6 +2527,27 @@ started it, and the wrapper leaves its starter's process group, which the
 starter's wrapper signals as it stops, taking the terminal along when that group
 held it, so the caller's stops leave the agent running. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
+
+`[terminal] nested_zmx`, which each host's table overrides as it does
+`close_when_done`, runs what the user attaches to in a host's place, agents,
+chats and demos, in a zmx session attached in that place, so any terminal,
+such as one over ssh, reaches it as well, and a Rex block, which has no
+terminal client, becomes reachable from one. It is off by default, since a host
+that reads an agent's turn from its pane sees only zmx there. Generic code
+decides it from the resolved value and never names a host: the host serving
+a place nests the sessions zmx runs there, where the option does nothing on a
+terminal no host serves, whose launches use zmx already, or in a zmx
+session. Setup output, launch steps and the shells a place keeps stay in the
+place, since nothing attaches to them. The nested launch keeps the place's
+variables and sets `SHOAL_NESTED_SESSION`, so Shoal inside takes the place
+for its own, opening starts beside it, restoring there, and closing it as
+before, while the record of where an execution or demo runs nests the session
+in the place's origin. Attach shows the place itself where its host serves
+the terminal, or to a viewer whose app for the host shows it, and attaches to
+the session from any other terminal. The session carries the labels of any
+zmx session Shoal creates, so removal and the sweeps close it with its owner,
+and a demo's close ends it with its place, whose closing ends only the zmx
+client.
 
 Demos let the user try a change where the agent's windows are out of sight,
 usually over SSH. A demo is a named command the repository configures or the
