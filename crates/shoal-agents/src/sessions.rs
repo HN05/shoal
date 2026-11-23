@@ -191,14 +191,17 @@ impl Agents {
         }
     }
 
+    /// Close `close`'s place, and the session nested in it, which outlives
+    /// a closed place, while `close`'s owner still owns each.
     async fn close_pending_session(&self, close: pending::Close) -> Result<()> {
-        let host = self
-            .session_hosts
-            .iter()
-            .find(|host| host.name() == close.place.host)
-            .with_context(|| format!("terminal host {} is unavailable", close.place.host))?;
-        host.close(&self.paths.state, &close.place, &close.owner)
-            .await?;
+        for place in close.place.with_nested() {
+            let host = self
+                .session_hosts
+                .iter()
+                .find(|host| host.name() == place.host)
+                .with_context(|| format!("terminal host {} is unavailable", place.host))?;
+            host.close(&self.paths.state, place, &close.owner).await?;
+        }
         self.store
             .run(move |db| pending::forget(db, &close.id))
             .await

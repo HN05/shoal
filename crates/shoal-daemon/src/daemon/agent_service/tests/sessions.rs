@@ -142,18 +142,41 @@ async fn fixture() -> Result<(tempfile::TempDir, Arc<Manager>, Workspace, Arc<Fa
 async fn fixture_for(
     name: &'static str,
 ) -> Result<(tempfile::TempDir, Arc<Manager>, Workspace, Arc<FakeHost>)> {
+    let (root, manager, workspace, mut hosts) = fixture_with(&[name]).await?;
+    Ok((root, manager, workspace, hosts.remove(0)))
+}
+
+/// A workspace whose daemon closes sessions through a fake host of each
+/// of `names`.
+async fn fixture_with(
+    names: &[&'static str],
+) -> Result<(
+    tempfile::TempDir,
+    Arc<Manager>,
+    Workspace,
+    Vec<Arc<FakeHost>>,
+)> {
     let (root, mut manager) = manager().await;
-    let host = Arc::new(FakeHost {
-        name: Some(name.parse()?),
-        ..Default::default()
-    });
+    let hosts = (names.iter())
+        .map(|name| {
+            Ok(Arc::new(FakeHost {
+                name: Some(name.parse()?),
+                ..Default::default()
+            }))
+        })
+        .collect::<Result<Vec<_>>>()?;
     Arc::get_mut(
         &mut Arc::get_mut(&mut manager)
             .context("manager is shared")?
             .agents,
     )
     .context("manager is shared")?
-    .set_session_hosts(vec![host.clone()]);
+    .set_session_hosts(
+        hosts
+            .iter()
+            .map(|host| host.clone() as Arc<dyn Host>)
+            .collect(),
+    );
     let checkout = repository(root.path(), "repo");
     let repo = manager
         .repositories
@@ -162,7 +185,7 @@ async fn fixture_for(
     let workspace = manager
         .create_workspace(&repo.id, "removed".into(), None, None, None)
         .await?;
-    Ok((root, manager, workspace, host))
+    Ok((root, manager, workspace, hosts))
 }
 
 #[tokio::test]
@@ -341,6 +364,52 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
                 .is_some()
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_demo_closes_the_session_nested_in_its_place_with_the_place() -> Result<()> {
+    use crate::{daemon::executions::ExecutionKind, demos::Launch};
+
+    let (_root, manager, workspace, hosts) = fixture_with(&["herdr", "zmx"]).await?;
+    let [herdr, zmx] = [&hosts[0], &hosts[1]];
+    herdr.add("w1:p1", workspace.id.as_str())?;
+    zmx.add("demo-session", workspace.id.as_str())?;
+    zmx.demo("demo-session", "launch")?;
+    let demo = Launch {
+        id: "launch".into(),
+        name: "demo".into(),
+        preset: None,
+        open: None,
+        scheme: None,
+        viewer_command: None,
+        environment: Default::default(),
+        origin: Origin {
+            nested: Some(Box::new(Origin::created(
+                HostName::Zmx,
+                "demo-session".into(),
+            ))),
+            ..Origin::created(HostName::Herdr, "w1:p1".into())
+        },
+    };
+    let started = manager
+        .agents
+        .begin_execution_running(
+            &*manager,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(demo),
+        )
+        .await?;
+    let finished = manager
+        .agents
+        .finish_execution(&*manager, started.plan.id, ExecutionKind::Command, Some(0))
+        .await?;
+    assert!(finished);
+    assert_eq!(herdr.closed()?, ["w1:p1"]);
+    assert_eq!(zmx.closed()?, ["demo-session"]);
     Ok(())
 }
 
