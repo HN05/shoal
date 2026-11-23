@@ -70,21 +70,19 @@ impl Coordination {
         Ok(chosen(merged(here, elsewhere), unread_only, limit))
     }
 
-    /// Mark exactly the alerts `ids` read: the user's, as `caller` may read
-    /// them, this machine's and those other machines keep, which the hub
-    /// passes on to them, and those for the agents of the spaces its scope
-    /// reaches, whose agents then do not receive them again.
+    /// Mark exactly the alerts read that `ids` number of this machine's:
+    /// the user's, as `caller` may read them, and those for the agents of
+    /// the spaces its scope reaches, whose agents then do not receive them
+    /// again; and those to the user that `elsewhere` numbers for each other
+    /// machine that keeps them, which the hub passes on to it.
     pub async fn mark_alerts_read(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
         ids: Vec<i64>,
+        elsewhere: BTreeMap<MemberId, Vec<i64>>,
     ) -> Result<()> {
-        let asked = ids.clone();
         let recipients = (self.store).read(move |db| recipients(db, &ids)).await?;
-        let here: HashSet<i64> = recipients.iter().map(|(id, _)| *id).collect();
-        let missing: Vec<i64> = asked.into_iter().filter(|id| !here.contains(id)).collect();
-        let elsewhere = self.notifications.kept_elsewhere(&missing);
         let mut users = Vec::new();
         let mut spaces: BTreeMap<SpaceId, Vec<i64>> = BTreeMap::new();
         for (id, recipient) in recipients {

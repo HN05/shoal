@@ -15,9 +15,16 @@ pub enum AlertMethod {
         unread_only: bool,
         limit: u32,
     },
-    /// Mark exactly these alerts read, each one for the caller's space or,
-    /// as the caller may read them, for the user.
-    MarkAlertsRead { ids: Vec<i64> },
+    /// Mark exactly these alerts read: `ids` of this machine's, each one
+    /// for the caller's space or, as the caller may read them, for the
+    /// user, and `elsewhere` the user's that each other joined machine
+    /// keeps, by its ID, since two machines' alerts may share a number
+    /// until the hub renumbers one.
+    MarkAlertsRead {
+        ids: Vec<i64>,
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        elsewhere: std::collections::BTreeMap<shoal_ids::member_ids::MemberId, Vec<i64>>,
+    },
     /// Deletes every alert to the user this machine knows of, read or not,
     /// its own and the other joined machines'; answers with how many.
     ClearAlerts,

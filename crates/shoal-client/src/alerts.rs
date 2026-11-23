@@ -2,7 +2,10 @@
 //! space or Shoal.
 use shoal_protocol::alerts::{Alert, AlertCursor, Cleared, Sent};
 
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result};
+use shoal_ids::member_ids::MemberId;
 
 use tokio::{io::BufReader, net::UnixStream};
 
@@ -32,9 +35,27 @@ pub async fn list(
     pages(daemon, method).await
 }
 
-/// Mark the alerts `ids` read, so they do not come back as new.
+/// Mark this machine's alerts `ids` read, so they do not come back as new.
 pub async fn mark_read(daemon: &impl Daemon, ids: Vec<i64>) -> Result<()> {
-    request(daemon, AlertMethod::MarkAlertsRead { ids }).await
+    let elsewhere = Default::default();
+    request(daemon, AlertMethod::MarkAlertsRead { ids, elsewhere }).await
+}
+
+/// Mark `shown` read where each is kept, this machine's or another's, so
+/// they do not come back as new.
+pub async fn mark_shown_read(daemon: &impl Daemon, shown: &[Alert]) -> Result<()> {
+    let mut ids = Vec::new();
+    let mut elsewhere: BTreeMap<MemberId, Vec<i64>> = BTreeMap::new();
+    for alert in shown {
+        match &alert.machine {
+            None => ids.push(alert.id),
+            Some(machine) => elsewhere
+                .entry(machine.id.clone())
+                .or_default()
+                .push(alert.id),
+        }
+    }
+    request(daemon, AlertMethod::MarkAlertsRead { ids, elsewhere }).await
 }
 
 /// Delete every alert to the user.

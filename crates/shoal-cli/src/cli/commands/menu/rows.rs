@@ -310,15 +310,14 @@ fn alert_labels(notifications: &[Alert]) -> Vec<String> {
 
 /// Mark the unread ones of `notifications` read.
 async fn mark_read(ctx: &Context, notifications: &[Alert]) -> Result<()> {
-    let unread: Vec<_> = notifications
-        .iter()
+    let unread: Vec<Alert> = (notifications.iter())
         .filter(|notification| !notification.read)
-        .map(|notification| notification.id)
+        .cloned()
         .collect();
     if unread.is_empty() {
         return Ok(());
     }
-    alerts::mark_read(&ctx.paths, unread).await
+    alerts::mark_shown_read(&ctx.paths, &unread).await
 }
 
 /// One row per item that needs the user.

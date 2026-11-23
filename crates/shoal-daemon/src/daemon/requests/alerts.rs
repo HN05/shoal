@@ -90,10 +90,10 @@ pub(super) async fn handle(
             );
             Body::Alert(withdrawn.await?)
         }
-        AlertMethod::MarkAlertsRead { ids } => {
+        AlertMethod::MarkAlertsRead { ids, elsewhere } => {
             manager
                 .coordination
-                .mark_alerts_read(&**manager, caller, ids)
+                .mark_alerts_read(&**manager, caller, ids, elsewhere)
                 .await?;
             Body::Ok
         }

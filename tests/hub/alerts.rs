@@ -155,11 +155,12 @@ fn own_once(machine: &Base, text: &str, ready: impl Fn(Option<&Value>) -> bool) 
 fn reading_another_machine_s_alert_reads_it_where_it_is_kept() {
     let hub = machine(true, "app");
     let laptop = machine(false, "app");
-    join(&laptop, &hub, "laptop");
+    let laptop_id = join(&laptop, &hub, "laptop");
     let on_laptop = workspace(&laptop, "on-laptop");
     let id = send_up(&laptop, &on_laptop, "from the laptop");
     shown(&hub, "from the laptop");
-    let marked = hub.request(json!({"mark_alerts_read": {"ids": [id]}}));
+    let elsewhere = json!({ laptop_id: [id] });
+    let marked = hub.request(json!({"mark_alerts_read": {"ids": [], "elsewhere": elsewhere}}));
     assert_ne!(marked["type"], "error", "{marked}");
     own_once(&laptop, "from the laptop", |own| {
         own.is_some_and(|alert| alert["read"] == true)

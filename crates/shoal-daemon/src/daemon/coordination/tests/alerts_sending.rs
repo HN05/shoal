@@ -100,7 +100,7 @@ async fn an_alert_names_its_sender_who_alone_withdraws_it_until_read() {
     // Once read, it stays.
     (manager
         .coordination
-        .mark_alerts_read(&*manager, None, vec![from_parent]))
+        .mark_alerts_read(&*manager, None, vec![from_parent], Default::default()))
     .await
     .unwrap();
     assert!(
@@ -160,15 +160,21 @@ async fn a_scoped_caller_reads_and_marks_only_the_alerts_its_scope_reaches() {
         .unwrap();
     assert_eq!(user.len(), 3);
     assert!(
-        (manager
-            .coordination
-            .mark_alerts_read(&*manager, Some(&as_parent), vec![beside]))
+        (manager.coordination.mark_alerts_read(
+            &*manager,
+            Some(&as_parent),
+            vec![beside],
+            Default::default()
+        ))
         .await
         .is_err()
     );
-    (manager
-        .coordination
-        .mark_alerts_read(&*manager, Some(&as_parent), vec![below]))
+    (manager.coordination.mark_alerts_read(
+        &*manager,
+        Some(&as_parent),
+        vec![below],
+        Default::default(),
+    ))
     .await
     .unwrap();
     assert!(

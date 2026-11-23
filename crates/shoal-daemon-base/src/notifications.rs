@@ -246,19 +246,6 @@ impl Notifications {
         elsewhere.alerts().find(|alert| alert.id == id).cloned()
     }
 
-    /// The machines that keep the alerts numbered `ids` among this
-    /// machine's copies, each with the numbers it keeps.
-    pub fn kept_elsewhere(&self, ids: &[i64]) -> Vec<(MemberId, Vec<i64>)> {
-        let elsewhere = self.elsewhere.lock().unwrap();
-        let mut kept: std::collections::BTreeMap<MemberId, Vec<i64>> = Default::default();
-        for alert in elsewhere.alerts().filter(|alert| ids.contains(&alert.id)) {
-            if let Some(machine) = &alert.machine {
-                kept.entry(machine.id.clone()).or_default().push(alert.id);
-            }
-        }
-        kept.into_iter().collect()
-    }
-
     /// Forget the other machines' alerts, as once this machine leaves its
     /// hub.
     pub fn forget_copies(&self) {

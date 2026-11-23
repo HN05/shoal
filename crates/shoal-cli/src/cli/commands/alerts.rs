@@ -51,8 +51,7 @@ pub(super) async fn list(ctx: &Context, args: AlertListArgs) -> Result<i32> {
     // Shown once: exactly what this listing showed does not come back as
     // new.
     if listing.marks_read && !args.keep_unread && !shown.is_empty() {
-        let ids = shown.iter().map(|alert| alert.id).collect();
-        alerts::mark_read(&ctx.paths, ids).await?;
+        alerts::mark_shown_read(&ctx.paths, &shown).await?;
     }
     if !picked && args.unread && matches!(listing.to, AlertsFor::User) {
         remaining(ctx, &shown, args.keep_unread).await?;

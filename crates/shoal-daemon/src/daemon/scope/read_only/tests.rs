@@ -50,7 +50,10 @@ async fn read_only_scope_reads_without_changing() {
             Operation::Agent(AgentMethod::AgentUpdates {
                 space: space.clone(),
             }),
-            Operation::Alert(crate::protocol::AlertMethod::MarkAlertsRead { ids: Vec::new() }),
+            Operation::Alert(crate::protocol::AlertMethod::MarkAlertsRead {
+                ids: Vec::new(),
+                elsewhere: Default::default(),
+            }),
             // Its review gate may queue a review.
             Operation::Merging(MergingMethod::PreviewMerge {
                 workspace: space,
