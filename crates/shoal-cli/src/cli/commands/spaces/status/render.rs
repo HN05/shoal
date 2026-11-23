@@ -360,12 +360,30 @@ fn render_sleep(sleep: Option<crate::state::Sleep>, wake_at: Option<crate::time:
 }
 
 /// Why Shoal put the agent of the space numbered `number` to sleep, what
-/// wakes it, and the commands that wake it now, while it is asleep.
+/// wakes it, the commands that wake it now and the leases it keeps, while
+/// it is asleep.
 fn render_asleep(asleep: Option<&crate::model::Asleep>, number: shoal_ids::space_ids::SpaceNumber) {
     if let Some(asleep) = asleep {
         let (label, wake) = (ui::asleep_label(asleep), ui::wake_now(number));
         outln!("Asleep:        {label}; {wake}");
+        if !asleep.keeps.is_empty() {
+            let kept: Vec<String> = asleep.keeps.iter().map(kept_label).collect();
+            outln!("Keeps:         {}", kept.join(", "));
+        }
     }
+}
+
+/// A lease an asleep agent keeps, with when Shoal stops it: "simulator
+/// default (until 14:30)".
+fn kept_label(kept: &crate::model::KeptLease) -> String {
+    let mut label = kept.kind.to_string();
+    if let Some(name) = &kept.name {
+        label += &format!(" {name}");
+    }
+    if let Some(until) = kept.until {
+        label += &format!(" (until {})", until.local_minutes());
+    }
+    label
 }
 
 /// When the agent restarts for the restart the daemon recorded, how, and

@@ -13,6 +13,7 @@ use crate::acquired_leases::{Acquired, Held};
 use crate::daemon::{Daemon, Sleeper};
 use crate::{Leases, callers::Caller, model::Workspace, sim::Device, time::UnixTime};
 use shoal_ids::space_ids::SpaceNumber;
+use shoal_protocol::model::{KeptKind, KeptLease};
 
 /// Why Shoal took a lease back from an asleep agent.
 #[derive(Debug, Clone, Copy)]
@@ -112,6 +113,21 @@ impl Leases {
         true
     }
 
+    /// The leases the asleep agent of the space `id` keeps, each running
+    /// one with when it stops; none while its agent is not asleep.
+    pub async fn kept_by(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<Vec<KeptLease>> {
+        let sleepers = daemon.sleepers(None).await?;
+        let Some(sleeper) = sleepers.iter().find(|sleeper| sleeper.space == *id) else {
+            return Ok(Vec::new());
+        };
+        let leases = self.acquired_leases().await?.into_iter();
+        Ok(
+            (leases.filter(|lease| lease.acquirer.agent_space() == Some(id)))
+                .map(|lease| kept(lease.held, sleeper))
+                .collect(),
+        )
+    }
+
     /// Stop the running `lease` of an asleep agent for `why`, shutting a
     /// simulator down, and tell its agent; whether it stopped.
     async fn stop_running(&self, daemon: &dyn Daemon, lease: &Acquired, why: Taken) -> bool {
@@ -122,6 +138,17 @@ impl Leases {
         tell_taken(daemon, lease, &workspace, why).await;
         true
     }
+}
+
+/// `held` as `sleeper` keeps it.
+fn kept(held: Held, sleeper: &Sleeper) -> KeptLease {
+    let until = (held.running()).then(|| sleeper.since + sleeper.keeps_running);
+    let (kind, name) = match held {
+        Held::Simulator { name } => (KeptKind::Simulator, Some(name)),
+        Held::Containers => (KeptKind::Containers, None),
+        Held::Permit { pool, .. } => (KeptKind::Resource, Some(pool)),
+    };
+    KeptLease { kind, name, until }
 }
 
 /// The set in `freeing` held wholly by `sleepers`, lowest-ranked first,

@@ -25,6 +25,7 @@ pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Asleep>> {
     Ok(found.map(|(reason, wakes_when)| Asleep {
         reason: reason.unwrap_or_else(|| UNKNOWN_STOP.to_owned()),
         wakes_when: wakes_when.unwrap_or_else(|| WAKES_IN_QUEUE.to_owned()),
+        keeps: Vec::new(),
     }))
 }
 

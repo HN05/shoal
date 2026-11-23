@@ -32,7 +32,32 @@ pub struct Asleep {
     pub reason: String,
     /// Completes "wakes once …".
     pub wakes_when: String,
+    /// The leases the agent keeps while it sleeps, which a space's status
+    /// shows.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keeps: Vec<KeptLease>,
 }
+
+/// A lease an asleep agent keeps.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptLease {
+    pub kind: KeptKind,
+    /// A simulator lease's name or a permit's pool; none for containers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// When Shoal stops it, for one that keeps something running.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<crate::time::UnixTime>,
+}
+
+shoal_states::states!(
+    /// What kind of lease an asleep agent keeps.
+    KeptKind {
+        Simulator => "simulator",
+        Containers => "containers",
+        Resource => "resource",
+    }
+);
 
 /// A connected agent, or an execution whose wrapper is gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

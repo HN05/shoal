@@ -635,6 +635,7 @@ fn an_agent_shoal_brings_back_shows_asleep_rather_than_stopped_or_queued() {
     workspace.asleep = Some(crate::model::Asleep {
         reason: "critical memory pressure".into(),
         wakes_when: "an update arrives for it".into(),
+        keeps: Vec::new(),
     });
     // Its stop saved work, which comes back on its own.
     assert_eq!(

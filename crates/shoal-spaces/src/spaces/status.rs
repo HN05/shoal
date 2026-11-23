@@ -3,7 +3,7 @@
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::model::ByKind;
+use shoal_protocol::model::{Asleep, ByKind};
 use shoal_protocol::status::{Attention, IssueStatus, SpaceDetail, SpaceStatus};
 use std::path::{Path, PathBuf};
 
@@ -90,12 +90,15 @@ impl Spaces {
     ) -> Result<(SpaceDetail, PathBuf)> {
         Ok(match space.by_kind() {
             ByKind::Workspace(workspace) => {
-                let status =
+                let mut status =
                     (self.worktree_status(daemon, &SpaceSelector::id(&workspace.id))).await?;
-                let path = status.workspace.path.clone();
+                let workspace = &mut status.workspace;
+                add_kept_leases(daemon, &workspace.id, workspace.asleep.as_mut()).await;
+                let path = workspace.path.clone();
                 (SpaceDetail::Workspace(Box::new(status)), path)
             }
-            ByKind::Chat(chat) => {
+            ByKind::Chat(mut chat) => {
+                add_kept_leases(daemon, &chat.id, chat.asleep.as_mut()).await;
                 let checkout = self.chat_checkout_path(daemon, &chat).await?;
                 let chat = Box::new(chat);
                 (SpaceDetail::Chat { chat }, checkout)
@@ -160,5 +163,17 @@ impl Spaces {
             )
             .await;
         (daemon.linked_states(&remote, records.pr_cleanup.as_ref(), &records.issues)).await
+    }
+}
+
+/// Add to `asleep`, the asleep agent of the space `id`, the leases it keeps;
+/// a status that cannot read them shows none.
+async fn add_kept_leases(daemon: &dyn Daemon, id: &SpaceId, asleep: Option<&mut Asleep>) {
+    let Some(asleep) = asleep else {
+        return;
+    };
+    match daemon.kept_leases(id).await {
+        Ok(keeps) => asleep.keeps = keeps,
+        Err(error) => crate::log!("leases the agent of {id} keeps unread: {error:#}"),
     }
 }

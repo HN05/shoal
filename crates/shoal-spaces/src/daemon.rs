@@ -39,6 +39,7 @@ use shoal_protocol::hub::packages::KeptPackage;
 use shoal_protocol::hub::placement::Decision;
 use shoal_protocol::hub::{Machine, Member};
 use shoal_protocol::links::{Unlinked, issue, pr};
+use shoal_protocol::model::KeptLease;
 use shoal_protocol::model::{
     Chat, CheckoutSync, Execution, LinkedItem, MergePath, MergeWarning, QueueAdmission, QueueEntry,
     QueuedJob, Relation, Repository, ReviewMark, RunningAgent, Selected, Space, SpaceLinks,
@@ -1034,6 +1035,10 @@ pub trait Leases: Send + Sync {
 
     /// Delete the simulators `owner` holds.
     fn remove_simulators<'a>(&'a self, owner: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
+
+    /// The leases the asleep agent of the space `id` keeps, each running
+    /// one with when it stops; none while its agent is not asleep.
+    fn kept_leases<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Vec<KeptLease>>>;
 
     /// Run the release hook `command` of `workspace` for `lease`; a failure
     /// keeps the lease.

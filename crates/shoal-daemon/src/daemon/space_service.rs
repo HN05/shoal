@@ -1301,6 +1301,13 @@ impl shoal_spaces::daemon::Leases for Manager {
         Box::pin(self.leases.remove_simulators(owner))
     }
 
+    fn kept_leases<'a>(
+        &'a self,
+        id: &'a SpaceId,
+    ) -> BoxFuture<'a, Result<Vec<shoal_protocol::model::KeptLease>>> {
+        Box::pin(self.leases.kept_by(self, id))
+    }
+
     fn run_resource_release_hook<'a>(
         &'a self,
         workspace: &'a Workspace,

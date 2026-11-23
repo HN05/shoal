@@ -765,7 +765,11 @@ stop` stopped, or that quit on its own, is stopped instead, and stays down
 until `shoal resume`. `shoal list` shows an asleep agent's space as `asleep`,
 the [inbox](#inbox) lists it, and `shoal status` adds an `Asleep` line with
 why it sleeps, what wakes it, and `shoal attach` and `shoal queue start`, which
-wake it now; `--json` gives `asleep` with `reason` and `wakes_when`. Where an
+wake it now, and a `Keeps` line with the [leases it keeps](#leases-while-asleep),
+each simulator or containers with when Shoal stops it, such as `simulator
+default (until 14:30), resource signing`; `--json` gives `asleep` with
+`reason`, `wakes_when` and `keeps`, each with its `kind`, its `name` and its
+`until`. Where an
 asleep agent's wrapper waits in a terminal for its restore, it keeps what the
 agent last showed and draws a block under it saying what wakes the agent and
 why it sleeps, ignoring other keys: Enter wakes the agent there, as
