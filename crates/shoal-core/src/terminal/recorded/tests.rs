@@ -139,12 +139,21 @@ fn every_record_of_a_stopped_agents_place_reports_the_stop_and_its_execution() {
     // after their windows: another agent's and a shell keep their own state.
     let running = Origin::created(HostName::Zmx, "running".to_owned());
     let shell = Origin::created(HostName::Zmx, "shell".to_owned());
+    // The stopped agent ran in a session nested in a pane Shoal opened.
+    let pane = Origin::created(HostName::Herdr, "w1:p1".to_owned());
+    let nested = pane_with("nested");
     let mut sessions = vec![
         Session::open("work".into(), 0, &created),
         Session {
             execution: Some("stopped".into()),
             stopped: Some(stopped_by_load()),
             ..Session::open("work".into(), 0, &execution)
+        },
+        Session::open("pane".into(), 0, &pane),
+        Session {
+            execution: Some("nested".into()),
+            stopped: Some(stopped_by_load()),
+            ..Session::open("pane".into(), 1, &nested)
         },
         Session::open("other".into(), 0, &other),
         Session {
@@ -159,11 +168,14 @@ fn every_record_of_a_stopped_agents_place_reports_the_stop_and_its_execution() {
         .map(|session| (session.stopped.is_some(), session.execution.clone()))
         .collect();
     let stopped_execution = Some(ExecutionId::from("stopped"));
+    let nested_execution = Some(ExecutionId::from("nested"));
     assert_eq!(
         stopped,
         [
             (true, stopped_execution.clone()),
             (true, stopped_execution),
+            (true, nested_execution.clone()),
+            (true, nested_execution),
             (false, None),
             (false, Some(ExecutionId::from("running"))),
             (false, None)

@@ -157,13 +157,15 @@ fn mark_stopped(sessions: &mut [Session]) {
 }
 
 /// Whether `a` and `b` name one place, whichever instance of it each
-/// record found.
+/// record found and whatever session each found nested in it, such as a
+/// stopped agent's record of a pane and the record Shoal kept of opening it.
 fn one_place(a: &Origin, b: &Origin) -> bool {
-    let any_instance = |place: &Origin| Origin {
+    let the_place = |place: &Origin| Origin {
         instance: None,
+        nested: None,
         ..place.clone()
     };
-    any_instance(a).same_place(&any_instance(b))
+    the_place(a).same_place(&the_place(b))
 }
 
 /// The session open at each of `places`, in order, asking each host that
