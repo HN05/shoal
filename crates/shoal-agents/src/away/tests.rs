@@ -109,3 +109,15 @@ async fn a_machine_that_hands_nothing_over_only_holds_its_queue() {
     assert!(handings(&fixture).is_empty());
     assert!(fixture.agents.agent_queue.holds_admission());
 }
+
+#[tokio::test]
+async fn a_sleep_does_not_wait_for_a_hand_over_under_way() {
+    let (fixture, _, _) = handing_over().await;
+    let under_way = fixture.agents.presences.handed_over.lock().await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    (fixture.agents)
+        .hand_over_before_sleep(&*fixture.daemon, deadline)
+        .await;
+    drop(under_way);
+    assert!(handings(&fixture).is_empty());
+}

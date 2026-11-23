@@ -106,20 +106,36 @@ impl Agents {
 
     /// Hand the spaces with something to do over before the machine sleeps
     /// by `deadline`, under `keep_awake = "handover"`, as when the user
-    /// walks away.
+    /// walks away. A hand-over already under way since they walked away
+    /// goes on as it can: the sleep's notice to the hub does not wait for it.
     pub async fn hand_over_before_sleep(&self, daemon: &dyn Daemon, deadline: Instant) {
         if self.config.current().machine.keep_awake != KeepAwake::Handover {
             return;
         }
+        let Ok(handed_over) = self.presences.handed_over.try_lock() else {
+            return;
+        };
         let window = HandoverWindow::Until(deadline);
-        self.hand_over_once(daemon, Shutdown::Sleep, window).await;
+        (self.hand_over_holding(daemon, handed_over, Shutdown::Sleep, window)).await;
     }
 
     /// Stop the spaces with something to do and hand them over within
     /// `window`, holding the machine awake meanwhile, unless they went
     /// since the user was last here or this machine hands nothing over.
     async fn hand_over_once(&self, daemon: &dyn Daemon, why: Shutdown, window: HandoverWindow) {
-        let mut handed_over = self.presences.handed_over.lock().await;
+        let handed_over = self.presences.handed_over.lock().await;
+        (self.hand_over_holding(daemon, handed_over, why, window)).await;
+    }
+
+    /// [`Self::hand_over_once`] while holding `handed_over`, the presence's
+    /// record of whether a hand-over finished since the user was here.
+    async fn hand_over_holding(
+        &self,
+        daemon: &dyn Daemon,
+        mut handed_over: tokio::sync::MutexGuard<'_, bool>,
+        why: Shutdown,
+        window: HandoverWindow,
+    ) {
         if *handed_over || !daemon.hands_over().await {
             return;
         }
