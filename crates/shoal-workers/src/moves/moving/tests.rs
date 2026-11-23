@@ -40,6 +40,7 @@ async fn a_move_of_a_space_another_move_left_leaves_that_move_alone_child() {
         keep: false,
         checkpoint: None,
         consent: Some(Consent::Any),
+        check_only: false,
     };
 
     let report = crate::moves::run(&paths, order, &Unfollowed).await.unwrap();

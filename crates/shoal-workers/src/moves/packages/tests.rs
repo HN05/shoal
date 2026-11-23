@@ -14,6 +14,7 @@ fn copies() -> MoveOrder {
         keep: true,
         checkpoint: None,
         consent: None,
+        check_only: false,
     }
 }
 

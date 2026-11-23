@@ -18,6 +18,7 @@ fn order(spaces: &[&SpaceId], keep: bool) -> MoveOrder {
         keep,
         checkpoint: None,
         consent: None,
+        check_only: false,
     }
 }
 

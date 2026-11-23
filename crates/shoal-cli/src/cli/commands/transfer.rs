@@ -37,6 +37,7 @@ pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<i32> {
         keep: args.keep,
         checkpoint: args.checkpoint,
         consent: args.confirmation.yes.then_some(Consent::Any),
+        check_only: false,
     };
     let streaming = stream::Streaming::start(ctx, &order).await?;
     let leaving = leaving::Leaving::find(ctx).await?;

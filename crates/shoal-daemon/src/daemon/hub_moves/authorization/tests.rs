@@ -13,6 +13,7 @@ fn order(spaces: &[&SpaceId], destination: MoveDestination, keep: bool) -> MoveO
         keep,
         checkpoint: None,
         consent: None,
+        check_only: false,
     }
 }
 

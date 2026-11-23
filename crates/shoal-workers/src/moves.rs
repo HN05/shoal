@@ -187,13 +187,16 @@ pub async fn runs_elsewhere(paths: &CommandPaths, order: &MoveOrder) -> Result<b
 
 /// Run `order`: check its spaces, then move each, or a copy of it, going on
 /// after one fails, telling `steps` how far each got and printing a line
-/// for each.
+/// for each; one that only checks them moves none.
 pub async fn run(paths: &CommandPaths, order: MoveOrder, steps: &impl Steps) -> Result<MoveReport> {
     if runs_elsewhere(paths, &order).await? {
         return relayed::run(paths, &order, steps).await;
     }
     let planned = plan(paths, &order).await?;
     ensure_consent(&order, &planned)?;
+    if order.check_only {
+        return Ok(MoveReport::default());
+    }
     if let MoveDestination::Ssh(destination) = &order.destination {
         ssh::Remote::new(destination).check().await?;
     }

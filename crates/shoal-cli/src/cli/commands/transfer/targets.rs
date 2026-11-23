@@ -101,6 +101,7 @@ pub(in crate::cli::commands) fn moving() -> Acting {
             keep: false,
             checkpoint: None,
             consent: None,
+            check_only: false,
         })
     })
 }

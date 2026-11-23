@@ -367,6 +367,11 @@ pub struct MoveOrder {
     /// nothing and asks for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub consent: Option<Consent>,
+    /// Whether it only checks its spaces and the consent ending them needs,
+    /// moving none, as a move of several machines' spaces asks each
+    /// machine before any of them ends.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub check_only: bool,
 }
 
 /// A caller's consent to what a move ends.
