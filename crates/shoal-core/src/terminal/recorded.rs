@@ -102,11 +102,13 @@ async fn open_with_nested(
 
 /// The session a recorded place shows, from `outer`, the one open at the
 /// place, and `nested`, the one open in the session nested in it: the
-/// place's while it is open, attached while a terminal shows either, and
-/// naming the nested session only while that is open; else the nested
-/// session, which outlives the place.
+/// place's while it is open and a client of the session is attached, which
+/// the place's own is, attached while a terminal shows either, and naming
+/// the nested session only while that is open; else the nested session,
+/// which outlives the place and a detach there.
 fn with_nested(outer: Option<Session>, nested: Option<Session>) -> Option<Session> {
     match (outer, nested) {
+        (_, Some(nested)) if nested.clients == 0 => Some(nested),
         (Some(outer), Some(nested)) => Some(Session {
             // One client of the nested session is the place's own.
             clients: outer.clients + nested.clients.saturating_sub(1),

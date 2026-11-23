@@ -2215,7 +2215,9 @@ places, runs in a zmx session attached there, named and labelled as above. It
 looks and works as before in that place, and from a terminal that host does
 not serve, such as over ssh, `shoal attach` and opening the demo attach to the
 session instead, where for Rex they would select the block in the Mac app; a
-Rex app on another machine still selects the block. Shoal inside the session
+Rex app on another machine still selects the block. Once no zmx client is
+attached, as after a detach in the place, attaching from anywhere attaches to
+the session. Shoal inside the session
 takes the pane or block for its place: starts it queues open beside it, a
 restore runs there again in a new session, and `close_when_done`, removal and
 cleanup close it and the session, which also ends with its agent. The picker

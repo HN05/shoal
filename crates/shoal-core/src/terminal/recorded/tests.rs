@@ -342,6 +342,9 @@ fn a_place_with_a_nested_session_shows_while_either_is_open() {
     assert_eq!(ended.place.nested, None);
     let outlived = with_nested(None, open(0, session)).unwrap();
     assert_eq!(&outlived.place, session);
+    // A pane whose client detached shows its shell, not the session.
+    let detached = with_nested(open(1, &pane), open(0, session)).unwrap();
+    assert_eq!((&detached.place, detached.clients), (session, 0));
     assert_eq!(with_nested(None, None), None);
 }
 
