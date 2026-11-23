@@ -31,8 +31,9 @@ async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_acti
                 "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
                  INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','fix');
                  INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('w','/work','fix','ready','abc','/admin');
-                 INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener)
-                     VALUES (1,1,'w','question','Which?',1,'space');
+                 INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener,
+                         opener_id)
+                     VALUES (1,1,'w','question','Which?',1,'space','w');
                  INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number)
                      VALUES ('action','w','action/merge','merge','{}',1,2),
                          ('port','w','port/web','web','{}',1,3);",

@@ -52,8 +52,9 @@ impl Coordination {
 
     /// Whether `caller` reads `thread`: the user reads every thread, and a
     /// space those that a space its scope reaches took part in, as the
-    /// space it is numbered in, a holder or an earlier holder, except a
-    /// pending review's comment, which only its writer's side reads.
+    /// space it is numbered in, its opener, a holder or an earlier holder,
+    /// except a pending review's comment, which only its writer's side
+    /// reads.
     pub(super) async fn reads(
         &self,
         daemon: &dyn Daemon,
@@ -69,6 +70,7 @@ impl Coordination {
         let id = thread.id;
         let mut parties = self.store.run(move |db| records::holders(db, id)).await?;
         parties.push(thread.space_id.clone());
+        parties.extend(thread.opener_id().cloned());
         for party in &parties {
             if self.reaches(daemon, caller, party).await? {
                 return Ok(true);
@@ -106,12 +108,10 @@ impl Coordination {
         caller: Option<&Caller>,
         thread: &Thread,
     ) -> Result<bool> {
-        match (caller, thread.held, thread.opener) {
+        match (caller, thread.held, thread.opener_id()) {
             (None, _, _) | (_, false, _) => Ok(true),
-            (Some(caller), true, Sender::Space) => {
-                self.reaches(daemon, caller, &thread.space_id).await
-            }
-            (Some(_), true, Sender::User | Sender::Shoal) => Ok(false),
+            (Some(caller), true, Some(writer)) => self.reaches(daemon, caller, writer).await,
+            (Some(_), true, None) => Ok(false),
         }
     }
 
@@ -135,7 +135,7 @@ impl Coordination {
                 }
             };
         };
-        if thread.opener == Sender::Space && caller.space_id == thread.space_id {
+        if thread.opener_id() == Some(&caller.space_id) {
             return Ok(Side::Opener);
         }
         if let Holder::Space(holder) = &thread.holder

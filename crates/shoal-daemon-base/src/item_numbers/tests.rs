@@ -18,8 +18,8 @@ fn spaces(db: &Connection) -> Result<()> {
 
 fn thread(db: &Connection, space: &str, number: ItemNumber) -> Result<()> {
     db.execute(
-        "INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener)
-            VALUES (?1,?2,?3,'question','Which?',1,'space')",
+        "INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener,opener_id)
+            VALUES (?1,?2,?3,'question','Which?',1,'space',?3)",
         params![number.space, number.item, space],
     )?;
     Ok(())

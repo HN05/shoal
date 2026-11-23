@@ -806,7 +806,7 @@ CREATE TABLE threads (
     outcome TEXT,
     resolved_by TEXT CHECK(resolved_by IN ('user','space','shoal')),
     resolver_id TEXT,
-    resolved_at INTEGER, severity TEXT CHECK(severity IN ('blocker','should-fix','nit')), review_id INTEGER, holder_name TEXT, holder_number INTEGER, held INTEGER NOT NULL DEFAULT 0 CHECK(held IN (0,1)),
+    resolved_at INTEGER, severity TEXT CHECK(severity IN ('blocker','should-fix','nit')), review_id INTEGER, holder_name TEXT, holder_number INTEGER, held INTEGER NOT NULL DEFAULT 0 CHECK(held IN (0,1)), opener_id TEXT, opener_name TEXT, opener_number INTEGER,
     CHECK((outcome IS NULL) = (resolved_by IS NULL)
         AND (outcome IS NULL) = (resolved_at IS NULL))
 );

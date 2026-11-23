@@ -32,10 +32,13 @@ const NUMBERED: &str = "t.space_number IS NOT NULL";
 const THREADS: &str = "SELECT t.id,t.space_number,t.number,t.space_id,
         COALESCE(s.name,t.space_id) AS space,t.kind,t.name,t.created_at,t.opener,t.holder_id,
         COALESCE(h.name,t.holder_name) AS holder_name,
-        COALESCE(h.number,t.holder_number) AS holder_number,t.outcome,t.resolved_by,t.resolver_id,
+        COALESCE(h.number,t.holder_number) AS holder_number,t.opener_id,
+        COALESCE(o.name,t.opener_name) AS opener_name,
+        COALESCE(o.number,t.opener_number) AS opener_number,t.outcome,t.resolved_by,t.resolver_id,
         t.resolved_at,t.severity,t.review_id,t.held,EXISTS (SELECT 1 FROM space_current_thread c
             WHERE c.thread_id=t.id AND c.space_id=t.holder_id) AS working
-    FROM threads t LEFT JOIN spaces s ON s.id=t.space_id LEFT JOIN spaces h ON h.id=t.holder_id";
+    FROM threads t LEFT JOIN spaces s ON s.id=t.space_id LEFT JOIN spaces h ON h.id=t.holder_id
+        LEFT JOIN spaces o ON o.id=t.opener_id";
 
 fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
     let holder = match row.get::<_, Option<SpaceId>>("holder_id")? {
@@ -44,6 +47,14 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
             id,
             name: row.get("holder_name")?,
             number: row.get("holder_number")?,
+        }),
+    };
+    let opener_space = match row.get::<_, Option<SpaceId>>("opener_id")? {
+        None => None,
+        Some(id) => Some(ThreadSpace {
+            id,
+            name: row.get("opener_name")?,
+            number: row.get("opener_number")?,
         }),
     };
     let resolution = match shoal_store::json_column::<Outcome>(row, "outcome")? {
@@ -71,6 +82,7 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
         finding,
         name: row.get("name")?,
         opener: row.get("opener")?,
+        opener_space,
         holder,
         created_at: row.get("created_at")?,
         posts: Vec::new(),
@@ -281,27 +293,55 @@ pub(super) fn linkers(db: &Connection, id: i64) -> Result<Vec<SpaceId>> {
 }
 
 /// What a new thread is: its kind and name, who opened it, the space it is
-/// numbered in and who holds it, none for the user, a `review` thread's
-/// finding, and whether it holds its posts, as a pending review's does. A
-/// space it names keeps the number and name it has now, which name it while
-/// this machine has no record of it.
+/// numbered in and who holds it, none
+/// for the user, a `review` thread's finding, and whether it holds its
+/// posts, as a pending review's does. A space it names keeps the number and
+/// name it has now, which name it while this machine has no record of it.
 pub struct NewThread<'a> {
     pub(super) kind: ThreadKind,
     pub(super) finding: Option<Finding>,
     pub(super) held: bool,
     pub(super) name: &'a str,
-    pub(super) opener: Sender,
+    pub(super) opener: Opener<'a>,
     pub(super) space_id: &'a SpaceId,
     pub(super) holder: Option<&'a ThreadSpace>,
+}
+
+/// Who opens a new thread: the user, Shoal, or a space, the one it is
+/// numbered in or, for a comment of its review, one of another machine.
+#[derive(Clone, Copy)]
+pub enum Opener<'a> {
+    User,
+    Space(&'a ThreadSpace),
+    Shoal,
+}
+
+impl<'a> Opener<'a> {
+    fn sender(self) -> Sender {
+        match self {
+            Self::User => Sender::User,
+            Self::Space(_) => Sender::Space,
+            Self::Shoal => Sender::Shoal,
+        }
+    }
+
+    fn space(self) -> Option<&'a ThreadSpace> {
+        match self {
+            Self::Space(space) => Some(space),
+            Self::User | Self::Shoal => None,
+        }
+    }
 }
 
 /// Record `new` under its space's next number; the thread's record ID.
 pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result<i64> {
     let number = item_numbers::next(tx, new.space_id)?;
+    let opener = new.opener.space();
     tx.execute(
         "INSERT INTO threads(space_id,space_number,number,kind,name,created_at,opener,holder_id,
-                holder_name,holder_number,severity,review_id,held)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                holder_name,holder_number,severity,review_id,held,opener_id,opener_name,
+                opener_number)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
         params![
             new.space_id,
             number.space,
@@ -309,13 +349,16 @@ pub(super) fn insert_thread(tx: &Transaction<'_>, new: &NewThread<'_>) -> Result
             new.kind,
             new.name,
             crate::time::UnixTime::now(),
-            new.opener,
+            new.opener.sender(),
             new.holder.map(|holder| &holder.id),
             new.holder.and_then(|holder| holder.name.as_ref()),
             new.holder.and_then(|holder| holder.number),
             new.finding.and_then(|finding| finding.severity),
             new.finding.and_then(|finding| finding.review),
-            new.held
+            new.held,
+            opener.map(|opener| &opener.id),
+            opener.and_then(|opener| opener.name.as_ref()),
+            opener.and_then(|opener| opener.number)
         ],
     )?;
     let id = tx.last_insert_rowid();

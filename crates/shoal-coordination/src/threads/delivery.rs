@@ -36,7 +36,7 @@ impl Party {
             (Side::Holder, _, Holder::User) => Some(Self::User),
             (Side::Holder, _, Holder::Space(holder)) => Some(Self::Space(holder.id.clone())),
             (Side::Opener, Sender::User, _) => Some(Self::User),
-            (Side::Opener, Sender::Space, _) => Some(Self::Space(thread.space_id.clone())),
+            (Side::Opener, Sender::Space, _) => thread.opener_id().cloned().map(Self::Space),
             (Side::Opener, Sender::Shoal, _) => None,
         }
     }

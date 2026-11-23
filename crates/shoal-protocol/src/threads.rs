@@ -458,6 +458,11 @@ pub struct Thread {
     pub finding: Option<Finding>,
     pub name: String,
     pub opener: Sender,
+    /// The space that opened it, for a thread a space opened: the one it is
+    /// numbered in, or for a comment of a space's review of a workspace on
+    /// another machine, that space, as the hub listed it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opener_space: Option<ThreadSpace>,
     pub holder: Holder,
     pub created_at: crate::time::UnixTime,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -514,10 +519,16 @@ impl Thread {
         }
     }
 
+    /// The ID of the space that opened it, for a thread a space opened.
+    pub fn opener_id(&self) -> Option<&SpaceId> {
+        self.opener_space.as_ref().map(|opener| &opener.id)
+    }
+
     /// Whether the space `space` takes part in it now: as the space it is
-    /// numbered in, or as its holder.
+    /// numbered in, as its opener, or as its holder.
     pub fn has_party(&self, space: &SpaceId) -> bool {
         self.space_id == *space
+            || self.opener_id() == Some(space)
             || self
                 .holder
                 .space()
@@ -546,7 +557,10 @@ impl Thread {
             (Side::Holder, _) => self.holder.label(),
             (Side::Opener, Sender::User) => "the user".into(),
             (Side::Opener, Sender::Shoal) => "Shoal".into(),
-            (Side::Opener, Sender::Space) => self.space.to_string(),
+            (Side::Opener, Sender::Space) => match &self.opener_space {
+                Some(opener) if opener.id != self.space_id => opener.label(),
+                _ => self.space.to_string(),
+            },
         }
     }
 

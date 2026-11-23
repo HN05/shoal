@@ -16,12 +16,12 @@ use shoal_protocol::{
     code::NewCodeRef,
     reviews::ReviewId,
     space_names::SpaceSelector,
-    threads::{Finding, Holder, Sender, Side, Thread, ThreadKind, ThreadSpace},
+    threads::{Finding, Holder, Side, Thread, ThreadKind, ThreadSpace},
 };
 
 use crate::{alerts::Recipients, notifications::Source, scope::Caller};
 use posting::Opening;
-use records::NewThread;
+use records::{NewThread, Opener};
 
 mod chat;
 mod closing;
@@ -66,12 +66,12 @@ impl Coordination {
             "a review thread joins a pending review: start one with shoal review start <space>, \
              then open threads towards that space without --kind"
         );
-        let (opener, space_id, holder) = match (caller, to) {
+        let (space_id, holder) = match (caller, to) {
             // Numbered in the space it is opened with, on that space's
             // machine, which takes a request for a space this one lacks.
             (None, Some(to)) => {
                 let target = ThreadSpace::of(&daemon.space(to).await?);
-                (Sender::User, target.id.clone(), Some(target))
+                (target.id.clone(), Some(target))
             }
             (None, None) => bail!("the user opens a thread with a space; name it with --space"),
             // Numbered in the opener's space here, and held by a space here
@@ -82,15 +82,15 @@ impl Coordination {
                     target.id != caller.space_id,
                     "a space opens a thread with another space"
                 );
-                (Sender::Space, caller.space_id.clone(), Some(target))
+                (caller.space_id.clone(), Some(target))
             }
             (Some(caller), None) => {
                 let holder = self.coordinator_of(daemon, &caller.space_id).await?;
-                (Sender::Space, caller.space_id.clone(), holder)
+                (caller.space_id.clone(), holder)
             }
         };
         let outside = self.records.clone();
-        let writer = caller.map(|caller| caller.space_id.clone());
+        let writer = caller.map(|caller| ThreadSpace::here(caller.space_id.clone()));
         let opening = self.opening_post(daemon, caller, code).await?;
         let versioned = opening
             .as_ref()
@@ -103,7 +103,8 @@ impl Coordination {
                 outside.require_taking_work(tx, &space_id)?;
                 let review = match (kind, &holder) {
                     (None, Some(holder)) => {
-                        outside.joined_review(tx, &holder.id, writer.as_ref())?
+                        let writer = writer.as_ref().map(|writer| &writer.id);
+                        outside.joined_review(tx, &holder.id, writer)?
                     }
                     _ => None,
                 };
@@ -113,7 +114,7 @@ impl Coordination {
                     finding,
                     held: review.is_some(),
                     name: &name,
-                    opener,
+                    opener: writer.as_ref().map_or(Opener::User, Opener::Space),
                     space_id: &space_id,
                     holder: holder.as_ref(),
                 };

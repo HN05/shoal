@@ -841,6 +841,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 285 {
         db.execute_batch(include_str!("hub_handed_over_copies.sql"))?;
     }
+    if version >= 286 {
+        db.execute_batch(include_str!("thread_openers.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -4657,5 +4660,22 @@ fn copies_of_spaces_taken_over_from_their_machines_count_as_handed_over() -> Res
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(handed, ["taken"]);
+    Ok(())
+}
+
+#[test]
+fn a_thread_a_space_opened_names_that_space_as_its_opener() -> Result<()> {
+    let mut db = historical_database(SCHEMA_VERSION - 1)?;
+    db.execute_batch(
+        "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener)
+            VALUES (1,'workspace',1,1,'question','Which?',1,'space'),
+                (2,'workspace',1,2,'question','Which?',1,'user');",
+    )?;
+    migrate_to(&mut db, SCHEMA_VERSION)?;
+    let openers: Vec<Option<String>> = db
+        .prepare("SELECT opener_id FROM threads ORDER BY id")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(openers, [Some("workspace".to_owned()), None]);
     Ok(())
 }

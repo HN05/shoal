@@ -37,6 +37,7 @@ fn thread(opener: Sender, holder: Holder, posts: Vec<Post>) -> Thread {
         finding: None,
         name: "Which database?".into(),
         opener,
+        opener_space: (opener == Sender::Space).then(|| ThreadSpace::here("w1".into())),
         holder,
         created_at: crate::time::UnixTime::from_seconds(1),
         posts,

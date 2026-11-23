@@ -195,10 +195,7 @@ impl Coordination {
 pub fn waiting_count(db: &rusqlite::Connection, id: &SpaceId) -> Result<usize> {
     let opened = records::query(
         db,
-        &format!(
-            "WHERE t.space_id=?1 AND t.opener='space' AND {}",
-            records::OPEN
-        ),
+        &format!("WHERE t.opener_id=?1 AND {}", records::OPEN),
         [id],
     )?;
     Ok(opened.iter().filter(|thread| thread.is_waiting()).count())
@@ -228,6 +225,9 @@ pub fn waiting_on_spaces(db: &rusqlite::Connection) -> Result<Vec<(SpaceId, Spac
     )?;
     Ok((opened.into_iter())
         .filter(Thread::is_waiting)
-        .filter_map(|thread| Some((thread.space_id, thread.holder.space()?.id.clone())))
+        .filter_map(|thread| {
+            let holder = thread.holder.space()?.id.clone();
+            Some((thread.opener_id()?.clone(), holder))
+        })
         .collect())
 }

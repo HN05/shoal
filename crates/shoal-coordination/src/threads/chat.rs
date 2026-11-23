@@ -55,7 +55,7 @@ fn chat_text(message: Option<&str>, fallback: &str) -> String {
 /// opened the thread, the holder's while it holds it, else none.
 fn side_of(thread: &Thread, id: &SpaceId) -> Option<Side> {
     match (thread.opener, &thread.holder) {
-        (Sender::Space, _) if &thread.space_id == id => Some(Side::Opener),
+        _ if thread.opener_id() == Some(id) => Some(Side::Opener),
         (_, Holder::Space(holder)) if &holder.id == id => Some(Side::Holder),
         _ => None,
     }

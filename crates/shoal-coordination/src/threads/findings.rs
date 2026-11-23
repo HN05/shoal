@@ -24,7 +24,7 @@ use shoal_refs::CommitId;
 use super::{
     code::NewCode,
     delivery::{self, Delivered},
-    records::{self, Author, NewRecord, NewThread},
+    records::{self, Author, NewRecord, NewThread, Opener},
 };
 
 /// A finding of a local review, whose thread Shoal opens in the reviewed
@@ -67,7 +67,7 @@ pub fn open(tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<()> {
         }),
         held: false,
         name: &name,
-        opener: Sender::Shoal,
+        opener: Opener::Shoal,
         space_id: finding.workspace,
         holder: Some(&ThreadSpace::here(finding.workspace.clone())),
     };

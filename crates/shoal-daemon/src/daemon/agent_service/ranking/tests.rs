@@ -124,8 +124,8 @@ async fn waits_come_from_blockers_threads_stacks_and_leases() {
             )?;
             db.execute(
                 "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
-                        holder_id)
-                    VALUES (1,?1,9,1,'question','Which?',1,'space',?2)",
+                        opener_id,holder_id)
+                    VALUES (1,?1,9,1,'question','Which?',1,'space',?1,?2)",
                 params![asking, stacked],
             )?;
             db.execute(

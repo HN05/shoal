@@ -117,7 +117,7 @@ impl Coordination {
             thread.number
         );
         let opener = match thread.opener {
-            Sender::Space => id == Some(&thread.space_id),
+            Sender::Space => id.is_some() && id == thread.opener_id(),
             Sender::User => id.is_none(),
             Sender::Shoal => false,
         };
