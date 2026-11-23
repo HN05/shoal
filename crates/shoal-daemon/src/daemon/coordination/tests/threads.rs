@@ -881,7 +881,7 @@ async fn a_submitted_review_reaches_its_holder_once_and_its_comments_then_post_a
     let thread = open_kind(manager, Some(&parent), &tree.child, "Unclear name", None).await;
     send(manager, Some(&parent), &thread, "Call it retries").await;
     // Its writer's only pending review, which a submit without a space takes.
-    let pending = Pending::new(manager, Some(&parent));
+    let pending = Pending::new(manager, Some(&parent), false);
     pending.submit_only(false, None).await.unwrap();
     let received = alerts(manager, &tree.child).await;
     assert_eq!(received.len(), 1, "{received:?}");
@@ -907,7 +907,7 @@ async fn a_bare_cancel_in_the_writers_own_space_drops_its_only_pending_review() 
         (manager.reviews).cancel(&**manager, Some(&own), None, Some(tree.parent.id.clone()));
     assert!(named.await.is_err());
     let parent = caller(&tree.parent);
-    let pending = Pending::new(manager, Some(&parent));
+    let pending = Pending::new(manager, Some(&parent), false);
     assert_eq!(pending.cancel_here(&own).await.unwrap().id, review.id);
 }
 

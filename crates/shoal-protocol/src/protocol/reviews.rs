@@ -23,11 +23,14 @@ pub enum ReviewMethod {
     /// threads it opens towards that workspace join, or return the one it
     /// has.
     StartReview { workspace: SpaceSelector },
-    /// The caller's pending reviews, oldest first.
+    /// The caller's pending reviews, oldest first, of every machine that
+    /// runs a space it sees; forwarded from another machine, those this
+    /// machine keeps.
     PendingReviews,
     /// Submit the caller's pending review of the workspace, else its only
-    /// one, at the workspace's HEAD: its comments reach the workspace's
-    /// agent together, with `summary`, approving its work when `approve`.
+    /// one on any machine, at the workspace's HEAD: its comments reach the
+    /// workspace's agent together, with `summary`, approving its work when
+    /// `approve`.
     SubmitReview {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,
@@ -46,7 +49,7 @@ pub enum ReviewMethod {
         id: Option<ReviewId>,
         /// Whether the workspace is the one the command runs in, rather than
         /// one it names: with nothing to cancel there, the caller's only
-        /// pending review goes.
+        /// pending review, on any machine, goes.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         here: bool,
     },
@@ -105,8 +108,9 @@ impl ReviewMethod {
             | Self::ShowReview { .. }
             | Self::CheckPrGate { .. } => Forwarding::Online,
             Self::AwaitReview { .. } => Forwarding::Streamed,
-            // The caller's reviews are those of its own machine.
-            Self::PendingReviews => Forwarding::Never,
+            // Without a target, it goes only where the caller's machine
+            // asks each machine for those it keeps.
+            Self::PendingReviews => Forwarding::Online,
         }
     }
 

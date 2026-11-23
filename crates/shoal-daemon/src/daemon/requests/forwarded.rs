@@ -1,5 +1,5 @@
-//! What the answer to a request another joined machine forwarded here
-//! tells its caller of this machine.
+//! Requests another joined machine forwarded here: how one shows it, and
+//! what the answer to one tells its caller of this machine.
 use anyhow::Result;
 use shoal_protocol::{hub::Machine, scope_tokens::ScopeToken};
 
@@ -13,8 +13,14 @@ pub(super) async fn answering_machine(
     manager: &Manager,
     scope: Option<&ScopeToken>,
 ) -> Result<Option<Machine>> {
-    if !scope.is_some_and(|token| manager.hub.vouched_caller(token).is_some()) {
+    if !from_elsewhere(manager, scope) {
         return Ok(None);
     }
     manager.hub.this_machine(manager).await
+}
+
+/// Whether another machine forwarded the request here, which `scope`, a
+/// vouch of that machine, then shows.
+pub(super) fn from_elsewhere(manager: &Manager, scope: Option<&ScopeToken>) -> bool {
+    scope.is_some_and(|token| manager.hub.vouched_caller(token).is_some())
 }

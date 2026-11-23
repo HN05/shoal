@@ -537,7 +537,8 @@ fn a_coordinator_reviews_its_child_on_another_machine() {
         "the comment is numbered in the child, whose machine keeps the review"
     );
     ok_in(&hub, &coordinator, &["send", &number, "Call it retries"]);
-    let submit = ["review", "submit", "-s", &child, "--body", "One rename"];
+    // Its only pending review, which the child's machine keeps.
+    let submit = ["review", "submit", "--body", "One rename"];
     let submitted = ok_in(&hub, &coordinator, &submit);
     assert_eq!(submitted["state"], "finished", "{submitted}");
     message_with(&laptop, &child, "Call it retries");
@@ -547,6 +548,16 @@ fn a_coordinator_reviews_its_child_on_another_machine() {
     message_with(&hub, &coordinator, "Renamed");
     let resolved = ok_in(&hub, &coordinator, &["thread", "resolve", &number, "fixed"]);
     assert_eq!(resolved["resolution"]["outcome"], "fixed", "{resolved}");
+}
+
+#[test]
+fn a_coordinator_cancels_its_only_pending_review_kept_on_another_machine() {
+    let tree = tree_across_machines();
+    let (hub, coordinator, child) = (&tree.hub, &tree.coordinator, &tree.child);
+    let started = ok_in(hub, coordinator, &["review", "start", child]);
+    let cancelled = ok_in(hub, coordinator, &["review", "cancel"]);
+    assert_eq!(cancelled["id"], started["id"], "{cancelled}");
+    assert_eq!(cancelled["state"], "cancelled", "{cancelled}");
 }
 
 #[test]

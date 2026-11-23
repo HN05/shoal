@@ -2021,8 +2021,9 @@ it is pending, a [thread](#threads) you open towards that workspace without
 `--kind`, with `--space` from a space, is its comment: a `review` thread with
 its number, which your editor shows: numbered in your space, or in the
 workspace when you are the user or it runs on another machine than your
-space, which then keeps the review and its comments, so `-s` names it to
-submit or cancel that review. While that machine cannot be reached, a thread
+space, which then keeps the review and its comments; your only pending
+review, which `review submit` and `review cancel` take without `-s`, is the
+only one on the machines that can be reached. While that machine cannot be reached, a thread
 without `--kind` towards one of its workspaces is refused, since only that
 machine knows whether it joins a review; `--kind question` opens a question. Its posts reach
 nobody and keep no one waiting: until you submit, only you, the spaces that reach the writing space and

@@ -112,7 +112,7 @@ pub(super) async fn handle(
         }
         Operation::Thread(method) => threads::handle(&server.manager, method, caller).await,
         Operation::Change(method) => changes::handle(&server.manager, method, caller).await,
-        Operation::Review(method) => reviews::handle(&server.manager, method, caller).await,
+        Operation::Review(method) => reviews::handle(&server.manager, method, caller, scope).await,
         Operation::Approval(method) => approvals::handle(&server.manager, method, caller).await,
         Operation::Port(method) => ports::handle(&server.manager, method, caller).await,
         Operation::Secret(method) => secrets::handle(&server.manager, method, caller).await,

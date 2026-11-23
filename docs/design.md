@@ -3009,7 +3009,10 @@ space, and while that machine cannot be asked it is refused unless it names a
 kind. The reviewed workspace's removal, or its writer's on the same machine,
 drops a pending review, whose comments a restore could never submit. A
 writer's comments on another machine neither keep it from cleanup nor close
-with it. Forge reviews stay on the forge.
+with it. Its machine asks every other machine that runs a space it sees for
+its pending reviews there, so its only one is found wherever it is kept and
+acted on there; a machine that cannot be asked is left out, since nothing it
+keeps can be submitted or cancelled until it returns. Forge reviews stay on the forge.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the

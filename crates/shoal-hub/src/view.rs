@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::hub::{
+    Member,
     directory::{Directory, HubView, Listed},
     link::{Call, Reply},
 };
@@ -48,6 +49,27 @@ impl Hub {
             directory,
             below_elsewhere,
         }))
+    }
+
+    /// The other machines that run a space `caller` sees, which keep what
+    /// it does there; none on a machine that is not the hub and joined
+    /// none.
+    pub async fn machines_seen(
+        &self,
+        daemon: &dyn Daemon,
+        caller: Option<&Caller>,
+    ) -> Result<Vec<Member>> {
+        let Some(view) = self.hub_view(daemon, caller).await? else {
+            return Ok(Vec::new());
+        };
+        let directory = &view.directory;
+        let running: HashSet<&MemberId> = (directory.spaces.iter())
+            .map(|listed| &listed.machine)
+            .collect();
+        Ok((directory.machines.iter())
+            .filter(|machine| running.contains(&machine.id))
+            .cloned()
+            .collect())
     }
 
     /// The other machines' repositories, with the hub's machines and this
