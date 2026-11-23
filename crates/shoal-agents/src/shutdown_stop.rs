@@ -189,22 +189,27 @@ impl Agents {
     /// copies.
     pub async fn stay(&self, daemon: &dyn Daemon) {
         *self.shutdown_stopped.lock().await = false;
-        self.resume_here(daemon).await;
+        self.agent_queue.suspend(false).await;
+        self.retire_handed_over(daemon).await;
     }
 
     /// [`Self::stay`] once the user who walked away came back, unless a
-    /// shutdown's stop ran since, whose hold on the queue stands.
+    /// shutdown's stop ran since, whose hold on the queue stands. Only the
+    /// check and the queue's release hold the stop's latch, so a shutdown
+    /// meanwhile does not wait for the hub.
     pub(crate) async fn stay_unless_shut_down(&self, daemon: &dyn Daemon) {
-        let finished = self.shutdown_stopped.lock().await;
-        if !*finished {
-            self.resume_here(daemon).await;
+        {
+            let finished = self.shutdown_stopped.lock().await;
+            if *finished {
+                return;
+            }
+            self.agent_queue.suspend(false).await;
         }
+        self.retire_handed_over(daemon).await;
     }
 
-    /// Admit queued agents again and have this machine retire its copies
-    /// of the spaces handed over.
-    async fn resume_here(&self, daemon: &dyn Daemon) {
-        self.agent_queue.suspend(false).await;
+    /// Have this machine retire its copies of the spaces handed over.
+    async fn retire_handed_over(&self, daemon: &dyn Daemon) {
         daemon.stay().await;
         self.presences.forget_gone();
     }
