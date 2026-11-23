@@ -575,9 +575,8 @@ review of a workspace is pending, a thread you open towards it without
 read and whose posts reach nobody yet; an
 explicit `--kind` opens a thread outside it. `review submit` records the
 workspace's HEAD and delivers the summary and every comment to its agent in one
-message. The agent fixes and says so in the thread; you, its opener, check the
-changes made for it and resolve it, or reply. A comment the user or a space
-above you opened is theirs to resolve, never yours. The review gates count a
+message. A comment's opener resolves it, and its holder's posts reach the
+opener. The review gates count a
 submitted review once every comment is resolved, and one without comments only
 with `--approve`.
 
