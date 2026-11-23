@@ -11,7 +11,7 @@ use super::super::{
     target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
-use shoal_protocol::reviews::{Author, Review, ReviewState};
+use shoal_protocol::reviews::Review;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_reviews::written::Writer;
 
@@ -104,28 +104,24 @@ fn pieces<T: serde::Serialize>(shown: Result<T>) -> Result<Vec<ReviewPiece>> {
         .collect())
 }
 
-/// `review` as `caller`, or the user without one, sees it: a pending
-/// review's comments are read, as its threads are, only by the user and
-/// the spaces that reach the space that writes it.
+/// `review` as `caller`, or the user without one, sees it: with only the
+/// pending comments `caller` reads as threads.
 pub(in crate::daemon) async fn seen_by(
     manager: &Manager,
     caller: Option<&Caller>,
     mut review: Review,
 ) -> Result<Review> {
-    let reads = match (caller, &review.author) {
-        (None, _) => true,
-        _ if review.state != ReviewState::Pending => true,
-        (Some(caller), Author::Space { space }) => {
-            manager
-                .coordination
-                .reaches(manager, caller, &space.id)
-                .await?
+    let mut read = Vec::new();
+    for thread in std::mem::take(&mut review.threads) {
+        if manager
+            .coordination
+            .reads_held(manager, caller, &thread)
+            .await?
+        {
+            read.push(thread);
         }
-        (Some(_), Author::User | Author::Shoal { .. }) => false,
-    };
-    if !reads {
-        review.threads.clear();
     }
+    review.threads = read;
     Ok(review)
 }
 
