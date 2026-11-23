@@ -68,27 +68,6 @@ impl Reviews {
         }
     }
 
-    /// Cancel, for a command run in the workspace `selector` names, its
-    /// review as [`Self::cancel`] picks it, else, with nothing to cancel
-    /// there, the only pending review the space `by`, or the user without
-    /// one, writes.
-    pub async fn cancel_here(
-        &self,
-        daemon: &dyn Daemon,
-        selector: &SpaceSelector,
-        by: Option<SpaceId>,
-    ) -> Result<Review> {
-        let writer = Writer::of(by.as_ref());
-        let id = match self.to_cancel(daemon, selector, &writer).await? {
-            Some(id) => id,
-            None => {
-                let only = self.only_pending(&writer).await?;
-                only.context("nothing here to cancel, nor is any one review of yours pending")?
-            }
-        };
-        self.cancel(daemon, None, Some(id), by).await
-    }
-
     /// The review a cancel without an ID ends, of the workspace `selector`
     /// names: `writer`'s pending one, else its queued or running one.
     async fn cancelled_of(
@@ -104,8 +83,8 @@ impl Reviews {
     }
 
     /// `writer`'s pending review of the workspace `selector` names, else
-    /// its queued or running one.
-    async fn to_cancel(
+    /// its queued or running one, which a cancel without an ID ends.
+    pub async fn to_cancel(
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,

@@ -70,11 +70,13 @@ async fn cancelling_a_pending_review_drops_its_threads_and_only_its_writer_cance
 }
 
 impl Fixture {
-    /// Submit `writer`'s only pending review, approving when `approve`.
+    /// Submit `writer`'s pending review of the workspace, approving when
+    /// `approve`.
     async fn submit(&self, writer: Writer, approve: bool) -> anyhow::Result<Review> {
         let summary = Some("Close, but rename it.".to_owned());
+        let workspace = self.selector();
         (self.reviews)
-            .submit(&*self.daemon, None, writer, approve, summary)
+            .submit(&*self.daemon, &workspace, writer, approve, summary)
             .await
     }
 
@@ -148,9 +150,9 @@ async fn removing_the_reviewed_workspace_drops_its_pending_reviews_with_their_co
 async fn a_summary_leaves_its_message_room_for_the_comments() {
     let fixture = fixture().await;
     fixture.start(Writer::User).await.unwrap();
-    let long = "a".repeat(MAX_SUMMARY_LEN + 1);
+    let (long, workspace) = ("a".repeat(MAX_SUMMARY_LEN + 1), fixture.selector());
     let submitted =
-        (fixture.reviews).submit(&*fixture.daemon, None, Writer::User, true, Some(long));
+        (fixture.reviews).submit(&*fixture.daemon, &workspace, Writer::User, true, Some(long));
     assert!(submitted.await.is_err());
 }
 

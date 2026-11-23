@@ -14,6 +14,7 @@ use crate::{
         executions::ExecutionKind,
         manager::Manager,
         notifications::AlertKind,
+        requests::reviews::pending::Pending,
         scope::{Caller, ScopedExecution},
         test_support::{away_on_offline_machine, caller_in, manager, repository, track_agent},
         workspace_files::Attacher,
@@ -879,8 +880,9 @@ async fn a_submitted_review_reaches_its_holder_once_and_its_comments_then_post_a
     start_review(manager, &tree.child, writer.clone()).await;
     let thread = open_kind(manager, Some(&parent), &tree.child, "Unclear name", None).await;
     send(manager, Some(&parent), &thread, "Call it retries").await;
-    let submitted = (manager.reviews).submit(&**manager, None, writer, false, None);
-    submitted.await.unwrap();
+    // Its writer's only pending review, which a submit without a space takes.
+    let pending = Pending::new(manager, Some(&parent));
+    pending.submit_only(false, None).await.unwrap();
     let received = alerts(manager, &tree.child).await;
     assert_eq!(received.len(), 1, "{received:?}");
     assert!(received[0].contains("Unclear name"), "{received:?}");
@@ -900,12 +902,13 @@ async fn a_bare_cancel_in_the_writers_own_space_drops_its_only_pending_review() 
     let writer = shoal_reviews::written::Writer::Space(tree.parent.id.clone());
     let review = start_review(manager, &tree.child, writer).await;
     let own = SpaceSelector::id(&tree.parent.id);
-    let by = || Some(tree.parent.id.clone());
     // Named, the space has nothing to cancel, and nothing else goes.
-    let named = (manager.reviews).cancel(&**manager, Some(&own), None, by());
+    let named =
+        (manager.reviews).cancel(&**manager, Some(&own), None, Some(tree.parent.id.clone()));
     assert!(named.await.is_err());
-    let cancelled = (manager.reviews).cancel_here(&**manager, &own, by());
-    assert_eq!(cancelled.await.unwrap().id, review.id);
+    let parent = caller(&tree.parent);
+    let pending = Pending::new(manager, Some(&parent));
+    assert_eq!(pending.cancel_here(&own).await.unwrap().id, review.id);
 }
 
 #[tokio::test]

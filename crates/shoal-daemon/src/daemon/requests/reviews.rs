@@ -11,9 +11,12 @@ use super::super::{
     target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
+use pending::Pending;
 use shoal_protocol::reviews::Review;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_reviews::written::Writer;
+
+pub(in crate::daemon) mod pending;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -22,6 +25,7 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     let (reviews, daemon) = (&manager.reviews, &**manager);
     let viewer = Writer::of(caller.map(|caller| &caller.space_id));
+    let pending = Pending::new(manager, caller);
     let shown = match method {
         ReviewMethod::AwaitReview { workspace, id } => {
             let (manager, reviews) = (manager.clone(), manager.reviews.clone());
@@ -57,11 +61,11 @@ pub(super) async fn handle(
             workspace,
             approve,
             summary,
-        } => {
-            let submitted = reviews.submit(daemon, workspace.as_ref(), viewer, approve, summary);
-            pieces(submitted.await)
-        }
-        ReviewMethod::PendingReviews => pieces(reviews.pending_reviews(daemon, viewer).await),
+        } => pieces(match workspace {
+            Some(workspace) => (reviews.submit(daemon, &workspace, viewer, approve, summary)).await,
+            None => pending.submit_only(approve, summary).await,
+        }),
+        ReviewMethod::PendingReviews => pieces(pending.reviews().await),
         ReviewMethod::CancelReview {
             workspace,
             id,
@@ -69,7 +73,7 @@ pub(super) async fn handle(
         } => {
             let by = caller.map(|caller| caller.space_id.clone());
             pieces(match (workspace, id, here) {
-                (Some(workspace), None, true) => reviews.cancel_here(daemon, &workspace, by).await,
+                (Some(workspace), None, true) => pending.cancel_here(&workspace).await,
                 (workspace, id, _) => reviews.cancel(daemon, workspace.as_ref(), id, by).await,
             })
         }

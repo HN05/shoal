@@ -79,13 +79,13 @@ impl Reviews {
         Ok(reviews)
     }
 
-    /// Submit `writer`'s pending review of the workspace `selector` names,
-    /// else its only one, at the workspace's HEAD with `summary`, approving
-    /// its work when `approve`, and deliver its comments together.
+    /// Submit `writer`'s pending review of the workspace `selector` names
+    /// at the workspace's HEAD with `summary`, approving its work when
+    /// `approve`, and deliver its comments together.
     pub async fn submit(
         &self,
         daemon: &dyn Daemon,
-        selector: Option<&SpaceSelector>,
+        selector: &SpaceSelector,
         writer: Writer,
         approve: bool,
         summary: Option<String>,
@@ -93,7 +93,10 @@ impl Reviews {
         if let Some(summary) = &summary {
             validate_summary(summary)?;
         }
-        let id = self.submitted(daemon, selector, &writer).await?;
+        let pending = self.pending_of(daemon, selector, &writer).await?;
+        let id = pending.with_context(|| {
+            format!("no pending review of {selector} is yours; start one with shoal review start")
+        })?;
         let review = self.stored(id).await?;
         let workspace = daemon.workspace_by_id(&review.workspace_id).await?;
         let head = daemon.head(&workspace).await?;
@@ -122,33 +125,6 @@ impl Reviews {
         self.review(daemon, id).await
     }
 
-    /// The pending review a submit names: `writer`'s of the workspace
-    /// `selector` names, else its only one.
-    async fn submitted(
-        &self,
-        daemon: &dyn Daemon,
-        selector: Option<&SpaceSelector>,
-        writer: &Writer,
-    ) -> Result<ReviewId> {
-        if let Some(selector) = selector {
-            let pending = self.pending_of(daemon, selector, writer).await?;
-            return pending.with_context(|| {
-                format!(
-                    "no pending review of {selector} is yours; start one with shoal review start"
-                )
-            });
-        }
-        let writer = writer.clone();
-        let pending = (self.store)
-            .run(move |db| store::pending_by(db, &writer))
-            .await?;
-        match pending.as_slice() {
-            [id] => Ok(*id),
-            [] => bail!("you have no pending review; start one with shoal review start <space>"),
-            _ => bail!("you have several pending reviews; name the space whose review to submit"),
-        }
-    }
-
     /// `writer`'s pending review of the workspace `selector` names.
     pub(crate) async fn pending_of(
         &self,
@@ -161,18 +137,6 @@ impl Reviews {
         (self.store)
             .run(move |db| store::pending_of(db, &workspace.id, &writer))
             .await
-    }
-
-    /// `writer`'s pending review when it has exactly one.
-    pub(crate) async fn only_pending(&self, writer: &Writer) -> Result<Option<ReviewId>> {
-        let writer = writer.clone();
-        let pending = (self.store)
-            .run(move |db| store::pending_by(db, &writer))
-            .await?;
-        Ok(match pending.as_slice() {
-            [id] => Some(*id),
-            _ => None,
-        })
     }
 
     /// Who writes review `id`, unless Shoal's reviewer does.

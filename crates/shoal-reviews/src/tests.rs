@@ -709,7 +709,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     (reviews.start_written(daemon, &selector, writer.clone()))
         .await
         .unwrap();
-    (reviews.submit(daemon, None, writer, true, None))
+    (reviews.submit(daemon, &selector, writer, true, None))
         .await
         .unwrap();
     let refused = require(Gate::Ready, agent).await.unwrap_err().to_string();
