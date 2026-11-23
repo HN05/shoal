@@ -89,14 +89,9 @@ async fn prepare_for_sleep(manager: &Arc<Manager>, deadline: Instant) {
     manager.agents.agent_queue().sleep(true);
     manager.reviews.stop_for_sleep().await;
     let jobs = end_jobs(manager, deadline);
-    let now = Instant::now();
-    let handover_by = now
-        + deadline
-            .saturating_duration_since(now)
-            .mul_f64(HANDOVER_SHARE);
     let announced = async {
         (manager.agents)
-            .hand_over_before_sleep(&**manager, handover_by)
+            .hand_over_before_sleep(&**manager, handover_deadline(deadline))
             .await;
         manager.hub.announce_sleep(&**manager, deadline).await;
     };
@@ -115,6 +110,15 @@ async fn end_jobs(manager: &Arc<Manager>, deadline: Instant) {
     if tokio::time::timeout_at(deadline, ending).await.is_err() {
         log!("sleep lock: CI jobs were still stopping as the machine went to sleep");
     }
+}
+
+/// The deadline of a hand-over before a sleep the platform holds until
+/// `deadline`: [`HANDOVER_SHARE`] of the time left.
+fn handover_deadline(deadline: Instant) -> Instant {
+    let now = Instant::now();
+    now + deadline
+        .saturating_duration_since(now)
+        .mul_f64(HANDOVER_SHARE)
 }
 
 /// Open the hub link and the agent queue again once the machine woke,
