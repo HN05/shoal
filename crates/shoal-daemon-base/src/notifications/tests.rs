@@ -108,3 +108,26 @@ async fn other_machines_alerts_join_this_machine_s_in_the_order_they_were_record
     notifications.take_copies(dropped).await.unwrap();
     assert_eq!(notifications.unread().await.unwrap(), 1);
 }
+
+#[tokio::test]
+async fn a_follow_cut_short_passes_none_of_a_machine_s_numbers_it_did_not_deliver() {
+    let (_temp, notifications) = notifications().await;
+    // The desk's 9, renumbered, kept the time it was recorded at, before
+    // its 5 and 6.
+    let whole = vec![
+        kept_on("desk", 9, 0),
+        kept_on("desk", 5, 1),
+        kept_on("desk", 6, 2),
+    ];
+    let copies = AlertCopies::Whole(whole);
+    notifications.take_copies(copies).await.unwrap();
+    let mut cursor = AlertCursor::default();
+    let mut delivered = Vec::new();
+    loop {
+        let batch = notifications.after(&cursor, 1).await.unwrap();
+        let Some(alert) = batch.first() else { break };
+        cursor.deliver(alert);
+        delivered.push(alert.id);
+    }
+    assert_eq!(delivered, [5, 6, 9]);
+}

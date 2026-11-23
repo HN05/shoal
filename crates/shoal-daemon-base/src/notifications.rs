@@ -355,7 +355,8 @@ impl Notifications {
             .await?;
         let elsewhere = self.copies().into_iter();
         let unread = elsewhere.filter(|alert| !alert.read && !after.passed(alert));
-        Ok(chosen(merged(here, unread), true, limit))
+        let ordered = in_each_machines_order(merged(here, unread));
+        Ok(chosen(ordered, true, limit))
     }
 
     /// How many alerts to the user are unread, this machine's and the
@@ -441,6 +442,25 @@ pub fn merged(here: Vec<Alert>, elsewhere: impl Iterator<Item = Alert>) -> Vec<A
         key(a).cmp(&key(b))
     });
     merged
+}
+
+/// `alerts`, in the order they come, but each machine's in the order of
+/// its numbers, which a renumbered one breaks, so a follow that stops
+/// partway passes none of a machine's numbers it did not deliver.
+fn in_each_machines_order(mut alerts: Vec<Alert>) -> Vec<Alert> {
+    let machine = |alert: &Alert| alert.machine.as_ref().map(|machine| machine.id.clone());
+    let mut places: std::collections::BTreeMap<Option<MemberId>, Vec<usize>> = Default::default();
+    for (place, alert) in alerts.iter().enumerate() {
+        places.entry(machine(alert)).or_default().push(place);
+    }
+    for places in places.values() {
+        let mut taken: Vec<Alert> = places.iter().map(|&place| alerts[place].clone()).collect();
+        taken.sort_by_key(|alert| alert.id);
+        for (&place, alert) in places.iter().zip(taken) {
+            alerts[place] = alert;
+        }
+    }
+    alerts
 }
 
 /// Of `alerts`, in order, the oldest `limit` when `unread_only`, so a
