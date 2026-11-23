@@ -40,7 +40,9 @@ values the CLI reads, for an agent's environment at launch
 or, for listed tools, through private PATH launchers each time the tool runs,
 which take a written one from the daemon so no file holds it;
 the daemon reads only a webhook trigger's, to check each request's
-signature, and no state keeps a value; hooks drop them. A tool secret
+signature, and no state keeps a value: a value may cross the hub link to
+the joined machine that asked for it, which keeps it only in memory; hooks
+drop them. A tool secret
 may require approval: the launcher reads it only after the daemon confirms a
 workspace grant bound to its value, a written one as its digest, and tools,
 and fails instead of waiting.
@@ -49,7 +51,19 @@ agent can ask. A setting
 that takes its value from outside the config, such as a secret or a proxy's
 upstream key, shares one form: as written, `{ env }` from the agent's
 environment, or `{ cmd }` run when the agent starts, and Shoal prints no
-written value. Forge changes Shoal
+written value. A `{ cmd }` with `on` runs on the joined machine it names, so
+a credential set up there serves every machine: only a machine's daemon asks
+for it through the hub, never a device, and a scoped process asks its own
+daemon by the setting, whose config gives the command. The machine that asked
+keeps the last value in memory for while the named machine cannot be
+reached, and drops it when its daemon exits, it leaves the hub or learns it
+was revoked, or the forge refuses it. The hub, which routes every request,
+records which setting each machine fetched from which, so that revoking a
+machine names the settings to rotate even while the machines that served
+them are offline. A machine that should not use a shared credential sets the
+key in its own file, which overrides `shared.toml` per key; one not trusted
+with credentials is not joined, since joined machines run agents as the user
+on each other. Forge changes Shoal
 makes for a workspace act as the agent too, with the host's configured
 `agent_token`, and so does the Git of agents and of the pushes Shoal runs for
 them over HTTPS to that host, through a credential helper the agent's Git
@@ -3523,7 +3537,8 @@ anonymously. GitHub's GraphQL requests go the same way. Shoal needs only a token
 no forge CLI and reads none of their login files, and a forge works without its
 CLI installed. A token
 is given in the shared value form, so it may come from a command such as a
-password manager, and is fetched at most once per operation and never stored;
+password manager, on this machine or another of its hub, and is fetched at
+most once per operation and never stored;
 an `{ env }` token reads the environment of the process sending the request,
 which for the daemon is the service's. The agent account has its own
 `agent_token` per host; without one it reads with the user's token, as the

@@ -1092,6 +1092,15 @@ CREATE TABLE hub_ci_job_reruns (
     PRIMARY KEY(run_url, job_id)
 );
 
+CREATE TABLE hub_value_fetches (
+    requester TEXT NOT NULL REFERENCES hub_members(id),
+    machine TEXT NOT NULL REFERENCES hub_members(id),
+    setting TEXT NOT NULL,
+    first_at INTEGER NOT NULL,
+    last_at INTEGER NOT NULL,
+    PRIMARY KEY(requester, machine, setting)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);

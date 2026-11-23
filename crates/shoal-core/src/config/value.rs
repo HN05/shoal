@@ -70,19 +70,30 @@ const BOUNDED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 /// The most such a command may print.
 const MAX_BOUNDED_BYTES: usize = 64 * 1024;
 
-/// What `command` prints for the daemon, bounded in time and size; its
-/// diagnostics go into the error rather than to the daemon's stderr.
+/// What `command` prints for the daemon, less one trailing line break,
+/// bounded in time and size; its diagnostics go into the error rather than
+/// to the daemon's stderr. A command that prints nothing or NUL gives no
+/// value, as one [`command_output`] runs gives none.
 pub async fn bounded_output(command: &[String]) -> Result<String> {
     let (program, args) = command
         .split_first()
         .context("the command names no program")?;
     let mut process = tokio::process::Command::new(program);
     process.args(args);
-    shoal_subprocess::Run::new(process)
+    let mut output = shoal_subprocess::Run::new(process)
         .timeout(BOUNDED_TIMEOUT)
         .output_limit(MAX_BOUNDED_BYTES)
         .output()
-        .await
+        .await?;
+    if output.ends_with('\n') {
+        output.pop();
+        if output.ends_with('\r') {
+            output.pop();
+        }
+    }
+    ensure!(!output.is_empty(), "{program} printed nothing");
+    ensure!(!output.contains('\0'), "{program} printed NUL");
+    Ok(output)
 }
 
 /// `setting`, an argument array, names a program and holds no NUL.

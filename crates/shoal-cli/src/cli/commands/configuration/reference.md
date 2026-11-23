@@ -29,7 +29,8 @@ its own from the first file that sets it:
    takes, but not the `[machine.hub]` settings a machine reaches the hub with:
    `enabled`, `listen`, `url` and `connect`. It must be valid on its own, since
    a machine whose global config sets nothing reads it alone. Paths, `~`, hooks
-   and `{ cmd }` values in it resolve on each machine as in the global config.
+   and `{ cmd }` values in it resolve on each machine as in the global config,
+   except a `{ cmd }` whose `on` names the machine that runs it.
    Machines joined to a [hub](../../../../../../docs/reference.md#hub) keep it,
    and its mode and rule files in `shared/`, the same on each.
 5. The **built-in default**.
@@ -62,8 +63,13 @@ repository files apply on the next request.
 Where an option takes a secret, such as a token or key, its value is the secret
 as written, `{ env = "<variable>" }`, read from the environment of the process
 that uses it, or `{ cmd = [...] }`, an argument array run without input whose
-output is the value. Paths that start with `~/` name a path under the home
-directory.
+output is the value. `{ cmd = [...], on = "<machine>" }` runs it on the machine
+of the [hub](../../../../../../docs/reference.md#hub) that `on` names, by name
+or ID as `--machine` does, so a secret set up there serves every machine: this
+machine's daemon asks for it each time, keeps the last value only in memory,
+and uses that while the named machine cannot be reached. A value written in
+`shared.toml` reaches every machine too, and then sits in that file on each.
+Paths that start with `~/` name a path under the home directory.
 
 Any option's value may instead be `{ same_as = "<key>" }`, naming another key
 of the same table, such as `end = { same_as = "start" }` under `[ports]`. The
@@ -241,8 +247,10 @@ changes on PRs with, as their [`pr_review` permission](#permissions) allows,
 and nothing else; it must not be the account that opened the PR, which forges
 refuse, so `{ same_as = "agent_token" }` suits only PRs agents did not open;
 `user_email`, `agent_email` and `review_email` apply only to Bitbucket. A `{ cmd }` runs at most once
-per operation that needs the token and for at most a minute, and its output is
-never stored; an `{ env }` reads the daemon's environment for its own requests.
+per operation that needs the token and for at most a minute, here or on the
+machine `on` names, and its output is never stored; a token the forge refuses
+is no longer kept for while that machine is away. An `{ env }` reads the
+daemon's environment for its own requests.
 Without a token only public repositories are readable. See
 [forges](../../../../../../docs/reference.md#forges).
 

@@ -18,6 +18,7 @@ mod shared_repositories;
 mod starts;
 #[path = "../support/mod.rs"]
 mod support;
+mod values;
 
 use std::{fs, path::Path, process::Output};
 

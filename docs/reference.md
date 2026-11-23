@@ -1031,6 +1031,23 @@ and, for a connected machine, the agent tools it has installed (`agents` in
 on the hub when it cannot reach it. Only your own terminal pairs, joins, leaves
 and revokes; anyone lists.
 
+A setting whose `{ cmd }` names a machine with
+[`on`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#files-and-layers)
+takes its value from that machine, so a token or key set up once, such as in
+its keychain, serves every machine. The daemon that needs the value sends the
+command over its link, the hub passes it on, and the named machine runs it as
+the user for at most a minute and sends the output back; `on` naming this
+machine runs it here. Only a machine's daemon asks: a device cannot, and a
+process of a space asks its own daemon for the setting's value, which runs only
+the command its config gives. The value is fetched once per operation, so a
+rotated one applies at once, and the machine that asked keeps the last one in
+memory, never on disk, using it while the named machine cannot be reached;
+without one, reading the setting fails, naming the machine and the setting. The
+hub records which settings each machine fetched from which, and when, never the
+values. Agent tools' own logins, such as Claude Code's and Codex's, are files
+those tools own and are not shared: their rotating refresh tokens would log out
+the other copy.
+
 Each machine is `always_on` or `intermittent`, which `hub ls` shows with the
 reason and `shoal status` shows for this machine.
 [`[machine] availability`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine)

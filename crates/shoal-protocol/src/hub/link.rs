@@ -546,6 +546,23 @@ pub enum Call {
     /// changed since the hub last answered it. Answered with
     /// [`Reply::Delivered`].
     Shared { copies: Copies },
+    /// A machine's request for what `command`, from its setting `setting`,
+    /// prints on the machine `machine` names by ID or name, which the hub
+    /// passes to that machine and records, never the value, or runs itself
+    /// for its own. Answered with [`Reply::Value`], or with
+    /// [`Reply::Unreachable`] while that machine is offline.
+    Value {
+        machine: String,
+        setting: String,
+        command: Vec<String>,
+    },
+    /// The hub's call to the machine a [`Call::Value`] names, which the
+    /// machine named `requester` asked. Answered with [`Reply::Value`].
+    RunValue {
+        requester: String,
+        setting: String,
+        command: Vec<String>,
+    },
 }
 
 /// The answer to a [`Call`].
@@ -574,6 +591,13 @@ pub enum Reply {
     Delivered,
     CutOffRerun(super::reruns::CutOffRerun),
     Shared(Copies),
+    /// What a value's command printed, which never shows in what Shoal
+    /// prints.
+    Value(crate::config::value::Resolved),
+    /// The machine a call names cannot be reached now.
+    Unreachable {
+        message: String,
+    },
     Failed {
         message: String,
     },

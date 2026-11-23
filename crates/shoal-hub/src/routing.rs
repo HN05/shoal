@@ -205,6 +205,11 @@ impl Hub {
                 Ok(Reply::Delivered)
             }
             Call::Retire { spaces } => Ok(Reply::Retired(self.retire(daemon, spaces).await)),
+            Call::RunValue {
+                requester,
+                setting,
+                command,
+            } => self.serve_value(&requester, &setting, &command).await,
             Call::Continue {
                 space,
                 from,

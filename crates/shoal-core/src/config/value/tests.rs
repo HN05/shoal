@@ -68,7 +68,7 @@ async fn bounded_commands_report_their_diagnostics_and_are_bounded() {
     assert!(format!("{error:#}").contains("locked"), "{error:#}");
     let flood = command("head -c 70000 /dev/zero | tr '\\0' a");
     assert!(bounded_output(&flood).await.is_err());
-    assert_eq!(bounded_output(&command("echo abc")).await.unwrap(), "abc\n");
+    assert_eq!(bounded_output(&command("echo abc")).await.unwrap(), "abc");
 }
 
 #[tokio::test]
@@ -79,4 +79,11 @@ async fn a_command_another_machine_runs_is_named_and_read_only_by_the_daemon() {
     assert!(resolve(&value, |_| None).await.is_err());
     let unnamed = parse("value = { cmd = ['security'], on = '' }").unwrap();
     assert!(validate(&unnamed, "value").is_err());
+}
+
+#[tokio::test]
+async fn a_bounded_command_that_prints_nothing_or_nul_gives_no_value() {
+    let command = |script: &str| vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
+    assert!(bounded_output(&command("echo")).await.is_err());
+    assert!(bounded_output(&command("printf 'a\\0b'")).await.is_err());
 }

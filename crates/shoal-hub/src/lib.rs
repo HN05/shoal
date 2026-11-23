@@ -77,6 +77,8 @@ pub mod test_support;
 pub mod transport;
 mod tree;
 mod updating;
+mod value_fetches;
+mod values;
 mod view;
 
 use daemon::Daemon;
@@ -202,6 +204,7 @@ impl Hub {
 /// user.
 pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: bool) {
     hub.member.restarts_on_update(restarts_on_update);
+    hub.connect_values(&daemon);
     tokio::join!(
         listener::run(hub.clone(), daemon.clone()),
         hub.report_own_spaces(&*daemon),

@@ -263,7 +263,25 @@ impl Hub {
                 ensure_machine(member)?;
                 Reply::Shared(self.take_edits(daemon, &member.id, edits).await?)
             }
+            Call::Value {
+                machine,
+                setting,
+                command,
+            } => {
+                ensure_machine(member)?;
+                let from = super::values::Requester {
+                    id: &member.id,
+                    name: &member.name,
+                };
+                let asked = super::values::Asked {
+                    machine: &machine,
+                    setting: &setting,
+                    command: &command,
+                };
+                self.route_value(from, asked).await?
+            }
             Call::Serve { .. }
+            | Call::RunValue { .. }
             | Call::ServeStream { .. }
             | Call::Expired { .. }
             | Call::Availability { .. }
@@ -272,7 +290,7 @@ impl Hub {
             | Call::RerunCutOff { .. }
             | Call::Shared { .. } => {
                 anyhow::bail!(
-                    "only the hub passes requests, expiries, availability, retirements, hand-overs, reruns and shared items to machines"
+                    "only the hub passes requests, expiries, availability, retirements, hand-overs, reruns, shared items and value commands to machines"
                 )
             }
         })
@@ -416,7 +434,7 @@ fn arrived(sent_at: UnixTime) -> Clocks {
 fn ensure_machine(member: &Member) -> Result<()> {
     anyhow::ensure!(
         member.kind == MemberKind::Machine,
-        "only a machine reports, claims, keeps and passes up spaces and shares files at the hub"
+        "only a machine reports, claims, keeps and passes up spaces, shares files and asks for values at the hub"
     );
     Ok(())
 }

@@ -431,13 +431,21 @@ instead of the PR delivery guidance below.
   Views automatically include failed Actions logs, read by the daemon as the
   workspace's agent account, resolving web indices to API IDs and validating the PR head before returning
   a bounded tail; scoped callers cannot access another workspace's logs.
-- `[secrets]` values are fetched in the CLI by user commands run without
-  input, at agent launch or, for tool-scoped secrets, by the tool's launcher on
-  each run; the daemon fetches only a webhook trigger's, for each request it
-  verifies, and neither it, state nor logs keep one; hooks drop them and
-  their launchers, and executions other than agent launches fetch none of
-  their own. A gated tool secret is fetched only after the daemon confirms the
+- `[secrets]` values are read in the CLI, at agent launch or, for tool-scoped
+  secrets, by the tool's launcher on each run, which takes a written value
+  from the daemon so no file holds it; the daemon reads only a webhook
+  trigger's, for each request it verifies, those its processes cannot read
+  themselves, and forge tokens; no state or log keeps one, and a record that
+  binds one keeps a written value as its digest. Hooks drop them and their
+  launchers, and executions other than agent launches fetch none of their own.
+  A gated tool secret is fetched only after the daemon confirms the
   workspace's grant; only tool secrets can be gated.
+- A `{ cmd }` with `on` runs on the joined machine it names, only at the
+  request of a machine's daemon through the hub: never a device's, and a
+  scoped process asks its own daemon by the setting's key, whose own config
+  gives the command. The asking daemon keeps the last value only in memory,
+  for while that machine cannot be reached; the hub records which settings
+  each machine fetched, never the values.
 - Daemon ref updates disable Git credential and SSH askpass prompts without
   overriding the user's SSH transport; interactive Git retains normal prompting.
   Production Git access, command arguments and in-process `gix` reads alike,
