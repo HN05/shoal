@@ -122,6 +122,21 @@ pub enum Report {
     },
 }
 
+impl Report {
+    /// This report with since when each space has unsent changes on the
+    /// hub's clock, as `clocks` carry it over.
+    pub fn on_hub_clock(mut self, clocks: super::sleep::Clocks) -> Self {
+        let summaries = match &mut self {
+            Self::Whole(summaries) => summaries,
+            Self::Changes { changed, .. } => changed,
+        };
+        for summary in summaries {
+            summary.unsent_since = summary.unsent_since.map(|since| clocks.on_hub(since));
+        }
+        self
+    }
+}
+
 /// A space in the hub's directory, as its machine last reported it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Listed {

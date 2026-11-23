@@ -36,3 +36,34 @@ pub struct Lagging {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since: Option<UnixTime>,
 }
+
+impl Lagging {
+    /// This lag with its time on the hub's clock, as `clocks` carry it over.
+    pub fn on_hub_clock(self, clocks: Clocks) -> Self {
+        Self {
+            since: self.since.map(|since| clocks.on_hub(since)),
+            ..self
+        }
+    }
+}
+
+/// When a machine sent a call, by its own clock, and when the hub took
+/// it, by the hub's: what carries the times the call names over to the
+/// hub's clock, so a machine whose clock differs from the hub's names the
+/// same moments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Clocks {
+    pub sent: UnixTime,
+    pub received: UnixTime,
+}
+
+impl Clocks {
+    /// `time`, on the machine's clock no later than it sent the call, as
+    /// the hub's clock reads it.
+    pub fn on_hub(self, time: UnixTime) -> UnixTime {
+        self.received - self.sent.duration_since(time)
+    }
+}
+
+#[cfg(test)]
+mod tests;

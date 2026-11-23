@@ -91,7 +91,11 @@ impl Hub {
             true => spaces,
             false => with_work(daemon, spaces).await?,
         };
-        match calls.call(Call::Sleeping { lagging }).await? {
+        let notice = Call::Sleeping {
+            lagging,
+            sent_at: UnixTime::now(),
+        };
+        match calls.call(notice).await? {
             Reply::Delivered => Ok(sending),
             reply => bail!("the hub answered with an unexpected {reply:?}"),
         }

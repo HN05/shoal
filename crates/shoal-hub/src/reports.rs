@@ -241,6 +241,7 @@ impl Hub {
                     capacity,
                     repositories,
                     power,
+                    sent_at: crate::time::UnixTime::now(),
                 };
                 match calls.call(call).await? {
                     Reply::Reported(numbering) => numbering,

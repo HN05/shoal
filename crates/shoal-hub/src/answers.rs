@@ -7,6 +7,7 @@ use shoal_protocol::hub::{
     Member, MemberKind, Overview,
     link::{Call, Reply},
     pairing::Pairing,
+    sleep::Clocks,
 };
 
 use std::sync::Arc;
@@ -104,8 +105,10 @@ impl Hub {
                 capacity,
                 repositories,
                 power,
+                sent_at,
             } => {
                 ensure_machine(member)?;
+                let report = report.on_hub_clock(arrived(sent_at));
                 self.sleeps.powered(&member.id, power);
                 self.capacities.keep(&member.id, &report, capacity);
                 let held = directory::Held {
@@ -224,8 +227,12 @@ impl Hub {
                 self.hear_release(daemon, &member.id, &space)?;
                 Reply::Delivered
             }
-            Call::Sleeping { lagging } => {
+            Call::Sleeping { lagging, sent_at } => {
                 ensure_machine(member)?;
+                let clocks = arrived(sent_at);
+                let lagging = (lagging.into_iter())
+                    .map(|lag| lag.on_hub_clock(clocks))
+                    .collect();
                 self.hear_sleep(&member.id, lagging).await?;
                 Reply::Delivered
             }
@@ -380,6 +387,15 @@ impl Hub {
             Reply::Revoked(member) => Ok(member),
             reply => Err(unexpected(reply)),
         }
+    }
+}
+
+/// The clocks of a call a machine sent at `sent_at` by its own clock,
+/// which arrives now by the hub's.
+fn arrived(sent_at: UnixTime) -> Clocks {
+    Clocks {
+        sent: sent_at,
+        received: UnixTime::now(),
     }
 }
 

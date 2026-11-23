@@ -340,6 +340,9 @@ pub enum Call {
         repositories: Option<Vec<super::directory::RegisteredRepository>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         power: Option<super::sleep::Power>,
+        /// When the machine sent it, by its own clock, which the hub
+        /// carries the report's times over to its own by.
+        sent_at: UnixTime,
     },
     /// What a machine says of itself, when its link opens and when its
     /// setting changes. Answered with [`Reply::Availability`].
@@ -374,6 +377,9 @@ pub enum Call {
     Sleeping {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         lagging: Vec<super::sleep::Lagging>,
+        /// When the machine sent it, by its own clock, which the hub
+        /// carries the lags' times over to its own by.
+        sent_at: UnixTime,
     },
     /// The package the hub keeps of the space `space`, whose machine is
     /// offline, which the caller would take the space over from; none
