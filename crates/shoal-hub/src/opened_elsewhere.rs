@@ -22,23 +22,29 @@ const FRESH: Duration = Duration::from_secs(5);
 #[derive(Default)]
 pub(super) struct Waiting(Mutex<Option<(Instant, HashMap<SpaceId, usize>)>>);
 
+impl Waiting {
+    /// How many threads the space `id` opened elsewhere wait, while the
+    /// last reading is fresh.
+    fn of(&self, id: &SpaceId) -> Option<usize> {
+        let last = self.0.lock().unwrap();
+        let (_, counts) = last.as_ref().filter(|(read, _)| read.elapsed() < FRESH)?;
+        Some(counts.get(id).copied().unwrap_or_default())
+    }
+}
+
 impl Hub {
     /// How many threads the space `id` opened on other machines wait for
     /// their holder, as the hub lists them, or as it last did while it
     /// cannot be asked, read at most once every [`FRESH`]; none while
     /// neither can be read.
     pub async fn waiting_elsewhere(&self, daemon: &dyn Daemon, id: &SpaceId) -> usize {
-        let fresh = |read: &Instant| read.elapsed() < FRESH;
-        let cached = self.waiting.0.lock().unwrap().clone();
-        let counts = match cached {
-            Some((read, counts)) if fresh(&read) => counts,
-            _ => {
-                let counts = self.read_waiting(daemon).await;
-                *self.waiting.0.lock().unwrap() = Some((Instant::now(), counts.clone()));
-                counts
-            }
-        };
-        counts.get(id).copied().unwrap_or_default()
+        if let Some(count) = self.waiting.of(id) {
+            return count;
+        }
+        let counts = self.read_waiting(daemon).await;
+        let count = counts.get(id).copied().unwrap_or_default();
+        *self.waiting.0.lock().unwrap() = Some((Instant::now(), counts));
+        count
     }
 
     /// How many threads each space opened on other machines wait for their
