@@ -160,7 +160,9 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     let tracked = fs::read_to_string(worktree.join(".shoal.toml")).unwrap();
     fs::write(
         worktree.join(".shoal.toml"),
-        format!("{tracked}[secrets.AGENT_TOKEN]\nvalue = {{ cmd = ['printf', 'tracked secret'] }}\n"),
+        format!(
+            "{tracked}[secrets.AGENT_TOKEN]\nvalue = {{ cmd = ['printf', 'tracked secret'] }}\n"
+        ),
     )
     .unwrap();
     let output = fixture.run(&[
@@ -177,7 +179,11 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     // The local config replaces the worktree file's; a failing command
     // stops the launch.
     let saved = fixture.root.path().join("saved.toml");
-    fs::write(&saved, "[secrets.AGENT_TOKEN]\nvalue = { cmd = ['false'] }\n").unwrap();
+    fs::write(
+        &saved,
+        "[secrets.AGENT_TOKEN]\nvalue = { cmd = ['false'] }\n",
+    )
+    .unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&[
         "start",

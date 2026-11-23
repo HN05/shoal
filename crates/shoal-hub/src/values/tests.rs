@@ -150,3 +150,67 @@ async fn a_link_that_ended_leaves_the_machine_unreachable() {
 
     assert!(matches!(unanswered(error), Unanswered::Unreachable(_)));
 }
+
+/// A machine that cannot be reached.
+struct Away;
+
+impl Remote for Away {
+    fn run<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: &'a [String],
+    ) -> BoxFuture<'a, Result<String, Unanswered>> {
+        Box::pin(async { Err(Unanswered::Unreachable(anyhow!("away"))) })
+    }
+}
+
+#[tokio::test]
+async fn leaving_the_hub_forgets_the_values_other_machines_printed() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = stand_in::hub(&root, Config::default()).await;
+    let key = KeyPair::generate().unwrap();
+    let hub_key = Identity::new(&KeyPair::generate().unwrap()).unwrap().public;
+    let joined = crate::membership::Joined {
+        membership: shoal_protocol::hub::Membership {
+            member: MemberId::from("laptop".to_owned()),
+            name: "laptop".into(),
+            through: shoal_protocol::hub::Route::Command(vec!["false".into()]),
+            joined_at: UnixTime::now(),
+        },
+        key,
+        hub_key,
+        revoked: false,
+    };
+    (hub.store)
+        .write(move |tx| crate::membership::save(tx, &joined))
+        .await
+        .unwrap();
+    let values = hub.config.values();
+    let value = shoal_protocol::config::value::Value::Cmd {
+        cmd: vec!["security".into()],
+        on: Some("desk".into()),
+    };
+    values.connect(Arc::new(Desk));
+    values.resolve("key", &value).await.unwrap();
+    values.connect(Arc::new(Away));
+    assert_eq!(values.resolve("key", &value).await.unwrap(), "sk-desk");
+
+    hub.leave_hub().await.unwrap();
+
+    assert!(values.resolve("key", &value).await.is_err());
+}
+
+/// A machine that prints `sk-desk`.
+struct Desk;
+
+impl Remote for Desk {
+    fn run<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: &'a [String],
+    ) -> BoxFuture<'a, Result<String, Unanswered>> {
+        Box::pin(async { Ok("sk-desk".into()) })
+    }
+}

@@ -442,7 +442,8 @@ impl Hub {
     }
 
     /// Record that the hub revoked the membership of `member`, unless a
-    /// later join replaced it meanwhile.
+    /// later join replaced it meanwhile, and forget the values other
+    /// machines printed for it.
     async fn record_revoked(&self, member: &MemberId) -> Result<()> {
         let member = member.clone();
         self.store
@@ -450,7 +451,9 @@ impl Hub {
                 membership::revoked(tx, &member)?;
                 numbering::forget_unless_joined(tx)
             })
-            .await
+            .await?;
+        self.config.values().forget_all();
+        Ok(())
     }
 
     /// The hub's reply to `call`, over this machine's link.

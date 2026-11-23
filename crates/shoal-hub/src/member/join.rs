@@ -143,11 +143,14 @@ impl Hub {
         self.store
             .write(move |tx| membership::save(tx, &joined))
             .await?;
+        // Another hub's machines may take the names the last one's had.
+        self.config.values().forget_all();
         Ok(membership)
     }
 
     /// Leave the hub: revoke this machine's credential there, when the hub
-    /// is reachable, and forget the membership.
+    /// is reachable, and forget the membership and the values other
+    /// machines printed for it.
     pub async fn leave_hub(&self) -> Result<Left> {
         let _change = self.member.changes.lock().await;
         let Some(joined) = self.store.read(membership::load).await? else {
@@ -160,6 +163,7 @@ impl Hub {
                 numbering::forget_unless_joined(tx)
             })
             .await?;
+        self.config.values().forget_all();
         self.member.wake.notify_one();
         Ok(Left {
             membership: joined.membership,
