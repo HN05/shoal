@@ -7,7 +7,9 @@ async fn a_long_notification_listing_goes_in_pages() {
     // Distinct notices, as completions handing back long file names make.
     for n in 0..200 {
         manager
+            .coordination
             .notify(
+                &*manager,
                 None,
                 AlertKind::SpaceDone,
                 format!("assignment finished {n}; results: {}", "x".repeat(700)),

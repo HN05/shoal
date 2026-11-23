@@ -402,7 +402,8 @@ pub(crate) async fn ask(
 ) -> shoal_protocol::threads::Thread {
     use shoal_protocol::threads::{NewPost, ThreadKind, ThreadNumber};
     let caller = caller_in(&shoal_protocol::space_names::SpaceSelector::id(id));
-    let thread = (manager.open_thread(
+    let thread = (manager.coordination.open_thread(
+        manager,
         Some(&caller),
         text.into(),
         ThreadKind::Question,
@@ -416,7 +417,8 @@ pub(crate) async fn ask(
         ..NewPost::default()
     };
     let number = ThreadNumber::Full(thread.number);
-    (manager.post_to_thread(
+    (manager.coordination.post_to_thread(
+        manager,
         Some(&caller),
         number,
         post,
@@ -439,7 +441,8 @@ pub(crate) async fn answer(
         text: text.into(),
         ..NewPost::default()
     };
-    (manager.post_to_thread(
+    (manager.coordination.post_to_thread(
+        manager,
         None,
         ThreadNumber::Full(number),
         post,

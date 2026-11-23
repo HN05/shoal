@@ -343,6 +343,16 @@ pub fn repository_spaces(db: &Connection, repository_id: &RepositoryId) -> Resul
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// Refuse a change to the records of the space `id`, such as its links or
+/// threads, while it is a workspace that is not ready; a chat takes one
+/// whenever it is recorded.
+pub fn require_ready_space(db: &Connection, id: &SpaceId) -> Result<()> {
+    if exists(db, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])? {
+        return Ok(());
+    }
+    require_ready(db, id)
+}
+
 /// Fail unless the workspace is ready; resources may only change then.
 pub fn require_ready(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     let (number, name, state): (shoal_ids::space_ids::SpaceNumber, SpaceName, WorkspaceState) = db

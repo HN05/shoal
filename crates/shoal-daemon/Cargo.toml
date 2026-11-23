@@ -36,6 +36,7 @@ sha2 = "0.11"
 shoal-agents.workspace = true
 shoal-apps.workspace = true
 shoal-demos.workspace = true
+shoal-coordination.workspace = true
 shoal-core.workspace = true
 shoal-daemon-base.workspace = true
 shoal-forge.workspace = true

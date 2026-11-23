@@ -116,13 +116,13 @@ impl Spaces for Manager {
         caller: &'a Caller,
     ) -> BoxFuture<'a, Result<Vec<Workspace>>> {
         Box::pin(async move {
-            let root = self.reach_root(Some(caller)).await?;
+            let root = self.coordination.reach_root(Some(caller)).await?;
             self.list_workspaces_within(root.as_ref()).await
         })
     }
 
     fn reaches<'a>(&'a self, caller: &'a Caller, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(Manager::reaches(self, caller, id))
+        Box::pin(self.coordination.reaches(self, caller, id))
     }
 
     fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>> {

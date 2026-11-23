@@ -160,7 +160,9 @@ impl Agents for Manager {
         Box::pin(async move {
             let about = About::space(name, id);
             let alert = NewAlert::shoal(kind, about, message);
-            Manager::tell_coordinator(self, alert, false, Source::Daemon).await;
+            (self.coordination)
+                .tell_coordinator(self, alert, false, Source::Daemon)
+                .await;
         })
     }
 }
@@ -170,13 +172,14 @@ impl Threads for Manager {
         Box::pin(async move {
             self.signals.thread_changed();
             let spaces = [workspace.id.clone()];
-            self.keep_code_versions(workspace.repository(), spaces)
+            self.coordination
+                .keep_code_versions(self, workspace.repository(), spaces)
                 .await;
         })
     }
 
     fn answer_finding(&self, thread: i64, text: String) -> BoxFuture<'_, Result<()>> {
-        Box::pin(Manager::answer_finding(self, thread, text))
+        Box::pin(self.coordination.answer_finding(self, thread, text))
     }
 }
 
@@ -249,7 +252,20 @@ impl Records for ReviewRecords {
         tx: &rusqlite::Transaction<'_>,
         finding: &FindingThread<'_>,
     ) -> Result<()> {
-        super::threads::findings::open(tx, finding)
+        let code = &finding.code;
+        let finding = super::threads::findings::FindingThread {
+            review: finding.review,
+            workspace: finding.workspace,
+            severity: finding.severity,
+            title: finding.title,
+            body: finding.body,
+            code: super::threads::findings::FindingCode {
+                commit: &code.commit,
+                at: &code.at,
+                snippet: code.snippet.as_deref(),
+            },
+        };
+        super::threads::findings::open(tx, &finding)
     }
 
     fn reopen_finding(
@@ -271,7 +287,13 @@ impl Records for ReviewRecords {
     }
 
     fn awaiting_answers(&self, db: &rusqlite::Connection) -> Result<Vec<AwaitedPost>> {
-        super::threads::findings::awaiting_answers(db)
+        let awaited = super::threads::findings::awaiting_answers(db)?;
+        Ok((awaited.into_iter())
+            .map(|awaited| AwaitedPost {
+                thread: awaited.thread,
+                post: awaited.post,
+            })
+            .collect())
     }
 }
 

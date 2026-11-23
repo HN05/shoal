@@ -27,7 +27,9 @@ impl Manager {
         match setup {
             Setup::Repository => {
                 let action = self.repository_setup(launch, caller).await?;
-                self.authorize_action(Some(caller), action).await
+                self.coordination
+                    .authorize_action(self, Some(caller), action)
+                    .await
             }
             Setup::Config => self.authorize_config_setup(caller).await,
         }
@@ -38,7 +40,9 @@ impl Manager {
     /// starts it or the caller queues the agent it runs itself.
     pub(crate) async fn authorize_config_setup(&self, caller: &Caller) -> Result<()> {
         let action = Action::new(PermissionKey::Admin, "shoal config setup");
-        self.authorize_action(Some(caller), action).await
+        self.coordination
+            .authorize_action(self, Some(caller), action)
+            .await
     }
 
     /// The action of the repository setup `launch` asks for, in the

@@ -153,7 +153,11 @@ impl Watcher for Socket {
         let Some(_operation) = manager.gates.try_operation() else {
             return Ok(false);
         };
-        if !manager.still_scoped(self.scope.as_ref()).await? {
+        if !manager
+            .coordination
+            .still_scoped(&*manager, self.scope.as_ref())
+            .await?
+        {
             let refused = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
             self.write(refused).await?;
             return Ok(false);

@@ -85,7 +85,12 @@ pub(super) async fn handle(
                 .agents
                 .stop_targets(&**manager, QueuedLaunches::Cancel)
                 .await?;
-            Body::Spaces(manager.spaces_below(caller, targets).await?)
+            Body::Spaces(
+                manager
+                    .coordination
+                    .spaces_below(&**manager, caller, targets)
+                    .await?,
+            )
         }
         RemovalMethod::StopSpace {
             space,
@@ -321,7 +326,12 @@ async fn releases_holds(
     space: &SpaceSelector,
 ) -> Result<bool> {
     match caller {
-        Some(caller) => manager.authorize_held_removal(caller, space, true).await,
+        Some(caller) => {
+            manager
+                .coordination
+                .authorize_held_removal(manager, caller, space, true)
+                .await
+        }
         None => Ok(true),
     }
 }
@@ -416,30 +426,39 @@ impl Scoped for RemovalMethod {
             // before removing any. It removes nothing, so it takes the
             // caller's own space too, as a move of that space checks it.
             RemovalMethod::CheckRemoval { space, .. } => {
-                manager.authorize_held_removal(caller, space, false).await?;
+                manager
+                    .coordination
+                    .authorize_held_removal(manager, caller, space, false)
+                    .await?;
                 Ok(Some(space))
             }
             // The removal takes the user's holds where it releases them.
             RemovalMethod::RemoveSpace { space, .. }
             | RemovalMethod::StartRemoval { space, .. } => manager
-                .workspace_below(caller, space, REFUSAL)
+                .coordination
+                .workspace_below(manager, caller, space, REFUSAL)
                 .await
                 .map(Some),
             // Into a space its scope reaches, the user's holds taken where
             // it may release them.
             RemovalMethod::AbsorbSpace(absorb) => {
                 manager
-                    .ensure_selected_reached(caller, absorb.into.as_mut())
+                    .coordination
+                    .ensure_selected_reached(manager, caller, absorb.into.as_mut())
                     .await?;
                 const ABSORB: &str = "scoped processes absorb only the spaces below their own";
-                (manager.workspace_below(caller, &mut absorb.space, ABSORB))
-                    .await
-                    .map(Some)
+                (manager
+                    .coordination
+                    .workspace_below(manager, caller, &mut absorb.space, ABSORB))
+                .await
+                .map(Some)
             }
             // Its answer confines the spaces to those below the caller's.
             RemovalMethod::StopTargets => Ok(None),
             RemovalMethod::StopSpace { space, .. } => manager
+                .coordination
                 .workspace_below(
+                    manager,
                     caller,
                     space,
                     "scoped processes stop only the spaces below theirs",
@@ -507,7 +526,10 @@ async fn moves_to_joined_machine(
         RemovalMethod::EndMovedSpace { space } => {
             let joined = manager.moves_to_joined_machine(space).await?;
             if joined {
-                manager.authorize_held_removal(caller, space, true).await?;
+                manager
+                    .coordination
+                    .authorize_held_removal(manager, caller, space, true)
+                    .await?;
             }
             Ok(joined)
         }
@@ -533,19 +555,31 @@ async fn administer<'a>(
     let repository = match importing {
         Some(repository) => {
             const REFUSAL: &str = "scoped processes import only into their own repository";
-            *repository = manager.own_repository(caller, repository, REFUSAL).await?;
+            *repository = manager
+                .coordination
+                .own_repository(manager, caller, repository, REFUSAL)
+                .await?;
             Some(manager.repositories.repository(&*repository).await?.id)
         }
         None => None,
     };
     manager
-        .ensure_selected_reached(caller, administered(method))
+        .coordination
+        .ensure_selected_reached(manager, caller, administered(method))
         .await?;
     let repository = match (administered(method), repository) {
-        (Some(space), None) => manager.space_repository(space).await?,
+        (Some(space), None) => {
+            manager
+                .coordination
+                .space_repository(manager, space)
+                .await?
+        }
         (_, repository) => repository,
     };
-    manager.administer(caller, &*method, repository).await?;
+    manager
+        .coordination
+        .administer(manager, caller, &*method, repository)
+        .await?;
     Ok(administered(method))
 }
 

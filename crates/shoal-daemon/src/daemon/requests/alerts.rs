@@ -35,7 +35,10 @@ pub(super) async fn handle(
         } => {
             // A listing of the most alerts a client asks for need not fit
             // one frame.
-            let listed = manager.alerts_for(caller, to, unread_only, limit).await;
+            let listed = manager
+                .coordination
+                .alerts_for(&**manager, caller, to, unread_only, limit)
+                .await;
             return Ok(Answer::pages(listed, Body::Alerts));
         }
         AlertMethod::SendAlert {
@@ -54,7 +57,14 @@ pub(super) async fn handle(
                     .await;
             }
             let acting = acting(manager, caller, from).await?;
-            let sent = (manager.send_alert(acting.as_ref(), to, message, attachments)).await?;
+            let sent = (manager.coordination.send_alert(
+                &**manager,
+                acting.as_ref(),
+                to,
+                message,
+                attachments,
+            ))
+            .await?;
             if to_all {
                 manager
                     .agents
@@ -68,11 +78,19 @@ pub(super) async fn handle(
         }
         AlertMethod::WithdrawAlert { id, space, from } => {
             let acting = acting(manager, caller, from).await?;
-            let withdrawn = manager.withdraw_alert(acting.as_ref(), space.as_ref(), id);
+            let withdrawn = manager.coordination.withdraw_alert(
+                &**manager,
+                acting.as_ref(),
+                space.as_ref(),
+                id,
+            );
             Body::Alert(withdrawn.await?)
         }
         AlertMethod::MarkAlertsRead { ids } => {
-            manager.mark_alerts_read(caller, ids).await?;
+            manager
+                .coordination
+                .mark_alerts_read(&**manager, caller, ids)
+                .await?;
             Body::Ok
         }
         AlertMethod::ClearAlerts => Body::Cleared(manager.notifications.clear().await?),
@@ -120,12 +138,16 @@ impl Scoped for AlertMethod {
             | AlertMethod::ClearAlerts
             | AlertMethod::WatchAlerts { .. } => {
                 manager
-                    .authorize_action(Some(caller), users_alerts())
+                    .coordination
+                    .authorize_action(manager, Some(caller), users_alerts())
                     .await?;
                 None
             }
             AlertMethod::SendAlert { to, .. } | AlertMethod::AlertInChat { to, .. } => {
-                manager.scope_alert_target(caller, to).await?;
+                manager
+                    .coordination
+                    .scope_alert_target(manager, caller, to)
+                    .await?;
                 None
             }
             AlertMethod::ListAlerts {

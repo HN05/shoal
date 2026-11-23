@@ -18,11 +18,11 @@ impl Alerts for Manager {
         kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, ()> {
-        Box::pin(self.notify(name, kind, message))
+        Box::pin(self.coordination.notify(self, name, kind, message))
     }
 
     fn notify_about(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
-        Box::pin(self.notify_about(about, kind, message))
+        Box::pin(self.coordination.notify_about(self, about, kind, message))
     }
 
     fn notify_space<'a>(
@@ -32,7 +32,10 @@ impl Alerts for Manager {
         kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, ()> {
-        Box::pin(self.notify_space(name, id, kind, message))
+        Box::pin(
+            self.coordination
+                .notify_space(self, name, id, kind, message),
+        )
     }
 
     fn tell_space<'a>(
@@ -41,15 +44,15 @@ impl Alerts for Manager {
         kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, bool> {
-        Box::pin(self.tell_space(id, kind, message))
+        Box::pin(self.coordination.tell_space(self, id, kind, message))
     }
 
     fn notify_approval<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
-        Box::pin(self.notify_approval(request))
+        Box::pin(self.coordination.notify_approval(self, request))
     }
 
     fn ask_user_about<'a>(&'a self, requests: &'a [ApprovalRequest]) -> BoxFuture<'a, ()> {
-        Box::pin(self.ask_user_about(requests))
+        Box::pin(self.coordination.ask_user_about(self, requests))
     }
 
     fn tell_still_blocked<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()> {
@@ -61,6 +64,9 @@ impl Alerts for Manager {
         selector: &'a SpaceSelector,
         error: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.report_state_failure(selector, error))
+        Box::pin(
+            self.coordination
+                .report_state_failure(self, selector, error),
+        )
     }
 }

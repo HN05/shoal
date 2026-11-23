@@ -37,7 +37,9 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     let changed = manager.signals.watch_messages();
     for _ in 0..2 {
         manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 "Stop the dev server".into(),
@@ -48,7 +50,9 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     }
     assert!(changed.has_changed().unwrap());
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
@@ -57,7 +61,9 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Move:\n\tabc123 to api".into(),
@@ -71,7 +77,9 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     ] {
         assert!(
             manager
+                .coordination
                 .send_space_message(
+                    &*manager,
                     None,
                     &SpaceSelector::id(&workspace.id),
                     rejected,
@@ -112,7 +120,9 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     assert_eq!(remaining, messages[1..]);
     // A delivered message may be sent again.
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Stop the dev server".into(),
@@ -241,7 +251,8 @@ async fn a_message_to_one_space_says_when_its_agent_reads_it() {
         let manager = &manager;
         async move {
             manager
-                .send_space_message(None, &selector, "Rebase".into(), Vec::new())
+                .coordination
+                .send_space_message(&**manager, None, &selector, "Rebase".into(), Vec::new())
                 .await
                 .unwrap()
         }
@@ -333,7 +344,9 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
         let repository = repository.cloned().map(Into::into);
         async move {
             manager
+                .coordination
                 .send_all_message(
+                    &**manager,
                     caller.as_ref(),
                     repository.as_ref(),
                     "Rebase onto main".into(),
@@ -438,7 +451,9 @@ async fn a_message_to_all_from_a_coordinator_reaches_the_chats_below_it_not_bein
     }
     let _removal = manager.space_removals.reserve(&chats[1].id).unwrap();
     let reached = manager
+        .coordination
         .send_all_message(
+            &*manager,
             Some(&scoped(parent.id.clone())),
             None,
             "Rebase onto main".into(),
@@ -544,7 +559,8 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     let paused = chats.iter().find(|chat| chat.name == "paused").unwrap();
     manager.agents.end_executions(&*manager, &paused.id).await;
     let reached = manager
-        .send_all_message(None, None, "Rebase onto main".into(), Vec::new())
+        .coordination
+        .send_all_message(&*manager, None, None, "Rebase onto main".into(), Vec::new())
         .await
         .unwrap();
     let [refused] = reached.reached.refused.workspaces.as_slice() else {
@@ -588,7 +604,9 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     std::fs::write(&file, "panic").unwrap();
     for _ in 0..2 {
         manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
@@ -598,7 +616,9 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
             .unwrap();
     }
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             String::new(),
@@ -667,7 +687,9 @@ async fn a_refused_message_leaves_no_copies() {
     let workspace = workspace(&temp, &manager, "receiver").await;
     for n in 0..shoal_daemon_base::alerts::MAX_UNREAD {
         manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 format!("message {n}"),
@@ -680,7 +702,9 @@ async fn a_refused_message_leaves_no_copies() {
     std::fs::write(&file, "panic").unwrap();
     assert!(
         manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
@@ -714,7 +738,9 @@ async fn an_attached_send_waits_for_the_files_gate() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
+                .coordination
                 .send_space_message(
+                    &*manager,
                     None,
                     &SpaceSelector::id(&id),
                     "See the log".into(),
@@ -771,7 +797,9 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
+                .coordination
                 .send_space_message(
+                    &*manager,
                     None,
                     &SpaceSelector::id(&id),
                     "See the log".into(),
@@ -822,7 +850,9 @@ async fn attachments_must_be_files() {
         "relative.png".into(),
     ] {
         let sent = manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 "See".into(),
@@ -833,7 +863,9 @@ async fn attachments_must_be_files() {
     }
     assert!(
         manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 String::new(),
@@ -875,9 +907,11 @@ async fn queue_until_refused(
 ) -> usize {
     let to = SpaceSelector::id(&workspace.id);
     let mut sent = 0;
-    while (manager.send_space_message(None, &to, text(sent), files.clone()))
-        .await
-        .is_ok()
+    while (manager
+        .coordination
+        .send_space_message(manager, None, &to, text(sent), files.clone()))
+    .await
+    .is_ok()
     {
         sent += 1;
     }
@@ -943,7 +977,10 @@ async fn an_alert_s_copied_files_count_toward_a_nearly_full_queue() {
     assert!(queue_until_refused(&manager, &workspace, text, Vec::new()).await > 0);
     let files = long_titled_files(&temp);
     let to = SpaceSelector::id(&workspace.id);
-    let attached = manager.send_space_message(None, &to, "logs".into(), files);
+    let attached =
+        manager
+            .coordination
+            .send_space_message(&*manager, None, &to, "logs".into(), files);
     assert!(attached.await.is_err());
     assert_fits_one_delivery(&manager, &workspace).await;
 }
@@ -953,7 +990,11 @@ async fn a_repeated_alert_s_longer_titles_count_toward_a_nearly_full_queue() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
     let to = SpaceSelector::id(&workspace.id);
-    let send = |files| manager.send_space_message(None, &to, "logs".into(), files);
+    let send = |files| {
+        manager
+            .coordination
+            .send_space_message(&*manager, None, &to, "logs".into(), files)
+    };
     send(titled_files(&temp, "log")).await.unwrap();
     let text = |n| format!("{n}{}", "x".repeat(1000));
     assert!(queue_until_refused(&manager, &workspace, text, Vec::new()).await > 0);
@@ -989,7 +1030,15 @@ async fn an_upward_alert_s_longer_titles_count_toward_its_coordinator_s_queue() 
         .unwrap();
     }
     let as_child = crate::daemon::test_support::caller_in(&SpaceSelector::id(&child.id));
-    let up = |files| manager.send_alert(Some(&as_child), AlertTarget::Up, "logs".into(), files);
+    let up = |files| {
+        manager.coordination.send_alert(
+            &*manager,
+            Some(&as_child),
+            AlertTarget::Up,
+            "logs".into(),
+            files,
+        )
+    };
     up(titled_files(&temp, "log")).await.unwrap();
     let text = |n| format!("{n}{}", "x".repeat(1000));
     assert!(queue_until_refused(&manager, &parent, text, Vec::new()).await > 0);

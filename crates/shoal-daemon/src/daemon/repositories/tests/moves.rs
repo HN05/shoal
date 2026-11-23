@@ -517,7 +517,9 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     let file = temp.path().join("crash.log");
     fs::write(&file, "panic")?;
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),
@@ -578,6 +580,7 @@ async fn pending_proposals_follow_their_copies_to_the_new_root() -> Result<()> {
         .move_all(&*manager, Layout::Regular)
         .await?;
     let moved = manager
+        .coordination
         .approval_request(pull.number)
         .await?
         .context("no proposal")?;
@@ -624,7 +627,9 @@ async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
     moving.await??;
     // A send after the move copies to the new place.
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),

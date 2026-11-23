@@ -1310,7 +1310,13 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             .await
             .unwrap();
         let token = &started.plan.scope_token;
-        let caller = f.manager.caller(token).await.unwrap().unwrap();
+        let caller = f
+            .manager
+            .coordination
+            .caller(&*f.manager, token)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(caller.kind(), Some(kind));
         assert_eq!(caller.execution_id(), Some(&started.plan.id));
         assert_eq!(caller.space_id, workspace.id);
@@ -1381,7 +1387,14 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             .finish_execution(&*f.manager, started.plan.id.clone(), kind, Some(0))
             .await
             .unwrap();
-        assert!(f.manager.caller(token).await.unwrap().is_none());
+        assert!(
+            f.manager
+                .coordination
+                .caller(&*f.manager, token)
+                .await
+                .unwrap()
+                .is_none()
+        );
         assert!(
             scope::authorize(&f.manager, Some(token), &mut DaemonMethod::Status)
                 .await
@@ -1501,7 +1514,8 @@ async fn merge_execution_holds_git_gate_through_completion_and_releases_on_failu
         assert!(gate.try_lock().is_err());
         assert_eq!(
             f.manager
-                .caller(&started.plan.scope_token)
+                .coordination
+                .caller(&*f.manager, &started.plan.scope_token)
                 .await
                 .unwrap()
                 .unwrap()
@@ -1653,7 +1667,15 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
 
     // Approval lets the agent's retry merge the approved commit.
     f.manager
-        .decide_approval(pending.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            pending.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     let started = merge_as_agent(&f, &workspace).await.unwrap();
@@ -1686,7 +1708,8 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
     assert_eq!(
         statuses(
             f.manager
-                .approval_requests(Some(&f.manager.named("worker").await))
+                .coordination
+                .approval_requests(&*f.manager, Some(&f.manager.named("worker").await))
                 .await
                 .unwrap()
         ),
@@ -1700,13 +1723,22 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
     fs::write(workspace.path.join("feature"), "even more\n").unwrap();
     commit(&workspace.path, "feature");
     f.manager
-        .decide_approval(next.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            next.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap_err();
     assert_eq!(
         statuses(
             f.manager
-                .approval_requests(Some(&f.manager.named("worker").await))
+                .coordination
+                .approval_requests(&*f.manager, Some(&f.manager.named("worker").await))
                 .await
                 .unwrap()
         ),
@@ -1739,7 +1771,15 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
         git(&workspace.path, &["rev-parse", "HEAD"]).trim()
     );
     f.manager
-        .decide_approval(denied.number, false, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            denied.number,
+            false,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     let refused = undecided_merge(&f, &workspace).await;
@@ -1759,13 +1799,22 @@ async fn approving_a_merge_request_keeps_it_when_the_branch_cannot_be_read() {
     let saved = fs::read(&reference).unwrap();
     fs::write(&reference, "not a commit\n").unwrap();
     f.manager
-        .decide_approval(pending.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            pending.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap_err();
     fs::write(&reference, saved).unwrap();
     let requests = f
         .manager
-        .approval_requests(Some(&f.manager.named("worker").await))
+        .coordination
+        .approval_requests(&*f.manager, Some(&f.manager.named("worker").await))
         .await
         .unwrap();
     assert_eq!(requests.len(), 1);
@@ -1782,7 +1831,15 @@ async fn approving_a_merge_request_keeps_it_when_the_branch_cannot_be_read() {
             .is_empty()
     );
     f.manager
-        .decide_approval(pending.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            pending.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
 }
@@ -1801,7 +1858,8 @@ async fn scoped_merge_skips_approval_when_configured() {
     assert!(started.plan.merge.is_some());
     assert!(
         f.manager
-            .approval_requests(Some(&f.manager.named("worker").await))
+            .coordination
+            .approval_requests(&*f.manager, Some(&f.manager.named("worker").await))
             .await
             .unwrap()
             .is_empty()
@@ -1856,7 +1914,8 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
     // The local request no longer covers a merge that pushes.
     let requests = f
         .manager
-        .approval_requests(Some(&f.manager.named("worker").await))
+        .coordination
+        .approval_requests(&*f.manager, Some(&f.manager.named("worker").await))
         .await
         .unwrap();
     let replaced = requests
@@ -1865,7 +1924,15 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
     assert!(replaced.is_none_or(|request| request.status == DecisionStatus::Outdated));
     // An approval covers its destination: another upstream branch needs another.
     f.manager
-        .decide_approval(newer.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            newer.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     git(&f.repo, &["push", "origin", "main:release"]);
@@ -1895,7 +1962,15 @@ async fn a_merge_warning_recorded_after_approval_needs_another_decision() {
     commit(&workspace.path, "version");
     let approved = undecided_merge(&f, &workspace).await;
     f.manager
-        .decide_approval(approved.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            approved.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     // The default branch changes the same file, and a check at the same
@@ -1928,7 +2003,8 @@ async fn an_approved_merge_lets_no_other_method_or_message_through() {
     commit(&workspace.path, "feature");
     let approve = async |number| {
         f.manager
-            .decide_approval(number, true, None, Default::default(), None)
+            .coordination
+            .decide_approval(&*f.manager, number, true, None, Default::default(), None)
             .await
             .unwrap();
     };
@@ -1976,7 +2052,15 @@ async fn a_pushing_merge_approval_covers_no_other_local_commits_of_main() {
     };
     assert_eq!(merge.unpushed, None);
     f.manager
-        .decide_approval(approved.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            approved.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     // A sync brings main up to its upstream, which the push publishes anyway.
@@ -2199,7 +2283,8 @@ async fn merge_turned_off_refuses_runs_and_agent_requests() {
     merge_as_agent(&f, &workspace).await.unwrap_err();
     assert!(
         f.manager
-            .approval_requests(Some(&f.manager.named("worker").await))
+            .coordination
+            .approval_requests(&*f.manager, Some(&f.manager.named("worker").await))
             .await
             .unwrap()
             .is_empty()
@@ -2219,7 +2304,8 @@ async fn a_merge_without_a_review_is_refused_before_its_approval() {
     assert!(refused.contains("queued"), "{refused}");
     assert!(
         f.manager
-            .approval_requests(Some(&f.manager.named("worker").await))
+            .coordination
+            .approval_requests(&*f.manager, Some(&f.manager.named("worker").await))
             .await
             .unwrap()
             .is_empty()

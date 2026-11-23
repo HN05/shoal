@@ -70,14 +70,22 @@ fn caller(id: &SpaceId) -> shoal_daemon::test_daemon::Caller {
 async fn ask(manager: &shoal_daemon::test_daemon::Manager, id: &SpaceId) -> Thread {
     let caller = caller(id);
     let name = "Which database?".to_owned();
-    let thread = (manager.open_thread(Some(&caller), name, ThreadKind::Question, None, Vec::new()))
-        .await
-        .unwrap();
+    let thread = (manager.coordination.open_thread(
+        manager,
+        Some(&caller),
+        name,
+        ThreadKind::Question,
+        None,
+        Vec::new(),
+    ))
+    .await
+    .unwrap();
     let post = NewPost {
         text: "Postgres or SQLite?".into(),
         ..NewPost::default()
     };
-    (manager.post_to_thread(
+    (manager.coordination.post_to_thread(
+        manager,
         Some(&caller),
         ThreadNumber::Full(thread.number),
         post,
@@ -160,7 +168,9 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     until_each(&mut subscription, &[RecordKind::Thread, RecordKind::Alert]).await;
 
     manager
+        .coordination
         .send_space_message(
+            &**manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Rebase on main".into(),
@@ -173,7 +183,9 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
     })
     .await;
     manager
+        .coordination
         .send_alert(
+            &**manager,
             Some(&shoal_daemon::test_daemon::Caller {
                 space_id: workspace.id.clone(),
                 execution: None,
@@ -197,7 +209,9 @@ async fn a_subscription_sends_its_snapshot_then_each_kind_of_change() {
         ..Resolving::default()
     };
     manager
+        .coordination
         .resolve_thread(
+            &**manager,
             Some(&caller(&workspace.id)),
             ThreadNumber::Full(question.number),
             answered,
@@ -245,7 +259,12 @@ async fn an_approval_request_reaches_a_subscription() {
         Lifetime::Workspace,
         Some("serve the app"),
     );
-    daemon.manager.request_approval(request).await.unwrap();
+    daemon
+        .manager
+        .coordination
+        .request_approval(request)
+        .await
+        .unwrap();
     until(&mut subscription, changed(RecordKind::Approval)).await;
 }
 
@@ -356,7 +375,8 @@ async fn a_chat_reaches_a_subscription_with_its_agent_links_and_messages() {
     .await
     .unwrap();
     manager
-        .send_space_message(None, &selector, "Plan it".into(), Vec::new())
+        .coordination
+        .send_space_message(&**manager, None, &selector, "Plan it".into(), Vec::new())
         .await
         .unwrap();
     let topics = [Topic::Spaces, Topic::Links, Topic::Alerts];
@@ -594,7 +614,9 @@ async fn a_scoped_subscription_without_space_records_names_its_tree() {
         ask(&daemon.manager, &workspace.id).await;
         daemon
             .manager
+            .coordination
             .send_space_message(
+                &*daemon.manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 "Rebase on main".into(),

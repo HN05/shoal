@@ -350,7 +350,10 @@ async fn empty_caches(
         let name = repo.display_name();
         let emptying = manager.repositories.empty_caches(&repo, false).await;
         if let Some((kind, message)) = emptying_notice(name, emptying, filesystem) {
-            manager.notify(None, kind, message).await;
+            manager
+                .coordination
+                .notify(manager, None, kind, message)
+                .await;
         }
         // Even caches it reports as busy or absent may have had leftovers purged.
         filesystem.free = available(&filesystem.path)?;
@@ -398,7 +401,10 @@ async fn delete_results(
                 ),
             ),
         };
-        manager.notify(None, kind, message).await;
+        manager
+            .coordination
+            .notify(manager, None, kind, message)
+            .await;
         filesystem.free = available(&filesystem.path)?;
     }
     Ok(())
@@ -500,7 +506,7 @@ async fn stop_executions(
                 )
             }
         };
-        manager.notify_space(&workspace.name, &workspace.id, kind, message).await;
+        manager.coordination.notify_space(manager, &workspace.name, &workspace.id, kind, message).await;
         anyhow::Ok(())
     });
     for result in futures_util::future::join_all(stops).await {

@@ -391,7 +391,7 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
     let caller = Some(&caller);
 
     // Every caller sees every entry, and what holds each waiting one back.
-    let visible = manager.visible_queue().await.unwrap();
+    let visible = manager.coordination.visible_queue(&*manager).await.unwrap();
     let names: Vec<_> = visible
         .iter()
         .map(|entry| (entry.name.as_str(), entry.held_by))
@@ -406,7 +406,11 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
             ("other", max_heavy_agents)
         ]
     );
-    let reachable = manager.reachable_queue(caller).await.unwrap();
+    let reachable = manager
+        .coordination
+        .reachable_queue(&*manager, caller)
+        .await
+        .unwrap();
     let names: Vec<_> = reachable.iter().map(|entry| entry.name.as_str()).collect();
     assert_eq!(names, ["one", "two"]);
     manager

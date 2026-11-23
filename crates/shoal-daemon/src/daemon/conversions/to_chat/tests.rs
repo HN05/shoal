@@ -214,9 +214,21 @@ async fn a_workspace_that_becomes_a_chat_keeps_only_the_chats_own_token() {
         .await
         .unwrap();
 
-    assert!(manager.caller(&exported).await.unwrap().is_none());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &exported)
+            .await
+            .unwrap()
+            .is_none()
+    );
     let token = manager.chat_scope(&workspace.id).await.unwrap();
-    let caller = manager.caller(&token).await.unwrap().unwrap();
+    let caller = manager
+        .coordination
+        .caller(&*manager, &token)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(caller.space_id, workspace.id);
 }
 

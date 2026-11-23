@@ -51,7 +51,9 @@ impl Scoped for ConfigMethod {
                 target: ConfigTarget::Repository(repository),
             } => {
                 *repository = manager
+                    .coordination
                     .own_repository(
+                        manager,
                         caller,
                         repository,
                         "scoped processes read only their own repository's config",

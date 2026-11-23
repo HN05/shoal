@@ -42,7 +42,7 @@ impl Manager {
         // Serialize cleanup choices with the PR and completion sweeps.
         let (space, _guard) = self.lock_space_gate(selector).await?;
         let head = self.completion_head(&space, done.integrated).await?;
-        let results = (self.keep_results(&space.clone().into(), done.results, attacher)).await?;
+        let results = (self.keep_results(&space, done.results, attacher)).await?;
         let completion = Completion {
             head,
             cleanup: done.cleanup,
@@ -61,17 +61,18 @@ impl Manager {
         let (space, _guard) = self.lock_space_gate(selector).await?;
         self.verify_space(&space).await?;
         let id = space.id.clone();
+        let outside = crate::daemon::coordination::CoordinationRecords(self.space_removals.clone());
         let (completion, delivered) = self
             .store
             .write(move |tx| {
                 require_ready_space(tx, &id)?;
                 let completion =
                     take_completion(tx, &id)?.context("the space is not marked done")?;
-                let (_, delivered) = threads::reopen(tx, &id, CloseCause::Completion)?;
+                let (_, delivered) = threads::reopen(tx, &outside, &id, CloseCause::Completion)?;
                 Ok((completion, delivered))
             })
             .await?;
-        self.announce_threads(delivered).await;
+        self.coordination.announce_threads(self, delivered).await;
         self.signals.wake_cleanup();
         self.links.agent_settles().request(&space.id);
         Ok(completion)
@@ -176,13 +177,15 @@ impl Manager {
         if let Err(error) = self.agents.cancel_stopped_restores(self, &space.id).await {
             crate::daemon::log!("agent queue: {error:#}");
         }
-        self.notify_space(
-            &space.name,
-            &space.id,
-            AlertKind::SpaceDone,
-            done_notice(&space.number.to_string(), &completion, &closed),
-        )
-        .await;
+        self.coordination
+            .notify_space(
+                self,
+                &space.name,
+                &space.id,
+                AlertKind::SpaceDone,
+                done_notice(&space.number.to_string(), &completion, &closed),
+            )
+            .await;
         if let Some((command, _resources)) = hook {
             (self.run_done_hook(space, &settings, &command, &completion)).await;
         }
@@ -197,6 +200,7 @@ impl Manager {
         let id = id.to_owned();
         let completion = completion.clone();
         let now = crate::time::UnixTime::now();
+        let outside = crate::daemon::coordination::CoordinationRecords(self.space_removals.clone());
         let (persisted, delivered) = self
             .store
             .write(move |tx| {
@@ -206,7 +210,8 @@ impl Manager {
                 let progressed =
                     progress::record_status(tx, &id, completion.summary.as_deref(), now)?
                         | progress::remove_blockers(tx, &id, now)?;
-                let (closed, delivered) = threads::close(tx, &id, CloseCause::Completion)?;
+                let (closed, delivered) =
+                    threads::close(tx, &outside, &id, CloseCause::Completion)?;
                 // Finished work leaves its failed turn alone, and has
                 // nothing left for a timer to wake it for.
                 turn_retry::cancel(tx, &id)?;
@@ -219,7 +224,7 @@ impl Manager {
                 Ok((persisted, delivered))
             })
             .await?;
-        self.announce_threads(delivered).await;
+        self.coordination.announce_threads(self, delivered).await;
         Ok(persisted)
     }
 
@@ -250,7 +255,10 @@ impl Manager {
         if let Err(error) = (self.run_space_hook(hook, space, settings, command)).await {
             let kind = AlertKind::HookFailed;
             let message = format!("finished; {error:#}");
-            (self.notify_space(&space.name, &space.id, kind, message)).await;
+            (self
+                .coordination
+                .notify_space(self, &space.name, &space.id, kind, message))
+            .await;
         }
     }
 }

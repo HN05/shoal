@@ -653,7 +653,9 @@ async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status()
     // The space asks the user, which blocks it on them.
     let asking = crate::daemon::test_support::caller_in(&SpaceSelector::id(&workspace.id));
     let thread = manager
+        .coordination
         .open_thread(
+            &*manager,
             Some(&asking),
             "Database".into(),
             shoal_protocol::threads::ThreadKind::Question,
@@ -667,7 +669,9 @@ async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status()
         ..Default::default()
     };
     manager
+        .coordination
         .post_to_thread(
+            &*manager,
             Some(&asking),
             shoal_protocol::threads::ThreadNumber::Full(thread.number),
             question,

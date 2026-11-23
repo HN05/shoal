@@ -489,7 +489,7 @@ impl Manager {
         let sessions = (self.expire_imported_sessions(&HomeKey::Repository(repo.clone()))).await;
         // A failure leaves the objects to the next pass that deletes a ref.
         let deleted = self.delete_unowned_refs(repo, &kept).await?;
-        if self.expire_code_versions(repo).await? || deleted {
+        if self.coordination.expire_code_versions(repo).await? || deleted {
             git::checkpoint::prune_unreachable(&repo.path).await?;
         }
         sessions

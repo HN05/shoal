@@ -145,12 +145,18 @@ impl Manager {
             return Ok(());
         };
         let (giver, given) = (Some(caller), &agent.narrowing);
-        (self.ensure_caller_holds(giver, given, repository)).await?;
+        (self
+            .coordination
+            .ensure_caller_holds(self, giver, given, repository))
+        .await?;
         if !agent.now {
             return Ok(());
         }
         let start = format!("start the agent of a new {kind} now");
-        (self.authorize_beyond_limits(caller, start, repository.cloned())).await
+        (self
+            .coordination
+            .authorize_beyond_limits(self, caller, start, repository.cloned()))
+        .await
     }
 
     /// Refuse the scoped `caller` the agent `preparing` queues in the
@@ -168,6 +174,9 @@ impl Manager {
             return Ok(());
         };
         let (giver, space) = (Some(caller), SpaceSelector::id(&space.id));
-        (self.ensure_agent_held(giver, &space, &mode, &agent.narrowing)).await
+        (self
+            .coordination
+            .ensure_agent_held(self, giver, &space, &mode, &agent.narrowing))
+        .await
     }
 }

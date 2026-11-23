@@ -91,7 +91,12 @@ async fn a_renumbered_space_takes_its_threads_and_their_waits_along() -> Result<
     let (item, after) = (asked.number.item, asked.posts[0].id);
     let waiter = tokio::spawn({
         let (manager, selector) = (manager.clone(), selector.clone());
-        async move { manager.await_post(None, &selector, item, after).await }
+        async move {
+            manager
+                .coordination
+                .await_post(&*manager, None, &selector, item, after)
+                .await
+        }
     });
     // An issue proposal belongs to the repository and names its space in
     // its record.

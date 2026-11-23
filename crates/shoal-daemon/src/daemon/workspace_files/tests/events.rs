@@ -53,7 +53,9 @@ async fn every_route_records_one_added_event_per_file() {
     // Sending the same files again keeps their records, so adds nothing.
     for _ in 0..2 {
         manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 "See".into(),

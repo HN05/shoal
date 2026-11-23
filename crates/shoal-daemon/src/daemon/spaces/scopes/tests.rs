@@ -25,7 +25,12 @@ async fn issued_scopes_are_persistent_independent_and_untracked() {
     let token = &manager.issue_scope(&selector).await.unwrap();
     let second = manager.issue_scope(&selector).await.unwrap();
     assert_ne!(token, &second);
-    let caller = manager.caller(token).await.unwrap().unwrap();
+    let caller = manager
+        .coordination
+        .caller(&*manager, token)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(caller.space_id, workspace.id);
     assert!(caller.execution.is_none());
     // It issues and reads for the spaces its scope reaches, and acts as no
@@ -63,13 +68,34 @@ async fn issued_scopes_are_persistent_independent_and_untracked() {
     }
     manager.store.shutdown().await;
     let restored = Manager::open(manager.paths.clone()).await.unwrap();
-    assert!(restored.caller(token).await.unwrap().is_some());
+    assert!(
+        (restored
+            .coordination
+            .caller(&*restored, token)
+            .await
+            .unwrap())
+        .is_some()
+    );
     restored
         .revoke_scope(&selector, token.clone())
         .await
         .unwrap();
-    assert!(restored.caller(token).await.unwrap().is_none());
-    assert!(restored.caller(&second).await.unwrap().is_some());
+    assert!(
+        restored
+            .coordination
+            .caller(&*restored, token)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        restored
+            .coordination
+            .caller(&*restored, &second)
+            .await
+            .unwrap()
+            .is_some()
+    );
     let id = workspace.id.clone();
     restored
         .store
@@ -79,7 +105,14 @@ async fn issued_scopes_are_persistent_independent_and_untracked() {
         })
         .await
         .unwrap();
-    assert!(restored.caller(&second).await.unwrap().is_none());
+    assert!(
+        restored
+            .coordination
+            .caller(&*restored, &second)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -96,7 +129,13 @@ async fn a_chat_issues_tokens_apart_from_its_agents_which_none_revokes() {
     let selector = SpaceSelector::id(&chat.id);
     let issued = manager.issue_scope(&selector).await.unwrap();
     assert_eq!(
-        manager.caller(&issued).await.unwrap().unwrap().space_id,
+        manager
+            .coordination
+            .caller(&*manager, &issued)
+            .await
+            .unwrap()
+            .unwrap()
+            .space_id,
         chat.id
     );
     assert_eq!(manager.chat_scope(&chat.id).await.unwrap(), agent);
@@ -104,12 +143,26 @@ async fn a_chat_issues_tokens_apart_from_its_agents_which_none_revokes() {
         .revoke_scope(&selector, issued.clone())
         .await
         .unwrap();
-    assert!(manager.caller(&issued).await.unwrap().is_none());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &issued)
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert!(
         manager
             .revoke_scope(&selector, agent.clone())
             .await
             .is_err()
     );
-    assert!(manager.caller(&agent).await.unwrap().is_some());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &agent)
+            .await
+            .unwrap()
+            .is_some()
+    );
 }

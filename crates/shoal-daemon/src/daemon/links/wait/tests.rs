@@ -139,7 +139,9 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         .unwrap();
     // Waiting would fail without a linked PR; a queued message answers first.
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
@@ -176,7 +178,9 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         tokio::spawn(async move { next_agent_messages(&*manager, &id, &mut queued).await })
     };
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Stop the dev server".into(),
@@ -367,7 +371,9 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .unwrap();
     assert!(queued.has_changed().unwrap());
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
@@ -845,7 +851,9 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
@@ -1298,7 +1306,9 @@ async fn hook_responses_fit_messages_and_updates_together() {
     // As many unread messages as a workspace holds.
     for n in 0..50 {
         manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&parent.id),
                 format!("{n:02}{}", "m".repeat(498)),
@@ -1491,7 +1501,9 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     };
     state(crate::state::AgentState::Working).await.unwrap();
     manager
+        .coordination
         .send_space_message(
+            &**manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
@@ -3419,7 +3431,9 @@ async fn a_watch_times_out_while_its_messages_settle() {
     let (root, manager) = manager().await;
     let workspace = settling_workspace(&root, &manager).await;
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Request 1 approved".into(),

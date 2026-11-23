@@ -20,7 +20,9 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
@@ -177,8 +179,15 @@ async fn agents_approve_prs_as_the_review_account_as_pr_review_allows() {
 
     // Once approved, the same review is posted as the review account, as
     // a direct permission posts it at once.
-    let decision =
-        manager.decide_approval_as(None, request.number, true, None, Default::default(), None);
+    let decision = manager.coordination.decide_approval_as(
+        &*manager,
+        None,
+        request.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
     decision.await.unwrap();
     approve(&proposing.id, "8").await.unwrap();
     approve(&reviewing.id, "8").await.unwrap();

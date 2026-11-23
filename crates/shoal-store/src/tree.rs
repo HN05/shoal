@@ -434,3 +434,16 @@ pub fn space_ref(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceRef> {
         },
     })
 }
+
+/// The spaces above the space `id`, nearest first.
+pub fn ancestors(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
+    Ok(db
+        .prepare(&format!(
+            "{} SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM up
+                JOIN spaces USING(id) LEFT JOIN workspaces ON workspaces.id=spaces.id
+                WHERE depth > 0 ORDER BY depth",
+            up("true")
+        ))?
+        .query_map([id], space_ref)?
+        .collect::<rusqlite::Result<_>>()?)
+}

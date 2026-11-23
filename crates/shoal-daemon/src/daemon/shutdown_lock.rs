@@ -73,7 +73,8 @@ async fn delay_shutdown<L: LoginManager>(manager: &Manager, login: &L) -> Option
             let message =
                 format!("Shoal could not delay system shutdowns to stop agents first: {error:#}");
             manager
-                .notify(None, AlertKind::EnvironmentProblem, message)
+                .coordination
+                .notify(manager, None, AlertKind::EnvironmentProblem, message)
                 .await;
             None
         }

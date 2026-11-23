@@ -383,7 +383,10 @@ impl Scoped for ItemMethod {
                 .await?;
                 let merge = permitted_actions::Action::new(PermissionKey::Merge, subject)
                     .in_repository(repository);
-                manager.authorize_action(Some(caller), merge).await?;
+                manager
+                    .coordination
+                    .authorize_action(manager, Some(caller), merge)
+                    .await?;
                 Some(target_selector(target)?)
             }
             // Approving and requesting changes are the `pr_review`
@@ -399,7 +402,8 @@ impl Scoped for ItemMethod {
                     let repository = reached_change_context(manager, caller, context).await?;
                     let key = PermissionKey::PrReview;
                     manager
-                        .refuse_denied(caller, key, Some(&repository))
+                        .coordination
+                        .refuse_denied(manager, caller, key, Some(&repository))
                         .await?;
                     let verdict = manager.links.verdict_action(
                         manager,
@@ -410,7 +414,8 @@ impl Scoped for ItemMethod {
                         caller,
                     );
                     manager
-                        .authorize_action(Some(caller), verdict.await?)
+                        .coordination
+                        .authorize_action(manager, Some(caller), verdict.await?)
                         .await?;
                 }
                 let context = own_context(caller, target);
@@ -511,7 +516,11 @@ pub(super) async fn change_context_space<'a>(
     context: &'a mut ItemContext,
 ) -> Result<&'a mut SpaceSelector> {
     if let ItemContext::Checkout(repository) = context
-        && manager.reach_root(Some(caller)).await?.is_none()
+        && manager
+            .coordination
+            .reach_root(Some(caller))
+            .await?
+            .is_none()
     {
         *context = ItemContext::Space {
             space: SpaceSelector::id(&caller.space_id),
@@ -531,7 +540,10 @@ pub(super) async fn reached_change_context(
     context: &mut ItemContext,
 ) -> Result<RepositoryId> {
     let space = change_context_space(manager, caller, context).await?;
-    manager.ensure_selected_reached(caller, Some(space)).await?;
+    manager
+        .coordination
+        .ensure_selected_reached(manager, caller, Some(space))
+        .await?;
     let space = manager.links.context_space(manager, context).await?;
     Ok(space.repository_id().clone())
 }
@@ -546,7 +558,11 @@ pub(super) async fn read_context_space<'a>(
     context: &'a mut ItemContext,
 ) -> Result<Option<&'a mut SpaceSelector>> {
     if let ItemContext::Checkout(_) = context
-        && manager.reach_root(Some(caller)).await?.is_none()
+        && manager
+            .coordination
+            .reach_root(Some(caller))
+            .await?
+            .is_none()
     {
         return Ok(None);
     }

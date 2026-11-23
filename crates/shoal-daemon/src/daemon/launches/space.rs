@@ -170,9 +170,19 @@ impl Manager {
         let mut parent = (start.new.parent.as_ref()).map(SpaceSelector::id);
         match &mut start.home {
             Home::Opening(_, opening) => {
-                (self.confine_workspace_start(caller, &mut parent, &mut opening.start)).await?;
+                (self.coordination.confine_workspace_start(
+                    self,
+                    caller,
+                    &mut parent,
+                    &mut opening.start,
+                ))
+                .await?;
             }
-            _ => self.parent_below(caller, &mut parent).await?,
+            _ => {
+                self.coordination
+                    .parent_below(self, caller, &mut parent)
+                    .await?
+            }
         }
         start.new.parent = self.parent_space_id(parent.as_ref()).await?;
         Ok(())

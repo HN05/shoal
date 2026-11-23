@@ -516,7 +516,7 @@ impl Manager {
     ) -> Result<shoal_protocol::scope_tokens::ScopeToken> {
         let id = id.to_owned();
         let token = (self.store)
-            .run(move |db| crate::daemon::scope::tokens::agent_token(db, &id))
+            .run(move |db| shoal_coordination::scope::tokens::agent_token(db, &id))
             .await?;
         token.context("no such chat")
     }
@@ -601,7 +601,7 @@ fn insert(
             created_at: chat.started_at,
         },
     )?;
-    crate::daemon::scope::tokens::issue_agent(tx, &chat.id)?;
+    shoal_coordination::scope::tokens::issue_agent(tx, &chat.id)?;
     if parent.is_some() {
         chat.parent = super::tree::parent(tx, &chat.id)?;
     }

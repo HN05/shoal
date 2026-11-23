@@ -76,7 +76,9 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     // Without an agent of its own, the worker is the chat's or the user's
     // own work, which the user hears about.
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -109,7 +111,9 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -121,7 +125,9 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .unwrap();
     // The worker's agent coordinates the helper below it, not the chat.
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &helper.id,
             ))),
@@ -161,7 +167,9 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &helper.id,
             ))),
@@ -207,7 +215,9 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         }
     });
     manager
+        .coordination
         .send_alert(
+            &**manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -263,7 +273,9 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     );
     assert!(waiting.await.unwrap().unwrap().superseded);
     manager
+        .coordination
         .send_alert(
+            &**manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -299,7 +311,9 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
         }
     });
     manager
+        .coordination
         .send_space_message(
+            &**manager,
             None,
             &SpaceSelector::id(&chat.id),
             "Pick a new name".into(),
@@ -312,7 +326,9 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
 
     // Sent again before the chat reads it, by ID this time, it collapses.
     manager
+        .coordination
         .send_space_message(
+            &**manager,
             None,
             &SpaceSelector::id(&chat.id),
             "Pick a new name".into(),
@@ -323,7 +339,9 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
     assert_eq!(received(&manager, &chat).await, ["Pick a new name"]);
 
     manager
+        .coordination
         .send_space_message(
+            &**manager,
             None,
             &"missing".into(),
             "Pick a new name".into(),
@@ -362,7 +380,9 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -375,7 +395,9 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     // Ready marks reach only a coordinator, never the user.
     assert!(
         (manager
+            .coordination
             .tell_coordinator(
+                &*manager,
                 crate::daemon::alerts::NewAlert::shoal(
                     AlertKind::ReadyMarked,
                     crate::daemon::alerts::About::space(&worker.name, &worker.id),
@@ -467,7 +489,9 @@ async fn a_removed_workspace_gives_the_user_the_events_it_had_not_received() {
             .unwrap();
     }
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &child.id,
             ))),
@@ -537,7 +561,9 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -581,7 +607,9 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     let id = handed[0].id;
     assert!(
         manager
+            .coordination
             .withdraw_alert(
+                &*manager,
                 Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                     &successor.id
                 ))),
@@ -592,7 +620,9 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
             .is_err()
     );
     manager
+        .coordination
         .withdraw_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -634,7 +664,9 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     let shot = temp.path().join("layout.png");
     std::fs::write(&shot, "png").unwrap();
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -751,7 +783,9 @@ async fn same_named_spaces_reach_their_own_coordinators() {
     }
     for (workspace, message) in [(&worker, "from the worker"), (&other, "from the other")] {
         manager
+            .coordination
             .send_alert(
+                &*manager,
                 Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                     &workspace.id,
                 ))),
@@ -798,7 +832,9 @@ async fn same_named_siblings_send_the_same_message_apart() {
     }
     for workspace in [&worker, &sibling] {
         manager
+            .coordination
             .send_alert(
+                &*manager,
                 Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                     &workspace.id,
                 ))),

@@ -304,7 +304,9 @@ impl Manager {
         };
         for id in std::iter::once(&target.id).chain(going) {
             if self.user_holds(id).await? {
-                self.authorize_taking_holds(caller, target, true).await?;
+                self.coordination
+                    .authorize_taking_holds(self, caller, target, true)
+                    .await?;
                 return Ok(true);
             }
         }

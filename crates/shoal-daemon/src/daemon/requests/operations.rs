@@ -230,7 +230,10 @@ impl Scoped for OperationMethod {
             }
             OperationMethod::StartChild { parent, copy, .. } => {
                 if let Some(copy) = copy {
-                    manager.copy_within(caller, copy).await?;
+                    manager
+                        .coordination
+                        .copy_within(manager, caller, copy)
+                        .await?;
                 }
                 Some(parent)
             }
@@ -247,10 +250,14 @@ impl Scoped for OperationMethod {
                 ..
             } => {
                 manager
-                    .confine_workspace_start(caller, parent, start)
+                    .coordination
+                    .confine_workspace_start(manager, caller, parent, start)
                     .await?;
                 if let Some(entry) = queue_entry {
-                    manager.ensure_own_launch(caller, entry, start).await?;
+                    manager
+                        .coordination
+                        .ensure_own_launch(manager, caller, entry, start)
+                        .await?;
                 }
                 None
             }
@@ -304,7 +311,11 @@ impl Follower {
             // scope ended is read only by a lookup that sees it ended.
             let (events, ended) = entry.events_from(next);
             let scoped = match &self.scope {
-                Some(token) => manager.caller(token).await?.is_some(),
+                Some(token) => manager
+                    .coordination
+                    .caller(&**manager, token)
+                    .await?
+                    .is_some(),
                 None => true,
             };
             let Some(operation) = manager.gates.try_operation() else {

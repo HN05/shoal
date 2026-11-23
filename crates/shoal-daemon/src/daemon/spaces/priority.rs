@@ -66,7 +66,7 @@ impl Manager {
         caller: Option<&Caller>,
         priority: Option<Priority>,
     ) -> Result<Option<Priority>> {
-        let Some(root) = self.reach_root(caller).await? else {
+        let Some(root) = self.coordination.reach_root(caller).await? else {
             return Ok(priority);
         };
         // Another machine vouches for its own space's, the root.

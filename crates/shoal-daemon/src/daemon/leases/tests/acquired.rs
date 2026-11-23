@@ -67,10 +67,13 @@ impl Fixture {
                 Duration::ZERO,
             )
             .await;
-        let caller = (self.manager.caller(&execution.plan.scope_token))
-            .await
-            .unwrap()
-            .unwrap();
+        let caller = (self
+            .manager
+            .coordination
+            .caller(&*self.manager, &execution.plan.scope_token))
+        .await
+        .unwrap()
+        .unwrap();
         (id, caller)
     }
 
@@ -339,10 +342,13 @@ impl Fixture {
             Some(launch),
         );
         let started = started.await.unwrap();
-        let demo = (self.manager.caller(&started.plan.scope_token))
-            .await
-            .unwrap()
-            .unwrap();
+        let demo = (self
+            .manager
+            .coordination
+            .caller(&*self.manager, &started.plan.scope_token))
+        .await
+        .unwrap()
+        .unwrap();
         (started.plan.id, demo)
     }
 

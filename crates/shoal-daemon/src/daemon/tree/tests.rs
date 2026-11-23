@@ -568,7 +568,13 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
             .collect::<Vec<_>>()
     };
     assert_eq!(
-        names(manager.visible_spaces(None).await.unwrap()),
+        names(
+            manager
+                .coordination
+                .visible_spaces(&*manager, None)
+                .await
+                .unwrap()
+        ),
         ["child", "parent", "sibling"]
     );
     let caller = crate::daemon::scope::Caller {
@@ -579,7 +585,13 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
         vouched: None,
     };
     assert_eq!(
-        names(manager.visible_spaces(Some(&caller)).await.unwrap()),
+        names(
+            manager
+                .coordination
+                .visible_spaces(&*manager, Some(&caller))
+                .await
+                .unwrap()
+        ),
         ["parent", "child"]
     );
 }
@@ -897,7 +909,9 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .unwrap();
     // Without an agent above, the user hears the child's agent.
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &child.id,
             ))),
@@ -921,7 +935,9 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .await
         .unwrap();
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &child.id,
             ))),
@@ -933,7 +949,9 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .unwrap();
     // A child without an agent of its own is the coordinator's own work.
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &helper.id,
             ))),
@@ -945,7 +963,9 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .unwrap();
     // The daemon's events about a child's agent reach the coordinator.
     manager
+        .coordination
         .notify_space(
+            &*manager,
             &helper.name,
             &helper.id,
             AlertKind::AgentExited,
@@ -1058,7 +1078,9 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         };
         let number = shoal_protocol::threads::ThreadNumber::Full(thread.number);
         let posted = manager
+            .coordination
             .post_to_thread(
+                &*manager,
                 Some(&scoped),
                 number,
                 post,
@@ -1122,7 +1144,9 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         connections.push(started.stop);
     }
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &child.id,
             ))),
@@ -1335,21 +1359,35 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     };
     // The root holds a grant for the secret; the parent does not.
     let granted = manager
+        .coordination
         .request_approval(secret(&root))
         .await
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(granted.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            granted.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     let requested = manager
+        .coordination
         .request_approval(secret(&child))
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&requested).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &requested)
+        .await;
     let routed = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1363,7 +1401,8 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         let manager = &manager;
         async move {
             let requests = manager
-                .approval_requests(Some(&SpaceSelector::id(&id)))
+                .coordination
+                .approval_requests(&**manager, Some(&SpaceSelector::id(&id)))
                 .await
                 .unwrap();
             let pending = manager
@@ -1442,7 +1481,9 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     // deny or pass it up.
     for workspace in [&root, &parent] {
         let decided = manager
+            .coordination
             .decide_routed_approval(
+                &*manager,
                 &Caller::of_space(workspace.id.clone()),
                 requested.number,
                 true,
@@ -1470,13 +1511,27 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap();
     let told = messages(&root).await.len();
     let escalated = manager
-        .escalate_approval(None, &SpaceSelector::id(&parent.id), requested.number, None)
+        .coordination
+        .escalate_approval(
+            &*manager,
+            None,
+            &SpaceSelector::id(&parent.id),
+            requested.number,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(escalated.decider.as_ref(), Some(&root.id));
     assert_eq!(messages(&root).await.len(), told + 1);
     let escalated = manager
-        .escalate_approval(None, &SpaceSelector::id(&root.id), requested.number, None)
+        .coordination
+        .escalate_approval(
+            &*manager,
+            None,
+            &SpaceSelector::id(&root.id),
+            requested.number,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(escalated.decider, None);
@@ -1484,16 +1539,30 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     assert_eq!(user().await, 1);
     assert!(
         manager
-            .escalate_approval(None, &SpaceSelector::id(&root.id), requested.number, None)
+            .coordination
+            .escalate_approval(
+                &*manager,
+                None,
+                &SpaceSelector::id(&root.id),
+                requested.number,
+                None
+            )
             .await
             .is_err()
     );
-    manager.notify_approval(&escalated).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &escalated)
+        .await;
     // A snapshot from before the routing, as a concurrent acquisition holds,
     // does not route it again either.
     assert!(!requested.routed);
-    manager.notify_approval(&requested).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &requested)
+        .await;
     let again = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1550,6 +1619,7 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
             .unwrap();
     }
     let requested = manager
+        .coordination
         .request_approval(ApprovalRequest::new(
             &child.id,
             Target::Secret("token".into()),
@@ -1564,12 +1634,17 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&requested).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &requested)
+        .await;
     // The root cannot be told, so passing it up gives it to the user, as
     // the reply says.
     let mut n = 0;
     while manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&root.id),
             format!("note {n}"),
@@ -1581,7 +1656,14 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
         n += 1;
     }
     let escalated = manager
-        .escalate_approval(None, &SpaceSelector::id(&parent.id), requested.number, None)
+        .coordination
+        .escalate_approval(
+            &*manager,
+            None,
+            &SpaceSelector::id(&parent.id),
+            requested.number,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(escalated.decider, None);
@@ -1619,6 +1701,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
         .await
         .unwrap();
     let requested = manager
+        .coordination
         .request_approval(ApprovalRequest::new(
             &worker.id,
             Target::Secret("token".into()),
@@ -1636,11 +1719,13 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
     // Given back as an ending chat gives it, then withdrawn before the user
     // is told.
     manager
-        .withdraw_approval(&SpaceSelector::id(&worker.id), requested.number)
+        .coordination
+        .withdraw_approval(&*manager, &SpaceSelector::id(&worker.id), requested.number)
         .await
         .unwrap();
     manager
-        .ask_user_about(std::slice::from_ref(&requested))
+        .coordination
+        .ask_user_about(&*manager, std::slice::from_ref(&requested))
         .await;
     let asked = manager
         .notifications
@@ -1697,6 +1782,7 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
     // Stopped, the chat keeps its workspace but has no agent to tell.
     manager.agents.end_executions(&*manager, &chat.id).await;
     let requested = manager
+        .coordination
         .request_approval(ApprovalRequest::new(
             &worker.id,
             Target::Secret("token".into()),
@@ -1711,8 +1797,12 @@ async fn a_stopped_chat_leaves_its_workspaces_requests_to_the_user() {
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&requested).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &requested)
+        .await;
     let routed = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1765,6 +1855,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
         .await
         .unwrap();
     let requested = manager
+        .coordination
         .request_approval(ApprovalRequest::new(
             &worker.id,
             Target::Secret("token".into()),
@@ -1779,8 +1870,12 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&requested).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &requested)
+        .await;
     let routed = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1790,6 +1885,7 @@ async fn a_chat_whose_agent_stops_gives_the_requests_it_decides_back_to_the_user
     // Stopped after the request reached it, the chat decides it no more.
     manager.agents.end_executions(&*manager, &chat.id).await;
     let given_back = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1862,6 +1958,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap();
     let requested = manager
+        .coordination
         .request_approval(ApprovalRequest::new(
             &child.id,
             Target::Secret("token".into()),
@@ -1876,8 +1973,12 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&requested).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &requested)
+        .await;
     let routed = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -1910,7 +2011,8 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap();
     let listed = manager
-        .approval_requests(Some(&SpaceSelector::id(&chat.id)))
+        .coordination
+        .approval_requests(&*manager, Some(&SpaceSelector::id(&chat.id)))
         .await
         .unwrap();
     assert_eq!(listed.len(), 1);
@@ -1919,13 +2021,14 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     manager.agents.end_executions(&*manager, &chat.id).await;
     tokio::time::timeout(
         std::time::Duration::from_secs(10),
-        manager.notify_approval(&routed),
+        manager.coordination.notify_approval(&*manager, &routed),
     )
     .await
     .expect("the retry waited on the gate it holds");
     // An ended chat decides nothing more; the user does.
     manager.chats().await.unwrap();
     let passed = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -2009,21 +2112,34 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     };
     for name in ["token", "other"] {
         let grant = manager
+            .coordination
             .request_approval(secret(&parent, name))
             .await
             .unwrap()
             .unwrap();
         manager
-            .decide_approval(grant.number, true, None, Default::default(), None)
+            .coordination
+            .decide_approval(
+                &*manager,
+                grant.number,
+                true,
+                None,
+                Default::default(),
+                None,
+            )
             .await
             .unwrap();
     }
     let requested = manager
+        .coordination
         .request_approval(secret(&child, "token"))
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&requested).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &requested)
+        .await;
     // The grant ends before the parent decides, so it may no longer approve.
     let parent_id = parent.id.clone();
     manager
@@ -2039,7 +2155,9 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .unwrap();
     assert!(
         manager
+            .coordination
             .decide_routed_approval(
+                &*manager,
                 &Caller::of_space(parent.id.clone()),
                 requested.number,
                 true,
@@ -2050,6 +2168,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
             .is_err()
     );
     let kept = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -2062,6 +2181,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     // A grant for another lifetime does not cover the request, which the
     // parent may still deny.
     let lease = manager
+        .coordination
         .request_approval(ApprovalRequest {
             lifetime: Lifetime::Lease,
             ..secret(&parent, "lease")
@@ -2070,18 +2190,32 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(lease.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            lease.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     let longer = manager
+        .coordination
         .request_approval(secret(&child, "lease"))
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&longer).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &longer)
+        .await;
     assert!(
         manager
+            .coordination
             .decide_routed_approval(
+                &*manager,
                 &Caller::of_space(parent.id.clone()),
                 longer.number,
                 true,
@@ -2092,7 +2226,9 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
             .is_err()
     );
     let denied = manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(parent.id.clone()),
             longer.number,
             false,
@@ -2107,7 +2243,9 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     // A coordinator whose messages are full cannot be told; the user decides.
     let mut n = 0;
     while manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&parent.id),
             format!("note {n}"),
@@ -2119,14 +2257,19 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         n += 1;
     }
     let other = manager
+        .coordination
         .request_approval(secret(&child, "other"))
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&other).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &other)
+        .await;
     assert_eq!(user_requests().await, 1);
     // It is the user's now, so their inbox lists it.
     let given_back = manager
+        .coordination
         .approval_request(other.number)
         .await
         .unwrap()
@@ -2187,12 +2330,21 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         )
     };
     let grant = manager
+        .coordination
         .request_approval(secret(&parent))
         .await
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(grant.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            grant.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     let caller = Caller {
@@ -2209,12 +2361,17 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         .await;
     for displayed in [false, true] {
         let requested = manager
+            .coordination
             .request_approval(secret(&child))
             .await
             .unwrap()
             .unwrap();
-        manager.notify_approval(&requested).await;
+        manager
+            .coordination
+            .notify_approval(&*manager, &requested)
+            .await;
         let shown = manager
+            .coordination
             .approval_request(requested.number)
             .await
             .unwrap()
@@ -2241,6 +2398,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             .await
             .unwrap();
         let replacement = manager
+            .coordination
             .request_approval(ApprovalRequest {
                 created_at: shown.created_at,
                 ..secret(&child)
@@ -2250,7 +2408,10 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             .unwrap();
         assert_eq!(replacement.number, shown.number);
         assert_ne!(replacement.key, shown.key);
-        manager.notify_approval(&replacement).await;
+        manager
+            .coordination
+            .notify_approval(&*manager, &replacement)
+            .await;
         if displayed {
             crate::daemon::scope::authorize(&manager, Some(&"scope".into()), &mut method)
                 .await
@@ -2265,6 +2426,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         assert!(decided.is_err(), "a changed request must not be decided");
         assert_eq!(
             manager
+                .coordination
                 .approval_request(replacement.number)
                 .await
                 .unwrap()
@@ -2273,7 +2435,8 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             DecisionStatus::Pending
         );
         manager
-            .withdraw_approval(&SpaceSelector::id(&child.id), replacement.number)
+            .coordination
+            .withdraw_approval(&*manager, &SpaceSelector::id(&child.id), replacement.number)
             .await
             .unwrap();
     }
@@ -2322,6 +2485,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
         .await;
     for (workspace, allowed) in [(&parent, true), (&child, true), (&other, false)] {
         let approval = manager
+            .coordination
             .request_approval(ApprovalRequest::new(
                 &workspace.id,
                 Target::Secret("token".into()),
@@ -2486,6 +2650,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     };
     // The parent's agent decides it without a grant of its own.
     let routed = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -2506,7 +2671,9 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .resource_guard(&child.id, crate::daemon::gates::GuardMode::Exclusive)
         .unwrap();
     manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(parent.id.clone()),
             requested.number,
             true,
@@ -2516,6 +2683,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .await
         .unwrap_err();
     let pending = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
@@ -2523,7 +2691,9 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     assert_eq!(pending.status, DecisionStatus::Pending);
     drop(hook);
     let decided = manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(parent.id.clone()),
             requested.number,
             true,
@@ -2593,13 +2763,22 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         panic!("holding its own workspace needs approval");
     };
     let routed = manager
+        .coordination
         .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(routed.decider, None);
     manager
-        .decide_approval(requested.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            requested.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(

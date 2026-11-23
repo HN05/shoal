@@ -19,6 +19,6 @@ impl Permissions for Manager {
     ) -> BoxFuture<'a, Result<()>> {
         let mut authorized = Action::new(key, action);
         authorized.repository = repository;
-        Box::pin(self.authorize_action(caller, authorized))
+        Box::pin(self.coordination.authorize_action(self, caller, authorized))
     }
 }

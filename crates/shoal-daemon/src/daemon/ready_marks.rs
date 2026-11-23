@@ -121,7 +121,13 @@ impl Manager {
         let about = crate::daemon::alerts::About::space(&space.name, &id);
         let kind = crate::daemon::alerts::AlertKind::ReadyMarked;
         let alert = crate::daemon::alerts::NewAlert::shoal(kind, about, ready_notice(&ready.marks));
-        (self.tell_coordinator(alert, false, super::notifications::Source::Agent)).await;
+        (self.coordination.tell_coordinator(
+            self,
+            alert,
+            false,
+            super::notifications::Source::Agent,
+        ))
+        .await;
         undrafted.context("marked ready for review, but a PR is still a draft")?;
         (self
             .links
@@ -174,7 +180,10 @@ impl Manager {
         if let Err(error) = result {
             let message = format!("marked ready for review; {error:#}");
             let kind = AlertKind::HookFailed;
-            (self.notify_space(&space.name, &space.id, kind, message)).await;
+            (self
+                .coordination
+                .notify_space(self, &space.name, &space.id, kind, message))
+            .await;
         }
     }
 

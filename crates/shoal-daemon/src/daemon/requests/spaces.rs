@@ -60,9 +60,12 @@ pub(super) async fn handle(
                 .select_spaces(caller, &spaces, &machines, below)
                 .await?,
         ),
-        SpaceMethod::FindSpaces { target } => {
-            Body::Spaces(manager.find_visible_spaces(&target, caller).await?)
-        }
+        SpaceMethod::FindSpaces { target } => Body::Spaces(
+            manager
+                .coordination
+                .find_visible_spaces(&**manager, &target, caller)
+                .await?,
+        ),
         SpaceMethod::RenameSpace { space, name } => {
             Body::RenamedSpace(manager.rename_space(&space, &name).await?)
         }

@@ -24,9 +24,8 @@ pub struct Manager {
     pub leases: shoal_leases::Leases,
     pub paths: Paths,
     pub(crate) operations: Arc<crate::daemon::operations::Operations>,
-    /// The scope tokens approved commands take their permission's actions
-    /// with.
-    pub(crate) grants: crate::daemon::permissions::Grants,
+    /// The alerts, threads, approvals, permissions and scope between spaces.
+    pub coordination: shoal_coordination::Coordination,
     pub(crate) signals: Arc<super::signals::Signals>,
     pub(crate) usage: super::workspace::usage::Usage,
     pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
@@ -137,6 +136,16 @@ impl Manager {
         ));
         let apps = shoal_apps::Apps::new(store.clone(), config_state.clone());
         let demos = shoal_demos::Demos::new(store.clone(), paths.clone());
+        let coordination = shoal_coordination::Coordination::new(
+            store.clone(),
+            gates.clone(),
+            config_state.clone(),
+            notifications.clone(),
+            signals.clone(),
+            Arc::new(super::coordination::CoordinationRecords(
+                space_removals.clone(),
+            )),
+        );
         Ok(Arc::new(Self {
             config_state,
             notifications,
@@ -150,7 +159,7 @@ impl Manager {
             gates,
             paths,
             operations: Default::default(),
-            grants: Default::default(),
+            coordination,
             signals,
             usage: Default::default(),
             leftovers: Default::default(),

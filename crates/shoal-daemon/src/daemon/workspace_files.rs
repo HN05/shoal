@@ -9,6 +9,8 @@ use shoal_protocol::model::ByKind;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, ensure};
+use futures_util::future::BoxFuture;
+use shoal_coordination::daemon::{Attaching, Unsent};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::{
@@ -268,12 +270,13 @@ impl Manager {
     /// completion, recorded as its results attached by `attacher`.
     pub(crate) async fn keep_results(
         &self,
-        space: &Space,
+        space: &crate::model::Space,
         results: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<HandedBack>> {
         let kept = |files: Vec<SentFile>| std::future::ready(Ok(files));
-        let records = (self.send_with_files(
+        let records = (shoal_coordination::alerts::send_with_files(
+            self,
             space,
             FileSource::Result,
             "shoal done",
@@ -291,52 +294,33 @@ impl Manager {
             .collect())
     }
 
-    /// Hand the user `message`, such as an alert, a post or a
-    /// completion, from `space` with `send`, passing it copies of the files
-    /// `files` recorded as coming from `source` and attached by `attacher`,
-    /// which outlive its removal. When `send` refuses the message, the copies
-    /// and records made for it go; those an identical earlier message made
+    /// Copies of `files` that `space` sends with `message`, recorded as
+    /// coming from `source` and attached by `attacher`, which outlive its
+    /// removal, until the message is sent or refused: a refused message's
+    /// copies and records go, while those an identical earlier message made
     /// stay with it.
-    pub(crate) async fn send_with_files<T, Send, Sent>(
+    pub(crate) async fn attach_files(
         &self,
         space: &Space,
         source: FileSource,
         message: &str,
         files: Vec<NewFile>,
         attacher: &Attacher,
-        send: Send,
-    ) -> Result<T>
-    where
-        Send: FnOnce(Vec<SentFile>) -> Sent,
-        Sent: Future<Output = Result<T>>,
-    {
-        if files.is_empty() {
-            return send(Vec::new()).await;
-        }
-        let (layout, _files) = self.lock_files(space).await?;
+    ) -> Result<Attaching> {
+        let (layout, guard) = self.lock_files(space).await?;
         let kept = copy_for_user(layout, &space.id, message, files).await?;
         let records = self
             .record_or_discard(&space.id, source, attacher, kept.clone())
             .await?;
-        let sent = send(records.iter().map(SentFile::from).collect()).await;
-        if sent.is_err() {
-            self.forget_unsent(kept, records).await;
-        }
-        sent
-    }
-
-    /// Delete the copies `kept` and their records `records` once the message
-    /// they were made for was refused, unless the copies were reused.
-    /// Failure only logs, as the message's refusal is what its sender hears.
-    async fn forget_unsent(&self, kept: Kept, records: Vec<AttachedFile>) {
-        if kept.reused() {
-            return;
-        }
-        let ids: Vec<i64> = records.iter().map(|file| file.id).collect();
-        if let Err(error) = self.store.write(move |tx| records::forget(tx, &ids)).await {
-            crate::daemon::log!("records of refused files not deleted: {error:#}");
-        }
-        discard(kept).await;
+        Ok(Attaching {
+            files: records.iter().map(SentFile::from).collect(),
+            unsent: Box::new(UnsentCopies {
+                store: self.store.clone(),
+                kept,
+                records,
+                _files: guard,
+            }),
+        })
     }
 
     /// Attach copies of the files attached to the space `from` to the space
@@ -569,5 +553,32 @@ impl Manager {
             Err(_) => {}
         }
         Ok(())
+    }
+}
+
+/// The copies made for a message until it is sent, which go with their
+/// records if it is refused, while the space's files stay locked.
+struct UnsentCopies {
+    store: crate::daemon::store::Store,
+    kept: Kept,
+    records: Vec<AttachedFile>,
+    _files: OwnedMutexGuard<()>,
+}
+
+impl Unsent for UnsentCopies {
+    /// Delete the copies and their records once the message they were made
+    /// for was refused, unless the copies were reused. Failure only logs,
+    /// as the message's refusal is what its sender hears.
+    fn forget(self: Box<Self>) -> BoxFuture<'static, ()> {
+        Box::pin(async move {
+            if self.kept.reused() {
+                return;
+            }
+            let ids: Vec<i64> = self.records.iter().map(|file| file.id).collect();
+            if let Err(error) = self.store.write(move |tx| records::forget(tx, &ids)).await {
+                crate::daemon::log!("records of refused files not deleted: {error:#}");
+            }
+            discard(self.kept).await;
+        })
     }
 }

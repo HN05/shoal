@@ -73,7 +73,9 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<()> {
         if let (Some(caller), Some(copy)) = (caller, &mut creation.copy) {
-            self.copy_within(caller, &mut copy.source).await?;
+            self.coordination
+                .copy_within(self, caller, &mut copy.source)
+                .await?;
         }
         (self.check_launch_parent(launch, Some(&repo.id), caller)).await?;
         let repository: crate::repository::Selector = (&repo.id).into();

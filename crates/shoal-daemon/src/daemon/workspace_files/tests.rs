@@ -58,7 +58,12 @@ async fn command_caller(
         .unwrap()
         .plan
         .scope_token;
-    manager.caller(&token).await.unwrap().unwrap()
+    manager
+        .coordination
+        .caller(manager, &token)
+        .await
+        .unwrap()
+        .unwrap()
 }
 
 /// The caller that the processes of a tracked agent `name` in the space
@@ -71,7 +76,12 @@ async fn agent_caller(manager: &Manager, id: &SpaceId, space: &SpaceName, name: 
         .unwrap()
         .plan
         .scope_token;
-    let caller = manager.caller(&token).await.unwrap().unwrap();
+    let caller = manager
+        .coordination
+        .caller(manager, &token)
+        .await
+        .unwrap()
+        .unwrap();
     manager
         .agents
         .track_agent(
@@ -163,7 +173,9 @@ async fn an_agents_files_name_its_kind_and_session() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             Some(&caller),
             &SpaceSelector::id(&workspace.id),
             "See the log".into(),
@@ -264,7 +276,9 @@ async fn files_sent_with_messages_are_listed_until_they_expire() {
     // Sending the same file again keeps one record of its copy.
     for _ in 0..2 {
         manager
+            .coordination
             .send_space_message(
+                &*manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 "See the log".into(),
@@ -364,7 +378,9 @@ async fn added_files_need_no_message() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             String::new(),
@@ -424,7 +440,9 @@ async fn titles_stay_with_their_files_until_a_new_one() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             String::new(),
@@ -511,7 +529,9 @@ async fn deleting_by_name_keeps_the_other_files() {
     std::fs::write(&log, "panic").unwrap();
     std::fs::write(&shot, "image").unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "See".into(),
@@ -550,7 +570,9 @@ async fn deleting_by_name_keeps_the_other_files() {
 
     // Sending the same files again copies the deleted one anew.
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "See".into(),
@@ -1046,7 +1068,9 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             String::new(),

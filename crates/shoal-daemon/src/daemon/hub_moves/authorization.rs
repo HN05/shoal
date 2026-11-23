@@ -40,8 +40,11 @@ impl Manager {
                 self.ensure_restorable_by(&selector, caller).await?;
                 continue;
             };
-            self.ensure_reaches(caller, &space).await?;
-            self.authorize_held_removal(caller, &selector, false)
+            self.coordination
+                .ensure_reaches(self, caller, &space)
+                .await?;
+            self.coordination
+                .authorize_held_removal(self, caller, &selector, false)
                 .await?;
         }
         Ok(())

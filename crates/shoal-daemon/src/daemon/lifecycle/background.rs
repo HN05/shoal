@@ -99,7 +99,8 @@ impl Manager {
                 Err(error) => log!("removal failure not sent to {requester}: {error:#}"),
             }
         }
-        self.notify_about(About::space(&space.name, &space.id), kind, message)
+        self.coordination
+            .notify_about(self, About::space(&space.name, &space.id), kind, message)
             .await;
     }
 }

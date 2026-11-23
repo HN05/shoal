@@ -59,7 +59,10 @@ impl UnreadContainers {
             holding.unwrap_or_default()
         );
         let kind = crate::daemon::alerts::AlertKind::LoadWarning;
-        manager.notify(None, kind, message).await;
+        manager
+            .coordination
+            .notify(manager, None, kind, message)
+            .await;
     }
 
     /// Whether unread work that now holds back starts, `holding`, began to

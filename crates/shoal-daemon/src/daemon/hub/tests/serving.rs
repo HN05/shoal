@@ -18,7 +18,9 @@ async fn concurrent_forwarded_requests_of_one_space_are_each_decided_by_their_ow
     let manager = &daemon.manager;
     let workspace = daemon.workspace("here").await;
     let repository = Some(&daemon.repository.id);
-    let permissions = manager.space_permissions(&workspace.id, repository);
+    let permissions = manager
+        .coordination
+        .space_permissions(&**manager, &workspace.id, repository);
     let permissions = permissions.await.unwrap();
     // A space on another machine, whose permissions and priority changed
     // between two of its requests that run here at once.
@@ -40,7 +42,11 @@ async fn concurrent_forwarded_requests_of_one_space_are_each_decided_by_their_ow
 
     let caller = |token| manager.hub.vouched_caller(token).flatten().unwrap();
     let (earlier, later) = (caller(&first.token), caller(&second.token));
-    let pushing = |caller| manager.refuse_denied(caller, PermissionKey::Push, None);
+    let pushing = |caller| {
+        manager
+            .coordination
+            .refuse_denied(&**manager, caller, PermissionKey::Push, None)
+    };
     assert!(pushing(&earlier).await.is_err());
     pushing(&later).await.unwrap();
     let ranking = |caller| manager.given_priority(Some(caller), Some(Priority::NORMAL));
@@ -91,7 +97,8 @@ async fn a_streamed_request_s_vouch_stands_for_its_caller_only_until_its_answer_
         space: workspace.id.clone(),
         everywhere: false,
         permissions: manager
-            .space_permissions(&workspace.id, repository)
+            .coordination
+            .space_permissions(&**manager, &workspace.id, repository)
             .await
             .unwrap(),
         granted: None,

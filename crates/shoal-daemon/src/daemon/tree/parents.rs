@@ -75,7 +75,7 @@ impl Manager {
             return Ok(());
         };
         let space = crate::model::Space::from(workspace.clone());
-        self.ensure_reaches(caller, &space).await
+        self.coordination.ensure_reaches(self, caller, &space).await
     }
 
     /// [`Self::create_workspace`] below `parent`, returning the workspace with

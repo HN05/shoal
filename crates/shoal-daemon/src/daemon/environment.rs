@@ -206,7 +206,8 @@ impl Manager {
             Err(error) => log!("environment check skipped forge hosts: {error:#}"),
         }
         for problem in problems {
-            self.notify(None, AlertKind::EnvironmentProblem, problem)
+            self.coordination
+                .notify(self, None, AlertKind::EnvironmentProblem, problem)
                 .await;
         }
     }

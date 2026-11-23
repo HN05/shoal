@@ -143,7 +143,8 @@ impl Tree {
     /// A thread the user opens with the parent.
     async fn thread(&self, name: &str) -> Thread {
         let parent = SpaceSelector::id(&self.parent.space);
-        (self.manager.open_thread(
+        (self.manager.coordination.open_thread(
+            &*self.manager,
             None,
             name.into(),
             ThreadKind::Question,
@@ -166,7 +167,12 @@ impl Tree {
     /// The texts of the posts `thread` has from the chat.
     async fn chat_posts(&self, thread: &Thread) -> Vec<String> {
         let number = ThreadNumber::Full(thread.number);
-        let thread = self.manager.thread(None, number).await.unwrap();
+        let thread = self
+            .manager
+            .coordination
+            .thread(&*self.manager, None, number)
+            .await
+            .unwrap();
         (thread.posts.into_iter())
             .filter(|post| post.in_chat)
             .map(|post| post.post.text)
@@ -340,9 +346,13 @@ async fn a_prompt_during_a_marked_turn_drops_its_alert_and_tells_the_agent() {
 async fn a_prompt_marks_read_the_alerts_its_chat_sent_the_user() {
     let tree = tree().await;
     let parent = tree.parent.caller();
-    let plain = tree
-        .manager
-        .send_alert(Some(&parent), AlertTarget::Up, "Plain".into(), Vec::new());
+    let plain = tree.manager.coordination.send_alert(
+        &*tree.manager,
+        Some(&parent),
+        AlertTarget::Up,
+        "Plain".into(),
+        Vec::new(),
+    );
     plain.await.unwrap();
     for to in [
         AlertTarget::Up,

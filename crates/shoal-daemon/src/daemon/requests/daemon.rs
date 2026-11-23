@@ -60,7 +60,10 @@ impl Scoped for ExitRequest {
         caller: &Caller,
     ) -> Result<Option<&mut SpaceSelector>> {
         let action = Action::new(PermissionKey::Daemon, exit_command(self));
-        manager.authorize_action(Some(caller), action).await?;
+        manager
+            .coordination
+            .authorize_action(manager, Some(caller), action)
+            .await?;
         Ok(None)
     }
 }

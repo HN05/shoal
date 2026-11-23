@@ -232,7 +232,12 @@ impl Client<'_> {
     /// Go on only while the follow's scope token acts for a caller, so
     /// that the follow reads more for it; [`Stopped::Revoked`] once not.
     async fn ensure_scoped(&self) -> Result<()> {
-        match self.manager.still_scoped(self.scope.as_ref()).await? {
+        match self
+            .manager
+            .coordination
+            .still_scoped(self.manager, self.scope.as_ref())
+            .await?
+        {
             true => Ok(()),
             false => Err(Stopped::Revoked.into()),
         }

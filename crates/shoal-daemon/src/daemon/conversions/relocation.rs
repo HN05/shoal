@@ -180,7 +180,10 @@ impl Manager {
             "The post-setup hook of {name} failed: {failure}; its agent stopped instead of restarting there, and shoal resume {number} continues it once the hook is repaired"
         );
         let about = About::space(&name, id);
-        (self.notify_about(about, AlertKind::RecoveryBlocked, message)).await;
+        (self
+            .coordination
+            .notify_about(self, about, AlertKind::RecoveryBlocked, message))
+        .await;
         Ok(())
     }
 
@@ -413,7 +416,13 @@ impl Manager {
                 "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal resume {number} continues"
             ),
         };
-        self.notify_about(About::space(&name, id), AlertKind::RecoveryBlocked, message)
+        self.coordination
+            .notify_about(
+                self,
+                About::space(&name, id),
+                AlertKind::RecoveryBlocked,
+                message,
+            )
             .await;
     }
 }

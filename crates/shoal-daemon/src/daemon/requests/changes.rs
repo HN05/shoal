@@ -21,14 +21,25 @@ pub(super) async fn handle(
     Ok(Answer::Body(match method {
         ChangeMethod::RecordChange { change } => {
             let caller = caller.context("only an agent's hooks record its changes")?;
-            Body::Changes(manager.record_tool_change(caller, change).await?)
+            Body::Changes(
+                manager
+                    .coordination
+                    .record_tool_change(&**manager, caller, change)
+                    .await?,
+            )
         }
         ChangeMethod::ListChanges { filter } => {
-            let listed = manager.changes(caller, filter).await;
+            let listed = manager
+                .coordination
+                .changes(&**manager, caller, filter)
+                .await;
             return Ok(Answer::pages(listed, Body::Changes));
         }
         ChangeMethod::ChangeDiffs { filter } => {
-            let listed = manager.change_diffs(caller, filter).await;
+            let listed = manager
+                .coordination
+                .change_diffs(&**manager, caller, filter)
+                .await;
             return Ok(Answer::pages(listed, Body::ChangeDiffs));
         }
         ChangeMethod::ClaimChanges {
@@ -36,15 +47,27 @@ pub(super) async fn handle(
             changes,
             thread,
         } => {
-            let claimed = manager.claim_changes(caller, space.as_ref(), &changes, thread);
+            let claimed = manager.coordination.claim_changes(
+                &**manager,
+                caller,
+                space.as_ref(),
+                &changes,
+                thread,
+            );
             Body::Changes(claimed.await?)
         }
         ChangeMethod::ReportEdits { paths } => {
-            manager.report_edits(caller, paths).await?;
+            manager
+                .coordination
+                .report_edits(&**manager, caller, paths)
+                .await?;
             Body::Ok
         }
         ChangeMethod::UnclaimChanges { space, changes } => {
-            let unclaimed = manager.unclaim_changes(caller, space.as_ref(), &changes);
+            let unclaimed =
+                manager
+                    .coordination
+                    .unclaim_changes(&**manager, caller, space.as_ref(), &changes);
             Body::Changes(unclaimed.await?)
         }
     }))

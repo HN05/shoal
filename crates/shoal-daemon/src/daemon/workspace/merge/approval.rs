@@ -56,7 +56,8 @@ impl Manager {
     async fn merges_directly(&self, workspace: &Workspace, caller: &Caller) -> Result<bool> {
         use crate::config::permissions::{Opening, Pushes};
         let permissions = self
-            .caller_permissions(caller, Some(workspace.repository()))
+            .coordination
+            .caller_permissions(self, caller, Some(workspace.repository()))
             .await?;
         Ok(permissions.merge.value == Opening::Direct && permissions.push.value == Pushes::Direct)
     }
@@ -64,7 +65,7 @@ impl Manager {
     /// Request `request`, refusing until the user approves it.
     async fn await_merge_decision(&self, request: ApprovalRequest) -> Result<()> {
         self.reviews.ensure_gate_hears(self, &request).await?;
-        match self.request_merge_approval(request).await? {
+        match self.coordination.request_merge_approval(request).await? {
             Some(request) => Err(Undecided(Box::new(request)).into()),
             None => Ok(()),
         }
@@ -109,7 +110,7 @@ impl Manager {
     /// Retire a stale merge request and tell the requesting agent; failing to
     /// queue the message only logs.
     async fn retire_stale_merge_request(&self, request: &ApprovalRequest) -> Result<()> {
-        self.retire_approval(request.clone()).await?;
+        self.coordination.retire_approval(request.clone()).await?;
         let message = format!(
             "Approval {} for {} is stale: the branch moved; run shoal merge again to request merging it.",
             request.number,

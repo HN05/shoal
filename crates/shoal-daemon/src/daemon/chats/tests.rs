@@ -745,7 +745,11 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         .executions()
         .issue_scope("chat".into(), caller.clone())
         .await;
-    let listed = manager.visible_spaces(Some(&caller)).await.unwrap();
+    let listed = manager
+        .coordination
+        .visible_spaces(&*manager, Some(&caller))
+        .await
+        .unwrap();
     let names: Vec<_> = listed.into_iter().map(|listed| listed.name).collect();
     assert_eq!(names, ["worker-chat", "worker"]);
 

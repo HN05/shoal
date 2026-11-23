@@ -188,7 +188,12 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .issue_scope(&SpaceSelector::id(&own.id))
         .await
         .unwrap();
-    let caller = manager.caller(token).await.unwrap().unwrap();
+    let caller = manager
+        .coordination
+        .caller(&*manager, token)
+        .await
+        .unwrap()
+        .unwrap();
     let id = manager
         .start_operation(setup(&own), None, Some(&caller))
         .await
@@ -202,12 +207,24 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .revoke_scope(&SpaceSelector::id(&own.id), token.clone())
         .await
         .unwrap();
-    let acting = manager.caller(&issued).await.unwrap().unwrap();
+    let acting = manager
+        .coordination
+        .caller(&*manager, &issued)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(acting.space_id, own.id);
     let entry = manager.operation(&id, Some(&caller)).await.unwrap();
     worker.exit(0);
     until(&entry, |_, ended| ended).await;
-    assert!(manager.caller(&issued).await.unwrap().is_none());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &issued)
+            .await
+            .unwrap()
+            .is_none()
+    );
     // A worker started from an execution acts as that execution even once
     // it ended, as when a `shoal run` command goes before its operation.
     let ended = crate::daemon::scope::Caller {
@@ -227,7 +244,8 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .unwrap();
     let worker = fake::take(&from_execution);
     let acting = manager
-        .caller(worker.token.as_ref().unwrap())
+        .coordination
+        .caller(&*manager, worker.token.as_ref().unwrap())
         .await
         .unwrap()
         .unwrap();
@@ -319,7 +337,12 @@ async fn a_scoped_caller_follows_and_reports_its_own_operation_in_a_space_no_lon
         let space = SpaceSelector::id(&space.id);
         async move {
             let token = manager.issue_scope(&space).await.unwrap();
-            manager.caller(&token).await.unwrap().unwrap()
+            manager
+                .coordination
+                .caller(&**manager, &token)
+                .await
+                .unwrap()
+                .unwrap()
         }
     };
     let (starter, outsider) = (caller(&own).await, caller(&other).await);
@@ -332,7 +355,8 @@ async fn a_scoped_caller_follows_and_reports_its_own_operation_in_a_space_no_lon
         .unwrap();
     let worker = fake::take(&id);
     let acting = manager
-        .caller(worker.token.as_ref().unwrap())
+        .coordination
+        .caller(&*manager, worker.token.as_ref().unwrap())
         .await
         .unwrap()
         .unwrap();

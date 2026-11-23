@@ -274,7 +274,11 @@ async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
 
     // The user still decides it by the number it was announced with, shown
     // with the space it came from.
-    let listed = manager.approval_requests(None).await.unwrap();
+    let listed = manager
+        .coordination
+        .approval_requests(&*manager, None)
+        .await
+        .unwrap();
     let [kept] = &listed[..] else {
         panic!("{listed:?}")
     };
@@ -321,7 +325,10 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
         .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
-    manager.notify_approval(&proposed).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &proposed)
+        .await;
     assert_eq!(manager.notifications.list(true, 50).await.unwrap().len(), 1);
     // An approval that failed to open it kept the user's edited title.
     let mut edited = proposed.clone();
@@ -332,12 +339,24 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
     manager.links.save_proposal(edited).await.unwrap();
 
     let withdrawn = manager
-        .withdraw_approval(&SpaceSelector::id(&workspace.id), proposed.number)
+        .coordination
+        .withdraw_approval(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            proposed.number,
+        )
         .await
         .unwrap();
     assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
     // It would outlive the workspace, so it goes as a decided one does.
-    assert!(manager.approval_requests(None).await.unwrap().is_empty());
+    assert!(
+        manager
+            .coordination
+            .approval_requests(&*manager, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(
         manager
             .notifications
@@ -413,7 +432,10 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
-    manager.notify_approval(&proposed).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &proposed)
+        .await;
     let routed = manager
         .links
         .approval_request(proposed.number)
@@ -430,7 +452,9 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
             ..ProposalDecision::default()
         };
         let decided = manager
+            .coordination
             .decide_routed_approval(
+                &*manager,
                 &Caller::of_space(parent.id.clone()),
                 proposed.number,
                 true,
@@ -443,13 +467,18 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
     // It may deny it as a duplicate of another proposal, which takes its
     // finding, and deny that one with a reason.
     let original = store_issue_proposal(&manager, &child.clone().into()).await;
-    manager.notify_approval(&original).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &original)
+        .await;
     let duplicate = ProposalDecision {
         duplicate_of: Some(Duplicate::Approval(original.number)),
         ..ProposalDecision::default()
     };
     let denied = manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(parent.id.clone()),
             proposed.number,
             false,
@@ -478,7 +507,9 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         ..ProposalDecision::default()
     };
     let decided = manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(parent.id.clone()),
             original.number,
             false,
@@ -494,7 +525,9 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .unwrap();
     assert!(outside.unwrap().findings().is_empty());
     let denied = manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(parent.id.clone()),
             original.number,
             false,
@@ -531,13 +564,18 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
-    manager.notify_approval(&elsewhere).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &elsewhere)
+        .await;
     let duplicate = ProposalDecision {
         duplicate_of: Some(Duplicate::Issue("12".parse().unwrap())),
         ..ProposalDecision::default()
     };
     let decided = manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(parent.id.clone()),
             elsewhere.number,
             false,
@@ -557,7 +595,9 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         ..ProposalDecision::default()
     };
     let denied = manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(parent.id.clone()),
             elsewhere.number,
             false,
@@ -591,7 +631,10 @@ async fn a_parent_without_the_permission_denies_a_routed_proposal_or_passes_it_u
         .store_proposal(request, ProposalKind::Issue)
         .await
         .unwrap();
-    manager.notify_approval(&pending).await;
+    manager
+        .coordination
+        .notify_approval(&*manager, &pending)
+        .await;
     for id in [&child.id, &parent.id] {
         manager
             .remove_selected(

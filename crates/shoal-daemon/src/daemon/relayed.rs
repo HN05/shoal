@@ -45,7 +45,7 @@ impl Relayed<'_> {
             let bytes = tokio::select! {
                 bytes = incoming.next() => bytes,
                 _ = scope_check.tick() => {
-                    if self.manager.still_scoped(self.scope).await? {
+                    if self.manager.coordination.still_scoped(self.manager, self.scope).await? {
                         continue;
                     }
                     return self.refuse_scope(writer).await;
@@ -64,7 +64,12 @@ impl Relayed<'_> {
             };
             // Its client gets nothing more once its scope token stops
             // acting, as while it paused reading.
-            if !self.manager.still_scoped(self.scope).await? {
+            if !self
+                .manager
+                .coordination
+                .still_scoped(self.manager, self.scope)
+                .await?
+            {
                 return self.refuse_scope(writer).await;
             }
             if !self.write(writer, frames.take(&bytes)?).await? {

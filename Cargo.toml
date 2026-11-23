@@ -23,6 +23,7 @@ shoal-apps = { path = "crates/shoal-apps" }
 shoal-cli = { path = "crates/shoal-cli" }
 shoal-client = { path = "crates/shoal-client" }
 shoal-config-derive = { path = "crates/shoal-config-derive" }
+shoal-coordination = { path = "crates/shoal-coordination" }
 shoal-core = { path = "crates/shoal-core" }
 shoal-daemon = { path = "crates/shoal-daemon" }
 shoal-daemon-base = { path = "crates/shoal-daemon-base" }

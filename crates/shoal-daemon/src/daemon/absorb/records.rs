@@ -40,7 +40,10 @@ impl Manager {
         let (links, warnings) = self.move_links(from, to, caller).await?;
         let files = self.copy_attached_files(from, to).await?;
         let copies = (files.iter()).map(|(old, file)| (*old, file.id)).collect();
-        let threads = self.move_open_threads(from, to, copies).await?;
+        let threads = self
+            .coordination
+            .move_open_threads(self, from, to, copies)
+            .await?;
         let files = files.into_iter().map(|(_, file)| file.name).collect();
         Ok(TakenOver {
             links,
@@ -55,12 +58,18 @@ impl Manager {
     /// `id`, which its branch and commit bind, returning their numbers.
     async fn withdraw_branch_requests(&self, id: &SpaceId) -> Result<Vec<ItemNumber>> {
         let selector = SpaceSelector::id(id);
-        let requests = self.approval_requests(Some(&selector)).await?;
+        let requests = self
+            .coordination
+            .approval_requests(self, Some(&selector))
+            .await?;
         let mut withdrawn = Vec::new();
         for request in requests {
             let bound = matches!(request.target, Target::PrOpen | Target::Push);
             if request.space_id == *id && request.status == DecisionStatus::Pending && bound {
-                let request = self.withdraw_approval(&selector, request.number).await?;
+                let request = self
+                    .coordination
+                    .withdraw_approval(self, &selector, request.number)
+                    .await?;
                 withdrawn.push(request.number);
             }
         }

@@ -79,7 +79,11 @@ async fn a_chat_without_a_repository_acts_in_each_repository_under_its_permissio
             .unwrap();
         assert_eq!(*space.repository_id(), repo.id);
         assert!(!space.keeps_links());
-        let permissions = manager.space_permissions(&master.id, Some(space.repository_id()));
+        let permissions = manager.coordination.space_permissions(
+            &*manager,
+            &master.id,
+            Some(space.repository_id()),
+        );
         openings.push(permissions.await.unwrap().issue_open.value);
     }
     assert_eq!(openings, [Opening::Propose, Opening::Direct]);

@@ -152,7 +152,7 @@ impl Manager {
         let mut checks = tokio::time::interval(SCOPE_CHECK);
         loop {
             checks.tick().await;
-            if let Ok(false) = self.still_scoped(scope).await {
+            if let Ok(false) = self.coordination.still_scoped(self, scope).await {
                 return;
             }
         }

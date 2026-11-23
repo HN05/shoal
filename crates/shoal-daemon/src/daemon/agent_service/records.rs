@@ -18,7 +18,7 @@ use crate::{
         approvals::{self, ApprovalRequest},
         changes, links,
         operations::starts,
-        progress, ready_marks, scope,
+        progress, ready_marks,
         spaces::{self, Removing},
         store, threads,
         tree::{self, TrackedAgents},
@@ -102,7 +102,7 @@ impl Records for AgentRecords {
     }
 
     fn agent_token(&self, db: &Connection, id: &SpaceId) -> Result<Option<ScopeToken>> {
-        scope::tokens::agent_token(db, id)
+        shoal_coordination::scope::tokens::agent_token(db, id)
     }
 
     fn repository_registered(&self, db: &Connection, id: &RepositoryId) -> Result<bool> {

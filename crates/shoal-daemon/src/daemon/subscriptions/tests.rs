@@ -57,7 +57,8 @@ async fn a_large_snapshot_arrives_in_pages() {
         let message = format!("{n}: {}", "x".repeat(1000));
         daemon
             .manager
-            .notify(None, AlertKind::CleanupFailed, message)
+            .coordination
+            .notify(&*daemon.manager, None, AlertKind::CleanupFailed, message)
             .await;
     }
     let stream = daemon.raw().await;

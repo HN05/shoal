@@ -336,7 +336,10 @@ impl Manager {
             blockers.join("; ")
         );
         let kind = AlertKind::SpaceBlocked;
-        (self.notify_space(&space.name, &space.id, kind, message)).await;
+        (self
+            .coordination
+            .notify_space(self, &space.name, &space.id, kind, message))
+        .await;
     }
 
     /// Whether the space `id` is blocked.

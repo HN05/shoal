@@ -99,7 +99,9 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     })
     .await;
     let refused = manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Review requested".into(),

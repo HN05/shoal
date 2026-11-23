@@ -70,7 +70,8 @@ impl Manager {
             return Ok(None);
         };
         if let Some(caller) = caller {
-            self.copy_within(caller, &mut copied.creation.source)
+            self.coordination
+                .copy_within(self, caller, &mut copied.creation.source)
                 .await?;
         }
         let (head, files) = self.copy_snapshot(&copied.creation.source).await?;
@@ -135,7 +136,9 @@ impl Manager {
     async fn forwarded_spaces(&self, launch: &mut Launch, caller: Option<&Caller>) -> Result<()> {
         self.select_launch_spaces(launch).await?;
         if let Some(caller) = caller {
-            self.parent_below(caller, &mut launch.parent).await?;
+            self.coordination
+                .parent_below(self, caller, &mut launch.parent)
+                .await?;
         }
         self.parent_listed(launch.parent.as_ref()).await
     }
@@ -246,7 +249,9 @@ impl Manager {
         }
         if let Some(caller) = caller {
             let mut named = launch.parent.clone();
-            self.parent_below(caller, &mut named).await?;
+            self.coordination
+                .parent_below(self, caller, &mut named)
+                .await?;
         }
         let shape = self.launch_shape(launch, caller).await?;
         if !shape.repository {

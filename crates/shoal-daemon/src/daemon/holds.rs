@@ -109,7 +109,7 @@ impl Manager {
             Lifetime::Lease,
             reason.as_deref(),
         );
-        let pending = self.request_approval(request).await.map_err(|error| {
+        let pending = self.coordination.request_approval(request).await.map_err(|error| {
             if error.is::<ReasonRequired>() {
                 anyhow!(
                     "holding your own space needs approval; request it with shoal acquire hold --name {name} --reason <why>"
@@ -198,7 +198,9 @@ impl Manager {
             repository: space.repository_id.as_ref().cloned(),
             ..Action::new(PermissionKey::UserHolds, release)
         };
-        self.authorize_action(Some(caller), action).await?;
+        self.coordination
+            .authorize_action(self, Some(caller), action)
+            .await?;
         self.release_hold(selector, name, HoldPlacer::User).await
     }
 

@@ -100,14 +100,7 @@ pub(crate) fn is_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
     store::exists(db, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])
 }
 
-/// Refuse a change to the links, cursor or marks of a workspace that is not
-/// ready; a chat takes one whenever it is recorded.
-pub(crate) fn require_ready_space(db: &Connection, id: &SpaceId) -> Result<()> {
-    if is_chat(db, id)? {
-        return Ok(());
-    }
-    store::require_ready(db, id)
-}
+pub(crate) use shoal_store::require_ready_space;
 
 #[cfg(test)]
 mod tests;

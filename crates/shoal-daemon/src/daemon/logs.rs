@@ -59,12 +59,15 @@ impl Manager {
     ) -> Result<()> {
         let Some(selector) = selector else {
             let action = Action::new(PermissionKey::Notifications, "Shoal's log");
-            return self.authorize_action(Some(caller), action).await;
+            return self
+                .coordination
+                .authorize_action(self, Some(caller), action)
+                .await;
         };
         let id = self.log_space(selector).await?;
         let reached = match self.nearest_existing(&id).await? {
-            Some(space) => self.reaches(caller, &space).await?,
-            None => self.reach_root(Some(caller)).await?.is_none(),
+            Some(space) => self.coordination.reaches(self, caller, &space).await?,
+            None => self.coordination.reach_root(Some(caller)).await?.is_none(),
         };
         ensure!(
             reached,

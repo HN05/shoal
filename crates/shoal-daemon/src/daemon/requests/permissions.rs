@@ -27,7 +27,8 @@ pub(super) async fn handle(
             let workspace = manager.workspace(&workspace).await?;
             Body::Permissions(
                 manager
-                    .launch_permissions(workspace, &mode, narrowing)
+                    .coordination
+                    .launch_permissions(&**manager, workspace, &mode, narrowing)
                     .await?,
             )
         }
@@ -37,7 +38,10 @@ pub(super) async fn handle(
                 Some(repository) => Some(manager.repositories.repository(repository).await?.id),
                 None => None,
             };
-            let held = manager.caller_permissions(caller, repository.as_ref());
+            let held =
+                manager
+                    .coordination
+                    .caller_permissions(&**manager, caller, repository.as_ref());
             Body::Permissions(held.await?)
         }
     }))

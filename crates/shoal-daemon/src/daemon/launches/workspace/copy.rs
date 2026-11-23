@@ -37,9 +37,13 @@ impl Manager {
                 )?)
             }
         };
-        let live = (self.visible_spaces(caller).await?.into_iter())
-            .filter_map(|space| space.into_workspace().ok())
-            .find(|workspace| selector.selects(&workspace.id, workspace.number));
+        let live = (self
+            .coordination
+            .visible_spaces(self, caller)
+            .await?
+            .into_iter())
+        .filter_map(|space| space.into_workspace().ok())
+        .find(|workspace| selector.selects(&workspace.id, workspace.number));
         let (workspace, repository, named) = match live {
             Some(workspace) => (
                 workspace.id.clone(),

@@ -126,7 +126,9 @@ impl Manager {
         let request = RemovalMethod::RestoreSpace {
             space: selector.clone(),
         };
-        self.administer(caller, &request, None).await
+        self.coordination
+            .administer(self, caller, &request, None)
+            .await
     }
 
     /// Whether this machine has a removal record of the space `id`.

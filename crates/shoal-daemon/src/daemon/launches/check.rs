@@ -57,7 +57,13 @@ impl Manager {
         launches::ensure_in_fits(&launch)?;
         self.select_launch_spaces(&mut launch).await?;
         let repository = self.checked_repository(&launch, caller).await?;
-        (self.ensure_caller_holds(caller, &launch.permissions, repository.as_ref())).await?;
+        (self.coordination.ensure_caller_holds(
+            self,
+            caller,
+            &launch.permissions,
+            repository.as_ref(),
+        ))
+        .await?;
         let shape = match launches::decides_kind(&launch) {
             true => self.checked_shape(&launch, caller).await?,
             false => None,
@@ -152,7 +158,9 @@ impl Manager {
         (self.ensure_parent_not_host(named_workspace(launch), parent)).await?;
         let mut parent = parent.cloned();
         if let Some(caller) = caller {
-            self.parent_below(caller, &mut parent).await?;
+            self.coordination
+                .parent_below(self, caller, &mut parent)
+                .await?;
         }
         let parent = self.parent_space_id(parent.as_ref()).await?;
         let repository = repository.map(Into::into);

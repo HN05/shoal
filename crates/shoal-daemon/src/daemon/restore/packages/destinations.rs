@@ -93,7 +93,10 @@ impl Manager {
         let selector = crate::repository::named(origin.clone())?;
         if let Some(caller) = caller {
             const REFUSAL: &str = "scoped processes import only into their own repository";
-            let own = self.own_repository(caller, &selector, REFUSAL).await?;
+            let own = self
+                .coordination
+                .own_repository(self, caller, &selector, REFUSAL)
+                .await?;
             return Ok(self.repositories.repository(&own).await?.id);
         }
         match self.repositories.repository(selector).await {

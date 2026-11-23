@@ -93,7 +93,11 @@ impl Manager {
         let parent = (self.restored_parent(&removed, caller, &mut warnings)).await?;
         let place = (self.reopen_place(&removed, parent, &mut warnings)).await?;
         let id = &removed.space_id;
-        if let Err(error) = self.reopen_threads(id, CloseCause::Removal).await {
+        if let Err(error) = self
+            .coordination
+            .reopen_threads(self, id, CloseCause::Removal)
+            .await
+        {
             warnings.push(format!("its threads stay closed: {error:#}"));
         }
         warnings.extend(
@@ -230,7 +234,7 @@ impl Manager {
                 "{name} was below {}, which is gone, so restoring it is the user's",
                 parent.name
             ),
-            Some(_) if !self.reaches(caller, &parent.id).await? => format!(
+            Some(_) if !self.coordination.reaches(self, caller, &parent.id).await? => format!(
                 "{name} was below {}, outside this space's scope, so restoring it is the user's",
                 parent.name
             ),
@@ -254,7 +258,10 @@ impl Manager {
         let name = &removed.name;
         if let Some(workspace) = &kept.workspace
             && self.find_space(&workspace.id).await?.is_some()
-            && !self.reaches(caller, &workspace.id).await?
+            && !self
+                .coordination
+                .reaches(self, caller, &workspace.id)
+                .await?
         {
             return Ok(Some(format!(
                 "{name} ran in the worktree of {}, outside this space's scope, so restoring it is the user's",
@@ -262,7 +269,13 @@ impl Manager {
             )));
         }
         let repository = removed.repository_id.as_ref();
-        let held = (self.ensure_caller_holds(Some(caller), &kept.narrowing, repository)).await;
+        let held = (self.coordination.ensure_caller_holds(
+            self,
+            Some(caller),
+            &kept.narrowing,
+            repository,
+        ))
+        .await;
         Ok(held.err().map(|error| {
             format!("{name} was given permissions this space does not hold: {error:#}")
         }))

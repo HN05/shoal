@@ -82,7 +82,12 @@ impl Scoped for FileMethod {
             FileMethod::FetchedDirectory { .. } => Ok(None),
             // A post's files reach whoever reads its thread, wherever they
             // are kept.
-            FileMethod::ReadFile { id, .. } if manager.reads_posted_file(caller, *id).await? => {
+            FileMethod::ReadFile { id, .. }
+                if manager
+                    .coordination
+                    .reads_posted_file(manager, caller, *id)
+                    .await? =>
+            {
                 Ok(None)
             }
             FileMethod::ListFiles { space }
@@ -113,8 +118,17 @@ async fn narrow_to_removed(
 ) -> Result<()> {
     let space = manager.file_space(workspace).await?;
     let below = match &space.parent_id {
-        Some(parent) => manager.reaches(caller, parent).await?,
-        None => manager.reach_root(Some(caller)).await?.is_none(),
+        Some(parent) => {
+            manager
+                .coordination
+                .reaches(manager, caller, parent)
+                .await?
+        }
+        None => manager
+            .coordination
+            .reach_root(Some(caller))
+            .await?
+            .is_none(),
     };
     ensure!(below, "space {} is outside this space's scope", space.id);
     *workspace = SpaceSelector::id(&space.id);

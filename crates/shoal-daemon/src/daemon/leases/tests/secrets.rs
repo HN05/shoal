@@ -92,7 +92,15 @@ async fn workspace_grants_outlast_release() -> Result<()> {
     let scoped = Some(&caller);
     let request = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
     manager
-        .decide_approval(request.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            request.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await?;
     let worker = manager.named("worker").await;
     (manager

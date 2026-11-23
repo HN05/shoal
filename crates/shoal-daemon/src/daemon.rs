@@ -8,21 +8,19 @@ pub(crate) use shoal_agents::{
     places, restart_recovery, restarts, shutdown_stop, stopped_work, turn_retry, turn_state,
     wake_timers, warnings,
 };
+pub(crate) use shoal_coordination::{alerts, approvals, changes, threads};
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications, retention, signals,
 };
 pub(crate) use shoal_leases::{allocation, containers, resources};
 mod absorb;
 mod agent_service;
-mod alerts;
 mod answer;
-pub mod approvals;
 mod apps;
 mod auto_update;
 pub(crate) mod blockers;
 mod carried_commits;
 mod carried_sessions;
-pub(crate) mod changes;
 pub(crate) mod chat_marks;
 pub(crate) mod chats;
 pub mod cleanup;
@@ -31,6 +29,7 @@ mod connections;
 mod contribution_holds;
 pub(crate) mod conversions;
 mod coordinated;
+mod coordination;
 mod daemon_exit;
 pub(crate) mod demos;
 pub(crate) mod disk;
@@ -61,7 +60,6 @@ pub(crate) mod operations;
 mod ownership;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) mod per_daemon;
-mod permissions;
 mod pr_gate;
 pub(crate) mod progress;
 mod quarantine;
@@ -97,7 +95,6 @@ pub(crate) mod test_daemon;
 // Other crates' tests read only some of the daemon's own fixtures.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod test_support;
-pub mod threads;
 mod tmp_dirs;
 mod tree;
 
@@ -465,7 +462,8 @@ impl Manager {
                 let message = format!(
                     "Shoal could not update its installed service definition: {error:#}; run `shoal daemon install`"
                 );
-                self.notify(None, AlertKind::EnvironmentProblem, message)
+                self.coordination
+                    .notify(self, None, AlertKind::EnvironmentProblem, message)
                     .await;
             }
         }

@@ -496,13 +496,15 @@ impl Manager {
         .await
         .err()?;
         let message = format!("workspace removed; {error:#}");
-        self.notify_space(
-            &workspace.name,
-            &workspace.id,
-            crate::daemon::notifications::AlertKind::HookFailed,
-            &message,
-        )
-        .await;
+        self.coordination
+            .notify_space(
+                self,
+                &workspace.name,
+                &workspace.id,
+                crate::daemon::notifications::AlertKind::HookFailed,
+                &message,
+            )
+            .await;
         Some(message)
     }
 

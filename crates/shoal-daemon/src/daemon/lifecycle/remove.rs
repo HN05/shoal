@@ -475,7 +475,7 @@ impl Manager {
         let id = &space.id;
         if let Removal::Converted { chat } = removal {
             let released = self.commit_conversion(id, chat).await?;
-            self.ask_user_about(&released).await;
+            self.coordination.ask_user_about(self, &released).await;
             return Ok(());
         }
         if space.worktree().is_none() {

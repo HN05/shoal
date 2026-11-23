@@ -47,7 +47,9 @@ impl Manager {
                 };
                 let message =
                     format!("Space {id}, {left}, is this machine's now but did not open: {error}");
-                self.notify(None, AlertKind::HandoverFailed, message).await;
+                self.coordination
+                    .notify(self, None, AlertKind::HandoverFailed, message)
+                    .await;
                 Ok(())
             }
             ImportedMove::Refused { error } => bail!("{error}"),

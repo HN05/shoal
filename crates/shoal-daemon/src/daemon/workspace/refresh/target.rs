@@ -105,7 +105,7 @@ impl Manager {
             (None, Some(source)) => {
                 if let Some(caller) = caller {
                     ensure!(
-                        self.reaches(caller, &source.id).await?,
+                        self.coordination.reaches(self, caller, &source.id).await?,
                         "workspace processes copy only their own workspace and those below it, and {} is outside this one's scope; ask the user to refresh {}",
                         source.name,
                         workspace.name

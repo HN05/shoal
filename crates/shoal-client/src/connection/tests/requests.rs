@@ -200,6 +200,7 @@ async fn decisions_bind_to_the_record_the_app_showed() {
     );
     let pending = daemon
         .manager
+        .coordination
         .request_approval(request)
         .await
         .unwrap()

@@ -100,9 +100,16 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .unwrap_err();
     let crate::daemon::approvals::Undecided(proposed) = held.downcast().unwrap();
     assert_eq!(sent().len(), 1);
-    (manager.decide_approval(proposed.number, true, None, Default::default(), None))
-        .await
-        .unwrap();
+    (manager.coordination.decide_approval(
+        &*manager,
+        proposed.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    ))
+    .await
+    .unwrap();
     manager
         .links
         .forge_api(

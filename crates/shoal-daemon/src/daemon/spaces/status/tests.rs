@@ -38,11 +38,23 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
     let kind = AlertKind::CleanupFailed;
     for workspace in &workspaces {
         let message = workspace.name.to_string();
-        (manager.notify_space(&workspace.name, &workspace.id, kind, message)).await;
+        (manager.coordination.notify_space(
+            &*manager,
+            &workspace.name,
+            &workspace.id,
+            kind,
+            message,
+        ))
+        .await;
     }
-    manager.notify(None, kind, "daemon").await;
     manager
+        .coordination
+        .notify(&*manager, None, kind, "daemon")
+        .await;
+    manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(
                 &manager.named("planning").await,
             )),

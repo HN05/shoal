@@ -174,7 +174,12 @@ async fn a_chats_agent_runs_as_an_execution_of_its_chat_with_the_chats_scope() {
     );
     let token = manager.chat_scope(&chat.id).await.unwrap();
     assert_eq!(plan.scope_token, token);
-    let caller = manager.caller(&token).await.unwrap().unwrap();
+    let caller = manager
+        .coordination
+        .caller(&*manager, &token)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(caller.space_id, chat.id);
     assert_eq!(caller.execution_id(), Some(&plan.id));
     assert!(manager.agents.caller_agent(&caller).await.is_some());

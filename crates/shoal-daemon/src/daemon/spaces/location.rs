@@ -104,7 +104,7 @@ impl Manager {
         // Without the spaces below, the walk only drops repeated roots.
         let tree = match below {
             true => Tree {
-                here: self.visible_spaces(caller).await?,
+                here: self.coordination.visible_spaces(self, caller).await?,
                 view: self.view_below(caller).await,
             },
             false => Tree {
@@ -153,8 +153,11 @@ impl Manager {
     /// The spaces of this machine `caller`'s scope reaches but its own, as
     /// it may restart or stop them.
     async fn reached_here(&self, caller: Option<&Caller>) -> Result<Vec<Located>> {
-        let visible = self.visible_spaces(caller).await?;
-        let reached = self.spaces_below(caller, visible).await?;
+        let visible = self.coordination.visible_spaces(self, caller).await?;
+        let reached = self
+            .coordination
+            .spaces_below(self, caller, visible)
+            .await?;
         Ok((reached.into_iter())
             .map(|space| Located::Here(Box::new(space)))
             .collect())
@@ -167,7 +170,7 @@ impl Manager {
         caller: Option<&Caller>,
         selector: &SpaceSelector,
     ) -> Result<Option<Space>> {
-        let spaces = self.visible_spaces(caller).await?;
+        let spaces = self.coordination.visible_spaces(self, caller).await?;
         Ok((spaces.into_iter()).find(|space| selector.selects(&space.id, space.number)))
     }
 

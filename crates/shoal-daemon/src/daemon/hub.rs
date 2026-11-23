@@ -70,7 +70,7 @@ impl Spaces for Manager {
         &'a self,
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Option<SpaceId>>> {
-        Box::pin(Manager::reach_root(self, caller))
+        Box::pin(self.coordination.reach_root(caller))
     }
 
     fn coordinator<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<SpaceId>>> {
@@ -123,7 +123,10 @@ impl SpacePermissions for Manager {
         caller: &'a Caller,
         repository: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<Permissions>> {
-        Box::pin(Manager::caller_permissions(self, caller, repository))
+        Box::pin(
+            self.coordination
+                .caller_permissions(self, caller, repository),
+        )
     }
 
     fn chained_permissions<'a>(
@@ -131,11 +134,14 @@ impl SpacePermissions for Manager {
         chain: &'a [ChainedMode],
         repository: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<Permissions>> {
-        Box::pin(Manager::chained_permissions(self, chain, repository))
+        Box::pin(
+            self.coordination
+                .chained_permissions(self, chain, repository),
+        )
     }
 
     fn chat_modes<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Vec<ChainedMode>>> {
-        Box::pin(Manager::chat_modes(self, space))
+        Box::pin(self.coordination.chat_modes(self, space))
     }
 
     fn space_permissions<'a>(
@@ -143,7 +149,7 @@ impl SpacePermissions for Manager {
         id: &'a SpaceId,
         repository: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<Permissions>> {
-        Box::pin(Manager::space_permissions(self, id, repository))
+        Box::pin(self.coordination.space_permissions(self, id, repository))
     }
 }
 
@@ -189,19 +195,19 @@ impl Approvals for Manager {
         &'a self,
         selector: Option<&'a SpaceSelector>,
     ) -> BoxFuture<'a, Result<Vec<ApprovalRequest>>> {
-        Box::pin(Manager::approval_requests(self, selector))
+        Box::pin(self.coordination.approval_requests(self, selector))
     }
 
     fn open_threads(&self) -> BoxFuture<'_, Result<Vec<shoal_protocol::threads::Thread>>> {
-        Box::pin(Manager::open_threads(self))
+        Box::pin(self.coordination.open_threads())
     }
 
     fn pass_over_offline<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::pass_over_offline(self, request))
+        Box::pin(self.coordination.pass_over_offline(self, request))
     }
 
     fn pass_to_user<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::pass_to_user(self, request))
+        Box::pin(self.coordination.pass_to_user(self, request))
     }
 
     fn saved_summaries<'a>(
@@ -212,7 +218,7 @@ impl Approvals for Manager {
     }
 
     fn visible_queue(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>> {
-        Box::pin(Manager::visible_queue(self))
+        Box::pin(self.coordination.visible_queue(self))
     }
 }
 

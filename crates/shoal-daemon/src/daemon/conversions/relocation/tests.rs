@@ -65,7 +65,14 @@ async fn the_agent_restarts_in_the_worktree_once_its_turn_ends() {
     let (workspace, mut process, token, issued) = converted(root.path(), &manager).await;
     let selector = SpaceSelector::id(&workspace.id);
     // The agent that converted its chat goes on in its turn, under its scope.
-    assert!(manager.caller(&token).await.unwrap().is_some());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_some()
+    );
 
     let idle = AgentState::Idle;
     (manager
@@ -89,8 +96,22 @@ async fn the_agent_restarts_in_the_worktree_once_its_turn_ends() {
     assert_eq!(last.mode, ModeName::PLAN);
     // Neither the agent's token nor one the chat issued acts for the
     // workspace it became.
-    assert!(manager.caller(&token).await.unwrap().is_none());
-    assert!(manager.caller(&issued).await.unwrap().is_none());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &issued)
+            .await
+            .unwrap()
+            .is_none()
+    );
     let id = workspace.id.clone();
     let pending = (manager.store)
         .run(move |db| crate::daemon::conversions::pending(db, &id))
@@ -106,7 +127,12 @@ async fn a_converted_chats_token_acts_for_the_workspace_it_became() {
     // As after a restart, before the agent's wrapper connects again.
     manager.agents.executions().scopes().await.clear();
 
-    let caller = manager.caller(&token).await.unwrap().unwrap();
+    let caller = manager
+        .coordination
+        .caller(&*manager, &token)
+        .await
+        .unwrap()
+        .unwrap();
 
     assert_eq!(caller.space_id, workspace.id);
 }
@@ -119,7 +145,14 @@ async fn a_working_agent_finishes_its_turn_where_it_runs() {
     manager.relocate_finished_turns().await.unwrap();
 
     assert!(resumed(&manager.paths).is_empty());
-    assert!(manager.caller(&token).await.unwrap().is_some());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_some()
+    );
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
     assert!(sessions.is_empty(), "{sessions:?}");
 }
@@ -146,7 +179,14 @@ async fn an_agent_waits_where_it_runs_while_the_workspaces_setup_failed() {
     manager.relocate_finished_turns().await.unwrap();
 
     assert!(resumed(&manager.paths).is_empty());
-    assert!(manager.caller(&token).await.unwrap().is_some());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[tokio::test]
@@ -175,7 +215,14 @@ async fn a_stop_of_the_workspace_keeps_the_converting_agents_session() {
         panic!("one last session to continue: {sessions:?}");
     };
     assert!(last.converted);
-    assert!(manager.caller(&token).await.unwrap().is_none());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -638,7 +685,14 @@ async fn the_agent_waits_for_its_workspaces_post_setup_hook() {
     manager.relocate_finished_turns().await.unwrap();
 
     assert!(resumed(&manager.paths).is_empty());
-    assert!(manager.caller(&token).await.unwrap().is_some());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_some()
+    );
     assert!(manager.converting(&workspace.id).await.unwrap());
 }
 
@@ -672,7 +726,14 @@ async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
     // Stopped with its session kept for shoal resume, not restarted.
     process.wait().unwrap();
     assert!(resumed(&manager.paths).is_empty());
-    assert!(manager.caller(&token).await.unwrap().is_none());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert!(!manager.converting(&workspace.id).await.unwrap());
     let sessions = LastSession::all(&manager.paths, &workspace.id).unwrap();
     assert_eq!(sessions.len(), 1, "{sessions:?}");

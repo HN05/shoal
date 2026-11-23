@@ -24,7 +24,13 @@ pub(super) async fn handle(
         ThreadMethod::AwaitPost { space, item, after } => {
             let (manager, caller) = (manager.clone(), caller.cloned());
             return Ok(Answer::wait(async move {
-                let awaited = manager.await_post(caller.as_ref(), &space, item, after);
+                let awaited = manager.coordination.await_post(
+                    &*manager,
+                    caller.as_ref(),
+                    &space,
+                    item,
+                    after,
+                );
                 let awaited = awaited.await?;
                 Ok(Body::SpaceThread(Box::new(awaited)))
             }));
@@ -37,7 +43,14 @@ pub(super) async fn handle(
             code,
         } => {
             let acting = acting(manager, caller, from).await?;
-            let opened = manager.open_thread(acting.as_ref(), name, kind, to.as_ref(), code);
+            let opened = manager.coordination.open_thread(
+                &**manager,
+                acting.as_ref(),
+                name,
+                kind,
+                to.as_ref(),
+                code,
+            );
             thread(opened.await?)
         }
         ThreadMethod::Post {
@@ -49,8 +62,15 @@ pub(super) async fn handle(
             from,
         } => {
             let acting = acting(manager, caller, from).await?;
-            let posted =
-                manager.post_to_thread(acting.as_ref(), number, post, attachments, code, changes);
+            let posted = manager.coordination.post_to_thread(
+                &**manager,
+                acting.as_ref(),
+                number,
+                post,
+                attachments,
+                code,
+                changes,
+            );
             thread(posted.await?)
         }
         ThreadMethod::PostInChat {
@@ -69,7 +89,13 @@ pub(super) async fn handle(
             from,
         } => {
             let acting = acting(manager, caller, from).await?;
-            let forwarded = manager.forward_thread(acting.as_ref(), number, to.as_ref(), note);
+            let forwarded = manager.coordination.forward_thread(
+                &**manager,
+                acting.as_ref(),
+                number,
+                to.as_ref(),
+                note,
+            );
             thread(forwarded.await?)
         }
         ThreadMethod::ResolveThread {
@@ -78,34 +104,53 @@ pub(super) async fn handle(
             from,
         } => {
             let acting = acting(manager, caller, from).await?;
-            let resolved = manager.resolve_thread(acting.as_ref(), number, resolving);
+            let resolved =
+                manager
+                    .coordination
+                    .resolve_thread(&**manager, acting.as_ref(), number, resolving);
             thread(resolved.await?)
         }
         ThreadMethod::ListThreads {
             space,
             state,
             for_user,
-        } => Body::SpaceThreads(manager.threads(space.as_ref(), state, for_user).await?),
-        ThreadMethod::ShowThread { thread: number } => {
-            thread(manager.thread(caller, number).await?)
-        }
+        } => Body::SpaceThreads(
+            manager
+                .coordination
+                .threads(&**manager, space.as_ref(), state, for_user)
+                .await?,
+        ),
+        ThreadMethod::ShowThread { thread: number } => thread(
+            manager
+                .coordination
+                .thread(&**manager, caller, number)
+                .await?,
+        ),
         ThreadMethod::SwitchThread {
             space,
             thread: number,
         } => {
-            let switched = manager.switch_thread(caller, &space, number).await?;
+            let switched = manager
+                .coordination
+                .switch_thread(&**manager, caller, &space, number)
+                .await?;
             Body::CurrentThread(switched.map(Box::new))
         }
-        ThreadMethod::CurrentThread { space } => {
-            Body::CurrentThread(manager.current_thread(&space).await?.map(Box::new))
-        }
+        ThreadMethod::CurrentThread { space } => Body::CurrentThread(
+            manager
+                .coordination
+                .current_thread(&**manager, &space)
+                .await?
+                .map(Box::new),
+        ),
         ThreadMethod::AddChanges {
             thread: number,
             space,
             changes,
         } => Body::Changes(
             manager
-                .add_changes(caller, number, space.as_ref(), &changes)
+                .coordination
+                .add_changes(&**manager, caller, number, space.as_ref(), &changes)
                 .await?,
         ),
         ThreadMethod::RemoveChanges {
@@ -113,17 +158,33 @@ pub(super) async fn handle(
             space,
             changes,
         } => {
-            let removed = manager.remove_changes(caller, number, space.as_ref(), &changes);
+            let removed = manager.coordination.remove_changes(
+                &**manager,
+                caller,
+                number,
+                space.as_ref(),
+                &changes,
+            );
             Body::Changes(removed.await?)
         }
         ThreadMethod::LinkThread {
             space,
             thread: number,
-        } => thread(manager.link_thread(caller, &space, number, true).await?),
+        } => thread(
+            manager
+                .coordination
+                .link_thread(&**manager, caller, &space, number, true)
+                .await?,
+        ),
         ThreadMethod::UnlinkThread {
             space,
             thread: number,
-        } => thread(manager.link_thread(caller, &space, number, false).await?),
+        } => thread(
+            manager
+                .coordination
+                .link_thread(&**manager, caller, &space, number, false)
+                .await?,
+        ),
     }))
 }
 
@@ -172,7 +233,12 @@ impl Scoped for ThreadMethod {
             // The thread stays on its own machine, whichever runs the space.
             ThreadMethod::OpenThread { to: Some(to), .. }
             | ThreadMethod::ForwardThread { to: Some(to), .. } => {
-                *to = SpaceSelector::id(&manager.reached_space(caller, to).await?);
+                *to = SpaceSelector::id(
+                    &manager
+                        .coordination
+                        .reached_space(manager, caller, to)
+                        .await?,
+                );
                 None
             }
             ThreadMethod::OpenThread { to: None, .. }

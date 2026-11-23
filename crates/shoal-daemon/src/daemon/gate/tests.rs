@@ -179,7 +179,12 @@ impl Fixture {
     ) -> ApprovalRequest {
         let mut changed = self.manager.store.watch_changes();
         loop {
-            let stored = self.manager.approval_by_key(key).await.unwrap();
+            let stored = self
+                .manager
+                .coordination
+                .approval_by_key(key)
+                .await
+                .unwrap();
             if let Some(stored) = stored.filter(|stored| done(stored)) {
                 return stored;
             }
@@ -238,14 +243,28 @@ async fn a_run_holds_a_read_only_scope_of_the_space_until_it_ends() {
     let request = fixture.push_branch().await;
     let (token, state) = fixture.run_scope().await;
     assert_eq!(state, fixture.manager.paths.state);
-    let caller = fixture.manager.caller(&token).await.unwrap().unwrap();
+    let caller = fixture
+        .manager
+        .coordination
+        .caller(&*fixture.manager, &token)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(caller.space_id, fixture.workspace.id);
     assert!(caller.read_only);
     std::fs::remove_file(&hold).unwrap();
     fixture
         .request_when(&request.key, |stored| stored.operation.is_some())
         .await;
-    assert!(fixture.manager.caller(&token).await.unwrap().is_none());
+    assert!(
+        fixture
+            .manager
+            .coordination
+            .caller(&*fixture.manager, &token)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -274,7 +293,12 @@ async fn an_allowed_request_that_cannot_be_carried_out_goes_to_the_user() {
     (fixture.manager.reviews)
         .carry_out_stranded_allows(fixture.manager.as_ref())
         .await;
-    let stored = fixture.manager.approval_by_key(&request.key).await.unwrap();
+    let stored = fixture
+        .manager
+        .coordination
+        .approval_by_key(&request.key)
+        .await
+        .unwrap();
     let stored = stored.unwrap();
     assert!(matches!(stored.gate, Some(GateStep::Unapplied { .. })));
     assert_eq!(fixture.asked_user().await.len(), 1);

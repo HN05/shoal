@@ -202,7 +202,9 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
 
     // Its hooks receive what the space below it sends, and acknowledge it.
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &below.id,
             ))),
@@ -283,7 +285,11 @@ async fn a_broadcast_with_files_reaches_a_chat_without_a_repository() {
         .unwrap();
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
-    let send = |attachments| manager.send_all_message(None, None, "Note".into(), attachments);
+    let send = |attachments| {
+        manager
+            .coordination
+            .send_all_message(&*manager, None, None, "Note".into(), attachments)
+    };
     let reached = send(vec![report.into()]).await.unwrap();
     let names = crate::daemon::test_support::names;
     assert_eq!(
@@ -314,7 +320,11 @@ async fn a_chat_without_a_repository_copies_a_workspace_of_any_repository() {
         workspace: SpaceSelector::id(&user.id),
         checkpoint: None,
     };
-    manager.copy_within(&caller, &mut source).await.unwrap();
+    manager
+        .coordination
+        .copy_within(&*manager, &caller, &mut source)
+        .await
+        .unwrap();
     assert_eq!(source.workspace, SpaceSelector::id(&user.id));
 }
 
@@ -361,10 +371,23 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     assert!(refused.is_err());
 
     // It lists every space and repository.
-    let caller = manager.caller(&token).await.unwrap().unwrap();
-    let listed = manager.visible_spaces(Some(&caller)).await.unwrap();
+    let caller = manager
+        .coordination
+        .caller(&*manager, &token)
+        .await
+        .unwrap()
+        .unwrap();
+    let listed = manager
+        .coordination
+        .visible_spaces(&*manager, Some(&caller))
+        .await
+        .unwrap();
     assert_eq!(listed.len(), 3);
-    let visible = manager.visible_repositories(Some(&caller)).await.unwrap();
+    let visible = manager
+        .coordination
+        .visible_repositories(&*manager, Some(&caller))
+        .await
+        .unwrap();
     assert_eq!(visible.len(), 2);
     let mut workspaces = SpaceMethod::ListSpaces;
     crate::daemon::scope::authorize(&manager, Some(&token), &mut workspaces)

@@ -509,7 +509,13 @@ async fn built_in_restore_child() {
     };
     assert_ne!(opens().await, shoal_core::terminal::WAKE_PROMPT);
     let space = SpaceSelector::id(&workspace.id);
-    let message = manager.send_space_message(None, &space, "Review requested".into(), Vec::new());
+    let message = manager.coordination.send_space_message(
+        &*manager,
+        None,
+        &space,
+        "Review requested".into(),
+        Vec::new(),
+    );
     message.await.unwrap();
     assert_eq!(opens().await, shoal_core::terminal::WAKE_PROMPT);
     serving.abort();
@@ -988,7 +994,9 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     let generation = manager.config_state.generation();
     manager.config_state.publish_disk_reading(Some(generation));
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Review requested".into(),

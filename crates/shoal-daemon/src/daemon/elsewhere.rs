@@ -201,7 +201,7 @@ async fn scoped_caller(
     scope: Option<&ScopeToken>,
 ) -> Result<Option<Option<Caller>>> {
     match scope {
-        Some(token) => Ok(manager.caller(token).await?.map(Some)),
+        Some(token) => Ok(manager.coordination.caller(manager, token).await?.map(Some)),
         None => Ok(Some(None)),
     }
 }

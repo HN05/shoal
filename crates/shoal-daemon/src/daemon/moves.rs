@@ -142,7 +142,9 @@ impl Manager {
             )],
         };
         for message in messages {
-            self.notify(None, AlertKind::MoveFinished, message).await;
+            self.coordination
+                .notify(self, None, AlertKind::MoveFinished, message)
+                .await;
         }
     }
 
@@ -164,13 +166,17 @@ impl Manager {
             let selector = SpaceSelector::id(id);
             match self.space(&selector).await {
                 Ok(space) => {
-                    self.ensure_reaches(caller, &space).await?;
+                    self.coordination
+                        .ensure_reaches(self, caller, &space)
+                        .await?;
                     repository = repository.or(space.repository_id);
                 }
                 Err(_) => self.ensure_restorable_by(&selector, caller).await?,
             }
         }
-        self.administer(caller, order, repository).await
+        self.coordination
+            .administer(self, caller, order, repository)
+            .await
     }
 }
 

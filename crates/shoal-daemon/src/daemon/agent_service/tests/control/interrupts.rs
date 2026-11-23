@@ -79,7 +79,9 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
         .await
         .unwrap();
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
@@ -136,7 +138,14 @@ async fn a_chats_interrupted_agent_is_due_its_wrappers_wake_for_a_message() {
         .await
         .unwrap();
     manager
-        .send_space_message(None, &selected, "Rebase onto main".into(), Vec::new())
+        .coordination
+        .send_space_message(
+            &*manager,
+            None,
+            &selected,
+            "Rebase onto main".into(),
+            Vec::new(),
+        )
         .await
         .unwrap();
     // A hang guard only: each wait answers the state it is given.

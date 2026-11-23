@@ -170,7 +170,10 @@ impl Manager {
                 self.cleanup_removals.push(space.name);
             }
             let notice = space.removal_notice(cleanup);
-            (self.notify_about(about, AlertKind::SpaceRemoved, notice)).await;
+            (self
+                .coordination
+                .notify_about(self, about, AlertKind::SpaceRemoved, notice))
+            .await;
             return Ok(());
         };
         log!(
@@ -181,7 +184,10 @@ impl Manager {
         );
         let recorded = self.record_retention(space, cleanup, error).await;
         let notice = format!("{} retained the {}: {error:#}", cleanup.name(), space.kind);
-        (self.notify_about(about, AlertKind::CleanupFailed, notice)).await;
+        (self
+            .coordination
+            .notify_about(self, about, AlertKind::CleanupFailed, notice))
+        .await;
         recorded
     }
 

@@ -75,7 +75,11 @@ impl Subscriber {
             tokio::time::sleep(SETTLE).await;
             stored.borrow_and_update();
             agents.borrow_and_update();
-            if !manager.still_scoped(self.scope.as_ref()).await? {
+            if !manager
+                .coordination
+                .still_scoped(&**manager, self.scope.as_ref())
+                .await?
+            {
                 let body =
                     Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
                 return self.refuse(&mut writer, id, body).await;

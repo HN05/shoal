@@ -107,7 +107,7 @@ impl Visible {
         if !reading_spaces.into_iter().any(|topic| topics.has(topic)) {
             return Ok(Self::default());
         }
-        let spaces = manager.visible_spaces(caller).await?;
+        let spaces = manager.coordination.visible_spaces(manager, caller).await?;
         Ok(Self { spaces })
     }
 
@@ -124,7 +124,8 @@ impl Visible {
 /// Every repository, or a scoped caller's own, as listing them shows.
 async fn repositories(manager: &Manager, caller: Option<&Caller>) -> Result<Vec<Record>> {
     Ok(manager
-        .visible_repositories(caller)
+        .coordination
+        .visible_repositories(manager, caller)
         .await?
         .into_iter()
         .map(Record::Repository)
@@ -237,6 +238,7 @@ async fn sessions(manager: &Manager, spaces: &[Space]) -> Result<Vec<Record>> {
 /// The open threads with a post of the visible spaces.
 async fn threads(manager: &Manager, visible: &Visible) -> Result<Vec<Record>> {
     Ok(manager
+        .coordination
         .open_threads()
         .await?
         .into_iter()
@@ -254,7 +256,8 @@ async fn approvals(
     visible: &Visible,
 ) -> Result<Vec<Record>> {
     Ok(manager
-        .approval_requests(None)
+        .coordination
+        .approval_requests(manager, None)
         .await?
         .into_iter()
         .filter(|request| {

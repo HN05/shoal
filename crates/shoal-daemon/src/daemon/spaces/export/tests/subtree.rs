@@ -293,7 +293,11 @@ async fn a_selection_leaves_the_other_spaces_below_one_level_up() {
         panic!("the hold waits for approval");
     };
     let decider = async || {
-        let request = manager.approval_by_key(&request.key).await.unwrap();
+        let request = manager
+            .coordination
+            .approval_by_key(&request.key)
+            .await
+            .unwrap();
         request.unwrap().decider
     };
     assert_eq!(decider().await, Some(worker.id.clone()));

@@ -81,7 +81,8 @@ impl Manager {
         }
         let message = format!("starting {} warned: {}", space.name, warnings.join("; "));
         let kind = AlertKind::StartWarned;
-        self.notify_space(&space.name, &space.id, kind, message)
+        self.coordination
+            .notify_space(self, &space.name, &space.id, kind, message)
             .await;
     }
 

@@ -47,7 +47,7 @@ impl Spaces for Manager {
         &'a self,
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Vec<Space>>> {
-        Box::pin(self.visible_spaces(caller))
+        Box::pin(self.coordination.visible_spaces(self, caller))
     }
 
     fn workspace_below<'a>(
@@ -57,7 +57,9 @@ impl Spaces for Manager {
         refusal: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            self.workspace_below(caller, space, refusal).await?;
+            self.coordination
+                .workspace_below(self, caller, space, refusal)
+                .await?;
             Ok(())
         })
     }
@@ -66,7 +68,7 @@ impl Spaces for Manager {
         &'a self,
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Vec<QueueEntry>>> {
-        Box::pin(self.reachable_queue(caller))
+        Box::pin(self.coordination.reachable_queue(self, caller))
     }
 
     fn agent_of<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Agent>>> {
@@ -168,7 +170,10 @@ impl Spaces for Manager {
         change: &'a PermissionChange,
         repository: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.ensure_change_held(giver, space, change, repository))
+        Box::pin(
+            self.coordination
+                .ensure_change_held(self, giver, space, change, repository),
+        )
     }
 
     fn ensure_agent_held<'a>(
@@ -178,7 +183,10 @@ impl Spaces for Manager {
         mode: &'a ModeName,
         given: &'a PermissionsConfig,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.ensure_agent_held(giver, space, mode, given))
+        Box::pin(
+            self.coordination
+                .ensure_agent_held(self, giver, space, mode, given),
+        )
     }
 
     fn verify_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>> {

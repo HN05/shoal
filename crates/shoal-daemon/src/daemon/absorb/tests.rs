@@ -210,7 +210,9 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
     fs::write(&screenshot, "png").unwrap();
     let caller = crate::daemon::test_support::caller_in(&SpaceSelector::id(&worker.id));
     let thread = manager
+        .coordination
         .open_thread(
+            &*manager,
             Some(&caller),
             "Which database?".into(),
             ThreadKind::Question,
@@ -225,7 +227,8 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
     };
     let attached = vec![NewFile::from(screenshot)];
     let number = ThreadNumber::Full(thread.number);
-    (manager.post_to_thread(
+    (manager.coordination.post_to_thread(
+        &*manager,
         Some(&caller),
         number,
         post,
@@ -250,7 +253,9 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
 
     assert_eq!(absorbed.threads.len(), 1);
     let listing = manager
+        .coordination
         .threads(
+            &*manager,
             Some(&SpaceSelector::id(&parent.id)),
             ThreadState::Open,
             false,

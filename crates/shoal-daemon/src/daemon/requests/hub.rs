@@ -99,7 +99,7 @@ async fn authorize(manager: &Manager, method: &HubMethod, caller: Option<&Caller
         .into()),
         HubMethod::UpdateHub => {
             let action = Action::new(PermissionKey::Daemon, "shoal hub update");
-            manager.authorize_action(Some(caller), action).await
+            manager.coordination.authorize_action(manager, Some(caller), action).await
         }
         _ => Err(Refusal::new(
             Reason::NotReady,

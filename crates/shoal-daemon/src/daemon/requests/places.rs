@@ -76,7 +76,10 @@ impl Scoped for PlaceMethod {
             // given instead of resolved.
             PlaceMethod::CloseOwnedPlace { workspace, .. } => {
                 ensure!(
-                    manager.reaches(caller, workspace).await?,
+                    manager
+                        .coordination
+                        .reaches(manager, caller, workspace)
+                        .await?,
                     "workspace processes close only the places of their own space and those below it"
                 );
                 None

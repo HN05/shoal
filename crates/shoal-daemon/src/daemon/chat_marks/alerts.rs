@@ -160,14 +160,20 @@ impl Manager {
 
     /// Whom an alert sent up from `space` reaches now.
     async fn recipient_up(&self, space: &Space) -> Result<MarkedRecipients> {
-        Ok(match self.route_up(&space.id, Source::Agent).await? {
-            Recipients::User => MarkedRecipients::User,
-            Recipients::Coordinator(id) => MarkedRecipients::Coordinator {
-                space: recipient(&self.space(&SpaceSelector::id(&id)).await?),
+        Ok(
+            match self
+                .coordination
+                .route_up(self, &space.id, Source::Agent)
+                .await?
+            {
+                Recipients::User => MarkedRecipients::User,
+                Recipients::Coordinator(id) => MarkedRecipients::Coordinator {
+                    space: recipient(&self.space(&SpaceSelector::id(&id)).await?),
+                },
+                Recipients::Above(_) => MarkedRecipients::Above,
+                Recipients::Spaces(_) => bail!("an alert sent up reaches one recipient"),
             },
-            Recipients::Above(_) => MarkedRecipients::Above,
-            Recipients::Spaces(_) => bail!("an alert sent up reaches one recipient"),
-        })
+        )
     }
 
     /// The name of the repository `selector` names, as text shows it.
@@ -191,9 +197,15 @@ impl Manager {
             attachments,
             recipients,
         } = alert;
-        self.scope_alert_target(&caller, &mut to).await?;
+        self.coordination
+            .scope_alert_target(self, &caller, &mut to)
+            .await?;
         let text = alert_text(&to, message.as_deref());
-        let sent = held_as_sent(self.send_alert(Some(&caller), to, text, attachments).await)?;
+        let sent = held_as_sent(
+            self.coordination
+                .send_alert(self, Some(&caller), to, text, attachments)
+                .await,
+        )?;
         let here = recorded_here(&recipients, sent);
         self.store.write(move |tx| mark_in_chat(tx, &here)).await
     }

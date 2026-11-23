@@ -124,7 +124,13 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     );
     assert_eq!(again.key, request.key);
     // A pending push keeps the workspace from unattended removal.
-    assert!(manager.has_pending_push(&workspace.id).await.unwrap());
+    assert!(
+        manager
+            .coordination
+            .has_pending_push(&workspace.id)
+            .await
+            .unwrap()
+    );
 
     // A newer commit replaces it, and the old request stays outdated.
     std::fs::write(workspace.path.join("tracked"), "changed\n").unwrap();
@@ -143,6 +149,7 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     );
     assert_ne!(newer.key, request.key);
     let old = manager
+        .coordination
         .approval_by_key(&request.key)
         .await
         .unwrap()
@@ -192,6 +199,7 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
         "{subject}"
     );
     let retired = manager
+        .coordination
         .approval_by_key(&separate.key)
         .await
         .unwrap()
@@ -228,17 +236,35 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
             .await
             .unwrap(),
     );
-    let approve = || manager.decide_approval(request.number, true, None, Default::default(), None);
+    let approve = || {
+        manager.coordination.decide_approval(
+            &*manager,
+            request.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
+    };
     let running = approve().await.unwrap();
     assert_eq!(running.status, DecisionStatus::Pending);
     assert!(running.operation.is_some());
     // The push lands whatever happens to the request, so nothing else
     // decides, withdraws or replaces it while the push runs.
     assert!(approve().await.is_err());
-    let denied = manager.decide_approval(request.number, false, None, Default::default(), None);
+    let denied = manager.coordination.decide_approval(
+        &*manager,
+        request.number,
+        false,
+        None,
+        Default::default(),
+        None,
+    );
     assert!(denied.await.is_err());
     let selected = SpaceSelector::id(&workspace.id);
-    let withdrawn = manager.withdraw_approval(&selected, request.number);
+    let withdrawn = manager
+        .coordination
+        .withdraw_approval(&*manager, &selected, request.number);
     assert!(withdrawn.await.is_err());
     std::fs::write(workspace.path.join("tracked"), "changed\n").unwrap();
     commit(&workspace.path, "tracked");
@@ -258,6 +284,7 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
         .await
         .unwrap_err();
     let kept = manager
+        .coordination
         .approval_by_key(&request.key)
         .await
         .unwrap()
@@ -273,6 +300,7 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     assert_eq!(decided.status, DecisionStatus::Approved);
     assert!(
         manager
+            .coordination
             .approval_by_key(&request.key)
             .await
             .unwrap()
@@ -300,7 +328,16 @@ async fn an_exit_that_waits_keeps_an_approved_push_pending() {
         Some(&caller),
     );
     let request = proposed(requested.await.unwrap());
-    let approve = || manager.decide_approval(request.number, true, None, Default::default(), None);
+    let approve = || {
+        manager.coordination.decide_approval(
+            &*manager,
+            request.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
+    };
     let held = manager.gates.hold_back(crate::protocol::Exit::Restart);
     let error = approve().await.unwrap_err();
     assert!(
@@ -309,6 +346,7 @@ async fn an_exit_that_waits_keeps_an_approved_push_pending() {
             .is_some()
     );
     let kept = manager
+        .coordination
         .approval_by_key(&request.key)
         .await
         .unwrap()
@@ -337,10 +375,19 @@ async fn approving_a_push_of_a_branch_that_moved_outdates_it() {
     std::fs::write(workspace.path.join("tracked"), "changed\n").unwrap();
     commit(&workspace.path, "tracked");
     manager
-        .decide_approval(request.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            request.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap_err();
     let outdated = manager
+        .coordination
         .approval_by_key(&request.key)
         .await
         .unwrap()
@@ -391,7 +438,14 @@ async fn deny_refuses_scoped_pushes_and_lets_the_user_push() {
             .await
             .unwrap()
     );
-    assert!(manager.approval_requests(None).await.unwrap().is_empty());
+    assert!(
+        manager
+            .coordination
+            .approval_requests(&*manager, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -442,17 +496,25 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
 
     // The worker proposes its own pushes, so it may only deny or pass up.
     let deciding = Caller::of_space(worker.id.clone());
-    let approved =
-        manager.decide_routed_approval(&deciding, request.number, true, None, Default::default());
+    let approved = manager.coordination.decide_routed_approval(
+        &*manager,
+        &deciding,
+        request.number,
+        true,
+        None,
+        Default::default(),
+    );
     assert!(approved.await.is_err());
     assert_eq!(
         decider(request.number).await,
         (Some(worker.id.clone()), DecisionStatus::Pending)
     );
     let selected = SpaceSelector::id(&worker.id);
-    (manager.escalate_approval(None, &selected, request.number, None))
-        .await
-        .unwrap();
+    (manager
+        .coordination
+        .escalate_approval(&*manager, None, &selected, request.number, None))
+    .await
+    .unwrap();
     assert_eq!(
         decider(request.number).await,
         (Some(top.id.clone()), DecisionStatus::Pending)
@@ -460,7 +522,9 @@ async fn a_parent_approves_a_push_only_with_its_own_push_permission() {
 
     // The chat pushes directly, so it approves as the user would.
     let running = manager
+        .coordination
         .decide_routed_approval(
+            &*manager,
             &Caller::of_space(top.id.clone()),
             request.number,
             true,

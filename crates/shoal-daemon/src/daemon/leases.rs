@@ -124,7 +124,7 @@ fn recorded_executions(db: &Connection) -> Result<HashMap<ExecutionId, bool>> {
 
 impl Approvals for Manager {
     fn announce<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
-        Box::pin(self.notify_approval(request))
+        Box::pin(self.coordination.notify_approval(self, request))
     }
 }
 

@@ -71,7 +71,8 @@ impl Manager {
             self.agents
                 .ensure_may_replace(self, caller, &mut selector, launch.replace)
                 .await?;
-            self.worker_target(caller, &mut selector, mode, given)
+            self.coordination
+                .worker_target(self, caller, &mut selector, mode, given)
                 .await?;
         }
         let workspace = self.workspace(&selector).await?;
@@ -110,9 +111,15 @@ impl Manager {
             .agents
             .ensure_may_replace(self, caller, selector, launch.replace))
         .await?;
-        let target = self.worker_target(caller, selector, mode, given).await?;
+        let target = self
+            .coordination
+            .worker_target(self, caller, selector, mode, given)
+            .await?;
         if launch.now {
-            (self.authorize_start_beyond_limits(caller, "start", target)).await?;
+            (self
+                .coordination
+                .authorize_start_beyond_limits(self, caller, "start", target))
+            .await?;
         }
         Ok(())
     }

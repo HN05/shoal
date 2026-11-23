@@ -217,7 +217,12 @@ async fn a_refused_pr_merge_asks_for_no_approval() {
     let refused = scoped.unwrap_err().to_string();
     assert!(refused.contains(f.head.short()), "{refused}");
     let selector = SpaceSelector::id(&f.workspace.id);
-    let requests = f.manager.approval_requests(Some(&selector)).await.unwrap();
+    let requests = f
+        .manager
+        .coordination
+        .approval_requests(&*f.manager, Some(&selector))
+        .await
+        .unwrap();
     assert!(requests.is_empty(), "{requests:?}");
 }
 

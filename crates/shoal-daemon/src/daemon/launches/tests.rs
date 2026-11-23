@@ -114,7 +114,10 @@ async fn another_machine_s_caller_reads_a_launch_s_items_through_the_checkout() 
     let manager = &daemon.manager;
     let workspace = daemon.workspace("here").await;
     let repository = &daemon.repository.id;
-    let permissions = manager.space_permissions(&workspace.id, Some(repository));
+    let permissions =
+        manager
+            .coordination
+            .space_permissions(&**manager, &workspace.id, Some(repository));
     let space = SpaceId::generate();
     let vouched = VouchedSpace {
         space: space.clone(),

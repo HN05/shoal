@@ -76,11 +76,11 @@ impl Manager {
     /// parent, a workspace's branch and what it builds on, its open
     /// threads and its queued work.
     async fn record_state(&self, space: &Space) -> Result<serde_json::Value> {
-        let threads: Vec<_> = (self.open_threads().await?.into_iter())
+        let threads: Vec<_> = (self.coordination.open_threads().await?.into_iter())
             .filter(|thread| thread.space_id == space.id)
             .collect();
         // Without its place in the queue, which other spaces' work moves.
-        let queued: Vec<_> = (self.visible_queue().await?.into_iter())
+        let queued: Vec<_> = (self.coordination.visible_queue(self).await?.into_iter())
             .filter(|entry| entry.space_id.as_ref() == Some(&space.id))
             .map(|entry| json!([entry.id, entry.kind, entry.state, entry.blockers]))
             .collect();

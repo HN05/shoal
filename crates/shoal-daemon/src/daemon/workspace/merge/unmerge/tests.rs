@@ -666,7 +666,15 @@ async fn an_agents_unmerge_waits_for_approval_of_the_merge_it_undoes() {
     );
     assert_eq!(f.main(), result);
     f.manager
-        .decide_approval(pending.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*f.manager,
+            pending.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     let started = begin().await.unwrap();

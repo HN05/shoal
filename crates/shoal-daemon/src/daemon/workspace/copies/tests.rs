@@ -550,7 +550,10 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
             workspace: SpaceSelector::id(&workspace.id),
             checkpoint: None,
         };
-        let result = manager.copy_within(&caller, &mut source).await;
+        let result = manager
+            .coordination
+            .copy_within(&**manager, &caller, &mut source)
+            .await;
         assert_eq!(result.is_ok(), allowed, "{}", workspace.name);
         if allowed {
             assert_eq!(source.workspace, SpaceSelector::id(&workspace.id));
@@ -572,7 +575,13 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         workspace: SpaceSelector::id(&other.id),
         checkpoint: Some(checkpoint.number),
     };
-    assert!(manager.copy_within(&caller, &mut removed).await.is_err());
+    assert!(
+        manager
+            .coordination
+            .copy_within(&**manager, &caller, &mut removed)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]

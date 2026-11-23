@@ -407,7 +407,15 @@ async fn an_agent_places_its_own_hold_only_while_approved() {
     // check and its hold, nothing is placed.
     place().await.unwrap_err();
     manager
-        .decide_approval(requested.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            requested.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     place().await.unwrap();
@@ -504,7 +512,15 @@ async fn a_chats_agent_holds_its_own_chat_once_approved() {
     assert_eq!(requested.space_id, chat.id);
     assert!(!manager.has_holds(&chat.id).await.unwrap());
     manager
-        .decide_approval(requested.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            requested.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     let holds = manager.holds(&selected).await.unwrap();
@@ -529,14 +545,30 @@ async fn an_approval_decided_during_a_removal_places_no_hold() {
     };
     let removal = manager.space_removals.reserve(&chat.id).unwrap();
     manager
-        .decide_approval(requested.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            requested.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap_err();
     assert!(!manager.has_holds(&chat.id).await.unwrap());
     // The request stays undecided, so the decision can be made again.
     drop(removal);
     manager
-        .decide_approval(requested.number, true, None, Default::default(), None)
+        .coordination
+        .decide_approval(
+            &*manager,
+            requested.number,
+            true,
+            None,
+            Default::default(),
+            None,
+        )
         .await
         .unwrap();
     assert!(manager.has_holds(&chat.id).await.unwrap());

@@ -225,7 +225,9 @@ impl Manager {
     ) -> Result<Option<MemberId>> {
         let mut parent = launch.parent.clone();
         if let Some(caller) = caller {
-            self.parent_below(caller, &mut parent).await?;
+            self.coordination
+                .parent_below(self, caller, &mut parent)
+                .await?;
         }
         let Some(parent) = parent else {
             return Ok(None);

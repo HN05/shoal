@@ -78,7 +78,12 @@ impl Relayed<'_> {
         let mut checks = tokio::time::interval(super::SCOPE_CHECK);
         loop {
             checks.tick().await;
-            if let Ok(false) = self.manager.still_scoped(self.scope).await {
+            if let Ok(false) = self
+                .manager
+                .coordination
+                .still_scoped(self.manager, self.scope)
+                .await
+            {
                 return;
             }
         }

@@ -334,7 +334,11 @@ impl Manager {
     /// a move after its space left this machine, or one in a space its
     /// scope reaches.
     async fn follows(&self, caller: &Caller, entry: &Entry) -> Result<bool> {
-        Ok(entry.started_by(caller) || self.reaches(caller, &entry.workspace).await?)
+        Ok(entry.started_by(caller)
+            || self
+                .coordination
+                .reaches(self, caller, &entry.workspace)
+                .await?)
     }
 
     /// The operation `named` names, refusing a scoped caller one outside

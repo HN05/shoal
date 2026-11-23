@@ -285,12 +285,19 @@ impl Manager {
         cause: crate::model::EventCause,
     ) -> Result<()> {
         let expires_at = self.removed_files_expiry(space).await;
-        let id = space.id.to_owned();
+        let (id, outside) = (
+            space.id.to_owned(),
+            super::coordination::CoordinationRecords(self.space_removals.clone()),
+        );
         let deleted = (self.store)
-            .write(move |tx| delete_record(tx, &id, cause, expires_at))
+            .write(move |tx| delete_record(tx, &outside, &id, cause, expires_at))
             .await?;
-        self.ask_user_about(&deleted.released).await;
-        self.announce_threads(deleted.threads).await;
+        self.coordination
+            .ask_user_about(self, &deleted.released)
+            .await;
+        self.coordination
+            .announce_threads(self, deleted.threads)
+            .await;
         if let Some(id) = deleted.notification {
             self.notifications.recorded(id);
         }
@@ -320,7 +327,10 @@ impl Manager {
         }
         for warning in warnings {
             let kind = AlertKind::UnassignFailed;
-            (self.notify_space(&space.name, &space.id, kind, warning)).await;
+            (self
+                .coordination
+                .notify_space(self, &space.name, &space.id, kind, warning))
+            .await;
         }
     }
 
@@ -378,6 +388,7 @@ struct Deleted {
 /// `expires_at`, and its open threads close.
 fn delete_record(
     tx: &rusqlite::Transaction<'_>,
+    outside: &super::coordination::CoordinationRecords,
     id: &SpaceId,
     cause: crate::model::EventCause,
     expires_at: UnixTime,
@@ -394,7 +405,12 @@ fn delete_record(
     let released = release_decided_by(tx, id)?;
     let assignees = links::issue::removed_assignees(tx, id)?;
     let issues = links::issue::removed_issues(tx, id)?;
-    let (_, threads) = threads::close(tx, id, shoal_protocol::threads::CloseCause::Removal)?;
+    let (_, threads) = threads::close(
+        tx,
+        outside,
+        id,
+        shoal_protocol::threads::CloseCause::Removal,
+    )?;
     ensure!(
         spaces::records::remove(tx, id)?,
         "the space was removed meanwhile"

@@ -73,7 +73,10 @@ impl Manager {
     /// The effective permissions of `space` in its own repository, or for a
     /// chat without one in the global config.
     async fn status_permissions(&self, space: &Space) -> Result<Permissions> {
-        (self.space_permissions(&space.id, space.repository_id.as_ref())).await
+        (self
+            .coordination
+            .space_permissions(self, &space.id, space.repository_id.as_ref()))
+        .await
     }
 
     /// What the status of `space` shows for its kind, and the directory

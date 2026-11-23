@@ -211,7 +211,14 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
         .await
         .unwrap();
     bounded(stopping).await.unwrap().unwrap();
-    assert!(manager.caller(&token).await.unwrap().is_none());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -343,7 +350,8 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
         );
         assert!(
             manager
-                .caller(&started.plan.scope_token)
+                .coordination
+                .caller(&*manager, &started.plan.scope_token)
                 .await
                 .unwrap()
                 .is_none()
@@ -540,7 +548,14 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     crate::daemon::quarantine::interrupted_operations(&manager.store)
         .await
         .unwrap();
-    assert!(manager.caller(&token).await.unwrap().is_none());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_none()
+    );
     let request = Reattach {
         narrowing: Default::default(),
         mode: None,
@@ -598,7 +613,12 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
         .unwrap();
     assert_eq!(&reattached.space.id, &workspace.id);
     assert!(manager.agents.executions().is_connected(&id).await);
-    let caller = manager.caller(&token).await.unwrap().unwrap();
+    let caller = manager
+        .coordination
+        .caller(&*manager, &token)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(caller.execution_id(), Some(&id));
     assert_eq!(caller.kind(), Some(ExecutionKind::Command));
     assert!(

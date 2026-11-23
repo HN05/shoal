@@ -79,7 +79,9 @@ async fn replay_drains_multiple_batches_and_live_readers_do_not_consume_notifica
     let (_temp, manager) = manager().await;
     seed(&manager, 205).await;
     manager
+        .coordination
         .notify(
+            &*manager,
             Some(&"worker".into()),
             AlertKind::SpaceRemoved,
             "idle cleanup",

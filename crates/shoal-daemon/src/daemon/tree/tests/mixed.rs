@@ -76,6 +76,7 @@ pub(super) async fn decider(
     secret: &str,
 ) -> Option<SpaceId> {
     let requested = manager
+        .coordination
         .request_approval(ApprovalRequest::new(
             &workspace.id,
             Target::Secret(secret.into()),
@@ -90,8 +91,15 @@ pub(super) async fn decider(
         .await
         .unwrap()
         .unwrap();
-    manager.notify_approval(&requested).await;
-    let routed = manager.approval_request(requested.number).await.unwrap();
+    manager
+        .coordination
+        .notify_approval(manager, &requested)
+        .await;
+    let routed = manager
+        .coordination
+        .approval_request(requested.number)
+        .await
+        .unwrap();
     routed.unwrap().decider
 }
 
@@ -131,7 +139,9 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         Some(chat.id.clone())
     );
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),
@@ -161,7 +171,9 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         Some(root.id.clone())
     );
     manager
+        .coordination
         .send_alert(
+            &*manager,
             Some(&crate::daemon::test_support::caller_in(&SpaceSelector::id(
                 &worker.id,
             ))),

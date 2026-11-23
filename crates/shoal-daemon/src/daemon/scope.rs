@@ -10,13 +10,9 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 
-mod access;
-mod reach;
 mod read_only;
-pub(crate) mod tokens;
 
-use reach::outside_scope;
-pub use shoal_daemon_base::callers::{Caller, ScopedExecution};
+pub use shoal_coordination::scope::{Caller, ScopedExecution, outside_scope, tokens};
 
 /// Resolve `token`, which may stand for a caller another machine vouches
 /// for, and confine `method` to the spaces the caller's scope reaches: its own space, a workspace or a chat, and the spaces below it,
@@ -36,7 +32,8 @@ pub(crate) async fn authorize(
         Some(None) => return Ok(None),
         Some(Some(caller)) => caller,
         None => manager
-            .caller(token)
+            .coordination
+            .caller(manager, token)
             .await?
             .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?,
     };
@@ -66,7 +63,7 @@ pub(in crate::daemon) async fn confine_target(
     }
     let space = manager.space(target).await?;
     let id = space.id.to_owned();
-    if !manager.reaches(caller, &id).await? {
+    if !manager.coordination.reaches(manager, caller, &id).await? {
         let home = manager.chat_home(&caller.space_id).await?;
         ensure!(home.as_ref() == Some(&id), "{}", outside_scope(&space));
         ensure!(
@@ -208,7 +205,10 @@ pub(super) async fn inspect_owner(
 ) -> Result<()> {
     if let Some(caller) = caller {
         ensure!(
-            manager.reaches(caller, workspace).await?,
+            manager
+                .coordination
+                .reaches(manager, caller, workspace)
+                .await?,
             "workspace processes inspect only {kind} in their workspace tree"
         );
     }

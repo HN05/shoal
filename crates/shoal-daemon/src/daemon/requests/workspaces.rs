@@ -215,13 +215,19 @@ impl Scoped for WorkspaceMethod {
             ..
         } = self
         {
-            manager.copy_within(caller, source).await?;
+            manager
+                .coordination
+                .copy_within(manager, caller, source)
+                .await?;
         }
         Ok(match self {
             // A copy's source is confined as a copy that starts a space is,
             // which tells a scoped caller what to do about a removed one.
             WorkspaceMethod::CopyOrigin { source } => {
-                manager.copy_within(caller, source).await?;
+                manager
+                    .coordination
+                    .copy_within(manager, caller, source)
+                    .await?;
                 None
             }
             // A scoped caller opens workspaces only below its own space,
@@ -255,7 +261,10 @@ impl Scoped for WorkspaceMethod {
             // The inbox lists them with the user's notifications.
             WorkspaceMethod::UntrackedWorktrees => {
                 let action = Action::new(PermissionKey::Notifications, "the untracked worktrees");
-                manager.authorize_action(Some(caller), action).await?;
+                manager
+                    .coordination
+                    .authorize_action(manager, Some(caller), action)
+                    .await?;
                 None
             }
             WorkspaceMethod::ReopenWorkspace { .. } | WorkspaceMethod::AdoptWorkspace { .. } => {
@@ -276,19 +285,31 @@ async fn administer<'a>(
     let repository = match method {
         WorkspaceMethod::AdoptWorkspace { repository, .. } => {
             const REFUSAL: &str = "scoped processes adopt worktrees only in their own repository";
-            *repository = manager.own_repository(caller, repository, REFUSAL).await?;
+            *repository = manager
+                .coordination
+                .own_repository(manager, caller, repository, REFUSAL)
+                .await?;
             Some(manager.repositories.repository(&*repository).await?.id)
         }
         _ => None,
     };
     manager
-        .ensure_selected_reached(caller, administered(method))
+        .coordination
+        .ensure_selected_reached(manager, caller, administered(method))
         .await?;
     let repository = match (administered(method), repository) {
-        (Some(space), None) => manager.space_repository(space).await?,
+        (Some(space), None) => {
+            manager
+                .coordination
+                .space_repository(manager, space)
+                .await?
+        }
         (_, repository) => repository,
     };
-    manager.administer(caller, &*method, repository).await?;
+    manager
+        .coordination
+        .administer(manager, caller, &*method, repository)
+        .await?;
     Ok(administered(method))
 }
 

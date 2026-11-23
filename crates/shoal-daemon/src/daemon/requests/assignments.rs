@@ -84,7 +84,9 @@ impl Scoped for AssignmentMethod {
             | AssignmentMethod::ClearReady { space, .. } => Some(space),
             AssignmentMethod::DiscardStoppedAgent { space, .. } => Some(
                 manager
+                    .coordination
                     .workspace_below(
+                        manager,
                         caller,
                         space,
                         "scoped processes discard stopped agents only in the spaces below theirs",
@@ -99,10 +101,16 @@ impl Scoped for AssignmentMethod {
                 // A launch waiting for a failed setup or a failed launch is
                 // a space's restore, as a stopped agent is.
                 for agent in agents {
-                    manager.stopped_below(caller, &mut agent.workspace).await?;
+                    manager
+                        .coordination
+                        .stopped_below(manager, caller, &mut agent.workspace)
+                        .await?;
                 }
                 for space in launches {
-                    manager.stopped_below(caller, space).await?;
+                    manager
+                        .coordination
+                        .stopped_below(manager, caller, space)
+                        .await?;
                 }
                 None
             }

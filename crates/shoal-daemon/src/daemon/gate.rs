@@ -45,7 +45,7 @@ impl Requesters for Manager {
         id: &'a SpaceId,
         repository: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<Permissions>> {
-        Box::pin(self.space_permissions(id, repository))
+        Box::pin(self.coordination.space_permissions(self, id, repository))
     }
 
     fn tell_space<'a>(
@@ -54,11 +54,11 @@ impl Requesters for Manager {
         kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, bool> {
-        Box::pin(Manager::tell_space(self, id, kind, message))
+        Box::pin(self.coordination.tell_space(self, id, kind, message))
     }
 
     fn notify(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
-        Box::pin(self.notify_about(about, kind, message))
+        Box::pin(self.coordination.notify_about(self, about, kind, message))
     }
 
     fn issue_scope(&self, caller: &Caller) -> ScopeToken {
@@ -75,13 +75,16 @@ impl Approvals for Manager {
         Box::pin(async move {
             let shown = Some(allowed.clone());
             let details = ProposalDecision::default();
-            (self.decide_approval(allowed.number, true, shown, details, None)).await?;
+            (self
+                .coordination
+                .decide_approval(self, allowed.number, true, shown, details, None))
+            .await?;
             Ok(())
         })
     }
 
     fn announce<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
-        Box::pin(self.notify_approval(request))
+        Box::pin(self.coordination.notify_approval(self, request))
     }
 
     fn prune_proposal_files<'a>(&'a self, denied: &'a ApprovalRequest) -> BoxFuture<'a, ()> {

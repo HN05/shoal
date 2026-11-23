@@ -17,7 +17,7 @@ impl Permissions for Manager {
         caller: Option<&'a Caller>,
         action: Action,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::authorize_action(self, caller, action))
+        Box::pin(self.coordination.authorize_action(self, caller, action))
     }
 
     fn caller_permissions<'a>(
@@ -25,7 +25,10 @@ impl Permissions for Manager {
         caller: &'a Caller,
         repository: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<permissions::Permissions>> {
-        Box::pin(Manager::caller_permissions(self, caller, repository))
+        Box::pin(
+            self.coordination
+                .caller_permissions(self, caller, repository),
+        )
     }
 
     fn authorize_actions<'a>(
@@ -33,7 +36,7 @@ impl Permissions for Manager {
         caller: Option<&'a Caller>,
         actions: Vec<Action>,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::authorize_actions(self, caller, actions))
+        Box::pin(self.coordination.authorize_actions(self, caller, actions))
     }
 
     fn refuse_denied<'a>(
@@ -42,6 +45,9 @@ impl Permissions for Manager {
         key: PermissionKey,
         repository: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(Manager::refuse_denied(self, caller, key, repository))
+        Box::pin(
+            self.coordination
+                .refuse_denied(self, caller, key, repository),
+        )
     }
 }

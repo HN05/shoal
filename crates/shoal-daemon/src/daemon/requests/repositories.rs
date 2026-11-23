@@ -26,12 +26,18 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        RepositoryMethod::ListRepositories => {
-            Body::Repositories(manager.visible_repositories(caller).await?)
-        }
-        RepositoryMethod::RepositoriesElsewhere => {
-            Body::RepositoriesElsewhere(manager.visible_repositories_elsewhere(caller).await?)
-        }
+        RepositoryMethod::ListRepositories => Body::Repositories(
+            manager
+                .coordination
+                .visible_repositories(&**manager, caller)
+                .await?,
+        ),
+        RepositoryMethod::RepositoriesElsewhere => Body::RepositoriesElsewhere(
+            manager
+                .coordination
+                .visible_repositories_elsewhere(&**manager, caller)
+                .await?,
+        ),
         RepositoryMethod::RegisterRepository {
             source,
             name,
@@ -179,7 +185,10 @@ async fn administered_repository(
     method: &mut RepositoryMethod,
 ) -> Result<Option<RepositoryId>> {
     let own = async |named: &crate::repository::Selector| {
-        let selected = manager.own_repository(caller, named, OWN).await?;
+        let selected = manager
+            .coordination
+            .own_repository(manager, caller, named, OWN)
+            .await?;
         Ok::<_, anyhow::Error>(manager.repositories.repository(&selected).await?.id)
     };
     Ok(match method {
@@ -200,7 +209,12 @@ async fn administered_repository(
         RepositoryMethod::KeptBranches { repository } => {
             let named = match repository.as_deref() {
                 Some(named) => Some(own(&named.into()).await?),
-                None => manager.caller_repository(caller).await?,
+                None => {
+                    manager
+                        .coordination
+                        .caller_repository(manager, caller)
+                        .await?
+                }
             };
             *repository = named.as_ref().map(ToString::to_string);
             named
@@ -275,14 +289,18 @@ impl Scoped for RepositoryMethod {
             RepositoryMethod::HoldContribution { repository } => {
                 let key = PermissionKey::Admin;
                 manager
-                    .refuse_undirected(caller, key, Some(repository))
+                    .coordination
+                    .refuse_undirected(manager, caller, key, Some(repository))
                     .await?;
                 return Ok(None);
             }
             // The inbox lists them with the user's notifications.
             RepositoryMethod::FailingSyncs => {
                 let action = Action::new(PermissionKey::Notifications, "the failing syncs");
-                manager.authorize_action(Some(caller), action).await?;
+                manager
+                    .coordination
+                    .authorize_action(manager, Some(caller), action)
+                    .await?;
                 return Ok(None);
             }
             // It reads every space of the repository, as removing it takes
@@ -293,9 +311,18 @@ impl Scoped for RepositoryMethod {
                 machine,
             } => {
                 ensure_own_machine(manager, machine).await?;
-                *repository = manager.own_repository(caller, repository, OWN).await?;
+                *repository = manager
+                    .coordination
+                    .own_repository(manager, caller, repository, OWN)
+                    .await?;
                 let id = manager.repositories.repository(&*repository).await?.id;
-                (manager.refuse_undirected(caller, PermissionKey::Admin, Some(&id))).await?;
+                (manager.coordination.refuse_undirected(
+                    manager,
+                    caller,
+                    PermissionKey::Admin,
+                    Some(&id),
+                ))
+                .await?;
                 return Ok(None);
             }
             RepositoryMethod::RemoveRepository { machine, .. } => {
@@ -304,7 +331,9 @@ impl Scoped for RepositoryMethod {
             }
             RepositoryMethod::SyncRepository { repository } => {
                 *repository = manager
+                    .coordination
                     .own_repository(
+                        manager,
                         caller,
                         repository,
                         "workspace processes can only sync their own repository",
@@ -317,10 +346,16 @@ impl Scoped for RepositoryMethod {
         // An edit that would give more than the caller holds is refused
         // before it asks for approval.
         if let RepositoryMethod::EditLocalConfig { changes, .. } = self {
-            let held = manager.caller_permissions(caller, repository.as_ref());
+            let held =
+                manager
+                    .coordination
+                    .caller_permissions(manager, caller, repository.as_ref());
             crate::config::edit::ensure_permissions_held(changes, &held.await?)?;
         }
-        manager.administer(caller, self, repository).await?;
+        manager
+            .coordination
+            .administer(manager, caller, self, repository)
+            .await?;
         Ok(None)
     }
 }

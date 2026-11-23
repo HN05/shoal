@@ -40,7 +40,12 @@ pub(super) async fn handle(
         }
         AgentMethod::ListAgents => {
             let agents = manager.agents.running_agents().await?;
-            Body::RunningAgents(manager.visible_agents(caller, agents).await?)
+            Body::RunningAgents(
+                manager
+                    .coordination
+                    .visible_agents(&**manager, caller, agents)
+                    .await?,
+            )
         }
         AgentMethod::SpaceAgents { space } => {
             Body::RunningAgents(manager.agents.space_agents(&**manager, &space).await?)
@@ -329,7 +334,7 @@ impl Scoped for AgentMethod {
             | AgentMethod::StartWokenTurn { workspace }
             | AgentMethod::ReportTurnFailure { workspace, .. } => Some(
                 manager
-                    .own_workspace(
+                    .coordination.own_workspace(manager,
                         caller,
                         workspace,
                         "workspace processes report agent state only for their own workspace",
@@ -343,7 +348,7 @@ impl Scoped for AgentMethod {
             } => Some(space),
             AgentMethod::SetProgress { space, .. } => Some(
                 manager
-                    .own_workspace(
+                    .coordination.own_workspace(manager,
                         caller,
                         space,
                         "scoped processes set progress only for their own space",
@@ -358,7 +363,7 @@ impl Scoped for AgentMethod {
                 workspace: space, ..
             } => Some(
                 manager
-                    .workspace_below(
+                    .coordination.workspace_below(manager,
                         caller,
                         space,
                         "scoped processes interrupt and continue only the agents of the spaces below theirs",
@@ -367,7 +372,7 @@ impl Scoped for AgentMethod {
             ),
             AgentMethod::RestartAgent { space, .. } | AgentMethod::CancelRestart { space } => Some(
                 manager
-                    .workspace_below(
+                    .coordination.workspace_below(manager,
                         caller,
                         space,
                         "scoped processes restart only the agents of the spaces below their own",

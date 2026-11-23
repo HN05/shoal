@@ -26,7 +26,7 @@ use crate::{
 
 impl Approvals for Manager {
     fn announce<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()> {
-        Box::pin(self.notify_approval(request))
+        Box::pin(self.coordination.notify_approval(self, request))
     }
 
     fn ensure_gate_hears<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>> {
@@ -39,11 +39,11 @@ impl Approvals for Manager {
         kind: AlertKind,
         message: String,
     ) -> BoxFuture<'a, bool> {
-        Box::pin(Manager::tell_space(self, id, kind, message))
+        Box::pin(self.coordination.tell_space(self, id, kind, message))
     }
 
     fn notify_about(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
-        Box::pin(Manager::notify_about(self, about, kind, message))
+        Box::pin(self.coordination.notify_about(self, about, kind, message))
     }
 
     fn start_operation(
@@ -118,7 +118,7 @@ impl Manager {
         }
         let at_head = current_head(owner).await.ok().as_ref() == Some(head);
         let reached = match caller {
-            Some(caller) => self.reaches(caller, &owner.id).await?,
+            Some(caller) => self.coordination.reaches(self, caller, &owner.id).await?,
             None => true,
         };
         match at_head && reached {

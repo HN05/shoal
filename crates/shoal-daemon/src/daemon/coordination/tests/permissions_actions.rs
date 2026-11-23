@@ -1,0 +1,537 @@
+//! Taking an action a permission governs: at once, after approval, or not
+//! at all.
+use crate::{
+    config::permissions::PermissionKey,
+    daemon::{
+        approvals::{DecisionStatus, Target, Undecided},
+        scope::Caller,
+        test_support::{chat, manager, repository},
+    },
+};
+use shoal_daemon_base::permitted_actions::Action;
+
+fn caller(space: &shoal_ids::space_ids::SpaceId) -> Caller {
+    Caller {
+        space_id: space.clone(),
+        execution: None,
+        granted: None,
+        read_only: false,
+        vouched: None,
+    }
+}
+
+fn restart() -> Action {
+    Action::new(PermissionKey::Daemon, "shoal daemon restart")
+}
+
+/// The request `result` waits for or was refused by.
+fn undecided(result: anyhow::Result<()>) -> Box<crate::daemon::approvals::ApprovalRequest> {
+    let error = result.unwrap_err();
+    match error.downcast::<Undecided>() {
+        Ok(Undecided(request)) => request,
+        Err(error) => panic!("expected an approval request: {error:#}"),
+    }
+}
+
+#[tokio::test]
+async fn the_permission_takes_refuses_or_proposes_the_action() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
+    let config = "[modes.plan.permissions]\ndaemon = 'direct'\n\
+                  [modes.chat.permissions]\ndaemon = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let parent = chat(&manager, "parent", "plan", Some(&repo), None).await;
+    let child = chat(&manager, "child", "chat", Some(&repo), Some(&parent.id)).await;
+    let worker = chat(&manager, "worker", "worker", Some(&repo), None).await;
+
+    // The user and a direct permission act at once; deny refuses.
+    manager
+        .coordination
+        .authorize_action(&*manager, None, restart())
+        .await
+        .unwrap();
+    let direct = caller(&parent.id);
+    manager
+        .coordination
+        .authorize_action(&*manager, Some(&direct), restart())
+        .await
+        .unwrap();
+    let denying = caller(&worker.id);
+    let error = (manager
+        .coordination
+        .authorize_action(&*manager, Some(&denying), restart()))
+    .await
+    .unwrap_err();
+    assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
+    assert!(format!("{error:#}").contains("\"deny\""), "{error:#}");
+
+    // Propose asks the parent, which holds the key at direct; asking again
+    // finds the same request.
+    let proposing = caller(&child.id);
+    let request = undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&proposing), restart())
+            .await,
+    );
+    assert_eq!(request.target, Target::Action(PermissionKey::Daemon));
+    assert_eq!(request.status, DecisionStatus::Pending);
+    let again = undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&proposing), restart())
+            .await,
+    );
+    assert_eq!(again.key, request.key);
+    let routed = manager
+        .coordination
+        .show_approval(request.number)
+        .await
+        .unwrap();
+    assert_eq!(routed.decider.as_ref(), Some(&parent.id));
+    let shown = Some(routed);
+    (manager.coordination.decide_routed_approval(
+        &*manager,
+        &Caller::of_space(parent.id.clone()),
+        request.number,
+        true,
+        shown,
+        Default::default(),
+    ))
+    .await
+    .unwrap();
+
+    // The approval lets the same action proceed once.
+    (manager
+        .coordination
+        .authorize_action(&*manager, Some(&proposing), restart()))
+    .await
+    .unwrap();
+    let next = undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&proposing), restart())
+            .await,
+    );
+    assert_ne!(next.key, request.key);
+    assert_eq!(next.status, DecisionStatus::Pending);
+}
+
+#[tokio::test]
+async fn a_parent_without_the_key_at_direct_cannot_approve() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
+    let config = "[permissions]\ndaemon = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let parent = chat(&manager, "parent", "plan", Some(&repo), None).await;
+    let child = chat(&manager, "child", "chat", Some(&repo), Some(&parent.id)).await;
+    let request = undecided(
+        (manager
+            .coordination
+            .authorize_action(&*manager, Some(&caller(&child.id)), restart()))
+        .await,
+    );
+    let parent = Caller::of_space(parent.id.clone());
+    let refused = manager.coordination.decide_routed_approval(
+        &*manager,
+        &parent,
+        request.number,
+        true,
+        None,
+        Default::default(),
+    );
+    let error = refused.await.unwrap_err();
+    assert!(format!("{error:#}").contains("daemon"), "{error:#}");
+    (manager.coordination.decide_routed_approval(
+        &*manager,
+        &parent,
+        request.number,
+        false,
+        None,
+        Default::default(),
+    ))
+    .await
+    .unwrap();
+    let denied = undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&caller(&child.id)), restart())
+            .await,
+    );
+    assert_eq!(denied.status, DecisionStatus::Denied);
+}
+
+#[tokio::test]
+async fn an_approved_command_takes_its_permission_s_actions_without_asking_again() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
+    let config = "[permissions]\ndaemon = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let chat = chat(&manager, "chat", "chat", Some(&repo), None).await;
+    let asking = caller(&chat.id);
+    let command = || Action::new(PermissionKey::Daemon, "shoal daemon stop");
+    let request = undecided(
+        manager
+            .coordination
+            .grant_action(&*manager, Some(&asking), command())
+            .await
+            .map(drop),
+    );
+    (manager.coordination.decide_approval(
+        &*manager,
+        request.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    ))
+    .await
+    .unwrap();
+    let token = (manager
+        .coordination
+        .grant_action(&*manager, Some(&asking), command())
+        .await)
+        .unwrap()
+        .expect("an approval grants a token");
+
+    // The command's own requests take the permission's actions at once,
+    // as often as they come, while the space's other processes still ask.
+    let granted = manager
+        .coordination
+        .caller(&*manager, &token)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(granted.space_id, chat.id);
+    for _ in 0..2 {
+        (manager
+            .coordination
+            .authorize_action(&*manager, Some(&granted), restart()))
+        .await
+        .unwrap();
+    }
+    undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&asking), restart())
+            .await,
+    );
+}
+
+#[tokio::test]
+async fn administering_shoal_follows_the_admin_permission() {
+    use crate::{daemon::scope::Scoped, protocol::RecoveryMethod};
+
+    let (_temp, manager) = manager().await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let worker = chat(&manager, "worker", "chat", None, Some(&master.id)).await;
+    let repair = || RecoveryMethod::Reconcile {
+        workspace: None,
+        options: Default::default(),
+    };
+    // A master session administers at once; the chat below it asks it.
+    (repair().scope(&manager, &caller(&master.id)))
+        .await
+        .unwrap();
+    let mut asking = repair();
+    let request = undecided(asking.scope(&manager, &caller(&worker.id)).await.map(drop));
+    assert_eq!(request.target, Target::Action(PermissionKey::Admin));
+    let routed = manager
+        .coordination
+        .show_approval(request.number)
+        .await
+        .unwrap();
+    assert_eq!(routed.decider.as_ref(), Some(&master.id));
+}
+
+#[tokio::test]
+async fn releasing_the_user_s_hold_follows_the_user_holds_permission() {
+    use crate::model::HoldPlacer;
+    use shoal_protocol::space_names::SpaceSelector;
+
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let worker = crate::daemon::test_support::workspace_below(
+        &manager,
+        &repo,
+        "worker",
+        &master.id,
+        Some("worker".into()),
+    )
+    .await;
+    let selector = SpaceSelector::id(&worker.id);
+    let hold = || async {
+        (manager.acquire_hold(&selector, "keep".into(), None, HoldPlacer::User))
+            .await
+            .unwrap();
+    };
+    hold().await;
+    // The worker proposes releasing the user's hold; the master releases it.
+    let asking = caller(&worker.id);
+    let release = manager.release_hold_as(Some(&asking), &selector, "keep".into());
+    let request = undecided(release.await);
+    assert_eq!(request.target, Target::Action(PermissionKey::UserHolds));
+    (manager.release_hold_as(Some(&caller(&master.id)), &selector, "keep".into()))
+        .await
+        .unwrap();
+    assert!(manager.holds(&selector).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn reading_the_user_s_notifications_follows_the_notifications_permission() {
+    use crate::{daemon::scope::Scoped, protocol::AlertMethod};
+
+    let (_temp, manager) = manager().await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let below = chat(&manager, "below", "chat", None, Some(&master.id)).await;
+    let list = || AlertMethod::ListAlerts {
+        to: crate::protocol::AlertsFor::User,
+        unread_only: false,
+        limit: 10,
+    };
+    (list().scope(&manager, &caller(&master.id))).await.unwrap();
+    // Nothing asks approval for them: a denied space is refused.
+    let error = (list().scope(&manager, &caller(&below.id)))
+        .await
+        .unwrap_err();
+    assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
+}
+
+#[tokio::test]
+async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
+    let (_temp, manager) = manager().await;
+    let config = "[modes.chat.permissions]\ndaemon = 'propose'\n";
+    crate::daemon::test_support::configure(&manager, config).await;
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let lead = chat(&manager, "lead", "chat", None, Some(&master.id)).await;
+    let worker = chat(&manager, "worker", "chat", None, Some(&lead.id)).await;
+    let setup = || Action::new(PermissionKey::Admin, "shoal setup --skip 3");
+    let request = undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&caller(&worker.id)), setup())
+            .await,
+    );
+    let routed = manager
+        .coordination
+        .show_approval(request.number)
+        .await
+        .unwrap();
+    assert_eq!(routed.decider.as_ref(), Some(&lead.id));
+
+    // The lead neither decides as the user nor holds admin at direct; the
+    // master decides it, though it went to the lead.
+    let (leading, mastering) = (caller(&lead.id), caller(&master.id));
+    let refused = manager.coordination.decide_approval_as(
+        &*manager,
+        Some(&leading),
+        request.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
+    assert!(refused.await.is_err());
+    let decided = manager.coordination.decide_approval_as(
+        &*manager,
+        Some(&mastering),
+        request.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
+    assert_eq!(decided.await.unwrap().status, DecisionStatus::Approved);
+    (manager
+        .coordination
+        .authorize_action(&*manager, Some(&caller(&worker.id)), setup()))
+    .await
+    .unwrap();
+
+    // A key it only proposes stays the user's to approve, below it too,
+    // though it may deny.
+    let restart = || Action::new(PermissionKey::Daemon, "shoal daemon restart");
+    let below = undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&caller(&worker.id)), restart())
+            .await,
+    );
+    let approving = manager.coordination.decide_approval_as(
+        &*manager,
+        Some(&mastering),
+        below.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
+    let refused = format!("{:#}", approving.await.unwrap_err());
+    assert!(refused.contains("daemon"), "{refused}");
+    let denied = manager.coordination.decide_approval_as(
+        &*manager,
+        Some(&mastering),
+        below.number,
+        false,
+        None,
+        Default::default(),
+        None,
+    );
+    assert_eq!(denied.await.unwrap().status, DecisionStatus::Denied);
+
+    // Its own requests stay another's to decide.
+    let own = Action::new(PermissionKey::Daemon, "shoal daemon restart");
+    let own = undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&mastering), own)
+            .await,
+    );
+    assert!(
+        !manager
+            .coordination
+            .decides_as_user(&*manager, &mastering, &own)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
+    let config = "[modes.orchestrate.permissions]\nlimits = 'deny'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let start = || "start the agent of worker now".to_owned();
+    let mastering = caller(&master.id);
+    (manager
+        .coordination
+        .authorize_beyond_limits(&*manager, &mastering, start(), None))
+    .await
+    .unwrap();
+    let denied = manager.coordination.authorize_beyond_limits(
+        &*manager,
+        &mastering,
+        start(),
+        Some(repo.id.clone()),
+    );
+    let error = denied.await.unwrap_err();
+    assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
+}
+
+#[tokio::test]
+async fn a_decider_without_a_repository_decides_as_the_action_s_repository_allows() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
+    let config = "[modes.orchestrate.permissions]\nadmin = 'propose'\n";
+    (manager.write_local_config(&repo.id, Some(config.into())))
+        .await
+        .unwrap();
+    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    let below = chat(&manager, "below", "chat", None, Some(&master.id)).await;
+    let setup = Action::new(PermissionKey::Admin, "shoal setup --skip 3").in_repository(repo.id);
+    let request = undecided(
+        manager
+            .coordination
+            .authorize_action(&*manager, Some(&caller(&below.id)), setup)
+            .await,
+    );
+    // The repository holds the master session's admin to propose, so it
+    // may only deny or pass up what its global config would let it approve.
+    let mastering = caller(&master.id);
+    let approving = manager.coordination.decide_approval_as(
+        &*manager,
+        Some(&mastering),
+        request.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    );
+    let refused = format!("{:#}", approving.await.unwrap_err());
+    assert!(refused.contains("admin"), "{refused}");
+}
+
+#[tokio::test]
+async fn an_approval_to_release_a_hold_covers_only_the_space_it_names() {
+    use crate::model::HoldPlacer;
+    use shoal_protocol::space_names::SpaceSelector;
+
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = (manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None))
+    .await
+    .unwrap();
+    let lead = chat(&manager, "lead", "chat", Some(&repo), None).await;
+    let mut held = Vec::new();
+    for _ in 0..2 {
+        let child =
+            crate::daemon::test_support::workspace_below(&manager, &repo, "child", &lead.id, None)
+                .await;
+        let selector = SpaceSelector::id(&child.id);
+        (manager.acquire_hold(&selector, "keep".into(), None, HoldPlacer::User))
+            .await
+            .unwrap();
+        held.push(selector);
+    }
+    let leading = caller(&lead.id);
+    let release =
+        |index: usize| manager.release_hold_as(Some(&leading), &held[index], "keep".into());
+    let first = undecided(release(0).await);
+    (manager.coordination.decide_approval(
+        &*manager,
+        first.number,
+        true,
+        None,
+        Default::default(),
+        None,
+    ))
+    .await
+    .unwrap();
+    // The other space of the same name asks for its own approval.
+    let second = undecided(release(1).await);
+    assert_ne!(second.key, first.key);
+    release(0).await.unwrap();
+}

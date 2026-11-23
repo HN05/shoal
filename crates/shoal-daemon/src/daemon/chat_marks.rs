@@ -131,7 +131,10 @@ impl Manager {
     ) -> Result<ChatMarked> {
         let space = self.space(selector).await?;
         let turn = self.marked_turn(caller, &space).await?;
-        let thread = self.chat_post_thread(caller, &space, number).await?;
+        let thread = self
+            .coordination
+            .chat_post_thread(self, caller, &space, number)
+            .await?;
         self.mark_turn(turn, Mark::Post(thread.id)).await
     }
 
@@ -169,7 +172,11 @@ impl Manager {
             return Ok(());
         };
         let sent = match mark {
-            Mark::Post(thread) => self.post_marked(&space, thread, message).await,
+            Mark::Post(thread) => {
+                self.coordination
+                    .post_marked(self, &space, thread, message)
+                    .await
+            }
             Mark::Alert(alert) => (self.send_marked_alert(&space, turn, alert, message)).await,
         };
         if let Err(error) = &sent {
@@ -194,6 +201,7 @@ impl Manager {
         self.agents.note_interaction(self, selector).await;
         let space = self.space(selector).await?;
         let (turn, id) = (execution.cloned(), space.id.clone());
+        let outside = crate::daemon::coordination::CoordinationRecords(self.space_removals.clone());
         let (dropped, delivered) = self
             .store
             .write(move |tx| {
@@ -202,12 +210,16 @@ impl Manager {
                     None => None,
                 };
                 alerts::read_in_chat(tx, &id)?;
-                let delivered =
-                    crate::daemon::threads::record_chat_replies(tx, &id, prompt.as_deref())?;
+                let delivered = crate::daemon::threads::record_chat_replies(
+                    tx,
+                    &outside,
+                    &id,
+                    prompt.as_deref(),
+                )?;
                 Ok((dropped, delivered))
             })
             .await?;
-        self.announce_threads(delivered).await;
+        self.coordination.announce_threads(self, delivered).await;
         // The prompt answers a post the turn marked; an alert goes unsent.
         if let Some((Mark::Alert(_), shown)) = dropped {
             let why = "the user's prompt answered your turn";

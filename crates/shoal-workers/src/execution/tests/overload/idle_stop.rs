@@ -83,7 +83,9 @@ async fn an_update_restores_an_idle_agent_stopped_in_a_held_done_workspace() {
     let generation = manager.config_state.generation();
     manager.config_state.publish_disk_reading(Some(generation));
     manager
+        .coordination
         .send_space_message(
+            &*manager,
             None,
             &SpaceSelector::id(&workspace.id),
             "Review requested".into(),

@@ -430,9 +430,11 @@ async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive
         ..Resolving::default()
     };
     let number = ThreadNumber::Full(thread.number);
-    (manager.resolve_thread(Some(&agent), number, resolving))
-        .await
-        .unwrap();
+    (manager
+        .coordination
+        .resolve_thread(&**manager, Some(&agent), number, resolving))
+    .await
+    .unwrap();
     let path = (manager
         .repositories
         .false_positives_path(workspace.repository()))
@@ -450,9 +452,11 @@ async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive
     assert_eq!(shown.unresolved().count(), 0);
 
     // Reopening it drops it from the false positives.
-    (manager.resolve_thread(Some(&agent), number, Resolving::default()))
-        .await
-        .unwrap();
+    (manager
+        .coordination
+        .resolve_thread(&**manager, Some(&agent), number, Resolving::default()))
+    .await
+    .unwrap();
     let kept = std::fs::read_to_string(&path).unwrap();
     assert!(!kept.contains("The type names it."), "{kept}");
 }
@@ -479,7 +483,8 @@ async fn the_reviewer_answers_its_workspace_s_post_in_a_finding_s_thread() {
         ..NewPost::default()
     };
     let mut changed = manager.store.watch_changes();
-    (manager.post_to_thread(
+    (manager.coordination.post_to_thread(
+        &**manager,
         Some(&agent),
         number,
         post,
@@ -490,7 +495,11 @@ async fn the_reviewer_answers_its_workspace_s_post_in_a_finding_s_thread() {
     .await
     .unwrap();
     let answer = loop {
-        let thread = manager.thread(None, number).await.unwrap();
+        let thread = manager
+            .coordination
+            .thread(&**manager, None, number)
+            .await
+            .unwrap();
         if let [_, _, answer] = thread.posts.as_slice() {
             break answer.clone();
         }
@@ -518,18 +527,22 @@ async fn a_later_review_reopens_only_a_fixed_finding_of_its_workspace() {
         outcome: Some(OutcomeKind::Fixed),
         ..Resolving::default()
     };
-    (manager.resolve_thread(None, ThreadNumber::Full(number), fixed))
-        .await
-        .unwrap();
+    (manager
+        .coordination
+        .resolve_thread(&**manager, None, ThreadNumber::Full(number), fixed))
+    .await
+    .unwrap();
     assert!(
         reopen("The empty case still panics.")
             .await
             .unwrap()
             .is_some()
     );
-    let thread = (manager.thread(None, ThreadNumber::Full(number)))
-        .await
-        .unwrap();
+    let thread = (manager
+        .coordination
+        .thread(&**manager, None, ThreadNumber::Full(number)))
+    .await
+    .unwrap();
     assert!(thread.is_open());
     let last = thread.last_post().unwrap();
     assert!(
@@ -543,13 +556,17 @@ async fn a_later_review_reopens_only_a_fixed_finding_of_its_workspace() {
         reason: Some("Rare.".into()),
         ..Resolving::default()
     };
-    (manager.resolve_thread(None, ThreadNumber::Full(number), wont))
-        .await
-        .unwrap();
+    (manager
+        .coordination
+        .resolve_thread(&**manager, None, ThreadNumber::Full(number), wont))
+    .await
+    .unwrap();
     assert_eq!(reopen("Still.").await.unwrap(), None);
-    let thread = (manager.thread(None, ThreadNumber::Full(number)))
-        .await
-        .unwrap();
+    let thread = (manager
+        .coordination
+        .thread(&**manager, None, ThreadNumber::Full(number)))
+    .await
+    .unwrap();
     assert!(matches!(
         thread.resolution.map(|resolution| resolution.outcome),
         Some(Outcome::WontFix { .. })

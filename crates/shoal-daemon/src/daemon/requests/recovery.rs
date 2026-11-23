@@ -79,13 +79,22 @@ impl Scoped for RecoveryMethod {
     ) -> Result<Option<&mut SpaceSelector>> {
         if let RecoveryMethod::Reconcile { workspace, .. } = self {
             manager
-                .ensure_selected_reached(caller, workspace.as_mut())
+                .coordination
+                .ensure_selected_reached(manager, caller, workspace.as_mut())
                 .await?;
             let repository = match workspace {
-                Some(workspace) => manager.space_repository(workspace).await?,
+                Some(workspace) => {
+                    manager
+                        .coordination
+                        .space_repository(manager, workspace)
+                        .await?
+                }
                 None => None,
             };
-            manager.administer(caller, self, repository).await?;
+            manager
+                .coordination
+                .administer(manager, caller, self, repository)
+                .await?;
         }
         Ok(match self {
             RecoveryMethod::Checkpoint { workspace, .. }

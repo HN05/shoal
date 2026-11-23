@@ -9,8 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
-use super::{manager::Manager, notifications::Source};
-use crate::daemon::alerts::{NewAlert, Recipients, Sent};
+use super::manager::Manager;
 use crate::{
     model::{Repository, Space, SpaceRef, Workspace},
     protocol::CopySource,
@@ -18,12 +17,11 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 pub(crate) use shoal_store::tree::{
-    Receiver, TrackedAgents, agent_runs, below_elsewhere, children, coordinator_of, deciders,
-    delegated, delegated_elsewhere, first_absent_above, parent, parent_id, parent_ids,
-    receiver_from, receiving_paths, removal_depth, spaces_above, subtree, subtree_query,
-    with_agents,
+    Receiver, TrackedAgents, agent_runs, below_elsewhere, children, coordinator_of, delegated,
+    delegated_elsewhere, first_absent_above, parent, parent_id, parent_ids, receiver_from,
+    receiving_paths, removal_depth, subtree, subtree_query, with_agents,
 };
-use shoal_store::tree::{TAKEN_FIRST, has_running_agent, space_ref, taken, up};
+use shoal_store::tree::{TAKEN_FIRST, space_ref, taken};
 
 impl Manager {
     /// Create a workspace on a new branch named `name` in the repository of
@@ -89,6 +87,7 @@ impl Manager {
     }
 
     /// `id` and every space below it, `id` first.
+    #[cfg(test)]
     pub async fn subtree(&self, id: &SpaceId) -> Result<Vec<SpaceId>> {
         let id = id.to_owned();
         self.store.run(move |db| subtree(db, &id)).await
@@ -137,17 +136,7 @@ impl Manager {
     pub(crate) async fn ancestors(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                Ok(db
-                    .prepare(&format!(
-                        "{} SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM up
-                            JOIN spaces USING(id) LEFT JOIN workspaces ON workspaces.id=spaces.id
-                            WHERE depth > 0 ORDER BY depth",
-                        up("true")
-                    ))?
-                    .query_map([id], space_ref)?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
+            .run(move |db| shoal_store::tree::ancestors(db, &id))
             .await
     }
 
@@ -163,73 +152,6 @@ impl Manager {
             return Ok(true);
         }
         Ok(!self.hub.descendants_elsewhere(self, id).await?.is_empty())
-    }
-
-    /// Queue `alert` about the space it names for its coordinator: the
-    /// nearest space above it with an agent, which receives what arrived
-    /// once a queued restore starts it, or, once the tree goes on above
-    /// this machine, the nearest on the machines above, which the event
-    /// passes up to. `for_user` says the user would receive the event
-    /// without a coordinator, which the user then does if the coordinator's
-    /// space goes before its agent reads it. Returns where it went, or none
-    /// when the alert goes to the user, as [`Self::route`] decides, or its
-    /// coordinator's alerts are full; the user then receives the event
-    /// instead.
-    pub(crate) async fn tell_coordinator(
-        &self,
-        alert: NewAlert,
-        for_user: bool,
-        source: Source,
-    ) -> Option<Sent> {
-        let (Some(name), Some(id)) = (alert.about.name.clone(), alert.about.id.clone()) else {
-            return None;
-        };
-        let told = match self.route_up(&id, source).await {
-            Ok(Recipients::Coordinator(coordinator)) => {
-                let queued = self.agents.queue_alert(&coordinator, alert, for_user).await;
-                queued.map(|id| Sent {
-                    alerts: vec![id],
-                    ..Sent::default()
-                })
-            }
-            Ok(Recipients::Above(above)) => {
-                (self.pass_up_alert(above, alert, for_user).await).map(|()| Sent {
-                    passed_up: true,
-                    ..Sent::default()
-                })
-            }
-            Ok(Recipients::User | Recipients::Spaces(_)) => return None,
-            Err(error) => Err(error),
-        };
-        match told {
-            Ok(sent) => Some(sent),
-            Err(error) => {
-                crate::daemon::log!("message for the coordinator of {name}: {error:#}");
-                None
-            }
-        }
-    }
-
-    /// Pass `alert`, about the space it names, up to the space `above`,
-    /// which another machine runs, with the records of its files.
-    async fn pass_up_alert(&self, above: SpaceId, alert: NewAlert, for_user: bool) -> Result<()> {
-        let (Some(name), Some(id)) = (&alert.about.name, &alert.about.id) else {
-            bail!("an alert passed up names its space");
-        };
-        let mut files = self.sent_files(alert.attachments.clone()).await?;
-        files.extend(alert.relayed.iter().cloned());
-        let event = crate::daemon::hub::Event {
-            name,
-            space: id,
-            kind: alert.kind,
-            for_user,
-            message: alert.message.clone(),
-            agent: None,
-            files: &files,
-        };
-        // Boxed: on the hub, an event for its own machine's space comes back
-        // here when no space there takes it.
-        Box::pin(self.hub.pass_up(self, above, event)).await
     }
 
     /// The spaces below `id` whose activity its agent receives: children
@@ -345,28 +267,6 @@ pub(crate) fn place_below(
         ensure_parent(db, repository_id, space, parent)?;
     }
     set_parent(db, space, Some(parent))
-}
-
-/// The coordinator of the space `id` for an event from `source`: the
-/// nearest space above it with an agent, or the first one above on
-/// another machine. An event about no known space, which names repeat too
-/// much to find, has none.
-pub(crate) fn coordinator(
-    db: &Connection,
-    id: Option<SpaceId>,
-    source: Source,
-    agents: &TrackedAgents,
-) -> Result<Option<Receiver>> {
-    let Some(id) = id else {
-        return Ok(None);
-    };
-    if source == Source::Agent && !has_running_agent(db, &id, agents)? {
-        return Ok(None);
-    }
-    if let Some(coordinator) = coordinator_of(db, &id, agents)? {
-        return Ok(Some(Receiver::Here(coordinator)));
-    }
-    Ok(first_absent_above(db, &id)?.map(Receiver::Elsewhere))
 }
 
 /// Fill in the workspace's parent and its children.

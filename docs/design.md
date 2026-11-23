@@ -196,6 +196,18 @@ overlap. The spaces they run in, the executions that run them and stop
 their processes, and the ports their viewers lease are its interface's;
 relaying a client's stream to a running demo stays with the daemon's
 connections.
+`shoal-coordination` holds what passes between spaces and the user: its
+`Coordination` service sends, routes, reads and withdraws alerts, keeps
+threads with their posts, code references and the changes agents make
+for them, records approval requests and routes each to the space or user
+that decides it, computes a space's permissions and grants, and resolves
+the caller a scope token stands for and the spaces its scope reaches.
+The spaces, their files and holds, the agents and their queue, the hub,
+the repositories, the reviews and the links it routes between are its
+interface's; confining each request to its caller's scope stays with the
+daemon's request dispatch. The walks up and down the tree of spaces, and
+whether a space on the way has an agent, are `shoal-store`'s, which every
+subsystem that follows the tree takes in its own transactions.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

@@ -80,7 +80,9 @@ async fn idle_agent(manager: &Manager, workspace: &Workspace) {
 async fn send(manager: &Manager, workspace: &Workspace, messages: &[&str]) {
     for &message in messages {
         manager
+            .coordination
             .send_space_message(
+                manager,
                 None,
                 &SpaceSelector::id(&workspace.id),
                 message.into(),

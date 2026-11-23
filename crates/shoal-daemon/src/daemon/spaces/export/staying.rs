@@ -26,7 +26,7 @@ impl Manager {
         (self.store)
             .write(move |tx| move_up(tx, &moving, above.as_ref(), &held))
             .await?;
-        self.pass_on_from(&leaving).await
+        self.coordination.pass_on_from(self, &leaving).await
     }
 
     /// Detach the spaces directly below `space` and the spaces `carried`

@@ -49,7 +49,7 @@ impl Manager {
     /// workspace's processes use, the turn state of the coordinator that
     /// does its work and the job the runner runs there.
     pub(crate) async fn listed_spaces(&self, caller: Option<&Caller>) -> Result<Vec<Space>> {
-        let mut spaces = self.visible_spaces(caller).await?;
+        let mut spaces = self.coordination.visible_spaces(self, caller).await?;
         self.load_usage(&mut spaces);
         self.load_coordinator_states(&mut spaces).await?;
         self.runner.attach_jobs(self, &mut spaces).await?;

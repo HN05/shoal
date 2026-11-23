@@ -125,7 +125,14 @@ async fn a_worktree_that_cannot_be_made_gives_the_chat_back() {
     assert!(manager.workspace_by_id(&talk.id).await.is_err());
     assert_eq!(manager.completion(&talk.id).await.unwrap(), Some(done));
     let token = manager.chat_scope(&talk.id).await.unwrap();
-    assert!(manager.caller(&token).await.unwrap().is_some());
+    assert!(
+        manager
+            .coordination
+            .caller(&*manager, &token)
+            .await
+            .unwrap()
+            .is_some()
+    );
     // It was the workspace's once its record went in, and is the chat again.
     let converted = EventKind::Converted.to_string();
     let kinds = kinds(&manager, &talk.id).await;
@@ -181,7 +188,8 @@ async fn the_chats_open_threads_stay_with_the_space() {
 
     let open = shoal_protocol::threads::ThreadState::Open;
     let listed = manager
-        .threads(Some(&selector), open, false)
+        .coordination
+        .threads(&*manager, Some(&selector), open, false)
         .await
         .unwrap()
         .threads;

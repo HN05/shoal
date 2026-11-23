@@ -34,7 +34,7 @@ impl Manager {
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<Workspace>> {
-        let spaces = self.visible_spaces(caller).await?;
+        let spaces = self.coordination.visible_spaces(self, caller).await?;
         Ok((spaces.into_iter())
             .filter_map(|space| space.into_workspace().ok())
             .collect())

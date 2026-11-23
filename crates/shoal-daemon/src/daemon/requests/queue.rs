@@ -39,7 +39,9 @@ pub(super) async fn handle(
                 .queue_agent(&**manager, &workspace, *launch, blockers, pr);
             Body::QueueEntry(entry.await?)
         }
-        QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue().await?),
+        QueueMethod::ListQueue => {
+            Body::QueueEntries(manager.coordination.visible_queue(&**manager).await?)
+        }
         QueueMethod::QueuedPlan { entry } => {
             Body::QueuedPlan(manager.agents.queued_plan(&entry).await?)
         }
@@ -171,35 +173,60 @@ impl Scoped for QueueMethod {
                 workspace, launch, ..
             } => {
                 let (mode, given) = (launch.mode.as_ref(), &launch.narrowing);
-                let target = manager.worker_target(caller, workspace, mode, given);
+                let target = manager
+                    .coordination
+                    .worker_target(manager, caller, workspace, mode, given);
                 let target = target.await?;
                 if launch.now {
-                    (manager.authorize_start_beyond_limits(caller, "start", target)).await?;
+                    (manager
+                        .coordination
+                        .authorize_start_beyond_limits(manager, caller, "start", target))
+                    .await?;
                 }
                 Some(target)
             }
             QueueMethod::QueueRestore { workspace, now, .. } => {
-                let target = manager.stopped_below(caller, workspace).await?;
+                let target = manager
+                    .coordination
+                    .stopped_below(manager, caller, workspace)
+                    .await?;
                 if *now {
-                    (manager.authorize_start_beyond_limits(caller, "restore", target)).await?;
+                    (manager
+                        .coordination
+                        .authorize_start_beyond_limits(manager, caller, "restore", target))
+                    .await?;
                 }
                 Some(target)
             }
             // A space's own failed launch restores as its stopped agent
             // does: only from the spaces above it.
             QueueMethod::QueueRetry { entry, start } => {
-                let repository = manager.reached_entry(caller, entry).await?.repository_id;
+                let repository = manager
+                    .coordination
+                    .reached_entry(manager, caller, entry)
+                    .await?
+                    .repository_id;
                 if *start == RetryStart::Now {
                     let start = format!("start queue entry {entry} now");
-                    (manager.authorize_beyond_limits(caller, start, repository)).await?;
+                    (manager
+                        .coordination
+                        .authorize_beyond_limits(manager, caller, start, repository))
+                    .await?;
                 }
                 None
             }
             QueueMethod::QueueStart { entry, .. } => {
                 let id = entry.clone().into();
-                let repository = manager.reached_entry(caller, &id).await?.repository_id;
+                let repository = manager
+                    .coordination
+                    .reached_entry(manager, caller, &id)
+                    .await?
+                    .repository_id;
                 let start = format!("start queue entry {entry} now");
-                (manager.authorize_beyond_limits(caller, start, repository)).await?;
+                (manager
+                    .coordination
+                    .authorize_beyond_limits(manager, caller, start, repository))
+                .await?;
                 None
             }
             // A caller holds, claims, reads, opens, fails and attaches the
@@ -209,15 +236,24 @@ impl Scoped for QueueMethod {
             | QueueMethod::QueuedPlan { entry }
             | QueueMethod::OpenStart { entry }
             | QueueMethod::QueueFail { entry, .. } => {
-                manager.ensure_entry_reached(caller, entry).await?;
+                manager
+                    .coordination
+                    .ensure_entry_reached(manager, caller, entry)
+                    .await?;
                 None
             }
             QueueMethod::QueueAttach { entry, space } => {
-                manager.ensure_entry_reached(caller, entry).await?;
+                manager
+                    .coordination
+                    .ensure_entry_reached(manager, caller, entry)
+                    .await?;
                 Some(space)
             }
             QueueMethod::StartedLaunch { entry } => {
-                manager.ensure_started_launch_reached(caller, entry).await?;
+                manager
+                    .coordination
+                    .ensure_started_launch_reached(manager, caller, entry)
+                    .await?;
                 None
             }
         })

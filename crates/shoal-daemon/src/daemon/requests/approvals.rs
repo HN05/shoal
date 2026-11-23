@@ -23,12 +23,18 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        ApprovalMethod::WithdrawApproval { space, number } => {
-            Body::ApprovalRequest(Box::new(manager.withdraw_approval(&space, number).await?))
-        }
-        ApprovalMethod::ListApprovals { space } => {
-            Body::ApprovalRequests(manager.approval_requests(space.as_ref()).await?)
-        }
+        ApprovalMethod::WithdrawApproval { space, number } => Body::ApprovalRequest(Box::new(
+            manager
+                .coordination
+                .withdraw_approval(&**manager, &space, number)
+                .await?,
+        )),
+        ApprovalMethod::ListApprovals { space } => Body::ApprovalRequests(
+            manager
+                .coordination
+                .approval_requests(&**manager, space.as_ref())
+                .await?,
+        ),
         ApprovalMethod::ShowApproval { number } => {
             Body::ApprovalRequest(Box::new(show_approval(manager, caller, number).await?))
         }
@@ -40,7 +46,9 @@ pub(super) async fn handle(
             env,
         } => Body::ApprovalRequest(Box::new(
             manager
+                .coordination
                 .decide_approval_as(
+                    &**manager,
                     caller,
                     number,
                     approve,
@@ -75,7 +83,12 @@ pub(super) async fn handle(
                 repository,
                 ..Action::new(key, action)
             };
-            Body::Granted(manager.grant_action(caller, action).await?)
+            Body::Granted(
+                manager
+                    .coordination
+                    .grant_action(&**manager, caller, action)
+                    .await?,
+            )
         }
         ApprovalMethod::FinishPush { key, failure } => Body::ApprovalRequest(Box::new(
             manager
@@ -89,7 +102,14 @@ pub(super) async fn handle(
             shown,
         } => Body::ApprovalRequest(Box::new(
             manager
-                .escalate_approval(caller, &space, number, shown.map(|shown| *shown))
+                .coordination
+                .escalate_approval(
+                    &**manager,
+                    caller,
+                    &space,
+                    number,
+                    shown.map(|shown| *shown),
+                )
                 .await?,
         )),
     }))
@@ -124,12 +144,12 @@ impl Scoped for ApprovalMethod {
                 None
             }
             ApprovalMethod::DecideApproval { number, shown, .. } => {
-                shown.get_or_insert(Box::new(manager.routed_approval(caller, *number).await?));
+                shown.get_or_insert(Box::new(manager.coordination.routed_approval(manager, caller, *number).await?));
                 None
             }
             ApprovalMethod::EscalateApproval { space, .. } => Some(
                 manager
-                    .own_workspace(
+                    .coordination.own_workspace(manager,
                         caller,
                         space,
                         "workspace processes pass up only the approval requests routed to their own workspace",
@@ -153,7 +173,7 @@ async fn show_approval(
     caller: Option<&Caller>,
     number: ItemNumber,
 ) -> Result<ApprovalRequest> {
-    let request = manager.show_approval(number).await?;
+    let request = manager.coordination.show_approval(number).await?;
     inspect_owner(manager, caller, &request.space_id, "approval requests").await?;
     Ok(request)
 }

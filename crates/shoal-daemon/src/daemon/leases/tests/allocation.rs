@@ -44,9 +44,22 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
     };
     // What was decided before its announcement is not announced.
     for (name, approve) in [("api", true), ("docs", false)] {
-        let request = manager.request_approval(port(name)).await.unwrap().unwrap();
+        let request = manager
+            .coordination
+            .request_approval(port(name))
+            .await
+            .unwrap()
+            .unwrap();
         let decided = manager
-            .decide_approval(request.number, approve, None, Default::default(), None)
+            .coordination
+            .decide_approval(
+                &*manager,
+                request.number,
+                approve,
+                None,
+                Default::default(),
+                None,
+            )
             .await
             .unwrap();
         assert_ne!(decided.status, DecisionStatus::Pending);
@@ -63,6 +76,7 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
     assert_eq!(manager.notifications.unread().await.unwrap(), 0);
 
     let request = manager
+        .coordination
         .request_approval(port("web"))
         .await
         .unwrap()
