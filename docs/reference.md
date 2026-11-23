@@ -1951,7 +1951,7 @@ workspace, and a space reviews the workspaces below it on its own machine,
 never its own. While it is pending, a [thread](#threads) you open towards that
 workspace without `--kind`, with `--space` from a space, is its comment: a
 `review` thread with its number, which your editor shows, whose posts reach
-nobody: until you submit, only you, the spaces that reach the writing space and
+nobody and keep no one waiting: until you submit, only you, the spaces that reach the writing space and
 the user read it, in threads and in the review, and its holder neither posts
 in, forwards nor resolves it. `--kind
 question` or `request` opens a thread outside the review, delivered at once. A

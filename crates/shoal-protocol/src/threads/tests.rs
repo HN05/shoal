@@ -56,6 +56,14 @@ fn an_empty_thread_waits_for_nobody() {
 }
 
 #[test]
+fn a_thread_that_holds_its_posts_waits_for_nobody() {
+    let mut held = thread(Sender::User, Holder::User, vec![post(1, Side::Opener)]);
+    held.held = true;
+    assert_eq!(held.awaits(), None);
+    assert!(!held.is_waiting() && !held.waits_for_user());
+}
+
+#[test]
 fn a_thread_waits_for_the_side_that_did_not_post_last() {
     let asked = thread(Sender::Space, Holder::User, vec![post(1, Side::Opener)]);
     assert!(asked.is_waiting());

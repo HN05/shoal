@@ -491,9 +491,10 @@ impl Thread {
     }
 
     /// The side whose turn it is to post: the other side of its last post
-    /// that speaks, while it is open; none before its first post.
+    /// that speaks, while it is open; none before its first post, or while
+    /// it holds its posts, which have reached nobody.
     pub fn awaits(&self) -> Option<Side> {
-        if !self.is_open() {
+        if !self.is_open() || self.held {
             return None;
         }
         let last = self.posts.iter().rev().find(|post| post.speaks())?;
