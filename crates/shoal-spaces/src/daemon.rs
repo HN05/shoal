@@ -865,6 +865,14 @@ pub trait Hub: Send + Sync {
     /// The joined machines other than this one; none in no hub.
     fn other_machines(&self) -> BoxFuture<'_, Vec<Member>>;
 
+    /// Have `machine` carry out `operation` for the user, once it and the
+    /// hub can be reached, which hold it until then; an error it answered.
+    fn tell_machine<'a>(
+        &'a self,
+        machine: &'a Member,
+        operation: Operation,
+    ) -> BoxFuture<'a, Result<()>>;
+
     /// The other joined machine whose space `selector` names, as the hub's
     /// directory lists it.
     fn machine_of<'a>(

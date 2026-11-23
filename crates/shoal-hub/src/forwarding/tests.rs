@@ -75,3 +75,41 @@ fn a_paged_answer_from_another_machine_arrives_whole() {
 fn a_single_answer_from_another_machine_stays_as_sent() {
     assert!(matches!(answered_body(vec![frame(Body::Ok)]), Ok(Body::Ok)));
 }
+
+#[tokio::test]
+async fn a_request_told_while_the_hub_cannot_be_reached_waits_in_the_outbox() {
+    use shoal_protocol::{protocol::ThreadMethod, threads::CloseCause};
+    let root = tempfile::tempdir().unwrap();
+    let hub = crate::stand_in::hub(&root, shoal_core::config::Config::default()).await;
+    let laptop: Member = serde_json::from_value(json!({
+        "id": "laptop", "kind": "machine", "name": "laptop", "version": null,
+        "joined_at": 1, "last_seen": null, "connected": false, "hub": false,
+    }))
+    .unwrap();
+    let closed = Operation::Thread(ThreadMethod::CloseOpened {
+        opener: SpaceId::from("writer".to_owned()),
+        cause: CloseCause::Removal,
+    });
+    let daemon = crate::stand_in::StandIn::default();
+    hub.tell_machine(&daemon, &laptop, closed).await.unwrap();
+    let kept = (hub.store)
+        .read(crate::telling::first_outbox)
+        .await
+        .unwrap();
+    let Some((
+        _,
+        Call::Forward {
+            machine,
+            request,
+            delivery,
+        },
+    )) = kept
+    else {
+        panic!("the outbox kept {kept:?}");
+    };
+    assert_eq!((machine.as_str(), delivery), ("laptop", Delivery::Queued));
+    assert_eq!(
+        request.method["close_opened"]["opener"], "writer",
+        "{request:?}"
+    );
+}

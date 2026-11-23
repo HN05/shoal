@@ -32,7 +32,9 @@ impl Hub {
             return self.take_alert_marks(machine, marks).await;
         }
         let machine = machine.clone();
-        self.call_or_hold(Call::MarkAlerts { machine, marks }).await
+        self.call_or_hold(Call::MarkAlerts { machine, marks })
+            .await
+            .map(drop)
     }
 
     /// As the hub: take `marks` of the alerts to the user that `machine`

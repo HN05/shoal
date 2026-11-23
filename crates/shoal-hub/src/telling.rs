@@ -3,8 +3,9 @@
 //! elsewhere, which hands it to the nearest space from there up with an
 //! agent, passes it on to the next machine where the tree goes on, or
 //! tells the user at the top. While a machine's link is down, what its
-//! spaces pass up waits in its outbox and goes in order once the link
-//! opens again; the hub holds what it cannot deliver yet.
+//! spaces pass up, and the requests it tells other machines that can
+//! wait, wait in its outbox and go in order once the link opens again; the
+//! hub holds what it cannot deliver yet.
 use anyhow::{Context as _, Result};
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
@@ -12,7 +13,7 @@ use shoal_protocol::{
     alerts::AlertKind,
     files::SentFile,
     hub::{
-        link::Call,
+        link::{Call, Reply},
         routing::{Expired, HeldOutcome, Told, ToldAbout, ToldRecord},
     },
     space_names::SpaceName,
@@ -113,17 +114,17 @@ impl Hub {
         if self.store.read(membership::load).await?.is_none() {
             anyhow::bail!("this machine joined no hub to pass the event to");
         }
-        self.call_or_hold(Call::Tell { told }).await
+        self.call_or_hold(Call::Tell { told }).await.map(drop)
     }
 
     /// Make `call` over this machine's link, or keep it in the outbox,
     /// which sends it once the link opens, while the link is down or the
-    /// call fails.
-    pub(crate) async fn call_or_hold(&self, call: Call) -> Result<()> {
+    /// call fails; the hub's reply, none for a call it kept.
+    pub(crate) async fn call_or_hold(&self, call: Call) -> Result<Option<Reply>> {
         if let Some(calls) = self.member.calls()
-            && calls.call(call.clone()).await.is_ok()
+            && let Ok(reply) = calls.call(call.clone()).await
         {
-            return Ok(());
+            return Ok(Some(reply));
         }
         let queued_at = UnixTime::now();
         (self.store)
@@ -131,7 +132,7 @@ impl Hub {
             .await?;
         // The link may have opened since this looked.
         self.outbox.notify_one();
-        Ok(())
+        Ok(None)
     }
 
     /// Send what the outbox keeps over the link `calls` serves, as it comes,
@@ -315,7 +316,7 @@ fn push_outbox(tx: &Transaction<'_>, call: &Call, queued_at: UnixTime) -> Result
     Ok(())
 }
 
-fn first_outbox(tx: &Transaction<'_>) -> Result<Option<(i64, Call)>> {
+pub(super) fn first_outbox(tx: &Transaction<'_>) -> Result<Option<(i64, Call)>> {
     let row = tx
         .query_row(
             "SELECT seq, call FROM hub_outbox ORDER BY seq LIMIT 1",

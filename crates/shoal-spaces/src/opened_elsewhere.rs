@@ -3,11 +3,12 @@
 //! goes or comes back, each other machine closes or reopens them, and the
 //! threads there it holds, as its own machine does those it keeps, and its
 //! removal cancels its pending reviews there; the hub holds the request
-//! for a machine that is offline.
+//! for a machine that is offline, and this machine's outbox while the hub
+//! cannot be reached.
 use futures_util::future::join_all;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
-    hub::{Member, routing::Queued},
+    hub::Member,
     protocol::{Operation, ThreadMethod},
     threads::CloseCause,
 };
@@ -38,9 +39,8 @@ impl Followed {
 
 impl Spaces {
     /// Have every other joined machine follow what `followed` says became
-    /// of the space `id`, or the hub hold it for one that is offline. A
-    /// machine that cannot be asked is logged, since what happened here
-    /// stands.
+    /// of the space `id`, once it and the hub can be reached. A machine
+    /// that refuses is logged, since what happened here stands.
     pub async fn tell_other_machines(&self, daemon: &dyn Daemon, id: &SpaceId, followed: Followed) {
         let machines = daemon.other_machines().await;
         let told = (machines.iter()).map(|machine| tell(daemon, machine, id, followed));
@@ -73,15 +73,13 @@ impl Spaces {
 }
 
 /// Have `machine` follow what `followed` says became of the space `id`,
-/// logging a failure other than the hub holding the request.
+/// logging its refusal.
 async fn tell(daemon: &dyn Daemon, machine: &Member, id: &SpaceId, followed: Followed) {
-    let asked = daemon.ask_machine_or_hold(machine, followed.operation(id), None);
-    match asked.await {
-        Ok(_) => {}
-        Err(error) if error.is::<Queued>() => {}
-        Err(error) => crate::log!(
+    let told = daemon.tell_machine(machine, followed.operation(id));
+    if let Err(error) = told.await {
+        crate::log!(
             "machine {} did not follow {followed:?} of {id}: {error:#}",
             machine.name
-        ),
+        );
     }
 }

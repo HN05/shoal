@@ -1345,6 +1345,10 @@ impl Hub for StandIn {
         Box::pin(async { Default::default() })
     }
 
+    fn tell_machine<'a>(&'a self, _: &'a Member, _: Operation) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { bail!("{NOT_HERE}: tell_machine") })
+    }
+
     fn machine_of<'a>(
         &'a self,
         _: &'a SpaceSelector,

@@ -327,6 +327,37 @@ impl Hub {
         }
     }
 
+    /// Have `machine` carry out `operation` for the user, through the hub,
+    /// which holds it while that machine is offline, keeping it in this
+    /// machine's outbox while the hub cannot be reached, so it goes once
+    /// it can; an error that machine answered fails it, and one it kept or
+    /// the hub holds succeeds.
+    pub async fn tell_machine(
+        &self,
+        daemon: &dyn Daemon,
+        machine: &Member,
+        operation: Operation,
+    ) -> Result<()> {
+        let request = self.forwarded_to(daemon, machine, operation, None).await?;
+        let reply = if self.is_hub(daemon) {
+            let own = self.own_machine(daemon).await?;
+            let routed = self.route_request(daemon, &own, &machine.id, request, Delivery::Queued);
+            Some(routed.await?)
+        } else {
+            let call = Call::Forward {
+                machine: machine.id.clone(),
+                request,
+                delivery: Delivery::Queued,
+            };
+            self.call_or_hold(call).await?
+        };
+        match reply {
+            Some(Reply::Answered(answered)) => answered_body(answered.frames).map(drop),
+            Some(Reply::Queued(_)) | None => Ok(()),
+            Some(reply) => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
+        }
+    }
+
     /// The duplex stream `machine` answers `operation` from `caller` on,
     /// which this machine forwards there through the hub, with the stream
     /// that carries what this machine writes there; it fails at once while
