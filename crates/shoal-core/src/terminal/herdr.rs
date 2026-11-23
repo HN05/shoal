@@ -205,6 +205,7 @@ pub(super) fn options(config: &config::Herdr) -> Options {
         name_template: config.tab_name.clone(),
         group_template: Some(config.workspace_name.clone()),
         close_when_done: config.close_when_done,
+        nested_zmx: config.nested_zmx,
     }
 }
 

@@ -7,6 +7,7 @@ fn config(enabled: Option<bool>) -> crate::config::Zellij {
         placement: TabPlacement::Split,
         tab_name: Some("{branch}".into()),
         close_when_done: Some(false),
+        nested_zmx: None,
     }
 }
 

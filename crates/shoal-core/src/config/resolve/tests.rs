@@ -13,11 +13,11 @@ git_profile = 'work'\n\
 [modes.plan]\nkind = 'workspace'\nrepository = true\nrules = ['review']\ninstructions = 'plan'\nfocus = false\nidle_wake_minutes = 5\nweight = 'light'\nlabel = 'plan-next'\n[modes.plan.permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'deny'\nmerge = 'propose'\npush = 'deny'\napi_writes = 'deny'\ndaemon = 'direct'\nadmin = 'deny'\nlimits = 'deny'\nuser_holds = 'deny'\nnotifications = 'direct'\ndecide = 'direct'\nci_approve = 'deny'\npr_review = 'deny'\ntriggers = 'deny'\n\
 [modes.orchestrate]\nkind = 'chat'\nrepository = false\nrules = ['orchestrate']\ninstructions = 'manage'\nfocus = false\nidle_wake_minutes = 5\nweight = 'light'\nlabel = 'orchestrate-next'\n[modes.orchestrate.permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'deny'\nmerge = 'propose'\npush = 'deny'\napi_writes = 'deny'\ndaemon = 'direct'\nadmin = 'deny'\nlimits = 'deny'\nuser_holds = 'deny'\nnotifications = 'direct'\ndecide = 'direct'\nci_approve = 'deny'\npr_review = 'deny'\ntriggers = 'deny'\n\
 [rules.work]\ntext = 'work'\n[rules.worker]\ntext = 'agent'\n[rules.chat]\ntext = 'chat'\n[rules.review]\ntext = 'review'\n[rules.orchestrate]\ntext = 'orchestrate'\n\
-[terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
-[terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\
-[terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
-[terminal.tmux]\nenabled = true\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
-[terminal.zellij]\nenabled = true\nnew_tab = false\nplacement = 'split'\ntab_name = '{branch}'\nclose_when_done = false\n\
+[terminal]\nfocus = false\nclose_when_done = false\nnested_zmx = true\ndefault_host = 'rex'\n\
+[terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\nnested_zmx = true\n\
+[terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\nnested_zmx = true\n\
+[terminal.tmux]\nenabled = true\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\nnested_zmx = true\n\
+[terminal.zellij]\nenabled = true\nnew_tab = false\nplacement = 'split'\ntab_name = '{branch}'\nclose_when_done = false\nnested_zmx = true\n\
 [setup]\ncommand = 'setup'\ncopy_ignored = false\ncopy_ignored_exclude = ['build/']\npresets = ['cargo']\n[setup.seed]\ncommand = 'scripts/seed'\npaths = ['target']\n\
 [hooks]\npre_setup = 'pre-setup'\npost_remove = 'post-remove'\npost_done = 'post-done'\npost_ready = 'post-ready'\npost_agent_exit = 'agent-exit'\n\
 post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup = 'attach'\npre_remove = 'detach'\n\

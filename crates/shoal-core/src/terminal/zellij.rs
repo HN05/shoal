@@ -227,6 +227,7 @@ pub(super) fn options(config: &crate::config::Zellij, default_host: HostName) ->
         name_template: config.tab_name.clone(),
         group_template: None,
         close_when_done: config.close_when_done,
+        nested_zmx: config.nested_zmx,
     }
 }
 

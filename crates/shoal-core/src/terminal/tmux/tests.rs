@@ -8,6 +8,7 @@ fn config(enabled: Option<bool>) -> crate::config::Tmux {
         window_name: Some("{branch}".into()),
         session_name: "{repo}".into(),
         close_when_done: Some(false),
+        nested_zmx: None,
     }
 }
 

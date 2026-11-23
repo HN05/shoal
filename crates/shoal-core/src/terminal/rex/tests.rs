@@ -9,6 +9,7 @@ fn split_placement_opens_splits() {
         window_name: None,
         session_name: "{repo}".into(),
         close_when_done: None,
+        nested_zmx: None,
     };
     assert!(options(&config).opens_splits);
 }

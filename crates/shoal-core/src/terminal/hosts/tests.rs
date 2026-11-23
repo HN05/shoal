@@ -91,3 +91,31 @@ fn a_place_keeps_none_of_its_openers_scope() {
         );
     }
 }
+
+#[test]
+fn a_hosts_nested_zmx_overrides_the_top_level_one() {
+    let resolved = |global: &str| {
+        let config = crate::config::Config::from_toml(global).unwrap();
+        config
+            .resolve(&crate::config::repo::ConfigLayers::default())
+            .unwrap()
+    };
+    let nests = |settings, name| {
+        Configured::named(settings, name)
+            .nesting()
+            .map(|host| host.name())
+    };
+    let off = resolved("");
+    assert_eq!(nests(&off, HostName::Herdr), None);
+    let on = resolved("[terminal]\nnested_zmx = true\n[terminal.rex]\nnested_zmx = false\n");
+    for name in [HostName::Herdr, HostName::Tmux, HostName::Zellij] {
+        assert_eq!(nests(&on, name), Some(HostName::Zmx), "{name}");
+    }
+    assert_eq!(nests(&on, HostName::Rex), None);
+    // zmx and the plain terminal run agents in sessions of their own already.
+    assert_eq!(nests(&on, HostName::Zmx), None);
+    assert_eq!(nests(&on, HostName::Terminal), None);
+    let tmux_only = resolved("[terminal.tmux]\nnested_zmx = true\n");
+    assert_eq!(nests(&tmux_only, HostName::Tmux), Some(HostName::Zmx));
+    assert_eq!(nests(&tmux_only, HostName::Herdr), None);
+}

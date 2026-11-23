@@ -88,6 +88,9 @@ pub struct Options {
     /// Whether the places it opens for a workspace close once it is done,
     /// over the top-level `close_when_done`.
     pub(crate) close_when_done: Option<bool>,
+    /// Whether agents and demos it runs in its places run in zmx sessions
+    /// attached there, over the top-level `nested_zmx`.
+    pub(crate) nested_zmx: Option<bool>,
 }
 
 impl Options {
@@ -99,6 +102,7 @@ impl Options {
         name_template: None,
         group_template: None,
         close_when_done: None,
+        nested_zmx: None,
     };
 }
 
@@ -108,6 +112,9 @@ pub struct Configured {
     pub options: Options,
     /// Whether the places it opens for a workspace close once it is done.
     pub closes_when_done: bool,
+    /// Whether agents and demos it runs in its places run in zmx sessions
+    /// attached there.
+    pub(crate) nests_sessions: bool,
 }
 
 impl Configured {
@@ -115,10 +122,12 @@ impl Configured {
         let closes_when_done = options
             .close_when_done
             .unwrap_or(settings.terminal.close_when_done);
+        let nests_sessions = options.nested_zmx.unwrap_or(settings.terminal.nested_zmx);
         Self {
             host,
             options,
             closes_when_done,
+            nests_sessions,
         }
     }
 
@@ -149,6 +158,17 @@ impl Configured {
             ..Options::DEFAULT
         };
         Self::new(&Plain, options, settings)
+    }
+
+    /// The host whose sessions agents and demos run in, attached in this
+    /// host's places, where config asks for that: zmx, for a host that runs
+    /// work in places of its own.
+    pub fn nesting(&self) -> Option<&'static dyn Host> {
+        let nesting = &zmx::Zmx;
+        let nests = self.nests_sessions
+            && self.host.places().is_some()
+            && self.host.name() != nesting.name();
+        nests.then_some(nesting)
     }
 
     /// Whether the host serves the terminal this process runs in.

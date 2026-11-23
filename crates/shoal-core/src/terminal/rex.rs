@@ -203,6 +203,7 @@ pub(super) fn options(config: &crate::config::Rex) -> super::Options {
         name_template: config.window_name.clone(),
         group_template: Some(config.session_name.clone()),
         close_when_done: config.close_when_done,
+        nested_zmx: config.nested_zmx,
     }
 }
 

@@ -187,6 +187,10 @@ pub struct TerminalConfig {
     /// Whether a place Shoal opened for a workspace closes once it is done.
     #[option(default = true)]
     pub close_when_done: Option<bool>,
+    /// Whether an agent or demo Shoal runs in a host's place runs in a zmx
+    /// session attached there, which other terminals attach to too.
+    #[option(default = false)]
+    pub nested_zmx: Option<bool>,
     #[option(section)]
     pub herdr: HerdrConfig,
     #[option(section)]
@@ -978,6 +982,8 @@ pub struct HerdrConfig {
     pub workspace_name: Option<String>,
     /// Overrides the top-level `close_when_done` for Herdr tabs.
     pub close_when_done: Option<bool>,
+    /// Overrides the top-level `nested_zmx` for Herdr.
+    pub nested_zmx: Option<bool>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
@@ -997,6 +1003,8 @@ pub struct RexConfig {
     pub session_name: Option<String>,
     /// Overrides the top-level `close_when_done` for Rex windows.
     pub close_when_done: Option<bool>,
+    /// Overrides the top-level `nested_zmx` for Rex.
+    pub nested_zmx: Option<bool>,
 }
 
 /// tmux is opt-in: unset, `enabled` follows whether `default_host` names it.
@@ -1016,6 +1024,8 @@ pub struct TmuxConfig {
     pub session_name: Option<String>,
     /// Overrides the top-level `close_when_done` for tmux windows.
     pub close_when_done: Option<bool>,
+    /// Overrides the top-level `nested_zmx` for tmux.
+    pub nested_zmx: Option<bool>,
 }
 
 /// Zellij is opt-in: unset, `enabled` follows whether `default_host` names it.
@@ -1031,6 +1041,8 @@ pub struct ZellijConfig {
     pub tab_name: Option<String>,
     /// Overrides the top-level `close_when_done` for Zellij tabs.
     pub close_when_done: Option<bool>,
+    /// Overrides the top-level `nested_zmx` for Zellij.
+    pub nested_zmx: Option<bool>,
 }
 
 states!(
