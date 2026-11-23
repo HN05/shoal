@@ -1348,6 +1348,10 @@ impl Hub for StandIn {
         Box::pin(async { Ok(Default::default()) })
     }
 
+    fn record_keeper<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<Option<Member>>> {
+        Box::pin(async { Ok(None) })
+    }
+
     fn named_machine<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<(Member, bool)>> {
         Box::pin(async { bail!("{NOT_HERE}: named_machine") })
     }

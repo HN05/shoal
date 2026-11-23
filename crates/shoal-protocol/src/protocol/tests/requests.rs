@@ -98,6 +98,7 @@ const REQUESTS: &[&str] = &[
     r#"{"cleanup":{"dry_run":true,"spaces":"all","caches":"none"}}"#,
     r#""removed_spaces""#,
     r#"{"removed_space":{"space":"fix"}}"#,
+    r#"{"locate_removed_space":{"space":"fix"}}"#,
     r#"{"restore_space":{"space":"fix"}}"#,
     r#"{"drop_restored_sessions":{"space":"fix"}}"#,
     r#"{"export_removed_space":{"space":"fix","file":"/work/fix.shoal","carrying":"subtree"}}"#,

@@ -8,7 +8,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     absorb::{Absorb, Absorbed},
     cleanup::{ManualCleanup, Selection},
-    model::{RemovedSpace, RestoredSpace},
+    model::{LocatedRemoved, RemovedSpace, RestoredSpace},
     protocol::RemovalMethod,
     transfer::Carrying,
 };
@@ -74,6 +74,15 @@ pub async fn removed(daemon: &impl Daemon) -> Result<Vec<RemovedSpace>> {
 pub async fn removed_space(daemon: &impl Daemon, space: SpaceSelector) -> Result<RemovedSpace> {
     let removed: Vec<RemovedSpace> = request(daemon, RemovalMethod::RemovedSpace { space }).await?;
     removed.into_iter().next().context("no such removed space")
+}
+
+/// The removed `space`, named by ID, with where its record is kept: here,
+/// or on the other joined machine that keeps it; refused with the reason
+/// when the caller may not restore it.
+pub async fn locate_removed(daemon: &impl Daemon, space: SpaceSelector) -> Result<LocatedRemoved> {
+    let located: Box<LocatedRemoved> =
+        request(daemon, RemovalMethod::LocateRemovedSpace { space }).await?;
+    Ok(*located)
 }
 
 /// The removal records of the spaces the removal of `space` took that

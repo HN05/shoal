@@ -30,6 +30,7 @@ use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::cleanup::Emptying;
 use shoal_protocol::containers::ContainerProject;
 use shoal_protocol::executions::{ProxyRetry, TurnRetry};
+use shoal_protocol::hub::directory::Keeps;
 use shoal_protocol::hub::directory::{HubView, Listed};
 use shoal_protocol::hub::packages::KeptPackage;
 use shoal_protocol::hub::placement::Decision;
@@ -1088,6 +1089,13 @@ impl shoal_spaces::daemon::Hub for Manager {
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<Option<(Member, Listed)>>> {
         Box::pin(self.hub.machine_of(self, selector))
+    }
+
+    fn record_keeper<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+    ) -> BoxFuture<'a, Result<Option<Member>>> {
+        Box::pin(self.hub.keeper_of(self, selector, Keeps::Record))
     }
 
     fn named_machine<'a>(&'a self, named: &'a str) -> BoxFuture<'a, Result<(Member, bool)>> {

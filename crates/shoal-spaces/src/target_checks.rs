@@ -324,7 +324,9 @@ impl Spaces {
         // A space's process acts in its own space whatever an acting
         // target names.
         let selector = match target {
-            Some(Target::Space(selector) | Target::Files(selector)) => selector,
+            Some(
+                Target::Space(selector) | Target::Files(selector) | Target::Removable(selector),
+            ) => selector,
             Some(Target::Item(_) | Target::Acting(_)) | None => return Ok(()),
         };
         let Ok(space) = self.space(selector).await else {

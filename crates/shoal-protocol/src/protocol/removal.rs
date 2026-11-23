@@ -106,6 +106,10 @@ pub enum RemovalMethod {
     RemovedSpaces,
     /// The removed space `space` names, once the caller may restore it.
     RemovedSpace { space: SpaceSelector },
+    /// The removed space `space` names by ID, with where its record is
+    /// kept: here, or on the other joined machine that keeps it, which is
+    /// asked for it; refused where the caller may not restore it.
+    LocateRemovedSpace { space: SpaceSelector },
     /// Open a removed space again from its removal record.
     RestoreSpace { space: SpaceSelector },
     /// Delete the agents' session files the restore that opened `space`
@@ -173,9 +177,9 @@ pub enum RemovalMethod {
         destination: crate::transfer::MachineDestination,
     },
     /// The package of `space` held here for the joined machine that
-    /// started its move: the recorded move's, or with `copy` a copy's,
-    /// which goes once read; answered with its size, then its bytes on the
-    /// request's connection.
+    /// started its move: the recorded move's, or with `copy` a copy's or,
+    /// for a removed space, its record's, which goes once read; answered
+    /// with its size, then its bytes on the request's connection.
     ReadHeldPackage {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -242,7 +246,7 @@ impl RemovalMethod {
     /// A stop goes to the space's machine, waiting for it while it is
     /// offline, and a removal there too, as does the end of a move another
     /// machine took the package of, the read of a package it holds and its
-    /// return; an
+    /// return, and a removed space's record is read where it is kept; an
     /// absorb needs both worktrees, and a restore, the other steps of a
     /// move, an export and the caller's cleanup run where the caller does.
     pub fn forwarding(&self) -> Forwarding {
@@ -255,13 +259,17 @@ impl RemovalMethod {
             | Self::StartRemoval { .. }
             | Self::EndMovedSpace { .. }
             | Self::ReleaseHeldMove { .. } => Forwarding::Online,
+            // The machine that keeps a record serves it when asked for it;
+            // a lookup that fails here never names an absent space, so it
+            // is answered here.
+            Self::RemovedSpace { .. } => Forwarding::Online,
             // Raw bytes follow its answer, which only a duplex stream carries.
             Self::ReceiveMove { .. } | Self::ReadHeldPackage { .. } => Forwarding::Duplex,
             Self::StopTargets
             | Self::AbsorbSpace(_)
             | Self::Cleanup { .. }
             | Self::RemovedSpaces
-            | Self::RemovedSpace { .. }
+            | Self::LocateRemovedSpace { .. }
             | Self::RestoreSpace { .. }
             | Self::DropRestoredSessions { .. }
             | Self::ExportRemovedSpace { .. }
@@ -292,9 +300,10 @@ impl RemovalMethod {
             | Self::AbandonMove { space }
             | Self::DeliverMove { space }
             | Self::DeliverCopy { space, .. }
-            | Self::ReadHeldPackage { space, .. }
             | Self::ReleaseHeldMove { space }
             | Self::SettleMove { space } => Some(Target::Space(space)),
+            // A removed space's record exports where it is kept.
+            Self::ReadHeldPackage { space, .. } => Some(Target::Removable(space)),
             Self::AbsorbSpace(absorb) => Some(Target::Space(&absorb.space)),
             // A removed space's record is this machine's, whichever runs
             // the space now.
@@ -305,6 +314,8 @@ impl RemovalMethod {
             | Self::TakenRecords { .. }
             | Self::DeliverRemovedSpace { .. }
             | Self::SettleRemovedMove { .. } => None,
+            // It asks the machine that keeps the record itself.
+            Self::LocateRemovedSpace { .. } => None,
             // The hub sends it to the machine a move goes to.
             Self::ReceiveMove { .. }
             | Self::StopTargets

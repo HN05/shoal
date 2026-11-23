@@ -107,3 +107,30 @@ fn an_unmerge_starts_on_its_workspace_s_machine_without_the_caller_s_environment
     assert_eq!(prepare.target(), None);
     assert_eq!(prepare.forwarding(), Forwarding::Never);
 }
+
+#[test]
+fn a_move_and_the_read_of_its_package_reach_the_machine_that_keeps_a_removed_record() {
+    let id = shoal_ids::space_ids::SpaceId::from("gone".to_owned());
+    let space = SpaceSelector::id(&id);
+    let order = crate::transfer::MoveOrder {
+        spaces: vec![id],
+        destination: crate::transfer::MoveDestination::Held,
+        recursive: true,
+        keep: false,
+        checkpoint: None,
+        consent: None,
+        check_only: false,
+    };
+    let moving = Operation::Operations(OperationMethod::StartMove {
+        order: Box::new(order),
+        env: None,
+    });
+    assert_eq!(moving.kept(), Some(Keeps::Record));
+    let reading = Operation::Removal(RemovalMethod::ReadHeldPackage {
+        space: space.clone(),
+        copy: true,
+    });
+    assert_eq!(reading.kept(), Some(Keeps::Record));
+    let stopping = Operation::Removal(RemovalMethod::CheckStop { space });
+    assert_eq!(stopping.kept(), None);
+}

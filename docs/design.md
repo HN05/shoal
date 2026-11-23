@@ -450,8 +450,9 @@ diff is. Each machine reports the removed spaces whose records or files it
 keeps with its spaces, since the hub's directory drops a space once it is
 removed, and
 a request for a space's files that no machine lists goes to the one that
-keeps them, which checks the caller's scope as for its other removed
-spaces. What a space passes up to another machine
+keeps them. A move of a removed space's record, and the read of its
+package, go to the one that keeps that record. Either machine checks the
+caller's scope as for its other removed spaces. What a space passes up to another machine
 carries its files' records, so the user or coordinator there reads them the
 same way, and a terminal there opens one only after fetching it into a
 directory marked as Shoal's, its repository's where that machine has it,

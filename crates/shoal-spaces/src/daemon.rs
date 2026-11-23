@@ -869,6 +869,13 @@ pub trait Hub: Send + Sync {
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<Option<(Member, Listed)>>>;
 
+    /// The other joined machine that keeps the removal record of the
+    /// space `selector` names by ID, as the hub's directory lists it.
+    fn record_keeper<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+    ) -> BoxFuture<'a, Result<Option<Member>>>;
+
     /// The joined machine `named` names, by its ID or a name only one
     /// machine has, and whether it is this machine.
     fn named_machine<'a>(&'a self, named: &'a str) -> BoxFuture<'a, Result<(Member, bool)>>;

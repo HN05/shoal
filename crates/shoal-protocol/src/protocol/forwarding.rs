@@ -6,8 +6,8 @@
 //! connection carries bytes both ways, as a demo's, on a duplex stream; only
 //! one that needs the caller's machine stays there.
 use crate::{
-    approvals::ApprovalRequest, item_numbers::ItemNumber, space_names::SpaceSelector,
-    threads::ThreadNumber,
+    approvals::ApprovalRequest, hub::directory::Keeps, item_numbers::ItemNumber,
+    space_names::SpaceSelector, threads::ThreadNumber,
 };
 
 use super::{
@@ -52,6 +52,9 @@ pub enum Target<'a> {
     /// A space's attached files, which outlive it: a removed space's are
     /// read where a machine keeps them.
     Files(&'a SpaceSelector),
+    /// A space, or once it is removed, its removal record, which is read
+    /// where a machine keeps it.
+    Removable(&'a SpaceSelector),
     /// A thread or an approval request, numbered in the space its number
     /// begins with.
     Item(&'a ItemNumber),
@@ -255,6 +258,22 @@ impl Operation {
             Self::Trigger(method) => method.target(),
             Self::Hub(method) => method.target(),
             Self::App(method) => method.target(),
+        }
+    }
+
+    /// What of a removed space the request acts on, which the machine that
+    /// keeps it answers when no machine has the space: its files, or its
+    /// record where the request takes a removed space as well as a live
+    /// one; none for one that acts on live spaces alone.
+    pub fn kept(&self) -> Option<Keeps> {
+        match self.target() {
+            Some(Target::Files(_)) => Some(Keeps::Files),
+            Some(Target::Removable(_)) => Some(Keeps::Record),
+            Some(Target::Space(_) | Target::Item(_) | Target::Acting(_)) => None,
+            None => match self {
+                Self::Operations(method) => method.kept(),
+                _ => None,
+            },
         }
     }
 }

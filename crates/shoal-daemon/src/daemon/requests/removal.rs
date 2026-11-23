@@ -46,6 +46,7 @@ fn changes_lifecycle(method: &RemovalMethod) -> bool {
         | RemovalMethod::CheckRemoval { .. }
         | RemovalMethod::RemovedSpaces
         | RemovalMethod::RemovedSpace { .. }
+        | RemovalMethod::LocateRemovedSpace { .. }
         | RemovalMethod::DropRestoredSessions { .. }
         | RemovalMethod::ExportRemovedSpace { .. }
         | RemovalMethod::CopySpace { .. }
@@ -80,6 +81,12 @@ pub(super) async fn handle(
         RemovalMethod::RemovedSpace { space } => Body::RemovedSpaces(vec![
             manager.spaces.restorable_space(&**manager, &space).await?,
         ]),
+        RemovalMethod::LocateRemovedSpace { space } => Body::LocatedRemoved(Box::new(
+            manager
+                .spaces
+                .locate_removed(&**manager, &space, caller)
+                .await?,
+        )),
         RemovalMethod::StopTargets => {
             let targets = manager
                 .agents
@@ -462,6 +469,7 @@ impl Checked for RemovalMethod {
             | Self::Cleanup { .. }
             | Self::RemovedSpaces
             | Self::RemovedSpace { .. }
+            | Self::LocateRemovedSpace { .. }
             | Self::RestoreSpace { .. }
             | Self::DropRestoredSessions { .. }
             | Self::ExportRemovedSpace { .. }
@@ -534,6 +542,9 @@ impl Scoped for RemovalMethod {
             RemovalMethod::CheckStop { space } => Ok(Some(space)),
             // Its answer lists only the spaces the caller may restore.
             RemovalMethod::RemovedSpaces => Ok(None),
+            // The machine that keeps the record checks that the caller may
+            // restore it, as for a record here.
+            RemovalMethod::LocateRemovedSpace { .. } => Ok(None),
             // Below its recorded parent, within the caller's scope; a
             // removed space's record moves to a joined machine with no
             // permission key, as a live space does.

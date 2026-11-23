@@ -147,10 +147,11 @@ fn ensure_takes(order: &MoveOrder, planned: &[Planned], refusals: &[String]) -> 
 }
 
 /// Plan the move of the removed space `space`'s record, which a copy
-/// refuses, since it keeps no running work.
+/// refuses, since it keeps no running work; its package goes where a
+/// copy's does, since the record stays here as a copied space does.
 fn plan_removed(paths: &CommandPaths, order: &MoveOrder, space: RemovedSpace) -> Result<Planned> {
     ensure!(!order.keep, "it is removed, so it keeps no work to copy");
-    let file = packages::reserve(paths, &order.destination, &space.space_id)?;
+    let file = packages::reserve_copy(paths, &order.destination, &space.space_id)?;
     Ok(Planned::Removed { space, file })
 }
 

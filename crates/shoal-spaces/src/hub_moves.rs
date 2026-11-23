@@ -14,6 +14,7 @@ mod handed_over;
 mod handing_over;
 pub mod held;
 pub mod receiving;
+mod removed_elsewhere;
 mod removed_records;
 
 pub use authorization::moves_without_permission;

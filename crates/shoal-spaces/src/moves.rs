@@ -13,7 +13,7 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use super::{hub_moves::moves_without_permission, log, notifications::AlertKind, scope::Caller};
 use crate::protocol::operations::{Ended, OperationSpec, Outcome};
 use crate::transfer::{DeferredMove, MoveDestination, MoveLock, MoveOrder, MoveReport};
-use shoal_protocol::{model::Located, space_names::SpaceSelector};
+use shoal_protocol::{hub::Member, model::Located, space_names::SpaceSelector};
 
 /// How often the daemon looks for recorded moves whose worker went.
 const INTERRUPTED_MOVES_INTERVAL: Duration = Duration::from_secs(60);
@@ -34,10 +34,10 @@ pub async fn finish_interrupted(daemon: Arc<dyn Daemon>) {
 
 impl Spaces {
     /// Start `order` in a worker that acts with `caller`'s scope, in `env`
-    /// when given, once every space it takes is here: live, or for a file
-    /// or a joined machine a removed one. A space another machine has refuses it, naming that
-    /// space, which the hub forwards it for, as does a joined machine to
-    /// move to that is this one or offline. A move to a joined machine that
+    /// when given, once every space it takes is here, live or removed. A
+    /// space another machine has refuses it, naming that space, which the
+    /// hub forwards it for, as does a joined machine to move to that is
+    /// this one or offline. A move to a joined machine that
     /// would stop `caller`'s agent waits for its turn to end instead.
     pub async fn start_move(
         &self,
@@ -69,12 +69,11 @@ impl Spaces {
         Ok(MoveStart::Started(started))
     }
 
-    /// Refuse a space `id` that is not here to move to `destination`: a
-    /// file or a joined machine takes a removed space too, and a file or a
-    /// directory one another joined machine runs, whose package this
-    /// machine's worker reads from there; a move to another machine, or one
-    /// holding its package for this machine's, goes to the machine that has
-    /// the space.
+    /// Refuse a space `id`, live or removed, that is not here to move to
+    /// `destination`: a file takes one another joined machine runs or
+    /// keeps the record of, whose package this machine's worker reads from
+    /// there; a move to another machine, or one holding its package for
+    /// this machine's, goes to the machine that has the space or its record.
     async fn ensure_movable(
         &self,
         daemon: &dyn Daemon,
@@ -86,28 +85,39 @@ impl Spaces {
             Ok(_) => return Ok(()),
             Err(absent) => absent,
         };
-        if *destination == MoveDestination::Held {
-            return Err(absent);
-        }
         if self.removed_space(&selector).await.is_ok() {
             return Ok(());
         }
-        if destination.machine().is_some() {
+        if *destination == MoveDestination::Held || destination.machine().is_some() {
             return Err(absent);
         }
-        match (self.space_anywhere(daemon, &selector).await?, destination) {
-            (
-                Located::Elsewhere { .. },
-                MoveDestination::File { .. }
-                | MoveDestination::Directory { .. }
-                | MoveDestination::Client { .. },
-            ) => Ok(()),
-            (Located::Elsewhere { machine, .. }, _) => anyhow::bail!(
-                "space {id} runs on machine {}; move it to a file, or from that machine",
+        let Some(machine) = self.other_machine_with(daemon, &selector).await else {
+            return Err(absent);
+        };
+        match destination {
+            MoveDestination::File { .. }
+            | MoveDestination::Directory { .. }
+            | MoveDestination::Client { .. } => Ok(()),
+            _ => anyhow::bail!(
+                "space {id} is on machine {}; move it to a file, or from that machine",
                 machine.name
             ),
-            (Located::Here(_), _) => Err(absent),
         }
+    }
+
+    /// The other joined machine that runs the space `selector` names, or
+    /// keeps its removal record; none when the hub lists neither or cannot
+    /// be asked.
+    async fn other_machine_with(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Option<Member> {
+        if let Ok(Located::Elsewhere { machine, .. }) = self.space_anywhere(daemon, selector).await
+        {
+            return Some(*machine);
+        }
+        daemon.record_keeper(selector).await.ok().flatten()
     }
 
     /// Start a worker that finishes each recorded move whose worker went:

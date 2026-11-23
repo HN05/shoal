@@ -4,7 +4,9 @@
 //! caller named and then ends the space here, or gives it back when it
 //! could not, and the space stays here. A copy's package, which no move
 //! record keeps, waits apart from a move's until its reader reads it, and
-//! goes then, or once it waited as long as a move waits for its reader.
+//! goes then, or once it waited as long as a move waits for its reader; so
+//! does the package of a removed space's record, which stays here as a
+//! copied space does.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::fsutil::off_runtime;
@@ -76,12 +78,13 @@ impl Spaces {
         })
     }
 
-    /// The package of a copy of the space `selector` names that waits here
-    /// for its reader, which it takes: its file goes once open, whether or
-    /// not the read ends whole, since its reader cannot read it again.
+    /// The package of a copy of the space `selector` names, or of its
+    /// record once it is removed, that waits here for its reader, which it
+    /// takes: its file goes once open, whether or not the read ends whole,
+    /// since its reader cannot read it again.
     async fn held_copy(&self, selector: &SpaceSelector) -> Result<HeldPackage> {
-        let space = self.space(selector).await?;
-        let path = held_copies(&self.paths.move_packages()).join(package_name(&space.id));
+        let id = self.live_or_removed_id(selector).await?;
+        let path = held_copies(&self.paths.move_packages()).join(package_name(&id));
         let (file, size) = (take_package(path).await).with_context(|| {
             format!("no copy of space {selector} waits here for another machine")
         })?;
@@ -90,6 +93,20 @@ impl Spaces {
             size,
             kept: Kept::Copy,
         })
+    }
+
+    /// The ID of the space `selector` names, live or removed here; one
+    /// this machine has neither of is refused as absent, which the machine
+    /// that has it answers for.
+    async fn live_or_removed_id(&self, selector: &SpaceSelector) -> Result<SpaceId> {
+        let absent = match self.space(selector).await {
+            Ok(space) => return Ok(space.id),
+            Err(absent) => absent,
+        };
+        match self.removed_space(selector).await {
+            Ok(removed) => Ok(removed.space_id),
+            Err(_) => Err(absent),
+        }
     }
 
     /// Delete the copies' packages that no machine read within

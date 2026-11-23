@@ -64,7 +64,9 @@ pub(super) struct Targeted {
 /// space's process acts in its own.
 fn target_space(target: Target<'_>, scope: Option<&ScopeToken>) -> Option<SpaceSelector> {
     match target {
-        Target::Space(space) | Target::Files(space) => Some(space.clone()),
+        Target::Space(space) | Target::Files(space) | Target::Removable(space) => {
+            Some(space.clone())
+        }
         Target::Item(number) => Some(SpaceSelector::Number(number.space)),
         Target::Acting(_) if scope.is_some() => None,
         Target::Acting(space) => Some(space.clone()),
@@ -101,17 +103,8 @@ impl<'a> Routing<'a> {
             method,
             forwarding,
             scope,
-            kept: kept(operation.target()),
+            kept: operation.kept(),
         }))
-    }
-}
-
-/// What of a removed space a request for `target` acts on, which the
-/// machine that keeps it answers.
-fn kept(target: Option<Target<'_>>) -> Option<Keeps> {
-    match target? {
-        Target::Files(_) => Some(Keeps::Files),
-        Target::Space(_) | Target::Item(_) | Target::Acting(_) => None,
     }
 }
 

@@ -163,6 +163,27 @@ pub struct KeptWorkspace {
     pub pending_review: Option<crate::reviews::CarriedReview>,
 }
 
+/// A removed space's record and where it is kept: here, or on another
+/// joined machine, which the hub lists as keeping it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocatedRemoved {
+    Here(Box<RemovedSpace>),
+    Elsewhere {
+        space: Box<RemovedSpace>,
+        machine: Box<crate::hub::Member>,
+    },
+}
+
+impl LocatedRemoved {
+    /// The removed space's record.
+    pub fn space(&self) -> &RemovedSpace {
+        match self {
+            Self::Here(space) | Self::Elsewhere { space, .. } => space,
+        }
+    }
+}
+
 impl RemovedSpace {
     /// What it keeps as a workspace; `None` for a chat.
     pub fn workspace(&self) -> Option<&KeptWorkspace> {

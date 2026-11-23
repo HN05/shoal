@@ -710,6 +710,21 @@ impl OperationMethod {
         }
     }
 
+    /// A move takes removed spaces too, which it names in its set, so it
+    /// goes to the machine that keeps the record of one no machine runs.
+    pub fn kept(&self) -> Option<crate::hub::directory::Keeps> {
+        match self {
+            Self::StartMove { .. } => Some(crate::hub::directory::Keeps::Record),
+            Self::CancelOperation { .. }
+            | Self::FollowOperation { .. }
+            | Self::StartOperation { .. }
+            | Self::StartWorkspace { .. }
+            | Self::StartCreation { .. }
+            | Self::StartChild { .. }
+            | Self::ReportProgress { .. } => None,
+        }
+    }
+
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
             Self::FollowOperation { operation, .. } | Self::CancelOperation { operation } => {

@@ -309,6 +309,7 @@ response_bodies! {
     Permissions(crate::config::permissions::Permissions),
     Cleanup(crate::cleanup::ManualCleanup),
     RemovedSpaces(Vec<crate::model::RemovedSpace>),
+    LocatedRemoved(Box<crate::model::LocatedRemoved>),
     KeptBranches(Vec<crate::model::KeptBranch>),
     UntrackedWorktrees(Vec<crate::model::UntrackedWorktree>),
     RestoredWorkspace(Box<crate::model::RestoredWorkspace>),
