@@ -5,11 +5,12 @@ use crate::stand_in::{Fixture, StandInHook};
 
 const POOL: &str = "[resources.lock]\ncapacity = 4\n";
 
-/// An agent's caller of the fixture's workspace, running `execution`.
-fn agent(fixture: &Fixture, execution: &ExecutionId) -> Caller {
-    let mut caller = Caller::of_space(fixture.workspace.id.clone());
+/// A caller of the agent of `space`, acquiring for the fixture's workspace,
+/// as a coordinator does for a space below.
+fn agent(space: &SpaceId) -> Caller {
+    let mut caller = Caller::of_space(space.clone());
     caller.execution = Some(crate::callers::ScopedExecution {
-        id: execution.clone(),
+        id: ExecutionId::generate(),
         kind: shoal_protocol::executions::ExecutionKind::Command,
         agent_execution: None,
     });
@@ -45,21 +46,16 @@ async fn permits(fixture: &Fixture) -> Vec<(String, Acquirer)> {
     permits
 }
 
-/// The sweep releases the permits of an agent whose execution ended or runs
-/// no process, keeps those of a running agent and the user's.
+/// The sweep releases the permits of an agent whose space has no agent
+/// left, keeps those of an agent that has not ended and the user's.
 #[tokio::test]
 async fn the_sweep_releases_the_permits_of_ended_agents_alone() {
     let fixture = Fixture::new(POOL, "").await;
-    let [ended, stopped, running] = [(); 3].map(|()| ExecutionId::generate());
-    for (name, execution) in [
-        ("ended", &ended),
-        ("stopped", &stopped),
-        ("running", &running),
-    ] {
-        acquire(&fixture, name, Some(&agent(&fixture, execution))).await;
-    }
+    let [ended, live] = [(); 2].map(|()| SpaceId::generate());
+    acquire(&fixture, "ended", Some(&agent(&ended))).await;
+    acquire(&fixture, "live", Some(&agent(&live))).await;
     acquire(&fixture, "user", None).await;
-    *fixture.daemon.running.lock().unwrap() = [(stopped, false), (running.clone(), true)].into();
+    *fixture.daemon.agents.lock().unwrap() = [live.clone()].into();
 
     (fixture
         .leases
@@ -67,12 +63,10 @@ async fn the_sweep_releases_the_permits_of_ended_agents_alone() {
     .await
     .unwrap();
 
-    let running = Acquirer::Agent {
-        execution_id: running,
-    };
+    let live = Acquirer::Agent { space_id: live };
     assert_eq!(
         permits(&fixture).await,
-        [("running".into(), running), ("user".into(), Acquirer::User)]
+        [("live".into(), live), ("user".into(), Acquirer::User)]
     );
 }
 
@@ -81,8 +75,8 @@ async fn the_sweep_releases_the_permits_of_ended_agents_alone() {
 #[tokio::test]
 async fn a_failing_release_hook_keeps_the_permit_as_the_users_and_tells_the_user() {
     let fixture = Fixture::new(POOL, "").await;
-    let execution = ExecutionId::generate();
-    acquire(&fixture, "agent", Some(&agent(&fixture, &execution))).await;
+    let space = SpaceId::generate();
+    acquire(&fixture, "agent", Some(&agent(&space))).await;
     let hook = StandInHook {
         executable: "release.sh".into(),
         fails: true,

@@ -555,14 +555,12 @@ pub trait Runner: Send + Sync {
 
 /// The leases executions and agents hold.
 pub trait Leases: Send + Sync {
-    /// Release the leases the execution `id` acquired.
+    /// Release the leases the demo of execution `id` acquired.
     fn release_execution_leases<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, ()>;
 
-    /// Release the leases the agent of execution `id` acquired.
-    fn release_agent_leases<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, ()>;
-
-    /// Release the leases the stopped agents of the workspace `id` held
-    /// until their stop ended.
+    /// Release the leases held in the space `id` or by its agent whose
+    /// acquirer ended, as a stop of the space or its agent's end leaves
+    /// them.
     fn release_ended_leases_of<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 
     /// Give the demo of `execution` in the space `id` its leases.

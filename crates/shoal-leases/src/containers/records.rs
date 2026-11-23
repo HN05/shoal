@@ -14,7 +14,7 @@ pub struct Recorded {
 }
 
 const COLUMNS: &str =
-    "workspace_id,project,runtime,compose,state,acquirer,acquirer_execution,for_agent,reason,error";
+    "workspace_id,project,runtime,compose,state,acquirer,acquirer_id,for_agent,reason,error";
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Recorded> {
     Ok(Recorded {
@@ -64,7 +64,7 @@ pub fn save(db: &Connection, recorded: &Recorded) -> Result<()> {
             project.compose,
             project.state,
             project.acquirer.kind(),
-            project.acquirer.execution(),
+            project.acquirer.id(),
             recorded.for_agent,
             project.reason,
             project.error,

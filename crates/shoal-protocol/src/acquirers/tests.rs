@@ -1,15 +1,15 @@
 use super::*;
 
 #[test]
-fn serializes_the_kind_beside_the_execution() -> Result<()> {
-    let execution_id = ExecutionId::generate();
+fn serializes_the_kind_beside_the_agents_space() -> Result<()> {
+    let space_id = SpaceId::generate();
     let agent = Acquirer::Agent {
-        execution_id: execution_id.clone(),
+        space_id: space_id.clone(),
     };
     let json = serde_json::to_value(&agent)?;
     assert_eq!(
         json,
-        serde_json::json!({"kind": "agent", "execution_id": execution_id.to_string()})
+        serde_json::json!({"kind": "agent", "space_id": space_id.to_string()})
     );
     assert_eq!(serde_json::from_value::<Acquirer>(json)?, agent);
     assert_eq!(
@@ -26,15 +26,18 @@ fn rejects_an_unknown_kind() {
 }
 
 #[test]
-fn only_the_user_goes_without_an_execution() -> Result<()> {
+fn only_the_user_goes_without_an_id() -> Result<()> {
     let execution = ExecutionId::generate();
     assert_eq!(
-        Acquirer::from_parts(AcquirerKind::Demo, Some(execution.clone()))?,
+        Acquirer::from_parts(AcquirerKind::Demo, Some(execution.to_string()))?,
         Acquirer::Demo {
             execution_id: execution.clone()
         }
     );
-    assert!(Acquirer::from_parts(AcquirerKind::User, Some(execution)).is_err());
+    let space = SpaceId::generate();
+    let agent = Acquirer::from_parts(AcquirerKind::Agent, Some(space.to_string()))?;
+    assert_eq!(agent.agent_space(), Some(&space));
+    assert!(Acquirer::from_parts(AcquirerKind::User, Some(execution.to_string())).is_err());
     assert!(Acquirer::from_parts(AcquirerKind::Agent, None).is_err());
     Ok(())
 }
@@ -42,10 +45,10 @@ fn only_the_user_goes_without_an_execution() -> Result<()> {
 #[test]
 fn only_the_users_acquire_takes_a_lease_over() {
     let agent = Acquirer::Agent {
-        execution_id: ExecutionId::generate(),
+        space_id: SpaceId::generate(),
     };
     let other = Acquirer::Agent {
-        execution_id: ExecutionId::generate(),
+        space_id: SpaceId::generate(),
     };
     assert_eq!(agent.renewed_by(&Acquirer::User), Acquirer::User);
     assert_eq!(Acquirer::User.renewed_by(&agent), Acquirer::User);

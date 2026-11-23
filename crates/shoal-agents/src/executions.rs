@@ -890,6 +890,10 @@ impl Agents {
         daemon.ask_user_about(&completed.released).await;
         if let Some(space) = &completed.agent_space {
             daemon.settle_agent(space);
+            // An agent that comes back, asleep or restarting, keeps them.
+            if complete && let Err(error) = daemon.release_ended_leases_of(space).await {
+                log!("leases of the agent of {space} not released: {error:#}");
+            }
         }
         let demo = completed.demo;
         if connections.disconnect(&id).await {

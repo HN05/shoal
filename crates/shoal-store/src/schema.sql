@@ -31,8 +31,8 @@ CREATE TABLE resource_leases (
             id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
             scope TEXT NOT NULL, pool TEXT NOT NULL, name TEXT NOT NULL, resource TEXT NOT NULL,
             reason TEXT, created_at INTEGER NOT NULL, mode TEXT NOT NULL DEFAULT 'permit' CHECK(mode IN ('permit','read','write')), acquirer TEXT NOT NULL DEFAULT 'user'
-    CHECK(acquirer IN ('user','agent','demo')), acquirer_execution TEXT
-    CHECK((acquirer='user') = (acquirer_execution IS NULL)), UNIQUE(workspace_id,pool,name),
+    CHECK(acquirer IN ('user','agent','demo')), acquirer_id TEXT
+    CHECK((acquirer='user') = (acquirer_id IS NULL)), UNIQUE(workspace_id,pool,name),
             FOREIGN KEY(scope,pool) REFERENCES resource_pools(scope,name)
         );
 
@@ -504,7 +504,7 @@ CREATE TABLE container_projects (
     compose TEXT NOT NULL,
     state TEXT NOT NULL CHECK(state IN ('starting','running','stopped','failed')),
     acquirer TEXT NOT NULL CHECK(acquirer IN ('user','agent','demo')),
-    acquirer_execution TEXT CHECK((acquirer='user') = (acquirer_execution IS NULL)),
+    acquirer_id TEXT CHECK((acquirer='user') = (acquirer_id IS NULL)),
     for_agent INTEGER NOT NULL DEFAULT 0 CHECK(for_agent IN (0,1)),
     reason TEXT,
     error TEXT
@@ -1042,16 +1042,6 @@ CREATE TABLE hub_sleep_lags (
     since INTEGER
 );
 
-CREATE TABLE hub_ci_job_reruns (
-    run_url TEXT NOT NULL,
-    job_id INTEGER NOT NULL,
-    member_id TEXT NOT NULL REFERENCES hub_members(id),
-    job_name TEXT NOT NULL,
-    cut_off_by TEXT NOT NULL,
-    stopped_at INTEGER NOT NULL,
-    PRIMARY KEY(run_url, job_id)
-);
-
 CREATE TABLE "reviews" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -1090,6 +1080,16 @@ CREATE TABLE "reviews" (
     CHECK((opener='shoal') = (agent IS NOT NULL)),
     CHECK((opener='space') = (opener_id IS NOT NULL)),
     CHECK(opener='shoal' OR state IN ('pending','finished','cancelled'))
+);
+
+CREATE TABLE hub_ci_job_reruns (
+    run_url TEXT NOT NULL,
+    job_id INTEGER NOT NULL,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    job_name TEXT NOT NULL,
+    cut_off_by TEXT NOT NULL,
+    stopped_at INTEGER NOT NULL,
+    PRIMARY KEY(run_url, job_id)
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
@@ -1147,8 +1147,8 @@ CREATE INDEX access_request_repository ON access_requests(repository_id);
 
 CREATE INDEX space_scopes_space ON space_scopes(space_id);
 
-CREATE INDEX resource_lease_acquirers ON resource_leases(acquirer_execution)
-    WHERE acquirer_execution IS NOT NULL;
+CREATE INDEX resource_lease_acquirers ON resource_leases(acquirer_id)
+    WHERE acquirer_id IS NOT NULL;
 
 CREATE INDEX trigger_runs_by_trigger ON trigger_runs(scope, name, id);
 

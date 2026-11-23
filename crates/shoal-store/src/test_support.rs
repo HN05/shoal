@@ -12,9 +12,13 @@ pub mod queries;
 /// from.
 pub const SCHEMA_V17: &str = include_str!("../tests/fixtures/schema_v17.sql");
 
-/// The migration that records who acquired each resource lease, which a
-/// test of leases applies to a database of [`SCHEMA_V17`].
-pub const LEASE_ACQUIRERS: &str = include_str!("lease_acquirers.sql");
+/// The migrations that record who acquired each resource lease, in the
+/// columns this release reads, which a test of leases applies to a database
+/// of [`SCHEMA_V17`].
+pub const LEASE_ACQUIRERS: &str = concat!(
+    include_str!("lease_acquirers.sql"),
+    "ALTER TABLE resource_leases RENAME COLUMN acquirer_execution TO acquirer_id;"
+);
 
 /// Skip the syncs to disk that carry `db`'s commits through a power loss,
 /// which no test outlives: where `TMPDIR`'s disk syncs slowly, they take

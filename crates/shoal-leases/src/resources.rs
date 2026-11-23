@@ -46,7 +46,7 @@ impl ResourceLeaseExt for ResourceLease {
 }
 
 const LEASE_COLUMNS: &str = "id,workspace_id,scope,pool,name,resource,reason,created_at,mode,
-    acquirer,acquirer_execution,
+    acquirer,acquirer_id,
     (SELECT repository_id FROM repository_resource_leases WHERE lease_id=resource_leases.id) AS repository_id,
     (SELECT path FROM repository_resource_leases WHERE lease_id=resource_leases.id) AS repository_path";
 
@@ -77,7 +77,7 @@ fn row_lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResourceLease> {
 /// The acquirer a lease row records in its two columns.
 pub fn row_acquirer(row: &rusqlite::Row<'_>) -> rusqlite::Result<Acquirer> {
     let index = row.as_ref().column_index("acquirer")?;
-    Acquirer::from_parts(row.get(index)?, row.get("acquirer_execution")?).map_err(|error| {
+    Acquirer::from_parts(row.get(index)?, row.get("acquirer_id")?).map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text, error.into())
     })
 }
@@ -184,7 +184,7 @@ fn save_definition(
 
 fn insert_lease(tx: &Transaction<'_>, lease: &ResourceLease) -> Result<()> {
     tx.execute(
-        "INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,reason,created_at,mode,acquirer,acquirer_execution)
+        "INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,reason,created_at,mode,acquirer,acquirer_id)
             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
         params![
             lease.id,
@@ -197,7 +197,7 @@ fn insert_lease(tx: &Transaction<'_>, lease: &ResourceLease) -> Result<()> {
             lease.created_at,
             lease.mode,
             lease.acquirer.kind(),
-            lease.acquirer.execution()
+            lease.acquirer.id()
         ],
     )?;
     Ok(())
@@ -533,7 +533,7 @@ impl Leases {
         self.store
             .write(move |tx| {
                 tx.execute(
-                    "UPDATE resource_leases SET acquirer=?4,acquirer_execution=NULL
+                    "UPDATE resource_leases SET acquirer=?4,acquirer_id=NULL
                         WHERE workspace_id=?1 AND pool=?2 AND name=?3",
                     params![workspace, pool, name, Acquirer::User.kind()],
                 )?;
@@ -843,8 +843,8 @@ fn renew_lease(
     let renewed = lease.acquirer.renewed_by(acquirer);
     if renewed != lease.acquirer {
         tx.execute(
-            "UPDATE resource_leases SET acquirer=?2,acquirer_execution=?3 WHERE id=?1",
-            params![lease.id, renewed.kind(), renewed.execution()],
+            "UPDATE resource_leases SET acquirer=?2,acquirer_id=?3 WHERE id=?1",
+            params![lease.id, renewed.kind(), renewed.id()],
         )?;
         lease.acquirer = renewed;
     }

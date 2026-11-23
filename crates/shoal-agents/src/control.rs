@@ -619,10 +619,10 @@ impl Agents {
     }
 
     /// Prove that a protection-stopped agent ended, then forget its stopped
-    /// child and release its leases. Identity-verified processes it left
-    /// outside its process group, such as background shell commands, are
-    /// stopped as `shoal stop` stops them; the waiting wrapper is not a
-    /// target. Reports what survives when `patience` passes without proof.
+    /// child; its leases stay its space's agent's. Identity-verified
+    /// processes it left outside its process group, such as background
+    /// shell commands, are stopped as `shoal stop` stops them; the waiting
+    /// wrapper is not a target. Reports what survives when `patience` passes without proof.
     pub async fn pause_agent_execution(
         &self,
         daemon: &dyn Daemon,
@@ -651,8 +651,6 @@ impl Agents {
                 Ok(())
             })
             .await?;
-        // Its leases end with the agent, though its execution stays.
-        daemon.release_agent_leases(id).await;
         Ok(Pause::Paused)
     }
 

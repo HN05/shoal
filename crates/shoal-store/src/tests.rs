@@ -835,6 +835,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
     if version >= 283 {
         db.execute_batch(include_str!("hub_ci_job_reruns.sql"))?;
     }
+    if version >= 284 {
+        db.execute_batch(include_str!("agent_lease_spaces.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -2488,17 +2491,57 @@ fn resource_leases_recorded_before_acquirers_are_the_users() -> Result<()> {
     migrate(&mut db)?;
 
     let acquirer = db.query_row(
-        "SELECT acquirer,acquirer_execution FROM resource_leases",
+        "SELECT acquirer,acquirer_id FROM resource_leases",
         [],
         |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
     )?;
     assert_eq!(acquirer, ("user".to_owned(), None));
-    // An agent's lease names its execution, and only the user's goes without.
+    // An agent's lease names its space, and only the user's goes without.
     let mismatched = db.execute(
         "UPDATE resource_leases SET acquirer='agent' WHERE id='lease'",
         [],
     );
     assert!(mismatched.is_err());
+    Ok(())
+}
+
+#[test]
+fn agent_leases_name_the_space_their_execution_ran_in() -> Result<()> {
+    let mut db = historical_database(283)?;
+    // The leases' workspaces need not exist for what the migration reads.
+    db.execute_batch(
+        "PRAGMA foreign_keys=OFF;
+         INSERT INTO executions(id,space_id,state,agent) VALUES ('run','coordinator','running','claude');
+         INSERT INTO resource_pools(scope,name,definition) VALUES ('global','devices','{}');
+         INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,created_at,acquirer,acquirer_execution)
+            VALUES ('live','child','global','devices','a','phone',1,'agent','run'),
+                ('ended','child','global','devices','b','phone',1,'agent','gone'),
+                ('demo','child','global','devices','c','phone',1,'demo','run');
+         INSERT INTO simulators(id,record) VALUES ('sim',
+            json_object('workspace_id','child','acquirer',json_object('kind','agent','execution_id','run')));",
+    )?;
+
+    migrate(&mut db)?;
+
+    let acquirers: Vec<(String, String)> = db
+        .prepare("SELECT id,acquirer_id FROM resource_leases ORDER BY id")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let named = |id: &str, acquirer: &str| (id.to_owned(), acquirer.to_owned());
+    assert_eq!(
+        acquirers,
+        [
+            named("demo", "run"),
+            named("ended", "child"),
+            named("live", "coordinator")
+        ]
+    );
+    let simulator: String = db.query_row(
+        "SELECT json_extract(record,'$.acquirer') FROM simulators",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!(simulator, r#"{"kind":"agent","space_id":"coordinator"}"#);
     Ok(())
 }
 

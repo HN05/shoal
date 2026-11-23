@@ -1,7 +1,7 @@
 //! What leases need of the rest of the daemon, which implements it: the
 //! spaces they belong to, their repositories' settings and hooks, the agents
 //! that acquire them and the approval requests that gate them.
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -77,17 +77,19 @@ pub trait Settings: Send + Sync {
 
 /// The agents and demos that acquire leases, which end with them.
 pub trait Agents: Send + Sync {
-    /// The agent execution a request from `caller` comes from: the one its
-    /// execution runs, else the one whose process tree registered it.
-    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<ExecutionId>>;
+    /// The space of the agent a request from `caller` comes from: the agent
+    /// its execution runs, else the one whose process tree registered it.
+    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<SpaceId>>;
 
     /// Whether `execution` runs a demo.
     fn runs_demo<'a>(&'a self, execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>>;
 
-    /// Every execution with a record, which a recorded end deletes, and
-    /// whether it runs a process: a stopped agent waiting for its restore
-    /// has none recorded.
-    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashMap<ExecutionId, bool>>>;
+    /// Every execution with a record, which a recorded end deletes.
+    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashSet<ExecutionId>>>;
+
+    /// The spaces whose agent has not ended for good: it runs, sleeps, waits
+    /// in the agent queue for its restore, or restarts.
+    fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>>;
 
     /// Whether an agent launch waits to start in the space `id`.
     fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;

@@ -1,7 +1,7 @@
 //! What leases need of the rest of the daemon, which [`Manager`] gives
 //! them: the spaces they belong to, their repositories' settings and hooks,
 //! the agents that acquire them and the approval requests that gate them.
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -96,8 +96,8 @@ impl Settings for Manager {
 }
 
 impl Agents for Manager {
-    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<ExecutionId>> {
-        Box::pin(async move { Some(self.agents.caller_agent(caller).await?.execution) })
+    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<SpaceId>> {
+        Box::pin(async move { Some(self.agents.caller_agent(caller).await?.space_id) })
     }
 
     fn runs_demo<'a>(&'a self, execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
@@ -108,8 +108,12 @@ impl Agents for Manager {
         )
     }
 
-    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashMap<ExecutionId, bool>>> {
+    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashSet<ExecutionId>>> {
         Box::pin(self.store.read(|db| recorded_executions(db)))
+    }
+
+    fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
+        Box::pin(self.agents.agent_spaces())
     }
 
     fn has_queued_launch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
@@ -117,11 +121,10 @@ impl Agents for Manager {
     }
 }
 
-/// Every execution with a record, and whether it runs a process.
-fn recorded_executions(db: &Connection) -> Result<HashMap<ExecutionId, bool>> {
-    let mut statement =
-        db.prepare("SELECT id, child IS NOT NULL OR group_id IS NOT NULL FROM executions")?;
-    let ids = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+/// Every execution with a record.
+fn recorded_executions(db: &Connection) -> Result<HashSet<ExecutionId>> {
+    let mut statement = db.prepare("SELECT id FROM executions")?;
+    let ids = statement.query_map([], |row| row.get(0))?;
     Ok(ids.collect::<rusqlite::Result<_>>()?)
 }
 

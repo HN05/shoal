@@ -1,8 +1,9 @@
 //! Leases that end with the agents and demos that acquired them, as the
-//! daemon tracks their executions.
+//! daemon tracks their executions and agents' restores.
 use std::{sync::Arc, time::Duration};
 
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use crate::daemon::{
     allocation::Allocation,
@@ -100,6 +101,39 @@ impl Fixture {
         );
     }
 
+    /// The acquirer of the workspace's agent.
+    fn its_agent(&self) -> Acquirer {
+        Acquirer::Agent {
+            space_id: self.workspace.id.clone(),
+        }
+    }
+
+    /// Put the agent of `execution` to sleep as Shoal does on its own: its
+    /// restore waits in the agent queue as its execution ends.
+    async fn sleep(&self, execution: &ExecutionId) {
+        let (restored, space) = (execution.clone(), self.workspace.id.clone());
+        let queued = self.manager.store.run(move |db| {
+            db.execute(
+                "INSERT INTO agent_queue(id,kind,name,agent,execution_id,state,created_at,space_id,automatic)
+                 VALUES ('restore','restore','worker','claude',?1,'queued',1,?2,1)",
+                rusqlite::params![restored, space],
+            )?;
+            Ok(())
+        });
+        queued.await.unwrap();
+        (self.manager.agents)
+            .end_test_execution(&*self.manager, execution.clone())
+            .await;
+    }
+
+    /// Release the leases of every acquirer that ended, as the sweep does.
+    async fn sweep(&self) {
+        (self.manager.leases)
+            .release_leases_of_ended_executions(&*self.manager)
+            .await
+            .unwrap();
+    }
+
     /// The workspace's permits by name, with who acquired each.
     async fn permits(&self) -> Vec<(String, Acquirer)> {
         let leases = self
@@ -122,14 +156,14 @@ fn permit(name: &str, acquirer: &Acquirer) -> (String, Acquirer) {
 }
 
 #[tokio::test]
-async fn an_agents_permit_is_its_executions_and_the_users_the_users() {
+async fn an_agents_permit_is_its_spaces_agents_and_the_users_the_users() {
     let fixture = Fixture::new(POOL).await;
-    let (execution_id, caller) = fixture.agent().await;
+    let (_, caller) = fixture.agent().await;
 
     fixture.acquire("agent", Some(&caller)).await;
     fixture.acquire("user", None).await;
 
-    let agent = Acquirer::Agent { execution_id };
+    let agent = fixture.its_agent();
     assert_eq!(
         fixture.permits().await,
         [permit("agent", &agent), permit("user", &Acquirer::User)]
@@ -190,15 +224,12 @@ impl Fixture {
 }
 
 #[tokio::test]
-async fn an_agents_leases_end_with_its_execution_and_the_users_stay() {
+async fn an_agents_leases_end_when_it_quits_and_the_users_stay() {
     let fixture = Fixture::new(POOL).await;
     let (execution_id, caller) = fixture.agent().await;
     fixture.acquire("agent", Some(&caller)).await;
     fixture.acquire("user", None).await;
-    let agent = Acquirer::Agent {
-        execution_id: execution_id.clone(),
-    };
-    fixture.lease_simulator("agent", agent).await;
+    fixture.lease_simulator("agent", fixture.its_agent()).await;
     fixture.lease_simulator("user", Acquirer::User).await;
 
     fixture
@@ -211,34 +242,41 @@ async fn an_agents_leases_end_with_its_execution_and_the_users_stay() {
     assert_eq!(fixture.simulators().await, ["user"]);
 }
 
-/// A stop that keeps the execution for a restore ends its agent's leases,
-/// while a demo's execution between runs keeps its own.
+/// An asleep agent keeps its leases while its restore waits and once the
+/// restore starts it in a new execution; a cancelled restore ends them.
 #[tokio::test]
-async fn a_stopped_agents_leases_end_and_a_demo_keeps_its_own_between_runs() {
+async fn an_asleep_agent_keeps_its_leases_until_its_restore_is_cancelled() {
     let fixture = Fixture::new(POOL).await;
-    let (agent, _) = fixture.agent().await;
-    let demo = ExecutionId::generate();
-    let agent_acquirer = Acquirer::Agent {
-        execution_id: agent.clone(),
-    };
-    let demo_acquirer = Acquirer::Demo {
-        execution_id: demo.clone(),
-    };
-    fixture.lease_simulator("agent", agent_acquirer).await;
-    fixture.lease_simulator("demo", demo_acquirer).await;
+    let (asleep, caller) = fixture.agent().await;
+    fixture.acquire("permit", Some(&caller)).await;
+    fixture.lease_simulator("sim", fixture.its_agent()).await;
 
-    fixture
-        .manager
-        .leases
-        .release_agent_leases(&*fixture.manager, &agent)
-        .await;
-    fixture
-        .manager
-        .leases
-        .release_agent_leases(&*fixture.manager, &demo)
-        .await;
+    fixture.sleep(&asleep).await;
+    fixture.sweep().await;
+    let kept = [permit("permit", &fixture.its_agent())];
+    assert_eq!(fixture.permits().await, kept);
+    assert_eq!(fixture.simulators().await, ["sim"]);
 
-    assert_eq!(fixture.simulators().await, ["demo"]);
+    // Its restore starts it again, as a new execution.
+    let (restored, _) = fixture.agent().await;
+    let started = fixture.manager.store.run(|db| {
+        db.execute("DELETE FROM agent_queue WHERE id='restore'", [])?;
+        Ok(())
+    });
+    started.await.unwrap();
+    fixture.sweep().await;
+    assert_eq!(fixture.permits().await, kept);
+
+    // It sleeps again, and its restore is cancelled.
+    fixture.sleep(&restored).await;
+    let cancelled = fixture.manager.store.run(|db| {
+        db.execute("DELETE FROM agent_queue WHERE id='restore'", [])?;
+        Ok(())
+    });
+    cancelled.await.unwrap();
+    fixture.sweep().await;
+    assert_eq!(fixture.permits().await, []);
+    assert_eq!(fixture.simulators().await, Vec::<String>::new());
 }
 
 #[tokio::test]
@@ -257,15 +295,13 @@ async fn the_users_acquire_keeps_an_agents_permit_past_its_exit() {
     assert_eq!(fixture.permits().await, [permit("shared", &Acquirer::User)]);
 }
 
-/// The sweep releases the leases of an agent whose execution ended, or
-/// that a stop left without a process while its execution waits for a
-/// restore, and keeps those of a running agent and of a demo between runs.
+/// The sweep releases the leases of an agent whose space has no agent
+/// left, and keeps those of a running agent and of a demo between runs.
 #[tokio::test]
-async fn leases_of_ended_and_stopped_agents_are_released_and_running_ones_kept() {
+async fn leases_of_ended_agents_are_released_and_running_ones_kept() {
     let fixture = Fixture::new(POOL).await;
-    let (running, _) = fixture.agent().await;
+    fixture.agent().await;
     let process = agent_process(&fixture.manager, &fixture.workspace.id).await;
-    let (stopped, _) = fixture.agent().await;
     let demo = fixture.manager.agents.begin_execution(
         &*fixture.manager,
         fixture.workspace.id.as_str(),
@@ -274,37 +310,19 @@ async fn leases_of_ended_and_stopped_agents_are_released_and_running_ones_kept()
         None,
     );
     let demo = demo.await.unwrap().plan.id;
+    let ended = Acquirer::Agent {
+        space_id: SpaceId::generate(),
+    };
     let leases = [
-        (
-            "ended",
-            Acquirer::Agent {
-                execution_id: ExecutionId::generate(),
-            },
-        ),
-        (
-            "running",
-            Acquirer::Agent {
-                execution_id: running,
-            },
-        ),
-        (
-            "stopped",
-            Acquirer::Agent {
-                execution_id: stopped,
-            },
-        ),
+        ("ended", ended),
+        ("running", fixture.its_agent()),
         ("between-runs", Acquirer::Demo { execution_id: demo }),
     ];
     for (name, acquirer) in leases {
         fixture.lease_simulator(name, acquirer).await;
     }
 
-    (fixture
-        .manager
-        .leases
-        .release_leases_of_ended_executions(&*fixture.manager))
-    .await
-    .unwrap();
+    fixture.sweep().await;
 
     assert_eq!(fixture.simulators().await, ["between-runs", "running"]);
     process.kill();
@@ -372,11 +390,8 @@ impl Fixture {
 async fn a_simulator_demo_keeps_the_lease_its_agent_took_past_the_agent() {
     let fixture = Fixture::new(POOL).await;
     let (agent, caller) = fixture.agent().await;
-    let agent_acquirer = Acquirer::Agent {
-        execution_id: agent.clone(),
-    };
     fixture
-        .lease_device("default", Some("DEMO"), agent_acquirer)
+        .lease_device("default", Some("DEMO"), fixture.its_agent())
         .await;
     fixture
         .lease_device("user", Some("USER"), Acquirer::User)
@@ -428,9 +443,9 @@ async fn an_agent_ending_during_a_stop_releases_its_leases_once_the_stop_ends() 
 
     manager
         .agents
-        .end_test_execution(&**manager, execution_id.clone())
+        .end_test_execution(&**manager, execution_id)
         .await;
-    let agent = Acquirer::Agent { execution_id };
+    let agent = fixture.its_agent();
     assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
 
     (manager
@@ -460,9 +475,9 @@ async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass()
 
     manager
         .agents
-        .end_test_execution(&**manager, execution_id.clone())
+        .end_test_execution(&**manager, execution_id)
         .await;
-    let agent = Acquirer::Agent { execution_id };
+    let agent = fixture.its_agent();
     assert_eq!(fixture.permits().await, [permit("agent", &agent)]);
 
     drop(hook);
@@ -484,9 +499,8 @@ async fn a_release_a_busy_resource_operation_holds_off_waits_for_the_next_pass()
 #[tokio::test]
 async fn a_simulator_release_a_lifecycle_operation_holds_off_waits() {
     let fixture = Fixture::new(POOL).await;
-    let (execution_id, _) = fixture.agent().await;
-    let agent = Acquirer::Agent { execution_id };
-    fixture.lease_simulator("agent", agent).await;
+    fixture.agent().await;
+    fixture.lease_simulator("agent", fixture.its_agent()).await;
     let manager = &fixture.manager;
     let stopping = crate::state::WorkspaceState::Stopping;
     (manager
@@ -510,8 +524,8 @@ async fn a_simulator_release_a_lifecycle_operation_holds_off_waits() {
 #[tokio::test]
 async fn a_release_decided_for_an_agent_leaves_a_lease_the_user_took_over_since() {
     let fixture = Fixture::new(POOL).await;
-    let (execution_id, caller) = fixture.agent().await;
-    let agent = Acquirer::Agent { execution_id };
+    let (_, caller) = fixture.agent().await;
+    let agent = fixture.its_agent();
     fixture.acquire("permit", Some(&caller)).await;
     fixture.lease_simulator("sim", agent.clone()).await;
     let manager = &fixture.manager;
@@ -551,10 +565,7 @@ async fn releasing_an_ended_agents_leases_leaves_the_workspace_idle() {
     let fixture = Fixture::new(POOL).await;
     let (execution_id, caller) = fixture.agent().await;
     fixture.acquire("agent", Some(&caller)).await;
-    let agent = Acquirer::Agent {
-        execution_id: execution_id.clone(),
-    };
-    fixture.lease_simulator("agent", agent).await;
+    fixture.lease_simulator("agent", fixture.its_agent()).await;
     let manager = &fixture.manager;
     let id = fixture.workspace.id.clone();
     (manager.store.run(move |db| {
@@ -564,10 +575,13 @@ async fn releasing_an_ended_agents_leases_leaves_the_workspace_idle() {
     .await
     .unwrap();
 
-    manager
-        .leases
-        .release_agent_leases(&**manager, &execution_id)
-        .await;
+    // The agent's record goes, as its end deletes it.
+    let ended = manager.store.run(move |db| {
+        db.execute("DELETE FROM executions WHERE id=?1", [execution_id])?;
+        Ok(())
+    });
+    ended.await.unwrap();
+    fixture.sweep().await;
 
     assert_eq!(fixture.permits().await, []);
     assert_eq!(fixture.simulators().await, Vec::<String>::new());

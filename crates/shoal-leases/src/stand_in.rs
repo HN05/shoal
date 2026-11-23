@@ -3,7 +3,7 @@
 //! whose repository's settings a test gives, and approval requests kept in
 //! memory, which a test decides and which need a reason as the daemon's
 //! do.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -65,7 +65,7 @@ impl Fixture {
             layers: Mutex::new(layers(repo)),
             hooks: Mutex::default(),
             hooks_run: Mutex::default(),
-            running: Mutex::default(),
+            agents: Mutex::default(),
             touched: Mutex::default(),
             announced: Mutex::default(),
         };
@@ -161,8 +161,8 @@ pub(crate) struct StandIn {
     pub(crate) hooks: Mutex<HashMap<HookKind, StandInHook>>,
     /// The executables of the hooks run, in order.
     pub(crate) hooks_run: Mutex<Vec<PathBuf>>,
-    /// The executions with a record, and whether each runs a process.
-    pub(crate) running: Mutex<HashMap<ExecutionId, bool>>,
+    /// The spaces whose agent has not ended.
+    pub(crate) agents: Mutex<HashSet<SpaceId>>,
     /// The workspaces whose requests counted as their activity.
     pub(crate) touched: Mutex<Vec<SpaceId>>,
     /// The approval requests announced to whoever decides them.
@@ -238,19 +238,23 @@ impl Settings for StandIn {
     }
 }
 
-/// Every execution runs an agent; none runs a demo.
+/// Every scoped caller is its space's agent; nothing runs a demo.
 impl Agents for StandIn {
-    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<ExecutionId>> {
-        Box::pin(async move { caller.execution_id().cloned() })
+    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<SpaceId>> {
+        Box::pin(async move { Some(caller.space_id.clone()) })
     }
 
     fn runs_demo<'a>(&'a self, _execution: &'a ExecutionId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
     }
 
-    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashMap<ExecutionId, bool>>> {
-        let running = self.running.lock().unwrap().clone();
-        Box::pin(async move { Ok(running) })
+    fn recorded_executions(&self) -> BoxFuture<'_, Result<HashSet<ExecutionId>>> {
+        Box::pin(async { Ok(HashSet::new()) })
+    }
+
+    fn agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
+        let agents = self.agents.lock().unwrap().clone();
+        Box::pin(async move { Ok(agents) })
     }
 
     fn has_queued_launch<'a>(&'a self, _id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {

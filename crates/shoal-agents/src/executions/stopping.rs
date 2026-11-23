@@ -21,6 +21,7 @@ use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
+use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_store;
 use std::collections::HashSet;
@@ -284,7 +285,11 @@ impl Agents {
                 self.stop_workspace_executions(daemon, workspace, stopping)
                     .await
             }
-            ByKind::Chat(chat) => self.stop_and_keep(daemon, &chat.id, stopping).await,
+            ByKind::Chat(chat) => {
+                let stopped = self.stop_and_keep(daemon, &chat.id, stopping).await;
+                release_stopped_leases(daemon, &chat.id, &chat.name).await;
+                stopped
+            }
         }
     }
 
@@ -337,12 +342,7 @@ impl Agents {
             )
             .await?;
         // The stopped agents' leases waited for the stop to end.
-        if let Err(error) = daemon.release_ended_leases_of(&workspace.id).await {
-            log!(
-                "leases of the agents stopped in {} not released: {error:#}",
-                workspace.name
-            );
-        }
+        release_stopped_leases(daemon, &workspace.id, &workspace.name).await;
         result
     }
 
@@ -675,5 +675,13 @@ impl Agents {
             None => "command still running".to_owned(),
         };
         format!("execution {}: {step}", execution.id)
+    }
+}
+
+/// Release the leases held in the space `id` named `name`, or by its agent,
+/// that its stop ended. A failure is logged.
+async fn release_stopped_leases(daemon: &dyn Daemon, id: &SpaceId, name: &SpaceName) {
+    if let Err(error) = daemon.release_ended_leases_of(id).await {
+        log!("leases of the agents stopped in {name} not released: {error:#}");
     }
 }

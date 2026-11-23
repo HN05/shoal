@@ -13,10 +13,6 @@ impl Leases for Manager {
         Box::pin(self.leases.release_execution_leases(self, id))
     }
 
-    fn release_agent_leases<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, ()> {
-        Box::pin(self.leases.release_agent_leases(self, id))
-    }
-
     fn release_ended_leases_of<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
         Box::pin(self.leases.release_ended_leases_of(self, id))
     }

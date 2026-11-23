@@ -1,8 +1,10 @@
-//! The simulator leases, containers and resource permits an execution
-//! acquired, which end with it: who acquires a lease, the lease a demo
-//! takes over from the agent that started it, and releasing an execution's
-//! leases through each kind's release path once it ends.
-use std::collections::HashMap;
+//! The simulator leases, containers and resource permits an agent or a
+//! demo acquired, which end with it: who acquires a lease, the lease a demo
+//! takes over from the agent that started it, and releasing the leases of
+//! an acquirer through each kind's release path once it ends: a demo with
+//! its execution, an agent once its space has no agent left to run, asleep
+//! or restoring.
+use std::collections::HashSet;
 
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
@@ -17,7 +19,7 @@ use shoal_protocol::{
     acquirers::Acquirer, alerts::AlertKind, demos::Launch, space_names::SpaceSelector,
 };
 
-/// A lease that ends with the execution that acquired it.
+/// A lease that ends with the agent or demo that acquired it.
 struct Acquired {
     workspace: SpaceId,
     acquirer: Acquirer,
@@ -56,8 +58,9 @@ impl std::fmt::Display for Held {
 
 impl Leases {
     /// Whose lease a request from `caller` acquires: the demo its execution
-    /// runs, else the agent it runs or that registered it, else the user's,
-    /// as for an unscoped caller or a command no agent started.
+    /// runs, else the agent of the space whose agent runs it or registered
+    /// it, else the user's, as for an unscoped caller or a command no agent
+    /// started.
     pub async fn acquirer(&self, daemon: &dyn Daemon, caller: Option<&Caller>) -> Acquirer {
         let Some(caller) = caller else {
             return Acquirer::User;
@@ -70,7 +73,7 @@ impl Leases {
             };
         }
         match daemon.caller_agent(caller).await {
-            Some(execution_id) => Acquirer::Agent { execution_id },
+            Some(space_id) => Acquirer::Agent { space_id },
             None => Acquirer::User,
         }
     }
@@ -94,40 +97,31 @@ impl Leases {
         }
     }
 
-    /// Release the leases execution `id` acquired, whose processes are
-    /// proven ended.
+    /// Release the leases the demo execution `id` acquired, whose processes
+    /// are proven ended.
     pub async fn release_execution_leases(&self, daemon: &dyn Daemon, id: &ExecutionId) {
-        (self.release_acquired(daemon, |acquirer| acquirer.execution() == Some(id))).await;
-    }
-
-    /// Release the leases agent execution `id` acquired, once its stopped
-    /// agent's processes are proven ended while its execution stays for a
-    /// restore. A demo's execution between runs keeps its leases.
-    pub async fn release_agent_leases(&self, daemon: &dyn Daemon, id: &ExecutionId) {
-        let agent = Acquirer::Agent {
-            execution_id: id.to_owned(),
+        let demo = |acquirer: &Acquirer| match acquirer {
+            Acquirer::Demo { execution_id } => execution_id == id,
+            _ => false,
         };
-        self.release_acquired(daemon, |acquirer| *acquirer == agent)
-            .await;
+        self.release_acquired(daemon, demo).await;
     }
 
-    /// Release the leases of executions whose end is recorded, and of agents
-    /// proven stopped while their executions wait for a restore: those whose
-    /// workspace was in another lifecycle operation then, such as a stop,
-    /// and those the daemon stopped before releasing.
+    /// Release the leases of demos whose end is recorded and of agents that
+    /// ended for good: those whose workspace was in another lifecycle
+    /// operation then, such as a stop, and those whose end nothing released
+    /// at once, such as a cancelled restore.
     pub async fn release_leases_of_ended_executions(&self, daemon: &dyn Daemon) -> Result<()> {
         self.release_ended_leases(daemon, |_| true).await
     }
 
-    /// [`Self::release_leases_of_ended_executions`] for the leases of
-    /// `workspace` alone, as its stop leaves them.
-    pub async fn release_ended_leases_of(
-        &self,
-        daemon: &dyn Daemon,
-        workspace: &SpaceId,
-    ) -> Result<()> {
-        self.release_ended_leases(daemon, |lease| lease.workspace == *workspace)
-            .await
+    /// [`Self::release_leases_of_ended_executions`] for the leases held in
+    /// the space `id` or by its agent alone, as its stop or its agent's end
+    /// leaves them.
+    pub async fn release_ended_leases_of(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<()> {
+        let concerns =
+            |lease: &Acquired| lease.workspace == *id || lease.acquirer.agent_space() == Some(id);
+        self.release_ended_leases(daemon, concerns).await
     }
 
     /// Release the leases `selects` among those whose acquirer ended.
@@ -136,13 +130,16 @@ impl Leases {
         daemon: &dyn Daemon,
         selects: impl Fn(&Acquired) -> bool,
     ) -> Result<()> {
-        // The leases first: an execution exists before it acquires one, so
-        // the executions read after hold every lease read here that is live.
+        // The leases first: an acquirer runs before it acquires one, so the
+        // acquirers read after hold every lease read here that is live.
         let leases = self.acquired_leases().await?;
-        let executions = daemon.recorded_executions().await?;
+        let live = Live {
+            executions: daemon.recorded_executions().await?,
+            agents: daemon.agent_spaces().await?,
+        };
         let ended = leases
             .into_iter()
-            .filter(|lease| selects(lease) && has_ended(&lease.acquirer, &executions));
+            .filter(|lease| selects(lease) && live.ended(&lease.acquirer));
         for lease in ended {
             self.release_acquired_lease(daemon, lease).await;
         }
@@ -304,14 +301,24 @@ fn waits(error: &anyhow::Error) -> bool {
     error.downcast_ref::<ResourcesBusy>().is_some() || Reason::of(error) == Some(Reason::NotReady)
 }
 
-/// Whether `acquirer` ended, as `executions` records them: an agent once
-/// its execution ended or runs no process, a demo, which runs none between
-/// its command's runs, only once its execution ended.
-fn has_ended(acquirer: &Acquirer, executions: &HashMap<ExecutionId, bool>) -> bool {
-    match acquirer {
-        Acquirer::User => false,
-        Acquirer::Agent { execution_id } => executions.get(execution_id) != Some(&true),
-        Acquirer::Demo { execution_id } => !executions.contains_key(execution_id),
+/// The acquirers that have not ended, as the daemon records them.
+struct Live {
+    /// Every recorded execution, a demo's among them.
+    executions: HashSet<ExecutionId>,
+    /// The spaces whose agent runs, sleeps or restarts.
+    agents: HashSet<SpaceId>,
+}
+
+impl Live {
+    /// Whether `acquirer` ended: an agent once its space has none, a demo,
+    /// which runs nothing between its command's runs, once its execution
+    /// ended.
+    fn ended(&self, acquirer: &Acquirer) -> bool {
+        match acquirer {
+            Acquirer::User => false,
+            Acquirer::Agent { space_id } => !self.agents.contains(space_id),
+            Acquirer::Demo { execution_id } => !self.executions.contains(execution_id),
+        }
     }
 }
 

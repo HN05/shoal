@@ -1,4 +1,4 @@
-use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::*;
 
@@ -31,7 +31,7 @@ fn starter(acquirer: &Acquirer, agent_start: bool) -> Starter {
 
 fn agent() -> Acquirer {
     Acquirer::Agent {
-        execution_id: ExecutionId::generate(),
+        space_id: SpaceId::generate(),
     }
 }
 

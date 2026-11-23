@@ -897,7 +897,8 @@ suggestion, not a reservation; repeating the request with
 New reservations do not change the environment of running commands.
 Reservations and leases outlive the command that made them. The simulator
 leases, containers and resource permits an agent acquires end with the agent,
-when it exits or is stopped; the user's stay until released.
+when it quits or is stopped, not while it sleeps; the user's stay until
+released.
 
 ## Resource pools
 

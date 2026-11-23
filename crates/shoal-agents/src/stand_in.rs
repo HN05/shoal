@@ -927,10 +927,6 @@ impl Leases for StandIn {
         Box::pin(async {})
     }
 
-    fn release_agent_leases<'a>(&'a self, _: &'a ExecutionId) -> BoxFuture<'a, ()> {
-        Box::pin(async {})
-    }
-
     fn release_ended_leases_of<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }

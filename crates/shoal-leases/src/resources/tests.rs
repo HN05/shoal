@@ -96,14 +96,14 @@ fn leases_use_named_columns() -> Result<()> {
     db.execute_batch(
         "CREATE TABLE repository_resource_leases (lease_id TEXT, repository_id TEXT, path TEXT);
             CREATE TABLE resource_leases AS SELECT
-            'execution' AS acquirer_execution, 'agent' AS acquirer, 'read' AS mode, 123 AS created_at, NULL AS reason, 'member' AS resource,
+            'space' AS acquirer_id, 'agent' AS acquirer, 'read' AS mode, 123 AS created_at, NULL AS reason, 'member' AS resource,
             'default' AS name, 'pool' AS pool, 'global' AS scope,
             'workspace' AS workspace_id, 'lease' AS id;",
     )?;
     let expected = serde_json::json!({
         "id": "lease", "workspace_id": "workspace", "scope": "global", "pool": "pool",
         "name": "default", "resource": "member", "reason": null, "created_at": 123, "mode": "read",
-        "acquirer": {"kind": "agent", "execution_id": "execution"}
+        "acquirer": {"kind": "agent", "space_id": "space"}
     });
     assert_eq!(serde_json::to_value(&leases(&db, None)?[0])?, expected);
     assert_eq!(leases(&db, Some(&SpaceId::from("workspace")))?.len(), 1);
@@ -175,11 +175,11 @@ fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
     let selected = pool_leases(&db, &Scope::Global, "target")?;
     assert_eq!(selected.len(), 2);
     db.execute(
-        "UPDATE resource_leases SET acquirer='agent',acquirer_execution='agent' WHERE id='three'",
+        "UPDATE resource_leases SET acquirer='agent',acquirer_id='agent' WHERE id='three'",
         [],
     )?;
     let agent = Acquirer::Agent {
-        execution_id: "agent".into(),
+        space_id: "agent".into(),
     };
     let existing = named_lease(&db, &SpaceId::from("a"), "target", "three")?.unwrap();
     assert_eq!(existing.scope, Scope::Repo("a".into()));
@@ -205,7 +205,7 @@ fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
     assert!(renewed.is_err());
     // Another agent's acquire leaves the lease the agent's.
     let other = Acquirer::Agent {
-        execution_id: "other".into(),
+        space_id: "other".into(),
     };
     renew_lease(
         db.transaction()?,

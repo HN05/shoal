@@ -36,6 +36,7 @@ pub mod execution_recovery;
 pub mod executions;
 pub mod idle_wakes;
 pub mod keep_awake;
+pub mod lease_holders;
 pub mod lost_reports;
 pub mod messages;
 #[cfg(target_os = "linux")]

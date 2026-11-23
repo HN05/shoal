@@ -4196,16 +4196,19 @@ path rules, and cannot overlap permit or lifecycle transitions in their workspac
 Release hooks also run in the shared removal path while the worktree exists;
 all permits remain owned until removal succeeds.
 Simulator leases and permits record their acquirer: the user for an unscoped
-caller, else the agent execution the caller runs or was started by. An agent's
-lease ends with it, since capacity it no longer uses would otherwise keep other
-workspaces waiting and its workspace from removal: one daemon operation releases
-an execution's leases through each kind's release once its end is recorded or
-its stopped agent is proven ended while its execution waits for a restore. A
-lease whose workspace another lifecycle or resource operation holds then, such
+caller, else the space whose agent the caller runs or was started by, not its
+execution. An agent's lease ends once that space's agent ends for good, since
+capacity it no longer uses would otherwise keep other workspaces waiting and its
+workspace from removal, but not when it sleeps, restores in a new execution or
+restarts: an agent that sleeps after most turns would otherwise keep giving up
+and reacquiring slow resources. One daemon operation releases an acquirer's
+leases through each kind's release once a demo's execution's end is recorded,
+or once an agent's space has no agent execution, queued restore or restart
+left. A lease whose workspace another lifecycle or resource operation holds then, such
 as the stop that ended the agent or a resource hook, waits for it to end; the
-stop then releases the leases of ended executions and of agents stopped while
-their executions wait in its workspace, and the cleanup sweep, which also runs
-as the daemon starts, in every workspace. A failed release hands the lease to
+stop then releases the leases of the agents that ended in its space or hold
+leases there, and the cleanup sweep, which also runs as the daemon starts, in
+every workspace. A failed release hands the lease to
 the user, so a failing hook does not rerun on every sweep. The user's lease
 stays until released; the user's acquire takes an agent's lease over, never the
 reverse. A demo outlives the agent that starts it, so a simulator demo takes
