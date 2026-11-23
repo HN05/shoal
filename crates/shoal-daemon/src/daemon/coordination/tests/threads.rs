@@ -752,3 +752,25 @@ async fn a_thread_that_holds_its_posts_reaches_nobody_and_its_holder_takes_no_si
     );
     assert!(replied.await.is_err());
 }
+
+#[tokio::test]
+async fn a_submitted_review_reaches_its_holder_once_and_its_comments_then_post_as_any_thread() {
+    let tree = tree().await;
+    let (manager, parent) = (&tree.manager, caller(&tree.parent));
+    let writer = shoal_reviews::written::Writer::Space(tree.parent.id.clone());
+    start_review(manager, &tree.child, writer.clone()).await;
+    let thread = open_kind(manager, Some(&parent), &tree.child, "Unclear name", None).await;
+    send(manager, Some(&parent), &thread, "Call it retries").await;
+    let submitted = (manager.reviews).submit(&**manager, None, writer, false, None);
+    submitted.await.unwrap();
+    let received = alerts(manager, &tree.child).await;
+    assert_eq!(received.len(), 1, "{received:?}");
+    assert!(received[0].contains("Unclear name"), "{received:?}");
+    let replied = send(manager, Some(&caller(&tree.child)), &thread, "Renamed").await;
+    assert!(!replied.held);
+    let heard = alerts(manager, &tree.parent).await;
+    assert!(
+        heard.iter().any(|alert| alert.contains("Renamed")),
+        "{heard:?}"
+    );
+}

@@ -277,6 +277,19 @@ impl Review {
         Some(self.ended_at?.duration_since(self.started_at?))
     }
 
+    /// Whether it covers its commit for the review gates: finished, with
+    /// every thread it opened or reopened resolved, and, written by the user
+    /// or a space, with comments or approving the work.
+    pub fn covers(&self) -> bool {
+        let judged = match self.author {
+            Author::Shoal { .. } => true,
+            Author::User | Author::Space { .. } => {
+                !self.threads.is_empty() || self.verdict == Some(Verdict::Approve)
+            }
+        };
+        self.state == ReviewState::Finished && judged && self.unresolved().next().is_none()
+    }
+
     /// The threads it opened or reopened that are open.
     pub fn unresolved(&self) -> impl Iterator<Item = &Thread> {
         (self.threads.iter().chain(&self.reopened)).filter(|thread| thread.is_open())

@@ -372,6 +372,11 @@ pub trait Records: Send + Sync {
     /// while it was pending.
     fn drop_review_threads(&self, tx: &Transaction<'_>, review: ReviewId) -> Result<()>;
 
+    /// Let the threads of review `review`, which its writer submitted, post
+    /// as any thread does; it tells no one, since the review's own alert
+    /// names its threads.
+    fn release_review_threads(&self, tx: &Transaction<'_>, review: ReviewId) -> Result<()>;
+
     /// The threads review `review` opened, in the order it opened them.
     fn review_threads(&self, db: &Connection, review: ReviewId) -> Result<Vec<Thread>>;
 

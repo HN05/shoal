@@ -13,7 +13,7 @@ use crate::{
     config::{Effective, repo::Requester},
     daemon::Daemon,
     model::Workspace,
-    reviews::{Review, ReviewId, ReviewState, ReviewTarget},
+    reviews::{Author, Review, ReviewId, ReviewState, ReviewTarget},
     store,
 };
 use shoal_daemon_base::callers::Caller;
@@ -103,8 +103,9 @@ impl Reviews {
             })
             .await?;
         let missing = match &reviewed {
-            Some(review) if review.unresolved().next().is_none() => return Ok(()),
-            Some(review) => unresolved(review, head),
+            Some(review) if review.covers() => return Ok(()),
+            Some(review) if review.unresolved().next().is_some() => unresolved(review, head),
+            Some(review) => unjudged(review, head, gate),
             None => format!(
                 "{} needs a finished review of {} first",
                 gate.command(),
@@ -208,14 +209,26 @@ fn pending(id: ReviewId, state: ReviewState) -> String {
     format!("; review {id} is {state}, and shoal watch review {id} waits for it")
 }
 
-/// The refusal for a review of `head` whose threads are not all resolved,
-/// listing them.
-fn unresolved(review: &Review, head: &CommitId) -> String {
-    let mut text = format!(
-        "review {} of {} has unresolved findings; resolve each with shoal thread resolve:",
+/// The refusal for a review of `head` the user or a space submitted
+/// without comments or approving it, which `gate` does not take.
+fn unjudged(review: &Review, head: &CommitId, gate: Gate) -> String {
+    format!(
+        "review {} of {} by {} neither approves nor comments; {} needs one that does",
         review.id,
-        head.short()
-    );
+        head.short(),
+        review.author.label(),
+        gate.command()
+    )
+}
+
+/// The refusal for a review of `head` whose threads are not all resolved,
+/// listing them with who resolves them.
+fn unresolved(review: &Review, head: &CommitId) -> String {
+    let resolves = match review.author {
+        Author::Shoal { .. } => "has unresolved findings; resolve each with shoal thread resolve",
+        Author::User | Author::Space { .. } => "has unresolved comments, which its writer resolves",
+    };
+    let mut text = format!("review {} of {} {resolves}:", review.id, head.short());
     for thread in review.unresolved() {
         let _ = write!(text, "\n  {}", thread.finding_line());
     }

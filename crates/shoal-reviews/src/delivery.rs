@@ -1,22 +1,25 @@
 //! Telling a review's workspace that it ended: its agents receive the
-//! threads of its findings in one alert, and whoever coordinates the
-//! workspace a one-line notice.
+//! threads of its findings or comments in one alert, and whoever
+//! coordinates the workspace a one-line notice, unless a space above wrote
+//! the review.
 use std::fmt::Write as _;
 
 use crate::{
     Reviews,
     daemon::Daemon,
     log,
-    reviews::{AUTOMATED_NOTE, Review, ReviewId, ReviewState, severity_counts},
+    reviews::{AUTOMATED_NOTE, Author, Review, ReviewId, ReviewState, Verdict, severity_counts},
     store,
     validate::MAX_AGENT_MESSAGE_LEN,
 };
 use shoal_protocol::{alerts::AlertKind, threads::Thread};
+use shoal_refs::CommitId;
 
 impl Reviews {
     /// Deliver review `id`, which has ended: to the workspace's agents,
     /// unless a process of the workspace cancelled it, and as a notice to
-    /// its coordinator.
+    /// its coordinator, unless a space wrote it, which coordinates the
+    /// workspace or is above the one that does.
     pub(crate) async fn deliver(&self, daemon: &dyn Daemon, id: ReviewId) {
         let records = self.records.clone();
         let loaded = (self.store)
@@ -46,6 +49,9 @@ impl Reviews {
         {
             log!("delivering review {id}: {error:#}");
         }
+        if matches!(review.author, Author::Space { .. }) {
+            return;
+        }
         let kind = AlertKind::ReviewFinished;
         (daemon.tell_coordinator(
             &review.workspace,
@@ -62,6 +68,7 @@ impl Reviews {
 fn agent_message(review: &Review) -> String {
     let id = review.id;
     match review.state {
+        ReviewState::Finished if review.agent().is_none() => comments_message(review),
         ReviewState::Finished => findings_message(review),
         ReviewState::Failed => {
             let reason = review.failure.map_or("", |reason| reason.describe());
@@ -81,7 +88,7 @@ fn findings_message(review: &Review) -> String {
         counts if counts.is_empty() => "no new findings".to_owned(),
         counts => counts,
     };
-    let mut message = format!("Review {id} finished: {counts}. {summary}");
+    let message = format!("Review {id} finished: {counts}. {summary}");
     let ending = format!(
         "\n\nEach finding is a thread you hold. Before fixing one, run shoal thread switch \
          <thread> so the changes you make are its; then resolve it with shoal thread resolve \
@@ -90,24 +97,71 @@ fn findings_message(review: &Review) -> String {
          user's decision unresolved and ask in a thread with shoal thread open.\n\n\
          {AUTOMATED_NOTE}"
     );
-    let omitted = format!("\n\nshoal view review {id} shows the remaining findings.");
     let reopened = review.reopened.iter().map(|thread| (thread, true));
     let entries: Vec<(&Thread, bool)> = (review.threads.iter().map(|thread| (thread, false)))
         .chain(reopened)
         .collect();
+    listed(message, id, &entries, "findings", &ending)
+}
+
+/// What the workspace's agents receive of a review the user or a space
+/// wrote: its verdict, summary and comments, which its writer resolves.
+fn comments_message(review: &Review) -> String {
+    let (id, by) = (review.id, review.author.label());
+    let head = review.head.as_ref().map_or("", CommitId::short);
+    let summary =
+        (review.summary.as_deref()).map_or(String::new(), |summary| format!(" {summary}"));
+    if review.threads.is_empty() {
+        let verdict = match review.verdict {
+            Some(Verdict::Approve) => "approved",
+            _ => "reviewed",
+        };
+        return format!("Review {id}: {by} {verdict} your work at {head}.{summary}");
+    }
+    let approved = match review.verdict {
+        Some(Verdict::Approve) => ", approving it once they are settled",
+        _ => "",
+    };
+    let counts = severity_counts(&review.threads);
+    let message =
+        format!("Review {id}: {by} reviewed your work at {head}{approved}: {counts}.{summary}");
+    let ending = format!(
+        "\n\nEach comment is a thread you hold, which {by} resolves. Before working on one, run \
+         shoal thread switch <thread> so the changes you make are its; then say what you did \
+         with shoal send <thread> \"<text>\", or there why you would not change it."
+    );
+    let entries: Vec<(&Thread, bool)> = review
+        .threads
+        .iter()
+        .map(|thread| (thread, false))
+        .collect();
+    listed(message, id, &entries, "comments", &ending)
+}
+
+/// `message` followed by as many of the threads `entries` as fit, each
+/// marked when reopened, then `ending`, saying how many `things` of
+/// review `id` are left out.
+fn listed(
+    mut message: String,
+    id: ReviewId,
+    entries: &[(&Thread, bool)],
+    things: &str,
+    ending: &str,
+) -> String {
+    let omitted = format!("\n\nshoal view review {id} shows the remaining {things}.");
     for (shown, (thread, reopened)) in entries.iter().enumerate() {
         let entry = entry(thread, *reopened);
         // What is left once the ending, the pointer to the rest and the
-        // count of findings left out fit.
+        // count of entries left out fit.
         let room = MAX_AGENT_MESSAGE_LEN - ending.len() - omitted.len() - 64;
         if message.len() + entry.len() > room {
             let left = entries.len() - shown;
-            let _ = write!(message, "\n\n{left} more findings are not shown.{omitted}");
+            let _ = write!(message, "\n\n{left} more {things} are not shown.{omitted}");
             break;
         }
         message.push_str(&entry);
     }
-    message.push_str(&ending);
+    message.push_str(ending);
     message
 }
 

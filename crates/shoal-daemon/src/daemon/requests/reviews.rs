@@ -52,6 +52,15 @@ pub(super) async fn handle(
             let writer = Writer::of(caller.map(|caller| &caller.space_id));
             pieces(reviews.start_written(daemon, &workspace, writer).await)
         }
+        ReviewMethod::SubmitReview {
+            workspace,
+            approve,
+            summary,
+        } => {
+            let writer = Writer::of(caller.map(|caller| &caller.space_id));
+            let submitted = reviews.submit(daemon, workspace.as_ref(), writer, approve, summary);
+            pieces(submitted.await)
+        }
         ReviewMethod::PendingReviews => {
             let writer = Writer::of(caller.map(|caller| &caller.space_id));
             pieces(reviews.pending_reviews(daemon, writer).await)
@@ -103,6 +112,7 @@ impl Checked for ReviewMethod {
             Self::PendingReviews => None,
             Self::RunReview { .. }
             | Self::StartReview { .. }
+            | Self::SubmitReview { .. }
             | Self::CancelReview { .. }
             | Self::ListReviews { .. }
             | Self::ShowReview { .. }
@@ -132,6 +142,8 @@ impl Scoped for ReviewMethod {
             | ReviewMethod::StartReview { workspace }
             | ReviewMethod::CheckPrGate { workspace } => Some(workspace),
             ReviewMethod::PendingReviews => None,
+            // Without a workspace, it is the caller's own review.
+            ReviewMethod::SubmitReview { workspace, .. } => workspace.as_mut(),
             ReviewMethod::ListReviews {
                 workspace,
                 repository,

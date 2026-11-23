@@ -6,8 +6,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{threads::Sender, time::UnixTime};
 
+use shoal_refs::CommitId;
+
 use super::Writer;
-use crate::reviews::{ReviewId, ReviewState, ReviewTarget};
+use crate::reviews::{ReviewId, ReviewState, ReviewTarget, Verdict};
 
 /// The columns that name a writer: who writes, and the space that does.
 fn columns(writer: &Writer) -> (Sender, Option<&SpaceId>) {
@@ -88,6 +90,39 @@ pub fn writer(db: &Connection, id: ReviewId) -> Result<Option<Writer>> {
         Some((Sender::Space, Some(id))) => Some(Writer::Space(id)),
         _ => None,
     })
+}
+
+/// What submitting a review records: the commit it covers and the one that
+/// commit is compared with, its summary and verdict.
+pub struct Submitted<'a> {
+    pub head: &'a CommitId,
+    pub base: &'a CommitId,
+    pub summary: Option<&'a str>,
+    pub verdict: Verdict,
+}
+
+/// End pending review `id` as `submitted`, finished; false when it is no
+/// longer pending.
+pub fn submit(
+    db: &Connection,
+    id: ReviewId,
+    submitted: &Submitted<'_>,
+    now: UnixTime,
+) -> Result<bool> {
+    Ok(db.execute(
+        "UPDATE reviews SET state=?2,head=?3,base=?4,summary=?5,verdict=?6,ended_at=?7
+            WHERE id=?1 AND state=?8",
+        params![
+            id,
+            ReviewState::Finished,
+            submitted.head,
+            submitted.base,
+            submitted.summary,
+            submitted.verdict,
+            now,
+            ReviewState::Pending
+        ],
+    )? == 1)
 }
 
 /// End pending review `id` as cancelled; false when it is no longer pending.

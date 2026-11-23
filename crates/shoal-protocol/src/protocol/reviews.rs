@@ -25,6 +25,17 @@ pub enum ReviewMethod {
     StartReview { workspace: SpaceSelector },
     /// The caller's pending reviews, oldest first.
     PendingReviews,
+    /// Submit the caller's pending review of the workspace, else its only
+    /// one, at the workspace's HEAD: its comments reach the workspace's
+    /// agent together, with `summary`, approving its work when `approve`.
+    SubmitReview {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<SpaceSelector>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        approve: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        summary: Option<String>,
+    },
     /// Cancel review `id`, else the workspace's queued or running one; a
     /// pending review goes with its threads.
     CancelReview {
@@ -82,6 +93,7 @@ impl ReviewMethod {
         match self {
             Self::RunReview { .. }
             | Self::StartReview { .. }
+            | Self::SubmitReview { .. }
             | Self::CancelReview { .. }
             | Self::ListReviews { .. }
             | Self::ShowReview { .. }
@@ -99,6 +111,7 @@ impl ReviewMethod {
             | Self::CheckPrGate { workspace } => Some(Target::Space(workspace)),
             Self::PendingReviews => None,
             Self::CancelReview { workspace, .. }
+            | Self::SubmitReview { workspace, .. }
             | Self::ListReviews { workspace, .. }
             | Self::ShowReview { workspace, .. }
             | Self::AwaitReview { workspace, .. } => workspace.as_ref().map(Target::Space),

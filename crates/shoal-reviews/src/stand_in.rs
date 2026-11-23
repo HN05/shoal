@@ -609,6 +609,14 @@ impl Records for StandInRecords {
         Ok(())
     }
 
+    fn release_review_threads(&self, _tx: &Transaction<'_>, review: ReviewId) -> Result<()> {
+        let mut threads = self.threads.lock().unwrap();
+        let of_review = (threads.iter_mut())
+            .filter(|thread| thread.finding.and_then(|finding| finding.review) == Some(review));
+        of_review.for_each(|thread| thread.held = false);
+        Ok(())
+    }
+
     fn review_threads(&self, _db: &Connection, review: ReviewId) -> Result<Vec<Thread>> {
         let threads = self.threads.lock().unwrap();
         Ok((threads.iter())

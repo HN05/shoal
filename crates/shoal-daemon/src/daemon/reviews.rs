@@ -290,6 +290,14 @@ impl Records for ReviewRecords {
         super::threads::findings::drop_of_review(tx, review)
     }
 
+    fn release_review_threads(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        review: ReviewId,
+    ) -> Result<()> {
+        super::threads::findings::release_of_review(tx, review)
+    }
+
     fn review_threads(&self, db: &rusqlite::Connection, review: ReviewId) -> Result<Vec<Thread>> {
         super::threads::findings::of_review(db, review)
     }

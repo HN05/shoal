@@ -1,5 +1,6 @@
 use super::*;
-use crate::{reviews::ReviewState, stand_in::Fixture};
+use crate::{required::Gate, reviews::ReviewState, stand_in::Fixture};
+use shoal_protocol::threads::Outcome;
 
 async fn fixture() -> Fixture {
     Fixture::new(tempfile::tempdir().unwrap(), "").await
@@ -66,4 +67,60 @@ async fn cancelling_a_pending_review_drops_its_threads_and_only_its_writer_cance
     let cancelled = by_parent.await.unwrap();
     assert_eq!(cancelled.state, ReviewState::Cancelled);
     assert!(fixture.records.threads.lock().unwrap().is_empty());
+}
+
+impl Fixture {
+    /// Submit `writer`'s only pending review, approving when `approve`.
+    async fn submit(&self, writer: Writer, approve: bool) -> anyhow::Result<Review> {
+        let summary = Some("Close, but rename it.".to_owned());
+        (self.reviews)
+            .submit(&*self.daemon, None, writer, approve, summary)
+            .await
+    }
+
+    /// Whether a review gate lets work at the workspace's HEAD through.
+    async fn covered(&self) -> bool {
+        let head = crate::daemon::Spaces::head(&*self.daemon, &self.workspace);
+        let head = head.await.unwrap();
+        let checked = self
+            .reviews
+            .check_reviewed(&self.workspace, Gate::Ready, &head);
+        checked.await.is_ok()
+    }
+}
+
+#[tokio::test]
+async fn submitting_delivers_the_comments_together_and_the_gate_waits_for_their_writer() {
+    let fixture = fixture().await;
+    let review = fixture.start(Writer::User).await.unwrap();
+    let comment = fixture.records.comment(review.id, "Unclear name");
+    let submitted = fixture.submit(Writer::User, false).await.unwrap();
+    assert_eq!(submitted.state, ReviewState::Finished);
+    assert_eq!(submitted.verdict, Some(Verdict::RequestChanges));
+    assert!(submitted.head.is_some());
+    assert!(!submitted.threads[0].held);
+    let messages = fixture.daemon.messages.lock().unwrap().clone();
+    assert_eq!(messages.len(), 1, "{messages:?}");
+    assert!(messages[0].contains("Unclear name"), "{messages:?}");
+    assert_eq!(fixture.daemon.notices.lock().unwrap().len(), 1);
+    assert!(!fixture.covered().await);
+    fixture.records.resolve(comment, Some(Outcome::Fixed));
+    assert!(fixture.covered().await);
+    // It was submitted; nothing is left to submit.
+    assert!(fixture.submit(Writer::User, false).await.is_err());
+}
+
+#[tokio::test]
+async fn a_review_without_comments_covers_its_commit_only_when_it_approves() {
+    let fixture = fixture().await;
+    let parent = Writer::Space("parent".into());
+    fixture.start(parent.clone()).await.unwrap();
+    let commented = fixture.submit(parent.clone(), false).await.unwrap();
+    assert_eq!(commented.verdict, Some(Verdict::Comment));
+    assert!(!fixture.covered().await);
+    fixture.start(parent.clone()).await.unwrap();
+    fixture.submit(parent, true).await.unwrap();
+    assert!(fixture.covered().await);
+    // A space above wrote it, so no coordinator is told of it.
+    assert!(fixture.daemon.notices.lock().unwrap().is_empty());
 }

@@ -1,7 +1,8 @@
 //! Reviews the user or a space writes, as Shoal's reviewer writes its own:
 //! a writer starts a pending review of a workspace below it, the threads it
-//! opens towards that workspace join it and hold their posts, and
-//! cancelling it drops them.
+//! opens towards that workspace join it and hold their posts, submitting it
+//! at the workspace's HEAD delivers them together, and cancelling it drops
+//! them.
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Connection, Transaction};
 use shoal_ids::space_ids::SpaceId;
@@ -11,7 +12,8 @@ use crate::{
     Reviews,
     daemon::{Daemon, Records},
     model::Workspace,
-    reviews::{Review, ReviewId},
+    reviews::{Review, ReviewId, Verdict},
+    validate,
 };
 
 pub mod store;
@@ -77,6 +79,76 @@ impl Reviews {
         Ok(reviews)
     }
 
+    /// Submit `writer`'s pending review of the workspace `selector` names,
+    /// else its only one, at the workspace's HEAD with `summary`, approving
+    /// its work when `approve`, and deliver its comments together.
+    pub async fn submit(
+        &self,
+        daemon: &dyn Daemon,
+        selector: Option<&SpaceSelector>,
+        writer: Writer,
+        approve: bool,
+        summary: Option<String>,
+    ) -> Result<Review> {
+        if let Some(summary) = &summary {
+            validate::agent_message(summary).context("invalid summary")?;
+        }
+        let id = self.submitted(daemon, selector, &writer).await?;
+        let review = self.stored(id).await?;
+        let workspace = daemon.workspace_by_id(&review.workspace_id).await?;
+        let head = daemon.head(&workspace).await?;
+        let base = daemon.diff_base(&workspace.id).await?;
+        let (records, now) = (self.records.clone(), UnixTime::now());
+        let submitted = self
+            .store
+            .write(move |tx| {
+                let comments = records.review_threads(tx, id)?.len();
+                let submitted = store::Submitted {
+                    head: &head,
+                    base: &base,
+                    summary: summary.as_deref(),
+                    verdict: verdict(approve, comments),
+                };
+                let submitted = store::submit(tx, id, &submitted, now)?;
+                if submitted {
+                    records.release_review_threads(tx, id)?;
+                }
+                Ok(submitted)
+            })
+            .await?;
+        ensure!(submitted, "review {id} is no longer pending");
+        daemon.review_threads_changed(&workspace).await;
+        self.deliver(daemon, id).await;
+        self.review(daemon, id).await
+    }
+
+    /// The pending review a submit names: `writer`'s of the workspace
+    /// `selector` names, else its only one.
+    async fn submitted(
+        &self,
+        daemon: &dyn Daemon,
+        selector: Option<&SpaceSelector>,
+        writer: &Writer,
+    ) -> Result<ReviewId> {
+        if let Some(selector) = selector {
+            let pending = self.pending_of(daemon, selector, writer).await?;
+            return pending.with_context(|| {
+                format!(
+                    "no pending review of {selector} is yours; start one with shoal review start"
+                )
+            });
+        }
+        let writer = writer.clone();
+        let pending = (self.store)
+            .run(move |db| store::pending_by(db, &writer))
+            .await?;
+        match pending.as_slice() {
+            [id] => Ok(*id),
+            [] => bail!("you have no pending review; start one with shoal review start <space>"),
+            _ => bail!("you have several pending reviews; name the space whose review to submit"),
+        }
+    }
+
     /// `writer`'s pending review of the workspace `selector` names.
     pub(crate) async fn pending_of(
         &self,
@@ -121,6 +193,17 @@ impl Reviews {
         let workspace = daemon.workspace_by_id(&review.workspace_id).await?;
         daemon.review_threads_changed(&workspace).await;
         self.review(daemon, id).await
+    }
+}
+
+/// What a review submitted with `comments` says: it approves when its
+/// writer says so, else asks for changes when it comments, else only
+/// comments.
+fn verdict(approve: bool, comments: usize) -> Verdict {
+    match (approve, comments) {
+        (true, _) => Verdict::Approve,
+        (false, 0) => Verdict::Comment,
+        (false, _) => Verdict::RequestChanges,
     }
 }
 

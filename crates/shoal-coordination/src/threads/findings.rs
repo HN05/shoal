@@ -1,9 +1,11 @@
-//! The `review` threads Shoal opens for a local review's findings, held by
-//! the reviewed workspace: opening one with its finding as the opening
-//! post, reopening one a later review found still present, and reading a
-//! review's, each in the review's own transaction, telling no one, since
-//! the review's one alert names its threads; and posting the reviewer's
-//! answers in them, which reach their holders.
+//! The `review` threads of reviews: those Shoal opens for a local review's
+//! findings, held by the reviewed workspace, opening one with its finding
+//! as the opening post and reopening one a later review found still
+//! present; reading a review's threads, releasing those of a review its
+//! writer submitted and dropping those of one it cancelled, each in the
+//! review's own transaction, telling no one, since the review's one alert
+//! names its threads; and posting the reviewer's answers in Shoal's, which
+//! reach their holders.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result};
 use rusqlite::{Connection, Transaction, params};
@@ -131,6 +133,13 @@ pub fn reopen(
 /// it was pending.
 pub fn drop_of_review(tx: &Transaction<'_>, review: ReviewId) -> Result<()> {
     tx.execute("DELETE FROM threads WHERE review_id=?1", [review.0])?;
+    Ok(())
+}
+
+/// Let the threads of review `review`, which its writer submitted, post as
+/// any thread does.
+pub fn release_of_review(tx: &Transaction<'_>, review: ReviewId) -> Result<()> {
+    tx.execute("UPDATE threads SET held=0 WHERE review_id=?1", [review.0])?;
     Ok(())
 }
 
