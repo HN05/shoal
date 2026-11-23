@@ -14,43 +14,17 @@ use crate::{
     stand_in::Fixture,
 };
 
-/// A registered repository.
-struct Registered {
-    id: RepositoryId,
-}
-
-async fn manager() -> ((), Arc<Fixture>) {
-    ((), Arc::new(Fixture::new().await))
-}
-
-async fn register(_: &(), manager: &Fixture, name: &str) -> Registered {
-    Registered {
-        id: manager.repository(name).await,
-    }
-}
-
 async fn chat(
-    manager: &Fixture,
+    fixture: &Fixture,
     name: &str,
     mode: &str,
-    repository: Option<&Registered>,
+    repository: Option<&RepositoryId>,
     parent: Option<&SpaceId>,
 ) -> Space {
-    let repository = repository.map(|repository| &repository.id);
-    let chat = manager.chat(name, mode, repository, parent).await;
+    let chat = fixture.chat(name, mode, repository, parent).await;
     // A chat runs its agent, which decides what is routed to it.
-    manager.run_agent(&chat.id);
+    fixture.run_agent(&chat.id);
     chat
-}
-
-fn caller(space: &shoal_ids::space_ids::SpaceId) -> Caller {
-    Caller {
-        space_id: space.clone(),
-        execution: None,
-        granted: None,
-        read_only: false,
-        vouched: None,
-    }
 }
 
 fn restart() -> Action {
@@ -68,31 +42,31 @@ fn undecided(result: anyhow::Result<()>) -> Box<crate::approvals::ApprovalReques
 
 #[tokio::test]
 async fn the_permission_takes_refuses_or_proposes_the_action() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
     let config = "[modes.plan.permissions]\ndaemon = 'direct'\n\
                   [modes.chat.permissions]\ndaemon = 'propose'\n";
-    manager.set_local_config(&repo.id, config);
-    let parent = chat(&manager, "parent", "plan", Some(&repo), None).await;
-    let child = chat(&manager, "child", "chat", Some(&repo), Some(&parent.id)).await;
-    let worker = chat(&manager, "worker", "worker", Some(&repo), None).await;
+    fixture.set_local_config(&repo, config);
+    let parent = chat(&fixture, "parent", "plan", Some(&repo), None).await;
+    let child = chat(&fixture, "child", "chat", Some(&repo), Some(&parent.id)).await;
+    let worker = chat(&fixture, "worker", "worker", Some(&repo), None).await;
 
     // The user and a direct permission act at once; deny refuses.
-    manager
+    fixture
         .coordination
-        .authorize_action(&**manager, None, restart())
+        .authorize_action(&**fixture, None, restart())
         .await
         .unwrap();
-    let direct = caller(&parent.id);
-    manager
+    let direct = Fixture::caller(&parent.id);
+    fixture
         .coordination
-        .authorize_action(&**manager, Some(&direct), restart())
+        .authorize_action(&**fixture, Some(&direct), restart())
         .await
         .unwrap();
-    let denying = caller(&worker.id);
-    let error = (manager
+    let denying = Fixture::caller(&worker.id);
+    let error = (fixture
         .coordination
-        .authorize_action(&**manager, Some(&denying), restart()))
+        .authorize_action(&**fixture, Some(&denying), restart()))
     .await
     .unwrap_err();
     assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
@@ -100,31 +74,31 @@ async fn the_permission_takes_refuses_or_proposes_the_action() {
 
     // Propose asks the parent, which holds the key at direct; asking again
     // finds the same request.
-    let proposing = caller(&child.id);
+    let proposing = Fixture::caller(&child.id);
     let request = undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&proposing), restart())
+            .authorize_action(&**fixture, Some(&proposing), restart())
             .await,
     );
     assert_eq!(request.target, Target::Action(PermissionKey::Daemon));
     assert_eq!(request.status, DecisionStatus::Pending);
     let again = undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&proposing), restart())
+            .authorize_action(&**fixture, Some(&proposing), restart())
             .await,
     );
     assert_eq!(again.key, request.key);
-    let routed = manager
+    let routed = fixture
         .coordination
         .show_approval(request.number)
         .await
         .unwrap();
     assert_eq!(routed.decider.as_ref(), Some(&parent.id));
     let shown = Some(routed);
-    (manager.coordination.decide_routed_approval(
-        &**manager,
+    (fixture.coordination.decide_routed_approval(
+        &**fixture,
         &Caller::of_space(parent.id.clone()),
         request.number,
         true,
@@ -135,15 +109,15 @@ async fn the_permission_takes_refuses_or_proposes_the_action() {
     .unwrap();
 
     // The approval lets the same action proceed once.
-    (manager
+    (fixture
         .coordination
-        .authorize_action(&**manager, Some(&proposing), restart()))
+        .authorize_action(&**fixture, Some(&proposing), restart()))
     .await
     .unwrap();
     let next = undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&proposing), restart())
+            .authorize_action(&**fixture, Some(&proposing), restart())
             .await,
     );
     assert_ne!(next.key, request.key);
@@ -152,21 +126,23 @@ async fn the_permission_takes_refuses_or_proposes_the_action() {
 
 #[tokio::test]
 async fn a_parent_without_the_key_at_direct_cannot_approve() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
     let config = "[permissions]\ndaemon = 'propose'\n";
-    manager.set_local_config(&repo.id, config);
-    let parent = chat(&manager, "parent", "plan", Some(&repo), None).await;
-    let child = chat(&manager, "child", "chat", Some(&repo), Some(&parent.id)).await;
+    fixture.set_local_config(&repo, config);
+    let parent = chat(&fixture, "parent", "plan", Some(&repo), None).await;
+    let child = chat(&fixture, "child", "chat", Some(&repo), Some(&parent.id)).await;
     let request = undecided(
-        (manager
-            .coordination
-            .authorize_action(&**manager, Some(&caller(&child.id)), restart()))
+        (fixture.coordination.authorize_action(
+            &**fixture,
+            Some(&Fixture::caller(&child.id)),
+            restart(),
+        ))
         .await,
     );
     let parent = Caller::of_space(parent.id.clone());
-    let refused = manager.coordination.decide_routed_approval(
-        &**manager,
+    let refused = fixture.coordination.decide_routed_approval(
+        &**fixture,
         &parent,
         request.number,
         true,
@@ -175,8 +151,8 @@ async fn a_parent_without_the_key_at_direct_cannot_approve() {
     );
     let error = refused.await.unwrap_err();
     assert!(format!("{error:#}").contains("daemon"), "{error:#}");
-    (manager.coordination.decide_routed_approval(
-        &**manager,
+    (fixture.coordination.decide_routed_approval(
+        &**fixture,
         &parent,
         request.number,
         false,
@@ -186,9 +162,9 @@ async fn a_parent_without_the_key_at_direct_cannot_approve() {
     .await
     .unwrap();
     let denied = undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&caller(&child.id)), restart())
+            .authorize_action(&**fixture, Some(&Fixture::caller(&child.id)), restart())
             .await,
     );
     assert_eq!(denied.status, DecisionStatus::Denied);
@@ -196,22 +172,22 @@ async fn a_parent_without_the_key_at_direct_cannot_approve() {
 
 #[tokio::test]
 async fn an_approved_command_takes_its_permission_s_actions_without_asking_again() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
     let config = "[permissions]\ndaemon = 'propose'\n";
-    manager.set_local_config(&repo.id, config);
-    let chat = chat(&manager, "chat", "chat", Some(&repo), None).await;
-    let asking = caller(&chat.id);
+    fixture.set_local_config(&repo, config);
+    let chat = chat(&fixture, "chat", "chat", Some(&repo), None).await;
+    let asking = Fixture::caller(&chat.id);
     let command = || Action::new(PermissionKey::Daemon, "shoal daemon stop");
     let request = undecided(
-        manager
+        fixture
             .coordination
-            .grant_action(&**manager, Some(&asking), command())
+            .grant_action(&**fixture, Some(&asking), command())
             .await
             .map(drop),
     );
-    (manager.coordination.decide_approval(
-        &**manager,
+    (fixture.coordination.decide_approval(
+        &**fixture,
         request.number,
         true,
         None,
@@ -220,53 +196,53 @@ async fn an_approved_command_takes_its_permission_s_actions_without_asking_again
     ))
     .await
     .unwrap();
-    let token = (manager
+    let token = (fixture
         .coordination
-        .grant_action(&**manager, Some(&asking), command())
+        .grant_action(&**fixture, Some(&asking), command())
         .await)
         .unwrap()
         .expect("an approval grants a token");
 
     // The command's own requests take the permission's actions at once,
     // as often as they come, while the space's other processes still ask.
-    let granted = manager
+    let granted = fixture
         .coordination
-        .caller(&**manager, &token)
+        .caller(&**fixture, &token)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(granted.space_id, chat.id);
     for _ in 0..2 {
-        (manager
+        (fixture
             .coordination
-            .authorize_action(&**manager, Some(&granted), restart()))
+            .authorize_action(&**fixture, Some(&granted), restart()))
         .await
         .unwrap();
     }
     undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&asking), restart())
+            .authorize_action(&**fixture, Some(&asking), restart())
             .await,
     );
 }
 
 #[tokio::test]
 async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
-    let (_temp, manager) = manager().await;
+    let fixture = Arc::new(Fixture::new().await);
     let config = "[modes.chat.permissions]\ndaemon = 'propose'\n";
-    manager.configure(config);
-    let master = chat(&manager, "master", "orchestrate", None, None).await;
-    let lead = chat(&manager, "lead", "chat", None, Some(&master.id)).await;
-    let worker = chat(&manager, "worker", "chat", None, Some(&lead.id)).await;
+    fixture.configure(config);
+    let master = chat(&fixture, "master", "orchestrate", None, None).await;
+    let lead = chat(&fixture, "lead", "chat", None, Some(&master.id)).await;
+    let worker = chat(&fixture, "worker", "chat", None, Some(&lead.id)).await;
     let setup = || Action::new(PermissionKey::Admin, "shoal setup --skip 3");
     let request = undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&caller(&worker.id)), setup())
+            .authorize_action(&**fixture, Some(&Fixture::caller(&worker.id)), setup())
             .await,
     );
-    let routed = manager
+    let routed = fixture
         .coordination
         .show_approval(request.number)
         .await
@@ -275,9 +251,9 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
 
     // The lead neither decides as the user nor holds admin at direct; the
     // master decides it, though it went to the lead.
-    let (leading, mastering) = (caller(&lead.id), caller(&master.id));
-    let refused = manager.coordination.decide_approval_as(
-        &**manager,
+    let (leading, mastering) = (Fixture::caller(&lead.id), Fixture::caller(&master.id));
+    let refused = fixture.coordination.decide_approval_as(
+        &**fixture,
         Some(&leading),
         request.number,
         true,
@@ -286,8 +262,8 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
         None,
     );
     assert!(refused.await.is_err());
-    let decided = manager.coordination.decide_approval_as(
-        &**manager,
+    let decided = fixture.coordination.decide_approval_as(
+        &**fixture,
         Some(&mastering),
         request.number,
         true,
@@ -296,9 +272,11 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
         None,
     );
     assert_eq!(decided.await.unwrap().status, DecisionStatus::Approved);
-    (manager
-        .coordination
-        .authorize_action(&**manager, Some(&caller(&worker.id)), setup()))
+    (fixture.coordination.authorize_action(
+        &**fixture,
+        Some(&Fixture::caller(&worker.id)),
+        setup(),
+    ))
     .await
     .unwrap();
 
@@ -306,13 +284,13 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     // though it may deny.
     let restart = || Action::new(PermissionKey::Daemon, "shoal daemon restart");
     let below = undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&caller(&worker.id)), restart())
+            .authorize_action(&**fixture, Some(&Fixture::caller(&worker.id)), restart())
             .await,
     );
-    let approving = manager.coordination.decide_approval_as(
-        &**manager,
+    let approving = fixture.coordination.decide_approval_as(
+        &**fixture,
         Some(&mastering),
         below.number,
         true,
@@ -322,8 +300,8 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     );
     let refused = format!("{:#}", approving.await.unwrap_err());
     assert!(refused.contains("daemon"), "{refused}");
-    let denied = manager.coordination.decide_approval_as(
-        &**manager,
+    let denied = fixture.coordination.decide_approval_as(
+        &**fixture,
         Some(&mastering),
         below.number,
         false,
@@ -336,15 +314,15 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
     // Its own requests stay another's to decide.
     let own = Action::new(PermissionKey::Daemon, "shoal daemon restart");
     let own = undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&mastering), own)
+            .authorize_action(&**fixture, Some(&mastering), own)
             .await,
     );
     assert!(
-        !manager
+        !fixture
             .coordination
-            .decides_as_user(&**manager, &mastering, &own)
+            .decides_as_user(&**fixture, &mastering, &own)
             .await
             .unwrap()
     );
@@ -352,23 +330,23 @@ async fn a_space_that_decides_as_the_user_decides_what_was_not_routed_to_it() {
 
 #[tokio::test]
 async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
     let config = "[modes.orchestrate.permissions]\nlimits = 'deny'\n";
-    manager.set_local_config(&repo.id, config);
-    let master = chat(&manager, "master", "orchestrate", None, None).await;
+    fixture.set_local_config(&repo, config);
+    let master = chat(&fixture, "master", "orchestrate", None, None).await;
     let start = || "start the agent of worker now".to_owned();
-    let mastering = caller(&master.id);
-    (manager
+    let mastering = Fixture::caller(&master.id);
+    (fixture
         .coordination
-        .authorize_beyond_limits(&**manager, &mastering, start(), None))
+        .authorize_beyond_limits(&**fixture, &mastering, start(), None))
     .await
     .unwrap();
-    let denied = manager.coordination.authorize_beyond_limits(
-        &**manager,
+    let denied = fixture.coordination.authorize_beyond_limits(
+        &**fixture,
         &mastering,
         start(),
-        Some(repo.id.clone()),
+        Some(repo.clone()),
     );
     let error = denied.await.unwrap_err();
     assert!(error.downcast_ref::<Undecided>().is_none(), "{error:#}");
@@ -376,24 +354,24 @@ async fn a_chat_without_a_repository_takes_an_action_as_its_repository_allows() 
 
 #[tokio::test]
 async fn a_decider_without_a_repository_decides_as_the_action_s_repository_allows() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
     let config = "[modes.orchestrate.permissions]\nadmin = 'propose'\n";
-    manager.set_local_config(&repo.id, config);
-    let master = chat(&manager, "master", "orchestrate", None, None).await;
-    let below = chat(&manager, "below", "chat", None, Some(&master.id)).await;
-    let setup = Action::new(PermissionKey::Admin, "shoal setup --skip 3").in_repository(repo.id);
+    fixture.set_local_config(&repo, config);
+    let master = chat(&fixture, "master", "orchestrate", None, None).await;
+    let below = chat(&fixture, "below", "chat", None, Some(&master.id)).await;
+    let setup = Action::new(PermissionKey::Admin, "shoal setup --skip 3").in_repository(repo);
     let request = undecided(
-        manager
+        fixture
             .coordination
-            .authorize_action(&**manager, Some(&caller(&below.id)), setup)
+            .authorize_action(&**fixture, Some(&Fixture::caller(&below.id)), setup)
             .await,
     );
     // The repository holds the master session's admin to propose, so it
     // may only deny or pass up what its global config would let it approve.
-    let mastering = caller(&master.id);
-    let approving = manager.coordination.decide_approval_as(
-        &**manager,
+    let mastering = Fixture::caller(&master.id);
+    let approving = fixture.coordination.decide_approval_as(
+        &**fixture,
         Some(&mastering),
         request.number,
         true,

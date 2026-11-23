@@ -12,63 +12,41 @@ use crate::{
     stand_in::Fixture,
 };
 
-/// A registered repository.
-struct Registered {
-    id: RepositoryId,
-}
-
-async fn manager() -> ((), Arc<Fixture>) {
-    ((), Arc::new(Fixture::new().await))
-}
-
-async fn register(_: &(), manager: &Fixture, name: &str) -> Registered {
-    Registered {
-        id: manager.repository(name).await,
-    }
-}
-
 async fn chat(
-    manager: &Fixture,
+    fixture: &Fixture,
     name: &str,
     mode: &str,
-    repository: Option<&Registered>,
+    repository: Option<&RepositoryId>,
     parent: Option<&SpaceId>,
 ) -> Space {
-    let repository = repository.map(|repository| &repository.id);
-    manager.chat(name, mode, repository, parent).await
+    fixture.chat(name, mode, repository, parent).await
 }
 
 async fn workspace(
-    manager: &Fixture,
-    repository: &Registered,
+    fixture: &Fixture,
+    repository: &RepositoryId,
     name: &str,
     parent: &SpaceId,
     mode: Option<String>,
 ) -> Workspace {
-    let repository = repository.id.as_str();
-    (manager.workspace_in(repository, name, Some(parent), mode.as_deref())).await
-}
-
-/// Record `assignments` as the `--permission` given to the agent of the
-/// space `id`.
-async fn give(manager: &Fixture, id: &SpaceId, assignments: &[&str]) {
-    manager.give(id, assignments);
+    let repository = repository.as_str();
+    (fixture.workspace_in(repository, name, Some(parent), mode.as_deref())).await
 }
 
 #[tokio::test]
 async fn a_space_never_has_more_than_the_space_above_it() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
-    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
-    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker".into())).await;
-    let split = workspace(&manager, &repo, "split", &worker.id, None).await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
+    let top = chat(&fixture, "top", "chat", Some(&repo), None).await;
+    let worker = workspace(&fixture, &repo, "worker", &top.id, Some("worker".into())).await;
+    let split = workspace(&fixture, &repo, "split", &worker.id, None).await;
     let of = |id: SpaceId| {
-        let manager = manager.clone();
-        let repository = repo.id.clone();
+        let fixture = fixture.clone();
+        let repository = repo.clone();
         async move {
-            (manager
+            (fixture
                 .coordination
-                .space_permissions(&**manager, &id, Some(&repository)))
+                .space_permissions(&**fixture, &id, Some(&repository)))
             .await
             .unwrap()
         }
@@ -91,7 +69,7 @@ async fn a_space_never_has_more_than_the_space_above_it() {
 
     // A config change narrowing the chat reaches every space below it.
     let config = "[modes.chat.permissions]\npush = 'propose'\n";
-    manager.set_local_config(&repo.id, config);
+    fixture.set_local_config(&repo, config);
     for id in [worker.id.clone(), split.id.clone()] {
         let push = of(id).await.push;
         assert_eq!(push.value, Pushes::Propose);
@@ -100,7 +78,7 @@ async fn a_space_never_has_more_than_the_space_above_it() {
     // A wider mode below a narrower one is narrowed, a narrower one kept.
     let config = "[modes.chat.permissions]\npush = 'propose'\nmerge = 'direct'\n\
                   [modes.worker.permissions]\npush = 'deny'\nmerge = 'direct'\n";
-    manager.set_local_config(&repo.id, config);
+    fixture.set_local_config(&repo, config);
     let below = of(worker.id.clone()).await;
     assert_eq!(below.push.value, Pushes::Deny);
     assert_eq!(below.push.from, PermissionSource::Mode);
@@ -114,55 +92,55 @@ async fn a_space_never_has_more_than_the_space_above_it() {
 
 #[tokio::test]
 async fn a_chat_without_a_repository_resolves_in_the_repository_of_the_action() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
-    let other = register(&temp, &manager, "other").await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
+    let other = fixture.repository("other").await;
     let config = "[modes.orchestrate.permissions]\nmerge = 'propose'\n\
                   [modes.chat.permissions]\nmerge = 'direct'\n";
-    manager.set_local_config(&repo.id, config);
-    let master = chat(&manager, "master", "orchestrate", None, None).await;
-    let child = chat(&manager, "child", "chat", Some(&repo), Some(&master.id)).await;
+    fixture.set_local_config(&repo, config);
+    let master = chat(&fixture, "master", "orchestrate", None, None).await;
+    let child = chat(&fixture, "child", "chat", Some(&repo), Some(&master.id)).await;
     let merge = |id: SpaceId, repository: Option<RepositoryId>| {
-        let manager = manager.clone();
+        let fixture = fixture.clone();
         async move {
             let permissions =
-                manager
+                fixture
                     .coordination
-                    .space_permissions(&**manager, &id, repository.as_ref());
+                    .space_permissions(&**fixture, &id, repository.as_ref());
             permissions.await.unwrap().merge
         }
     };
     assert_eq!(
-        merge(master.id.clone(), Some(repo.id.clone())).await.value,
+        merge(master.id.clone(), Some(repo.clone())).await.value,
         Opening::Propose
     );
     assert_eq!(
-        merge(master.id.clone(), Some(other.id.clone())).await.value,
+        merge(master.id.clone(), Some(other.clone())).await.value,
         Opening::Direct
     );
     // Without a repository, the global config applies.
     assert_eq!(merge(master.id.clone(), None).await.value, Opening::Direct);
     // The chat below resolves the master's mode in its own repository.
-    let below = merge(child.id.clone(), Some(repo.id.clone())).await;
+    let below = merge(child.id.clone(), Some(repo.clone())).await;
     assert_eq!(below.value, Opening::Propose);
     assert_eq!(below.from, PermissionSource::Parent);
 }
 
 #[tokio::test]
 async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
     let config = "[modes.review.permissions]\npush = 'propose'\n\
                   [modes.chat.permissions]\npush = 'deny'\n";
-    manager.set_local_config(&repo.id, config);
-    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
-    let child = workspace(&manager, &repo, "child", &top.id, None).await;
+    fixture.set_local_config(&repo, config);
+    let top = chat(&fixture, "top", "chat", Some(&repo), None).await;
+    let child = workspace(&fixture, &repo, "child", &top.id, None).await;
     let launch = |mode: &'static str| {
-        let (manager, child) = (manager.clone(), child.clone());
+        let (fixture, child) = (fixture.clone(), child.clone());
         async move {
             let mode = mode.into();
-            let permissions = manager.coordination.launch_permissions(
-                &**manager,
+            let permissions = fixture.coordination.launch_permissions(
+                &**fixture,
                 child,
                 &mode,
                 Default::default(),
@@ -174,14 +152,14 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
     assert_eq!(review.value, Pushes::Deny);
     assert_eq!(review.from, PermissionSource::Parent);
     let config = "[modes.review.permissions]\npush = 'propose'\n";
-    manager.set_local_config(&repo.id, config);
+    fixture.set_local_config(&repo, config);
     assert_eq!(launch("review").await.value, Pushes::Propose);
     assert_eq!(launch("worker").await.value, Pushes::Direct);
     // Nothing is recorded: the workspace has no mode of its own yet, so
     // its push is the key's default rather than the review mode's.
-    let recorded = manager
+    let recorded = fixture
         .coordination
-        .space_permissions(&**manager, &child.id, Some(&repo.id))
+        .space_permissions(&**fixture, &child.id, Some(&repo))
         .await
         .unwrap();
     assert_eq!(recorded.push.value, Pushes::Direct);
@@ -189,23 +167,23 @@ async fn a_launch_takes_the_mode_it_starts_in_before_the_mode_is_recorded() {
 
 #[tokio::test]
 async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
-    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
-    let worker = workspace(&manager, &repo, "worker", &top.id, Some("worker".into())).await;
-    let split = workspace(&manager, &repo, "split", &worker.id, None).await;
-    give(&manager, &top.id, &["merge=propose"]).await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
+    let top = chat(&fixture, "top", "chat", Some(&repo), None).await;
+    let worker = workspace(&fixture, &repo, "worker", &top.id, Some("worker".into())).await;
+    let split = workspace(&fixture, &repo, "split", &worker.id, None).await;
+    fixture.give(&top.id, &["merge=propose"]);
     // Wider than the worker mode's merge and the chat's above it.
     let assignments = ["push=propose", "merge=direct"];
-    give(&manager, &worker.id, &assignments).await;
+    fixture.give(&worker.id, &assignments);
     let of = |id: SpaceId| {
-        let manager = manager.clone();
-        let repository = repo.id.clone();
+        let fixture = fixture.clone();
+        let repository = repo.clone();
         async move {
             let permissions =
-                manager
+                fixture
                     .coordination
-                    .space_permissions(&**manager, &id, Some(&repository));
+                    .space_permissions(&**fixture, &id, Some(&repository));
             permissions.await.unwrap()
         }
     };
@@ -224,17 +202,17 @@ async fn a_given_permission_applies_to_its_space_and_caps_the_spaces_below() {
 
 #[tokio::test]
 async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
-    let worker = manager
-        .workspace_in(repo.id.as_str(), "worker", None, None)
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
+    let worker = fixture
+        .workspace_in(repo.as_str(), "worker", None, None)
         .await;
-    let child = workspace(&manager, &repo, "child", &worker.id, Some("worker".into())).await;
-    let talk = chat(&manager, "talk", "chat", Some(&repo), Some(&worker.id)).await;
+    let child = workspace(&fixture, &repo, "child", &worker.id, Some("worker".into())).await;
+    let talk = chat(&fixture, "talk", "chat", Some(&repo), Some(&worker.id)).await;
     // The user gave both a merge the worker does not hold.
-    give(&manager, &child.id, &["merge=direct"]).await;
-    give(&manager, &talk.id, &["merge=direct"]).await;
-    let talk = manager.space_of(&talk.id);
+    fixture.give(&child.id, &["merge=direct"]);
+    fixture.give(&talk.id, &["merge=direct"]);
+    let talk = fixture.space_of(&talk.id);
     let assigned = |assignments: &[&str]| {
         let assignments: Vec<String> = assignments.iter().map(|a| (*a).to_owned()).collect();
         crate::config::permissions::PermissionsConfig::assigned(&assignments).unwrap()
@@ -244,14 +222,14 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
 
     // What the space recorded comes back, with what the giver holds.
     let recorded = assigned(&["merge=direct", "push=propose"]);
-    let registered = manager
+    let registered = fixture
         .coordination
-        .ensure_agent_held(&**manager, giver, &child, &WORKER, &recorded);
+        .ensure_agent_held(&**fixture, giver, &child, &WORKER, &recorded);
     registered.await.unwrap();
-    manager
+    fixture
         .coordination
         .ensure_agent_held(
-            &**manager,
+            &**fixture,
             giver,
             &SpaceSelector::id(&talk.id),
             &CHAT,
@@ -261,15 +239,15 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
         .unwrap();
     // A value the giver does not hold, recorded nowhere, is refused.
     let wider = assigned(&["merge=direct", "api_writes=direct"]);
-    let registered = manager
+    let registered = fixture
         .coordination
-        .ensure_agent_held(&**manager, giver, &child, &WORKER, &wider);
+        .ensure_agent_held(&**fixture, giver, &child, &WORKER, &wider);
     assert!(registered.await.is_err());
     assert!(
-        manager
+        fixture
             .coordination
             .ensure_agent_held(
-                &**manager,
+                &**fixture,
                 giver,
                 &SpaceSelector::id(&talk.id),
                 &CHAT,
@@ -284,19 +262,19 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
         dropped: Vec::new(),
     };
     let restarted =
-        manager
+        fixture
             .coordination
-            .ensure_change_held(&**manager, giver, &talk, &change, Some(&repo.id));
+            .ensure_change_held(&**fixture, giver, &talk, &change, Some(&repo));
     assert!(restarted.await.is_err());
     // The user gives any.
-    let registered = manager
+    let registered = fixture
         .coordination
-        .ensure_agent_held(&**manager, None, &child, &WORKER, &wider);
+        .ensure_agent_held(&**fixture, None, &child, &WORKER, &wider);
     registered.await.unwrap();
-    manager
+    fixture
         .coordination
         .ensure_agent_held(
-            &**manager,
+            &**fixture,
             None,
             &SpaceSelector::id(&talk.id),
             &CHAT,
@@ -305,34 +283,34 @@ async fn a_scoped_process_gives_only_what_it_holds_or_was_recorded() {
         .await
         .unwrap();
     let restarted =
-        manager
+        fixture
             .coordination
-            .ensure_change_held(&**manager, None, &talk, &change, Some(&repo.id));
+            .ensure_change_held(&**fixture, None, &talk, &change, Some(&repo));
     restarted.await.unwrap();
 }
 
 #[tokio::test]
 async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
-    let (temp, manager) = manager().await;
-    let repo = register(&temp, &manager, "repo").await;
-    let top = chat(&manager, "top", "chat", Some(&repo), None).await;
-    let parent = workspace(&manager, &repo, "parent", &top.id, Some("worker".into())).await;
-    let child = workspace(&manager, &repo, "child", &parent.id, Some("worker".into())).await;
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository("repo").await;
+    let top = chat(&fixture, "top", "chat", Some(&repo), None).await;
+    let parent = workspace(&fixture, &repo, "parent", &top.id, Some("worker".into())).await;
+    let child = workspace(&fixture, &repo, "child", &parent.id, Some("worker".into())).await;
     // The user gave the chat less push than the spaces below it.
-    give(&manager, &top.id, &["push=propose"]).await;
-    give(&manager, &parent.id, &["push=direct"]).await;
-    give(&manager, &child.id, &["push=propose"]).await;
-    let child = manager.space_of(&child.id);
+    fixture.give(&top.id, &["push=propose"]);
+    fixture.give(&parent.id, &["push=direct"]);
+    fixture.give(&child.id, &["push=propose"]);
+    let child = fixture.space_of(&child.id);
     let space = child;
     let dropped = |assignment: &str| {
         crate::config::permissions::PermissionChange::assigned(assignment).unwrap()
     };
     let check = |giver: Option<SpaceId>, change| {
-        let (manager, space, repository) = (manager.clone(), space.clone(), repo.id.clone());
+        let (fixture, space, repository) = (fixture.clone(), space.clone(), repo.clone());
         async move {
             let giver = giver.map(Caller::of_space);
-            let held = manager.coordination.ensure_change_held(
-                &**manager,
+            let held = fixture.coordination.ensure_change_held(
+                &**fixture,
                 giver.as_ref(),
                 &space,
                 &change,
@@ -353,21 +331,21 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
 
     // A queued or registered agent or a restore that leaves a recorded key
     // out drops it.
-    let talk = chat(&manager, "talk", "chat", Some(&repo), Some(&parent.id)).await;
-    give(&manager, &talk.id, &["push=propose"]).await;
-    let talk = manager.space_of(&talk.id);
+    let talk = chat(&fixture, "talk", "chat", Some(&repo), Some(&parent.id)).await;
+    fixture.give(&talk.id, &["push=propose"]);
+    let talk = fixture.space_of(&talk.id);
     let none = crate::config::permissions::PermissionsConfig::default();
     let top = Caller::of_space(top.id.clone());
     let (giver, child) = (Some(&top), SpaceSelector::id(&space.id));
-    let registered = manager
+    let registered = fixture
         .coordination
-        .ensure_agent_held(&**manager, giver, &child, &WORKER, &none);
+        .ensure_agent_held(&**fixture, giver, &child, &WORKER, &none);
     assert!(registered.await.is_err());
     assert!(
-        manager
+        fixture
             .coordination
             .ensure_agent_held(
-                &**manager,
+                &**fixture,
                 giver,
                 &SpaceSelector::id(&talk.id),
                 &CHAT,
@@ -377,14 +355,14 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
             .is_err()
     );
     let recorded = talk.narrowing;
-    let registered = manager
+    let registered = fixture
         .coordination
-        .ensure_agent_held(&**manager, giver, &child, &WORKER, &recorded);
+        .ensure_agent_held(&**fixture, giver, &child, &WORKER, &recorded);
     registered.await.unwrap();
-    manager
+    fixture
         .coordination
         .ensure_agent_held(
-            &**manager,
+            &**fixture,
             giver,
             &SpaceSelector::id(&talk.id),
             &CHAT,
@@ -395,18 +373,18 @@ async fn a_scoped_process_drops_a_key_only_to_a_value_it_holds() {
 
     // A dropped key falls back in the mode of the agent that drops it.
     let config = "[modes.review.permissions]\npush = 'deny'\n";
-    manager.set_local_config(&repo.id, config);
-    let quiet = workspace(&manager, &repo, "quiet", &parent.id, Some("review".into())).await;
-    give(&manager, &quiet.id, &["push=deny"]).await;
+    fixture.set_local_config(&repo, config);
+    let quiet = workspace(&fixture, &repo, "quiet", &parent.id, Some("review".into())).await;
+    fixture.give(&quiet.id, &["push=deny"]);
     let quiet = SpaceSelector::id(&quiet.id);
     let review = "review".into();
-    let registered = manager
+    let registered = fixture
         .coordination
-        .ensure_agent_held(&**manager, giver, &quiet, &review, &none);
+        .ensure_agent_held(&**fixture, giver, &quiet, &review, &none);
     registered.await.unwrap();
-    let registered = manager
+    let registered = fixture
         .coordination
-        .ensure_agent_held(&**manager, giver, &quiet, &WORKER, &none);
+        .ensure_agent_held(&**fixture, giver, &quiet, &WORKER, &none);
     assert!(registered.await.is_err());
 }
 
