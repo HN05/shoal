@@ -85,3 +85,16 @@ async fn a_job_that_needs_no_rerun_goes_without_a_notice() {
     let alerts = hub.notifications.list(false, 50).await.unwrap();
     assert!(alerts.is_empty());
 }
+
+#[test]
+fn a_failed_try_passes_the_rerun_on_and_names_why_none_could() {
+    let failed = || Err(anyhow!("the forge is unreachable"));
+    assert!(!answered(&failed()));
+    assert!(!answered(&Ok(CutOffRerun::NoLogin)));
+    let reran = latest(failed(), Ok(CutOffRerun::Rerun));
+    assert_eq!(reran.unwrap(), CutOffRerun::Rerun);
+    let without_login = latest(failed(), Ok(CutOffRerun::NoLogin));
+    assert!(without_login.is_err());
+    let later_failure = latest(Ok(CutOffRerun::NoLogin), failed());
+    assert!(later_failure.is_err());
+}

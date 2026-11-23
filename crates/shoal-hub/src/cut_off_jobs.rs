@@ -143,7 +143,7 @@ impl Hub {
     }
 
     /// Rerun `job` as the user on the hub's own machine, else on the first
-    /// of `machines` with the user's login for its forge.
+    /// of `machines` that answers with the user's login for its forge.
     async fn rerun_anywhere(
         &self,
         daemon: &dyn Daemon,
@@ -152,10 +152,10 @@ impl Hub {
     ) -> Result<CutOffRerun> {
         let mut rerun = daemon.rerun_cut_off(job).await;
         for machine in machines {
-            if !matches!(rerun, Ok(CutOffRerun::NoLogin)) {
+            if answered(&rerun) {
                 break;
             }
-            rerun = self.rerun_on(&machine.id, job).await;
+            rerun = latest(rerun, self.rerun_on(&machine.id, job).await);
         }
         rerun
     }
@@ -205,6 +205,26 @@ impl Hub {
             job.name, job.run
         );
         (self.notify(daemon, About::default(), AlertKind::RunnerFailed, message)).await;
+    }
+}
+
+/// Whether a machine's try of a rerun answered it: one without the user's
+/// login for the forge, or that failed, leaves it to the next machine.
+fn answered(rerun: &Result<CutOffRerun>) -> bool {
+    matches!(rerun, Ok(rerun) if *rerun != CutOffRerun::NoLogin)
+}
+
+/// What the tries of a rerun found, `earlier` and then `later`, which
+/// keeps an earlier failure over a later machine without a login, so a
+/// job given up names why.
+fn latest(earlier: Result<CutOffRerun>, later: Result<CutOffRerun>) -> Result<CutOffRerun> {
+    match (earlier, later) {
+        (Err(error), Ok(CutOffRerun::NoLogin)) => Err(error),
+        (Err(error), later) => {
+            log!("hub: a rerun of a CI job a machine cut off failed: {error:#}");
+            later
+        }
+        (Ok(_), later) => later,
     }
 }
 
