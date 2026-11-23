@@ -127,6 +127,9 @@ pub struct Hub {
     /// As a member: the tree across machines it last learned, as its store
     /// keeps it.
     known_tree: std::sync::Mutex<Option<known_tree::Known>>,
+    /// As a member: the threads spaces opened on other machines that wait,
+    /// as last read.
+    waiting: opened_elsewhere::Waiting,
     /// The effective permissions the hub last listed of each space on
     /// another machine above a space here, which stand while it cannot be
     /// asked.
@@ -181,6 +184,7 @@ impl Hub {
             handovers: Default::default(),
             sleeps: Default::default(),
             known_tree: Default::default(),
+            waiting: Default::default(),
             parent_permissions: Default::default(),
             reported: Default::default(),
             shared_files: Default::default(),
