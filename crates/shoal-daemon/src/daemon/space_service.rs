@@ -1455,15 +1455,7 @@ impl shoal_spaces::daemon::Records for SpaceRecords {
     }
 
     fn leasing_workspaces(&self, db: &Connection, name: &str) -> Result<Vec<SpaceId>> {
-        let mut holders: Vec<SpaceId> = Vec::new();
-        for lease in shoal_leases::resources::leases(db, None)? {
-            if (lease.pool == name || lease.resource == name)
-                && !holders.contains(&lease.workspace_id)
-            {
-                holders.push(lease.workspace_id);
-            }
-        }
-        Ok(holders)
+        shoal_leases::resources::holding_workspaces(db, name)
     }
 
     fn next_space_number(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> {

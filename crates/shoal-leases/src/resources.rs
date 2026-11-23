@@ -116,6 +116,14 @@ pub fn leases(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ResourceLe
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// The workspaces that hold a lease of the pool or resource `name`.
+pub fn holding_workspaces(db: &Connection, name: &str) -> Result<Vec<SpaceId>> {
+    Ok(db
+        .prepare("SELECT DISTINCT workspace_id FROM resource_leases WHERE pool=?1 OR resource=?1")?
+        .query_map([name], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 // Deliberately independent of scope: configuration drift must not hide a name
 // already held by this workspace under the previous scope.
 fn named_lease(
