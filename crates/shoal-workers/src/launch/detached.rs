@@ -146,7 +146,7 @@ async fn deliver_first_message(
     prepared: Box<dyn Prepared>,
 ) -> Result<(DetachedLaunch, Delivered)> {
     let undelivered = match prepared.deliver().await {
-        Ok(delivered) => return Ok((execution.launch, delivered)),
+        Ok(delivered) => return Ok((execution.detach(), delivered)),
         Err(error) => error,
     };
     if let Err(error) = execution.interrupt().await {

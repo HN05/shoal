@@ -163,7 +163,7 @@ impl Manager {
             None,
         )
         .await?;
-        Ok(execution.launch.execution_id)
+        Ok(execution.detach().execution_id)
     }
 
     /// Tests run no command; they record it with an execution they end.

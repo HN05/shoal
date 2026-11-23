@@ -54,11 +54,24 @@ pub struct Wrapper<'a> {
 /// A detached execution this process launched, whose wrapper it can still
 /// stop.
 pub struct DetachedExecution {
-    pub launch: DetachedLaunch,
+    launch: DetachedLaunch,
     wrapper: Child,
 }
 
 impl DetachedExecution {
+    /// Leave the execution running and return its launch. The wrapper is
+    /// this process's child, so a task waits on it to reap it once it exits:
+    /// dropping it leaves that to Tokio's orphan queue, which has left the
+    /// daemon's wrappers zombies for days.
+    pub fn detach(mut self) -> DetachedLaunch {
+        tokio::spawn(async move {
+            if let Err(error) = self.wrapper.wait().await {
+                eprintln!("warning: could not reap the execution wrapper: {error}");
+            }
+        });
+        self.launch
+    }
+
     /// Interrupt the execution as Ctrl-C interrupts a command, which stops
     /// it without saving it for `shoal resume`, and wait until its wrapper
     /// reported the end and exited. The wrapper is this process's child, not
@@ -224,3 +237,6 @@ fn log_tail(log: &Path) -> String {
     let lines: Vec<_> = text.lines().rev().take(10).collect();
     lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
+
+#[cfg(test)]
+mod tests;
