@@ -6,9 +6,9 @@
 //! its link, which it opens again only once the machine fully wakes, so a
 //! dark wake neither tells the hub it is back nor races a takeover. An
 //! intermittent machine names the spaces whose packages lag; an always-on
-//! one keeps no package current, so it names and sends every space with
-//! work.
-use std::collections::HashSet;
+//! one keeps no package current, so it names every space as lagging by an
+//! unknown time, and sends those with work.
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, bail};
 use shoal_ids::space_ids::SpaceId;
@@ -24,7 +24,7 @@ use shoal_protocol::{
 use tokio::time::Instant;
 
 use super::sending::{self, packageable};
-use crate::{Hub, daemon::Daemon, log, membership, session::Calls};
+use crate::{Hub, daemon::Daemon, log, membership, session::Calls, time::UnixTime};
 
 impl Hub {
     /// Tell the hub this machine goes to sleep and send it the packages of
@@ -70,10 +70,10 @@ impl Hub {
     }
 
     /// Send the hub over `calls` the notice that this machine sleeps,
-    /// returning the spaces whose packages to send: every space a package
-    /// can hold on an `intermittent` machine, which keeps the hub's
-    /// packages current and names those that lag, and otherwise every one
-    /// with work, which it names.
+    /// returning the spaces whose packages to send: on an `intermittent`
+    /// machine, which keeps the hub's packages current, every space a
+    /// package can hold, and on any other, which keeps none, only those
+    /// with work.
     async fn send_sleep_notice(
         &self,
         daemon: &dyn Daemon,
@@ -82,37 +82,14 @@ impl Hub {
     ) -> Result<Vec<Space>> {
         let spaces = daemon.listed_spaces(None).await?;
         let spaces: Vec<Space> = spaces.into_iter().filter(packageable).collect();
-        let (lagging, sending) = match intermittent {
-            true => {
-                let unsent = self.store.read(sending::unsent).await?;
-                let lagging = (spaces.iter())
-                    .filter_map(|space| {
-                        let since = unsent.get(&space.id)?;
-                        Some(Lagging {
-                            space: space.id.clone(),
-                            since: Some(*since),
-                        })
-                    })
-                    .collect();
-                (lagging, spaces)
-            }
-            false => {
-                let queued: HashSet<SpaceId> = (daemon.visible_queue().await?.into_iter())
-                    .filter_map(|entry| entry.space_id)
-                    .collect();
-                let working = |space: &Space| {
-                    let state = space.agent_state.as_ref().map(|status| status.state);
-                    state == Some(AgentState::Working) || queued.contains(&space.id)
-                };
-                let sending: Vec<Space> = spaces.into_iter().filter(working).collect();
-                let lagging = (sending.iter())
-                    .map(|space| Lagging {
-                        space: space.id.clone(),
-                        since: None,
-                    })
-                    .collect();
-                (lagging, sending)
-            }
+        let unsent = match intermittent {
+            true => Some(self.store.read(sending::unsent).await?),
+            false => None,
+        };
+        let lagging = lags(spaces.iter().map(|space| &space.id), unsent.as_ref());
+        let sending = match intermittent {
+            true => spaces,
+            false => with_work(daemon, spaces).await?,
         };
         match calls.call(Call::Sleeping { lagging }).await? {
             Reply::Delivered => Ok(sending),
@@ -120,3 +97,39 @@ impl Hub {
         }
     }
 }
+
+/// How far the packages of the spaces `ids` lag: as `unsent` records for
+/// a machine that keeps them current, each space that has changes since
+/// then, and for one that keeps none, every space by an unknown lag, so
+/// the hub trusts no package it kept before.
+fn lags<'a>(
+    ids: impl Iterator<Item = &'a SpaceId>,
+    unsent: Option<&HashMap<SpaceId, UnixTime>>,
+) -> Vec<Lagging> {
+    ids.filter_map(|id| {
+        let since = match unsent {
+            Some(unsent) => Some(*unsent.get(id)?),
+            None => None,
+        };
+        Some(Lagging {
+            space: id.clone(),
+            since,
+        })
+    })
+    .collect()
+}
+
+/// Those of `spaces` with work: an agent working, or one queued.
+async fn with_work(daemon: &dyn Daemon, spaces: Vec<Space>) -> Result<Vec<Space>> {
+    let queued: HashSet<SpaceId> = (daemon.visible_queue().await?.into_iter())
+        .filter_map(|entry| entry.space_id)
+        .collect();
+    let working = |space: &Space| {
+        let state = space.agent_state.as_ref().map(|status| status.state);
+        state == Some(AgentState::Working) || queued.contains(&space.id)
+    };
+    Ok(spaces.into_iter().filter(working).collect())
+}
+
+#[cfg(test)]
+mod tests;
