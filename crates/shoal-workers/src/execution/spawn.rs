@@ -59,7 +59,9 @@ pub(super) async fn fetch_command_key(
     else {
         return Ok(None);
     };
-    let value = key.resolve(|_| None).await.context("the proxy's key")?;
+    let value = crate::config::value::resolve(key, |_| None)
+        .await
+        .context("the proxy's key")?;
     Ok(Some((key.clone(), value)))
 }
 
@@ -141,16 +143,19 @@ impl AgentLaunch {
         }
         let configured = self.configured_environment(environment);
         let variable = |name: &str| self.variable(&configured, name);
-        tokio::time::timeout(KEY_COMMAND_LIMIT, key.resolve(variable))
-            .await
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "its command did not finish within {}s",
-                    KEY_COMMAND_LIMIT.as_secs()
-                )
-            })
-            .flatten()
-            .context("the proxy's key")
+        tokio::time::timeout(
+            KEY_COMMAND_LIMIT,
+            crate::config::value::resolve(key, variable),
+        )
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "its command did not finish within {}s",
+                KEY_COMMAND_LIMIT.as_secs()
+            )
+        })
+        .flatten()
+        .context("the proxy's key")
     }
 
     /// Run the restored agent, launched as `command` in `directory` with the

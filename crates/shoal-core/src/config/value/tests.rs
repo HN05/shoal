@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 use super::*;
 
 #[derive(Debug, Deserialize)]
@@ -18,8 +20,8 @@ async fn a_value_is_written_out_read_from_a_variable_or_printed_by_a_command() {
         ("value = { cmd = ['printf', 'from cmd\\n'] }", "from cmd"),
     ] {
         let value = parse(text).unwrap();
-        value.validate("value").unwrap();
-        assert_eq!(value.resolve(set).await.unwrap(), expected, "{text}");
+        validate(&value, "value").unwrap();
+        assert_eq!(resolve(&value, set).await.unwrap(), expected, "{text}");
     }
 }
 
@@ -32,7 +34,7 @@ async fn a_value_that_cannot_be_read_fails() {
         "value = { cmd = ['printf', '\\377'] }",
     ] {
         assert!(
-            parse(text).unwrap().resolve(|_| None).await.is_err(),
+            resolve(&parse(text).unwrap(), |_| None).await.is_err(),
             "{text}"
         );
     }
@@ -46,7 +48,7 @@ fn each_form_is_validated() {
         "value = { cmd = [] }",
         "value = { cmd = [\"a\\u0000b\"] }",
     ] {
-        assert!(parse(text).unwrap().validate("value").is_err(), "{text}");
+        assert!(validate(&parse(text).unwrap(), "value").is_err(), "{text}");
     }
     for text in [
         "value = { file = 'key' }",
@@ -55,12 +57,4 @@ fn each_form_is_validated() {
     ] {
         assert!(parse(text).is_err(), "{text}");
     }
-}
-
-#[test]
-fn a_written_value_never_shows_in_what_shoal_prints() {
-    let printed = format!("{:?}", parse("value = 'sk-raw'").unwrap());
-    assert!(!printed.contains("sk-raw"), "{printed}");
-    let printed = format!("{:?}", parse("value = { cmd = ['bw', 'get'] }").unwrap());
-    assert!(printed.contains("bw"), "{printed}");
 }

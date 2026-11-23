@@ -602,7 +602,7 @@ async fn reached(
     let variable = |name: &str| crate::env::configured_var(configured, name);
     let upstream = upstream(kind, proxy, &command, home, &variable, home).unwrap();
     let key = match &proxy.key {
-        Some(key) => Some(key.resolve(|_| None).await.unwrap()),
+        Some(key) => Some(crate::config::value::resolve(key, |_| None).await.unwrap()),
         None => None,
     };
     let running = super::start(&upstream, key.as_deref()).await.unwrap();

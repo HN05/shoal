@@ -6,69 +6,37 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use serde::{Deserialize, Serialize};
 
-/// A setting's value: as written, `{ env = "<variable>" }` or
-/// `{ cmd = ["<program>", ...] }`.
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    untagged,
-    deny_unknown_fields,
-    expecting = "a value, { env = \"<variable>\" } naming the variable that holds it, or { cmd = [\"<program>\", ...] } printing it"
-)]
-pub enum Value {
-    Written(String),
-    Env { env: String },
-    Cmd { cmd: Vec<String> },
-}
+pub use shoal_protocol::config::value::Value;
 
-/// A value as written never shows in what Shoal prints.
-impl std::fmt::Debug for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Written(_) => f.write_str("Written(..)"),
-            Self::Env { env } => f.debug_struct("Env").field("env", env).finish(),
-            Self::Cmd { cmd } => f.debug_struct("Cmd").field("cmd", cmd).finish(),
-        }
+/// The variable or command `value` names is one Shoal can read or run.
+pub fn validate(value: &Value, setting: &str) -> Result<()> {
+    match value {
+        Value::Written(_) => Ok(()),
+        Value::Env { env } => crate::env::validate_configured_name(setting, env),
+        Value::Cmd { cmd } => validate_command(&format!("{setting}.cmd"), cmd),
     }
 }
 
-impl Value {
-    /// The variable or command the value names is one Shoal can read or run.
-    pub fn validate(&self, setting: &str) -> Result<()> {
-        match self {
-            Self::Written(_) => Ok(()),
-            Self::Env { env } => crate::env::validate_configured_name(setting, env),
-            Self::Cmd { cmd } => validate_command(&format!("{setting}.cmd"), cmd),
+/// The value itself, reading `variable` of the agent's environment for one
+/// it names.
+pub async fn resolve(value: &Value, variable: impl Fn(&str) -> Option<OsString>) -> Result<String> {
+    let (value, source) = match value {
+        Value::Written(value) => return Ok(value.clone()),
+        Value::Env { env } => {
+            let value = variable(env)
+                .filter(|value| !value.is_empty())
+                .with_context(|| format!("variable {env} is not set"))?;
+            (value, format!("variable {env}"))
         }
-    }
-
-    /// Whether reading the value runs a command, which takes as long as the
-    /// command does.
-    pub fn runs_command(&self) -> bool {
-        matches!(self, Self::Cmd { .. })
-    }
-
-    /// The value itself, reading `variable` of the agent's environment for
-    /// one it names.
-    pub async fn resolve(&self, variable: impl Fn(&str) -> Option<OsString>) -> Result<String> {
-        let (value, source) = match self {
-            Self::Written(value) => return Ok(value.clone()),
-            Self::Env { env } => {
-                let value = variable(env)
-                    .filter(|value| !value.is_empty())
-                    .with_context(|| format!("variable {env} is not set"))?;
-                (value, format!("variable {env}"))
-            }
-            Self::Cmd { cmd } => (
-                command_output(cmd, None).await?,
-                format!("the output of {}", cmd[0]),
-            ),
-        };
-        value
-            .into_string()
-            .map_err(|_| anyhow::anyhow!("{source} is not UTF-8"))
-    }
+        Value::Cmd { cmd } => (
+            command_output(cmd, None).await?,
+            format!("the output of {}", cmd[0]),
+        ),
+    };
+    value
+        .into_string()
+        .map_err(|_| anyhow::anyhow!("{source} is not UTF-8"))
 }
 
 /// `setting`, an argument array, names a program and holds no NUL.

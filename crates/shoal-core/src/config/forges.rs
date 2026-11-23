@@ -178,7 +178,7 @@ impl Forge {
             let (token, email) = self.credentials(whose);
             let setting = |key: &str| format!("machine.forges.{host:?}.{key}");
             if let Some(token) = token {
-                token.validate(&setting(whose.token_key()))?;
+                super::value::validate(token, &setting(whose.token_key()))?;
             }
             let Some(email) = email else { continue };
             let key = whose.email_key();
@@ -256,7 +256,7 @@ impl Token for Configured {
         Box::pin(async move {
             let token = match &self.value {
                 Value::Cmd { cmd } => token_output(cmd).await,
-                value => value.resolve(|name| std::env::var_os(name)).await,
+                value => super::value::resolve(value, |name| std::env::var_os(name)).await,
             };
             token.with_context(|| format!("read {}", self.setting))
         })

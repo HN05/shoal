@@ -36,7 +36,7 @@ pub fn validate(proxies: &Proxies) -> Result<()> {
             "machine.proxies.{name}.key needs an upstream"
         );
         if let Some(key) = &proxy.key {
-            key.validate(&format!("machine.proxies.{name}.key"))?;
+            crate::config::value::validate(key, &format!("machine.proxies.{name}.key"))?;
         }
         if let Some(Value::Written(key)) = &proxy.key {
             ensure!(

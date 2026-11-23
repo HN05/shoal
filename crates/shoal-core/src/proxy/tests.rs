@@ -86,9 +86,24 @@ async fn a_proxy_key_is_written_out_read_from_the_agents_environment_or_fetched(
     .unwrap();
     let key = |name: &str| config.machine.proxies[name].key.clone().unwrap();
     let set = |name: &str| (name == "CLIPROXY_KEY").then(|| "sk-env".into());
-    assert_eq!(key("raw").resolve(set).await.unwrap(), "sk-raw");
-    assert_eq!(key("env").resolve(set).await.unwrap(), "sk-env");
-    assert_eq!(key("cmd").resolve(set).await.unwrap(), "sk-cmd");
+    assert_eq!(
+        crate::config::value::resolve(&key("raw"), set)
+            .await
+            .unwrap(),
+        "sk-raw"
+    );
+    assert_eq!(
+        crate::config::value::resolve(&key("env"), set)
+            .await
+            .unwrap(),
+        "sk-env"
+    );
+    assert_eq!(
+        crate::config::value::resolve(&key("cmd"), set)
+            .await
+            .unwrap(),
+        "sk-cmd"
+    );
     // A key as written never shows in what Shoal prints.
     let printed = format!("{:?}", config.machine.proxies["raw"]);
     assert!(!printed.contains("sk-raw"), "{printed}");

@@ -6,3 +6,4 @@ pub mod modes;
 pub mod options;
 pub mod permissions;
 pub mod repo;
+pub mod value;
