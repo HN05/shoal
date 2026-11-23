@@ -1,9 +1,10 @@
 //! A stand-in for the rest of the daemon, which coordination's tests build
-//! the service over: a temporary store with the spaces a test records, one
-//! repository, the agents a test says run, and the alerts queued for them,
-//! kept in memory. Nothing runs on another machine, no file is attached and
-//! no review or proposal is pending; a test that needs one of those drives
-//! a whole daemon instead.
+//! the service over: a temporary store with the spaces a test records and
+//! the repositories it registers, each with a local config a test may set,
+//! the agents a test says run, and the alerts queued for them as the
+//! agents' queue records them. Nothing runs on another machine, no file is
+//! attached and no review or proposal is pending; a test that needs one of
+//! those drives a whole daemon instead.
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
