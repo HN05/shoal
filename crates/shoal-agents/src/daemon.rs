@@ -521,7 +521,7 @@ pub trait Runner: Send + Sync {
     ) -> BoxFuture<'a, Result<Option<String>>>;
 
     /// End the job of the space `id` for load protection, for `pressure`,
-    /// to rerun once readings recover; whether it did.
+    /// to rerun once its run has finished; whether it did.
     fn stop_job_for_overload<'a>(
         &'a self,
         id: &'a SpaceId,

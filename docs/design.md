@@ -727,8 +727,10 @@ agent or a space with negligible memory for its own sake; disk every agent;
 making room an idle agent with a slot and no running agent below it, since
 putting an idle agent to sleep must never stop working ones. Stopping an agent
 stops every running agent below it first. A CI job load stops ends as one whose
-runner outlived its run does and reruns on its forge once readings recover,
-through the queue's normal admission, so load never costs a job, only time. On
+runner outlived its run does and reruns on its forge once its run has
+finished, whatever this machine's readings: the forge offers it to every
+runner, each admitting it through its queue's normal admission, so load never
+costs a job, only time. On
 Linux the kernel's OOM killer follows the same order: it picks its victim by
 `oom_score_adj`, which left alone put the daemon's service at 200 above agents'
 builds at 100, so it killed a small shoal process before a large rustc. The

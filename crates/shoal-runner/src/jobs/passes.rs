@@ -52,7 +52,7 @@ pub async fn run(runner: Arc<Runner>, daemon: Arc<dyn Daemon>) {
 }
 
 /// Record the running jobs' usage, remove the workspaces of the jobs that
-/// ended, rerun those protection stopped once readings recover, move a
+/// ended, rerun those protection stopped whose runs have finished, move a
 /// job's workspace to the commit of the job its runner took instead,
 /// release the runners the forge gave no job, claim the jobs admission
 /// admitted, and read the forge's waiting jobs when due.

@@ -384,10 +384,6 @@ impl Agents for StandIn {
         false
     }
 
-    fn readings_recovered(&self) -> bool {
-        true
-    }
-
     fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>> {
         Box::pin(async { Box::new(()) as Box<dyn Send> })
     }

@@ -94,10 +94,6 @@ pub trait Agents: Send + Sync {
     /// Whether the agent queue is suspended, as the system shuts down.
     fn queue_suspended(&self) -> bool;
 
-    /// Whether the machine's readings have recovered from the load that
-    /// protection stopped work for.
-    fn readings_recovered(&self) -> bool;
-
     /// Hold the agent queue's admission until the guard drops, so a
     /// suspension waits for what admission records meanwhile.
     fn lock_admission(&self) -> BoxFuture<'_, Box<dyn Send + '_>>;

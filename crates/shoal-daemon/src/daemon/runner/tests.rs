@@ -1422,9 +1422,10 @@ async fn heavy_agent(manager: &Manager, repository: &RepositoryId) -> StartedExe
 }
 
 /// Load protection ends the running job before any agent, records why,
-/// and reruns it on the forge once readings recover.
+/// and reruns it on the forge once its run has finished, while readings
+/// have yet to recover.
 #[tokio::test]
-async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_readings_recover() {
+async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_its_run_finished() {
     use crate::daemon::events::EventItem;
     use crate::daemon::overload::Pressure;
     use crate::protocol::{self, Control, ExecutionEvent};
@@ -1481,10 +1482,7 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_readings_re
             .filter(|request| request.line == rerun)
             .count()
     };
-    manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
-    assert_eq!(reruns(), 0, "readings have yet to recover");
-    let recovery = &manager.agents.overload_recovery();
-    recovery.publish(Some(recovery.epoch()));
+    assert!(manager.agents.overload_recovery().published().is_none());
     manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
     manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
     assert_eq!(reruns(), 1);

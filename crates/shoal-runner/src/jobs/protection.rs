@@ -1,10 +1,11 @@
 //! CI jobs that load protection stops. Shoal ends one as it ends a job
 //! whose runner outlived its run, without cancelling its run, which would
 //! end the run's other jobs, recording why in the workspace's log, and
-//! records it to rerun: once readings have recovered, each pass reruns it
-//! on its forge, as soon as its run has finished there, and the forge's
-//! waiting job then goes through the queue's admission as any other. A
-//! rerun its run never allows within [`PATIENCE`] is given up.
+//! records it to rerun: each pass reruns it on its forge as soon as its run
+//! has finished there, whatever this machine's readings, and the forge
+//! then offers the waiting job to every runner, each Shoal runner admitting
+//! it as any other. A rerun its run never allows within [`PATIENCE`] is
+//! given up.
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -52,8 +53,8 @@ struct StoppedJob {
 
 impl Runner {
     /// End the CI job running in the workspace `space` for `pressure`, the
-    /// reason load protection stops work, recording it to rerun once
-    /// readings recover, returning whether a job ran there.
+    /// reason load protection stops work, recording it to rerun once its run
+    /// has finished, returning whether a job ran there.
     pub async fn stop_job_for_overload(
         &self,
         daemon: &dyn Daemon,
@@ -80,7 +81,7 @@ impl Runner {
             Err(_) => (job.job.job.name.clone(), job.job.run.url.to_string()),
         };
         let outcome = match &taken {
-            Ok(_) => "reruns once readings recover",
+            Ok(_) => "reruns once its run has finished",
             Err(_) => "not rerun, since the job it took is unknown",
         };
         self.log_job_stop(&job, JobStop::Overload(pressure), outcome);
@@ -95,10 +96,10 @@ impl Runner {
         Ok(true)
     }
 
-    /// Rerun the jobs protection stopped, once readings have recovered,
-    /// reading their runs as often as a running job's.
+    /// Rerun the jobs protection stopped whose runs have finished, reading
+    /// their runs as often as a running job's.
     pub async fn rerun_stopped_jobs(&self, daemon: &dyn Daemon) -> Result<()> {
-        if !daemon.readings_recovered() || !self.jobs.take_reruns_read() {
+        if !self.jobs.take_reruns_read() {
             return Ok(());
         }
         for job in self.stopped_jobs().await? {
