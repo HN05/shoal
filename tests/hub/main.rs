@@ -22,37 +22,31 @@ use std::{fs, path::Path, process::Output};
 
 use serde_json::{Value, json};
 use support::{
-    cli as command,
-    daemon::{DaemonGuard, Leftovers},
-    daemon_client, printed, shoal_binary,
+    cli as command, daemon::DaemonGuard, daemon_client, home::Home, printed, shoal_binary,
     wait::wait_for,
 };
-use tempfile::TempDir;
 
 /// A daemon in a temporary home and state directory, with its global
 /// config.
 struct Machine {
-    // Fields drop in declaration order: the daemon stops, then what it left
-    // running, before its directory goes.
+    // Dropped first, so the daemon stops before its home goes.
     _guard: DaemonGuard,
-    _leftovers: Leftovers,
-    root: TempDir,
+    root: Home,
 }
 
 impl Machine {
     fn start(config: &str) -> Self {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let root = Home::new();
         Self::start_in(root, config)
     }
 
-    fn start_in(root: TempDir, config: &str) -> Self {
+    fn start_in(root: Home, config: &str) -> Self {
         let file = root.path().join(".config/shoal/config.toml");
         fs::create_dir_all(file.parent().unwrap()).unwrap();
         fs::write(&file, config).unwrap();
         let guard = DaemonGuard::start(root.path(), &mut command(root.path()));
         Self {
             _guard: guard,
-            _leftovers: Leftovers::new(root.path()),
             root,
         }
     }
@@ -223,7 +217,7 @@ fn the_hub_refuses_a_copy_of_a_machines_credential() {
     let laptop = Machine::start("");
     laptop.join_through_command(&hub, "laptop");
     laptop.connected();
-    let copy = tempfile::tempdir_in("/tmp").unwrap();
+    let copy = Home::new();
     fs::create_dir_all(copy.path().join("state")).unwrap();
     let database = laptop.root.path().join("state/state.db");
     let copied = copy.path().join("state/state.db");

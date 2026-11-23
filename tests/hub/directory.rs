@@ -7,7 +7,9 @@ use serde_json::Value;
 
 use super::support::{
     fixture::{Base, home},
-    git, install_test_script, shoal_binary,
+    git,
+    home::Home,
+    install_test_script, shoal_binary,
     wait::wait_for,
 };
 
@@ -17,7 +19,7 @@ pub(super) fn machine(hub: bool, repository: &str) -> Base {
 }
 
 /// [`machine`] in `root`, which may hold a state directory already.
-fn start(root: tempfile::TempDir, hub: bool, repository: &str) -> Base {
+fn start(root: Home, hub: bool, repository: &str) -> Base {
     let config = match hub {
         true => "[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n",
         false => "",
@@ -66,7 +68,7 @@ pub(super) fn listed(machine: &Base, id: &str, of: &str) -> Value {
 
 /// A copy of `machine`'s state in a new home, without its membership of
 /// the hub, as on another machine that joins it of its own.
-fn copied(machine: &Base) -> tempfile::TempDir {
+fn copied(machine: &Base) -> Home {
     let copy = home();
     fs::create_dir_all(copy.path().join("state")).unwrap();
     let copied = copy.path().join("state/state.db");

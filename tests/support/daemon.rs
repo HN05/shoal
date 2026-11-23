@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::{Read, Seek},
     os::unix::process::CommandExt,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
@@ -179,76 +179,4 @@ fn group_runs(group: u32) -> bool {
         fields.next().and_then(|pgid| pgid.parse().ok()) == Some(group)
             && fields.next().is_some_and(|stat| !stat.starts_with('Z'))
     })
-}
-
-/// The processes a fixture's commands leave in its home: those working in
-/// it, such as the agent of a `shoal start` a test killed and a demo's
-/// server, or naming it, such as place watchers, zmx workers and the
-/// scripted forge. Many start their own session and so leave its command
-/// group, and their parents exit before them. Dropped after the commands and
-/// the daemon stop, it kills them with their groups before the fixture's
-/// directory goes: one still running would never end, and one writing into
-/// the directory while it is removed would keep it.
-pub struct Leftovers {
-    root: PathBuf,
-}
-
-impl Leftovers {
-    pub fn new(root: &Path) -> Self {
-        Self {
-            root: root.to_owned(),
-        }
-    }
-
-    /// The process IDs of the leftovers still running.
-    fn running(&self) -> Vec<i32> {
-        let mut found = processes_naming(&format!("{}/", self.root.display()));
-        // A scan that fails leaves its processes rather than panicking in a drop.
-        let working = shoal_core::test_support::working_in(&self.root).unwrap_or_default();
-        found.extend(working.into_iter().map(|pid| pid as i32));
-        found
-    }
-}
-
-impl Drop for Leftovers {
-    fn drop(&mut self) {
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            let found = self.running();
-            if found.is_empty() || Instant::now() >= deadline {
-                break;
-            }
-            for pid in found {
-                // SAFETY: getpgid and kill only read and signal processes.
-                let target = if unsafe { libc::getpgid(pid) } == pid {
-                    -pid
-                } else {
-                    pid
-                };
-                unsafe { libc::kill(target, libc::SIGKILL) };
-            }
-            std::thread::sleep(Duration::from_millis(25));
-        }
-    }
-}
-
-/// The IDs of the processes whose command line contains `text`, other than
-/// zombies.
-fn processes_naming(text: &str) -> Vec<i32> {
-    let Ok(output) = Command::new("ps")
-        .args(["-ax", "-ww", "-o", "pid=,stat=,command="])
-        .output()
-    else {
-        return Vec::new();
-    };
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter(|line| line.contains(text))
-        .filter_map(|line| {
-            let mut fields = line.split_whitespace();
-            let pid = fields.next()?.parse().ok()?;
-            let stat = fields.next()?;
-            (!stat.starts_with('Z')).then_some(pid)
-        })
-        .collect()
 }

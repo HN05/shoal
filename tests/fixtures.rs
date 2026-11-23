@@ -7,7 +7,7 @@ use std::{
     path::Path,
     process::{Child, Command},
 };
-use support::{daemon::Leftovers, printed};
+use support::{home::Home, printed};
 
 #[test]
 fn installed_scripts_preserve_literal_paths_contents_and_modes() {
@@ -51,17 +51,18 @@ fn installed_scripts_preserve_literal_paths_contents_and_modes() {
     );
 }
 
-/// A fixture's leftovers stop as it goes, though each leads a group of its
-/// own: one working in its home and one naming it, but no other.
+/// A fixture's home stops, as it goes, the processes left in it, though
+/// each leads a group of its own: one working in it and one naming it, but
+/// no other.
 #[test]
-fn a_fixture_stops_the_processes_working_in_or_naming_its_home() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+fn a_home_stops_the_processes_working_in_or_naming_it() {
+    let home = Home::new();
     let elsewhere = tempfile::tempdir_in("/tmp").unwrap();
-    let mut working = looping(root.path(), elsewhere.path());
-    let mut naming = looping(elsewhere.path(), &root.path().join("state"));
+    let mut working = looping(home.path(), elsewhere.path());
+    let mut naming = looping(elsewhere.path(), &home.path().join("state"));
     let mut other = looping(elsewhere.path(), elsewhere.path());
 
-    drop(Leftovers::new(root.path()));
+    drop(home);
 
     assert!(working.try_wait().unwrap().is_some());
     assert!(naming.try_wait().unwrap().is_some());
@@ -69,6 +70,27 @@ fn a_fixture_stops_the_processes_working_in_or_naming_its_home() {
     // SAFETY: kill only sends a signal, to the group `other` leads.
     unsafe { libc::kill(-(other.id() as i32), libc::SIGKILL) };
     other.wait().unwrap();
+}
+
+/// A home whose test process is gone, as when a signal ended the test
+/// before its drops ran, goes with the processes left in it.
+#[test]
+fn an_abandoned_home_goes_with_its_processes() {
+    let mut ended = Command::new("true").spawn().unwrap();
+    ended.wait().unwrap();
+    let abandoned = Path::new("/tmp").join(format!(".t{}.test", ended.id()));
+    fs::create_dir(&abandoned).unwrap();
+    let elsewhere = tempfile::tempdir_in("/tmp").unwrap();
+    let mut working = looping(&abandoned, elsewhere.path());
+    let mut naming = looping(elsewhere.path(), &abandoned.join("state"));
+    let kept = Home::new();
+
+    support::home::remove_abandoned();
+
+    assert!(!abandoned.exists());
+    assert!(working.try_wait().unwrap().is_some());
+    assert!(naming.try_wait().unwrap().is_some());
+    assert!(kept.path().exists());
 }
 
 /// A shell looping in `directory` with `argument` on its command line, in a

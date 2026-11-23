@@ -8,12 +8,13 @@ use std::{
     process::{Command, Output},
     time::Duration,
 };
-use tempfile::TempDir;
 
 use crate::support::{
     self,
-    daemon::{CommandGroup, DaemonGuard, Leftovers},
-    git, repository_with,
+    daemon::{CommandGroup, DaemonGuard},
+    git,
+    home::Home,
+    repository_with,
 };
 
 /// Global config without overload warnings, which would add a message to
@@ -32,20 +33,18 @@ const CHAT_AGENT: &str = "#!/bin/sh\ntrap 'exit 0' TERM\n\
 
 pub struct Base {
     // Fields drop in declaration order: the commands stop while the daemon
-    // still answers them, and what left their group stops before the
-    // directory goes.
+    // still answers them, and the home stops what left their group.
     sessions: Sessions,
     pub commands: CommandGroup,
     pub daemon: DaemonGuard,
-    _leftovers: Leftovers,
-    pub root: TempDir,
+    pub root: Home,
     pub repo: PathBuf,
 }
 
 /// A new home under `/tmp` with the scripted forge installed, to prepare
 /// before [`Base::start`] takes it.
-pub fn home() -> TempDir {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
+pub fn home() -> Home {
+    let root = Home::new();
     support::forge::install(root.path());
     root
 }
@@ -54,13 +53,13 @@ impl Base {
     /// Start a daemon in `root` with `config` after [`NO_OVERLOAD_WARNINGS`]
     /// as the global config, and register repository `name` holding `files`,
     /// whose `main` is on its origin.
-    pub fn start(root: TempDir, config: &str, name: &str, files: &[(&str, &str)]) -> Self {
+    pub fn start(root: Home, config: &str, name: &str, files: &[(&str, &str)]) -> Self {
         Self::start_with_env(root, (config, &[]), name, files)
     }
 
     /// [`Self::start`], with the daemon running with `env` added.
     pub fn start_with_env(
-        root: TempDir,
+        root: Home,
         (config, env): (&str, &[(&str, &str)]),
         name: &str,
         files: &[(&str, &str)],
@@ -73,7 +72,6 @@ impl Base {
         let base = Self {
             sessions: Sessions::default(),
             commands: CommandGroup::new(),
-            _leftovers: Leftovers::new(root.path()),
             daemon,
             root,
             repo,

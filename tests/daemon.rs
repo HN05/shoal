@@ -1,9 +1,6 @@
 mod support;
 
-use support::{
-    daemon::{DaemonGuard, Leftovers},
-    printed, prompt,
-};
+use support::{daemon::DaemonGuard, home::Home, printed, prompt};
 
 use std::{
     fs,
@@ -28,11 +25,9 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 struct Daemon {
-    // Fields drop in declaration order: the daemon stops, then what it left
-    // running, before its directory goes.
+    // Dropped first, so the daemon stops before its home goes.
     guard: DaemonGuard,
-    _leftovers: Leftovers,
-    root: TempDir,
+    root: Home,
 }
 
 impl Daemon {
@@ -41,17 +36,13 @@ impl Daemon {
     }
 
     fn with_path(path: Option<&Path>) -> Self {
-        let root = tempfile::tempdir_in("/tmp").unwrap();
+        let root = Home::new();
         let mut launch = command(root.path());
         if let Some(path) = path {
             launch.env("PATH", path);
         }
         let guard = DaemonGuard::start(root.path(), &mut launch);
-        Self {
-            guard,
-            _leftovers: Leftovers::new(root.path()),
-            root,
-        }
+        Self { guard, root }
     }
 
     fn run(&self, args: &[&str]) -> Output {
@@ -356,12 +347,8 @@ fn failed_startup_recovery_never_serves() {
         let daemon = Daemon::start();
         let stopped = daemon.run(&["daemon", "stop"]);
         assert!(stopped.status.success(), "{}", printed(&stopped));
-        // Bindings drop in reverse: the daemon, its leftovers, then its home.
-        let Daemon {
-            root,
-            _leftovers,
-            mut guard,
-        } = daemon;
+        // Bindings drop in reverse: the daemon, then its home.
+        let Daemon { root, mut guard } = daemon;
         assert!(guard.child.wait().unwrap().success());
         rusqlite::Connection::open(root.path().join("state/state.db"))
             .unwrap()

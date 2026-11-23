@@ -383,14 +383,12 @@ fn cloning_unsupported(error: &std::io::Error) -> bool {
     })
 }
 
-/// The processes of this user, other than this one, that work in `root` or
-/// a directory below it.
-pub fn working_in(root: &Path) -> anyhow::Result<Vec<u32>> {
-    let root = fs::canonicalize(root)?;
+/// The working directory of each of this user's processes other than this
+/// one, with symbolic links resolved.
+pub fn working_directories() -> anyhow::Result<Vec<(u32, PathBuf)>> {
     Ok(crate::process::directories::working_directories()?
         .into_iter()
-        .filter(|process| process.path.starts_with(&root))
-        .map(|process| process.pid)
+        .map(|process| (process.pid, process.path))
         .collect())
 }
 
