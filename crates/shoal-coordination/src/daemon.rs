@@ -12,6 +12,7 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_daemon_base::notifications::{Coordinators, Recorded};
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -396,6 +397,14 @@ pub trait Records: Send + Sync {
 
     /// Place the hold the approved `request` asks for.
     fn place_approved_hold(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()>;
+
+    /// The turn the agent of the space `space` is in, as the space counts
+    /// them, and its execution.
+    fn agent_turn(
+        &self,
+        db: &Connection,
+        space: &SpaceId,
+    ) -> Result<(Option<i64>, Option<ExecutionId>)>;
 
     /// Queue `alert` for the agents of the space `id`, which they receive
     /// once the transaction `tx` commits.

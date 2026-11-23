@@ -24,6 +24,19 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
+/// The turn the agent of the space `id` is in, as the space counts them,
+/// and its execution.
+pub fn turn_of(db: &Connection, id: &SpaceId) -> Result<(Option<i64>, Option<ExecutionId>)> {
+    Ok(db
+        .query_row(
+            "SELECT turn,execution_id FROM space_agent_state WHERE space_id=?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?
+        .unwrap_or_default())
+}
+
 pub fn get(db: &Connection, id: &SpaceId) -> Result<Option<AgentStatus>> {
     Ok(db
         .query_row(

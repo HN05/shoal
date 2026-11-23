@@ -13,6 +13,7 @@ use shoal_coordination::daemon::{
     Reviews, Spaces,
 };
 use shoal_daemon_base::notifications::{Coordinators, Recorded, Source};
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -457,6 +458,14 @@ impl Records for CoordinationRecords {
 
     fn place_approved_hold(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
         crate::daemon::holds::place_approved(tx, request, &self.0)
+    }
+
+    fn agent_turn(
+        &self,
+        db: &Connection,
+        space: &SpaceId,
+    ) -> Result<(Option<i64>, Option<ExecutionId>)> {
+        crate::daemon::turn_state::turn_of(db, space)
     }
 
     fn queue_alert_in(

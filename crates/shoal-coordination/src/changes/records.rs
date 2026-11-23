@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
-use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
+use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     changes::{Change, ChangeAuthor, ChangeDiff, ChangeEntry, ChangeKind, Counted, Hunk},
     code::{CodeAt, CodeState, Lines},
@@ -15,6 +15,7 @@ use shoal_protocol::{
 };
 use shoal_refs::CommitId;
 
+use crate::daemon::Records;
 use crate::time::UnixTime;
 
 /// A change to record: who made it, the file and its hunk, or its kind
@@ -119,10 +120,11 @@ pub fn query<T>(
 /// thread the agent works for; the changes as recorded.
 pub(super) fn insert(
     tx: &Transaction<'_>,
+    outside: &dyn Records,
     made: &Made,
     changes: &[NewChange],
 ) -> Result<Vec<Change>> {
-    let (turn, execution) = turn(tx, &made.space_id)?;
+    let (turn, execution) = outside.agent_turn(tx, &made.space_id)?;
     let thread = current_thread(tx, &made.space_id)?;
     let mut ids = Vec::new();
     for new in changes {
@@ -182,19 +184,6 @@ fn next_number(tx: &Transaction<'_>, space: &SpaceId) -> Result<u32> {
         [space],
         |row| row.get(0),
     )?)
-}
-
-/// The turn the space `space`'s agent is in, as the space counts them, and
-/// its execution.
-fn turn(db: &Connection, space: &SpaceId) -> Result<(Option<i64>, Option<ExecutionId>)> {
-    Ok(db
-        .query_row(
-            "SELECT turn,execution_id FROM space_agent_state WHERE space_id=?1",
-            [space],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?
-        .unwrap_or_default())
 }
 
 /// The thread the space `space`'s agent works for now.

@@ -54,11 +54,11 @@ impl Coordination {
             Some(base) => Some(with_version(workspace, &base, &version).await?),
             None => None,
         };
-        let made = self.made_in(workspace).await?;
+        let (made, outside) = (self.made_in(workspace).await?, self.records.clone());
         let id = workspace.id.clone();
         (self.store)
             .write(move |tx| {
-                let recorded = records::insert(tx, &made, &changes)?;
+                let recorded = records::insert(tx, &*outside, &made, &changes)?;
                 if let Some(base) = base {
                     records::set_base(tx, &id, &base)?;
                 }

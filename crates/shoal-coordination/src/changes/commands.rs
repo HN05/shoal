@@ -39,10 +39,10 @@ impl Coordination {
             None => Vec::new(),
         };
         let others = new_changes(others, |_| ChangeAuthor::Others);
-        let made = self.made_in(workspace).await?;
+        let (made, outside) = (self.made_in(workspace).await?, self.records.clone());
         (self.store)
             .write(move |tx| {
-                let recorded = records::insert(tx, &made, &others)?;
+                let recorded = records::insert(tx, &*outside, &made, &others)?;
                 records::set_base(tx, &id, &tree)?;
                 records::start_command(tx, &id, &call, at)?;
                 Ok(recorded)
@@ -73,11 +73,11 @@ impl Coordination {
             true => ChangeAuthor::Mixed,
             false => ChangeAuthor::Agent,
         });
-        let made = self.made_in(workspace).await?;
+        let (made, outside) = (self.made_in(workspace).await?, self.records.clone());
         let id = workspace.id.clone();
         (self.store)
             .write(move |tx| {
-                let recorded = records::insert(tx, &made, &changes)?;
+                let recorded = records::insert(tx, &*outside, &made, &changes)?;
                 records::set_base(tx, &id, &tree)?;
                 records::end_command(tx, &id, &call)?;
                 Ok(recorded)
