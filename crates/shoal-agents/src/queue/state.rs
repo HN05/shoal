@@ -402,9 +402,11 @@ impl AgentQueue {
     }
 
     /// Hold back admission while the machine sleeps; waking wakes the
-    /// dispatcher. Takes the admission gate, as [`Self::suspend`] does.
-    pub async fn sleep(&self, asleep: bool) {
-        let _gate = self.lock_admission().await;
+    /// dispatcher. Unlike [`Self::suspend`] it never waits for the
+    /// admission gate, which a start may hold for longer than the
+    /// platform waits for a sleep: an admission pass already past its
+    /// check finishes, and the next one admits nothing.
+    pub fn sleep(&self, asleep: bool) {
         self.asleep.store(asleep, Ordering::SeqCst);
         if !asleep {
             self.wake();

@@ -76,7 +76,7 @@ async fn follow(manager: &Manager, mut events: impl PowerEvents) {
 /// sleeps, closing its link until it wakes.
 async fn prepare_for_sleep(manager: &Manager, deadline: Instant) {
     log!("sleep lock: the machine goes to sleep");
-    manager.agents.agent_queue().sleep(true).await;
+    manager.agents.agent_queue().sleep(true);
     manager.hub.announce_sleep(manager, deadline).await;
 }
 
@@ -84,7 +84,7 @@ async fn prepare_for_sleep(manager: &Manager, deadline: Instant) {
 async fn woke(manager: &Manager) {
     log!("sleep lock: the machine woke");
     manager.hub.woke();
-    manager.agents.agent_queue().sleep(false).await;
+    manager.agents.agent_queue().sleep(false);
 }
 
 #[cfg(test)]
