@@ -144,6 +144,21 @@ impl Coordination {
         Ok(cleared)
     }
 
+    /// Mark the alerts `ids` read that the machine `machine` keeps, as a
+    /// follow that delivered them names it.
+    pub async fn mark_copies_read(
+        &self,
+        daemon: &dyn Daemon,
+        machine: &MemberId,
+        read: Vec<i64>,
+    ) -> Result<()> {
+        let marks = AlertMarks {
+            read,
+            ..AlertMarks::default()
+        };
+        self.mark_elsewhere(daemon, machine, marks).await
+    }
+
     /// Take `marks` of `machine`'s alerts into this machine's copies at
     /// once, and send them to the hub.
     async fn mark_elsewhere(

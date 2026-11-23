@@ -186,15 +186,21 @@ async fn watch_alerts(
         let batch = manager.notifications.after(&after, 100).await?;
         for alert in batch {
             after.deliver(&alert);
-            let id = alert.id;
+            let (id, machine) = (alert.id, alert.machine.clone());
             let response = Response::new(request_id, Body::Alert(alert));
             protocol::write(&mut writer, &response).await?;
-            if !keep_unread {
-                // The watch's caller may read the user's alerts.
-                let marked = manager
-                    .coordination
-                    .mark_alerts_read(&*manager, None, vec![id]);
-                marked.await?;
+            if keep_unread {
+                continue;
+            }
+            // Marked where it is kept, since two machines' alerts may share
+            // a number until the hub renumbers one.
+            match machine {
+                None => manager.notifications.mark_read(vec![id]).await?,
+                Some(machine) => {
+                    let coordination = &manager.coordination;
+                    let marked = coordination.mark_copies_read(&*manager, &machine.id, vec![id]);
+                    marked.await?
+                }
             }
         }
         drop(operation);
