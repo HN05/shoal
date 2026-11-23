@@ -175,9 +175,8 @@ impl Configured {
     /// zmx session, goes to the default host.
     pub fn takes_queued(&self, origin: &Origin) -> bool {
         self.options.enabled
-            && self.places().is_some()
             && origin.host == self.host.name()
-            && origin.group.is_some()
+            && self.places().is_some_and(|places| places.in_group(origin))
     }
 
     /// How the host opens places, where config lets it.

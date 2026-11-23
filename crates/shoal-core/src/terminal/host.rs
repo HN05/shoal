@@ -103,6 +103,12 @@ pub trait Places: Sync {
         None
     }
 
+    /// Whether `origin`, a place or group of this host, is in a group a
+    /// queued start from it joins.
+    fn in_group(&self, origin: &Origin) -> bool {
+        origin.group.is_some()
+    }
+
     /// The variables that name this host's place for a process in it, which
     /// a place another host opens must not inherit.
     fn place_variables(&self) -> &'static [&'static str] {

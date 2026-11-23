@@ -2343,7 +2343,11 @@ host-defined data, and whether Shoal created the place. The place is the one ID
 a host names it by, for its watcher as well: a Herdr place is the pane, whose
 tab Herdr finds to close, rename or focus. Generic code passes the
 record to the host that reads it and never interprets the data, which for Rex
-is how to reach the server and its CLI. Queued entries carry the queuing
+is how to reach the server and its CLI. A Rex block keeps its ID when it
+moves to another session, and Rex names only the block to the programs in
+it, so a block's record names no session: Shoal reads the session from the
+block when it opens a window beside it, and a start queued from any block
+joins that session. Queued entries carry the queuing
 terminal's origin, recovery records the stopped agent's, demos their launch's,
 and the daemon the place each execution and chat runs in, which `attach`, `status`
 and attach completion ask the host about for every host, together with the

@@ -125,8 +125,13 @@ impl Places for Rex {
         origin()
     }
 
+    /// Every block is in a session, which Shoal reads from the block.
+    fn in_group(&self, origin: &Origin) -> bool {
+        origin.place.is_some() || origin.group.is_some()
+    }
+
     fn place_variables(&self) -> &'static [&'static str] {
-        &["REX_SESSION", "REX_BLOCK"]
+        &["REX_BLOCK"]
     }
 
     fn server_variables(&self) -> &'static [&'static str] {
@@ -208,11 +213,12 @@ fn var(name: &str) -> Option<String> {
 
 /// Whether this process runs in a Rex block.
 fn in_rex() -> bool {
-    var("REX_SESSION").is_some() && var("REX_BLOCK").is_some()
+    var("REX_BLOCK").is_some()
 }
 
-/// The block this process runs in, in its session, with how to reach its
-/// server.
+/// The block this process runs in, with how to reach its server. Rex names
+/// the block alone, which keeps its ID when it moves to another session, so
+/// a block's origin names no session: Shoal reads it from the block.
 fn origin() -> Option<Origin> {
     if !in_rex() {
         return None;
@@ -220,12 +226,39 @@ fn origin() -> Option<Origin> {
     let server = Server::here().ok()?;
     Some(Origin {
         host: HostName::Rex,
-        group: var("REX_SESSION"),
+        group: None,
         place: var("REX_BLOCK"),
         data: server.data(),
         owned: false,
         instance: None,
     })
+}
+
+/// The session to open a block in beside `origin`: the one its block is in
+/// now, or else the one it names.
+async fn session_of(server: &Server, origin: &Origin) -> Result<String> {
+    match &origin.place {
+        Some(block) => Ok(server
+            .block(block)
+            .await?
+            .context("the Rex block is gone")?
+            .session),
+        None => origin
+            .group
+            .clone()
+            .context("the Rex origin names no session"),
+    }
+}
+
+/// The origin of `block`, which Shoal opened beside `origin`, named as a
+/// process in it names its own.
+fn opened(origin: &Origin, block: String) -> Origin {
+    Origin {
+        group: None,
+        place: Some(block),
+        owned: true,
+        ..origin.clone()
+    }
 }
 
 /// The server of `origin`, or the one this process reaches.
@@ -261,14 +294,11 @@ async fn open_block(start: &Start<'_>) -> Result<Origin> {
         .context("Shoal has no Rex session to open a window in")?;
     let server = Server::recorded(&origin.data)?;
     server.ensure_supported().await?;
-    let session = origin
-        .group
-        .as_deref()
-        .context("the Rex origin names no session")?;
+    let session = session_of(&server, origin).await?;
     let typed = Typed::new(start.state, start.argv, start.env)?;
-    let opened = server
+    let block = server
         .open(&Shell {
-            session,
+            session: &session,
             label: start.label,
             cwd: start.cwd,
             focus: start.focus,
@@ -277,11 +307,7 @@ async fn open_block(start: &Start<'_>) -> Result<Origin> {
         })
         .await?;
     typed.hand_over()?;
-    Ok(Origin {
-        place: Some(opened.block),
-        owned: true,
-        ..origin.clone()
-    })
+    Ok(opened(origin, block.block))
 }
 
 /// Bring `id`, `name`'s block, forward: in Rex, its window becomes the
@@ -357,13 +383,10 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         .context("Shoal has no Rex session to open a window in")?;
     let server = Server::recorded(&origin.data)?;
     server.ensure_supported().await?;
-    let session = origin
-        .group
-        .as_deref()
-        .context("the Rex origin names no session")?;
-    let opened = server
+    let session = session_of(&server, origin).await?;
+    let block = server
         .open(&Shell {
-            session,
+            session: &session,
             label: demo.label,
             cwd: demo.cwd,
             focus: false,
@@ -371,11 +394,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
             beside: None,
         })
         .await?;
-    let place = Origin {
-        place: Some(opened.block),
-        owned: true,
-        ..origin.clone()
-    };
+    let place = opened(origin, block.block);
     // The demo's shell ends with it, so no later command reuses its block.
     let typed = Typed::ending_shell(demo.state, &(demo.worker)(&place)?, demo.env)?;
     typed::await_prompt(|| server.canonical(place.id())).await;

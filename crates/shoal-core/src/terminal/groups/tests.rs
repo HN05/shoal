@@ -92,13 +92,17 @@ fn a_start_queued_from_a_place_outside_a_group_goes_to_the_default_host() {
         order(&settings("terminal.default_host = 'herdr'"), Some(&session)),
         [(Herdr, false)]
     );
-    let ungrouped = Origin::created(Rex, "block".into());
+}
+
+/// Rex names a block alone, never its session, which Shoal reads from the
+/// block.
+#[test]
+fn a_start_queued_from_a_rex_block_joins_the_session_that_holds_it() {
+    use HostName::*;
+    let block = Origin::created(Rex, "block".into());
     assert_eq!(
-        order(
-            &settings("terminal.default_host = 'herdr'"),
-            Some(&ungrouped)
-        ),
-        [(Herdr, false)]
+        order(&settings("terminal.default_host = 'herdr'"), Some(&block)),
+        [(Rex, true), (Rex, false), (Herdr, false)]
     );
 }
 

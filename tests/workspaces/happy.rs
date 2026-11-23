@@ -806,7 +806,6 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
                 "test",
             ])
             .env("HAPPY_RECORD", &record)
-            .env("REX_SESSION", "session:caller")
             .env("REX_BLOCK", "block:caller")
             .env("REX_BIN_DIR", &rex_bin)
             .output()

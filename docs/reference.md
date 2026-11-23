@@ -2258,9 +2258,9 @@ tab in the workspace it was queued from, then falls back to the
 
 #### Rex
 
-Inside a [Rex](https://www.superlogical.com/rex) terminal (`REX_SESSION` and
-`REX_BLOCK` are set), `shoal start`, chats, background resumes and demos open a
-new window in the current Rex session, placed and labelled as a Herdr tab would
+Inside a [Rex](https://www.superlogical.com/rex) terminal (`REX_BLOCK` is set),
+`shoal start`, chats, background resumes and demos open a new window in the
+Rex session that holds the block, placed and labelled as a Herdr tab would
 be, and agents run in place in their block. With `placement = "split"`, a start
 from your block other than a demo splits that block instead, opening to its
 right in the same window; the new block takes the label and the window keeps

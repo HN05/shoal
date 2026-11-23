@@ -106,10 +106,9 @@ impl RexServer {
         )
     }
 
-    /// `command` as if run in `block` of `session`.
-    fn inside<'a>(&self, command: &'a mut Command, session: &str, block: &str) -> &'a mut Command {
+    /// `command` as if run in `block`.
+    fn inside<'a>(&self, command: &'a mut Command, block: &str) -> &'a mut Command {
         command
-            .env("REX_SESSION", session)
             .env("REX_BLOCK", block)
             .env("REX_SERVER", &self.socket)
             .env("REX_BIN_DIR", self.program.parent().unwrap())
@@ -251,7 +250,6 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
             fixture.command().current_dir(&fixture.repo).args([
                 "start", "--wait", repo, "--branch", "placed", "--agent", "pi",
             ]),
-            &session,
             &users,
         ),
         "",
@@ -316,7 +314,6 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
         let (output, transcript) = fixture.interactive_command(
             rex.inside(
                 fixture.command().current_dir(&fixture.repo).args(args),
-                &session,
                 &users,
             ),
             "",
@@ -432,7 +429,6 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
     let demo = |args: &[&str]| {
         let output = fixture.output(rex.inside(
             fixture.command().arg("--json").arg("demo").args(args),
-            "session:gone",
             "block:gone",
         ));
         assert!(output.status.success(), "{args:?}: {}", printed(&output));
@@ -521,7 +517,7 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
         return;
     };
     fixture.add("gone");
-    let (session, block) = rex.session("work", &fixture.repo);
+    let (_, block) = rex.session("work", &fixture.repo);
     rex.type_shoal(
         &fixture,
         &block,
@@ -534,7 +530,6 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
         fixture.interactive_command(
             rex.inside(
                 fixture.command().args(["attach", &fixture.id("gone")]),
-                &session,
                 &block,
             ),
             "",
@@ -566,7 +561,7 @@ fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() 
     };
     fixture.add("plain");
     fixture.add("owner");
-    let (session, block) = rex.session("mine", &fixture.repo);
+    let (_, block) = rex.session("mine", &fixture.repo);
     // Shoal created the block for another workspace.
     let recorded = fixture.request(serde_json::json!({"record_owned_place": {
         "workspace": fixture.id("owner"),
@@ -588,7 +583,6 @@ fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() 
                 "--agent",
                 "pi",
             ]),
-            &session,
             &block,
         ),
         "",
