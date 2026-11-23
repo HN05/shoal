@@ -22,7 +22,7 @@ pub struct Handoff {
     pub listener: StdListener,
     /// The children the replaced image left this process, such as detached
     /// executions' wrappers, whose waits ended with that image.
-    pub inherited_children: Vec<u32>,
+    inherited_children: Vec<u32>,
 }
 
 impl Handoff {

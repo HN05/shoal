@@ -120,7 +120,7 @@ fn lineage(pid: u32) -> Result<Option<Lineage>> {
 
 /// This process's children, those that exited and wait to be reaped
 /// included.
-pub fn children() -> Result<Vec<u32>> {
+pub(crate) fn children() -> Result<Vec<u32>> {
     platform::children(std::process::id())
 }
 
