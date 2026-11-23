@@ -250,3 +250,6 @@ pub fn remove_written_before(directory: &Path, cutoff: SystemTime) -> std::io::R
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

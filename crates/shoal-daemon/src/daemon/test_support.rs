@@ -529,28 +529,6 @@ pub async fn chat_launches(manager: &Manager) -> Vec<crate::protocol::operations
         .collect()
 }
 
-/// Keeps Git from creating a linked worktree of a repository until it
-/// drops, which makes the directory of the worktrees' admin directories
-/// read-only, so a creation fails after its record exists.
-pub struct BlockedWorktrees(std::path::PathBuf);
-
-/// Block worktrees of the repository checked out at `checkout`.
-pub fn block_worktrees(checkout: &std::path::Path) -> BlockedWorktrees {
-    use std::os::unix::fs::PermissionsExt;
-    let directory = checkout.join(".git/worktrees");
-    std::fs::create_dir_all(&directory).unwrap();
-    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o555)).unwrap();
-    BlockedWorktrees(directory)
-}
-
-impl Drop for BlockedWorktrees {
-    fn drop(&mut self) {
-        use std::os::unix::fs::PermissionsExt;
-        let writable = std::fs::Permissions::from_mode(0o755);
-        std::fs::set_permissions(&self.0, writable).unwrap();
-    }
-}
-
 /// Move the space `selector` names, with the spaces below it that
 /// `carrying` carries, to the new file `file`, as `shoal move -o` does:
 /// pack it, letting its end delete the `unsaved` work, then end it here,

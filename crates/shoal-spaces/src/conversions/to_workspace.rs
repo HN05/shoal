@@ -190,3 +190,6 @@ impl Spaces {
         Ok(pending.is_some())
     }
 }
+
+#[cfg(test)]
+mod tests;

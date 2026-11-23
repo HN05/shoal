@@ -9,7 +9,7 @@ use shoal_core::start_plan;
 #[cfg(any(test, feature = "test-support"))]
 use shoal_core::test_support;
 #[cfg(test)]
-use shoal_core::{agents, daemon_owner, fetched_copies, launches, presets, tmp_dirs};
+use shoal_core::{agents, launches, presets, tmp_dirs};
 use shoal_core::{
     caches, config, config_file, daemon_handoff, env, execution, fsutil, git, hooks, installed,
     paths, process, profile, refusal, releases, removal, repository, service, sessions, shoal_dirs,

@@ -277,3 +277,6 @@ pub fn placeable(launch: &Launch) -> bool {
 pub fn heavy(settings: &Effective, mode: &crate::config::modes::ModeName) -> bool {
     (settings.modes.get(mode.as_str())).is_none_or(|mode| mode.weight != Weight::Light)
 }
+
+#[cfg(test)]
+mod tests;

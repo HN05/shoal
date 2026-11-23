@@ -1,20 +1,16 @@
-use crate::daemon::{
-    manager::Manager,
-    test_support::{global_config, manager, repository},
-};
+use crate::stand_in::Fixture;
+use shoal_core::test_support::{global_config, repository};
 use shoal_protocol::launches::{Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A registered repository.
-async fn registered(manager: &Manager, temp: &tempfile::TempDir) -> crate::model::Repository {
-    manager.publish_config(global_config("[agents.claude]\ncommand = ['sh']\n"));
+async fn registered(manager: &Fixture, temp: &tempfile::TempDir) -> crate::model::Repository {
+    manager
+        .config
+        .publish(global_config("[agents.claude]\ncommand = ['sh']\n"));
     let path = repository(temp.path(), "repo");
     let path = path.to_str().unwrap().into();
-    manager
-        .repositories
-        .register(path, None, None)
-        .await
-        .unwrap()
+    manager.register_repository(path, None, None).await.unwrap()
 }
 
 /// A check of a launch whose mode a terminal has yet to pick refuses what
@@ -22,8 +18,9 @@ async fn registered(manager: &Manager, temp: &tempfile::TempDir) -> crate::model
 /// parent no one knows.
 #[tokio::test]
 async fn a_check_without_a_mode_refuses_what_every_kind_refuses() {
-    let (temp, manager) = manager().await;
-    let repo = registered(&manager, &temp).await;
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let repo = registered(&manager, temp).await;
     let unregistered = Launch {
         repository: Some("elsewhere".into()),
         ..Launch::default()
@@ -54,8 +51,9 @@ async fn a_check_without_a_mode_refuses_what_every_kind_refuses() {
 /// yet to pick answers with that workspace, which the start goes into.
 #[tokio::test]
 async fn a_check_without_a_mode_answers_the_workspace_in_names() {
-    let (temp, manager) = manager().await;
-    let repo = registered(&manager, &temp).await;
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let repo = registered(&manager, temp).await;
     let base = Some("main".into());
     let fix = (manager.create_workspace(&repo.id, "fix".into(), base, None, None))
         .await
@@ -78,8 +76,9 @@ async fn a_check_without_a_mode_answers_the_workspace_in_names() {
 /// refuses an issue no kind of space could read, before the mode picker.
 #[tokio::test]
 async fn a_check_without_a_mode_refuses_an_unreadable_issue() {
-    let (temp, manager) = manager().await;
-    let repo = registered(&manager, &temp).await;
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let repo = registered(&manager, temp).await;
     let launch = Launch {
         target: Some(StartTarget::Repository(repo.id.to_string())),
         issue: Some(shoal_protocol::launches::ItemChoice::Named(

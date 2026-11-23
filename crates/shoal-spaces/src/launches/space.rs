@@ -308,3 +308,6 @@ pub(super) fn agent_request(
 pub fn closed(error: &anyhow::Error) -> bool {
     (error.chain()).any(|cause| cause.is::<shoal_forge::items::issue::ClosedIssue>())
 }
+
+#[cfg(test)]
+mod tests;

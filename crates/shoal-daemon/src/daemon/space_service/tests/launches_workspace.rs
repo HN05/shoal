@@ -1,6 +1,6 @@
 use crate::daemon::manager::Manager;
 use crate::daemon::test_support::{global_config, manager, repository};
-use shoal_protocol::launches::{ItemChoice, Launch, LaunchSource, SpaceChoice, StartTarget};
+use shoal_protocol::launches::{ItemChoice, Launch, LaunchSource, StartTarget};
 
 /// A registered repository whose remote is a forge's, which Shoal never
 /// reaches, and an agent that starts without limits.
@@ -64,45 +64,4 @@ async fn a_workspace_on_an_unread_issue_is_refused() {
             .unwrap()
             .is_empty()
     );
-}
-
-/// A launch on a PR `--pr` names refuses what a PR link refuses beside it,
-/// a copy included, before it reads the PR.
-#[tokio::test]
-async fn a_pr_launch_refuses_another_branch_issue_or_repository() {
-    let (temp, manager) = manager().await;
-    let repo = offline_machine(&manager, &temp).await;
-    let on_pr = |change: fn(&mut Launch)| {
-        let mut launch = Launch {
-            pr: Some(ItemChoice::Named("7".parse().unwrap())),
-            issue: None,
-            ..launch_on_issue(&repo, None)
-        };
-        change(&mut launch);
-        launch
-    };
-    for (launch, refusal) in [
-        (
-            on_pr(|l| l.issue = Some(ItemChoice::Named("3".parse().unwrap()))),
-            "--pr cannot",
-        ),
-        (on_pr(|l| l.branch = Some("fix".into())), "--pr cannot"),
-        (
-            on_pr(|l| l.repository = Some("repo".into())),
-            "positional repository",
-        ),
-        (
-            on_pr(|l| l.copy = Some(SpaceChoice::Current)),
-            "a copy starts",
-        ),
-        (on_pr(|l| l.checkpoint = Some(1.into())), "a copy starts"),
-    ] {
-        let refused = manager
-            .spaces
-            .launch(&manager.daemon(), launch, LaunchSource::Manual, None)
-            .await;
-        let error = format!("{:#}", refused.unwrap_err());
-        assert!(error.contains(refusal), "{error}");
-    }
-    assert!(manager.spaces.list_workspaces().await.unwrap().is_empty());
 }

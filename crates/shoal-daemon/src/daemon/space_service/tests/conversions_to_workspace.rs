@@ -44,20 +44,6 @@ async fn refusal(
     format!("{refused:#}")
 }
 
-#[tokio::test]
-async fn a_workspace_is_a_workspace_already() {
-    let (root, manager) = manager().await;
-    let repo = registered(root.path(), &manager).await;
-    let workspace = manager
-        .create_workspace(&repo.id, "worker".into(), None, None, None)
-        .await
-        .unwrap();
-
-    let refused = refusal(&manager, SpaceSelector::id(&workspace.id), None).await;
-
-    assert!(refused.contains("is a workspace already"), "{refused}");
-}
-
 /// An agent converts the spaces its scope reaches, its own and those below
 /// it, and is refused one outside, which the refusal names.
 #[tokio::test]

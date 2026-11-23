@@ -142,3 +142,6 @@ fn ensure_creates(launch: &Launch) -> Result<()> {
         None => Ok(()),
     }
 }
+
+#[cfg(test)]
+mod tests;

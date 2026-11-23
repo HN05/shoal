@@ -171,3 +171,6 @@ async fn issue_creation(
 fn ensure_reopens(workspace: &Workspace) -> Result<()> {
     crate::target_checks::ready(workspace, workspace.state).require()
 }
+
+#[cfg(test)]
+mod tests;

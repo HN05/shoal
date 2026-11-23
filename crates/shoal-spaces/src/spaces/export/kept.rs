@@ -140,3 +140,6 @@ fn file_states(sources: &[SessionSource]) -> Vec<serde_json::Value> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

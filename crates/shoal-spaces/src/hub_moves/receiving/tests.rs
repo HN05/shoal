@@ -1,4 +1,4 @@
-use crate::daemon::hub_moves::receiving::*;
+use crate::hub_moves::receiving::*;
 use crate::transfer::ImportedMove;
 use std::os::unix::process::ExitStatusExt as _;
 

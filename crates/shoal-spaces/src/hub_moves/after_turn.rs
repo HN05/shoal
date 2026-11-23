@@ -240,3 +240,6 @@ pub fn stayed_message(space: &SpaceId, ended: &Ended) -> String {
         ),
     }
 }
+
+#[cfg(test)]
+mod tests;

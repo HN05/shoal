@@ -142,3 +142,6 @@ impl Spaces {
         Ok(workspace)
     }
 }
+
+#[cfg(test)]
+mod tests;

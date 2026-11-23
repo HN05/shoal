@@ -232,3 +232,6 @@ enum Starts {
 fn named_workspace(launch: &Launch) -> Option<&shoal_protocol::space_names::SpaceSelector> {
     launch.in_workspace.as_ref().and_then(SpaceChoice::named)
 }
+
+#[cfg(test)]
+mod tests;

@@ -224,3 +224,6 @@ pub fn reported(output: &std::process::Output) -> Result<ImportedMove> {
         stderr.trim()
     )
 }
+
+#[cfg(test)]
+mod tests;

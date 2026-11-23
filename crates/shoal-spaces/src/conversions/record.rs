@@ -403,3 +403,6 @@ fn give_back_chat_row(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Resu
         None => Ok(()),
     }
 }
+
+#[cfg(test)]
+mod tests;

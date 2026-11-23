@@ -1,4 +1,4 @@
-use crate::daemon::launches::workspace::branch::*;
+use crate::launches::workspace::branch::*;
 use crate::model::Repository;
 
 #[tokio::test]

@@ -565,3 +565,6 @@ pub fn ensure_carried(launch: &Launch, machine: &str) -> Result<()> {
         None => Ok(()),
     }
 }
+
+#[cfg(test)]
+mod tests;

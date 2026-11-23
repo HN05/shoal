@@ -44,6 +44,20 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
         .collect()
 }
 
+/// A registered repository with the ready workspace `worker`.
+async fn workspace(root: &std::path::Path, manager: &Manager) -> (Repository, Workspace) {
+    let checkout = repository(root, "repo");
+    let repo = manager
+        .repositories
+        .register(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    (repo, workspace)
+}
 #[tokio::test]
 async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     let (temp, manager) = manager().await;
@@ -713,48 +727,6 @@ async fn a_chat_being_removed_takes_no_new_space() {
     assert!(manager.spaces.list_workspaces().await.unwrap().is_empty());
     let chats = manager.spaces.chats().await.unwrap();
     assert_eq!(chats.len(), 1, "{chats:?}");
-}
-
-/// A registered repository with the ready workspace `worker`.
-async fn workspace(root: &std::path::Path, manager: &Manager) -> (Repository, Workspace) {
-    let checkout = repository(root, "repo");
-    let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "worker".into(), None, None, None)
-        .await
-        .unwrap();
-    (repo, workspace)
-}
-
-/// A chat runs the diff itself in the path the diff base names, so the base
-/// names only the workspace's own worktree.
-#[tokio::test]
-async fn the_diff_base_names_only_the_workspaces_own_worktree() {
-    let (temp, manager) = manager().await;
-    let (repo, workspace) = workspace(temp.path(), &manager).await;
-    let base = manager
-        .spaces
-        .diff_base(&*manager, &SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    assert_eq!(base.path, workspace.path);
-    // A clone at its path has the same history, so only the ownership check
-    // tells it apart.
-    std::fs::rename(&workspace.path, temp.path().join("moved")).unwrap();
-    let clone = [repo.path.as_os_str(), workspace.path.as_os_str()].map(|p| p.to_str().unwrap());
-    crate::daemon::test_support::git(temp.path(), &["clone", "-q", clone[0], clone[1]]);
-    crate::daemon::test_support::git(&workspace.path, &["checkout", "-q", "-b", "worker"]);
-    assert!(
-        manager
-            .spaces
-            .diff_base(&*manager, &SpaceSelector::id(&workspace.id))
-            .await
-            .is_err()
-    );
 }
 
 #[tokio::test]

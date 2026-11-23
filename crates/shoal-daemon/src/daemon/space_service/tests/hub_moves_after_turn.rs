@@ -2,7 +2,6 @@ use crate::daemon::hub_moves::after_turn::*;
 use crate::daemon::scope::Caller;
 use crate::protocol::operations::Ended;
 use crate::protocol::operations::Failure;
-use crate::protocol::operations::Outcome;
 use crate::transfer::MoveOrder;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -119,22 +118,6 @@ async fn a_move_that_left_its_space_here_tells_its_agent_once_it_ended() {
     .await
     .unwrap();
     assert_eq!(told.len(), 1);
-}
-
-#[test]
-fn a_carried_space_hears_the_failure_of_the_space_that_carried_it() {
-    let (chat, worker): (SpaceId, SpaceId) = ("chat".into(), "worker".into());
-    let report = crate::transfer::MoveReport {
-        moved: Vec::new(),
-        failed: vec![crate::transfer::MoveFailure {
-            id: worker,
-            name: "worker".into(),
-            error: "it changed since its package was written".into(),
-        }],
-    };
-    let ended = Ended::Succeeded(Box::new(Outcome::Moved(report)));
-    let told = stayed_message(&chat, &ended);
-    assert!(told.contains("it changed since"), "{told}");
 }
 
 #[tokio::test]

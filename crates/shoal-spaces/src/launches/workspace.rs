@@ -290,3 +290,6 @@ fn as_chat(launch: &Launch, shape: &Shape, repo: &Repository) -> Result<Placed> 
     };
     Ok(Placed::Chat(chat, shape))
 }
+
+#[cfg(test)]
+mod tests;

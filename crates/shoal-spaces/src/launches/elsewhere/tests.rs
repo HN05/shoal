@@ -1,6 +1,6 @@
 use shoal_protocol::launches::{Launch, SpaceChoice};
 
-use crate::daemon::launches::elsewhere::ensure_carried;
+use crate::launches::elsewhere::ensure_carried;
 
 #[test]
 fn a_start_on_another_machine_refuses_what_only_this_machine_has() {

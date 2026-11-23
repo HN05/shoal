@@ -1,26 +1,20 @@
-use crate::daemon::hub_moves::held::remove_written_before;
+use crate::hub_moves::held::remove_written_before;
+use crate::stand_in::Fixture;
+use shoal_core::test_support::repository;
 use std::time::{Duration, SystemTime};
 
 use shoal_protocol::space_names::SpaceSelector;
 
-use crate::{
-    daemon::{
-        spaces::MovePacking,
-        test_support::{manager, repository},
-    },
-    removal::UnsavedWork,
-    transfer::MoveDestination,
-};
+use crate::{removal::UnsavedWork, spaces::MovePacking, transfer::MoveDestination};
 
 #[tokio::test]
 async fn a_held_move_waits_for_its_reader_once_packed_until_its_time_is_up() {
-    let (root, manager) = manager().await;
+    let manager = Fixture::new().await;
+    let root = &manager.root;
     let path = repository(root.path(), "repo");
-    let repo = (manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None))
-    .await
-    .unwrap();
+    let repo = (manager.register_repository(path.to_str().unwrap().into(), None, None))
+        .await
+        .unwrap();
     let work = (manager.create_workspace(&repo.id, "work".into(), None, None, None))
         .await
         .unwrap();

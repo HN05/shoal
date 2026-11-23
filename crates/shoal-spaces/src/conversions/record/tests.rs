@@ -1,4 +1,5 @@
-use crate::daemon::conversions::record::ChatRow;
+use crate::conversions::record::ChatRow;
+use crate::stand_in::Fixture;
 
 #[test]
 fn a_chat_row_keeps_its_scope_token_typed_and_out_of_its_debug() {
@@ -16,8 +17,8 @@ fn a_chat_row_keeps_its_scope_token_typed_and_out_of_its_debug() {
 
 #[tokio::test]
 async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_actions() {
-    let (_root, manager) = crate::daemon::test_support::manager().await;
-    let chat = crate::daemon::conversions::record::ConvertedChat {
+    let manager = Fixture::new().await;
+    let chat = crate::conversions::record::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
         origin: None,
@@ -38,7 +39,7 @@ async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_acti
                      VALUES ('action','w','action/merge','merge','{}',1,2),
                          ('port','w','port/web','web','{}',1,3);",
             )?;
-            crate::daemon::conversions::record::replace_workspace(tx, &*records, &"w".into(), &chat)?;
+            crate::conversions::record::replace_workspace(tx, &*records, &"w".into(), &chat)?;
             let mut kept: Vec<(String, String)> = tx
                 .prepare(
                     "SELECT 'thread',space_id FROM threads

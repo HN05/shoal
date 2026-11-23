@@ -739,3 +739,6 @@ fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,8 +1,7 @@
 use crate::model::Space;
+use crate::stand_in::Fixture;
 
 use shoal_protocol::{model::Head, model::Workspace, state::WorkspaceState};
-
-use crate::daemon::test_support;
 
 /// A ready workspace record on `branch`, which needs no worktree.
 fn on_branch(workspace: &Workspace, branch: &str) -> Space {
@@ -13,7 +12,7 @@ fn on_branch(workspace: &Workspace, branch: &str) -> Space {
 
 #[tokio::test]
 async fn a_renamed_branch_changes_what_a_package_holds() {
-    let (_root, manager) = test_support::manager().await;
+    let manager = Fixture::new().await;
     let workspace = Workspace::new_record(
         "repo".into(),
         "work".into(),

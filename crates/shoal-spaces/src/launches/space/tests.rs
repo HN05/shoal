@@ -1,4 +1,4 @@
-use crate::daemon::launches::space::closed;
+use crate::launches::space::closed;
 use shoal_forge::items::issue::ClosedIssue;
 
 /// A named launch's fallback, which takes an issue it cannot read by its

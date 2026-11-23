@@ -165,3 +165,6 @@ pub fn lacking(machine: &str, unsent_since: Option<UnixTime>, now: UnixTime) -> 
         elapsed(now.duration_since(since)),
     ))
 }
+
+#[cfg(test)]
+mod tests;

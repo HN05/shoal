@@ -518,3 +518,6 @@ pub use records::RESTORE_CLAIM;
 pub use records::rehome_removed_chat;
 pub use records::rekey_converted;
 pub use worktree::{RestoredFiles, write_files};
+
+#[cfg(test)]
+mod tests;

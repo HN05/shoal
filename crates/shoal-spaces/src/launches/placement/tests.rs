@@ -1,7 +1,7 @@
 use shoal_protocol::launches::{Launch, SpaceChoice};
 use shoal_protocol::space_names::SpaceSelector;
 
-use crate::daemon::launches::placement::placeable;
+use crate::launches::placement::placeable;
 
 #[test]
 fn only_a_detached_start_that_needs_nothing_of_this_machine_is_placed() {

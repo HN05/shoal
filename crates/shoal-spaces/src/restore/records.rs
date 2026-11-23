@@ -404,3 +404,6 @@ fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
 }
+
+#[cfg(test)]
+mod tests;

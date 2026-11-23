@@ -22,14 +22,11 @@ pub use shoal_spaces::{workspace, workspace_files};
 // they test with, as the daemon's own.
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use shoal_agents::places;
-#[cfg(test)]
-pub(crate) use shoal_leases::containers;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use shoal_spaces::chats;
 #[cfg(test)]
 pub(crate) use shoal_spaces::{
-    carried_sessions, launches, leftovers, lifecycle, quarantine, recovery, startup_audit,
-    tmp_dirs, untracked,
+    carried_sessions, launches, lifecycle, quarantine, recovery, tmp_dirs,
 };
 mod agent_service;
 mod answer;
