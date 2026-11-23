@@ -12,7 +12,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 mod read_only;
 
-pub use shoal_coordination::scope::{Caller, ScopedExecution, outside_scope, tokens};
+pub use shoal_coordination::scope::{Caller, ScopeRefusal, ScopedExecution, outside_scope, tokens};
 
 /// Resolve `token`, which may stand for a caller another machine vouches
 /// for, and confine `method` to the spaces the caller's scope reaches: its own space, a workspace or a chat, and the spaces below it,
@@ -166,35 +166,6 @@ pub(super) fn denied() -> anyhow::Error {
         "workspace processes can only inspect their worktree, execute or set up there, manage its resources, and sync their repository"
     )
 }
-
-/// A refusal by the caller's scope that a request's handler makes, once it
-/// knows what the request reaches, which answers as the scope's own
-/// refusals do.
-#[derive(Debug)]
-pub(crate) struct ScopeRefusal(anyhow::Error);
-
-impl ScopeRefusal {
-    /// `result`, its error a refusal by the caller's scope, except an
-    /// approval request and a refusal with a reason of its own, such as a
-    /// target that does not exist, which answer as they do anyway.
-    pub(crate) fn of<T>(result: Result<T>) -> Result<T> {
-        result.map_err(|error| {
-            let undecided = error.downcast_ref::<crate::daemon::approvals::Undecided>();
-            match undecided.is_some() || crate::refusal::Reason::of(&error).is_some() {
-                true => error,
-                false => Self(error).into(),
-            }
-        })
-    }
-}
-
-impl std::fmt::Display for ScopeRefusal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:#}", self.0)
-    }
-}
-
-impl std::error::Error for ScopeRefusal {}
 
 /// Refuse a scoped caller a record of a workspace outside its tree.
 pub(super) async fn inspect_owner(

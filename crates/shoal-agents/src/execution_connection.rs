@@ -993,22 +993,7 @@ pub mod registration;
 
 pub use controls::Controls;
 
-/// The change to the merge records an execution makes once it ends.
-pub enum RecordChange {
-    Merge(Box<crate::model::MergePlan>),
-    Unmerge(Box<crate::model::UnmergePlan>),
-}
-
-impl RecordChange {
-    /// The change `plan`'s execution makes, if it merges or unmerges.
-    pub fn of(plan: &crate::model::ExecutionPlan) -> Option<Self> {
-        match (&plan.merge, &plan.unmerge) {
-            (Some(merge), _) => Some(Self::Merge(merge.clone())),
-            (None, Some(unmerge)) => Some(Self::Unmerge(unmerge.clone())),
-            (None, None) => None,
-        }
-    }
-}
+pub use shoal_daemon_base::merges::RecordChange;
 
 #[cfg(test)]
 mod tests;

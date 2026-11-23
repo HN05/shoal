@@ -15,7 +15,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use compose::Compose;
 use records::Recorded;
-pub use stats::ContainerUsage;
+pub use shoal_daemon_base::containers::ContainerUsage;
 
 use crate::{
     Leases,

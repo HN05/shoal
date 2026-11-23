@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
+pub use shoal_daemon_base::blockers::{Lookup, Lookups, Readiness, Target};
 
 use crate::Agents;
 use crate::daemon::{Daemon, Records};
@@ -29,31 +30,6 @@ use crate::state::QueueState;
 /// waits for the agent's restore and so starts its turn there.
 pub const STOPPED_BLOCKED: &str =
     "Shoal stopped you while your work was blocked and restored you to continue it.";
-
-/// A blocker by its kind and target: a space's ID or an item's URL.
-pub type Target = (BlockerKind, String);
-
-/// What a lookup of a blocker found.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Lookup {
-    /// It cleared, as this says, such as `run <url> passed on main at <commit>`.
-    Cleared(String),
-    Open,
-    /// The lookup failed, which keeps it.
-    Failed(String),
-}
-
-/// What the forge says of each blocker it was asked about.
-pub type Lookups = HashMap<Target, Lookup>;
-
-/// Whether a waiting launch's blockers let it start.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Readiness {
-    /// It may start, on the branch of a done blocker that is not merged.
-    Ready { base: Option<String> },
-    /// What still blocks it, by name or URL.
-    Waiting(Vec<String>),
-}
 
 /// One blocker as admission sees it.
 #[derive(Debug, Clone)]

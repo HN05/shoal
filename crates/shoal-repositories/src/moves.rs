@@ -23,18 +23,8 @@ use crate::{
 };
 
 pub mod chats;
+pub use shoal_daemon_base::root_moves::Running;
 mod intent;
-
-/// What checking a repository makes of the commands and agents running in
-/// its workspaces.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Running {
-    /// They keep it from moving.
-    Refused,
-    /// The caller stops them before the move, so they and their processes
-    /// do not count.
-    StoppedFirst,
-}
 
 impl Repositories {
     /// The repositories [`Self::move_all`] would move into `root`, or the

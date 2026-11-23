@@ -13,6 +13,14 @@ pub async fn run<T: Send + 'static>(
     tokio::task::spawn_blocking(read).await?
 }
 
+/// Run the blocking file work `work`, which fails with an I/O error, on the
+/// blocking pool.
+pub async fn run_io<T: Send + 'static>(
+    work: impl FnOnce() -> std::io::Result<T> + Send + 'static,
+) -> Result<T> {
+    Ok(tokio::task::spawn_blocking(work).await??)
+}
+
 /// Whether `path` exists, read as [`Path::exists`] does.
 pub async fn exists(path: &Path) -> Result<bool> {
     let path = path.to_owned();

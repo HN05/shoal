@@ -1,25 +1,10 @@
 //! Shared outcomes of daemon-owned resource allocation.
-use crate::{Leases, daemon::Daemon, protocol::Body};
+pub use shoal_daemon_base::allocation::Allocation;
+
+use crate::{Leases, daemon::Daemon};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::AlertKind;
-use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::space_names::SpaceName;
-
-pub enum Allocation<T> {
-    Granted(T),
-    Busy(String),
-    Approval(Box<ApprovalRequest>),
-}
-
-impl<T> Allocation<T> {
-    pub fn into_body(self, granted: impl FnOnce(T) -> Body) -> Body {
-        match self {
-            Self::Granted(value) => granted(value),
-            Self::Busy(message) => Body::Busy { message },
-            Self::Approval(request) => Body::ApprovalRequest(request),
-        }
-    }
-}
 
 impl Leases {
     /// Record allocation notifications after the claim transaction has finished.

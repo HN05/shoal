@@ -1,6 +1,7 @@
 //! What each workspace's running containers use, as the runtime's `stats`
 //! reads them: the containers Compose labelled with the project name Shoal
 //! gave it, so no Compose file is read.
+use shoal_daemon_base::containers::ContainerUsage;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -18,14 +19,6 @@ const PROJECT_LABEL: &str = "com.docker.compose.project";
 
 /// How many projects' containers are listed with the runtime at once.
 const PROJECTS_LISTED_AT_ONCE: usize = 4;
-
-/// What a project's running containers use together.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct ContainerUsage {
-    /// Percent of one core.
-    pub cpu_percent: f64,
-    pub memory_bytes: u64,
-}
 
 impl Leases {
     /// What the containers of each workspace whose project may run use, or
