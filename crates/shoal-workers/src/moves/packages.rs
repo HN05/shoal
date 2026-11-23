@@ -67,7 +67,7 @@ pub(super) fn reserve_copy(
     let file = directory.join(package_name(id));
     ensure!(
         !file.exists(),
-        "a copy of it waits for the machine that started it already; copy it again once that one has it"
+        "a copy of it waits for the machine that started it already; copy it again once that machine has read it, or 30 minutes after it was written, when it goes"
     );
     Ok(file)
 }
