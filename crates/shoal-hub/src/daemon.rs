@@ -384,6 +384,10 @@ pub trait Records: Send + Sync {
         id: &SpaceId,
     ) -> Result<Option<(SpaceName, SpaceNumber)>>;
 
+    /// Give the alert `from` the number `to`, and the posts it carried
+    /// with it, unless an alert here holds `to`; whether it did.
+    fn renumber_alert(&self, tx: &Transaction<'_>, from: i64, to: i64) -> Result<bool>;
+
     /// Give the space `id` the number `to` instead of `from`, and its
     /// threads and approval requests with it.
     fn renumber_space(

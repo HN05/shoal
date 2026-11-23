@@ -456,6 +456,15 @@ pub(super) fn set_alert(tx: &Transaction<'_>, post: i64, alert: i64) -> Result<(
     Ok(())
 }
 
+/// Have the posts the alert `from` carried name its new number `to`.
+pub fn renumber_alert(tx: &Transaction<'_>, from: i64, to: i64) -> Result<()> {
+    tx.execute(
+        "UPDATE thread_posts SET alert_id=?2 WHERE alert_id=?1",
+        params![from, to],
+    )?;
+    Ok(())
+}
+
 /// Give the thread `id` to `holder`, none for the user.
 pub(super) fn set_holder(
     tx: &Transaction<'_>,

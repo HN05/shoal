@@ -480,6 +480,10 @@ impl Records for StandInRecords {
         Ok(None)
     }
 
+    fn renumber_alert(&self, tx: &Transaction<'_>, from: i64, to: i64) -> Result<bool> {
+        shoal_daemon_base::alerts::numbering::renumber(tx, from, to)
+    }
+
     fn renumber_space(
         &self,
         _: &Transaction<'_>,

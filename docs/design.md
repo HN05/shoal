@@ -391,7 +391,15 @@ reports the numbers it holds without a space, those of a removed space's
 issue proposals, with its spaces, and the hub gives them no other space. An import's
 claim of a space's ID also keeps its number for the claiming machine while
 the hub still lists the space, so `shoal move --machine` and `--ssh` keep it; an exported
-package imported after its source is gone takes a new one. The daemon
+package imported after its source is gone takes a new one. Alert
+numbers, to the user and to spaces alike, form another sequence the hub
+holds, which never gives a number twice, so a stale number never names
+another alert: each machine reports the spares it has left and the
+numbers its alerts took on their own, above the highest it knew once its
+spares ran out or before it joined, and the answer tops its spares up,
+confirms each such number no machine was given, and gives one another
+machine was given a new number, whose sending space's agent hears of an
+unread one. The daemon
 alone decides where a request runs: each request kind declares, with no
 default, whether it goes to the machine of the space it acts on, and every
 kind that only reads or changes Shoal's state does, while one that needs

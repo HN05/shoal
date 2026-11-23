@@ -28,16 +28,16 @@ mod summaries;
 use capacity::Measured;
 
 /// Lets a burst of changes settle into one report.
-const SETTLE: Duration = Duration::from_millis(500);
+pub(crate) const SETTLE: Duration = Duration::from_millis(500);
 
 /// How long a machine goes without a report before it reports that nothing
 /// changed, to hear of numbers the hub changed on its own, as when another
 /// machine ending a space makes this machine's copy of it the one listed.
-const QUIET: Duration = Duration::from_secs(5 * 60);
+pub(crate) const QUIET: Duration = Duration::from_secs(5 * 60);
 
 /// How long a machine waits to report all its spaces again after a report
 /// failed.
-const RETRY: Duration = Duration::from_secs(30);
+pub(crate) const RETRY: Duration = Duration::from_secs(30);
 
 /// How long a machine waits for the hub to take a report of a space
 /// another machine looks for there before it goes on anyway.
@@ -48,7 +48,7 @@ const LISTED_WAIT: Duration = Duration::from_secs(30);
 pub(crate) struct Reported(watch::Sender<HashSet<SpaceId>>);
 
 /// Where a machine's reports go.
-enum Sink<'a> {
+pub(crate) enum Sink<'a> {
     /// To the hub, over this machine's link.
     Link(&'a Calls),
     /// To this daemon's own directory, as the hub's machine `MemberId`.
@@ -149,16 +149,20 @@ impl Hub {
         let _ = tokio::time::timeout(LISTED_WAIT, listed).await;
     }
 
-    /// Report the hub's own machine's spaces to its directory while this
-    /// daemon takes the hub role, until the daemon stops; while it does
-    /// not, number them on its own unless it joined a hub.
+    /// Report the hub's own machine's spaces and alerts to the hub while
+    /// this daemon takes the hub role, until the daemon stops; while it
+    /// does not, number them on its own unless it joined a hub.
     pub(super) async fn report_own_spaces(&self, daemon: &dyn Daemon) {
         let mut reloaded = self.config.watch();
         loop {
             if self.is_hub(daemon) {
                 let reported = async {
                     let own = self.own_member().await?;
-                    self.report_spaces(daemon, Sink::Hub(own)).await
+                    let alerts = Sink::Hub(own.clone());
+                    tokio::select! {
+                        reported = self.report_spaces(daemon, Sink::Hub(own)) => reported,
+                        reported = self.report_alerts(daemon, &alerts) => reported,
+                    }
                 };
                 tokio::select! {
                     result = reported => {

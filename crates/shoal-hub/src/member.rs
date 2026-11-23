@@ -338,6 +338,7 @@ impl Hub {
             tokio::select! {
                 never = self.keep_sending_outbox(&calls) => never,
                 never = self.keep_reporting(&**daemon, &calls) => never,
+                never = self.keep_reporting_alerts(&**daemon, &calls) => never,
                 never = self.keep_describing(&calls) => never,
                 never = self.keep_packaging(&**daemon, &calls) => never,
                 never = self.keep_sharing(daemon, &calls) => never,

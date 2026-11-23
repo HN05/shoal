@@ -1030,13 +1030,6 @@ CREATE TABLE hub_repositories (
     PRIMARY KEY(member_id, repository_id)
 );
 
-CREATE TABLE hub_kept_removed (
-    space_id TEXT NOT NULL,
-    member_id TEXT NOT NULL REFERENCES hub_members(id),
-    keeps TEXT NOT NULL CHECK(keeps IN ('record','files')),
-    PRIMARY KEY(space_id, member_id, keeps)
-);
-
 CREATE TABLE hub_sleep_lags (
     space_id TEXT PRIMARY KEY,
     member_id TEXT NOT NULL REFERENCES hub_members(id),
@@ -1100,6 +1093,33 @@ CREATE TABLE hub_value_fetches (
     first_at INTEGER NOT NULL,
     last_at INTEGER NOT NULL,
     PRIMARY KEY(requester, machine, setting)
+);
+
+CREATE TABLE hub_kept_removed (
+    space_id TEXT NOT NULL,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    keeps TEXT NOT NULL CHECK(keeps IN ('record','files')),
+    PRIMARY KEY(space_id, member_id, keeps)
+);
+
+CREATE TABLE hub_alert_numbering (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    spares TEXT NOT NULL,
+    taken INTEGER NOT NULL,
+    seen INTEGER NOT NULL
+);
+
+CREATE TABLE hub_unconfirmed_alerts (number INTEGER PRIMARY KEY);
+
+CREATE TABLE hub_alert_sequence (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    next INTEGER NOT NULL
+);
+
+CREATE TABLE hub_alert_numbers (
+    number INTEGER PRIMARY KEY,
+    member_id TEXT NOT NULL,
+    spare INTEGER NOT NULL CHECK(spare IN (0,1))
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
@@ -1215,6 +1235,8 @@ CREATE UNIQUE INDEX reviews_pending ON reviews(workspace_id, opener, COALESCE(op
     WHERE state='pending';
 
 CREATE INDEX threads_opener ON threads(opener_id) WHERE opener_id IS NOT NULL;
+
+CREATE INDEX hub_alert_numbers_member ON hub_alert_numbers(member_id, spare);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

@@ -12,6 +12,8 @@ use shoal_protocol::files::SentFile;
 
 use shoal_protocol::space_names::SpaceName;
 
+pub mod numbering;
+
 /// A space's unread alerts.
 #[derive(Debug, Default)]
 pub struct Unread {
@@ -159,8 +161,9 @@ fn files(row: &rusqlite::Row<'_>) -> rusqlite::Result<Vec<SentFile>> {
 }
 
 /// Record `alert` for the space `recipient`, or for the user without one,
-/// in the caller's transaction, and prune the oldest read alerts beyond
-/// those kept. Returns its ID.
+/// in the caller's transaction, under the next number of the hub's
+/// sequence while this machine takes part in one, and prune the oldest
+/// read alerts beyond those kept. Returns its ID.
 pub fn insert(
     tx: &Transaction<'_>,
     recipient: Option<&SpaceId>,
@@ -168,10 +171,11 @@ pub fn insert(
     wakes: bool,
     for_user: bool,
 ) -> Result<i64> {
+    let number = numbering::next(tx)?;
     tx.execute(
-        "INSERT INTO alerts(created_at,kind,sender,recipient_id,space,space_id,subject,message,
+        "INSERT INTO alerts(id,created_at,kind,sender,recipient_id,space,space_id,subject,message,
                 attachments,relayed_files,wakes,for_user)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            VALUES (?13,?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
         params![
             crate::time::UnixTime::now(),
             alert.kind,
@@ -185,6 +189,7 @@ pub fn insert(
             alert.relayed_column()?,
             wakes,
             for_user,
+            number,
         ],
     )?;
     let id = tx.last_insert_rowid();

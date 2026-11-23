@@ -1,5 +1,6 @@
 //! Hub integration tests: daemons in temporary homes that take the hub role
 //! or join it through the command transport.
+mod alerts;
 mod apps;
 mod attaching;
 mod demos;

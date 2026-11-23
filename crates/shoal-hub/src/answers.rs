@@ -16,7 +16,7 @@ use shoal_ids::member_ids::MemberId;
 use tokio::sync::OwnedRwLockReadGuard;
 
 use super::{
-    directory, members,
+    alerts, directory, members,
     packages::{self, Continuation, Sent, takeovers},
     session::Calls,
 };
@@ -117,6 +117,10 @@ impl Hub {
                     self.record_report(&**daemon, &member.id, report, held)
                         .await?,
                 )
+            }
+            Call::ReportAlerts { report } => {
+                ensure_machine(member)?;
+                Reply::AlertsReported(self.record_alert_report(&member.id, report).await?)
             }
             Call::Claim {
                 space,
@@ -360,6 +364,7 @@ impl Hub {
                 }
                 members::revoke(tx, &member.id)?;
                 directory::forget(tx, &member.id)?;
+                alerts::sequence::forget(tx, &member.id)?;
                 super::queue::forget(tx, &member.id)?;
                 takeovers::forget(tx, &member.id)?;
                 packages::forget_sleep(tx, &member.id)?;
@@ -384,6 +389,7 @@ impl Hub {
             .write(move |tx| {
                 members::revoke(tx, &member)?;
                 directory::forget(tx, &member)?;
+                alerts::sequence::forget(tx, &member)?;
                 super::queue::forget(tx, &member)?;
                 takeovers::forget(tx, &member)?;
                 packages::forget_sleep(tx, &member)?;

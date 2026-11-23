@@ -164,6 +164,9 @@ states!(AlertKind {
     /// The hub gave a space a new number, since a space on another of its
     /// machines held its number first.
     SpaceRenumbered => "space_renumbered",
+    /// The hub gave an unread alert the space sent a new number, since an
+    /// alert on another of its machines took its number first.
+    AlertRenumbered => "alert_renumbered",
     /// The hub dropped a request or event it held for an offline machine
     /// once it expired.
     HubExpired => "hub_expired",

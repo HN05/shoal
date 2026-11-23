@@ -197,14 +197,18 @@ fn held(tx: &Transaction<'_>, number: SpaceNumber) -> Result<bool> {
     )?)
 }
 
-/// Stop numbering from a hub's sequence unless this machine is a member of
-/// a hub that has not revoked it, as once it leaves one or gives up the hub
-/// role.
+/// Stop numbering spaces and alerts from a hub's sequence unless this
+/// machine is a member of a hub that has not revoked it, as once it leaves
+/// one or gives up the hub role.
 pub fn forget_unless_joined(tx: &Transaction<'_>) -> Result<()> {
-    tx.execute(
-        "DELETE FROM hub_numbering
-            WHERE NOT EXISTS(SELECT 1 FROM hub_membership WHERE revoked=0)",
+    let joined: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM hub_membership WHERE revoked=0)",
         [],
+        |row| row.get(0),
     )?;
+    if !joined {
+        tx.execute("DELETE FROM hub_numbering", [])?;
+        crate::alerts::numbering::forget(tx)?;
+    }
     Ok(())
 }

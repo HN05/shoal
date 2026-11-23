@@ -48,7 +48,7 @@ pub use closing::{close, reopen};
 pub use code::{Followed, canonical, relative};
 pub use delivery::Delivered as ThreadsDelivered;
 pub use reading::{newest_waiting_for_user, waiting_count, waiting_on_spaces};
-pub use records::thread_space;
+pub use records::{renumber_alert, thread_space};
 
 impl Coordination {
     /// Open a thread of `kind` named `name` from `caller`, or from the

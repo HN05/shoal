@@ -29,6 +29,7 @@ pub use streams::{Incoming, Outgoing};
 pub use telling::Event;
 
 mod accept;
+mod alerts;
 pub mod answers;
 mod app_servers;
 

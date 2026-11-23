@@ -7192,8 +7192,11 @@ connected, `on_start` when its agent receives it once it next runs, or
 `without_agent` when the space has no agent and the alert waits for one to
 start there, each with `workspaces` and `chats` with `--json`. The sender may
 withdraw an alert by its number until it is read; `--space` names the space it
-went to, which finds it on the joined machine that has that space, since each
-machine numbers its own alerts.
+went to, which finds it on the joined machine that has that space. On machines
+joined to a [hub](#hub), alert numbers come from one sequence the hub never
+gives twice; an alert numbered while its machine could not reach the hub may
+take a new number once it can, which the sending space's agent hears of while
+the alert is unread.
 
 `--in-chat`, without text or `--body-file`, makes the final message of an
 agent's current turn the alert, so the agent writes it in its conversation,

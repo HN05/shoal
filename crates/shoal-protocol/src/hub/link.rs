@@ -46,6 +46,7 @@ use crate::time::UnixTime;
 
 use super::{
     ExchangeKey, Mac, MemberKind, Nonce, Overview, PublicKey, Signature,
+    alerts::{AlertNumbering, AlertsReport},
     availability::{Classified, Description},
     directory::{Directory, Report},
     numbering::Numbering,
@@ -347,6 +348,11 @@ pub enum Call {
         /// carries the report's times over to its own by.
         sent_at: UnixTime,
     },
+    /// A machine's report of the alerts it keeps: the numbers the hub kept
+    /// for it that it has not used, and those its alerts took without the
+    /// hub. Answered with [`Reply::AlertsReported`] and the numbers the hub
+    /// keeps for the machine.
+    ReportAlerts { report: AlertsReport },
     /// What a machine says of itself, when its link opens and when its
     /// setting changes. Answered with [`Reply::Availability`].
     Describe { description: Description },
@@ -578,6 +584,7 @@ pub enum Reply {
     Left,
     Updated(super::HubUpdate),
     Reported(Numbering),
+    AlertsReported(AlertNumbering),
     Availability(Classified),
     Directory(Directory),
     Owner(Option<super::Member>),

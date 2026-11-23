@@ -399,6 +399,14 @@ impl Records for HubRecords {
             .optional()?)
     }
 
+    fn renumber_alert(&self, tx: &Transaction<'_>, from: i64, to: i64) -> Result<bool> {
+        if !shoal_daemon_base::alerts::numbering::renumber(tx, from, to)? {
+            return Ok(false);
+        }
+        shoal_coordination::threads::renumber_alert(tx, from, to)?;
+        Ok(true)
+    }
+
     fn renumber_space(
         &self,
         tx: &Transaction<'_>,
