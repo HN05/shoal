@@ -798,17 +798,9 @@ pub trait Repositories: Send + Sync {
     ) -> BoxFuture<'a, Result<Effective>>;
 }
 
-/// The machines of the hub this machine is in.
+/// The machines of the hub this machine is in, which coordination's
+/// interface also asks.
 pub trait Hub: Send + Sync {
-    /// The answer `machine` gives `operation` from `caller`, which this
-    /// machine forwards there through the hub.
-    fn ask_machine<'a>(
-        &'a self,
-        machine: &'a Member,
-        operation: Operation,
-        caller: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<Body>>;
-
     /// Send `file` to `machine` with `operation`, from `caller`, and the
     /// answer it gives once it took the file.
     fn deliver_file<'a>(

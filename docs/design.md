@@ -2971,9 +2971,14 @@ gate nor closes one a covering review opened. Any review of the commit whose
 threads are unresolved decides the gate over the others, since a later review
 settles none of them: an approval leaves the reviewer's findings to be
 resolved, and the agent's own review run leaves its writer's comments. A
-space reviews the workspaces of its own machine, where its threads are numbered,
-and its removal, or the reviewed workspace's, drops a pending review, whose
-comments a restore could never submit. Forge reviews stay on the forge.
+review lives on the reviewed workspace's machine, where the gates read it, and
+so do its comments: a space whose workspace runs on another machine has its
+comment opened there, numbered in the workspace as the user's are and naming
+the space as its opener, since its own space's numbers are its own machine's,
+and a thread it opens there without a kind is a question in its own space
+when it has no pending review of that workspace. Its removal, or the
+reviewed workspace's, drops a pending review, whose comments a restore could
+never submit. Forge reviews stay on the forge.
 Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise starts one agent, in the built-in `setup` mode in a workspace on the

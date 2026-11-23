@@ -1998,10 +1998,13 @@ shoal review cancel                                  # Drop it with its comments
 You, or a space's agent naming a workspace below it, review a workspace's work
 as the [local reviewer](#local-reviews) does. `review start` starts your pending
 review of the workspace, or returns the one you have; each writer has one per
-workspace, and a space reviews the workspaces below it on its own machine,
-never its own. While it is pending, a [thread](#threads) you open towards that
-workspace without `--kind`, with `--space` from a space, is its comment: a
-`review` thread with its number, which your editor shows, whose posts reach
+workspace, and a space reviews the workspaces below it, never its own. While
+it is pending, a [thread](#threads) you open towards that workspace without
+`--kind`, with `--space` from a space, is its comment: a `review` thread with
+its number, which your editor shows: numbered in your space, or in the
+workspace when you are the user or it runs on another machine than your
+space, which then keeps the review and its comments, so `-s` names it to
+submit or cancel that review. Its posts reach
 nobody and keep no one waiting: until you submit, only you, the spaces that reach the writing space and
 the user read it, in threads, in the review and in logs, and its holder neither posts
 in, forwards nor resolves it. `--kind

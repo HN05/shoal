@@ -4,7 +4,7 @@
 //! at the workspace's HEAD delivers them together, and cancelling it drops
 //! them.
 use anyhow::{Context as _, Result, bail, ensure};
-use rusqlite::{Connection, Transaction};
+use rusqlite::Transaction;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 
@@ -51,13 +51,9 @@ impl Reviews {
     ) -> Result<Review> {
         let workspace = daemon.workspace(selector).await?;
         ensure_below(&workspace, &writer)?;
-        let (id, records, now) = (workspace.id.clone(), self.records.clone(), UnixTime::now());
-        let review = self
-            .store
-            .write(move |tx| {
-                ensure_here(tx, &*records, &writer)?;
-                store::start(tx, &id, &writer, now)
-            })
+        let (id, now) = (workspace.id.clone(), UnixTime::now());
+        let review = (self.store)
+            .write(move |tx| store::start(tx, &id, &writer, now))
             .await?;
         self.review(daemon, review).await
     }
@@ -261,17 +257,6 @@ fn ensure_below(workspace: &Workspace, writer: &Writer) -> Result<()> {
             "a space reviews the work of the spaces below it; ask for a review of your own with \
              shoal review run"
         );
-    }
-    Ok(())
-}
-
-/// Refuse a space of another machine writing a review here, since the
-/// threads it opens are numbered in its own space there (#3467).
-fn ensure_here(db: &Connection, records: &dyn Records, writer: &Writer) -> Result<()> {
-    if let Writer::Space(id) = writer {
-        records.space_name(db, id)?.with_context(|| {
-            format!("{id} is on another machine; a space reviews the workspaces of its own machine")
-        })?;
     }
     Ok(())
 }

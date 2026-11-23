@@ -997,15 +997,6 @@ impl shoal_spaces::daemon::Repositories for Manager {
 }
 
 impl shoal_spaces::daemon::Hub for Manager {
-    fn ask_machine<'a>(
-        &'a self,
-        machine: &'a Member,
-        operation: Operation,
-        caller: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<Body>> {
-        Box::pin(self.hub.ask_machine(self, machine, operation, caller))
-    }
-
     fn deliver_file<'a>(
         &'a self,
         machine: &'a Member,

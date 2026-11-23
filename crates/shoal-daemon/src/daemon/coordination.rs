@@ -338,6 +338,15 @@ impl Hub for Manager {
         Box::pin(self.hub.message_elsewhere(self, id, kind, message))
     }
 
+    fn ask_machine<'a>(
+        &'a self,
+        machine: &'a Member,
+        operation: Operation,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Body>> {
+        Box::pin(self.hub.ask_machine(self, machine, operation, caller))
+    }
+
     fn ask_machine_or_hold<'a>(
         &'a self,
         machine: &'a Member,

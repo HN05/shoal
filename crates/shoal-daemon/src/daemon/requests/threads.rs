@@ -2,7 +2,7 @@
 //! what each requires of the space it acts on.
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 use super::super::{
     answer::Answer,
@@ -52,6 +52,17 @@ pub(super) async fn handle(
                 code,
             );
             thread(opened.await?)
+        }
+        ThreadMethod::OpenComment {
+            workspace,
+            name,
+            code,
+        } => {
+            let caller = caller.context("the user's comments are opened as threads")?;
+            let opened = manager
+                .coordination
+                .open_comment(&**manager, caller, &workspace, name, code);
+            opened.await?.map_or(Body::Ok, thread)
         }
         ThreadMethod::Post {
             thread: number,
@@ -208,7 +219,8 @@ impl Checked for ThreadMethod {
             | Self::CurrentThread { .. }
             | Self::AddChanges { .. }
             | Self::RemoveChanges { .. }
-            | Self::AwaitPost { .. } => Some(TargetCheck::Space),
+            | Self::AwaitPost { .. }
+            | Self::OpenComment { .. } => Some(TargetCheck::Space),
             Self::OpenThread { .. }
             | Self::Post { .. }
             | Self::ForwardThread { .. }
@@ -251,6 +263,7 @@ impl Scoped for ThreadMethod {
             }
             ThreadMethod::OpenThread { to: None, .. }
             | ThreadMethod::ForwardThread { to: None, .. } => None,
+            ThreadMethod::OpenComment { workspace, .. } => Some(workspace),
             ThreadMethod::PostInChat { space, .. }
             | ThreadMethod::RepliedInChat { space, .. }
             | ThreadMethod::LinkThread { space, .. }

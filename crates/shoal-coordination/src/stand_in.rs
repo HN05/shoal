@@ -653,6 +653,15 @@ impl Hub for StandIn {
         Box::pin(async { bail!("{NOT_HERE}: another machine") })
     }
 
+    fn ask_machine<'a>(
+        &'a self,
+        _: &'a Member,
+        _: Operation,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Body>> {
+        Box::pin(async { bail!("{NOT_HERE}: another machine") })
+    }
+
     fn ask_machine_or_hold<'a>(
         &'a self,
         _: &'a Member,

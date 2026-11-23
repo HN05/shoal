@@ -517,6 +517,39 @@ fn a_coordinator_opens_a_thread_with_its_child_on_another_machine() {
 }
 
 #[test]
+fn a_coordinator_reviews_its_child_on_another_machine() {
+    let Tree {
+        hub,
+        laptop,
+        coordinator,
+        child,
+        ..
+    } = tree_across_machines();
+    working(&laptop, &child);
+    ok_in(&hub, &coordinator, &["review", "start", &child]);
+    let open = ["thread", "open", "Unclear name", "--space", &child];
+    let comment = ok_in(&hub, &coordinator, &open);
+    assert_eq!(comment["kind"], "review", "{comment}");
+    let number = comment["number"].as_str().unwrap().to_owned();
+    assert_eq!(
+        number,
+        format!("{}.1", listed_number(&hub, &child)),
+        "the comment is numbered in the child, whose machine keeps the review"
+    );
+    ok_in(&hub, &coordinator, &["send", &number, "Call it retries"]);
+    let submit = ["review", "submit", "-s", &child, "--body", "One rename"];
+    let submitted = ok_in(&hub, &coordinator, &submit);
+    assert_eq!(submitted["state"], "finished", "{submitted}");
+    message_with(&laptop, &child, "Call it retries");
+    // The child answers its writer, which resolves the comment from its
+    // own machine.
+    ok_in(&laptop, &child, &["send", &number, "Renamed"]);
+    message_with(&hub, &coordinator, "Renamed");
+    let resolved = ok_in(&hub, &coordinator, &["thread", "resolve", &number, "fixed"]);
+    assert_eq!(resolved["resolution"]["outcome"], "fixed", "{resolved}");
+}
+
+#[test]
 fn a_child_on_another_machine_reads_the_files_its_coordinator_posts_to_it() {
     let tree = tree_across_machines();
     let (hub, laptop) = (&tree.hub, &tree.laptop);

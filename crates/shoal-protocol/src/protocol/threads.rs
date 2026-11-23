@@ -30,6 +30,16 @@ pub enum ThreadMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         code: Vec<NewCodeRef>,
     },
+    /// Open a comment of the caller's pending review of the workspace,
+    /// numbered in it on its machine, which keeps the review, for a caller
+    /// of another machine; answered with the thread, or `ok` without such
+    /// a review.
+    OpenComment {
+        workspace: SpaceSelector,
+        name: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        code: Vec<NewCodeRef>,
+    },
     /// Add a post to the thread from the caller's side.
     Post {
         thread: ThreadNumber,
@@ -160,6 +170,7 @@ impl ThreadMethod {
         match self {
             Self::Post { .. } => Forwarding::Queued,
             Self::OpenThread { .. }
+            | Self::OpenComment { .. }
             | Self::ForwardThread { .. }
             | Self::ResolveThread { .. }
             | Self::ListThreads { .. }
@@ -185,6 +196,7 @@ impl ThreadMethod {
             | Self::ForwardThread { thread, .. }
             | Self::ResolveThread { thread, .. }
             | Self::ShowThread { thread } => thread.full().map(Target::Item),
+            Self::OpenComment { workspace, .. } => Some(Target::Space(workspace)),
             Self::PostInChat { space, .. }
             | Self::RepliedInChat { space, .. }
             | Self::LinkThread { space, .. }

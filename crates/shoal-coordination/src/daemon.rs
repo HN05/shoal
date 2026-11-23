@@ -276,6 +276,15 @@ pub trait Hub: Send + Sync {
         message: String,
     ) -> BoxFuture<'a, Result<()>>;
 
+    /// Send `operation` from `caller` to `machine`; its answer, or a
+    /// failure at once while that machine is offline.
+    fn ask_machine<'a>(
+        &'a self,
+        machine: &'a Member,
+        operation: Operation,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Body>>;
+
     /// Send `operation` from `caller` to `machine`, or hold it until that
     /// machine connects; its answer.
     fn ask_machine_or_hold<'a>(
