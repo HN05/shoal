@@ -51,7 +51,6 @@ mod spaces_sessions;
 mod spaces_status;
 mod starts;
 mod starts_waiting;
-mod target_checks;
 mod tmp_dirs;
 mod tree;
 mod tree_move_up;

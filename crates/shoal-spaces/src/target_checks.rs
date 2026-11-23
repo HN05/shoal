@@ -374,3 +374,6 @@ impl Spaces {
         busy.map(|(space, _)| space).collect()
     }
 }
+
+#[cfg(test)]
+mod tests;

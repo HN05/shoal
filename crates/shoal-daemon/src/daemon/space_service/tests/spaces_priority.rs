@@ -6,6 +6,19 @@ use shoal_schedule::priority::Priority;
 
 use crate::daemon::test_support::{chat, manager, repository, workspace_below};
 
+/// What preparing a started workspace does in the tests: nothing more.
+fn bare() -> crate::daemon::starts::Preparing<crate::protocol::operations::LaunchRequest> {
+    crate::daemon::starts::Preparing {
+        issue: None,
+        pr: None,
+        agent: None,
+        waiting: None,
+        queue_entry: None,
+        blockers: Vec::new(),
+        unfollowed: false,
+        env: None,
+    }
+}
 #[tokio::test]
 async fn a_scoped_caller_gives_at_most_its_own_spaces_priority() {
     let (temp, manager) = manager().await;
@@ -81,20 +94,6 @@ async fn a_chat_started_with_a_priority_records_it() {
     let chat = manager.run_chat_agent(chat, None).await.unwrap();
     let stored = manager.store.read(move |tx| current(tx, &chat.id)).await;
     assert_eq!(stored.unwrap(), Priority::URGENT);
-}
-
-/// What preparing a started workspace does in the tests: nothing more.
-fn bare() -> crate::daemon::starts::Preparing<crate::protocol::operations::LaunchRequest> {
-    crate::daemon::starts::Preparing {
-        issue: None,
-        pr: None,
-        agent: None,
-        waiting: None,
-        queue_entry: None,
-        blockers: Vec::new(),
-        unfollowed: false,
-        env: None,
-    }
 }
 
 #[tokio::test]
@@ -291,39 +290,6 @@ async fn a_reopened_workspace_keeps_its_priority_unless_one_is_asked_for() {
     let _reopened = crate::daemon::operations::fake::take(reopened.operation.as_deref().unwrap());
     assert_eq!(reopened.workspace.id, child.workspace.id);
     let id = child.workspace.id.clone();
-    let stored = manager.store.read(move |tx| current(tx, &id)).await;
-    assert_eq!(stored.unwrap(), Priority::URGENT);
-}
-
-/// A workspace at a commit records the priority its creation asks for.
-#[tokio::test]
-async fn a_workspace_at_a_commit_records_the_priority_it_is_given() {
-    use shoal_protocol::protocol::{CommitStart, CreationOptions};
-    let (temp, manager) = manager().await;
-    let checkout = repository(temp.path(), "repo");
-    let repo = manager
-        .repositories
-        .register(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    let options = CreationOptions {
-        priority: Some(Priority::URGENT),
-        ..Default::default()
-    };
-
-    let workspace = manager
-        .spaces
-        .create_commit_workspace(
-            &*manager,
-            (&repo.id).into(),
-            (None, None),
-            CommitStart::Revision(None),
-            options,
-        )
-        .await
-        .unwrap();
-
-    let id = workspace.id.clone();
     let stored = manager.store.read(move |tx| current(tx, &id)).await;
     assert_eq!(stored.unwrap(), Priority::URGENT);
 }

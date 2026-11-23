@@ -25,9 +25,7 @@ pub(crate) use shoal_agents::places;
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use shoal_spaces::chats;
 #[cfg(test)]
-pub(crate) use shoal_spaces::{
-    carried_sessions, launches, lifecycle, quarantine, recovery, tmp_dirs,
-};
+pub(crate) use shoal_spaces::{carried_sessions, lifecycle, quarantine, recovery};
 mod agent_service;
 mod answer;
 mod apps;

@@ -83,19 +83,6 @@ fn quarantined_snapshot() -> Vec<String> {
 }
 
 #[tokio::test]
-async fn current_schema_reopen_preserves_active_operations() {
-    let root = tempfile::tempdir().unwrap();
-    let path = root.path().join("state.db");
-    let store = Store::open(path.clone()).await.unwrap();
-    store.run(seed_interrupted_operations).await.unwrap();
-    let before = store.run(operation_snapshot).await.unwrap();
-    for _ in 0..2 {
-        let reopened = Store::open(path.clone()).await.unwrap();
-        assert_eq!(reopened.run(operation_snapshot).await.unwrap(), before);
-    }
-}
-
-#[tokio::test]
 async fn startup_quarantines_transient_workspaces_and_preserves_settled_states() -> Result<()> {
     let root = tempfile::tempdir()?;
     let store = Store::open(root.path().join("state.db")).await?;

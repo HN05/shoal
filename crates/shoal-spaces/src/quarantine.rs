@@ -40,3 +40,6 @@ pub async fn interrupted_operations(store: &Store, records: Arc<dyn Records>) ->
         .await
         .context("quarantine interrupted operations at daemon startup")
 }
+
+#[cfg(test)]
+mod tests;

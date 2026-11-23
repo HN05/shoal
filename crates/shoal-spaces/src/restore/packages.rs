@@ -308,3 +308,6 @@ fn session_files(parts: &Parts, space: &RemovedSpace) -> Vec<CarriedSessionFile>
         .map(|imported| imported.carried())
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

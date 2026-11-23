@@ -174,3 +174,6 @@ fn recorded_ids(
         .query_map([repository_id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
+
+#[cfg(test)]
+mod tests;

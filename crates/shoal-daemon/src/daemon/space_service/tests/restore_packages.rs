@@ -59,6 +59,23 @@ async fn exported_worker_with(
     (root, fs::read(file).unwrap(), url)
 }
 
+/// A repository `name` in `root` whose origin is the URL of a bare
+/// repository beside it, registered with `manager`; that URL.
+async fn with_origin(manager: &Manager, root: &Path, name: &str) -> (Repository, String) {
+    let path = repository(root, name);
+    let origin = root.join(format!("{name}.git"));
+    let origin = origin.to_str().unwrap();
+    git(root, &["init", "-q", "--bare", "-b", "main", origin]);
+    let url = format!("file://{origin}");
+    git(&path, &["remote", "add", "origin", &url]);
+    git(&path, &["push", "-q", "-u", "origin", "main"]);
+    git(&path, &["remote", "set-head", "origin", "main"]);
+    let registered = manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None);
+    (registered.await.unwrap(), url)
+}
+
 #[tokio::test]
 async fn an_import_clones_the_repository_it_lacks_from_its_origin() {
     let (_source, bytes, url) = exported_worker().await;
@@ -169,23 +186,6 @@ async fn a_package_cut_short_records_nothing_and_keeps_none_of_it() {
     assert!(left.is_empty(), "{left:?}");
 }
 
-/// A repository `name` in `root` whose origin is the URL of a bare
-/// repository beside it, registered with `manager`; that URL.
-async fn with_origin(manager: &Manager, root: &Path, name: &str) -> (Repository, String) {
-    let path = repository(root, name);
-    let origin = root.join(format!("{name}.git"));
-    let origin = origin.to_str().unwrap();
-    git(root, &["init", "-q", "--bare", "-b", "main", origin]);
-    let url = format!("file://{origin}");
-    git(&path, &["remote", "add", "origin", &url]);
-    git(&path, &["push", "-q", "-u", "origin", "main"]);
-    git(&path, &["remote", "set-head", "origin", "main"]);
-    let registered = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None);
-    (registered.await.unwrap(), url)
-}
-
 #[tokio::test]
 async fn a_scoped_import_records_no_space_outside_its_own_repository() {
     let (source, exporting) = manager().await;
@@ -238,45 +238,5 @@ async fn a_scoped_import_records_no_space_outside_its_own_repository() {
             .await
             .unwrap()
             .is_none()
-    );
-}
-
-/// The manifest of a copy of chat `plan`, whose sessions are newer than its
-/// files when `earlier_files`.
-fn chat_copy(earlier_files: bool) -> crate::transfer::Manifest {
-    serde_json::from_value(serde_json::json!({
-        "remote_url": "https://forge.test/o/r",
-        "record": {
-            "workspace_id": "c1",
-            "repository_id": "r1",
-            "name": "plan",
-            "links": {"issues": [], "prs": [], "opened": [], "related": []},
-            "cause": "manual",
-            "removed_at": 1,
-            "expires_at": 2,
-            "chat": {"agent": "claude", "mode": "chat"},
-        },
-        "copy": {"earlier_files": earlier_files},
-    }))
-    .unwrap()
-}
-
-#[test]
-fn a_copy_never_continues_the_original_sessions() {
-    let refused =
-        crate::daemon::restore::packages::copy_warnings(&chat_copy(false), Some(true)).unwrap_err();
-    assert!(
-        format!("{refused:#}").contains("--keep-sessions"),
-        "{refused:#}"
-    );
-    assert!(
-        crate::daemon::restore::packages::copy_warnings(&chat_copy(false), Some(false)).is_ok()
-    );
-    let warned = crate::daemon::restore::packages::copy_warnings(&chat_copy(true), None).unwrap();
-    assert_eq!(warned.len(), 1);
-    assert!(
-        crate::daemon::restore::packages::copy_warnings(&chat_copy(false), None)
-            .unwrap()
-            .is_empty()
     );
 }

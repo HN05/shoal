@@ -1,4 +1,4 @@
-use crate::daemon::target_checks::{Facts, TargetCheck, Verdict};
+use crate::target_checks::{Facts, TargetCheck, Verdict};
 
 /// A check judging a space alone.
 trait JudgeAlone {

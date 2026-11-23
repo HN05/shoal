@@ -678,3 +678,6 @@ async fn remove_deleted(daemon: &dyn Daemon, workspace: &Workspace) {
         log!("record retained workspace {}: {error:#}", workspace.name);
     }
 }
+
+#[cfg(test)]
+mod tests;

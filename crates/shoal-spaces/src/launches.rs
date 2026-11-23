@@ -166,3 +166,6 @@ pub fn carried_commits(launch: &Launch) -> Option<(String, Vec<shoal_refs::Commi
     let files = files.filter(|files| base.as_ref() != Some(files));
     Some((origin, base.into_iter().chain(files).collect()))
 }
+
+#[cfg(test)]
+mod tests;

@@ -418,3 +418,6 @@ pub fn results_preview(results: &[HandedBack]) -> String {
         more => format!("{} and {more} more", names.join(", ")),
     }
 }
+
+#[cfg(test)]
+mod tests;

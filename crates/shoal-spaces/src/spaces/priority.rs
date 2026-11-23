@@ -116,3 +116,6 @@ impl Spaces {
         self.store.write(move |db| set(db, &id, priority)).await
     }
 }
+
+#[cfg(test)]
+mod tests;

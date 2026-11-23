@@ -375,3 +375,6 @@ pub fn read_from(path: &Path, seen: ReadTo) -> std::io::Result<Gained> {
         rewritten,
     })
 }
+
+#[cfg(test)]
+mod tests;
