@@ -18,6 +18,10 @@ use crate::{
 
 pub mod store;
 
+/// Longest summary of a review its writer submits, in bytes: half of the
+/// message that delivers it, so its comments and how to answer them fit.
+pub const MAX_SUMMARY_LEN: usize = validate::MAX_AGENT_MESSAGE_LEN / 2;
+
 /// Who writes a review: the user, or a space's agent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Writer {
@@ -91,7 +95,7 @@ impl Reviews {
         summary: Option<String>,
     ) -> Result<Review> {
         if let Some(summary) = &summary {
-            validate::agent_message(summary).context("invalid summary")?;
+            validate_summary(summary)?;
         }
         let id = self.submitted(daemon, selector, &writer).await?;
         let review = self.stored(id).await?;
@@ -194,6 +198,18 @@ impl Reviews {
         daemon.review_threads_changed(&workspace).await;
         self.review(daemon, id).await
     }
+}
+
+/// Refuse a summary that is empty, holds control characters other than
+/// newlines and tabs, or leaves the message that delivers it no room for
+/// its comments.
+fn validate_summary(summary: &str) -> Result<()> {
+    validate::agent_message(summary).context("invalid summary")?;
+    ensure!(
+        summary.len() <= MAX_SUMMARY_LEN,
+        "a review's summary is at most {MAX_SUMMARY_LEN} bytes"
+    );
+    Ok(())
 }
 
 /// What a review submitted with `comments` says: it approves when its

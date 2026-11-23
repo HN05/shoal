@@ -139,3 +139,13 @@ async fn removing_the_reviewed_workspace_drops_its_pending_reviews_with_their_co
     assert_eq!(dropped.state, ReviewState::Cancelled);
     assert!(fixture.records.threads.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_summary_leaves_its_message_room_for_the_comments() {
+    let fixture = fixture().await;
+    fixture.start(Writer::User).await.unwrap();
+    let long = "a".repeat(MAX_SUMMARY_LEN + 1);
+    let submitted =
+        (fixture.reviews).submit(&*fixture.daemon, None, Writer::User, true, Some(long));
+    assert!(submitted.await.is_err());
+}
