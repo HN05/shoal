@@ -18,6 +18,7 @@ fn a_start_from_no_terminal_records_the_origin_it_opens_in() {
         data: Default::default(),
         owned: false,
         instance: None,
+        nested: None,
     };
     let env = detached_start_environment(Some(&origin));
     assert_eq!(recorded_origin(&env[env::ORIGIN]).unwrap(), Some(origin));

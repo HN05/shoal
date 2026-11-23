@@ -232,6 +232,7 @@ fn origin() -> Option<Origin> {
         data: server.data(),
         owned: false,
         instance: None,
+        nested: None,
     })
 }
 
@@ -283,6 +284,7 @@ async fn session(near: Option<&Origin>, label: &str, cwd: &Path) -> Result<Origi
         data: server.data(),
         owned: false,
         instance: None,
+        nested: None,
     })
 }
 

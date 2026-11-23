@@ -54,6 +54,10 @@ pub struct Origin {
     /// host that reuses IDs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instance: Option<String>,
+    /// The session of another host the work runs in, attached in this
+    /// place, which other terminals attach to as well.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nested: Option<Box<Origin>>,
 }
 
 impl Origin {
@@ -66,12 +70,19 @@ impl Origin {
             data: BTreeMap::new(),
             owned: true,
             instance: None,
+            nested: None,
         }
     }
 
     /// The place's ID; empty for a group alone.
     pub fn id(&self) -> &str {
         self.place.as_deref().unwrap_or_default()
+    }
+
+    /// The place itself and the session nested in it, which closing the
+    /// place closes too.
+    pub fn with_nested(&self) -> impl Iterator<Item = &Origin> {
+        std::iter::once(self).chain(self.nested.as_deref())
     }
 }
 

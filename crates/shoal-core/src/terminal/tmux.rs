@@ -256,6 +256,7 @@ fn origin() -> Option<Origin> {
         data: Server::data(server.socket),
         owned: false,
         instance: None,
+        nested: None,
     })
 }
 
@@ -280,6 +281,7 @@ async fn session(near: Option<&Origin>, label: &str) -> Result<Origin> {
         data: Server::data(&group.socket),
         owned: false,
         instance: None,
+        nested: None,
     })
 }
 

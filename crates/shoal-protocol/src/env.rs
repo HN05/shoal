@@ -29,6 +29,10 @@ pub const OPENED_CHAT_PLACE: &str = "SHOAL_OPENED_CHAT_PLACE";
 /// Set on the command a detached zmx session's shell runs, which ends the
 /// session once its agent or workspace shell has run; removed at startup.
 pub const ENDS_SESSION: &str = "SHOAL_ENDS_SESSION";
+/// The terminal host whose session a process runs in, attached in a place
+/// of another host whose variables it keeps: Shoal there takes that place
+/// for its own, and the session for where other terminals attach.
+pub const NESTED_SESSION: &str = "SHOAL_NESTED_SESSION";
 /// Set on the image an execution wrapper replaces itself with to become
 /// responsible for macOS privacy access; removed at startup.
 #[cfg(target_os = "macos")]

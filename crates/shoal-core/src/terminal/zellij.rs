@@ -247,6 +247,7 @@ fn origin() -> Option<Origin> {
         data,
         owned: false,
         instance: None,
+        nested: None,
     })
 }
 
@@ -336,6 +337,7 @@ fn opened_place(opened: Opened) -> Origin {
         group: Some(opened.session),
         owned: true,
         instance: Some(opened.instance),
+        nested: None,
     }
 }
 

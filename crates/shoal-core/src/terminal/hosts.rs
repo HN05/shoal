@@ -171,9 +171,13 @@ impl Configured {
         nests.then_some(nesting)
     }
 
-    /// Whether the host serves the terminal this process runs in.
+    /// Whether the host serves the terminal this process runs in. The host
+    /// of a session nested in another host's place does not: that place's
+    /// host serves it.
     pub fn serves(&self) -> bool {
-        self.options.enabled && self.host.serves()
+        self.options.enabled
+            && self.host.serves()
+            && super::here::nested_host() != Some(self.host.name())
     }
 
     /// The host as it serves a place of its own: one that opens no places
@@ -287,13 +291,14 @@ fn on_terminal() -> bool {
 
 /// The variables naming places of hosts other than `host`, which a place
 /// `host` opens must drop: Shoal there would take the caller's place for its
-/// own, and record or close it. So must the marks of the space whose process
+/// own, and record or close it. So must the mark of a nested session, which
+/// the new place is not, and the marks of the space whose process
 /// opens it, since what runs there marks its own space, and processes that
 /// kept the opener's would count as the opener's, which its stop would end,
 /// and its scope token, which a shell left in the place would keep.
 pub(super) fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
-    use crate::env::{EXECUTION_ID, SCOPE_TOKEN, SPACE};
-    let marks = [SPACE, EXECUTION_ID, SCOPE_TOKEN];
+    use crate::env::{EXECUTION_ID, NESTED_SESSION, SCOPE_TOKEN, SPACE};
+    let marks = [SPACE, EXECUTION_ID, SCOPE_TOKEN, NESTED_SESSION];
     hosts()
         .filter(|other| other.name() != host)
         .filter_map(Host::places)

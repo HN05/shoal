@@ -27,6 +27,7 @@ pub(super) async fn labelled(near: Option<&Origin>, label: &str, cwd: &Path) -> 
         data,
         owned: false,
         instance: None,
+        nested: None,
     })
 }
 

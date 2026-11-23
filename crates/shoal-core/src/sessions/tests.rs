@@ -44,3 +44,14 @@ fn a_place_is_named_by_host_server_id_and_instance_alone() {
         ..here.clone()
     }));
 }
+
+#[test]
+fn a_place_with_another_nested_session_is_another_place() {
+    let pane = |session: Option<&str>| Origin {
+        nested: session.map(|session| Box::new(Origin::created(HostName::Zmx, session.into()))),
+        ..Origin::created(HostName::Herdr, "pane:1".into())
+    };
+    assert!(pane(Some("work")).same_place(&pane(Some("work"))));
+    assert!(!pane(Some("work")).same_place(&pane(Some("work-2"))));
+    assert!(!pane(Some("work")).same_place(&pane(None)));
+}

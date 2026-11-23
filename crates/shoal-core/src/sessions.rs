@@ -62,8 +62,9 @@ pub trait OriginExt {
     fn server(&self) -> String;
 
     /// Whether `other` names the same place: on the same host and server,
-    /// by the same ID and instance, whatever else each records of it, such
-    /// as who created it or the group it was in then.
+    /// by the same ID and instance, with the same session nested in it,
+    /// whatever else each records of it, such as who created it or the
+    /// group it was in then.
     fn same_place(&self, other: &Origin) -> bool;
 }
 
@@ -79,6 +80,10 @@ impl OriginExt for Origin {
             && self.place == other.place
             && self.instance == other.instance
             && self.server() == other.server()
+            && match (&self.nested, &other.nested) {
+                (Some(nested), Some(other)) => nested.same_place(other),
+                (nested, other) => nested.is_none() && other.is_none(),
+            }
     }
 }
 

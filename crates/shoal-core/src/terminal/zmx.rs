@@ -120,6 +120,7 @@ impl Places for Zmx {
             data: BTreeMap::new(),
             owned: false,
             instance: None,
+            nested: None,
         })
     }
 
