@@ -13,6 +13,7 @@ fn carrying(paths: &Paths) -> (SpaceId, ExecutionId) {
     let last = LastSession {
         session: Some("s1".into()),
         converted: true,
+        handoff: None,
         ..serde_json::from_value(serde_json::json!({
             "execution": "old",
             "agent": "claude",

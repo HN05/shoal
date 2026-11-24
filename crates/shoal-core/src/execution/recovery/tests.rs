@@ -538,6 +538,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
             }),
             turn: None,
             converted: false,
+            handoff: None,
         }]
     );
     let kept = LastSession::path(

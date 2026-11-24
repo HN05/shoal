@@ -146,6 +146,7 @@ async fn launch(
     let opening = Opening::New {
         mode: mode.unwrap_or(ModeName::DEFAULT),
         subject,
+        note: None,
     };
     let options = LaunchOptions {
         fork,

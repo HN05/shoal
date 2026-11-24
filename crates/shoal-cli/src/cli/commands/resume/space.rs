@@ -85,7 +85,7 @@ async fn continue_last_session(ctx: &Context, chosen: Restore) -> Result<i32> {
     } = chosen;
     let (_claim, last) = claim_last_session(&picked.path)?;
     let _commands = commands::claim(&mut commands);
-    if !last.moved {
+    if !last.moved && last.handoff.is_none() {
         reports::continuing(&last.agent);
     }
     restore(ctx, &space, last, picked.path, commands).await

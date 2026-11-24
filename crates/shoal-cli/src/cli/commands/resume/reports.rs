@@ -154,11 +154,14 @@ pub(super) fn continuing(agent: impl Display) {
 pub(super) fn starting_changed(
     agent: impl Display,
     kind: crate::model::SpaceKind,
-    change: Change,
+    change: &Change,
     forked: bool,
 ) {
     match (change, forked) {
         (Change::Converted, _) => {}
+        (Change::HandedOver(_), _) => {
+            eprintln!("shoal: starting a new {agent} session to take the {kind}'s work over")
+        }
         (Change::Copied(_), true) => {
             eprintln!("shoal: starting {agent} from a fork of its session in the copy")
         }

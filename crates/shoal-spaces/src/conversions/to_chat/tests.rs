@@ -132,6 +132,7 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         moved: false,
         copied: None,
         converted: false,
+        handoff: None,
         origin: None,
         stop: None,
         model: Default::default(),

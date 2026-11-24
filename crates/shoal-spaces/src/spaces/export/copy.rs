@@ -152,6 +152,7 @@ fn running_record(execution: &Execution, carried: recovery::carried::Carried) ->
             moved: false,
             copied: None,
             converted: false,
+            handoff: None,
             turn: None,
             for_load: false,
             model: execution.model.clone(),

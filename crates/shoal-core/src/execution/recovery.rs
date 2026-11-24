@@ -26,7 +26,9 @@ use crate::{
     process::identity::{self, Identity},
     state::AgentState,
 };
-pub use shoal_protocol::executions::{Copied, LastSession, Record, Stage, Stop, StoppedAgent};
+pub use shoal_protocol::executions::{
+    Copied, HandoffBrief, LastSession, Record, Stage, Stop, StoppedAgent,
+};
 pub use shoal_protocol::saved::{Saved, SavedCommand, SavedSession};
 use shoal_protocol::sessions::Origin;
 
@@ -270,6 +272,7 @@ impl RecordExt for Record {
             moved: false,
             copied: None,
             converted: false,
+            handoff: None,
             turn: None,
             model: agent.model.clone(),
             mode: agent.mode.clone(),
@@ -287,6 +290,7 @@ impl RecordExt for Record {
             moved: self.moved,
             copied: self.copied,
             converted: self.converted,
+            handoff: self.handoff,
             origin: self.origin,
             stop: Some(stop),
             turn: self.turn,
@@ -764,6 +768,7 @@ impl LastSessionExt for LastSession {
             moved: carried.moved,
             copied: carried.copied,
             converted: carried.converted,
+            handoff: carried.handoff,
             origin: None,
             stop: None,
             turn,

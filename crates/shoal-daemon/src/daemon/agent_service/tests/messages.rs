@@ -519,6 +519,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
         origin: None,
         stop: None,
         converted: false,
+        handoff: None,
     }
     .write(&manager.paths, &stopped.id)
     .unwrap();

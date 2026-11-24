@@ -1,16 +1,20 @@
 //! What the agent of a space that changed since its session stopped is
 //! told, and whether it starts from a fork of that session, for a space of
 //! either kind: converted into the other kind, copied or restored while
-//! another space holds its session, or moved where its session is not.
+//! another space holds its session, moved where its session is not, or
+//! taken over by another agent tool.
 use shoal_refs::BranchName;
 
-use super::{Copied, LastSession};
+use super::{Copied, HandoffBrief, LastSession};
 use crate::config::templates::{IssueFields, Subject};
 use crate::model::Space;
 
 /// How a space changed since its agent's session stopped.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
+    /// Another agent tool took its work over, starting a new session told
+    /// what the [`HandoffBrief`] says.
+    HandedOver(HandoffBrief),
     /// It became a space of the other kind.
     Converted,
     /// It is a copy of another space, or another space holds its session,
@@ -22,8 +26,12 @@ pub enum Change {
 
 impl Change {
     /// How the space of `last` changed, as that session records it; `None`
-    /// when it did not. A converted space is told so, whatever else it is.
+    /// when it did not. A handoff's new tool is told of it, whatever else the
+    /// space is, and else a converted space is told so.
     pub fn of(last: &LastSession) -> Option<Self> {
+        if let Some(brief) = &last.handoff {
+            return Some(Self::HandedOver(brief.clone()));
+        }
         if last.converted {
             return Some(Self::Converted);
         }
@@ -34,9 +42,10 @@ impl Change {
     }
 
     /// Whether its agent may start from a fork of its session, which a
-    /// moved space's is not here to give.
-    pub fn forks(self) -> bool {
-        !matches!(self, Self::Moved)
+    /// moved space's is not here to give, and a handoff's new tool cannot
+    /// read.
+    pub fn forks(&self) -> bool {
+        !matches!(self, Self::Moved | Self::HandedOver(_))
     }
 
     /// What the agent of `space` is told, carrying on from a fork of its
@@ -44,15 +53,16 @@ impl Change {
     /// ended `mid_turn`, followed by `handoff`, before its mode's
     /// instructions, which take the fields of the issue `space` links.
     pub fn told(
-        self,
+        &self,
         space: &Space,
         forked: bool,
         mid_turn: bool,
         handoff: Option<&str>,
     ) -> Subject {
         let mut text = match self {
+            Self::HandedOver(brief) => brief.told.clone(),
             Self::Converted => converted_prompt(space, forked),
-            Self::Copied(copied) => copied_prompt(space, copied, forked, mid_turn),
+            Self::Copied(copied) => copied_prompt(space, *copied, forked, mid_turn),
             Self::Moved => moved_prompt(space, mid_turn),
         };
         if let Some(handoff) = handoff {

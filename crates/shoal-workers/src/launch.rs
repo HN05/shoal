@@ -60,10 +60,12 @@ pub struct Launch {
 /// What an agent's launch is told: its mode decides the rules of its
 /// system text and the instructions after its subject.
 pub enum Opening {
-    /// A new session, starting on `subject` when it has one.
+    /// A new session, starting on `subject` when it has one, with `note`
+    /// after its mode's instructions.
     New {
         mode: modes::ModeName,
         subject: Option<templates::Subject>,
+        note: Option<String>,
     },
     /// A session in `mode` told `message` as it is, such as one that
     /// replaces a stopped session.
@@ -96,14 +98,35 @@ impl Opening {
         home: AgentHome<'_>,
     ) -> Result<templates::Brief> {
         match self {
-            Self::New { mode, subject } => {
-                templates::brief(settings, mode, home.place(settings, name), subject.as_ref())
+            Self::New {
+                mode,
+                subject,
+                note,
+            } => {
+                let place = home.place(settings, name);
+                let brief = templates::brief(settings, mode, place, subject.as_ref())?;
+                Ok(noted(brief, note.as_deref()))
             }
             Self::Told { mode, message } => Ok(templates::Brief {
                 system: home.system(settings, name, mode)?,
                 first_message: Some(message.clone()),
             }),
         }
+    }
+}
+
+/// `brief` with `note` ending its first message.
+fn noted(brief: templates::Brief, note: Option<&str>) -> templates::Brief {
+    let Some(note) = note else {
+        return brief;
+    };
+    let first_message = match brief.first_message {
+        Some(first) => format!("{first}\n\n{note}"),
+        None => note.to_owned(),
+    };
+    templates::Brief {
+        first_message: Some(first_message),
+        ..brief
     }
 }
 

@@ -18,6 +18,7 @@ async fn queue_restore(fixture: &Fixture, execution: &str, starting: bool, conve
         stop: None,
         turn: None,
         converted,
+        handoff: None,
     };
     last.write(&fixture.agents.paths, &SpaceId::from("workspace"))
         .unwrap();

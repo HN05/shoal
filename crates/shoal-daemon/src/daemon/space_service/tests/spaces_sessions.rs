@@ -147,6 +147,7 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
             origin: None,
             stop: None,
             converted: false,
+            handoff: None,
         }
         .write(&manager.paths, &workspace.id)?;
     }

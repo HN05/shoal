@@ -12,8 +12,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AGENT_SUFFIX, Copied, LAST_SESSION_SUFFIX, LastSession, LastSessionExt as _, Record,
-    RecordExt as _, consume, reported_session, rewrite,
+    AGENT_SUFFIX, Copied, HandoffBrief, LAST_SESSION_SUFFIX, LastSession, LastSessionExt as _,
+    Record, RecordExt as _, consume, reported_session, rewrite,
 };
 use crate::paths::{Paths, StateFiles as _};
 
@@ -32,6 +32,9 @@ pub struct Carried {
     /// As [`Record::converted`].
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub converted: bool,
+    /// As [`Record::handoff`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<HandoffBrief>,
 }
 
 impl Carried {
@@ -47,6 +50,7 @@ impl Carried {
                 moved: record.moved,
                 copied: record.copied,
                 converted: record.converted,
+                handoff: record.handoff,
             }));
         }
         if name.ends_with(LAST_SESSION_SUFFIX) {
@@ -55,6 +59,7 @@ impl Carried {
                 moved: last.moved,
                 copied: last.copied,
                 converted: last.converted,
+                handoff: last.handoff,
             }));
         }
         Ok(None)
@@ -68,6 +73,7 @@ impl Carried {
             moved: record.moved || self.moved,
             copied: record.copied.or(self.copied),
             converted: record.converted || self.converted,
+            handoff: record.handoff.or(self.handoff),
             ..record
         }
     }

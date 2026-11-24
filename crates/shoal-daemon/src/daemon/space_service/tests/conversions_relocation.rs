@@ -330,6 +330,7 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         moved: false,
         copied: None,
         converted: false,
+        handoff: None,
         origin: None,
         stop: None,
         model: Default::default(),

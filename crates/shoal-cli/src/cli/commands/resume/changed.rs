@@ -43,7 +43,7 @@ pub(super) async fn start_changed(
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
     let forks = change.forks() && crate::agents::ensure_forks(&settings, &session.agent).is_ok();
     let fork = session.session.clone().filter(|_| forks);
-    reports::starting_changed(&session.agent, space.kind(), change, fork.is_some());
+    reports::starting_changed(&session.agent, space.kind(), &change, fork.is_some());
     let start = ChangedStart {
         told: change.told(space, fork.is_some(), session.ending().mid_turn(), handoff),
         session,
@@ -55,9 +55,10 @@ pub(super) async fn start_changed(
 }
 
 /// Launch the agent `start` describes in `space`, as a new agent is
-/// started, with the model and effort it ran with: a converted one starts
-/// on what it is told and its mode's instructions, any other is told it as
-/// it is.
+/// started: a handoff's new tool with the model and effort asked of it over
+/// its configured ones, any other with those it ran with. A converted one
+/// or a handoff's starts on what it is told and its mode's instructions,
+/// then a handoff's note; any other is told it as it is.
 async fn launch_in(ctx: &Context, space: &Space, start: ChangedStart) -> Result<i32> {
     let ChangedStart {
         session,
@@ -71,17 +72,27 @@ async fn launch_in(ctx: &Context, space: &Space, start: ChangedStart) -> Result<
         .name()
         .parse()
         .with_context(|| format!("cannot start agent {agent} of {}", space.name))?;
+    let model = match change {
+        Change::HandedOver(_) => shoal_workers::launch::ModelRequest::Override,
+        _ => shoal_workers::launch::ModelRequest::Kept,
+    };
     let options = shoal_workers::launch::LaunchOptions {
         replaces: records,
         fork,
-        model: shoal_workers::launch::ModelRequest::Kept(session.model.clone()),
+        model: model(session.model.clone()),
         narrowing: session.narrowing,
     };
     let mode = session.mode.clone();
     let opening = match change {
+        Change::HandedOver(brief) => shoal_workers::launch::Opening::New {
+            mode,
+            subject: Some(told),
+            note: brief.note,
+        },
         Change::Converted => shoal_workers::launch::Opening::New {
             mode,
             subject: Some(told),
+            note: None,
         },
         Change::Copied(_) | Change::Moved => shoal_workers::launch::Opening::Told {
             mode,

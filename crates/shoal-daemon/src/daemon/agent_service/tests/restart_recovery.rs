@@ -148,6 +148,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         moved: false,
         copied: None,
         converted: false,
+        handoff: None,
         origin: None,
         stop: None,
     };
@@ -227,6 +228,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
                 moved: false,
                 copied: None,
                 converted: false,
+                handoff: None,
                 origin: None,
                 stop: None,
             }

@@ -141,3 +141,21 @@ fn a_copy_is_told_whether_it_forked_and_how_old_its_files_are() {
     let restored = Change::Copied(held).told(&chat(), true, true, None).text;
     assert!(restored.contains("restored"), "{restored}");
 }
+
+#[test]
+fn a_handoffs_new_tool_starts_anew_on_its_brief_whatever_else_the_space_is() {
+    let brief = HandoffBrief {
+        told: "Codex takes over".into(),
+        note: None,
+    };
+    let handed_over = last(|last| {
+        last.converted = true;
+        last.handoff = Some(brief.clone());
+    });
+    let change = Change::of(&handed_over).expect("a handoff");
+    assert_eq!(change, Change::HandedOver(brief));
+    assert!(!change.forks());
+    let told = change.told(&workspace(), false, true, Some("handoff"));
+    assert_eq!(told.text, "Codex takes over\n\nhandoff");
+    assert_eq!(told.issue.map(|issue| issue.number), Some(7));
+}

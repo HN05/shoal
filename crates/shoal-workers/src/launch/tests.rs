@@ -64,6 +64,7 @@ fn a_chats_agent_gets_its_rules_in_its_first_message_unless_it_takes_them_apart(
         subject: Some(templates::Subject::told(
             "You now work in a workspace.".into(),
         )),
+        note: None,
     };
     let brief = || opening.brief(&settings, &"claude".into(), home).unwrap();
 
@@ -80,4 +81,31 @@ fn a_chats_agent_gets_its_rules_in_its_first_message_unless_it_takes_them_apart(
     let told = apart.first_message.unwrap();
     assert!(told.contains("You now work in a workspace."), "{told}");
     assert!(!told.contains("/repos/shoal"), "{told}");
+}
+
+/// A handoff's note follows the mode's instructions, which follow what the
+/// new session is told.
+#[test]
+fn a_new_sessions_note_ends_its_first_message() {
+    let settings = crate::config::Config::default()
+        .resolve(&Default::default())
+        .unwrap();
+    let (chat, repository) = chat_in_checkout();
+    let space = HomeRecords::Chat {
+        chat,
+        repository: Some(repository),
+        workspace: None,
+    };
+    let home = space.home().unwrap();
+    let opening = Opening::New {
+        mode: modes::ModeName::DEFAULT,
+        subject: Some(templates::Subject::told("Codex takes over.".into())),
+        note: Some("Focus on the failing test".into()),
+    };
+    let brief = opening.brief(&settings, &"codex".into(), home).unwrap();
+    let first = brief.first_message.unwrap();
+    assert!(first.starts_with("Codex takes over.\n\n"), "{first}");
+    assert!(first.ends_with("\n\nFocus on the failing test"), "{first}");
+    // The mode's instructions come between them.
+    assert_ne!(first, "Codex takes over.\n\nFocus on the failing test");
 }

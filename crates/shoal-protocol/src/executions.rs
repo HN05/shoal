@@ -138,6 +138,10 @@ pub struct Record {
     /// is now.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub converted: bool,
+    /// The agent takes the space's work over from another tool's, so it
+    /// starts a new session told this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<HandoffBrief>,
     /// What the agent was doing when it stopped, as its hooks last reported
     /// it. Unknown for agents without hooks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -159,6 +163,17 @@ pub struct Record {
     /// out.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub for_load: bool,
+}
+
+/// What the first session of an agent tool that takes a space's work over
+/// from another is told: `told`, which says what the space is and where the
+/// copies of its earlier sessions are, before its mode's instructions, then
+/// `note`, which the conversion passed on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandoffBrief {
+    pub told: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// How an agent of a copied workspace starts: from a fork of the session
@@ -217,6 +232,9 @@ pub struct LastSession {
     /// As [`Record::converted`].
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub converted: bool,
+    /// As [`Record::handoff`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<HandoffBrief>,
     /// Where the agent ran, as its terminal host records it, so `shoal
     /// resume` can restore it there; unknown for one that exited on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]

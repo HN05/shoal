@@ -315,6 +315,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
             origin: None,
             stop: None,
             converted: false,
+            handoff: None,
         }
         .write(&manager.paths, &workspace.id)
         .unwrap();
