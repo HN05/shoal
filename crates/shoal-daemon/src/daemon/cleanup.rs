@@ -14,7 +14,9 @@ use crate::process::DirectoryUsers;
 
 /// One pass of every automatic cleanup. A failed step does not skip the
 /// steps after it; the error names each step that failed, in the workspace
-/// it failed in where it concerns one.
+/// it failed in where it concerns one. The spaces' stand-in runs the
+/// spaces' steps in this order too, so a change to them changes its
+/// `sweep`.
 pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFailures> {
     let spaces = &manager.spaces;
     manager.agents.cleanup_orphan_sessions(manager).await;

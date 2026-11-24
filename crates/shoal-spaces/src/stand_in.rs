@@ -446,7 +446,8 @@ impl StandIn {
     }
 
     /// One pass of the daemon's cleanup sweep: the spaces' own steps, in
-    /// the order the daemon runs them among the other subsystems'.
+    /// the order the daemon's `cleanup::sweep` runs them among the other
+    /// subsystems', which a change there repeats here.
     pub(crate) async fn sweep(
         &self,
         timers: &mut crate::cleanup::Timers,
