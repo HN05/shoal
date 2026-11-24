@@ -431,6 +431,40 @@ impl Resolving {
     }
 }
 
+/// What a thread opens with: its name, the text of its opening post and
+/// the places in code that post points at, and for a comment that joins a
+/// review, how much it matters. Without text or code it opens empty;
+/// with code alone its opening post is its name.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThreadOpening {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub code: Vec<crate::code::NewCodeRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<crate::reviews::Severity>,
+}
+
+impl ThreadOpening {
+    /// An empty thread named `name`.
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            ..Self::default()
+        }
+    }
+
+    /// The text of its opening post, none for an empty thread.
+    pub fn post_text(&self) -> Option<&str> {
+        match (&self.body, self.code.is_empty()) {
+            (Some(body), _) => Some(body),
+            (None, false) => Some(&self.name),
+            (None, true) => None,
+        }
+    }
+}
+
 /// What a `review` thread is about: the review that opened it, while it
 /// exists, and how much its finding matters, as Shoal's reviewer judged it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

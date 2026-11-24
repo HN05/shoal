@@ -7,6 +7,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 use crate::{
     cli::{
         args::{
+            BodyArgs,
             items::RelationArgs,
             threads::{CodeArg, OutcomeData},
         },
@@ -19,8 +20,9 @@ use shoal_protocol::{
     code::NewCodeRef,
     item_numbers::ItemNumber,
     model::Relation,
+    reviews::Severity,
     space_names::SpaceSelector,
-    threads::{OutcomeKind, Resolving, Side, ThreadKind, ThreadNumber},
+    threads::{OutcomeKind, Resolving, Side, ThreadKind, ThreadNumber, ThreadOpening},
 };
 
 mod listing;
@@ -55,18 +57,38 @@ async fn acting_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
     }
 }
 
-/// Open the thread `name` of `kind` with the space `space` names, else with
-/// the caller's coordinator or the user; from the user's terminal with the
-/// current or a picked space. With `code`, its opening post points at it.
-/// Without a kind, it joins the caller's pending review of that space.
+/// What `shoal thread open` opens a thread with, as given.
+pub(super) struct Opening {
+    pub(super) name: String,
+    pub(super) code: Vec<CodeArg>,
+    pub(super) severity: Option<Severity>,
+    pub(super) body: BodyArgs,
+}
+
+impl Opening {
+    /// The opening the daemon takes: the body read, the code's paths made
+    /// absolute.
+    fn read(self) -> Result<ThreadOpening> {
+        Ok(ThreadOpening {
+            name: self.name,
+            body: super::items::read_body(self.body)?,
+            code: code_refs(self.code)?,
+            severity: self.severity,
+        })
+    }
+}
+
+/// Open a thread of `kind`, with what is `given`, with the space `space`
+/// names, else with the caller's coordinator or the user; from the user's
+/// terminal with the current or a picked space. Without a kind, it joins
+/// the caller's pending review of that space.
 pub(super) async fn open(
     ctx: &Context,
-    name: String,
+    given: Opening,
     kind: Option<ThreadKind>,
     space: Option<SpaceSelector>,
-    code: Vec<CodeArg>,
 ) -> Result<i32> {
-    let code = code_refs(code)?;
+    let given = given.read()?;
     let from = acting_space(ctx).await?;
     let to = match space {
         None if from.is_some() => None,
@@ -75,7 +97,7 @@ pub(super) async fn open(
             Some(ui::select_space(ctx, space, Fallback::CurrentDirectory(&opening)).await?)
         }
     };
-    let thread = threads::open(name, kind, to, from, code)
+    let thread = threads::open(given, kind, to, from)
         .send(&ctx.paths)
         .await?;
     let number = thread.number;
@@ -89,7 +111,7 @@ pub(super) async fn open(
         (None, true) => format!(
             "Thread {number} opened with {holder}; post in it with shoal send {number} \"<text>\"."
         ),
-        (None, false) => format!("Thread {number} opened with {holder}, about its code."),
+        (None, false) => format!("Thread {number} opened with {holder}, with its opening post."),
     };
     ctx.emit(&message, &thread)?;
     Ok(0)
@@ -218,7 +240,7 @@ fn linked_thread(args: &[String], linked: bool) -> Result<ItemNumber> {
 /// its holder; its name and opener decide nothing of which spaces it
 /// reaches.
 pub(super) fn opening(kind: Option<ThreadKind>) -> Acting {
-    Acting::request(move |to| threads::open(String::new(), kind, Some(to), None, Vec::new()))
+    Acting::request(move |to| threads::open(ThreadOpening::default(), kind, Some(to), None))
 }
 
 #[cfg(test)]

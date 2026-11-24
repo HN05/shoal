@@ -4,7 +4,9 @@ use super::{Forwarding, Lifetime, Target};
 use crate::code::NewCodeRef;
 use crate::item_numbers::ItemNumber;
 use crate::space_names::SpaceSelector;
-use crate::threads::{CloseCause, NewPost, Resolving, ThreadKind, ThreadNumber, ThreadState};
+use crate::threads::{
+    CloseCause, NewPost, Resolving, ThreadKind, ThreadNumber, ThreadOpening, ThreadState,
+};
 use shoal_ids::space_ids::SpaceId;
 
 /// Requests about threads: opening one, posting, forwarding, resolving,
@@ -12,12 +14,14 @@ use shoal_ids::space_ids::SpaceId;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThreadMethod {
-    /// Open an empty thread from the caller, a space or the user, with the
-    /// space `to` names, else with the caller's coordinator or the user.
-    /// Without a kind, it is a `review` thread of the caller's pending
-    /// review of the holder, else a question.
+    /// Open a thread from the caller, a space or the user, with the space
+    /// `to` names, else with the caller's coordinator or the user, empty or
+    /// with the opening post its opening gives. Without a kind, it is a
+    /// `review` thread of the caller's pending review of the holder, else a
+    /// question.
     OpenThread {
-        name: String,
+        #[serde(flatten)]
+        opening: ThreadOpening,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         kind: Option<ThreadKind>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -26,10 +30,6 @@ pub enum ThreadMethod {
         /// not start does; a scoped caller acts as its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         from: Option<SpaceSelector>,
-        /// Places in code the thread is about, which an opening post,
-        /// named as the thread, carries at once.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        code: Vec<NewCodeRef>,
     },
     /// Open a comment of the caller's pending review of the workspace,
     /// numbered in it on its machine, which keeps the review, for a caller
@@ -37,9 +37,8 @@ pub enum ThreadMethod {
     /// a review.
     OpenComment {
         workspace: SpaceSelector,
-        name: String,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        code: Vec<NewCodeRef>,
+        #[serde(flatten)]
+        opening: ThreadOpening,
     },
     /// Close the open threads here that the space `opener` of the
     /// sending machine opened, its comments of the reviews this machine

@@ -254,7 +254,7 @@ const REQUESTS: &[&str] = &[
     r#"{"agent_session":{"space":"app-chat"}}"#,
     // Threads.
     r#"{"open_thread":{"name":"Which database?","kind":"question","to":"part","from":"planning"}}"#,
-    r#"{"open_comment":{"workspace":"part","name":"Unclear name"}}"#,
+    r#"{"open_comment":{"workspace":"part","name":"Unclear name","body":"Call it retries","severity":"should-fix"}}"#,
     r#"{"close_opened":{"opener":"s1","cause":"removal"}}"#,
     r#"{"reopen_opened":{"opener":"s1","cause":"completion"}}"#,
     r#"{"post":{"thread":4,"post":{"text":"Which?","choices":["A","B"],"recommendation":"A","reason":"Simpler"},"changes":[12,14]}}"#,

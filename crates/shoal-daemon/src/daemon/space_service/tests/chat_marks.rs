@@ -1,3 +1,4 @@
+use shoal_protocol::threads::ThreadOpening;
 use std::sync::Arc;
 
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
@@ -155,10 +156,9 @@ impl Tree {
         (self.manager.coordination.open_thread(
             &*self.manager,
             None,
-            name.into(),
+            ThreadOpening::named(name),
             Some(ThreadKind::Question),
             Some(&parent),
-            vec![],
         ))
         .await
         .unwrap()

@@ -1,6 +1,6 @@
 use super::*;
 use crate::protocol::{AlertMethod, ThreadMethod};
-use crate::threads::ThreadKind;
+use crate::threads::{ThreadKind, ThreadOpening};
 
 #[test]
 fn a_withdrawal_targets_a_space_only_when_it_names_the_recipient() {
@@ -21,11 +21,10 @@ fn a_withdrawal_targets_a_space_only_when_it_names_the_recipient() {
 fn a_thread_opened_as_a_space_targets_none_and_one_opened_with_a_space_acts_there() {
     let open = |from: Option<SpaceSelector>, to: Option<SpaceSelector>| {
         Operation::Thread(ThreadMethod::OpenThread {
-            name: "Which base?".to_owned(),
+            opening: ThreadOpening::named("Which base?"),
             kind: Some(ThreadKind::Question),
             to,
             from,
-            code: Vec::new(),
         })
     };
     let to = SpaceSelector::Number(4.into());

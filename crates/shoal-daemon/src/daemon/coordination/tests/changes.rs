@@ -1,3 +1,4 @@
+use shoal_protocol::threads::ThreadOpening;
 use std::{fs, sync::Arc};
 
 use shoal_protocol::{
@@ -265,10 +266,9 @@ impl Fixture {
         let opened = (self.manager).coordination.open_thread(
             &*self.manager,
             Some(&self.agent),
-            name.into(),
+            ThreadOpening::named(name),
             Some(ThreadKind::Request),
             None,
-            Vec::new(),
         );
         opened.await.unwrap()
     }
@@ -404,10 +404,9 @@ async fn a_space_that_forwards_a_thread_works_for_it_no_longer() {
     let opened = manager.coordination.open_thread(
         &**manager,
         Some(&fixture.agent),
-        "Lex it".into(),
+        ThreadOpening::named("Lex it"),
         Some(ThreadKind::Request),
         Some(&to),
-        Vec::new(),
     );
     let number = ThreadNumber::Full(opened.await.unwrap().number);
     (manager
@@ -443,10 +442,9 @@ async fn a_thread_shows_its_changes_and_whether_its_holder_works_for_it() {
     let opened = manager.coordination.open_thread(
         &**manager,
         None,
-        "Fix the parser".into(),
+        ThreadOpening::named("Fix the parser"),
         Some(ThreadKind::Request),
         Some(&to),
-        Vec::new(),
     );
     let thread = opened.await.unwrap();
     let number = ThreadNumber::Full(thread.number);

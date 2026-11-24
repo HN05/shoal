@@ -17,13 +17,12 @@ use crate::{
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
-    code::NewCodeRef,
     hub::Member,
     model::{Located, SpaceKind},
     protocol::{Body, Operation, ThreadMethod},
-    reviews::ReviewId,
+    reviews::{ReviewId, Severity},
     space_names::SpaceSelector,
-    threads::{Finding, Holder, Side, Thread, ThreadKind, ThreadSpace},
+    threads::{Finding, Holder, Side, Thread, ThreadKind, ThreadOpening, ThreadSpace},
 };
 
 use crate::{alerts::Recipients, notifications::Source, scope::Caller};
@@ -57,18 +56,17 @@ impl Coordination {
     /// the opener's pending review of its holder, which holds its posts,
     /// else a question; a review of a workspace on another machine is kept
     /// there, which numbers its comments. An empty one notifies no one
-    /// until its first post; one about the places in code `code` gets its
-    /// opening post at once, named as the thread, which carries them.
+    /// until its first post; one with a body or code gets its opening post
+    /// at once, which carries the code.
     pub async fn open_thread(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
-        name: String,
+        opening: ThreadOpening,
         kind: Option<ThreadKind>,
         to: Option<&SpaceSelector>,
-        code: Vec<NewCodeRef>,
     ) -> Result<Thread> {
-        crate::validate::message(&name).context("invalid thread name")?;
+        validate(&opening)?;
         ensure!(
             kind != Some(ThreadKind::Review),
             "a review thread joins a pending review: start one with shoal review start <space>, \
@@ -91,13 +89,9 @@ impl Coordination {
                     *located.id() != caller.space_id,
                     "a space opens a thread with another space"
                 );
-                let comment = Comment {
-                    name: &name,
-                    code: &code,
-                };
                 if kind.is_none()
                     && let Some(thread) =
-                        comment_elsewhere(daemon, caller, &located, comment).await?
+                        comment_elsewhere(daemon, caller, &located, &opening).await?
                 {
                     return Ok(thread);
                 }
@@ -109,49 +103,46 @@ impl Coordination {
                 Opened::by(Some(caller), caller.space_id.clone(), holder)
             }
         };
-        let opened = Opened {
-            name,
-            kind,
-            ..opened
-        };
-        let thread = self.record_opened(daemon, caller, opened, code).await?;
+        let opened = Opened { kind, ..opened };
+        let thread = self.record_opened(daemon, caller, opened, opening).await?;
         thread.context("a thread that joins no review is a question")
     }
 
-    /// Open a comment named `name` of the pending review `caller`, a space
-    /// of another machine, writes of the workspace `workspace` names, which
-    /// this machine keeps, numbered in that workspace; none without such a
-    /// review, for the caller's machine to open as a question.
+    /// Open a comment of the pending review `caller`, a space of another
+    /// machine, writes of the workspace `workspace` names, which this
+    /// machine keeps, numbered in that workspace, with `opening`; none
+    /// without such a review, for the caller's machine to open as a
+    /// question.
     pub async fn open_comment(
         &self,
         daemon: &dyn Daemon,
         caller: &Caller,
         workspace: &SpaceSelector,
-        name: String,
-        code: Vec<NewCodeRef>,
+        opening: ThreadOpening,
     ) -> Result<Option<Thread>> {
-        crate::validate::message(&name).context("invalid thread name")?;
+        validate(&opening)?;
         let holder = ThreadSpace::of(&daemon.space(workspace).await?);
         let opened = Opened {
-            name,
             opener: Some(self.speaker(daemon, caller).await?),
             only_comment: true,
             ..Opened::by(None, holder.id.clone(), Some(holder))
         };
-        self.record_opened(daemon, Some(caller), opened, code).await
+        self.record_opened(daemon, Some(caller), opened, opening)
+            .await
     }
 
-    /// Record `opened`, which `caller` opens, with an opening post about
-    /// the places in code `code`; none for a comment that joins no review.
+    /// Record `opened`, which `caller` opens with `opening`; none for a
+    /// comment that joins no review.
     async fn record_opened(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
         opened: Opened,
-        code: Vec<NewCodeRef>,
+        opening: ThreadOpening,
     ) -> Result<Option<Thread>> {
         let outside = self.records.clone();
-        let opening = self.opening_post(daemon, caller, code).await?;
+        let (name, severity) = (opening.name.clone(), opening.severity);
+        let opening = self.opening_post(daemon, caller, opening).await?;
         let versioned = opening
             .as_ref()
             .map(|opening| code::versioned(&opening.code));
@@ -165,12 +156,12 @@ impl Coordination {
                 if review.is_none() && opened.only_comment {
                     return Ok(None);
                 }
-                let (kind, finding) = joining(opened.kind, review);
+                let (kind, finding) = joining(opened.kind, review, severity)?;
                 let new = NewThread {
                     kind,
                     finding,
                     held: review.is_some(),
-                    name: &opened.name,
+                    name: &name,
                     opener: opened.opener.as_ref().map_or(Opener::User, Opener::Space),
                     space_id: &opened.space_id,
                     holder: opened.holder.as_ref(),
@@ -178,8 +169,7 @@ impl Coordination {
                 let id = records::insert_thread(tx, &new)?;
                 match &opening {
                     Some(opening) => {
-                        let (thread, delivered) =
-                            opening.record(tx, id, &opened.name, &*outside)?;
+                        let (thread, delivered) = opening.record(tx, id, &*outside)?;
                         Ok(Some((thread, Some(delivered))))
                     }
                     None => Ok(Some((records::reread(tx, id)?, None))),
@@ -196,25 +186,25 @@ impl Coordination {
         Ok(Some(thread))
     }
 
-    /// Who makes the opening post of a thread about the places in code
-    /// `code` that `caller` opens, and the references made; none without
-    /// code, as an empty thread has no post. The thread's transaction
-    /// records the post, so a refused one leaves no thread behind.
+    /// The opening post of a thread `caller` opens with `opening`: who
+    /// makes it, its text and the references it makes; none for an empty
+    /// thread, which has no post. The thread's transaction records the
+    /// post, so a refused one leaves no thread behind.
     async fn opening_post(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
-        code: Vec<NewCodeRef>,
+        opening: ThreadOpening,
     ) -> Result<Option<Opening>> {
-        if code.is_empty() {
+        let Some(text) = opening.post_text().map(str::to_owned) else {
             return Ok(None);
-        }
-        let code = self.new_code(daemon, caller, code).await?;
+        };
+        let code = self.new_code(daemon, caller, opening.code).await?;
         // The opener's side is checked against no holder.
         let poster = self
             .poster(daemon, caller, Some(Side::Opener), &Holder::User)
             .await?;
-        Ok(Some(Opening { poster, code }))
+        Ok(Some(Opening { poster, text, code }))
     }
 
     /// The space whose agent coordinates the space `id`, here or on another
@@ -233,7 +223,8 @@ impl Coordination {
     }
 }
 
-/// `comment` of `caller`'s pending review of the workspace `located`,
+/// The comment `opening` opens of `caller`'s pending review of the
+/// workspace `located`,
 /// which the machine that runs that workspace keeps and opens; none for
 /// a space here, a chat, which no review is of, or without such a review.
 /// Only that machine knows whether it keeps one, so failing to ask it
@@ -242,7 +233,7 @@ async fn comment_elsewhere(
     daemon: &dyn Daemon,
     caller: &Caller,
     located: &Located,
-    comment: Comment<'_>,
+    opening: &ThreadOpening,
 ) -> Result<Option<Thread>> {
     let Located::Elsewhere { space, machine } = located else {
         return Ok(None);
@@ -250,7 +241,7 @@ async fn comment_elsewhere(
     if space.space.kind != SpaceKind::Workspace {
         return Ok(None);
     }
-    let opened = ask_comment(daemon, caller, machine, &space.space.id, comment);
+    let opened = ask_comment(daemon, caller, machine, &space.space.id, opening);
     opened.await.with_context(|| {
         format!(
             "machine {} keeps any review of {} and could not open the thread as its comment; \
@@ -261,19 +252,19 @@ async fn comment_elsewhere(
     })
 }
 
-/// Ask `machine` to open `comment` of `caller`'s pending review of its
-/// workspace `workspace`; none without such a review.
+/// Ask `machine` to open the comment `opening` opens of `caller`'s
+/// pending review of its workspace `workspace`; none without such a
+/// review.
 async fn ask_comment(
     daemon: &dyn Daemon,
     caller: &Caller,
     machine: &Member,
     workspace: &SpaceId,
-    comment: Comment<'_>,
+    opening: &ThreadOpening,
 ) -> Result<Option<Thread>> {
     let operation = Operation::Thread(ThreadMethod::OpenComment {
         workspace: SpaceSelector::id(workspace),
-        name: comment.name.to_owned(),
-        code: comment.code.to_vec(),
+        opening: opening.clone(),
     });
     match daemon.ask_machine(machine, operation, Some(caller)).await? {
         Body::SpaceThread(thread) => Ok(Some(*thread)),
@@ -282,10 +273,9 @@ async fn ask_comment(
     }
 }
 
-/// A thread to open: its name and kind, the space that opens it, none for
-/// the user, the space it is numbered in and its holder, none for the user.
+/// A thread to open: its kind, the space that opens it, none for the
+/// user, the space it is numbered in and its holder, none for the user.
 struct Opened {
-    name: String,
     /// Without one, it comments the opener's pending review of its holder
     /// where it has one, and is a question otherwise.
     kind: Option<ThreadKind>,
@@ -301,7 +291,6 @@ impl Opened {
     /// space `space_id` and held by `holder`.
     fn by(caller: Option<&Caller>, space_id: SpaceId, holder: Option<ThreadSpace>) -> Self {
         Self {
-            name: String::new(),
             kind: None,
             opener: caller.map(|caller| ThreadSpace::here(caller.space_id.clone())),
             space_id,
@@ -327,27 +316,39 @@ impl Opened {
     }
 }
 
-/// A comment of a review kept on another machine: its name and the places
-/// in code it is about.
-#[derive(Clone, Copy)]
-struct Comment<'a> {
-    name: &'a str,
-    code: &'a [NewCodeRef],
+/// Refuse an opening whose name or opening post a thread does not take.
+fn validate(opening: &ThreadOpening) -> Result<()> {
+    crate::validate::message(&opening.name).context("invalid thread name")?;
+    if let Some(body) = &opening.body {
+        posting::validate_text(body)?;
+    }
+    Ok(())
 }
 
 /// The kind and finding of a thread of `kind`, or without one of a
-/// question, or a comment of the pending review `review` it joins.
-fn joining(kind: Option<ThreadKind>, review: Option<ReviewId>) -> (ThreadKind, Option<Finding>) {
-    match review {
+/// question, or a comment of `severity` of the pending review `review` it
+/// joins; a severity marks only such a comment.
+fn joining(
+    kind: Option<ThreadKind>,
+    review: Option<ReviewId>,
+    severity: Option<Severity>,
+) -> Result<(ThreadKind, Option<Finding>)> {
+    Ok(match review {
         Some(review) => (
             ThreadKind::Review,
             Some(Finding {
-                severity: None,
+                severity,
                 review: Some(review),
             }),
         ),
-        None => (kind.unwrap_or(ThreadKind::Question), None),
-    }
+        None => {
+            ensure!(
+                severity.is_none(),
+                "--severity marks a comment of a review; start one with shoal review start <space>"
+            );
+            (kind.unwrap_or(ThreadKind::Question), None)
+        }
+    })
 }
 
 /// Refuse a resolved thread, naming how to reopen it.

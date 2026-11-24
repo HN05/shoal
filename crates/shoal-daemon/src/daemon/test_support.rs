@@ -2,6 +2,7 @@
 //! beside the crate's own fixtures, which this module re-exports.
 use crate::daemon::scope::Access;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::threads::ThreadOpening;
 use std::{fs, path::Path, sync::Arc};
 
 pub(crate) use crate::test_support::*;
@@ -453,10 +454,9 @@ pub(crate) async fn ask(
     let thread = (manager.coordination.open_thread(
         manager,
         Some(&caller),
-        text.into(),
+        ThreadOpening::named(text),
         Some(ThreadKind::Question),
         None,
-        Vec::new(),
     ))
     .await
     .unwrap();

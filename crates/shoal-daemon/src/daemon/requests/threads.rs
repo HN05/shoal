@@ -36,32 +36,26 @@ pub(super) async fn handle(
             }));
         }
         ThreadMethod::OpenThread {
-            name,
+            opening,
             kind,
             to,
             from,
-            code,
         } => {
             let acting = acting(manager, caller, from).await?;
             let opened = manager.coordination.open_thread(
                 &**manager,
                 acting.as_ref(),
-                name,
+                opening,
                 kind,
                 to.as_ref(),
-                code,
             );
             thread(opened.await?)
         }
-        ThreadMethod::OpenComment {
-            workspace,
-            name,
-            code,
-        } => {
+        ThreadMethod::OpenComment { workspace, opening } => {
             let caller = caller.context("the user's comments are opened as threads")?;
             let opened = manager
                 .coordination
-                .open_comment(&**manager, caller, &workspace, name, code);
+                .open_comment(&**manager, caller, &workspace, opening);
             opened.await?.map_or(Body::Ok, thread)
         }
         ThreadMethod::CloseOpened { opener, cause } => {

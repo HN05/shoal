@@ -19,6 +19,7 @@ use shoal_protocol::subscriptions::{
     Update,
     records::{Record, RecordKind, Topic},
 };
+use shoal_protocol::threads::ThreadOpening;
 use shoal_protocol::threads::{NewPost, OutcomeKind, Resolving, Thread, ThreadKind, ThreadNumber};
 
 use super::Subscription;
@@ -74,10 +75,9 @@ async fn ask(manager: &shoal_daemon::test_daemon::Manager, id: &SpaceId) -> Thre
     let thread = (manager.coordination.open_thread(
         manager,
         Some(&caller),
-        name,
+        ThreadOpening::named(name),
         Some(ThreadKind::Question),
         None,
-        Vec::new(),
     ))
     .await
     .unwrap();

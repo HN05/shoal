@@ -193,7 +193,17 @@ async fn thread(ctx: &Context, command: ThreadCommand) -> Result<i32> {
             kind,
             space,
             code,
-        } => threads::open(ctx, name, kind, space, code).await,
+            severity,
+            body,
+        } => {
+            let opening = threads::Opening {
+                name,
+                code,
+                severity,
+                body,
+            };
+            threads::open(ctx, opening, kind, space).await
+        }
         ThreadCommand::Forward {
             thread,
             space,

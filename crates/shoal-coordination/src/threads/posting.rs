@@ -27,12 +27,7 @@ use shoal_protocol::files::{FileSource, NewFile, SentFile};
 
 /// Refuse a post that is empty, too long, or offers too many choices.
 fn validate(post: &NewPost) -> Result<()> {
-    ensure!(
-        !post.text.trim().is_empty()
-            && post.text.len() <= MAX_POST_LEN
-            && !post.text.chars().any(|c| c.is_control() && c != '\n'),
-        "a post is nonempty text without control characters other than newlines (max {MAX_POST_LEN} bytes)"
-    );
+    validate_text(&post.text)?;
     ensure!(
         post.choices.len() <= MAX_CHOICES,
         "a post offers at most {MAX_CHOICES} choices"
@@ -48,6 +43,17 @@ fn validate(post: &NewPost) -> Result<()> {
             crate::validate::message(value).with_context(|| format!("invalid {field}"))?;
         }
     }
+    Ok(())
+}
+
+/// Refuse a post's text that is empty or too long.
+pub(super) fn validate_text(text: &str) -> Result<()> {
+    ensure!(
+        !text.trim().is_empty()
+            && text.len() <= MAX_POST_LEN
+            && !text.chars().any(|c| c.is_control() && c != '\n'),
+        "a post is nonempty text without control characters other than newlines (max {MAX_POST_LEN} bytes)"
+    );
     Ok(())
 }
 
@@ -116,26 +122,25 @@ pub struct Attached<'a> {
     pub(super) changes: &'a [(SpaceId, u32)],
 }
 
-/// The opening post of a thread about code: who posts it, and the places
-/// in code it carries.
+/// The opening post of a thread: who posts it, its text, and the places in
+/// code it carries.
 pub(super) struct Opening {
     pub(super) poster: Poster,
+    pub(super) text: String,
     pub(super) code: Vec<NewCode>,
 }
 
 impl Opening {
-    /// Record the post in the thread `id` named `name`, in the transaction
-    /// that records the thread, its text the thread's name, and deliver
-    /// it; the thread as it is now.
+    /// Record the post in the thread `id`, in the transaction that records
+    /// the thread, and deliver it; the thread as it is now.
     pub(super) fn record(
         &self,
         tx: &Transaction<'_>,
         id: i64,
-        name: &str,
         outside: &dyn Records,
     ) -> Result<(Thread, Delivered)> {
         let post = NewPost {
-            text: name.to_owned(),
+            text: self.text.clone(),
             ..NewPost::default()
         };
         let attached = Attached {

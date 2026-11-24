@@ -8,6 +8,7 @@ use crate::protocol::{
 use anyhow::Result;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::threads::ThreadOpening;
 use std::sync::Arc;
 use tokio::io::BufReader;
 use tokio::net::UnixStream;
@@ -674,10 +675,9 @@ async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status()
         .open_thread(
             &*manager,
             Some(&asking),
-            "Database".into(),
+            ThreadOpening::named("Database"),
             Some(shoal_protocol::threads::ThreadKind::Question),
             None,
-            Vec::new(),
         )
         .await
         .unwrap();

@@ -5,20 +5,23 @@ use std::{path::PathBuf, str::FromStr};
 use anyhow::{Result, ensure};
 use clap::{Args, Subcommand};
 
+use crate::cli::args::BodyArgs;
 use shoal_protocol::changes::ChangeNumber;
 use shoal_protocol::code::Lines;
+use shoal_protocol::reviews::Severity;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::{OutcomeKind, ThreadKind, ThreadNumber, ThreadState};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ThreadCommand {
-    /// Open an empty thread and print its number; post in it with shoal
-    /// send <thread> "<text>".
+    /// Open a thread and print its number; post in it with shoal send
+    /// <thread> "<text>".
     ///
     /// From a space, the thread goes to its coordinator, else the user, or
     /// with --space to a space below it; the user opens one with a space.
-    /// Nobody hears of it until its first post.
+    /// Nobody hears of an empty thread until its first post; --body or
+    /// --code opens it with one.
     Open {
         /// A free-text name, such as "Which database should the cache use?"
         name: String,
@@ -32,9 +35,16 @@ pub enum ThreadCommand {
         space: Option<SpaceSelector>,
         /// A file, or its lines as PATH:FIRST-LAST, in a worktree your
         /// scope reaches that the thread is about; repeat for more. The
-        /// thread's opening post, named as it, carries them at once.
+        /// thread's opening post, its body or else its name, carries them at
+        /// once.
         #[arg(long, value_name = "PATH[:FIRST-LAST]")]
         code: Vec<CodeArg>,
+        /// How much a comment of your pending review matters, which the
+        /// review's tallies count.
+        #[arg(long)]
+        severity: Option<Severity>,
+        #[command(flatten)]
+        body: BodyArgs,
     },
     /// Give your role in a thread, as its opener or holder, to a space
     /// below you, or up to your coordinator or the user; the new party

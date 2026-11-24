@@ -1,3 +1,4 @@
+use shoal_protocol::threads::ThreadOpening;
 use shoal_protocol::{
     space_names::SpaceSelector,
     threads::{
@@ -59,10 +60,9 @@ async fn open(fixture: &Fixture, from: Option<&Caller>, to: Option<&Workspace>) 
         .open_thread(
             &**fixture,
             from,
-            "Which database?".into(),
+            ThreadOpening::named("Which database?"),
             Some(ThreadKind::Question),
             to.as_ref(),
-            Vec::new(),
         )
         .await
         .unwrap()
@@ -201,10 +201,9 @@ async fn the_user_opens_a_thread_only_with_a_space() {
         .open_thread(
             &*tree.fixture,
             None,
-            "Which?".into(),
+            ThreadOpening::named("Which?"),
             Some(ThreadKind::Question),
             None,
-            Vec::new(),
         )
         .await;
     assert!(opened.is_err());
@@ -219,10 +218,9 @@ async fn a_review_thread_is_never_opened_by_its_kind() {
         .open_thread(
             &*tree.fixture,
             None,
-            "Unchecked length".into(),
+            ThreadOpening::named("Unchecked length"),
             Some(ThreadKind::Review),
             Some(&to),
-            Vec::new(),
         )
         .await;
     assert!(opened.is_err());

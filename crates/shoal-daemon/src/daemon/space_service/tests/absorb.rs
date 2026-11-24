@@ -1,4 +1,5 @@
 use crate::daemon::scope::Access;
+use shoal_protocol::threads::ThreadOpening;
 use std::{fs, path::Path, sync::Arc};
 
 use crate::{
@@ -224,10 +225,9 @@ async fn a_forced_squash_takes_the_open_threads_of_work_that_is_not_done() {
         .open_thread(
             &*manager,
             Some(&caller),
-            "Which database?".into(),
+            ThreadOpening::named("Which database?"),
             Some(ThreadKind::Question),
             None,
-            Vec::new(),
         )
         .await
         .unwrap();

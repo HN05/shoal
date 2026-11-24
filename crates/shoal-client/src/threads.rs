@@ -7,28 +7,28 @@ use shoal_protocol::{
     item_numbers::ItemNumber,
     protocol::ThreadMethod,
     space_names::SpaceSelector,
-    threads::{Listing, NewPost, Resolving, Thread, ThreadKind, ThreadNumber, ThreadState},
+    threads::{
+        Listing, NewPost, Resolving, Thread, ThreadKind, ThreadNumber, ThreadOpening, ThreadState,
+    },
 };
 
 use crate::connection::{Daemon, Prepared, await_reply, request};
 
-/// Open a thread `name` of `kind` with the space `to`, else with the
-/// caller's coordinator or the user, acting as the space `from`: empty, or
-/// with an opening post pointing at the places in code `code`. Without a
-/// kind it joins the caller's pending review of `to`, else is a question.
+/// Open a thread of `kind` with the space `to`, else with the caller's
+/// coordinator or the user, acting as the space `from`, with `opening`.
+/// Without a kind it joins the caller's pending review of `to`, else is a
+/// question.
 pub fn open(
-    name: String,
+    opening: ThreadOpening,
     kind: Option<ThreadKind>,
     to: Option<SpaceSelector>,
     from: Option<SpaceSelector>,
-    code: Vec<NewCodeRef>,
 ) -> Prepared<Box<Thread>> {
     Prepared::new(ThreadMethod::OpenThread {
-        name,
+        opening,
         kind,
         to,
         from,
-        code,
     })
 }
 

@@ -2043,7 +2043,8 @@ owns the PR's branch.
 
 ```sh
 shoal review start [space]                           # A pending review of a workspace's work
-shoal thread open "Retries are unbounded" --code src/fetch.rs:40-52   # Its comment
+shoal thread open "Retries are unbounded" --code src/fetch.rs:40-52 \
+  --severity should-fix --body "Cap them at the configured limit."   # Its comment
 shoal review submit [--approve] [--body T | --body-file F] [-s space]
 shoal review cancel                                  # Drop it with its comments
 ```
@@ -2066,7 +2067,10 @@ the user read it, in threads, in the review and in logs, and its holder neither 
 in, forwards nor resolves it. `--kind
 question` or `request` opens a thread outside the review, delivered at once. A
 comment's `--code` may point at unsaved lines, since a reference keeps its own
-file version.
+file version. `--severity blocker|should-fix|nit` marks how much a comment
+matters, as the local reviewer marks its findings: the review's tallies, its
+delivery and a posted PR review count it so. A thread that joins no review
+refuses it.
 
 `review submit` submits your pending review of `--space`, else of the space it
 runs in, else your only one, at
@@ -7468,6 +7472,7 @@ files.
 
 ```sh
 shoal thread open "<name>" [--kind question|request] [--space S] [--code PATH[:FIRST-LAST]]...
+  [--body T | --body-file F] [--severity blocker|should-fix|nit]
 shoal send <thread> "<text>" [--choice C]... [--recommend R --reason R] [--attach FILE]...
   [--code PATH[:FIRST-LAST]]... [--changes N[,N]...] [--wait]
 shoal send <thread> --body-file F    # The text from a file
@@ -7487,10 +7492,10 @@ shoal unlink thread <S.N>
 
 A thread is a conversation between its opener, the user, a space or Shoal, and
 its holder, the user or a space, whoever is asked now, with posts from both
-sides and from other spaces that read it. `shoal thread open` records an empty thread with a free-text name of one
-line and a kind, `question` or `request`, and prints its number;
-with `--code` it also makes its opening post, whose text is the name, pointing
-at that code. A question asks for an answer, and a request asks its holder to
+sides and from other spaces that read it. `shoal thread open` records a thread with a free-text name of one
+line and a kind, `question` or `request`, and prints its number, empty unless
+`--body`, or `--body-file`, or `--code` gives it an opening post: the body,
+else the name, pointing at that code. A question asks for an answer, and a request asks its holder to
 do something, such as implement the code it points at. Without `--kind`, a
 thread towards a workspace you have a pending review of is a `review` thread,
 [its comment](#your-own-reviews), and otherwise a question; Shoal opens one for

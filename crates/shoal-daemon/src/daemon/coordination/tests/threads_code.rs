@@ -1,3 +1,4 @@
+use shoal_protocol::threads::ThreadOpening;
 use std::{fs, path::PathBuf};
 
 use shoal_protocol::{
@@ -139,10 +140,12 @@ async fn a_thread_opened_about_code_posts_it_at_once_from_a_buffer() {
         .open_thread(
             &**manager,
             Some(&parent),
-            "Implement lex".into(),
+            ThreadOpening {
+                code: vec![unsaved],
+                ..ThreadOpening::named("Implement lex")
+            },
             Some(ThreadKind::Request),
             Some(&to),
-            vec![unsaved],
         )
         .await
         .unwrap();
@@ -369,10 +372,12 @@ async fn a_thread_whose_opening_post_is_refused_is_never_opened() {
         .open_thread(
             &**manager,
             Some(&child),
-            "Too much".into(),
+            ThreadOpening {
+                code,
+                ..ThreadOpening::named("Too much")
+            },
             Some(ThreadKind::Request),
             None,
-            code,
         )
         .await;
     let refused = opened.unwrap_err().to_string();

@@ -5,7 +5,7 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
     threads::{
         CloseCause, NewPost, Outcome, OutcomeKind, Resolving, Sender, Side, Thread, ThreadKind,
-        ThreadNumber, ThreadSpace,
+        ThreadNumber, ThreadOpening, ThreadSpace,
     },
 };
 use shoal_reviews::written::Pending;
@@ -23,6 +23,7 @@ use crate::{
     protocol::TurnEnd,
 };
 use shoal_protocol::assignments::Done;
+use shoal_protocol::reviews::{Severity, severity_counts};
 
 /// A workspace `parent` whose agent runs, two workspaces below it whose
 /// agents run, and a workspace beside it without one.
@@ -109,10 +110,9 @@ pub(super) async fn open(
         .open_thread(
             manager,
             from,
-            "Which database?".into(),
+            ThreadOpening::named("Which database?"),
             Some(ThreadKind::Question),
             to.as_ref(),
-            Vec::new(),
         )
         .await
         .unwrap()
@@ -663,10 +663,9 @@ async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
     let opened = (manager.coordination.open_thread(
         &**manager,
         Some(&parent),
-        "Which database?".into(),
+        ThreadOpening::named("Which database?"),
         Some(ThreadKind::Question),
         Some(&away),
-        Vec::new(),
     ))
     .await
     .unwrap();
@@ -708,10 +707,9 @@ async fn open_towards_offline(tree: &Tree, kind: &str) -> anyhow::Result<Thread>
     (manager.coordination.open_thread(
         &**manager,
         Some(&caller(&tree.parent)),
-        "Unclear name".into(),
+        ThreadOpening::named("Unclear name"),
         None,
         Some(&away),
-        Vec::new(),
     ))
     .await
 }
@@ -759,9 +757,58 @@ async fn open_kind(
     let to = SpaceSelector::id(&to.id);
     (manager
         .coordination
-        .open_thread(manager, from, name.into(), kind, Some(&to), Vec::new()))
+        .open_thread(manager, from, ThreadOpening::named(name), kind, Some(&to)))
     .await
     .unwrap()
+}
+
+/// A comment that gives its severity and body opens with the body as its
+/// one post and counts in the review's tallies at that severity.
+#[tokio::test]
+async fn a_comments_severity_and_body_make_one_post_of_its_severity() {
+    let tree = tree().await;
+    let (manager, parent) = (&tree.manager, caller(&tree.parent));
+    let writer = shoal_reviews::written::Writer::Space(tree.parent.id.clone());
+    start_review(manager, &tree.child, writer).await;
+    let opening = ThreadOpening {
+        body: Some("Call it retries".into()),
+        severity: Some(Severity::ShouldFix),
+        ..ThreadOpening::named("Unclear name")
+    };
+    let to = SpaceSelector::id(&tree.child.id);
+    let thread =
+        (manager
+            .coordination
+            .open_thread(&**manager, Some(&parent), opening, None, Some(&to)))
+        .await
+        .unwrap();
+    assert_eq!(thread.name, "Unclear name");
+    let posts: Vec<_> = (thread.posts.iter()).map(|post| &post.post.text).collect();
+    assert_eq!(posts, ["Call it retries"]);
+    assert_eq!(
+        severity_counts(std::slice::from_ref(&thread)),
+        "1 should-fix"
+    );
+}
+
+/// A severity marks only a comment of a review: a thread that would be a
+/// question is refused, and none is left.
+#[tokio::test]
+async fn a_severity_outside_a_review_is_refused() {
+    let tree = tree().await;
+    let (manager, parent) = (&tree.manager, caller(&tree.parent));
+    let opening = ThreadOpening {
+        severity: Some(Severity::Nit),
+        ..ThreadOpening::named("Unclear name")
+    };
+    let to = SpaceSelector::id(&tree.child.id);
+    let opened =
+        manager
+            .coordination
+            .open_thread(&**manager, Some(&parent), opening, None, Some(&to));
+    assert!(opened.await.is_err());
+    let open = manager.coordination.open_threads().await.unwrap();
+    assert!(open.is_empty(), "{open:?}");
 }
 
 #[tokio::test]

@@ -566,7 +566,8 @@ of the workspace's HEAD where that is the commit, and otherwise names
 
 ```sh
 shoal review start <space>          # A pending review of a workspace below you
-shoal thread open "Retries are unbounded" --space <space> --code src/fetch.rs:40-52
+shoal thread open "Retries are unbounded" --space <space> --code src/fetch.rs:40-52 \
+  --severity should-fix --body "Cap them at the configured limit."
 shoal review submit [--approve] [--body T | --body-file F] [-s space]
 shoal review cancel [<id>]          # Drop a pending review with its comments
 ```
@@ -575,7 +576,9 @@ You, or the user, review a workspace's work as the reviewer does. While your
 review of a workspace is pending, a thread you open towards it without
 `--kind` is its comment, a `review` thread that only your side and the user
 read and whose posts reach nobody yet; an
-explicit `--kind` opens a thread outside it. `review submit` records the
+explicit `--kind` opens a thread outside it. `--severity blocker|should-fix|nit`
+says how much a comment matters, which the review's tallies count.
+`review submit` records the
 workspace's HEAD and delivers the summary and every comment to its agent in one
 message. A comment's opener resolves it, and its holder's posts reach the
 opener. The review gates count a
@@ -624,7 +627,8 @@ fails.
 ## Threads
 
 ```sh
-shoal thread open "<name>" [--space <space>] [--kind question|request] [--code PATH[:FIRST-LAST]]
+shoal thread open "<name>" [--space <space>] [--kind question|request] [--code PATH[:FIRST-LAST]] \
+  [--body T | --body-file F] [--severity blocker|should-fix|nit]
 shoal send <thread> "<text>" [--choice A --choice B --recommend A --reason R] \
   [--attach FILE] [--code PATH[:FIRST-LAST]] [--changes 12,14] [--body-file F] [--wait]
 shoal send <thread> --choose <N>     # Pick a choice the other side offered
@@ -664,8 +668,9 @@ side receives each as `Code: path:first-last` with the lines' snippet, and
 the space whose worktree it is in when that is not its own. Shoal follows
 the code as it changes: `view thread` shows each reference where its lines
 are now, `changed` once lines inside it were edited and `outdated` once they
-are gone, with the snippet as it was. `thread open --code` posts the
-references at once, in an opening post named as the thread.
+are gone, with the snippet as it was. `thread open` with `--body` or
+`--code` posts at once: its opening post is the body, else the thread's
+name, with the references.
 
 A `question` asks for an answer; a `request` asks the holder to do
 something, such as implement the code it points at.
