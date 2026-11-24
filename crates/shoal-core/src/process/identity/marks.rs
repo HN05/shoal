@@ -23,6 +23,9 @@ pub(super) struct Marks {
     pub(super) hook: bool,
 }
 
+/// What the name of every variable [`Marks`] reads starts with.
+const SHOAL_PREFIX: &str = "SHOAL_";
+
 /// The marker a scan attributes processes by.
 #[derive(Clone, Copy)]
 pub(super) enum Marker {
@@ -33,9 +36,16 @@ pub(super) enum Marker {
 
 impl Marks {
     pub(super) fn read(environment: &[Vec<u8>]) -> Self {
+        // Inventories read every process's environment, few of whose entries
+        // are Shoal's; only those are searched for each marker.
+        let shoal: Vec<&[u8]> = (environment.iter())
+            .map(Vec::as_slice)
+            .filter(|entry| entry.starts_with(SHOAL_PREFIX.as_bytes()))
+            .collect();
         let value = |variable: &str| {
+            debug_assert!(variable.starts_with(SHOAL_PREFIX));
             let prefix = format!("{variable}=");
-            environment
+            shoal
                 .iter()
                 .find_map(|entry| entry.strip_prefix(prefix.as_bytes()))
                 .and_then(|value| std::str::from_utf8(value).ok())
