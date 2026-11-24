@@ -667,8 +667,6 @@ impl Records for StandInRecords {
     }
 }
 
-/// The thread `1.item` the stand-in's records open for `finding` in the
-/// workspace named `name`.
 /// Whether `thread` is a finding the workspace `workspace` holds resolved
 /// `fixed`.
 fn fixed_in(thread: &Thread, workspace: &SpaceId) -> bool {
@@ -677,6 +675,8 @@ fn fixed_in(thread: &Thread, workspace: &SpaceId) -> bool {
     fixed && thread.space_id == *workspace
 }
 
+/// The thread `1.item` the stand-in's records open for `finding` in the
+/// workspace named `name`.
 fn finding_thread(item: u32, name: &str, finding: &FindingThread<'_>) -> Thread {
     let id = i64::from(item);
     let space = ThreadSpace {
