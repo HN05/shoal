@@ -997,6 +997,10 @@ impl Conversions for StandIn {
     fn hand_over_before_removal<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
+
+    fn converting<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
+    }
 }
 
 impl Memory for StandIn {

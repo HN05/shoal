@@ -2204,7 +2204,10 @@ asleep agent waits for, and without any session left it waits for the agent
 a launch is starting there, or else resumes the agent as `shoal resume
 --now` does, refusing a space with only stopped commands. Neither starts a second agent beside one whose wrapper waits. A session
 whose agent stopped without a restore in the queue says why the agent stopped
-and what restores it.
+and what restores it. A session that ends while its agent moves to a new
+place, as a [conversion](#convert-a-chat-or-a-workspace) moves it, such as a
+zmx session, which ends with its agent, keeps you attached: the attach waits
+for the agent to run in its next session and attaches there.
 
 `shoal attach <target>` of a space another machine of the hub runs, by its
 number or ID, has that machine run the same attach as you, on a terminal of

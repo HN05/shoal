@@ -1,6 +1,7 @@
 //! The space an attach returns to, as the daemon has it now, and the
 //! sessions open where it recorded the space's agents.
 use anyhow::Result;
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{space_names::SpaceName, space_names::SpaceSelector, status::Inspection};
 
@@ -71,6 +72,26 @@ impl Target {
         let places = crate::client::places::places(paths, space).await?;
         let recorded = Recorded::space(&places.executions, &places.places);
         terminal::sessions(&settings, &recorded).await
+    }
+
+    /// Whether the target's agent, which ran as `left`, moves to a new
+    /// place: a conversion has yet to start it there, or kept its session
+    /// for the restore that does.
+    pub(super) async fn agent_moves(
+        &self,
+        paths: &CommandPaths,
+        left: Option<&ExecutionId>,
+    ) -> Result<bool> {
+        let space = SpaceSelector::id(self.id());
+        let places = crate::client::places::places(paths, space.clone()).await?;
+        if places.converting {
+            return Ok(true);
+        }
+        let Some(left) = left else {
+            return Ok(false);
+        };
+        let saved = crate::client::saved::read(paths, space).await?;
+        Ok(saved.session(left).is_some_and(|session| session.converted))
     }
 
     /// Whose settings choose the hosts to look in.

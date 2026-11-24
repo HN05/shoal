@@ -9,6 +9,7 @@ fn session(id: &str) -> SavedSession {
         stop_reason: None,
         idle: false,
         waits_in_wrapper: false,
+        converted: false,
         origin: None,
     }
 }
@@ -18,6 +19,7 @@ fn an_agent_its_wrapper_restores_is_not_restorable_work() {
     let mut saved = Saved {
         agents: vec![SavedSession {
             waits_in_wrapper: true,
+            converted: false,
             ..session("waiting")
         }],
         ..Saved::default()

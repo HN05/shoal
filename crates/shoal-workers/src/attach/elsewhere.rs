@@ -14,15 +14,17 @@ use shoal_protocol::attaching::{AttachReport, ChosenSession, Viewer};
 use super::{Attaching, Target, sessions::Steps};
 use crate::{
     client::connection::CommandPaths,
-    terminal::{self, Elsewhere},
+    terminal::{self, Elsewhere, Session},
 };
 
 /// Attach this terminal, which `viewer` views from another machine, to a
 /// session of `space` as `shoal attach` would on `machine`, this one, and
 /// report to the descriptor `report` the session it chose, then whether
-/// that session still runs once the viewer left it. Attaching again
-/// after a lost connection finds the session at the place it names,
-/// without waking or restoring its agent a second time.
+/// that session still runs once the viewer left it. A session that ends as
+/// its agent moves to a new place gives way to the agent's next, reported
+/// as chosen in turn. Attaching again after a lost connection finds the
+/// session at the place it names, without waking or restoring its agent a
+/// second time.
 pub async fn for_viewer(
     paths: &CommandPaths,
     space: SpaceId,
@@ -35,25 +37,44 @@ pub async fn for_viewer(
     let mut report = std::fs::File::from(unsafe { OwnedFd::from_raw_fd(report) });
     let target = Target::by_id(paths, space).await?;
     super::report_attach(paths, &target).await?;
-    let (target, session) = match &viewer.again {
+    let steps = Steps { paths, attaching };
+    let (mut target, mut session) = match &viewer.again {
         Some(place) => super::sessions::session_again(paths, target, place).await?,
-        None => {
-            let steps = Steps { paths, attaching };
-            (steps.awake_session(target, viewer.session.clone(), Some(&machine))).await?
+        None => (steps.awake_session(target, viewer.session.clone(), Some(&machine))).await?,
+    };
+    let open = loop {
+        if show_chosen(&mut report, &target, &session, &viewer, &machine).await? {
+            break true;
+        }
+        match steps.moved_session(target, &session).await? {
+            Some(moved) => (target, session) = moved,
+            None => break false,
         }
     };
+    send_report(&mut report, &AttachReport::Left { open })?;
+    Ok(0)
+}
+
+/// Report `session` of `target` as chosen on `report`, then show it to
+/// `viewer` from `machine`, this one, until they leave it; whether it still
+/// runs then.
+async fn show_chosen(
+    report: &mut std::fs::File,
+    target: &Target,
+    session: &Session,
+    viewer: &Viewer,
+    machine: &str,
+) -> Result<bool> {
     let chosen = ChosenSession {
         name: session.name.clone(),
         place: session.place.clone(),
     };
-    send_report(&mut report, &AttachReport::Chosen(chosen))?;
+    send_report(report, &AttachReport::Chosen(chosen))?;
     let shown = Elsewhere {
-        machine: &machine,
+        machine,
         app: viewer.terminal.app(session.place.host),
     };
-    let open = terminal::show_elsewhere(&target.number().to_string(), &session, &shown).await?;
-    send_report(&mut report, &AttachReport::Left { open })?;
-    Ok(0)
+    terminal::show_elsewhere(&target.number().to_string(), session, &shown).await
 }
 
 /// Write `line` to `report` for the daemon.

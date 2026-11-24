@@ -39,8 +39,9 @@ pub trait Attaching: Sync {
 /// else its only one or one `attaching` picks, once the agent there runs.
 /// With no session named and none showing an agent, an agent that sleeps
 /// wakes first, and a stopped one when no session is left; a session where
-/// Shoal stopped the agent wakes it. Returns whether the session still runs
-/// once this terminal left it.
+/// Shoal stopped the agent wakes it. A session that ends as its agent moves
+/// to a new place, as a conversion moves it, gives way to the agent's next.
+/// Returns whether the session still runs once this terminal left it.
 pub async fn here(
     paths: &CommandPaths,
     target: Target,
@@ -49,8 +50,17 @@ pub async fn here(
 ) -> Result<bool> {
     report_attach(paths, &target).await?;
     let steps = sessions::Steps { paths, attaching };
-    let (target, session) = steps.awake_session(target, session, None).await?;
-    crate::terminal::attach(&target.number().to_string(), &session).await
+    let (mut target, mut session) = steps.awake_session(target, session, None).await?;
+    loop {
+        let number = target.number().to_string();
+        if crate::terminal::attach(&number, &session).await? {
+            return Ok(true);
+        }
+        match steps.moved_session(target, &session).await? {
+            Some(moved) => (target, session) = moved,
+            None => return Ok(false),
+        }
+    }
 }
 
 /// Tell the daemon of the attach: attaching is the user's interaction with

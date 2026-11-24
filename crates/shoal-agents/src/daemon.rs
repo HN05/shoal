@@ -624,6 +624,10 @@ pub trait Conversions: Send + Sync {
 
     /// Hand over the agent of the space `id` before its removal.
     fn hand_over_before_removal<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
+
+    /// Whether a conversion of the space `id` has yet to start its agent in
+    /// the new place.
+    fn converting<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 }
 
 /// The memory agents' work takes.

@@ -150,8 +150,8 @@ impl Agents {
     }
 
     /// Where the executions of the space `selector` names run, with their
-    /// agents, and the places Shoal created for it, a workspace's or a
-    /// chat's.
+    /// agents, the places Shoal created for it, a workspace's or a chat's,
+    /// and whether a conversion moves its agent to a new place.
     pub async fn space_places(
         &self,
         daemon: &dyn Daemon,
@@ -159,10 +159,12 @@ impl Agents {
     ) -> Result<SpacePlaces> {
         let id = daemon.space(selector).await?.id.clone();
         let executions = self.space_executions(&id).await?;
+        let converting = daemon.converting(&id).await?;
         let places = self.owned_places(Some(id)).await?;
         Ok(SpacePlaces {
             executions,
             places: places.into_iter().map(|(_, origin)| origin).collect(),
+            converting,
         })
     }
 

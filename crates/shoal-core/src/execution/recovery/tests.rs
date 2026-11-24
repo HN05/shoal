@@ -737,3 +737,32 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     let other_last = LastSession::all(&paths, &other).unwrap();
     assert_eq!(other_last[0].narrowing, agent.narrowing);
 }
+
+#[test]
+fn a_last_session_a_conversion_kept_reads_as_converted() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let space = SpaceId::from("workspace");
+    let last = |execution: &str, converted| LastSession {
+        narrowing: Default::default(),
+        mode: "worker".into(),
+        model: Default::default(),
+        execution: execution.into(),
+        agent: "claude".into(),
+        session: Some("s1".into()),
+        moved: false,
+        copied: None,
+        origin: None,
+        stop: None,
+        turn: None,
+        converted,
+    };
+    last("converted", true).write(&paths, &space).unwrap();
+    last("exited", false).write(&paths, &space).unwrap();
+
+    let saved = Saved::load(&paths, &space).unwrap();
+
+    let converted = |id: &str| saved.session(&ExecutionId::from(id)).unwrap().converted;
+    assert!(converted("converted"));
+    assert!(!converted("exited"));
+}

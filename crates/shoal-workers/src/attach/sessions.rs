@@ -126,6 +126,29 @@ impl<A: Attaching> Steps<'_, A> {
         }
     }
 
+    /// The session `target`'s agent runs in once it moved from `left`, the
+    /// session this terminal showed, which ended: where it already runs
+    /// again, or where a conversion starts it, once it runs there. `None`
+    /// when it does not move, as when it exited or was stopped.
+    pub async fn moved_session(
+        &self,
+        target: Target,
+        left: &Session,
+    ) -> Result<Option<(Target, Session)>> {
+        let target = Target::by_id(self.paths, target.id().clone()).await?;
+        if let Some(session) = agent_session(target.sessions(self.paths).await?, None) {
+            return Ok(Some((target, session)));
+        }
+        if !(target.agent_moves(self.paths, left.execution.as_ref())).await? {
+            return Ok(None);
+        }
+        eprintln!(
+            "shoal: {} moves to its new place; attaching there once its agent runs",
+            target.name()
+        );
+        self.awaited(target, None).await.map(Some)
+    }
+
     /// `target`, read again, with the session its agent, only `execution`
     /// when given, runs in once it does.
     async fn awaited(

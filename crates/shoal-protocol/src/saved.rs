@@ -54,6 +54,9 @@ pub struct SavedSession {
     pub idle: bool,
     /// A live wrapper waits to restore it, which restores it only there.
     pub waits_in_wrapper: bool,
+    /// Its space changed kind, and its restore carries it on in the new
+    /// place.
+    pub converted: bool,
     /// Where it ran, when known, where a restore may run it again.
     pub origin: Option<Origin>,
 }
