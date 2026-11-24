@@ -206,6 +206,21 @@ fn stopped_restores(db: &Connection) -> Result<HashSet<ExecutionId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The stopped agents of the space `id` whose restore is in the queue, with
+/// whether it is starting.
+fn space_restores(
+    tx: &rusqlite::Transaction<'_>,
+    id: &SpaceId,
+) -> Result<Vec<(ExecutionId, bool)>> {
+    Ok(tx
+        .prepare("SELECT execution_id, state=?3 FROM agent_queue WHERE space_id=?1 AND kind=?2")?
+        .query_map(
+            params![id, QueueKind::Restore, QueueState::Starting],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Each waiting restore the daemon starts: its ID, workspace and execution.
 fn waiting_restores(db: &Connection) -> Result<Vec<(QueueEntryId, SpaceId, ExecutionId)>> {
     Ok(db
@@ -748,6 +763,29 @@ impl Agents {
         self.store.run(|db| stopped_restores(db)).await
     }
 
+    /// Whether a restore in the queue is about to run the agent of the space
+    /// `id` again in a new place: one that starts now, or one that continues
+    /// the session a conversion kept for its new place.
+    pub async fn restores_moved_agent(&self, id: &SpaceId) -> Result<bool> {
+        let space = id.to_owned();
+        let restores = self
+            .store
+            .read(move |tx| space_restores(tx, &space))
+            .await?;
+        Ok((restores.iter())
+            .any(|(execution, starting)| *starting || self.converted(id, execution)))
+    }
+
+    /// Whether the last session `execution` of the space `id` kept is one a
+    /// conversion kept, to continue in the space's new place.
+    fn converted(&self, id: &SpaceId, execution: &ExecutionId) -> bool {
+        let path = recovery::LastSession::path(&self.paths, id, execution);
+        recovery::LastSession::load(&path)
+            .ok()
+            .flatten()
+            .is_some_and(|last| last.converted)
+    }
+
     /// Whether the entry `id` restores a stopped agent the daemon starts.
     pub async fn restores_stopped_agent(&self, id: &QueueEntryId) -> Result<bool> {
         let id = id.to_owned();
@@ -762,3 +800,6 @@ impl Agents {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests;

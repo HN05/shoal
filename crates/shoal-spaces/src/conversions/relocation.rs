@@ -29,7 +29,7 @@ use crate::{
 };
 
 /// The spaces whose agent a relocation is moving now, from its hand-over
-/// until its restart in the new place is queued or failed.
+/// until it queued the agent's restart in the new place or failed to.
 #[derive(Default)]
 pub struct Relocating(std::sync::Mutex<std::collections::HashSet<SpaceId>>);
 
@@ -102,7 +102,7 @@ impl Spaces {
             return Ok(());
         };
         // Attaches wait for the agent's next session while this moves it.
-        let _moving = self.relocating.mark(id);
+        let _moving = (pending.restarts_agent()).then(|| self.relocating.mark(id));
         let relocated = match pending.clone() {
             Pending::Workspace {
                 mode,

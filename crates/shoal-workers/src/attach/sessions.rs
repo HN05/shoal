@@ -128,23 +128,25 @@ impl<A: Attaching> Steps<'_, A> {
 
     /// The session `target`'s agent runs in once the session this terminal
     /// showed ended, as a conversion moves the agent: where it runs again,
-    /// once it does. `None` once nothing moves it, as when it exited or a
-    /// stop or a failure left it for `shoal resume`.
+    /// once it does, starting the restore the conversion queued at once, as
+    /// for an agent that sleeps. `None` once nothing moves it, as when it
+    /// exited or a stop or a failure left it for `shoal resume`.
     pub async fn moved_session(&self, target: Target) -> Result<Option<(Target, Session)>> {
         let id = target.id().clone();
         let deadline = tokio::time::Instant::now() + super::WAIT;
-        let mut moved = false;
+        let mut told = false;
         loop {
             let target = Target::by_id(self.paths, id.clone()).await?;
             if let Some(session) = agent_session(target.sessions(self.paths).await?, None) {
                 return Ok(Some((target, session)));
             }
-            match after_end(target.agent_moves(self.paths).await?, moved) {
-                AfterEnd::Wait => {}
-                AfterEnd::StartRestore => return self.start_moved(target).await,
-                AfterEnd::End => return Ok(None),
+            if !target.agent_moves(self.paths).await? {
+                return Ok(None);
             }
-            if !std::mem::replace(&mut moved, true) {
+            if self.resume_space(&id).await? {
+                return self.awaited(target, None).await.map(Some);
+            }
+            if !std::mem::replace(&mut told, true) {
                 eprintln!(
                     "shoal: {} moves to its new place; attaching there once its agent runs",
                     target.name()
@@ -159,16 +161,6 @@ impl<A: Attaching> Steps<'_, A> {
             );
             tokio::time::sleep(super::POLL).await;
         }
-    }
-
-    /// The session of `target` the restore a conversion queued for its
-    /// agent runs it in, starting it at once, as for an agent that sleeps;
-    /// `None` when it queued none.
-    async fn start_moved(&self, target: Target) -> Result<Option<(Target, Session)>> {
-        if !self.resume_space(target.id()).await? {
-            return Ok(None);
-        }
-        self.awaited(target, None).await.map(Some)
     }
 
     /// `target`, read again, with the session its agent, only `execution`
@@ -194,28 +186,6 @@ impl<A: Attaching> Steps<'_, A> {
             );
             tokio::time::sleep(super::POLL).await;
         }
-    }
-}
-
-/// What an attach whose session ended does while its agent runs nowhere.
-#[derive(Debug, PartialEq, Eq)]
-enum AfterEnd {
-    /// Wait for the conversion that moves the agent.
-    Wait,
-    /// Start the restore the conversion it saw move the agent queued.
-    StartRestore,
-    /// End, leaving any other restore of the agent to wait its turn.
-    End,
-}
-
-/// What an attach does once its session ended and the agent runs nowhere,
-/// as the daemon says a conversion `moves` it, and whether this attach saw
-/// one moving it before, which queues its restore before it stops moving.
-fn after_end(moves: bool, moved: bool) -> AfterEnd {
-    match (moves, moved) {
-        (true, _) => AfterEnd::Wait,
-        (false, true) => AfterEnd::StartRestore,
-        (false, false) => AfterEnd::End,
     }
 }
 

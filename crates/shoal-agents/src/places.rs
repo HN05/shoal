@@ -159,13 +159,23 @@ impl Agents {
     ) -> Result<SpacePlaces> {
         let id = daemon.space(selector).await?.id.clone();
         let executions = self.space_executions(&id).await?;
-        let agent_moves = daemon.moves_agent(&id).await?;
+        let agent_moves = self.agent_moves(daemon, &id).await?;
         let places = self.owned_places(Some(id)).await?;
         Ok(SpacePlaces {
             executions,
             places: places.into_iter().map(|(_, origin)| origin).collect(),
             agent_moves,
         })
+    }
+
+    /// Whether a conversion moves the agent of the space `id` to its new
+    /// place: one that restarts it waits or moves it now, or the restore it
+    /// queued has yet to run it.
+    async fn agent_moves(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
+        if daemon.moves_agent(id).await? {
+            return Ok(true);
+        }
+        self.restores_moved_agent(id).await
     }
 
     /// The places Shoal created for `space`, or for every space, with the
