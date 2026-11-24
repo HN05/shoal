@@ -56,20 +56,32 @@ impl Releases {
             .collect();
         let removed = match unlocked.is_empty() {
             true => Vec::new(),
-            false => self.remove_unkept(unlocked, &kept()?, &mut failures),
+            false => self.remove_unkept(unlocked, kept(), &mut failures),
         };
         failures.into_result()?;
         Ok(removed)
     }
 
     /// Remove the copies of `unlocked` that `kept` does not keep, returning
-    /// their names.
+    /// their names; none when what keeps them is unknown. A copy of the
+    /// installed release that could not be named goes, since the next
+    /// wrapper copies it again.
     fn remove_unkept(
         &self,
         unlocked: Vec<Unlocked>,
-        kept: &Kept,
+        kept: Result<Kept>,
         failures: &mut Failures,
     ) -> Vec<String> {
+        let kept = match kept {
+            Ok(kept) => kept,
+            Err(error) => {
+                failures.push("what keeps copies", &format!("{error:#}"));
+                return Vec::new();
+            }
+        };
+        if let Err(error) = &kept.current {
+            failures.push("the installed release", error);
+        }
         unlocked
             .into_iter()
             .filter(|copy| !kept.keeps(&copy.name, &copy.path))
@@ -141,9 +153,11 @@ struct Failures(Vec<String>);
 impl Failures {
     /// The value of `result`, or none after noting its failure with `name`.
     fn note<T>(&mut self, name: &str, result: io::Result<T>) -> Option<T> {
-        result
-            .map_err(|error| self.0.push(format!("{name}: {error}")))
-            .ok()
+        result.map_err(|error| self.push(name, &error)).ok()
+    }
+
+    fn push(&mut self, name: &str, error: &dyn std::fmt::Display) {
+        self.0.push(format!("{name}: {error}"));
     }
 
     fn into_result(self) -> Result<()> {

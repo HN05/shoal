@@ -12,8 +12,9 @@ use crate::fsutil::FileIdentity;
 
 /// The copies a sweep keeps although no process holds their lock.
 pub(super) struct Kept {
-    /// The name of the installed release's copy, which the next wrapper runs.
-    pub(super) current: Option<String>,
+    /// The name of the installed release's copy, which the next wrapper
+    /// runs, or why it could not be named.
+    pub(super) current: io::Result<Option<String>>,
     /// The programs this user's processes run. One a wrapper started from
     /// its copy runs from it without its lock.
     pub(super) running: Vec<PathBuf>,
@@ -23,14 +24,14 @@ impl Kept {
     /// What keeps a copy on this machine now.
     pub(super) fn now() -> Result<Self> {
         Ok(Self {
-            current: installed_copy()?,
+            current: installed_copy(),
             running: crate::process::identity::programs()?,
         })
     }
 
     /// Whether the copy `name`, at `copy`, stays.
     pub(super) fn keeps(&self, name: &str, copy: &Path) -> bool {
-        self.current.as_deref() == Some(name)
+        matches!(&self.current, Ok(Some(current)) if current == name)
             || self.running.iter().any(|program| program.starts_with(copy))
     }
 }

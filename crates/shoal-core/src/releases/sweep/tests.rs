@@ -14,7 +14,7 @@ fn copy(root: &Path, name: &str) -> std::path::PathBuf {
 /// What keeps no copy.
 fn nothing() -> Result<Kept> {
     Ok(Kept {
-        current: None,
+        current: Ok(None),
         running: Vec::new(),
     })
 }
@@ -90,7 +90,7 @@ fn the_installed_release_s_copy_stays_unused() {
     let current = copy(temp.path(), "0.20.6-82e5d4546e2d");
     let kept = || {
         Ok(Kept {
-            current: Some("0.20.6-82e5d4546e2d".to_owned()),
+            current: Ok(Some("0.20.6-82e5d4546e2d".to_owned())),
             running: Vec::new(),
         })
     };
@@ -113,7 +113,7 @@ fn a_copy_stays_while_a_process_runs_a_program_in_it() {
     let unused = copy(&root, "0.20.4-ba9876543210");
     let kept = || {
         Ok(Kept {
-            current: None,
+            current: Ok(None),
             running: vec![used.join("Shoal.app/Contents/MacOS/shoal")],
         })
     };
@@ -138,4 +138,37 @@ fn what_keeps_a_copy_is_read_only_once_one_could_go() {
         })
         .unwrap();
     assert!(removed.is_empty());
+}
+
+#[test]
+fn an_installed_release_that_cannot_be_named_keeps_no_copy_and_fails_the_sweep() {
+    let temp = tempfile::tempdir().unwrap();
+    let releases = Releases::new(temp.path().to_owned());
+    let unused = copy(temp.path(), "0.20.5-0123456789ab");
+    let kept = || {
+        Ok(Kept {
+            current: Err(io::Error::other("no installed release")),
+            running: Vec::new(),
+        })
+    };
+
+    let error = releases.sweep_keeping(SystemTime::now(), kept).unwrap_err();
+    assert!(
+        error.to_string().contains("no installed release"),
+        "{error:#}"
+    );
+    assert!(!unused.exists());
+}
+
+#[test]
+fn copies_stay_while_what_keeps_them_is_unknown() {
+    let temp = tempfile::tempdir().unwrap();
+    let releases = Releases::new(temp.path().to_owned());
+    let unused = copy(temp.path(), "0.20.5-0123456789ab");
+
+    let error = releases
+        .sweep_keeping(SystemTime::now(), || anyhow::bail!("list processes"))
+        .unwrap_err();
+    assert!(error.to_string().contains("list processes"), "{error:#}");
+    assert!(unused.exists());
 }
