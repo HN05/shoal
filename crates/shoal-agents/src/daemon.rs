@@ -77,6 +77,14 @@ pub trait Spaces: Send + Sync {
         requester: Option<u32>,
     ) -> BoxFuture<'a, Result<usize>>;
 
+    /// Acknowledge the leftover processes `pids` that the agent of the
+    /// space `selector` names was told of.
+    fn acknowledge_leftovers<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        pids: &'a [u32],
+    ) -> BoxFuture<'a, Result<()>>;
+
     /// Whether the space `id` exists.
     fn space_exists<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
@@ -456,6 +464,14 @@ pub trait Demos: Send + Sync {
 pub trait Links: Send + Sync {
     /// Settle what the agent of the space `id` follows once it changed.
     fn settle_agent(&self, id: &SpaceId);
+
+    /// Acknowledge the item updates of `deliveries` that the agent of the
+    /// space `selector` names received.
+    fn acknowledge_item_updates<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        deliveries: Vec<String>,
+    ) -> BoxFuture<'a, Result<()>>;
 
     /// Whether the updates the agent of the space `id` follows are recorded.
     fn agent_updates_recorded<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;

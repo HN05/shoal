@@ -361,6 +361,14 @@ impl StandIn {
 const NOT_HERE: &str = "the agents' stand-in has no such space";
 
 impl Spaces for StandIn {
+    fn acknowledge_leftovers<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+        _: &'a [u32],
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn stop_untracked_processes<'a>(
         &'a self,
         _: &'a SpaceSelector,
@@ -821,6 +829,14 @@ impl Demos for StandIn {
 
 impl Links for StandIn {
     fn settle_agent(&self, _: &SpaceId) {}
+
+    fn acknowledge_item_updates<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+        _: Vec<String>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
 
     fn agent_updates_recorded<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(Default::default()) })
