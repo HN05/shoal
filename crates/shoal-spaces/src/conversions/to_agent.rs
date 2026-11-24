@@ -88,6 +88,35 @@ impl Spaces {
         .await
     }
 
+    /// Refuse the scoped `caller` how the agent of the space `id` carries
+    /// on in a conversion where it gives more than the caller's own space
+    /// holds: `taking`'s mode and permissions when another tool takes over,
+    /// else the permissions `change` makes to those the agent was given.
+    pub(super) async fn ensure_carrying_held(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        (taking, change): (Option<&Taking>, &AgentChange),
+        caller: Option<&Caller>,
+    ) -> Result<()> {
+        if let Some(taking) = taking {
+            return self.ensure_taking_held(daemon, id, taking, caller).await;
+        }
+        if change.permissions.is_empty() {
+            return Ok(());
+        }
+        let space = self.space(&SpaceSelector::id(id)).await?;
+        let repository = space.repository_id.clone();
+        (daemon.coordination().ensure_change_held(
+            daemon,
+            caller,
+            &space,
+            &change.permissions,
+            repository.as_ref(),
+        ))
+        .await
+    }
+
     /// Hand the work of `space` over to `taking`: once the turn of its
     /// running agent ends, which the conversion records, else at once, in
     /// place of its stopped or asleep agent. Whether it went over at once.

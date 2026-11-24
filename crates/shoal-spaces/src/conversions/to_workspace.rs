@@ -100,10 +100,8 @@ impl Spaces {
             "chat {} is stopped; restore it before converting it, or hand its work to another agent tool with --agent",
             chat.name
         );
-        if let Some(taking) = &taking {
-            self.ensure_taking_held(daemon, &chat.id, taking, caller)
-                .await?;
-        }
+        let carried = (taking.as_ref(), change);
+        (self.ensure_carrying_held(daemon, &chat.id, carried, caller)).await?;
         let narrowing = change.permissions.applied_to(chat.narrowing);
         Ok(Converting {
             chat: Chat { narrowing, ..chat },

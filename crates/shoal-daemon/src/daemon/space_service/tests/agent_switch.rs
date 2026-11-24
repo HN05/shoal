@@ -280,3 +280,40 @@ async fn a_workspace_whose_agent_stopped_becomes_a_chat_another_tool_takes_over(
     assert_eq!(sessions, ["s1"]);
     assert!(restore_queued(&manager, &workspace.id).await);
 }
+
+/// A conversion that keeps the space's tool gives its agent only the
+/// permissions a scoped caller holds, as one that hands the work over does.
+#[tokio::test]
+async fn a_scoped_conversion_gives_only_permissions_its_caller_holds() {
+    let (root, manager) = manager().await;
+    manager.publish_config(global_config(TOOLS));
+    let repo = repository_with_sessions(root.path(), &manager).await;
+    let talk = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let caller = crate::daemon::scope::Caller::of_space(talk.id.clone());
+    let merging = AgentChange {
+        permissions: crate::config::permissions::PermissionChange::assigned("merge=direct")
+            .unwrap(),
+        ..Default::default()
+    };
+    let conversion = crate::daemon::conversions::WorkspaceConversion {
+        branch: "fix-login".into(),
+        issue: None,
+        base: None,
+        options: Default::default(),
+        mode: ModeName::DEFAULT,
+        agent: merging,
+    };
+    let selector = SpaceSelector::id(&talk.id);
+    let daemon = manager.daemon();
+
+    let converting =
+        manager
+            .spaces
+            .convert_to_workspace(&daemon, &selector, conversion, None, Some(&caller));
+    let refused = format!("{:#}", converting.await.unwrap_err());
+    assert!(refused.contains("merge"), "{refused}");
+
+    let chat = manager.spaces.chat_by_id(&talk.id).await.unwrap();
+    assert!(chat.is_some(), "it stays a chat");
+    assert!(!manager.spaces.converting(&talk.id).await.unwrap());
+}

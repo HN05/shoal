@@ -38,9 +38,8 @@ impl Spaces {
         let narrowing = workspace.narrowing;
         let taking =
             super::to_agent::switching(narrowing, place, &mode, &change, current.as_ref())?;
-        if let Some(taking) = &taking {
-            (self.ensure_taking_held(daemon, &workspace.id, taking, caller)).await?;
-        }
+        let carried = (taking.as_ref(), &change);
+        (self.ensure_carrying_held(daemon, &workspace.id, carried, caller)).await?;
         let carrying = Carrying {
             model: change.model.clone(),
             taking: taking.map(Box::new),
