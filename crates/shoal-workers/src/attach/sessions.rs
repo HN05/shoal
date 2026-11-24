@@ -3,7 +3,6 @@
 //! lost connection.
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::space_ids::SpaceId;
 
 use super::{Attaching, Target};
 use crate::{
@@ -129,19 +128,23 @@ impl<A: Attaching> Steps<'_, A> {
 
     /// The session `target`'s agent runs in once the session this terminal
     /// showed ended, as a conversion moves the agent: where it runs again,
-    /// once it does. `None` once nothing starts it, as when it exited or a
+    /// once it does. `None` once nothing moves it, as when it exited or a
     /// stop or a failure left it for `shoal resume`.
     pub async fn moved_session(&self, target: Target) -> Result<Option<(Target, Session)>> {
         let id = target.id().clone();
         let deadline = tokio::time::Instant::now() + super::WAIT;
-        let mut told = false;
+        let mut moved = false;
         loop {
-            let target = match self.after_session_end(&id).await? {
-                AfterEnd::Runs(target, session) => return Ok(Some((target, session))),
-                AfterEnd::Stays => return Ok(None),
-                AfterEnd::Moves(target) => target,
-            };
-            if !std::mem::replace(&mut told, true) {
+            let target = Target::by_id(self.paths, id.clone()).await?;
+            if let Some(session) = agent_session(target.sessions(self.paths).await?, None) {
+                return Ok(Some((target, session)));
+            }
+            match after_end(target.agent_moves(self.paths).await?, moved) {
+                AfterEnd::Wait => {}
+                AfterEnd::StartRestore => return self.start_moved(target).await,
+                AfterEnd::End => return Ok(None),
+            }
+            if !std::mem::replace(&mut moved, true) {
                 eprintln!(
                     "shoal: {} moves to its new place; attaching there once its agent runs",
                     target.name()
@@ -158,22 +161,14 @@ impl<A: Attaching> Steps<'_, A> {
         }
     }
 
-    /// Where the agent of the space `id` stands once its session ended: it
-    /// runs in another session, or once the restore queued for it, which
-    /// starts at once, runs it; a conversion moves it; or nothing starts it.
-    async fn after_session_end(&self, id: &SpaceId) -> Result<AfterEnd> {
-        let target = Target::by_id(self.paths, id.clone()).await?;
-        if let Some(session) = agent_session(target.sessions(self.paths).await?, None) {
-            return Ok(AfterEnd::Runs(target, session));
+    /// The session of `target` the restore a conversion queued for its
+    /// agent runs it in, starting it at once, as for an agent that sleeps;
+    /// `None` when it queued none.
+    async fn start_moved(&self, target: Target) -> Result<Option<(Target, Session)>> {
+        if !self.resume_space(target.id()).await? {
+            return Ok(None);
         }
-        if self.resume_space(id).await? {
-            let (target, session) = self.awaited(target, None).await?;
-            return Ok(AfterEnd::Runs(target, session));
-        }
-        match target.agent_moves(self.paths).await? {
-            true => Ok(AfterEnd::Moves(target)),
-            false => Ok(AfterEnd::Stays),
-        }
+        self.awaited(target, None).await.map(Some)
     }
 
     /// `target`, read again, with the session its agent, only `execution`
@@ -202,14 +197,26 @@ impl<A: Attaching> Steps<'_, A> {
     }
 }
 
-/// Where a space's agent stands once the session an attach showed ended.
+/// What an attach whose session ended does while its agent runs nowhere.
+#[derive(Debug, PartialEq, Eq)]
 enum AfterEnd {
-    /// It runs in this session of the target.
-    Runs(Target, Session),
-    /// A conversion moves it to its new place, where it has yet to run.
-    Moves(Target),
-    /// Nothing starts it.
-    Stays,
+    /// Wait for the conversion that moves the agent.
+    Wait,
+    /// Start the restore the conversion it saw move the agent queued.
+    StartRestore,
+    /// End, leaving any other restore of the agent to wait its turn.
+    End,
+}
+
+/// What an attach does once its session ended and the agent runs nowhere,
+/// as the daemon says a conversion `moves` it, and whether this attach saw
+/// one moving it before, which queues its restore before it stops moving.
+fn after_end(moves: bool, moved: bool) -> AfterEnd {
+    match (moves, moved) {
+        (true, _) => AfterEnd::Wait,
+        (false, true) => AfterEnd::StartRestore,
+        (false, false) => AfterEnd::End,
+    }
 }
 
 /// Whether the resume of the agent of the space `name` started one, as its

@@ -74,3 +74,14 @@ fn an_attach_waits_for_what_its_resume_started_and_refuses_stopped_commands() {
     assert_eq!(outcome(nothing), Ok(false));
     assert!(outcome(commands).is_err());
 }
+
+#[test]
+fn an_ended_session_follows_only_a_move_it_saw() {
+    assert_eq!(after_end(true, false), AfterEnd::Wait);
+    assert_eq!(after_end(true, true), AfterEnd::Wait);
+    // The move ended with its restore queued, which the attach starts.
+    assert_eq!(after_end(false, true), AfterEnd::StartRestore);
+    // A restore queued for another reason, such as a protection stop's,
+    // waits its turn, and the attach ends.
+    assert_eq!(after_end(false, false), AfterEnd::End);
+}
