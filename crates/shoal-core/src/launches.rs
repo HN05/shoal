@@ -170,19 +170,24 @@ pub fn ensure_copy_fits(launch: &Launch) -> Result<()> {
 }
 
 /// The positional argument once the launch says whether a number names an
-/// issue: beside a branch, issue or PR of its own, it names a repository.
+/// issue: beside a branch, issue, PR or CI run of its own, it names a
+/// repository.
 pub fn decided_target(launch: &Launch) -> Result<Option<StartTarget>> {
-    let names_branch = launch.branch.is_some() || launch.issue.is_some() || launch.pr.is_some();
+    let names_branch = launch.branch.is_some()
+        || launch.issue.is_some()
+        || launch.pr.is_some()
+        || launch.ci.is_some();
     (launch.target.clone())
         .map(|target| target.decided(names_branch))
         .transpose()
 }
 
 /// Whether `launch` names the repository it starts in: by name, with a link
-/// into it, or with a copy of one of its workspaces; a bare issue number
-/// names none.
+/// into it, a CI run's included, or with a copy of one of its workspaces; a
+/// bare issue number names none.
 pub fn names_repository(launch: &Launch) -> Result<bool> {
-    if launch.repository.is_some() || launch.copy.is_some() {
+    let run = matches!(launch.ci, Some(ItemChoice::Named(ItemInput::Url(_))));
+    if launch.repository.is_some() || launch.copy.is_some() || run {
         return Ok(true);
     }
     Ok(match decided_target(launch)? {
@@ -245,16 +250,20 @@ pub fn named_pull(launch: &Launch) -> Option<ItemInput> {
     }
 }
 
-/// The issue and PR the arguments name by URL.
+/// The issue, PR and CI run the arguments name by URL.
 pub fn linked_items(launch: &Launch) -> impl Iterator<Item = &ItemRef> {
-    let flagged = [&launch.issue, &launch.pr]
+    let flagged = [&launch.issue, &launch.pr, &launch.ci]
         .into_iter()
         .filter_map(|item| match item {
             Some(ItemChoice::Named(ItemInput::Url(item))) => Some(item),
             _ => None,
         });
     let positional = match &launch.target {
-        Some(StartTarget::Issue(ItemInput::Url(item)) | StartTarget::Pull(item)) => Some(item),
+        Some(
+            StartTarget::Issue(ItemInput::Url(item))
+            | StartTarget::Pull(item)
+            | StartTarget::Run(item),
+        ) => Some(item),
         _ => None,
     };
     flagged.chain(positional)
@@ -321,6 +330,7 @@ fn positional_target(
         StartTarget::Pull(_) | StartTarget::Branch { .. } => anyhow::bail!(
             "a chat starts on an issue, not a PR or branch link; start it in a mode that starts in a workspace, such as -m worker"
         ),
+        StartTarget::Run(_) => anyhow::bail!("a CI run is read before its start is placed"),
         StartTarget::Issue(positional) => {
             ensure!(
                 issue.is_none(),
@@ -341,6 +351,7 @@ fn positional_target(
 pub mod fit;
 pub mod labels;
 mod reads;
+pub mod run;
 pub mod shape;
 pub mod workspace;
 

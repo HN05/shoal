@@ -59,11 +59,16 @@ fn anything_else_names_a_repository() {
 }
 
 #[test]
-fn a_run_or_an_invalid_item_link_is_refused() {
-    for input in [
-        "https://github.com/team/app/actions/runs/9",
-        "https://github.com/team/app/issues/0",
-    ] {
-        assert!(input.parse::<StartTarget>().is_err(), "{input}");
-    }
+fn a_run_link_names_the_run_and_its_repository() {
+    let run = "https://github.com/team/app/actions/runs/9";
+    let target = run.parse::<StartTarget>().unwrap();
+    assert!(matches!(&target, StartTarget::Run(item) if item.url() == run));
+    assert_eq!(target.linked_repository().unwrap().path, "team/app");
+    assert_eq!(target.to_string().parse::<StartTarget>().unwrap(), target);
+}
+
+#[test]
+fn an_invalid_item_link_is_refused() {
+    let invalid = "https://github.com/team/app/issues/0";
+    assert!(invalid.parse::<StartTarget>().is_err());
 }

@@ -87,6 +87,7 @@ impl Spaces {
             StartTarget::Branch { branch, .. } => {
                 super::branch::branch_creation(&branch, creation).await?
             }
+            StartTarget::Run(_) => anyhow::bail!("a CI run is read before its start is placed"),
             StartTarget::Repository(_) | StartTarget::Number(_) | StartTarget::Issue(_) => {
                 unreachable!("returned above")
             }

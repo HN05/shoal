@@ -401,6 +401,7 @@ impl StartArgs {
             git_profile: self.git_profile.clone(),
             issue: self.issue.clone().map(ItemChoice::from),
             pr: self.pr.clone().map(ItemChoice::from),
+            ci: None,
             copy: self.copy.copy.clone().map(SpaceChoice::from),
             checkpoint: self.copy.checkpoint,
             skip_setup: self.creation.skip_setup,

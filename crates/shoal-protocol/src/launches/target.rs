@@ -2,7 +2,7 @@
 //! positional argument.
 use std::{fmt, str::FromStr};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 use crate::forge::{
     ForgeRepo, IssueInput,
@@ -13,7 +13,7 @@ use crate::forge::{
 };
 
 /// A registered repository or a repository's URL, an issue by number or
-/// URL, or a PR or branch by its link.
+/// URL, or a PR, CI run or branch by its link.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StartTarget {
     /// A repository, by name, ID, path or URL.
@@ -23,6 +23,8 @@ pub enum StartTarget {
     Number(String),
     Issue(ItemInput),
     Pull(ItemRef),
+    /// A CI run, which the start reads to decide where it goes.
+    Run(ItemRef),
     /// A branch, by its link: the repository and the branch.
     Branch {
         url: String,
@@ -36,7 +38,9 @@ impl StartTarget {
     pub fn linked_repository(&self) -> Option<&ForgeRepo> {
         match self {
             Self::Repository(_) | Self::Number(_) | Self::Issue(ItemInput::Number(_)) => None,
-            Self::Issue(ItemInput::Url(item)) | Self::Pull(item) => Some(item.repository()),
+            Self::Issue(ItemInput::Url(item)) | Self::Pull(item) | Self::Run(item) => {
+                Some(item.repository())
+            }
             Self::Branch { repository, .. } => Some(repository),
         }
     }
@@ -83,7 +87,7 @@ fn link(input: &str) -> Result<StartTarget> {
         LinkTarget::Item(item) => match item.kind() {
             LinkKind::Issue => StartTarget::Issue(ItemInput::Url(item)),
             LinkKind::Pr => StartTarget::Pull(item),
-            LinkKind::Ci => bail!("a CI run names no work; use an issue, PR or branch link"),
+            LinkKind::Ci => StartTarget::Run(item),
         },
         LinkTarget::Branch(branch) => StartTarget::Branch {
             url: input.to_owned(),
@@ -98,7 +102,7 @@ impl fmt::Display for StartTarget {
         match self {
             Self::Repository(repository) | Self::Number(repository) => f.write_str(repository),
             Self::Issue(issue) => issue.fmt(f),
-            Self::Pull(pull) => pull.fmt(f),
+            Self::Pull(item) | Self::Run(item) => item.fmt(f),
             Self::Branch { url, .. } => f.write_str(url),
         }
     }
