@@ -661,7 +661,11 @@ One whose approach is settled is labelled `planned`, and agents implement it
 without asking; one that leaves a choice for
 the owner is labelled `needs-plan` until `shoal start --mode plan` settles a Plan section in
 its body. Issues with neither, such as tracking and meta issues, stay out of that
-flow. A PR description follows
+flow. Comment on an issue only to add what changes its work, such as a new cause,
+failure mode or fix: another sighting of a failure it already describes, or a
+status its watcher already gets from Shoal, such as a PR opening or CI
+passing, is not posted.
+A PR description follows
 `.forgejo/pull_request_template.md`. Push the branch and let CI verify instead
 of running the full suite locally first.
 A failed check is a defect even when a rerun passes. Read its log, then fix the
@@ -671,12 +675,12 @@ fails and `main`'s own run (`shoal ci ls --branch main`) fails the same way, the
 break is `main`'s, and gets one issue:
 
 1. Under `shoal acquire resource main-broken --queue`, which a chat goes
-   without, comment your run on the issue `shoal issue ls --label main-broken`
-   lists, or else open one with that label, the failing test and a log
-   excerpt; then release the lease.
+   without, take the issue `shoal issue ls --label main-broken` lists, or
+   else open one with that label, the failing test and a log excerpt; then
+   release the lease.
 2. After opening one, list them again: when an older one is open, close yours
-   as its duplicate with a comment linking it and move your run there, so that
-   every agent, on any machine, ends on the oldest.
+   as its duplicate with a comment linking it, so that every agent, on any
+   machine, ends on the oldest.
 3. Block on the issue you end on with `shoal progress --add-blocker <issue>
    --reason "main is broken"`: Shoal stops you and restores you once it
    closes, to rebase and rerun.
