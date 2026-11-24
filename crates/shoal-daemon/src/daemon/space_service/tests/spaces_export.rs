@@ -219,20 +219,6 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
 }
 
 #[tokio::test]
-async fn a_chat_whose_package_cannot_be_written_stays_here() {
-    let (root, manager, _pid) = chat("unwritten").await;
-    let chat = manager.spaces.chats().await.unwrap().remove(0);
-    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
-    // A file the package would replace, which it never does.
-    let file = root.path().join("unwritten.shoal");
-    fs::write(&file, "kept").unwrap();
-
-    assert!(export(&manager, "unwritten", &file).await.is_err());
-    assert_eq!(manager.spaces.chats().await.unwrap()[0].id, chat.id);
-    assert_eq!(fs::read_to_string(&file).unwrap(), "kept");
-}
-
-#[tokio::test]
 async fn a_disposable_workspace_is_refused_before_its_removal() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
@@ -550,78 +536,6 @@ async fn export_removed(
 }
 
 #[tokio::test]
-async fn a_removed_chat_exports_from_its_record_which_stays() {
-    let (root, manager, chat) = removed_chat("notes", "plan", Some("s1")).await;
-    let file = root.path().join("notes.shoal");
-
-    export_removed(&manager, &chat.id, &file).await.unwrap();
-    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
-    let packaged = &import.manifest.space.record;
-    let kept = packaged.chat().expect("a chat's record");
-    assert_eq!(
-        (packaged.name.as_str(), kept.mode.as_str()),
-        ("notes", "plan")
-    );
-    let sessions = import.manifest.sessions.as_ref().unwrap();
-    assert_eq!(
-        sessions.reported().collect::<Vec<_>>(),
-        [(&crate::agent::Agent::from("claude"), &"s1".into())]
-    );
-    let kept = manager.spaces.removed_spaces().await.unwrap();
-    assert_eq!(
-        kept.iter()
-            .map(|removed| &removed.space_id)
-            .collect::<Vec<_>>(),
-        [&chat.id]
-    );
-}
-
-#[tokio::test]
-async fn a_removed_chat_without_a_session_exports_with_a_warning() {
-    let (root, manager, chat) = removed_chat("talk", "chat", None).await;
-    let file = root.path().join("talk.shoal");
-
-    let exported = export_removed(&manager, &chat.id, &file).await.unwrap();
-    assert!(warns_of(&exported, "talk"), "{:?}", exported.warnings);
-    assert!(file.exists());
-    assert_eq!(manager.spaces.removed_spaces().await.unwrap().len(), 1);
-}
-
-#[tokio::test]
-async fn a_chat_without_a_repository_moves_and_copies_for_root_dir() {
-    let (root, manager) = manager().await;
-    let chat = crate::daemon::test_support::chat(&manager, "lead", "orchestrate", None, None).await;
-    crate::daemon::test_support::report_session(&manager, &chat.id, "s1").await;
-    let selector = SpaceSelector::id(&chat.id);
-    let copy = root.path().join("copy.shoal");
-    let moved = root.path().join("lead.shoal");
-
-    manager
-        .spaces
-        .copy_space(&*manager, &selector, None, copy.clone(), &Carrying::Subtree)
-        .await
-        .unwrap();
-    let all = UnsavedWork::All;
-    let moving = crate::daemon::test_support::move_to_file(
-        &manager,
-        &selector,
-        all,
-        moved.clone(),
-        &Carrying::Subtree,
-    );
-    let (_, removal) = moving.await.unwrap();
-    assert!(removal.removed);
-    assert!(manager.spaces.chats().await.unwrap().is_empty());
-    for file in [&copy, &moved] {
-        let import = Import::read(&mut &fs::read(file).unwrap()[..]).unwrap();
-        let packaged = &import.manifest.space.record;
-        assert!(packaged.chat().is_some());
-        assert_eq!(packaged.repository_id, None);
-        assert_eq!(import.manifest.remote_url, None);
-    }
-}
-
-#[tokio::test]
 async fn a_chat_without_a_repository_below_one_moves_with_it_into_root_dir() {
     let (root, manager) = manager().await;
     let lead = crate::daemon::test_support::chat(&manager, "lead", "orchestrate", None, None).await;
@@ -811,34 +725,28 @@ async fn a_moved_chat_keeps_its_id_with_the_chats_it_carried_below_it() {
 }
 
 #[tokio::test]
-async fn an_import_under_the_id_of_a_space_here_is_refused_before_recording_it() {
-    let (root, manager, chat) = removed_chat("notes", "chat", Some("s1")).await;
+async fn a_removed_chat_exports_from_its_record_which_stays() {
+    let (root, manager, chat) = removed_chat("notes", "plan", Some("s1")).await;
     let file = root.path().join("notes.shoal");
+
     export_removed(&manager, &chat.id, &file).await.unwrap();
-    // Its record stays, so it can open here again before the import.
-    let selector = SpaceSelector::id(&chat.id);
-    manager
-        .spaces
-        .restore_space(&*manager, &selector, None)
-        .await
-        .unwrap();
     let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
-    let repository = (chat.repository_id.as_ref()).map(|id| id.clone().into());
-    let space = SpaceImport {
-        repository,
-        ..chat_import(None, import.manifest.space.record)
-    };
-
-    let refused = manager
-        .spaces
-        .import_space(&*manager, space)
-        .await
-        .unwrap_err();
-
+    let packaged = &import.manifest.space.record;
+    let kept = packaged.chat().expect("a chat's record");
     assert_eq!(
-        crate::refusal::Reason::of(&refused),
-        Some(crate::refusal::Reason::NotImported)
+        (packaged.name.as_str(), kept.mode.as_str()),
+        ("notes", "plan")
     );
-    assert!(manager.spaces.removed_spaces().await.unwrap().is_empty());
-    assert!(manager.spaces.chat_by_id(&chat.id).await.unwrap().is_some());
+    let sessions = import.manifest.sessions.as_ref().unwrap();
+    assert_eq!(
+        sessions.reported().collect::<Vec<_>>(),
+        [(&crate::agent::Agent::from("claude"), &"s1".into())]
+    );
+    let kept = manager.spaces.removed_spaces().await.unwrap();
+    assert_eq!(
+        kept.iter()
+            .map(|removed| &removed.space_id)
+            .collect::<Vec<_>>(),
+        [&chat.id]
+    );
 }

@@ -625,6 +625,68 @@ impl StandIn {
         .unwrap();
     }
 
+    /// Have the one agent that runs in the space `id` report `session`, as
+    /// its hooks report the session it continues.
+    pub(crate) fn report_session(&self, id: &SpaceId, session: &str) {
+        let [(_, execution)] = self.agents.executions(Some(id)).try_into().unwrap();
+        let session = session.into();
+        crate::execution::recovery::save_session(&self.paths, id, &execution, &session).unwrap();
+    }
+
+    /// Move the space `selector` names, with the spaces `carrying` takes,
+    /// to the new file `file`, as `shoal move -o` does, with `unsaved` the
+    /// work its end may delete.
+    pub(crate) async fn move_to_file(
+        &self,
+        selector: &SpaceSelector,
+        unsaved: crate::removal::UnsavedWork,
+        file: PathBuf,
+        carrying: &crate::transfer::Carrying,
+    ) -> Result<(
+        crate::transfer::ExportedSpace,
+        crate::removal::RemovalResult,
+    )> {
+        let packing = crate::spaces::MovePacking {
+            unsaved,
+            destination: crate::transfer::MoveDestination::File { path: file },
+            carrying: carrying.clone(),
+            again: false,
+        };
+        let exported = match self
+            .spaces
+            .export_moving_space(self, selector, packing)
+            .await
+        {
+            Ok(exported) => exported,
+            Err(error) => {
+                let _ = self.spaces.abandon_move(self, selector).await;
+                return Err(error);
+            }
+        };
+        let removal = self.spaces.end_moved_space(self, selector).await?;
+        Ok((exported, removal))
+    }
+
+    /// Import the package `bytes` as `shoal restore --from` asks the daemon
+    /// to, into `repository` or the one with its origin.
+    pub(crate) async fn import_file(
+        &self,
+        repository: Option<&Repository>,
+        bytes: &[u8],
+    ) -> Result<crate::transfer::ImportedPackage> {
+        let directory = tempfile::tempdir()?;
+        let file = directory.path().join("space.shoal");
+        std::fs::write(&file, bytes)?;
+        let import = crate::transfer::PackageImport {
+            package: crate::transfer::PackageSource::File(file.clone()),
+            repository: repository.map(|repository| (&repository.id).into()),
+            sessions: None,
+            claim: crate::transfer::Claim::Plain,
+        };
+        let input = crate::restore::packages::PackageInput::File(file);
+        (self.spaces.import_package(self, &import, input, None)).await
+    }
+
     /// Have the agent of the space `id` report `state`.
     pub(crate) fn report(&self, id: &SpaceId, state: shoal_protocol::state::AgentState) {
         let mut ran = self.agents.0.lock().unwrap();

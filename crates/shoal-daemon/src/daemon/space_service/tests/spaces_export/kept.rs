@@ -119,38 +119,6 @@ async fn a_retired_chat_keeps_its_agent_s_session_in_its_removal_record() {
     assert!(opens.contains("plan-session"), "{opens}");
 }
 
-#[tokio::test]
-async fn a_retired_workspace_keeps_a_checkpoint_and_leaves_the_spaces_below_it() {
-    let (_source, manager, repo, _) = exporter().await;
-    let fix = manager
-        .create_workspace(repo.id.clone(), "fix".into(), None, None, None)
-        .await
-        .unwrap();
-    let below = test_support::chat(&manager, "below", "chat", Some(&repo), Some(&fix.id)).await;
-    let space = space(&manager, &fix.id).await;
-    let opens = manager
-        .spaces
-        .retire_space(&*manager, &space)
-        .await
-        .unwrap();
-    let removed = (manager.spaces.removed_spaces().await.unwrap().into_iter())
-        .find(|removed| removed.space_id == fix.id)
-        .unwrap();
-    let number = removed.workspace().unwrap().checkpoint.number;
-    // Its ID names the space on the machine that took it over, so a copy
-    // of the work kept here names its checkpoint.
-    let copy = format!("--copy {} --checkpoint {number}", fix.id);
-    assert!(opens.contains(&copy), "{opens}");
-    assert!(
-        manager
-            .spaces
-            .find_space(&below.id)
-            .await
-            .unwrap()
-            .is_some()
-    );
-}
-
 /// The space `id` here.
 async fn space(manager: &crate::daemon::manager::Manager, id: &SpaceId) -> Space {
     manager.spaces.find_space(id).await.unwrap().unwrap()

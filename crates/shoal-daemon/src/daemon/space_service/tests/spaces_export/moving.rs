@@ -3,10 +3,9 @@ use std::fs;
 
 use super::Import;
 use super::transfer::{exporter, import, importer, packaged_workspace};
-use crate::daemon::notifications::AlertKind;
 use crate::daemon::restore::SpaceImport;
 use crate::daemon::spaces::MovePacking;
-use crate::protocol::operations::{Ended, OperationKind, Outcome};
+use crate::protocol::operations::OperationKind;
 use crate::refusal::Reason;
 use crate::{
     daemon::{
@@ -18,8 +17,7 @@ use crate::{
     process::identity,
     removal::UnsavedWork,
     transfer::{
-        Carrying, ExportedSpace, ManifestExt, MoveDestination, MoveFailure, MoveLock, MovePhase,
-        MoveRecord, MoveReport,
+        Carrying, ExportedSpace, ManifestExt, MoveDestination, MoveLock, MovePhase, MoveRecord,
     },
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
@@ -592,27 +590,4 @@ async fn a_move_whose_worker_went_finishes_in_a_worker_of_its_own() {
         .await
         .unwrap();
     assert_eq!(finishing(&exporting), std::slice::from_ref(&workspace.id));
-}
-
-#[tokio::test]
-async fn a_finished_move_tells_the_user_how_each_space_ended() {
-    let (_root, manager) = test_support::manager().await;
-    let report = MoveReport {
-        moved: Vec::new(),
-        failed: vec![MoveFailure {
-            id: "talk".into(),
-            name: "talk".into(),
-            error: "mini may already have it".into(),
-        }],
-    };
-    let ended = Ended::Succeeded(Box::new(Outcome::Moved(report)));
-    manager.spaces.tell_finished_move(&*manager, &ended).await;
-
-    let alerts = manager.notifications.list(true, 10).await.unwrap();
-    let [alert] = alerts.as_slice() else {
-        panic!("expected one alert: {alerts:?}");
-    };
-    assert_eq!(alert.kind, AlertKind::MoveFinished);
-    assert!(alert.message.contains("talk"), "{}", alert.message);
-    assert!(alert.message.contains("mini may already have it"));
 }

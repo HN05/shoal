@@ -381,3 +381,6 @@ fn no_session(record: &RemovedSpace) -> Option<String> {
         )
     })
 }
+
+#[cfg(test)]
+mod tests;
