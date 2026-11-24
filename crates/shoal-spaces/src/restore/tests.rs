@@ -906,3 +906,108 @@ async fn an_agent_takes_a_space_over_only_as_its_admin_permission_allows() {
     let Undecided(request) = asked.await.unwrap_err().downcast::<Undecided>().unwrap();
     assert_eq!(request.target, Target::Action(PermissionKey::Admin));
 }
+
+/// Restore the removed space `id`, which must be a chat.
+async fn restore_chat(manager: &Fixture, id: &SpaceId) -> crate::model::RestoredChat {
+    match (manager.spaces)
+        .restore_space(&**manager, &SpaceSelector::id(id), None)
+        .await
+    {
+        Ok(crate::model::RestoredSpace::Chat(restored)) => *restored,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_chat_in_a_removed_workspace_restores_once_that_workspace_does() {
+    let manager = Fixture::new().await;
+    let repo = manager.repository("repo").await;
+    let workspace = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    let removed = manager.chat_in(&selector, "review").await.unwrap();
+    (manager.spaces.remove_selected(
+        &*manager,
+        &selector,
+        UnsavedWork::All,
+        InspectionPolicy::GitOnly,
+    ))
+    .await
+    .unwrap();
+    assert_eq!(manager.spaces.removed_spaces().await.unwrap().len(), 2);
+
+    let refused = (manager
+        .spaces
+        .restore_space(&*manager, &SpaceSelector::id(&removed.id), None))
+    .await
+    .unwrap_err();
+    let command = format!("shoal restore {} {}", workspace.id, removed.id);
+    assert!(format!("{refused:#}").contains(&command), "{refused:#}");
+
+    manager.restore_workspace(&selector).await.unwrap();
+    let restored = restore_chat(&manager, &removed.id).await;
+    let place = restored
+        .chat
+        .workdir
+        .workspace()
+        .map(|workspace| workspace.id.clone());
+    assert_eq!(place, Some(workspace.id));
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_gets_back_the_session_files_its_root_dir_kept() {
+    let manager = Fixture::new().await;
+    let root = &manager.root;
+    let removed = manager.chat("notes", "chat", None, None).await;
+    manager
+        .spaces
+        .remove_selected(
+            &*manager,
+            &SpaceSelector::id(&removed.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let record = manager.spaces.removed_spaces().await.unwrap().remove(0);
+    let contents = root.path().join("carried");
+    std::fs::write(&contents, "{}\n").unwrap();
+    let carried = shoal_protocol::transcripts::CarriedSessionFile {
+        file: shoal_protocol::transcripts::SessionFile {
+            agent: "claude".into(),
+            session: "s1".into(),
+            path: "project/s1.jsonl".into(),
+            size: 3,
+        },
+        contents,
+    };
+    let record = manager
+        .spaces
+        .keep_imported_sessions(&*manager, record, std::slice::from_ref(&carried))
+        .await
+        .unwrap();
+    let kept = record.clone();
+    (manager.store)
+        .run(move |db| crate::restore::records::record(db, &kept))
+        .await
+        .unwrap();
+
+    let restored = restore_chat(&manager, &removed.id).await;
+    let [handed] = restored.session_files.as_slice() else {
+        panic!("{:?}", restored.session_files);
+    };
+    assert_eq!(handed.file, carried.file);
+    let root_dir = record.chat().unwrap().root_dir.clone().unwrap();
+    assert!(handed.contents.starts_with(root_dir.join(".sessions")));
+    assert_eq!(std::fs::read_to_string(&handed.contents).unwrap(), "{}\n");
+
+    // Once the caller put them in place, the daemon deletes them.
+    manager
+        .spaces
+        .drop_restored_sessions(&*manager, &SpaceSelector::id(&removed.id))
+        .await
+        .unwrap();
+    assert!(!handed.contents.exists());
+}

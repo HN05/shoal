@@ -1,8 +1,9 @@
 //! A stand-in for the rest of the daemon, which the spaces' tests build the
 //! service over: a home with its state directory under a temporary
 //! directory, the global config a test gives, the Git repositories a test
-//! registers, read with their files' config, and no agents, links, hub,
-//! CI jobs, reviews, leases or demos, whose records read as empty.
+//! registers, read with their files' config, the agents a test runs, which
+//! it records as running, and no links, hub, CI jobs, reviews, leases or
+//! demos, whose records read as empty.
 #![allow(clippy::too_many_lines, reason = "one stand-in per interface method")]
 
 use shoal_daemon_base::forge_access::ForgeAccess;
@@ -203,6 +204,8 @@ pub(crate) struct StandIn {
     admissions: tokio::sync::Mutex<()>,
     /// The spaces whose places a removal closed, in order.
     pub(crate) closed_places: std::sync::Mutex<Vec<SpaceId>>,
+    /// The agents tests run.
+    agents: Arc<RunningAgents>,
 }
 
 impl StandIn {
@@ -212,8 +215,10 @@ impl StandIn {
         let notifications = Arc::new(Notifications::new(store.clone()));
         let signals = Arc::new(Signals::default());
         let removing = Removing::default();
+        let agents = Arc::new(RunningAgents::default());
         let records = Arc::new(StandInRecords {
             coordination: CoordinationRecords(removing.clone()),
+            agents: agents.clone(),
         });
         // Workers are fakes, which no test here drives.
         let operations =
@@ -255,6 +260,7 @@ impl StandIn {
             gates,
             admissions: Default::default(),
             closed_places: Default::default(),
+            agents,
         }
     }
 
@@ -383,6 +389,15 @@ impl StandIn {
         crate::events::space_log::read(&self.store, id, filter, limit).await
     }
 
+    /// The messages of the user's completion notices, the oldest first.
+    pub(crate) async fn done_notices(&self) -> Vec<String> {
+        let notifications = self.spaces.notifications.list(false, 100).await.unwrap();
+        (notifications.into_iter())
+            .filter(|notification| notification.kind == AlertKind::SpaceDone)
+            .map(|notification| notification.message)
+            .collect()
+    }
+
     /// Register the checkout `source` names, as `shoal repo add` does.
     pub(crate) async fn register_repository(
         &self,
@@ -471,6 +486,52 @@ impl StandIn {
             .unwrap()
     }
 
+    /// Run an agent in the space `id`, recorded as the execution the agents
+    /// record it as, which the stand-in reports as its agent until
+    /// [`Self::end_agent`]; the execution it runs as.
+    pub(crate) async fn run_agent(&self, id: &SpaceId) -> ExecutionId {
+        let execution = ExecutionId::generate();
+        let (recorded, space) = (execution.clone(), id.clone());
+        (self.store.write(move |tx| {
+            tx.execute(
+                "INSERT INTO executions(id,space_id,state,agent,mode)
+                 VALUES (?1,?2,'running','claude','worker')",
+                rusqlite::params![recorded, space],
+            )?;
+            Ok(())
+        }))
+        .await
+        .unwrap();
+        let ran = Ran {
+            space: id.clone(),
+            agent: "claude".into(),
+            state: None,
+        };
+        self.agents.0.lock().unwrap().insert(execution.clone(), ran);
+        execution
+    }
+
+    /// End the agent `execution` runs, whose record goes as its end deletes
+    /// it.
+    pub(crate) async fn end_agent(&self, execution: &ExecutionId) {
+        self.agents.0.lock().unwrap().remove(execution);
+        let recorded = execution.clone();
+        (self.store.write(move |tx| {
+            tx.execute("DELETE FROM executions WHERE id=?1", [recorded])?;
+            Ok(())
+        }))
+        .await
+        .unwrap();
+    }
+
+    /// Have the agent of the space `id` report `state`.
+    pub(crate) fn report(&self, id: &SpaceId, state: shoal_protocol::state::AgentState) {
+        let mut ran = self.agents.0.lock().unwrap();
+        for ran in (ran.values_mut()).filter(|ran| ran.space == *id) {
+            ran.state = Some(state);
+        }
+    }
+
     /// Record the chat `name` in the worktree of the workspace `workspace`
     /// names, as a start in it records it before its agent runs.
     pub(crate) async fn chat_in(&self, workspace: &SpaceSelector, name: &str) -> Result<Chat> {
@@ -533,6 +594,43 @@ fn repositories(db: &Connection) -> Result<Vec<Repository>> {
 /// place.
 struct StandInRecords {
     coordination: CoordinationRecords,
+    agents: Arc<RunningAgents>,
+}
+
+/// The agents a test runs in its spaces, by the execution each runs as,
+/// which the stand-in reports where the daemon reports the agents it
+/// tracks.
+#[derive(Default)]
+pub(crate) struct RunningAgents(std::sync::Mutex<BTreeMap<ExecutionId, Ran>>);
+
+/// An agent a test runs.
+#[derive(Clone)]
+struct Ran {
+    space: SpaceId,
+    agent: Agent,
+    state: Option<shoal_protocol::state::AgentState>,
+}
+
+impl RunningAgents {
+    /// The executions of the agents that run in `space`, or in every space.
+    fn executions(&self, space: Option<&SpaceId>) -> Vec<(SpaceId, ExecutionId)> {
+        let ran = self.0.lock().unwrap();
+        (ran.iter())
+            .filter(|(_, ran)| space.is_none_or(|space| ran.space == *space))
+            .map(|(execution, ran)| (ran.space.clone(), execution.clone()))
+            .collect()
+    }
+
+    /// The agent that runs as `execution`.
+    fn ran(&self, execution: &ExecutionId) -> Option<Ran> {
+        self.0.lock().unwrap().get(execution).cloned()
+    }
+
+    /// The state the agent of `space` last reported.
+    fn state(&self, space: &SpaceId) -> Option<shoal_protocol::state::AgentState> {
+        let ran = self.0.lock().unwrap();
+        (ran.values()).find(|ran| ran.space == *space)?.state
+    }
 }
 
 /// What coordination reads and writes in its own transactions.
@@ -908,8 +1006,16 @@ impl Agents for StandIn {
         Box::pin(async {})
     }
 
-    fn caller_agent<'a>(&'a self, _: &'a Caller) -> BoxFuture<'a, Option<CallerAgent>> {
-        Box::pin(async { Default::default() })
+    fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<CallerAgent>> {
+        Box::pin(async {
+            let execution = caller.execution_id()?;
+            let ran = self.agents.ran(execution)?;
+            Some(CallerAgent {
+                execution: execution.clone(),
+                name: ran.agent,
+                space_id: ran.space,
+            })
+        })
     }
 
     fn cancel_stopped_restores<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<()>> {
@@ -1139,12 +1245,12 @@ impl Repositories for StandIn {
         Box::pin(async { Default::default() })
     }
 
-    /// The `shoal` directory of the fixture's home, which no test configures.
+    /// The configured `root_dir`, which it creates.
     fn prepare_chat_root(&self) -> BoxFuture<'_, Result<PathBuf>> {
         Box::pin(async {
-            let root = self.paths.home.join("shoal");
+            let root = self.config.current().root_dir(&self.paths)?;
             std::fs::create_dir_all(&root)?;
-            Ok(std::fs::canonicalize(root)?)
+            Ok(root)
         })
     }
 
@@ -1600,9 +1706,9 @@ impl Records for StandInRecords {
     fn agent_state(
         &self,
         _: &Connection,
-        _: &SpaceId,
+        id: &SpaceId,
     ) -> Result<Option<shoal_protocol::state::AgentState>> {
-        Ok(Default::default())
+        Ok(self.agents.state(id))
     }
 
     fn hand_alerts_to_user(&self, _: &Transaction<'_>, _: &SpaceId) -> Result<Option<i64>> {
@@ -1632,14 +1738,20 @@ impl Records for StandInRecords {
     fn other_executions(
         &self,
         _: &Connection,
-        _: Option<&SpaceId>,
-        _: Option<&ExecutionId>,
+        space: Option<&SpaceId>,
+        own: Option<&ExecutionId>,
     ) -> Result<Vec<(SpaceId, ExecutionId)>> {
-        Ok(Default::default())
+        let mut executions = self.agents.executions(space);
+        executions.retain(|(_, execution)| Some(execution) != own);
+        Ok(executions)
     }
 
-    fn running_agents(&self, _: &Connection, _: &SpaceId) -> Result<Vec<ExecutionId>> {
-        Ok(Default::default())
+    fn running_agents(&self, _: &Connection, id: &SpaceId) -> Result<Vec<ExecutionId>> {
+        let executions = self.agents.executions(Some(id));
+        Ok(executions
+            .into_iter()
+            .map(|(_, execution)| execution)
+            .collect())
     }
 
     fn queued_agent(&self, _: &Connection, _: &SpaceId) -> Result<Option<Agent>> {
@@ -1828,11 +1940,13 @@ impl shoal_coordination::daemon::Agents for StandIn {
     }
 
     fn running_agent_workspaces(&self) -> BoxFuture<'_, Vec<SpaceId>> {
-        Box::pin(async { Default::default() })
+        let executions = self.agents.executions(None);
+        Box::pin(async { executions.into_iter().map(|(space, _)| space).collect() })
     }
 
     fn recorded_agent_spaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
-        Box::pin(async { Ok(Default::default()) })
+        let executions = self.agents.executions(None);
+        Box::pin(async { Ok(executions.into_iter().map(|(space, _)| space).collect()) })
     }
 
     fn queued_agent_workspaces(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {

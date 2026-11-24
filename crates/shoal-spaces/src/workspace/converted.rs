@@ -228,3 +228,6 @@ impl Spaces {
         self.verify_worktree(daemon, &current).await
     }
 }
+
+#[cfg(test)]
+mod tests;

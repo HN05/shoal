@@ -1,16 +1,14 @@
 use crate::{
     config::modes::ModeName,
     daemon::{
-        conversions::{Converting, Pending},
+        conversions::Converting,
         events::{EventItem, EventKind},
         manager::Manager,
         test_support::{chat, manager, repository},
     },
     model::Repository,
 };
-use shoal_protocol::{progress::ProgressChange, space_names::SpaceSelector};
-use shoal_refs::BranchName;
-use std::path::Path;
+use shoal_protocol::space_names::SpaceSelector;
 
 async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
     let path = repository(root, "repo");
@@ -31,79 +29,6 @@ async fn kinds(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> Vec<Str
             _ => None,
         })
         .collect()
-}
-
-#[tokio::test]
-async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
-    let (root, manager) = manager().await;
-    let repo = registered(root.path(), &manager).await;
-    let lead = chat(&manager, "lead", "chat", Some(&repo), None).await;
-    let talk = chat(&manager, "talk", "worker", Some(&repo), Some(&lead.id)).await;
-    let status = ProgressChange::Status(Some("Reproduced".into()));
-    (manager
-        .spaces
-        .set_progress(&*manager, &SpaceSelector::id(&talk.id), status))
-    .await
-    .unwrap();
-    let converting = Converting {
-        chat: talk.clone(),
-        mode: ModeName::DEFAULT,
-        carrying: Default::default(),
-    };
-
-    let workspace = manager
-        .spaces
-        .create_converted_workspace(
-            &*manager,
-            converting,
-            "fix-login".into(),
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(
-        (&workspace.id, workspace.number, &workspace.name),
-        (&talk.id, talk.number, &talk.name)
-    );
-    assert_eq!(
-        workspace.branch().map(BranchName::as_str),
-        Some("fix-login")
-    );
-    assert!(
-        workspace.path.ends_with("fix-login"),
-        "{:?}",
-        workspace.path
-    );
-    assert_eq!(workspace.mode, Some(ModeName::DEFAULT));
-    assert_eq!(workspace.parent.map(|parent| parent.id), Some(lead.id));
-    let progress = workspace.progress.and_then(|progress| progress.status);
-    assert_eq!(progress.as_deref(), Some("Reproduced"));
-    assert!(manager.spaces.chat_by_id(&talk.id).await.unwrap().is_none());
-    let id = talk.id.clone();
-    let pending = (manager.store)
-        .run(move |db| crate::daemon::conversions::pending(db, &id))
-        .await
-        .unwrap();
-    let Some(Pending::Workspace { execution, .. }) = pending else {
-        panic!("expected the chat's restart to wait: {pending:?}");
-    };
-    // The chat's agent hands its session over under the execution it runs as.
-    let executions = manager.spaces.workspace_executions(&talk.id).await.unwrap();
-    let agent = (executions.iter()).find(|recorded| recorded.agent.is_some());
-    assert_eq!(agent.map(|recorded| &recorded.id), Some(&execution));
-    // The space stays: its conversion is neither a removal nor a creation.
-    let kinds = kinds(&manager, &talk.id).await;
-    let converted = (kinds.iter())
-        .position(|kind| *kind == EventKind::Converted.to_string())
-        .unwrap_or_else(|| panic!("no conversion: {kinds:?}"));
-    for gone in [
-        EventKind::Created.to_string(),
-        EventKind::Removed.to_string(),
-    ] {
-        assert!(!kinds[converted..].contains(&gone), "{kinds:?}");
-    }
 }
 
 #[tokio::test]
@@ -169,40 +94,6 @@ async fn a_worktree_that_cannot_be_made_gives_the_chat_back() {
 }
 
 #[tokio::test]
-async fn a_branch_another_workspace_holds_is_refused_before_anything_changes() {
-    let (root, manager) = manager().await;
-    let repo = registered(root.path(), &manager).await;
-    let holder = manager
-        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
-        .await
-        .unwrap();
-    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    let converting = Converting {
-        chat: talk.clone(),
-        mode: ModeName::DEFAULT,
-        carrying: Default::default(),
-    };
-
-    let error = manager
-        .spaces
-        .create_converted_workspace(
-            &*manager,
-            converting,
-            "fix-login".into(),
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap_err();
-
-    assert!(
-        format!("{error:#}").contains(holder.name.as_str()),
-        "{error:#}"
-    );
-    assert!(manager.spaces.chat_by_id(&talk.id).await.unwrap().is_some());
-}
-
-#[tokio::test]
 async fn the_chats_open_threads_stay_with_the_space() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
@@ -239,103 +130,6 @@ async fn the_chats_open_threads_stay_with_the_space() {
 }
 
 #[tokio::test]
-async fn a_remote_branch_named_with_its_remote_opens_as_that_branch() {
-    let (root, manager) = manager().await;
-    let remote = repository(root.path(), "remote");
-    crate::daemon::test_support::git(&remote, &["branch", "topic"]);
-    let repo = registered(root.path(), &manager).await;
-    let checkout = repo.path.to_str().unwrap();
-    let remote_path = remote.to_str().unwrap();
-    crate::daemon::test_support::git(
-        Path::new(checkout),
-        &["remote", "add", "origin", remote_path],
-    );
-    crate::daemon::test_support::git(Path::new(checkout), &["fetch", "-q", "origin"]);
-    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    let converting = Converting {
-        chat: talk,
-        mode: ModeName::DEFAULT,
-        carrying: Default::default(),
-    };
-
-    let workspace = manager
-        .spaces
-        .create_converted_workspace(
-            &*manager,
-            converting,
-            "origin/topic".into(),
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(workspace.branch().map(BranchName::as_str), Some("topic"));
-}
-
-#[tokio::test]
-async fn a_branch_only_the_remote_has_opens_without_a_fetch() {
-    let (root, manager) = manager().await;
-    let remote = repository(root.path(), "remote");
-    crate::daemon::test_support::git(&remote, &["branch", "topic"]);
-    let repo = registered(root.path(), &manager).await;
-    let remote_path = remote.to_str().unwrap();
-    crate::daemon::test_support::git(&repo.path, &["remote", "add", "origin", remote_path]);
-    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    let converting = Converting {
-        chat: talk,
-        mode: ModeName::DEFAULT,
-        carrying: Default::default(),
-    };
-
-    let workspace = manager
-        .spaces
-        .create_converted_workspace(
-            &*manager,
-            converting,
-            "topic".into(),
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap();
-
-    let remote_head = crate::daemon::test_support::git(&remote, &["rev-parse", "topic"]);
-    let head = crate::daemon::test_support::git(&workspace.path, &["rev-parse", "HEAD"]);
-    assert_eq!(head, remote_head);
-}
-
-#[tokio::test]
-async fn a_new_branch_whose_namespace_a_branch_blocks_is_allocated_as_any() {
-    let (root, manager) = manager().await;
-    let repo = registered(root.path(), &manager).await;
-    crate::daemon::test_support::git(&repo.path, &["branch", "feature"]);
-    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    let converting = Converting {
-        chat: talk,
-        mode: ModeName::DEFAULT,
-        carrying: Default::default(),
-    };
-
-    let workspace = manager
-        .spaces
-        .create_converted_workspace(
-            &*manager,
-            converting,
-            "feature/login".into(),
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(
-        workspace.branch().map(BranchName::as_str),
-        Some("feature-2/login")
-    );
-}
-
-#[tokio::test]
 async fn a_chat_stopped_before_its_conversion_records_stays_a_chat() {
     let (root, manager) = manager().await;
     let repo = registered(root.path(), &manager).await;
@@ -365,48 +159,6 @@ async fn a_chat_stopped_before_its_conversion_records_stays_a_chat() {
     );
     let chat = manager.spaces.chat_by_id(&talk.id).await.unwrap().unwrap();
     assert!(!chat.running);
-}
-
-#[tokio::test]
-async fn a_mode_the_branch_does_not_define_gives_the_chat_back() {
-    let (root, manager) = manager().await;
-    let repo = registered(root.path(), &manager).await;
-    let checkout = repo.path.clone();
-    crate::daemon::test_support::git(&checkout, &["branch", "bare"]);
-    std::fs::write(
-        checkout.join(".shoal.toml"),
-        "[modes.extra]\nkind = \"workspace\"\n",
-    )
-    .unwrap();
-    crate::daemon::test_support::git(&checkout, &["add", ".shoal.toml"]);
-    crate::daemon::test_support::git(&checkout, &["commit", "-qm", "Add a mode"]);
-    let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
-    let converting = Converting {
-        chat: talk.clone(),
-        mode: "extra".into(),
-        carrying: Default::default(),
-    };
-
-    let refused = manager
-        .spaces
-        .create_converted_workspace(
-            &*manager,
-            converting,
-            "bare".into(),
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap_err();
-
-    assert!(
-        format!("{refused:#}").contains("no mode extra"),
-        "{refused:#}"
-    );
-    assert!(manager.spaces.chat_by_id(&talk.id).await.unwrap().is_some());
-    // It was never ready for commands or leases to use.
-    let kinds = kinds(&manager, &talk.id).await;
-    assert!(!kinds.contains(&EventKind::Ready.to_string()), "{kinds:?}");
 }
 
 #[tokio::test]

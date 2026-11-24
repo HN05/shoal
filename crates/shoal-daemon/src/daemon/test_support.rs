@@ -349,19 +349,6 @@ impl Manager {
             .await
     }
 
-    /// The messages of the completion notices the user received, oldest
-    /// first.
-    pub async fn done_notices(&self) -> Vec<String> {
-        let notifications = self.notifications.list(false, 100).await.unwrap();
-        notifications
-            .into_iter()
-            .filter(|notification| {
-                notification.kind == crate::daemon::notifications::AlertKind::SpaceDone
-            })
-            .map(|notification| notification.message)
-            .collect()
-    }
-
     /// Write the repository's local config file, or remove it for `None`.
     pub async fn write_local_config(
         &self,

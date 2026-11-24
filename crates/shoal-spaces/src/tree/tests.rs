@@ -592,3 +592,205 @@ async fn a_workspace_keeps_the_parent_its_creation_recorded_on_another_machine()
         .unwrap();
     assert_eq!(parent, Some(elsewhere));
 }
+
+/// Register a repository for each of `names`.
+async fn repositories(manager: &Fixture, names: &[&str]) -> Vec<crate::model::Repository> {
+    let mut repos = Vec::new();
+    for name in names {
+        repos.push(manager.repository(name).await);
+    }
+    repos
+}
+
+/// Record the chat `name` without a repository, below `parent` when given,
+/// with its agent running as the returned execution.
+async fn outside(
+    manager: &Fixture,
+    name: &str,
+    parent: Option<&SpaceId>,
+) -> (crate::model::Chat, shoal_ids::execution_ids::ExecutionId) {
+    let chat = manager.chat(name, "orchestrate", None, parent).await;
+    let agent = manager.run_agent(&chat.id).await;
+    (chat, agent)
+}
+
+/// Create the workspace `name` of `repository` below `parent` when given,
+/// with a working agent.
+async fn worked(
+    manager: &Fixture,
+    repository: &crate::model::Repository,
+    name: &str,
+    parent: Option<&SpaceId>,
+) -> Workspace {
+    let workspace = manager
+        .spaces
+        .create_workspace_below(
+            &**manager,
+            repository.id.clone().into(),
+            name.into(),
+            None,
+            Default::default(),
+            parent.cloned(),
+        )
+        .await
+        .unwrap();
+    manager.run_agent(&workspace.id).await;
+    manager.report(&workspace.id, crate::state::AgentState::Working);
+    workspace
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir() {
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let (master, _agent) = outside(&manager, "master", None).await;
+    assert_eq!(master.repository_id, None);
+    let tmp_dir = master.tmp_dir.clone().unwrap();
+    assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
+    let root_dir = manager.config.current().root_dir(&manager.paths).unwrap();
+    assert_eq!(tmp_dir, root_dir.join(".tmp").join(&master.id));
+    let listed = manager
+        .spaces
+        .chat_by_id(&master.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(listed.tmp_dir, Some(tmp_dir.clone()));
+    // A daemon with another state directory sharing root_dir neither lists
+    // nor takes it.
+    let other =
+        shoal_core::tmp_dirs::Layout::outside_repositories(&root_dir, &temp.path().join("other"));
+    assert_eq!(other.list().unwrap(), Vec::<String>::new());
+    other.prepare(&SpaceId::from("another")).unwrap_err();
+    manager.spaces.sweep_tmp_dirs(&*manager).await.unwrap();
+    assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
+    // A new root_dir leaves it where the chat started, as a repository
+    // keeps its directory.
+    let moved = std::fs::canonicalize(temp.path()).unwrap().join("moved");
+    crate::stand_in::configure(&manager, &format!("[machine]\nroot_dir = {moved:?}\n")).await;
+    let listed = manager
+        .spaces
+        .chat_by_id(&master.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(listed.tmp_dir, Some(tmp_dir.clone()));
+    assert_eq!(listed.workdir.root_dir(), Some(root_dir.as_path()));
+    let directory = manager
+        .spaces
+        .chat_checkout_path(&*manager, &listed)
+        .await
+        .unwrap();
+    assert_eq!(directory, root_dir);
+    let space = crate::model::Space::from(listed);
+    let space = (manager
+        .spaces
+        .space_ties(
+            &*manager,
+            &space,
+            crate::space_processes::WorktreeTies::None,
+        )
+        .await)
+        .unwrap();
+    assert_eq!(space.directories, std::slice::from_ref(&tmp_dir));
+    manager.spaces.sweep_tmp_dirs(&*manager).await.unwrap();
+    assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
+    manager
+        .spaces
+        .remove_selected(
+            &*manager,
+            &SpaceSelector::id(&master.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!tmp_dir.exists(), "{}", tmp_dir.display());
+}
+
+#[tokio::test]
+async fn a_chat_without_a_repository_takes_children_in_every_repository() {
+    let manager = Fixture::new().await;
+    let repos = repositories(&manager, &["repo", "other"]).await;
+    let (master, _agent) = outside(&manager, "master", None).await;
+    let first = worked(&manager, &repos[0], "first", Some(&master.id)).await;
+    let second = worked(&manager, &repos[1], "second", Some(&master.id)).await;
+    for workspace in [&first, &second] {
+        let parent = manager
+            .spaces
+            .workspace_by_id(&workspace.id)
+            .await
+            .unwrap()
+            .parent;
+        assert_eq!(parent.map(|parent| parent.id), Some(master.id.clone()));
+    }
+    // A chat without a repository goes below another one.
+    let (nested, _nested_agent) = outside(&manager, "nested", Some(&master.id)).await;
+    assert_eq!(nested.parent.map(|parent| parent.id), Some(master.id));
+    // Every other parent keeps its children in its repository.
+    let foreign = manager
+        .spaces
+        .create_workspace_below(
+            &*manager,
+            repos[1].id.clone().into(),
+            "foreign".into(),
+            None,
+            Default::default(),
+            Some(first.id.clone()),
+        )
+        .await;
+    assert!(foreign.is_err());
+    let below_workspace = crate::chats::NewChat {
+        priority: None,
+        narrowing: Default::default(),
+        name: "below".into(),
+        agent: "claude".into(),
+        mode: "orchestrate".into(),
+        origin: None,
+        parent: Some(first.id.clone()),
+    };
+    let refused = manager
+        .spaces
+        .start_new_chat(&*manager, None, None, below_workspace)
+        .await;
+    assert!(refused.is_err());
+}
+
+#[tokio::test]
+async fn removing_a_chat_without_a_repository_removes_its_children_in_every_repository() {
+    let manager = Fixture::new().await;
+    let repos = repositories(&manager, &["repo", "other"]).await;
+    let (master, agent) = outside(&manager, "master", None).await;
+    let first = worked(&manager, &repos[0], "first", Some(&master.id)).await;
+    let second = worked(&manager, &repos[1], "second", Some(&master.id)).await;
+    manager.end_agent(&agent).await;
+    let removed = manager
+        .spaces
+        .remove_selected(
+            &*manager,
+            &SpaceSelector::id(&master.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let mut children: Vec<_> = removed
+        .children
+        .iter()
+        .map(shoal_protocol::space_names::SpaceName::as_str)
+        .collect();
+    children.sort_unstable();
+    assert_eq!(children, ["first", "second"]);
+    assert!(
+        manager
+            .spaces
+            .chat_by_id(&master.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    for workspace in [&first, &second] {
+        let found = manager.spaces.find_workspace(&workspace.id).await.unwrap();
+        assert!(found.is_none(), "{}", workspace.name);
+    }
+}
