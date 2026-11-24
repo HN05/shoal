@@ -2,10 +2,10 @@ mod support;
 
 use std::{
     fs,
-    io::Read,
+    io::{BufRead, BufReader, Read, Write},
     os::unix::{fs::PermissionsExt, process::CommandExt},
-    path::Path,
-    process::{Child, Command},
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
 };
 use support::{home::Home, printed};
 
@@ -91,6 +91,65 @@ fn an_abandoned_home_goes_with_its_processes() {
     assert!(working.try_wait().unwrap().is_some());
     assert!(naming.try_wait().unwrap().is_some());
     assert!(kept.path().exists());
+}
+
+/// A test process that a signal ends before its drops run leaves nothing
+/// running in its home, which goes too, though no later test sweeps it.
+#[test]
+fn a_killed_test_process_leaves_nothing_in_its_home() {
+    let mut test = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "killed_test_process", "--ignored", "--nocapture"])
+        .env(KILLED, "1")
+        .stdout(Stdio::piped())
+        // The loop it leaves keeps none of the runner's output open.
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let (looping, home) = BufReader::new(test.stdout.take().unwrap())
+        .lines()
+        .find_map(|line| {
+            let line = line.unwrap();
+            let (pid, home) = line.split_once(' ')?;
+            Some((pid.parse::<u32>().ok()?, PathBuf::from(home)))
+        })
+        .expect("the test process printed what runs in its home");
+
+    test.kill().unwrap();
+    test.wait().unwrap();
+
+    support::wait::wait_until("the killed test's home to go", || {
+        !home.exists() && !runs(looping)
+    });
+}
+
+/// Set for the test process [`a_killed_test_process_leaves_nothing_in_its_home`] kills.
+const KILLED: &str = "SHOAL_FIXTURE_KILLED";
+
+/// Make a home and loop in it, printing the loop's ID and the home's path,
+/// until killed.
+#[test]
+#[ignore = "the test process a_killed_test_process_leaves_nothing_in_its_home kills"]
+fn killed_test_process() {
+    if std::env::var_os(KILLED).is_none() {
+        return;
+    }
+    let home = Home::new();
+    // Killed, this process never reaps the loop.
+    let looping = looping(home.path(), home.path()).id();
+    let mut stdout = std::io::stdout();
+    writeln!(stdout, "{looping} {}", home.path().display()).unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(600));
+}
+
+/// Whether process `pid` runs, other than as a zombie.
+fn runs(pid: u32) -> bool {
+    let output = Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .unwrap();
+    let stat = String::from_utf8_lossy(&output.stdout);
+    let stat = stat.trim();
+    !stat.is_empty() && !stat.starts_with('Z')
 }
 
 /// A shell looping in `directory` with `argument` on its command line, in a

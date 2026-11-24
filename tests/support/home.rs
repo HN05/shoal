@@ -1,11 +1,12 @@
 //! Fixture homes: temporary directories named for the test process that
-//! made them, removed with what still runs in them when dropped, or by a
-//! later test once that process is gone, as when a signal ends a test
-//! before any drop runs.
+//! made them, removed with what still runs in them when dropped, or once
+//! that process is gone, as when a signal ends a test before any drop runs,
+//! by the watcher it started or a later test.
 use std::{
     fs,
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::Once,
     time::{Duration, Instant},
 };
@@ -23,10 +24,14 @@ pub struct Home {
 }
 
 impl Home {
-    /// A new home, after removing those whose test processes are gone.
+    /// A new home, after removing those whose test processes are gone, with
+    /// this process's watcher started.
     pub fn new() -> Self {
         static SWEEP: Once = Once::new();
-        SWEEP.call_once(remove_abandoned);
+        SWEEP.call_once(|| {
+            remove_abandoned();
+            watch_this_process();
+        });
         let dir = tempfile::Builder::new()
             .prefix(&format!(".t{}.", std::process::id()))
             .rand_bytes(4)
@@ -51,22 +56,86 @@ impl Drop for Home {
     }
 }
 
+/// The variable naming the test process whose homes [`sweep_after_exit`]
+/// removes.
+const WATCHED: &str = "SHOAL_TEST_HOMES_OF";
+
+/// Start this test binary's [`sweep_after_exit`] as this process's watcher,
+/// which holds the read end of a pipe whose write end this process keeps
+/// until it exits, however it exits: a signal that ends the test before its
+/// drops run then leaves nothing running in its homes, even when no later
+/// test sweeps them. The watcher has a session of its own, which the
+/// signals for the test's process group or terminal do not reach.
+fn watch_this_process() {
+    let (_, module) = module_path!().split_once("::").unwrap();
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            &format!("{module}::sweep_after_exit"),
+            "--ignored",
+        ])
+        .env(WATCHED, std::process::id().to_string())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    in_own_session(&mut command);
+    // The watcher, never waited for, outlives this process, and no other
+    // child inherits the write end, which closes on exec.
+    std::mem::forget(command.spawn().unwrap());
+}
+
+/// Start `command` in a session of its own.
+fn in_own_session(command: &mut Command) {
+    // SAFETY: setsid only changes the child's session.
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+}
+
+/// The watcher [`watch_this_process`] starts: once its input ends, as the
+/// test process that keeps the other end exits, stop what runs in that
+/// process's homes and remove them.
+#[test]
+#[ignore = "the watcher each test process starts for its homes"]
+fn sweep_after_exit() {
+    let Some(watched) = std::env::var(WATCHED)
+        .ok()
+        .and_then(|pid| pid.parse::<i32>().ok())
+    else {
+        return;
+    };
+    let _ = std::io::copy(&mut std::io::stdin(), &mut std::io::sink());
+    remove_homes(|owner| owner == watched);
+}
+
 /// Stop the processes of the homes whose test processes are gone, and
 /// remove the homes. Another test may sweep the same ones meanwhile.
 pub fn remove_abandoned() {
+    remove_homes(gone);
+}
+
+/// Stop the processes of the homes whose owners `owned` selects, and remove
+/// the homes.
+fn remove_homes(owned: impl Fn(i32) -> bool) {
     let Ok(entries) = fs::read_dir(PARENT) else {
         return;
     };
-    let abandoned: Vec<PathBuf> = entries
+    let homes: Vec<PathBuf> = entries
         .filter_map(|entry| entry.ok())
-        .filter(|entry| owner(&entry.file_name().to_string_lossy()).is_some_and(gone))
+        .filter(|entry| owner(&entry.file_name().to_string_lossy()).is_some_and(&owned))
         .map(|entry| entry.path())
         .collect();
-    if abandoned.is_empty() {
+    if homes.is_empty() {
         return;
     }
-    stop_processes_in(&abandoned);
-    for home in abandoned {
+    stop_processes_in(&homes);
+    for home in homes {
         let _ = fs::remove_dir_all(home);
     }
 }
