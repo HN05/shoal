@@ -317,6 +317,11 @@ pub struct PermissionChange {
 }
 
 impl PermissionChange {
+    /// Whether it changes nothing.
+    pub fn is_empty(&self) -> bool {
+        self.set.is_empty() && self.dropped.is_empty()
+    }
+
     /// The change `--permission KEY=VALUE` makes, where `mode` as the value
     /// drops the key's given value; refusing an unknown key or value.
     pub fn assigned(assignment: &str) -> Result<Self> {

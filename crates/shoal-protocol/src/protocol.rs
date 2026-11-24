@@ -61,7 +61,7 @@ pub use chats::{ChatMethod, ChatRoot};
 pub use ci::CiMethod;
 pub use config::{ConfigMethod, ConfigTarget, RepositoryLayers};
 pub use containers::ContainerMethod;
-pub use conversions::ConversionMethod;
+pub use conversions::{AgentChange, AgentSwitch, ConversionMethod};
 pub use daemon::{DaemonMethod, Exit, ExitRequest, ExitWhen, Exited, Work, WorkPlace};
 pub use demos::DemoMethod;
 pub use diffs::DiffMethod;

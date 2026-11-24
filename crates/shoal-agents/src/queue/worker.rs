@@ -51,6 +51,15 @@ impl Agents {
         self.forget_resolved_restores().await
     }
 
+    /// Discard the stopped or asleep agent of `space` as a launch that
+    /// replaces it does, without queueing one: first stop the wrappers that
+    /// wait to restore it, then hold the queue gate while it goes.
+    pub async fn discard_replaced_worker(&self, daemon: &dyn Daemon, space: &Space) -> Result<()> {
+        self.stop_asleep_wrappers(daemon, space).await?;
+        let _gate = self.agent_queue.lock_admission().await;
+        self.replace_stopped_worker(daemon, space).await
+    }
+
     /// Refuse the scoped `caller` a launch that `replaces` the stopped
     /// agent of the workspace `selector` names, unless it may discard that
     /// agent: one of a space below its own.

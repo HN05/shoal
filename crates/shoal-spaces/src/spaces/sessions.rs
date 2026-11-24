@@ -12,6 +12,7 @@ use rusqlite::Connection;
 
 use crate::{
     agent::Agent,
+    conversions::handoff::Leaving,
     execution::recovery::{self, LastSession},
     paths::Paths,
     state::ExecutionState,
@@ -131,17 +132,33 @@ pub fn stored_agents(db: &Connection, records: &dyn Records, id: &SpaceId) -> Re
     })
 }
 
-/// The agent the space `space_id` saved last: its newest stopped agent's,
-/// else its newest last session's.
+/// The agent the space `space_id` saved last.
 fn saved_agent(paths: &Paths, space_id: &SpaceId) -> Result<Option<Agent>> {
+    Ok(newest_saved(paths, space_id)?.map(|saved| saved.agent))
+}
+
+/// The agent the space `space_id` saved last, with its session, the
+/// execution it ran as and where it ran: its newest stopped agent, else its
+/// newest last session.
+pub fn newest_saved(paths: &Paths, space_id: &SpaceId) -> Result<Option<Leaving>> {
     let stopped = recovery::stopped_agents(paths, space_id)?;
     let newest = (stopped.into_iter()).max_by_key(|stopped| stopped.stopped_at);
     if let Some(stopped) = newest {
-        return Ok(Some(stopped.record.agent));
+        return Ok(Some(Leaving {
+            agent: stopped.record.agent,
+            session: stopped.record.session,
+            execution: stopped.execution,
+            origin: stopped.record.origin,
+        }));
     }
     let last = LastSession::all(paths, space_id)?;
     let newest = (last.into_iter()).max_by_key(|last| last.stop.as_ref().and_then(|stop| stop.at));
-    Ok(newest.map(|last| last.agent))
+    Ok(newest.map(|last| Leaving {
+        agent: last.agent,
+        session: last.session,
+        execution: last.execution,
+        origin: last.origin,
+    }))
 }
 
 /// The sessions of the space's stopped agents.

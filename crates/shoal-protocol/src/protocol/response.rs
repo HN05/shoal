@@ -329,6 +329,7 @@ response_bodies! {
     RemovalCheck(Box<SpaceRemovalCheck>),
     RemovalResult(RemovalResult),
     Absorbed(Box<crate::absorb::Absorbed>),
+    AgentSwitch(Box<super::AgentSwitch>),
     StoppedProcesses(crate::processes::Stopped),
     ExportedSpace(crate::transfer::ExportedSpace),
     ImportedPackage(crate::transfer::ImportedPackage),

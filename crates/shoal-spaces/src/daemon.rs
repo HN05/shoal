@@ -467,6 +467,11 @@ pub trait Agents: Send + Sync {
     /// agent of its own runs there or waits in the agent queue.
     fn ensure_replaceable<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;
 
+    /// Discard the stopped or asleep agent of `space`, with its last
+    /// sessions and stopped commands, as a launch that replaces it does,
+    /// refusing one that runs or waits in the agent queue.
+    fn discard_replaced_agent<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;
+
     /// Refuse a launch in `space` while it has an agent of its own. Requires
     /// the queue gate, which keeps another launch out until this one is
     /// recorded.

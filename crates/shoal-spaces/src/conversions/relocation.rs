@@ -1,7 +1,8 @@
 //! Restarting a converted space's agent in the new place: once its turn
 //! ends, Shoal stops it where the space was and starts it again from a fork
 //! of its session, in the new workspace's worktree or the chat's checkout,
-//! told what the space is now.
+//! told what the space is now, or hands the space's work over to another
+//! agent tool.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::RunningAgent;
@@ -13,6 +14,7 @@ use anyhow::Result;
 
 use super::{
     Pending,
+    handoff::{Leaving, Taking},
     record::{ChatRow, ConvertedChat},
 };
 use crate::protocol::operations::{Ended, Failure};
@@ -120,6 +122,11 @@ impl Spaces {
                 }
             },
             Pending::Chat { chat, held } => self.relocate_to_chat(daemon, id, *chat, held).await,
+            Pending::Agent {
+                execution,
+                taking,
+                held,
+            } => (self.switch_after_turn(daemon, id, &execution, *taking, held)).await,
         };
         if let Err(error) = relocated {
             self.report_failed_relocation(daemon, id, &pending, &error)
@@ -159,6 +166,9 @@ impl Spaces {
             }
             Pending::Chat { chat, .. } => {
                 (daemon.turn_ended(id, &|agent: &RunningAgent| agent.ran_as(&chat.execution))).await
+            }
+            Pending::Agent { execution, .. } => {
+                (daemon.turn_ended(id, &|agent: &RunningAgent| agent.ran_as(execution))).await
             }
         }
     }
@@ -244,6 +254,31 @@ impl Spaces {
         restore_workspace(&self.paths, id, origin.as_ref(), self.operations.fakes()).await
     }
 
+    /// Hand the work of the space `id` over to `taking` once the agent
+    /// `execution` runs ended its turn, as [`Self::hand_off`] does, keeping
+    /// it stopped when `held`, and forget the conversion.
+    async fn switch_after_turn(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        execution: &ExecutionId,
+        taking: Taking,
+        held: bool,
+    ) -> Result<()> {
+        let leaving = self.converting_agent(id, execution).await?;
+        let leaving = leaving.map(|(agent, origin)| Leaving {
+            agent,
+            session: self.latest_session(id, execution),
+            execution: execution.clone(),
+            origin,
+        });
+        self.hand_off(daemon, id, leaving, taking, held).await?;
+        let space = id.to_owned();
+        (self.store)
+            .write(move |tx| super::record::forget(tx, &space))
+            .await
+    }
+
     /// Settle the conversion of the workspace `id` ahead of a stop of its
     /// agents as `stop` says, with the hand-overs held: a stop that keeps
     /// them down holds a conversion into a chat, and the agent of a chat that
@@ -268,7 +303,7 @@ impl Spaces {
         stop: ConversionStop,
     ) -> Result<bool> {
         if stop.holds {
-            self.hold_converting_chat(id).await?;
+            self.hold_converting_agent(id).await?;
         }
         let space = id.to_owned();
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;
@@ -298,12 +333,13 @@ impl Spaces {
         Ok(())
     }
 
-    /// Keep the chat that the workspace `id` becomes stopped, as a stop of
-    /// its agent keeps that agent down until `shoal resume`.
-    async fn hold_converting_chat(&self, id: &SpaceId) -> Result<()> {
+    /// Keep the chat that the workspace `id` becomes, or the agent tool
+    /// that takes its work over, stopped, as a stop of its agent keeps that
+    /// agent down until `shoal resume`.
+    async fn hold_converting_agent(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         (self.store)
-            .run(move |db| super::record::hold_chat(db, &id))
+            .run(move |db| super::record::hold(db, &id))
             .await
     }
 
@@ -465,6 +501,10 @@ impl Spaces {
             }
             Pending::Chat { .. } => format!(
                 "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal resume {number} continues"
+            ),
+            Pending::Agent { taking, .. } => format!(
+                "The work of {name} did not go over to {}: {error:#}; continue it with shoal resume {number}, or convert it again",
+                taking.agent
             ),
         };
         daemon

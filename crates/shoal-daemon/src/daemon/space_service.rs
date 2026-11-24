@@ -594,6 +594,10 @@ impl shoal_spaces::daemon::Agents for Manager {
         Box::pin(self.agents.ensure_replaceable(space))
     }
 
+    fn discard_replaced_agent<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>> {
+        Box::pin(self.agents.discard_replaced_worker(self, space))
+    }
+
     fn ensure_takes_worker<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>> {
         Box::pin(self.agents.ensure_takes_worker(space))
     }

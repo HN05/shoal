@@ -322,6 +322,10 @@ impl Agents {
                     .await
             }
             ByKind::Chat(chat) => {
+                // A stop that keeps the agent down until shoal resume keeps
+                // the agent tool taking its work over down too.
+                let holds = matches!(stopping.keep, Keep::LastSessions { .. });
+                daemon.stop_converting_agent(&chat.id, holds).await?;
                 let stopped = self.stop_and_keep(daemon, &chat.id, stopping).await;
                 release_stopped_leases(daemon, &chat.id, &chat.name).await;
                 stopped

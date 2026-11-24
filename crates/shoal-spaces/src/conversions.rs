@@ -1,16 +1,19 @@
-//! Converting a chat into a workspace and a workspace into a chat: the space
-//! keeps its ID, number, name, place in the tree, links, threads, files
-//! and progress, and its agent carries on with its conversation in the new
-//! place once its current turn ends.
+//! Converting a chat into a workspace and a workspace into a chat, and
+//! handing a space's work over to another agent tool: the space keeps its
+//! ID, number, name, place in the tree, links, threads, files and
+//! progress, and its agent carries on with its conversation in the new
+//! place, or the new tool from copies of it, once its current turn ends.
 use anyhow::Result;
 use rusqlite::Transaction;
 use shoal_ids::space_ids::SpaceId;
 
 use crate::{config::modes::ModeName, model::Workspace};
 
+pub mod handoff;
 pub mod handovers;
 pub mod record;
 pub mod relocation;
+pub mod to_agent;
 pub mod to_chat;
 pub mod to_workspace;
 

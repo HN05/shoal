@@ -1,7 +1,7 @@
 //! The store side of a conversion: changing a space's kind and swapping its
 //! kind's row, with what belongs to only one kind, and the record of a
 //! conversion whose agent has yet to start in the new place.
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
@@ -9,6 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::daemon::Records;
 
+use super::handoff::Taking;
 use crate::{
     agent::Agent,
     config::{modes::ModeName, permissions::PermissionsConfig},
@@ -60,16 +61,26 @@ pub enum Pending {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         held: bool,
     },
+    /// A space whose work `taking` takes over from the agent `execution`
+    /// runs once its turn ends. A stop that keeps that agent down until
+    /// `shoal resume` `held` it: `taking` then waits stopped too.
+    Agent {
+        execution: ExecutionId,
+        taking: Box<Taking>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        held: bool,
+    },
 }
 
 impl Pending {
-    /// Whether the conversion restarts the agent in the new place, rather
-    /// than leave it for `shoal resume`: neither a stop held it nor the new
-    /// workspace's post-setup hook failed.
+    /// Whether the conversion restarts the agent in the new place, or starts
+    /// the agent tool that takes the work over, rather than leave it for
+    /// `shoal resume`: neither a stop held it nor the new workspace's
+    /// post-setup hook failed.
     pub fn restarts_agent(&self) -> bool {
         match self {
             Self::Workspace { hook_failure, .. } => hook_failure.is_none(),
-            Self::Chat { held, .. } => !held,
+            Self::Chat { held, .. } | Self::Agent { held, .. } => !held,
         }
     }
 }
@@ -205,12 +216,13 @@ pub fn record_prepared(
     Ok(())
 }
 
-/// Hold the conversion of the workspace `id` into a chat, whose agent a
-/// stop kept down: the chat stays stopped once the workspace becomes it.
-pub fn hold_chat(db: &Connection, id: &SpaceId) -> Result<()> {
+/// Hold the conversion of the space `id` into a chat, or to another agent
+/// tool, whose agent a stop kept down: the agent that carries on stays
+/// stopped once the conversion is made.
+pub fn hold(db: &Connection, id: &SpaceId) -> Result<()> {
     db.execute(
         "UPDATE space_conversions SET record=json_set(record,'$.held',json('true'))
-         WHERE space_id=?1 AND json_extract(record,'$.to')='chat'",
+         WHERE space_id=?1 AND json_extract(record,'$.to') IN ('chat','agent')",
         [id],
     )?;
     Ok(())
@@ -244,6 +256,25 @@ pub fn record_chat_conversion(
     );
     let pending = Pending::Chat {
         chat: Box::new(chat),
+        held: false,
+    };
+    record(tx, id, &pending)
+}
+
+/// Record that `taking` takes the work of the space `id` over once the turn
+/// of the agent `execution` runs ends, while that agent's execution runs.
+pub fn record_agent_switch(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    execution: ExecutionId,
+    taking: Taking,
+) -> Result<()> {
+    let running = crate::store::execution_state(tx, &execution)?
+        == Some((id.to_owned(), crate::state::ExecutionState::Running));
+    ensure!(running, "the agent was stopped meanwhile; convert it again");
+    let pending = Pending::Agent {
+        execution,
+        taking: Box::new(taking),
         held: false,
     };
     record(tx, id, &pending)

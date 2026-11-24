@@ -109,6 +109,15 @@ impl StopRequest {
         }
     }
 
+    /// The agent of a space whose work another agent tool takes over from
+    /// the copies of its sessions the handoff made.
+    pub fn handoff() -> Self {
+        Self {
+            reason: "another agent tool takes its space's work over".into(),
+            save: Save::Nothing,
+        }
+    }
+
     /// Removal of a missing worktree, which keeps no checkpoint or record.
     pub fn removal() -> Self {
         Self {

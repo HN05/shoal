@@ -2,6 +2,7 @@
 //! module tests the spaces module of the same path, flattened, through a
 //! whole daemon. The spaces' own tests run over a stand-in in the crate.
 mod absorb;
+mod agent_switch;
 mod carried_sessions;
 mod chat_marks;
 mod chats;

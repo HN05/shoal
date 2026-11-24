@@ -56,6 +56,12 @@ pub(super) async fn handle(
                 )
                 .await?,
         ),
+        ConversionMethod::ConvertAgent { space, mode, agent } => Body::AgentSwitch(Box::new(
+            manager
+                .spaces
+                .convert_agent(&**manager, &space, mode, agent, caller)
+                .await?,
+        )),
     }))
 }
 
@@ -64,6 +70,7 @@ impl Checked for ConversionMethod {
         match self {
             Self::ConvertToWorkspace { .. } => Some(TargetCheck::Space),
             Self::ConvertToChat { .. } => Some(TargetCheck::ReadyWorkspace),
+            Self::ConvertAgent { .. } => Some(TargetCheck::Space),
         }
     }
 }
@@ -79,7 +86,8 @@ impl Scoped for ConversionMethod {
             ConversionMethod::ConvertToWorkspace { chat: space, .. }
             | ConversionMethod::ConvertToChat {
                 workspace: space, ..
-            } => Some(space),
+            }
+            | ConversionMethod::ConvertAgent { space, .. } => Some(space),
         })
     }
 }

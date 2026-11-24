@@ -906,6 +906,10 @@ impl Agents for StandIn {
         Box::pin(async { Ok(()) })
     }
 
+    fn discard_replaced_agent<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn ensure_takes_worker<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }

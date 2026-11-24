@@ -33,6 +33,10 @@ pub struct SessionCopy {
     pub session: shoal_ids::agent_session_ids::AgentSessionId,
     pub integration: crate::integrations::IntegrationKind,
     pub file: PathBuf,
+    /// Whether it is the conversation itself, rather than another file of
+    /// the session, such as a subagent's.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub transcript: bool,
 }
 
 /// Who attached a file.

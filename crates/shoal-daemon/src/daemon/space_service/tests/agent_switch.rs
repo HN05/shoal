@@ -1,0 +1,231 @@
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use crate::{
+    config::modes::ModeName,
+    daemon::{
+        manager::Manager,
+        test_support::{global_config, manager, repository},
+    },
+    execution::recovery::{LastSession, LastSessionExt},
+    model::Workspace,
+    protocol::AgentChange,
+    state::AgentState,
+};
+use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_protocol::files::FileSource;
+use shoal_protocol::space_names::SpaceSelector;
+
+/// Agents the test machine has: `sh` stands in for each tool.
+const TOOLS: &str = "[agents.claude]\ncommand = ['sh']\n[agents.codex]\ncommand = ['sh']\n";
+
+/// A change to `agent` with `note`.
+fn to(agent: &str, note: Option<&str>) -> AgentChange {
+    AgentChange {
+        agent: Some(agent.into()),
+        note: note.map(str::to_owned),
+        ..Default::default()
+    }
+}
+
+/// A registered repository whose agents keep Claude's config in `claude`
+/// under `root`, where its sessions' files are.
+async fn repository_with_sessions(root: &Path, manager: &Manager) -> crate::model::Repository {
+    let path = repository(root, "repo");
+    let repo = manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let environment = serde_json::json!({ "CLAUDE_CONFIG_DIR": root.join("claude") }).to_string();
+    let id = repo.id.clone();
+    (manager.store)
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO repository_agent_environments(repository_id,environment) VALUES (?1,?2)",
+                rusqlite::params![id, environment],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    repo
+}
+
+/// Write Claude's transcript of `session` under `root`, `contents` long,
+/// and return its path.
+fn transcript(root: &Path, session: &str, contents: &str) -> PathBuf {
+    let path = root.join(format!("claude/projects/repo/{session}.jsonl"));
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, contents).unwrap();
+    path
+}
+
+/// A workspace whose Claude agent exited, keeping session `s1`.
+async fn stopped_workspace(root: &Path, manager: &Arc<Manager>) -> Workspace {
+    let repo = repository_with_sessions(root, manager).await;
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    let exited = LastSession {
+        execution: ExecutionId::generate(),
+        agent: "claude".into(),
+        session: Some("s1".into()),
+        moved: false,
+        copied: None,
+        converted: false,
+        handoff: None,
+        origin: None,
+        stop: None,
+        turn: None,
+        model: Default::default(),
+        mode: ModeName::DEFAULT,
+        narrowing: Default::default(),
+    };
+    exited.write(&manager.paths, &workspace.id).unwrap();
+    workspace
+}
+
+/// The space's last session, which a handoff leaves as its only one.
+fn only_last_session(manager: &Manager, id: &SpaceId) -> LastSession {
+    let sessions = LastSession::all(&manager.paths, id).unwrap();
+    let [last] = sessions.as_slice() else {
+        panic!("one last session: {sessions:?}");
+    };
+    last.clone()
+}
+
+/// Whether a restore of the agent of the space `id` is queued.
+async fn restore_queued(manager: &Manager, id: &SpaceId) -> bool {
+    let entries = manager.agents.queue_entries(manager).await.unwrap();
+    (entries.iter()).any(|entry| entry.space_id.as_ref() == Some(id))
+}
+
+#[tokio::test]
+async fn a_switch_to_the_tool_the_space_runs_is_refused() {
+    let (root, manager) = manager().await;
+    manager.publish_config(global_config(TOOLS));
+    let workspace = stopped_workspace(root.path(), &manager).await;
+    let selector = SpaceSelector::id(&workspace.id);
+
+    let refused = (manager.spaces)
+        .convert_agent(&*manager, &selector, None, to("claude", None), None)
+        .await
+        .unwrap_err();
+
+    assert!(format!("{refused:#}").contains("already"), "{refused:#}");
+    let last = only_last_session(&manager, &workspace.id);
+    assert_eq!(last.session.as_ref().map(|s| s.as_str()), Some("s1"));
+    assert!(!restore_queued(&manager, &workspace.id).await);
+}
+
+#[tokio::test]
+async fn a_stopped_agents_work_goes_over_at_once_from_copies_of_its_sessions() {
+    let (root, manager) = manager().await;
+    manager.publish_config(global_config(TOOLS));
+    let workspace = stopped_workspace(root.path(), &manager).await;
+    let original = transcript(root.path(), "s1", "{\"turn\":1}\n");
+    let selector = SpaceSelector::id(&workspace.id);
+
+    let switched = (manager.spaces)
+        .convert_agent(
+            &*manager,
+            &selector,
+            None,
+            to("codex", Some("Focus on the test")),
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert!(switched.at_once);
+    assert_eq!(
+        switched.from.as_ref().map(|agent| agent.name()),
+        Some("claude")
+    );
+    let files = manager.spaces.attached_files(&selector).await.unwrap();
+    let [copy] = files.as_slice() else {
+        panic!("one copy: {files:?}");
+    };
+    assert_eq!(copy.source, FileSource::Handoff);
+    let session = copy.session.as_ref().expect("the session it copies");
+    assert_eq!(
+        (session.agent.name(), session.session.as_str()),
+        ("claude", "s1")
+    );
+    assert!(session.transcript);
+    // The copy outlives its tool's own file.
+    std::fs::remove_file(&original).unwrap();
+    let copied = std::fs::read_to_string(copy.path().unwrap()).unwrap();
+    assert_eq!(copied, "{\"turn\":1}\n");
+
+    // Codex replaces Claude as the space's stopped agent, told where the
+    // copy is, and starts at once.
+    let last = only_last_session(&manager, &workspace.id);
+    assert_eq!((last.agent.name(), last.session), ("codex", None));
+    let brief = last.handoff.expect("the handoff brief");
+    let shown = copy.path().unwrap().display().to_string();
+    assert!(brief.told.contains(&shown), "{}", brief.told);
+    assert_eq!(brief.note.as_deref(), Some("Focus on the test"));
+    assert_eq!(last.mode, ModeName::DEFAULT);
+    assert!(restore_queued(&manager, &workspace.id).await);
+}
+
+#[tokio::test]
+async fn a_running_agent_hands_over_once_its_turn_ends() {
+    let (root, manager) = manager().await;
+    manager.publish_config(global_config(TOOLS));
+    let repo = repository_with_sessions(root.path(), &manager).await;
+    let talk = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let mut process = crate::daemon::test_support::agent_process(&manager, &talk.id).await;
+    crate::daemon::test_support::report_session(&manager, &talk.id, "s1").await;
+    transcript(root.path(), "s1", "{}\n");
+    let selector = SpaceSelector::id(&talk.id);
+    let working = AgentState::Working;
+    (manager.agents)
+        .set_agent_state(&*manager, &selector, working, None, None)
+        .await
+        .unwrap();
+
+    let switched = (manager.spaces)
+        .convert_agent(&*manager, &selector, None, to("codex", None), None)
+        .await
+        .unwrap();
+    assert!(!switched.at_once);
+    // Claude goes on with its turn.
+    manager
+        .spaces
+        .relocate_finished_turns(&*manager)
+        .await
+        .unwrap();
+    assert!(manager.spaces.converting(&talk.id).await.unwrap());
+    assert!(
+        manager
+            .spaces
+            .attached_files(&selector)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    let idle = AgentState::Idle;
+    (manager.agents)
+        .set_agent_state(&*manager, &selector, idle, None, None)
+        .await
+        .unwrap();
+    manager
+        .spaces
+        .relocate_finished_turns(&*manager)
+        .await
+        .unwrap();
+
+    process.wait().unwrap();
+    assert!(!manager.spaces.converting(&talk.id).await.unwrap());
+    let last = only_last_session(&manager, &talk.id);
+    assert_eq!(last.agent.name(), "codex");
+    assert_eq!(last.mode, crate::model::chat_mode());
+    let files = manager.spaces.attached_files(&selector).await.unwrap();
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert!(restore_queued(&manager, &talk.id).await);
+}

@@ -72,6 +72,11 @@ impl Spaces {
                 "the agent of the chat that became workspace {} moves there once its turn ends; start another agent there then",
                 workspace.name
             ),
+            Some(super::Pending::Agent { taking, .. }) => bail!(
+                "the work of workspace {} goes over to {} once its agent's turn ends; start another agent there then",
+                workspace.name,
+                taking.agent
+            ),
             None => Ok(()),
         }
     }

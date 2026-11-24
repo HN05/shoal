@@ -486,7 +486,7 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
     LISTED.notified().await;
     let id = workspace.id.clone();
     (manager.store)
-        .run(move |db| crate::daemon::conversions::record::hold_chat(db, &id))
+        .run(move |db| crate::daemon::conversions::record::hold(db, &id))
         .await
         .unwrap();
     release.send(()).unwrap();
