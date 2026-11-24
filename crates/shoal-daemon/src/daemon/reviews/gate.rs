@@ -14,7 +14,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::views::Viewed;
 use shoal_reviews::daemon::{Approvals, Requesters, Requests};
 
-use super::{
+use crate::daemon::{
     approvals::{ApprovalRequest, by_key, gated, proposals::ProposalDecision},
     manager::Manager,
 };

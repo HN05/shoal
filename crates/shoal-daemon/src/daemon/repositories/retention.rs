@@ -5,7 +5,7 @@ use std::time::Duration;
 use futures_util::future::BoxFuture;
 use shoal_ids::repository_ids::RepositoryId;
 
-use super::{log, manager::Manager, retention::Retention};
+use crate::daemon::{log, manager::Manager, retention::Retention};
 
 impl Retention for Manager {
     /// Its settings' retention, or the global setting's for a chat without

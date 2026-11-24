@@ -31,7 +31,7 @@ mod ports;
 mod queue;
 mod recovery;
 mod removal;
-mod repositories;
+pub(in crate::daemon) mod repositories;
 mod resources;
 pub(in crate::daemon) mod reviews;
 mod secrets;
