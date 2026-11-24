@@ -337,27 +337,36 @@ pub(super) fn arguments(pid: u32) -> Option<Vec<Vec<u8>>> {
 
 /// `pid`'s `KERN_PROCARGS2` record.
 fn procargs(pid: u32) -> Result<Vec<u8>> {
+    // Inventories read every process's record, so each thread keeps one
+    // buffer of the largest size a record can take rather than allocating
+    // one for every read.
+    thread_local! {
+        static BUFFER: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
     let capacity = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
     ensure!(
         (1..=16 * 1024 * 1024).contains(&capacity),
         "invalid process argument limit"
     );
-    let mut bytes = vec![0_u8; capacity as usize];
-    let mut len = bytes.len();
-    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid as i32];
-    let result = unsafe {
-        libc::sysctl(
-            mib.as_mut_ptr(),
-            3,
-            bytes.as_mut_ptr().cast(),
-            &mut len,
-            std::ptr::null_mut(),
-            0,
-        )
-    };
-    ensure!(result == 0, "cannot inspect process environment");
-    bytes.truncate(len);
-    Ok(bytes)
+    BUFFER.with_borrow_mut(|bytes| {
+        if bytes.len() != capacity as usize {
+            *bytes = vec![0; capacity as usize];
+        }
+        let mut len = bytes.len();
+        let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid as i32];
+        let result = unsafe {
+            libc::sysctl(
+                mib.as_mut_ptr(),
+                3,
+                bytes.as_mut_ptr().cast(),
+                &mut len,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        ensure!(result == 0, "cannot inspect process environment");
+        Ok(bytes[..len].to_vec())
+    })
 }
 
 /// A process's arguments and environment.
