@@ -374,8 +374,9 @@ impl Spaces {
     /// conversion and the scope the agent carried there: the agent's session
     /// as the workspace's last session under its execution, marked
     /// converted, or else the agent tool that takes its work over from
-    /// copies of its sessions. Returns where the agent ran in a terminal
-    /// host, when it ran in one.
+    /// copies of its sessions, saved before the conversion goes so a failure
+    /// leaves it to be tried again. Returns where the agent ran in a
+    /// terminal host, when it ran in one.
     async fn hand_over(
         &self,
         daemon: &dyn Daemon,
@@ -390,12 +391,17 @@ impl Spaces {
         } = converted;
         let row = chat.agent()?;
         let leaving = self.leaving_agent(id, &execution).await?;
-        let listed = self.copies_for(daemon, id, &carrying).await?;
-        if let Some(leaving) = leaving.clone()
-            && carrying.taking.is_none()
-        {
-            let forked = forked(leaving, mode, carrying.model, row.narrowing()?);
-            forked.write(&self.paths, id)?;
+        let origin = leaving.as_ref().and_then(|leaving| leaving.origin.clone());
+        match (carrying.taking, leaving) {
+            (Some(taking), leaving) => {
+                let listed = self.copies_for_taking(daemon, id).await?;
+                (self.save_taking(daemon, id, leaving, *taking, &listed)).await?;
+            }
+            (None, Some(leaving)) => {
+                let forked = forked(leaving, mode, carrying.model, row.narrowing()?);
+                forked.write(&self.paths, id)?;
+            }
+            (None, None) => {}
         }
         // The workspace runs nothing else before the agent moves there.
         let request = crate::stops::StopRequest::conversion();
@@ -405,25 +411,16 @@ impl Spaces {
             .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))
             .await?;
         self.signals.agent_changed();
-        let origin = leaving.as_ref().and_then(|leaving| leaving.origin.clone());
-        if let Some(taking) = carrying.taking {
-            (self.save_taking(daemon, id, leaving, *taking, &listed)).await?;
-        }
         Ok(origin)
     }
 
-    /// The sessions of the space `id` copied for the agent tool `carrying`
-    /// names to take its work over from; none when its own agent carries
-    /// on.
-    async fn copies_for(
+    /// The sessions of the space `id` copied for an agent tool to take its
+    /// work over from.
+    async fn copies_for_taking(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
-        carrying: &Carrying,
     ) -> Result<Vec<super::handoff::Listed>> {
-        if carrying.taking.is_none() {
-            return Ok(Vec::new());
-        }
         let space = self.space(&SpaceSelector::id(id)).await?;
         self.copy_sessions(daemon, &space).await
     }
@@ -498,7 +495,7 @@ impl Spaces {
         let (leaving, listed) = match &carrying.taking {
             Some(_) => (
                 self.leaving_agent(id, &chat.execution).await?,
-                self.copies_for(daemon, id, &carrying).await?,
+                self.copies_for_taking(daemon, id).await?,
             ),
             None => (Some(self.converted_agent(id, &chat)), Vec::new()),
         };
