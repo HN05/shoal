@@ -1,7 +1,7 @@
 use super::*;
 use crate::stand_in::Fixture;
 use shoal_ids::space_ids::SpaceId;
-use shoal_store::test_support::queries::{check_owner_query, lease_database};
+use shoal_store::test_support::queries::{check_owner_query, populated_database};
 
 mod accounting;
 
@@ -12,7 +12,7 @@ fn owner_lease_reads_search_existing_index() -> Result<()> {
 
 #[test]
 fn lease_lists_preserve_global_order_and_owner_selection() -> Result<()> {
-    let db = lease_database()?;
+    let db = populated_database()?;
     let all_leases = leases(&db, None)?;
     assert_eq!(all_leases.len(), 20);
     let lease_key = |lease: &ResourceLease| {
@@ -44,7 +44,7 @@ fn lease_lists_preserve_global_order_and_owner_selection() -> Result<()> {
 
 #[test]
 fn lease_lists_propagate_decoding_and_prepare_errors() -> Result<()> {
-    let db = lease_database()?;
+    let db = populated_database()?;
     db.execute_batch(
         "PRAGMA ignore_check_constraints=ON;
         UPDATE resource_leases SET mode='invalid' WHERE workspace_id='owner-0';",
@@ -120,16 +120,13 @@ fn leases_use_named_columns() -> Result<()> {
 
 #[test]
 fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
-    let mut db = Connection::open_in_memory()?;
-    db.execute_batch(shoal_store::test_support::SCHEMA_V17)?;
-    db.execute_batch(
-        "CREATE TABLE repository_resource_leases (lease_id TEXT, repository_id TEXT, path TEXT);",
-    )?;
-    db.execute_batch(shoal_store::test_support::LEASE_ACQUIRERS)?;
+    let mut db = shoal_store::test_support::migrated()?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('a','/a','a',0),('b','/b','b',0);
-             INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir) VALUES
-             ('a','a','a','/a/w','a','ready','abc','/admin'),('b','b','b','/b/w','b','ready','abc','/admin');
+             INSERT INTO spaces(id,kind,repository_id,name) VALUES
+             ('a','workspace','a','a'),('b','workspace','b','b');
+             INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES
+             ('a','/a/w','a','ready','abc','/admin'),('b','/b/w','b','ready','abc','/admin');
              INSERT INTO resource_pools VALUES ('global','target','{}'),('repo/a','target','{}'),
              ('repo/b','target','{}'),('global','other','{}');",
         )?;

@@ -1,12 +1,7 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
-use shoal_core::{config, fsutil, process, refusal};
+use shoal_core::{config, process, refusal};
 use shoal_protocol::{agent, model, state};
-#[cfg(test)]
-use {
-    shoal_core::{sessions, start_plan},
-    shoal_protocol::time,
-};
 
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
@@ -27,22 +22,12 @@ use shoal_protocol::space_names::SpaceName;
 pub mod agent_handoffs;
 #[cfg(test)]
 mod benchmark;
-mod chat_names;
-mod consumed_upgrades;
 #[cfg(test)]
 mod event_tests;
-mod frozen;
-mod item_numbers;
 pub mod lifecycle;
 mod migrations;
 pub use migrations::SCHEMA_VERSION;
-mod place_owners;
-mod place_servers;
-mod queue_plans;
-mod record_shapes;
-mod relayed_files;
 pub mod sent_files;
-mod space_titles;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod tree;
@@ -144,13 +129,6 @@ pub fn write_transaction<T>(
     let value = operation(&tx)?;
     tx.commit()?;
     Ok(value)
-}
-
-/// The state directory holding the database `db` has open, which an
-/// in-memory database has none of.
-fn state_directory(db: &Connection) -> Option<PathBuf> {
-    let path = db.path().filter(|path| !path.is_empty())?;
-    Some(std::path::Path::new(path).parent()?.to_path_buf())
 }
 
 /// Whether the supplied SELECT query returns any rows.

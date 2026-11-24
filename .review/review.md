@@ -42,8 +42,9 @@ instead of the PR delivery guidance below.
   outside the daemon.
 - `crates/shoal-store` holds the daemon's `Store`, schema, migrations and the
   row mappers and guards every subsystem shares, and depends on no Shoal crate
-  but `shoal-core`, `shoal-ids`, `shoal-protocol` and `shoal-refs`. Flag a
-  migration that calls code outside the store instead of a frozen copy.
+  but `shoal-core`, `shoal-ids`, `shoal-protocol` and `shoal-refs`. It
+  migrates from the schema of the release its floor names; flag a migration
+  at or below the floor, or a test of one, that a raise of the floor keeps.
 - `crates/shoal-daemon-base` holds what more than one subsystem of the
   daemon uses, and depends on no Shoal crate but `shoal-core`, `shoal-forge`, `shoal-forge-types`,
   `shoal-ids`, `shoal-protocol` and `shoal-store`. Flag code there that is a method of `Manager`, or that calls

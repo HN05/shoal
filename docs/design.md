@@ -107,9 +107,7 @@ which makes no daemon calls, but not on each other; the CLI also depends on
 that run in the processes Shoal starts and call the daemon. The binary-only
 `shoal` package joins them. Below the daemon, `shoal-store` holds its SQLite
 store: the schema, the migrations and the row mappers and guards every part of
-the daemon shares. A migration runs only the store's code, a copy frozen at the
-shape it migrates of anything it once called elsewhere, so a later change
-elsewhere never changes what an old migration does. Over the store,
+the daemon shares. Over the store,
 `shoal-daemon-base` holds what every part of the daemon uses: its log, who
 sends a request, the approval requests it makes, the operations it starts in
 workers of their own, the global config it runs under, the gates that order conflicting changes, the journal of events, the
@@ -5327,11 +5325,11 @@ persistence migrates the store, rewriting what it holds into the shapes this
 release reads: Shoal promises its earlier versions no compatibility, so code
 reads one shape of each record and file, and refuses a package or request of
 another version, except from a process an upgrade left running, such as an
-agent's wrapper. State that carries one upgrade across it,
-for that release's daemon to consume once, goes in a later migration, which
-refuses a database that still holds some and names the release to start
-first; earlier migrations stay, so a database that skips releases runs them
-in order. Under the daemon lock, startup then atomically
+agent's wrapper. A database below the store's floor, the schema v0.21.0
+wrote, is refused unchanged, naming that release to start once first, as is
+one a newer version wrote. The floor moves to a later release's schema only
+by hand, which deletes the migrations at or below it with their tests and
+names the new release in the refusal. Under the daemon lock, startup then atomically
 quarantines interrupted operations in a separate transaction before ownership
 auditing, serving requests, or cleanup; failure aborts startup and leaves committed
 migrations available for retry. The daemon binds its socket before this work:

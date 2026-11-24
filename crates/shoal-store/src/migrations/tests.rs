@@ -5,11 +5,22 @@ use rusqlite::types::Value;
 /// write [`SCHEMA`] anew from the migrations.
 const WRITE_SCHEMA: &str = "SHOAL_WRITE_SCHEMA";
 
-/// A database that has taken every migration in turn.
-fn migrated() -> Result<Connection> {
-    let mut db = Connection::open_in_memory()?;
+/// The schema [`FLOOR_RELEASE`] wrote, which every migration starts from.
+const FLOOR_SCHEMA: &str = include_str!("../../tests/fixtures/schema_v0.21.0.sql");
+
+/// A database of [`FLOOR_RELEASE`], at [`FLOOR`].
+fn at_floor() -> Result<Connection> {
+    let db = Connection::open_in_memory()?;
     db.pragma_update(None, "foreign_keys", true)?;
-    migrate_to(&mut db, SCHEMA_VERSION)?;
+    db.execute_batch(FLOOR_SCHEMA)?;
+    db.pragma_update(None, "user_version", FLOOR)?;
+    Ok(db)
+}
+
+/// A database of [`FLOOR_RELEASE`] that has taken every migration.
+fn migrated() -> Result<Connection> {
+    let mut db = at_floor()?;
+    migrate(&mut db)?;
     Ok(db)
 }
 
@@ -129,10 +140,72 @@ fn a_new_database_takes_the_schema_the_migrations_make() -> Result<()> {
 }
 
 #[test]
-fn a_database_with_tables_but_no_version_takes_the_migrations() -> Result<()> {
-    let mut db = Connection::open_in_memory()?;
-    db.execute_batch(MIGRATIONS[0].1)?;
+fn a_database_older_than_the_floor_is_refused_without_changes() -> Result<()> {
+    let mut older = at_floor()?;
+    older.pragma_update(None, "user_version", FLOOR - 1)?;
+    let mut unversioned = at_floor()?;
+    unversioned.pragma_update(None, "user_version", 0)?;
+    for db in [&mut older, &mut unversioned] {
+        let before = contents(db)?;
+        let error = migrate(db).unwrap_err();
+        assert!(format!("{error:#}").contains(FLOOR_RELEASE), "{error:#}");
+        assert!(contents(db)? == before);
+    }
+    Ok(())
+}
+
+#[test]
+fn a_database_newer_than_this_version_is_refused_without_changes() -> Result<()> {
+    let mut db = migrated()?;
+    db.pragma_update(None, "user_version", SCHEMA_VERSION + 1)?;
+    let before = contents(&db)?;
+    assert!(migrate(&mut db).is_err());
+    assert!(contents(&db)? == before);
+    Ok(())
+}
+
+#[test]
+fn a_failed_migration_rolls_back_every_step_of_its_batch() -> Result<()> {
+    let mut db = at_floor()?;
+    // The last migration creates this table.
+    db.execute_batch("CREATE TABLE agent_handoffs (id INTEGER PRIMARY KEY);")?;
+    let before = contents(&db)?;
+    assert!(migrate(&mut db).is_err());
+    assert!(contents(&db)? == before);
+    Ok(())
+}
+
+#[test]
+fn reviews_keep_their_ids_and_reopens_once_they_can_fail_unsubmitted() -> Result<()> {
+    let mut db = at_floor()?;
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+        BEGIN;
+        INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+            VALUES ('workspace','/work','worker','ready','abc','/admin');
+        INSERT INTO spaces(id,kind,repository_id,name)
+            VALUES ('workspace','workspace','repo','worker');
+        COMMIT;
+        INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,holder_id)
+            VALUES (1,'workspace',1,1,'review','Still',1,'shoal','workspace');
+        INSERT INTO reviews(id,workspace_id,target,opener,agent,state,created_at)
+            VALUES (1,'workspace','{}','shoal','codex','finished',1),
+                (2,'workspace','{}','shoal','codex','cancelled',2);
+        INSERT INTO review_reopens(review_id,thread_id) VALUES (1,1);
+        DELETE FROM reviews WHERE id=2;",
+    )?;
     migrate(&mut db)?;
-    assert!(contents(&db)? == contents(&migrated()?)?);
+    let reopened: (i64, i64) = db.query_row(
+        "SELECT review_id,thread_id FROM review_reopens",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(reopened, (1, 1));
+    db.execute(
+        "INSERT INTO reviews(workspace_id,target,opener,agent,state,failure,created_at)
+            VALUES ('workspace','{}','shoal','codex','failed','not-submitted',3)",
+        [],
+    )?;
+    assert_eq!(db.last_insert_rowid(), 3);
     Ok(())
 }

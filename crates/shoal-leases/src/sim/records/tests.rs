@@ -28,24 +28,16 @@ fn ids(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<String>> {
 }
 
 #[tokio::test]
-async fn migration_and_transitions_preserve_json_ownership_and_audits() -> Result<()> {
+async fn transitions_and_reopens_preserve_json_ownership_and_audits() -> Result<()> {
     let root = tempfile::tempdir()?;
     let path = root.path().join("state.db");
+    let store = Store::open(path.clone()).await?;
     let db = open_database(&path)?;
-    db.execute_batch(shoal_store::test_support::SCHEMA_V17)?;
     let mut sim = record("b", Some("A"), None);
     save(&db, &sim)?;
     save(&db, &record("a", None, Some("A")))?;
     save(&db, &record("c", None, None))?;
     db.execute("INSERT INTO simulator_clean_requests(request_id,workspace_id,record) VALUES ('audit','A','{}')", [])?;
-    let before: String = db.query_row("SELECT record FROM simulators WHERE id='b'", [], |r| {
-        r.get(0)
-    })?;
-    let store = Store::open(path.clone()).await?;
-    let after: String = db.query_row("SELECT record FROM simulators WHERE id='b'", [], |r| {
-        r.get(0)
-    })?;
-    assert_eq!(before, after);
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a", "b"]);
     assert_eq!(ids(&db, None)?, ["a", "b", "c"]);
     for state in ["creating", "booting", "leased", "failed"] {
@@ -93,44 +85,6 @@ async fn migration_and_transitions_preserve_json_ownership_and_audits() -> Resul
     save(&db, &record("e", Some(""), Some("A")))?;
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a", "d"]);
     assert_eq!(ids(&db, Some(&SpaceId::from("")))?, ["e"]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn malformed_migration_rolls_back_and_names_the_record() -> Result<()> {
-    for invalid in [
-        "{",
-        r#"["broken",null,"phone","ios","A",null,null,null,"booting",42,null,null]"#,
-        r#"{"workspace_id":7}"#,
-        r#"{"workspace_id":null,"workspace_id":"A"}"#,
-    ] {
-        let root = tempfile::tempdir()?;
-        let path = root.path().join("state.db");
-        let db = open_database(&path)?;
-        db.execute_batch(shoal_store::test_support::SCHEMA_V17)?;
-        db.execute("INSERT INTO simulators VALUES ('broken',?1)", [invalid])?;
-        let error = Store::open(path.clone()).await.err().unwrap();
-        assert!(format!("{error:#}").contains("decode simulator record broken"));
-        assert_eq!(
-            db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
-            17
-        );
-        assert_eq!(
-            db.query_row(
-                "SELECT count(*) FROM sqlite_schema WHERE name='simulators_effective_owner'",
-                [],
-                |r| r.get::<_, i64>(0)
-            )?,
-            0
-        );
-        assert_eq!(
-            db.query_row("SELECT record FROM simulators", [], |r| r
-                .get::<_, String>(0))?,
-            invalid
-        );
-        db.execute("DELETE FROM simulators", [])?;
-        Store::open(path).await?;
-    }
     Ok(())
 }
 

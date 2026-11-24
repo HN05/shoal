@@ -151,10 +151,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-ids`, `shoal-time` and `shoal-states`.
 - `crates/shoal-store` holds the daemon's `Store`, its schema, its
   migrations and the row mappers and guards every subsystem shares; a
-  subsystem's own record functions stay with it. A migration calls no code
-  outside the store: one that needs a subsystem's logic takes a copy frozen at
-  the shape it migrates. It depends on no Shoal crate but `shoal-core`,
-  `shoal-ids`, `shoal-protocol` and `shoal-refs`.
+  subsystem's own record functions stay with it. The store migrates from the
+  schema of the release its floor names, and raising the floor deletes the
+  migrations at or below it with their tests. It depends on no Shoal crate
+  but `shoal-core`, `shoal-ids`, `shoal-protocol` and `shoal-refs`.
 - `crates/shoal-daemon-base` holds what more than one subsystem of the
   daemon uses. What it needs of a subsystem is an interface it declares, a trait whose methods
   return a `Send` `BoxFuture`, which the daemon implements; its code is no

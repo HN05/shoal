@@ -3,31 +3,16 @@
 use anyhow::Result;
 use rusqlite::{Connection, StatementStatus};
 
-pub(crate) fn populated_database() -> Result<Connection> {
-    let db = Connection::open_in_memory()?;
-    db.execute_batch(crate::test_support::SCHEMA_V17)?;
+/// A database with the current schema whose ten owners each hold two
+/// ports, resource leases and executions.
+pub fn populated_database() -> Result<Connection> {
+    let db = super::migrated()?;
     db.execute_batch(
         "PRAGMA foreign_keys=ON;
-        CREATE TABLE repository_resource_leases (lease_id TEXT PRIMARY KEY, repository_id TEXT, path TEXT);
         INSERT INTO resource_pools VALUES ('global','pool','{}');",
     )?;
     add_owners(&db, 0, 10)?;
     Ok(db)
-}
-
-/// The column naming an execution's owner: its workspace before the
-/// upgrade, its space after.
-pub(crate) fn execution_space(db: &Connection) -> &'static str {
-    match db.prepare("SELECT space_id FROM executions") {
-        Ok(_) => "space_id",
-        Err(_) => "workspace_id",
-    }
-}
-
-/// Whether a space's shared fields have their own table, as they do after
-/// the upgrade.
-pub(crate) fn has_spaces(db: &Connection) -> bool {
-    db.prepare("SELECT kind FROM spaces").is_ok()
 }
 
 fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
@@ -37,22 +22,14 @@ fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
             "INSERT INTO repositories(id,path,source,last_used) VALUES (?1,?1,?1,0)",
             [&owner],
         )?;
-        if has_spaces(db) {
-            db.execute(
-                "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?1,?1)",
-                [&owner],
-            )?;
-            db.execute(
-                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES (?1,?1,'main','ready','abc','/admin')",
-                [&owner],
-            )?;
-        } else {
-            db.execute(
-                "INSERT INTO workspaces(id,repository_id,name,path,branch,state,base_commit,git_dir)
-                VALUES (?1,?1,?1,?1,'main','ready','abc','/admin')",
-                [&owner],
-            )?;
-        }
+        db.execute(
+            "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?1,?1)",
+            [&owner],
+        )?;
+        db.execute(
+            "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES (?1,?1,'main','ready','abc','/admin')",
+            [&owner],
+        )?;
         // Insert in reverse name order to exercise the explicit list ordering.
         for name in ["z", "a"] {
             let id = format!("{owner}-{name}");
@@ -65,10 +42,7 @@ fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
                 VALUES (?1,?2,'global','pool',?3,?3,'retained',123,'read')",
                 [&id, &owner, name])?;
             db.execute(
-                &format!(
-                    "INSERT INTO executions(id,{},state) VALUES (?1,?2,'running')",
-                    execution_space(db)
-                ),
+                "INSERT INTO executions(id,space_id,state) VALUES (?1,?2,'running')",
                 [&id, &owner],
             )?;
         }
@@ -77,16 +51,8 @@ fn add_owners(db: &Connection, start: i64, end: i64) -> Result<()> {
 }
 
 pub fn check_owner_query(sql: &str, table: &str, owner_column: &str) -> Result<()> {
-    let db = lease_database()?;
-    check_query_growth(&db, sql, table, owner_column, "owner-0")
-}
-
-/// The populated database with the columns lease queries read that the
-/// v17 snapshot lacks.
-pub fn lease_database() -> Result<Connection> {
     let db = populated_database()?;
-    db.execute_batch(super::LEASE_ACQUIRERS)?;
-    Ok(db)
+    check_query_growth(&db, sql, table, owner_column, "owner-0")
 }
 
 pub(crate) fn check_query_growth(
