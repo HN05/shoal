@@ -36,7 +36,7 @@ impl Links {
         caller: Option<&Caller>,
     ) -> Result<RunsApproved> {
         let named = match run.as_ref().or(pr.as_ref()) {
-            Some(input) => forges::of_input(daemon, input).await?,
+            Some(input) => forges::of_input(&self.forges, input).await?,
             None => None,
         };
         let target = (self.forge_target(daemon, target, named, Access::Change, caller)).await?;
@@ -45,8 +45,8 @@ impl Links {
         let forge = target.forge()?;
         // A scoped caller approves as the agent account.
         let account = match caller {
-            Some(_) => self.agent_account(),
-            None => self.user_account(),
+            Some(_) => self.forges.agent_account(),
+            None => self.forges.user_account(),
         };
         let approved = match run {
             Some(input) => {

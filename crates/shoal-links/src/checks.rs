@@ -53,7 +53,8 @@ impl Links {
                 continue;
             };
             if !check.result.failed()
-                || !daemon
+                || !self
+                    .forges
                     .item_forge(&pull)
                     .await
                     .is_ok_and(|forge| forge.supports(Capability::ReadJobLogs))
@@ -96,12 +97,12 @@ impl Links {
         validate_check_name(name)?;
         let target = (self.selection_target(daemon, target, selection, true, caller)).await?;
         let account = match target.own {
-            true => self.agent_account(),
+            true => self.forges.agent_account(),
             false => self.elsewhere_account(Access::Read, caller),
         };
         let space = target.own_place().and_then(Place::space);
         let forge = target.forge()?;
-        let pull = self.check_log_pr(daemon, space, forge, selection).await?;
+        let pull = self.check_log_pr(space, forge, selection).await?;
         forge.failed_check_log(&account, &pull, name).await
     }
 
@@ -109,7 +110,6 @@ impl Links {
     /// space may be its linked PR.
     async fn check_log_pr(
         &self,
-        daemon: &dyn Daemon,
         space: Option<&LinkSpace>,
         forge: &ForgeRepo,
         selection: &Selection,
@@ -126,7 +126,7 @@ impl Links {
             input: selection.input.clone(),
         };
         // Of the linked PRs, only an assigned one is read without a number.
-        let prs = (self.selection_items(daemon, space, &selection, followed_items)).await?;
+        let prs = (self.selection_items(space, &selection, followed_items)).await?;
         match prs.as_slice() {
             [pull] if pull.kind() == LinkKind::Pr => Ok(pull.clone()),
             _ => bail!(ONE_PR),

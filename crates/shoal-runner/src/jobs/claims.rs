@@ -119,7 +119,7 @@ impl Runner {
         }
         let registration = (self.runner_registration(repository).await?)
             .context("the repository's runner is no longer registered")?;
-        let forge = daemon.resolve_forge(&registration.forge_repository).await?;
+        let forge = self.forges.forge(&registration.forge_repository).await?;
         if (self.cancel_if_superseded(daemon, &entry.name, &forge, &job.run)).await? {
             return Ok(Claim::Superseded);
         }
@@ -208,7 +208,7 @@ impl Runner {
             && let Some(runner) = runner
             && let Err(error) = claim
                 .forge
-                .delete_runner(&daemon.user_account(), runner)
+                .delete_runner(&self.forges.user_account(), runner)
                 .await
         {
             log!("runner: {error:#}");
@@ -285,19 +285,14 @@ impl Runner {
         claim: &Claimed<'_>,
         job: &QueuedJob,
     ) -> Result<JobCommand> {
-        let mut command = self.forge_job_command(daemon, claim, job).await?;
+        let mut command = self.forge_job_command(claim, job).await?;
         let environment = preset_job_environment(daemon, claim.workspace).await?;
         command.env.extend(environment);
         Ok(command)
     }
 
     /// The forge's command that runs `claim`'s job.
-    async fn forge_job_command(
-        &self,
-        daemon: &dyn Daemon,
-        claim: &Claimed<'_>,
-        job: &QueuedJob,
-    ) -> Result<JobCommand> {
+    async fn forge_job_command(&self, claim: &Claimed<'_>, job: &QueuedJob) -> Result<JobCommand> {
         let program = self.runner_program(claim.forge)?;
         let labels = runner_labels(&claim.runner.labels);
         // Named for the claim: a job claimed again, after an earlier runner
@@ -316,7 +311,7 @@ impl Runner {
         };
         claim
             .forge
-            .job_command(&daemon.user_account(), &launch)
+            .job_command(&self.forges.user_account(), &launch)
             .await
     }
 

@@ -226,7 +226,7 @@ impl Spaces {
         section: Option<&str>,
     ) -> Result<()> {
         let forge = daemon.space_forge(space).await?;
-        let account = daemon.agent_account();
+        let account = self.forges.agent_account();
         pull.belongs_to(&forge)?;
         let (number, url) = (pull.pull()?, pull.to_string());
         let current = forge.read(&account, ItemKind::Pr, number.get()).await?;

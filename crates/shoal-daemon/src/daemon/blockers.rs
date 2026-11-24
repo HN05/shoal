@@ -12,9 +12,7 @@ use crate::daemon::{log, manager::Manager, progress::Cleared};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{progress::Progress, space_names::SpaceSelector};
 
-mod forge;
-
-pub(crate) use shoal_agents::queue::blockers::{Lookup, Lookups, Target};
+use shoal_daemon_base::blockers::Target;
 
 impl Manager {
     /// Look up every forge blocker of the queue and of each space's
@@ -22,7 +20,7 @@ impl Manager {
     pub(crate) async fn poll_blockers(&self) -> Result<()> {
         let mut targets: HashSet<Target> = self.agents.queued_forge_blockers().await?;
         targets.extend(self.spaces.progress_forge_blockers().await?);
-        let lookups = self.look_up_blockers(targets).await;
+        let lookups = self.forges.look_up_blockers(targets).await;
         let forgotten = self.agents.forget_cleared_launch_blockers(&lookups).await;
         let cleared = self.spaces.clear_progress_blockers(self, &lookups).await?;
         for space in &cleared {

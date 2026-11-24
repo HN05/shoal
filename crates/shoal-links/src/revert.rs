@@ -72,8 +72,8 @@ impl Links {
             );
         }
         let (forge, account) = (
-            forges::of_space(daemon, &space).await?,
-            self.agent_account(),
+            forges::of_space(&self.forges, &space).await?,
+            self.forges.agent_account(),
         );
         let pull = (named_or_linked(daemon, input, Some(&space.id), &forge, ItemKind::Pr)).await?;
         let current = forge.merged(&account, pull.pull()?).await?;
@@ -124,8 +124,8 @@ impl Links {
         let space = self.link_space(daemon, selector).await?;
         daemon.verify_space(&space).await?;
         let (forge, account) = (
-            forges::of_space(daemon, &space).await?,
-            self.agent_account(),
+            forges::of_space(&self.forges, &space).await?,
+            self.forges.agent_account(),
         );
         let pull = (named_or_linked(daemon, input, Some(&space.id), &forge, ItemKind::Pr)).await?;
         forge.merged_pull(&account, pull.pull()?).await

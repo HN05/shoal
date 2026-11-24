@@ -101,7 +101,7 @@ impl Runner {
         if !self.job_execution_recorded(daemon, &job).await? {
             return Ok(false);
         }
-        let taken = self.identified_job(daemon, &job).await;
+        let taken = self.identified_job(&job).await;
         let (stopped, cancelled) =
             (self.interrupt_job(daemon, &job, taken.as_ref().ok(), cause)).await?;
         let reason = format!("stopped for {cause}");
@@ -140,7 +140,7 @@ impl Runner {
         if let Err(error) = self.hand_over_cut_off_jobs(daemon).await {
             log!("runner: the jobs cut off by {cause} rerun from here: {error:#}");
         }
-        if let Err(error) = self.rerun_recorded_jobs(daemon).await {
+        if let Err(error) = self.rerun_recorded_jobs().await {
             log!("runner: reruns after {cause}: {error:#}");
         }
     }
@@ -169,13 +169,8 @@ impl Runner {
     /// it to rerun; the wrapper then stops the runner. A job the forge does
     /// not name is left to fail there, as [`Self::stop_job_to_rerun`]
     /// leaves one.
-    pub(super) async fn cancel_job_to_rerun(
-        &self,
-        daemon: &dyn Daemon,
-        job: &ClaimedJob,
-        cause: JobStop,
-    ) -> Result<()> {
-        let taken = match self.identified_job(daemon, job).await {
+    pub(super) async fn cancel_job_to_rerun(&self, job: &ClaimedJob, cause: JobStop) -> Result<()> {
+        let taken = match self.identified_job(job).await {
             Ok(taken) => taken,
             Err(error) => {
                 self.log_job_stop(job, cause, rerun_outcome(false, false));
@@ -185,18 +180,18 @@ impl Runner {
             }
         };
         self.record_job_rerun(job, &taken, cause).await?;
-        let cancelled = self.cancel_stopping_job(daemon, job, &taken).await;
+        let cancelled = self.cancel_stopping_job(job, &taken).await;
         self.log_job_stop(job, cause, rerun_outcome(true, cancelled));
         Ok(())
     }
 
     /// Rerun the jobs Shoal ended whose runs have finished, reading their
     /// runs as often as a running job's.
-    pub async fn rerun_stopped_jobs(&self, daemon: &dyn Daemon) -> Result<()> {
+    pub async fn rerun_stopped_jobs(&self) -> Result<()> {
         if !self.jobs.take_reruns_read() {
             return Ok(());
         }
-        self.rerun_recorded_jobs(daemon).await
+        self.rerun_recorded_jobs().await
     }
 
     /// The claimed jobs whose runner's execution is recorded, which run
@@ -214,11 +209,11 @@ impl Runner {
     /// Rerun each job waiting to rerun whose run has finished, and tell the
     /// user of those a sleep or shutdown cut off, one caller at a time, so
     /// none reruns a job twice.
-    async fn rerun_recorded_jobs(&self, daemon: &dyn Daemon) -> Result<()> {
+    async fn rerun_recorded_jobs(&self) -> Result<()> {
         let _rerunning = self.jobs.rerunning.lock().await;
         let mut reran = Vec::new();
         for job in self.stopped_jobs().await? {
-            let rerun = self.rerun(daemon, &job).await;
+            let rerun = self.rerun(&job).await;
             if let (Ok(JobRerun::Rerun), Some(cause)) = (&rerun, &job.cut_off_by) {
                 reran.push(format!("{} of {}, cut off by {cause}", job.name, job.run));
             }
@@ -232,8 +227,8 @@ impl Runner {
 
     /// The job the runner of `job` took, as its forge names it within
     /// [`IDENTIFY_LIMIT`], before it stops.
-    async fn identified_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<TakenJob> {
-        tokio::time::timeout(IDENTIFY_LIMIT, self.taken_job(daemon, job))
+    async fn identified_job(&self, job: &ClaimedJob) -> Result<TakenJob> {
+        tokio::time::timeout(IDENTIFY_LIMIT, self.taken_job(job))
             .await
             .unwrap_or_else(|_| Err(anyhow::anyhow!("its forge did not answer in time")))
     }
@@ -256,7 +251,7 @@ impl Runner {
         let first = async {
             if let Some(taken) = taken {
                 self.record_job_rerun(job, taken, cause).await?;
-                cancelled = self.cancel_stopping_job(daemon, job, taken).await;
+                cancelled = self.cancel_stopping_job(job, taken).await;
             }
             Ok(())
         };
@@ -268,17 +263,12 @@ impl Runner {
     /// runner is stopped, so its report of the stop does not fail the job,
     /// returning whether it did. A forge that cannot, or does not answer
     /// within [`CANCEL_LIMIT`], leaves the job to fail.
-    async fn cancel_stopping_job(
-        &self,
-        daemon: &dyn Daemon,
-        job: &ClaimedJob,
-        taken: &TakenJob,
-    ) -> bool {
+    async fn cancel_stopping_job(&self, job: &ClaimedJob, taken: &TakenJob) -> bool {
         let cancel = async {
-            let forge = daemon.item_forge(&taken.run).await?;
+            let forge = self.forges.item_forge(&taken.run).await?;
             let registration = self.runner_registration(&job.repository_id).await?;
             let runner = registration.and_then(|registration| registration.runner);
-            (forge.cancel_runner_job(&daemon.user_account(), runner.as_ref(), taken.id)).await
+            (forge.cancel_runner_job(&self.forges.user_account(), runner.as_ref(), taken.id)).await
         };
         let cancelled = tokio::time::timeout(CANCEL_LIMIT, cancel)
             .await
@@ -308,8 +298,8 @@ impl Runner {
     /// forge says the runner registered for it alone took. A rerun of a
     /// guess could rerun an unrelated failure, so a job the forge does not
     /// name is an error.
-    async fn taken_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<TakenJob> {
-        let forge = daemon.item_forge(&job.job.run.url).await?;
+    async fn taken_job(&self, job: &ClaimedJob) -> Result<TakenJob> {
+        let forge = self.forges.item_forge(&job.job.run.url).await?;
         // One read of the report names both the run and the job taken of it.
         let reported = reported_run(&self.job_directory(&job.id))?;
         let run_id = reported.map_or(job.job.job.run, |took| took.run);
@@ -325,7 +315,7 @@ impl Runner {
             });
         };
         let taken = (forge
-            .runner_job(&daemon.user_account(), run_id, runner)
+            .runner_job(&self.forges.user_account(), run_id, runner)
             .await)?
             .context("the forge names no job its runner took")?;
         Ok(TakenJob {
@@ -383,17 +373,17 @@ impl Runner {
     }
 
     /// Have the forge rerun `job` as the user.
-    async fn rerun(&self, daemon: &dyn Daemon, job: &StoppedJob) -> Result<JobRerun> {
-        let forge = daemon.item_forge(&job.run).await?;
-        (forge.rerun_job(&daemon.user_account(), &job.run, job.id)).await
+    async fn rerun(&self, job: &StoppedJob) -> Result<JobRerun> {
+        let forge = self.forges.item_forge(&job.run).await?;
+        (forge.rerun_job(&self.forges.user_account(), &job.run, job.id)).await
     }
 
     /// Rerun `job`, which another machine cut off and handed the hub, on
     /// its forge as the user once its run has finished, or say this
     /// machine has no login of the user's for its forge.
-    pub async fn rerun_cut_off(&self, daemon: &dyn Daemon, job: &CutOffJob) -> Result<CutOffRerun> {
-        let forge = daemon.item_forge(&job.run).await?;
-        let account = daemon.user_account();
+    pub async fn rerun_cut_off(&self, job: &CutOffJob) -> Result<CutOffRerun> {
+        let forge = self.forges.item_forge(&job.run).await?;
+        let account = self.forges.user_account();
         if !account.has_login(&forge) {
             return Ok(CutOffRerun::NoLogin);
         }

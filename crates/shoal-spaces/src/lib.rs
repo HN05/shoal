@@ -5,6 +5,7 @@
 //! launches. [`Spaces`] holds what they keep in memory and offers their
 //! operations; what they need of the rest of the daemon is the interface in
 //! [`daemon`].
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::sync::Arc;
 
 use shoal_coordination::{alerts, approvals, changes, scope, threads};
@@ -75,6 +76,7 @@ pub struct Spaces {
     pub signals: Arc<Signals>,
     pub paths: paths::Paths,
     pub file_access: Arc<FileAccess>,
+    forges: Arc<ForgeAccess>,
     /// How the cleanup sweep last went.
     pub cleanup_health: cleanup::CleanupHealth,
     /// How the idle sleep pass last went.
@@ -113,6 +115,7 @@ impl Spaces {
         signals: Arc<Signals>,
         paths: paths::Paths,
         file_access: Arc<FileAccess>,
+        forges: Arc<ForgeAccess>,
         space_removals: spaces::Removing,
         records: Arc<dyn daemon::Records>,
     ) -> Self {
@@ -124,6 +127,7 @@ impl Spaces {
             signals,
             paths,
             file_access,
+            forges,
             cleanup_health: Default::default(),
             idle_sleep_health: cleanup::CleanupHealth::of("Idle sleep"),
             cleanup_removals: Default::default(),

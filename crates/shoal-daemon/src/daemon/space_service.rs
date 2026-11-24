@@ -181,14 +181,6 @@ impl shoal_spaces::daemon::Operations for Manager {
 }
 
 impl shoal_spaces::daemon::Links for Manager {
-    fn forge<'a>(&'a self, remote: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(Manager::forge(self, remote))
-    }
-
-    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(Manager::item_forge(self, item))
-    }
-
     fn current_head<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
         Box::pin(shoal_links::pr::current_head(workspace))
     }
@@ -212,7 +204,7 @@ impl shoal_spaces::daemon::Links for Manager {
         checkout: &'a Path,
         input: &'a ItemInput,
     ) -> BoxFuture<'a, Result<String>> {
-        Box::pin(self.links.read_pull_title(self, checkout, input))
+        Box::pin(self.links.read_pull_title(checkout, input))
     }
 
     fn branch_merge_warning<'a>(
@@ -225,15 +217,8 @@ impl shoal_spaces::daemon::Links for Manager {
     fn space_forge<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<ForgeRepo>> {
         Box::pin(async move {
             let space = self.link_space_of(space).await?;
-            shoal_links::forges::of_space(self, &space).await
+            shoal_links::forges::of_space(&self.forges, &space).await
         })
-    }
-
-    fn checkout_forge<'a>(
-        &'a self,
-        repository: &'a Repository,
-    ) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(shoal_links::forges::of_checkout(self, repository))
     }
 
     fn linked_states<'a>(
@@ -250,14 +235,6 @@ impl shoal_spaces::daemon::Links for Manager {
             let space = self.link_space_of(space).await?;
             Manager::acting_settings(self, &space).await
         })
-    }
-
-    fn agent_account(&self) -> Account {
-        self.links.agent_account()
-    }
-
-    fn user_account(&self) -> Account {
-        self.links.user_account()
     }
 
     fn settle_agents(&self, id: &SpaceId) {
@@ -293,9 +270,7 @@ impl shoal_spaces::daemon::Links for Manager {
             let Ok(space) = self.link_space_of(space).await else {
                 return;
             };
-            self.links
-                .check_conventions(self, &space, settings, marks)
-                .await
+            self.links.check_conventions(&space, settings, marks).await
         })
     }
 
@@ -304,7 +279,7 @@ impl shoal_spaces::daemon::Links for Manager {
         checkout: &'a Path,
         selection: &'a Selection,
     ) -> BoxFuture<'a, Result<Option<ItemRef>>> {
-        Box::pin(self.links.explicit_item(self, checkout, selection))
+        Box::pin(self.links.explicit_item(checkout, selection))
     }
 
     fn follow_pushed_merge(&self, pushed: PushedMerge) -> BoxFuture<'_, Result<()>> {
@@ -354,7 +329,7 @@ impl shoal_spaces::daemon::Links for Manager {
         checkout: &'a Path,
         input: &'a ItemInput,
     ) -> BoxFuture<'a, Result<(ForgeRepo, ItemRef)>> {
-        Box::pin(self.links.issue_forge(self, checkout, input))
+        Box::pin(self.links.issue_forge(checkout, input))
     }
 
     fn issue_registrations<'a>(
@@ -407,7 +382,7 @@ impl shoal_spaces::daemon::Links for Manager {
     ) -> BoxFuture<'a, Result<OpenIssue>> {
         Box::pin(async move {
             let shoal_links::reads::checkouts::OpenIssue { url, title, labels } =
-                self.links.read_open_issue(self, checkout, input).await?;
+                self.links.read_open_issue(checkout, input).await?;
             Ok(OpenIssue { url, title, labels })
         })
     }
@@ -416,7 +391,7 @@ impl shoal_spaces::daemon::Links for Manager {
         let dropped = (dropped.into_iter())
             .map(|Dropped { url, login }| shoal_links::issue::assignees::Dropped { url, login })
             .collect();
-        Box::pin(self.links.release_assignees(self, dropped))
+        Box::pin(self.links.release_assignees(dropped))
     }
 
     fn relink_space<'a>(
@@ -470,7 +445,7 @@ impl shoal_spaces::daemon::Links for Manager {
     ) -> BoxFuture<'a, Result<Vec<ItemRef>>> {
         Box::pin(async move {
             let space = self.link_space_of(space).await?;
-            self.links.selected_items(self, &space, selection).await
+            self.links.selected_items(&space, selection).await
         })
     }
 

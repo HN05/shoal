@@ -199,7 +199,7 @@ impl Manager {
             .collect();
         // Only a changed answer matters: a host Shoal cannot reach now keeps
         // the forge it answered before, which a machine offline at boot needs.
-        match self.recheck_forge_hosts().await {
+        match self.forges.recheck_forge_hosts().await {
             Ok(rechecks) => {
                 problems.extend(rechecks.iter().map(|(host, change)| change.message(host)))
             }

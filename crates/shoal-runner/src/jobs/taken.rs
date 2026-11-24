@@ -60,9 +60,9 @@ impl Runner {
         runner: RunnerId,
         took: TookRun,
     ) -> Result<()> {
-        let forge = daemon.item_forge(&job.job.run.url).await?;
-        let account = daemon.user_account();
-        let taken_run = self.taken_run(daemon, &forge, job, took.run).await?;
+        let forge = self.forges.item_forge(&job.job.run.url).await?;
+        let account = self.forges.user_account();
+        let taken_run = self.taken_run(&forge, job, took.run).await?;
         let taken_job = WaitingJob {
             run: took.run,
             ..job.job.job.clone()
@@ -100,17 +100,11 @@ impl Runner {
     /// The run with API ID `run` that the runner of `job` took a job of. One
     /// that cannot be read is still recorded by its URL, so stopping the job
     /// cancels it.
-    async fn taken_run(
-        &self,
-        daemon: &dyn Daemon,
-        forge: &ForgeRepo,
-        job: &ClaimedJob,
-        run: RunId,
-    ) -> Result<JobRun> {
+    async fn taken_run(&self, forge: &ForgeRepo, job: &ClaimedJob, run: RunId) -> Result<JobRun> {
         if run == job.job.job.run {
             return Ok(job.job.run.clone());
         }
-        let error = match forge.job_run(&daemon.user_account(), run).await {
+        let error = match forge.job_run(&self.forges.user_account(), run).await {
             Ok(taken) => return Ok(taken),
             Err(error) => error,
         };

@@ -579,7 +579,7 @@ impl Links {
             workspace.state.accepts_links(),
             "workspace cannot accept a PR in its current state"
         );
-        let (forge, account) = self.workspace_forge_account(daemon, workspace).await?;
+        let (forge, account) = self.workspace_forge_account(workspace).await?;
         if request.url.is_none() {
             let proposed = request
                 .proposed_pull()
@@ -811,7 +811,7 @@ impl Links {
             .proposed_issue()
             .and_then(|issue| issue.repository.as_deref())
         {
-            Some(repository) => Ok((daemon.resolve_forge(repository).await?, account)),
+            Some(repository) => Ok((self.forges.forge(repository).await?, account)),
             None => Ok((forge, account)),
         }
     }
@@ -828,8 +828,8 @@ impl Links {
             // The worktree may have been replaced while the proposal waited.
             daemon.verify_space(space).await?;
             return Ok((
-                crate::forges::of_space(daemon, space).await?,
-                self.agent_account(),
+                crate::forges::of_space(&self.forges, space).await?,
+                self.forges.agent_account(),
             ));
         }
         let repository = request
@@ -837,7 +837,7 @@ impl Links {
             .as_ref()
             .context("the space that made the proposal is gone")?;
         let repository = daemon.repository(repository).await?;
-        self.checkout_forge_account(daemon, &repository).await
+        self.checkout_forge_account(&repository).await
     }
 }
 

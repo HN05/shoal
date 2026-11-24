@@ -10,13 +10,13 @@ async fn a_contribution_clones_a_url_and_keeps_an_existing_registration() {
     let repositories = &fixture.repositories;
     let path = repository(fixture.root.path(), "repo");
     let source = path.to_str().unwrap().to_owned();
-    let contributed = repositories.register_contribution(&fixture.daemon, source.clone(), None);
+    let contributed = repositories.register_contribution(source.clone(), None);
     assert!(contributed.await.is_err());
     let registered = repositories
         .register(source.as_str().into(), None, None)
         .await
         .unwrap();
-    let again = repositories.register_contribution(&fixture.daemon, source, None);
+    let again = repositories.register_contribution(source, None);
     let (again, _hold) = again.await.unwrap();
     assert_eq!(again.id, registered.id);
     assert!(!again.contribution);

@@ -6,7 +6,8 @@
 //! read changes, the notifications for the user, the numbers of threads
 //! and approval requests, a CI job's cost and what stopped its runner, how long what they record stays, the checks of
 //! file access that can stall and of directories the daemon writes, and
-//! the proof of the directories Shoal owns.
+//! the proof of the directories Shoal owns, and the accounts and forge
+//! hosts the daemon reaches the forges with.
 use shoal_core::{config, git, refusal};
 use shoal_forge_types as forge;
 use shoal_protocol::{model, protocol, state, time};
@@ -23,6 +24,7 @@ pub mod events;
 pub mod failures;
 pub mod file_access;
 pub mod file_copies;
+pub mod forge_access;
 pub mod frames;
 #[cfg(target_os = "macos")]
 pub mod frameworks;

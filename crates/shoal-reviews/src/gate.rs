@@ -252,7 +252,7 @@ impl Reviews {
         if daemon.space(&request.space_id).await.is_err() {
             return self.pass_on_unjudged(daemon, request).await;
         }
-        let case = match context::case(daemon, request).await {
+        let case = match context::case(daemon, &self.forges, request).await {
             Ok(case) => case,
             Err(error) => return self.deny_unreadable(daemon, request, error).await,
         };

@@ -116,7 +116,9 @@ under, the gates that order conflicting changes, the journal of events, the
 signals that wake waits once what they read changes, the alert record and
 the user's alerts, the numbers of threads and approval requests,
 the checks of file access that can stall and of directories the daemon writes,
-and the proof of the directories Shoal owns. What these read of the rest of
+the proof of the directories Shoal owns, and how the daemon reaches the
+forges: the accounts its requests go out as, which forge each host serves,
+and what the forge says of the items that block work. What these read of the rest of
 the daemon, such as a space's coordinator or a repository's retention, is an
 interface the base declares and the daemon implements, and the daemon's
 `Manager` holds the base's types as fields. Over the base, each subsystem of
@@ -141,8 +143,7 @@ interface, as `shoal start` does, and registers each repository's runner,
 queues, claims and ends its jobs, while their workspaces, permits and
 executions stay with the daemon, which the interface reaches.
 `shoal-links` holds the issues, PRs and CI runs spaces link: its `Links`
-service keeps the watches' running waits and the forge's remembered
-answers, builds the accounts requests go out as, finds where a request
+service keeps the watches' running waits, finds where a request
 comes from and the repository it acts in, reads the forge, links items
 to spaces under their relations, issues as assigned with their forge
 assignees, keeps the PR watches and merge acknowledgements of spaces,
@@ -155,7 +156,7 @@ workspaces stacked on a base once its work merges, opens issues and PRs and
 reverts merged ones, or proposes them where a permission asks, decides
 those proposals and runs the pushes their approval starts, and delivers
 the activity to agents, or through the hub to coordinators on other
-machines, while the spaces, the forge each host serves, permission
+machines, while the spaces, permission
 checks, the agents' records and messages, the approval requests' records
 and routing, the reviews and the hub stay with the daemon, which its
 interface reaches; the approvals subsystem calls the service to decide a

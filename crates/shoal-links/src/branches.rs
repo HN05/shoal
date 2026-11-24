@@ -77,7 +77,7 @@ impl Links {
     ) -> Result<ReadBranches> {
         let target = (self.forge_target(daemon, target, None, access, caller)).await?;
         let checkout = target_checkout(daemon, &target).await?;
-        let (forge, account) = (target.into_forge()?, self.read_account(caller));
+        let (forge, account) = (target.into_forge()?, self.forges.read_account(caller));
         let (branches, pulls, default) = tokio::try_join!(
             forge.branches(&account),
             forge.open_pulls(&account),

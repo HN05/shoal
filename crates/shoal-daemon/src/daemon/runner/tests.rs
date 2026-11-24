@@ -1176,13 +1176,13 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_job_alone_to_rerun() {
         ..wrapper.clone()
     };
     (manager.runner)
-        .cancel_job_for_signal(&**manager, Some(&step), SessionSignal::Terminate)
+        .cancel_job_for_signal(Some(&step), SessionSignal::Terminate)
         .await
         .unwrap();
     assert!(!cancelled_alone(&fixture));
 
     (manager.runner)
-        .cancel_job_for_signal(&**manager, Some(&wrapper), SessionSignal::Terminate)
+        .cancel_job_for_signal(Some(&wrapper), SessionSignal::Terminate)
         .await
         .unwrap();
     assert!(cancelled_alone(&fixture));
@@ -1191,7 +1191,7 @@ async fn a_signal_to_a_jobs_wrapper_cancels_its_job_alone_to_rerun() {
         logged_stops(manager),
         [JobStop::Signal(SessionSignal::Terminate)]
     );
-    manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
+    manager.runner.rerun_stopped_jobs().await.unwrap();
     assert_eq!(reruns(&fixture, 8), 1);
     let told = alerts(manager, AlertKind::JobsRerun).await;
     assert!(told[0].contains("SIGTERM"), "{told:?}");
@@ -1579,8 +1579,8 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_its_run_fin
     assert_eq!(reasons, ["stopped for critical memory pressure"]);
 
     assert!(manager.agents.overload_recovery().published().is_none());
-    manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
-    manager.runner.rerun_stopped_jobs(&**manager).await.unwrap();
+    manager.runner.rerun_stopped_jobs().await.unwrap();
+    manager.runner.rerun_stopped_jobs().await.unwrap();
     assert_eq!(reruns(&fixture, 8), 1);
     // Load protection's reruns tell nobody.
     assert!(alerts(manager, AlertKind::JobsRerun).await.is_empty());
@@ -1682,7 +1682,7 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
     // As if the daemon stopped once the claim's workspace held the permit.
     let forge = crate::forge::ForgeRepo::resolve(
         &format!("http://{}/team/repo", fixture.server.host),
-        &manager.forge_hosts(),
+        &manager.forges.hosts(),
     )
     .await
     .unwrap();
@@ -1736,7 +1736,7 @@ async fn workspace_a_restart_caught_preparing(fixture: &Fixture) -> Workspace {
     let (entry, job) = (&admitted[0], admitted[0].job.as_deref().unwrap());
     let forge = crate::forge::ForgeRepo::resolve(
         &format!("http://{}/team/repo", fixture.server.host),
-        &manager.forge_hosts(),
+        &manager.forges.hosts(),
     )
     .await
     .unwrap();

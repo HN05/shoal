@@ -100,7 +100,7 @@ impl Links {
         drop(guard);
         let start = self.poll_start();
         let items = self.items_to_look_up(&space, items).await?;
-        let items = self.item_activity(daemon, items, selection).await;
+        let items = self.item_activity(items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
             observations.extend(

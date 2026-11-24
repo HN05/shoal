@@ -27,7 +27,7 @@ async fn a_stopped_chat_reads_in_its_repositorys_checkout() {
         .context_forge(&*manager, &ItemContext::space(SpaceSelector::id(&chat.id)))
         .await
         .unwrap();
-    assert!(forge == manager.forge(origin).await.unwrap());
+    assert!(forge == manager.forges.forge(origin).await.unwrap());
 }
 
 #[tokio::test]

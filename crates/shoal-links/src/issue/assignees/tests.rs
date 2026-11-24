@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 use shoal_core::test_support::{git, global_config, repository};
+use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_daemon_base::{
     config_state::ConfigState, file_access::FileAccess, gates::Gates, notifications::Notifications,
 };
@@ -68,12 +69,16 @@ impl Fixture {
         );
         let origin = format!("http://{host}/team/repo");
         git(&path, &["remote", "add", "origin", &origin]);
+        let gates = Arc::new(Gates::default());
+        let config = Arc::new(ConfigState::new(global_config(&text)));
+        let forges = ForgeAccess::new(store.clone(), gates.clone(), config.clone());
         let links = Arc::new(Links::new(
             store.clone(),
-            Arc::new(Gates::default()),
-            Arc::new(ConfigState::new(global_config(&text))),
+            gates,
+            config,
             Arc::new(Notifications::new(store)),
             Arc::new(FileAccess::default()),
+            Arc::new(forges),
             Arc::new(StandInRecords),
         ));
         let daemon = StandIn {

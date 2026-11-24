@@ -1,5 +1,6 @@
 //! Registering a repository: a local checkout in place, or a clone of a URL
 //! into a directory of its own, perhaps as a contribution.
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -16,7 +17,6 @@ use uuid::Uuid;
 use crate::{
     Repositories,
     contributions::holds::ContributionHold,
-    daemon::Daemon,
     root::{ConfiguredRoot, Recorded, prepare_root, reserve_directory},
 };
 
@@ -26,11 +26,11 @@ const CHECKOUT_DIR: &str = ".checkout";
 
 /// What a registration is for.
 #[derive(Clone, Copy)]
-enum Registration<'a> {
+enum Registration {
     Regular,
-    /// Removed once nothing of it is left, forking on the forge `daemon`
-    /// reaches.
-    Contribution(&'a dyn Daemon),
+    /// Removed once nothing of it is left, pushing to the user's fork when
+    /// the user cannot push to its source.
+    Contribution,
 }
 
 impl Repositories {
@@ -63,12 +63,11 @@ impl Repositories {
     /// from cleanup from the moment it is registered.
     pub async fn register_contribution(
         &self,
-        daemon: &dyn Daemon,
         source: String,
         name: Option<String>,
     ) -> Result<(Repository, ContributionHold)> {
         let _guard = self.gates.lock_registry().await;
-        let registration = Registration::Contribution(daemon);
+        let registration = Registration::Contribution;
         let repo = (self.register_locked(source.into(), name, None, registration)).await?;
         let hold = self.contribution_holds.hold(&repo.id);
         Ok((repo, hold))
@@ -80,7 +79,7 @@ impl Repositories {
         source: repository::Selector,
         name: Option<String>,
         clone_path: Option<PathBuf>,
-        registration: Registration<'_>,
+        registration: Registration,
     ) -> Result<Repository> {
         if let Some(name) = &name {
             validate::name("repository", name)?;
@@ -127,7 +126,7 @@ impl Repositories {
             .unwrap_or_else(|| repository::directory_name(&source));
         let (contribution, fork) = match registration {
             Registration::Regular => (false, None),
-            Registration::Contribution(daemon) => (true, contribution_fork(daemon, &source).await?),
+            Registration::Contribution => (true, contribution_fork(&self.forges, &source).await?),
         };
         let workspaces = self.workspaces().await?;
         let recorded = Recorded {
@@ -195,13 +194,13 @@ impl Repositories {
 
 /// The URL of the user's fork of `source` to push to, created when the
 /// user cannot push to `source` itself.
-async fn contribution_fork(daemon: &dyn Daemon, source: &str) -> Result<Option<String>> {
+async fn contribution_fork(forges: &ForgeAccess, source: &str) -> Result<Option<String>> {
     ensure!(
         !Path::new(source).exists(),
         "a contribution clones a repository URL; {source} is a local path"
     );
-    let forge = daemon.forge(source).await?;
-    let account = daemon.user_account();
+    let forge = forges.forge(source).await?;
+    let account = forges.user_account();
     if forge.pushable(&account).await? {
         return Ok(None);
     }

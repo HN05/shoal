@@ -67,8 +67,8 @@ impl Runner {
         registration: &Registration,
         labels: &[String],
     ) -> Result<()> {
-        let forge = daemon.resolve_forge(&registration.forge_repository).await?;
-        let account = daemon.user_account();
+        let forge = self.forges.forge(&registration.forge_repository).await?;
+        let account = self.forges.user_account();
         let waiting = forge.waiting_jobs(&account, labels).await?;
         let listed: HashSet<String> = waiting.iter().map(|job| job.handle.clone()).collect();
         let (records, id) = (self.records.clone(), repository.id.clone());

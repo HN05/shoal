@@ -40,7 +40,7 @@ impl Links {
         if recorded.is_empty() {
             return Ok(None);
         }
-        let account = self.user_account();
+        let account = self.forges.user_account();
         let current = forge.read(&account, ItemKind::Pr, number.get()).await?;
         let head = current.head_sha.context("the forge names no PR head")?;
         let base = current.item.pr.context("the forge names no PR base")?.base;
@@ -106,7 +106,9 @@ impl Links {
         configure_merge(daemon, target.own_place(), action).await?;
         if action.merges() && action.merge_head().is_none() {
             let forge = target.into_forge()?;
-            let pull = forge.pull_request(&self.agent_account(), &url).await?;
+            let pull = forge
+                .pull_request(&self.forges.agent_account(), &url)
+                .await?;
             let head = pull.head_commit.context("the forge names no PR head")?;
             action.bind_merge_head(head);
         }

@@ -5,6 +5,7 @@
 //! threads are resolved, the review gates that wait for them, and the gate agent that decides approval requests. [`Reviews`] holds what they keep in memory and offers their
 //! operations; what they need of the rest of the daemon is the interface in
 //! [`daemon`].
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -54,6 +55,7 @@ pub use run::run;
 pub struct Reviews {
     store: Store,
     gates: Arc<Gates>,
+    forges: Arc<ForgeAccess>,
     records: Arc<dyn Records>,
     requests: Arc<dyn Requests>,
     /// The daemon's paths: the home directory an agent's launch
@@ -87,6 +89,7 @@ impl Reviews {
     pub fn new(
         store: Store,
         gates: Arc<Gates>,
+        forges: Arc<ForgeAccess>,
         records: Arc<dyn Records>,
         requests: Arc<dyn Requests>,
         paths: Paths,
@@ -94,6 +97,7 @@ impl Reviews {
         Self {
             store,
             gates,
+            forges,
             records,
             requests,
             paths,

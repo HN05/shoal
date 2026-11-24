@@ -51,9 +51,7 @@ impl Runner {
                     self.register_runner_unless_removed(daemon, &repository)
                         .await
                 }
-                (false, Some(registration)) => {
-                    self.delete_runner(daemon, &repository, &registration).await
-                }
+                (false, Some(registration)) => self.delete_runner(&repository, &registration).await,
                 _ => continue,
             };
             if let Err(error) = result {
@@ -71,15 +69,11 @@ impl Runner {
     /// Delete `repository`'s runner on the forge before the repository goes;
     /// a forge that cannot be reached leaves the runner there, which the
     /// user is told to delete.
-    pub async fn delete_runner_of_removed(
-        &self,
-        daemon: &dyn Daemon,
-        repository: &Repository,
-    ) -> Result<()> {
+    pub async fn delete_runner_of_removed(&self, repository: &Repository) -> Result<()> {
         let Some(registration) = self.runner_registration(&repository.id).await? else {
             return Ok(());
         };
-        if let Err(error) = self.delete_runner(daemon, repository, &registration).await {
+        if let Err(error) = self.delete_runner(repository, &registration).await {
             let message = format!(
                 "The runner of {} stays registered at {}; delete it in the repository's Actions settings: {error:#}",
                 repository.display_name(),
@@ -125,13 +119,8 @@ impl Runner {
     /// The forge of `repository`'s checkout, refused unless this machine
     /// can run its jobs as `account`: the forge supports it and its runner
     /// program is on the daemon's `PATH`.
-    async fn runner_forge(
-        &self,
-        daemon: &dyn Daemon,
-        repository: &Repository,
-        account: &Account,
-    ) -> Result<ForgeRepo> {
-        let forge = daemon.checkout_forge(repository).await?;
+    async fn runner_forge(&self, repository: &Repository, account: &Account) -> Result<ForgeRepo> {
+        let forge = self.forges.checkout_forge(repository).await?;
         self.runner_program(&forge)?;
         forge.require_runner(account).await?;
         Ok(forge)
@@ -162,14 +151,14 @@ impl Runner {
         {
             return Ok(());
         }
-        self.register_runner(daemon, repository).await
+        self.register_runner(repository).await
     }
 
     /// Register a runner for `repository` on its forge and keep it.
-    async fn register_runner(&self, daemon: &dyn Daemon, repository: &Repository) -> Result<()> {
+    async fn register_runner(&self, repository: &Repository) -> Result<()> {
         // One account, so a token from a command is fetched once.
-        let account = daemon.user_account();
-        let forge = self.runner_forge(daemon, repository, &account).await?;
+        let account = self.forges.user_account();
+        let forge = self.runner_forge(repository, &account).await?;
         let name = format!("shoal-{}", shoal_core::process::machine::hostname());
         let registration = Registration {
             forge_repository: forge.repository_url(),
@@ -215,14 +204,13 @@ impl Runner {
     /// and forget it.
     async fn delete_runner(
         &self,
-        daemon: &dyn Daemon,
         repository: &Repository,
         registration: &Registration,
     ) -> Result<()> {
         if let Some(runner) = &registration.runner {
-            let forge = daemon.resolve_forge(&registration.forge_repository).await?;
+            let forge = self.forges.forge(&registration.forge_repository).await?;
             forge
-                .delete_runner(&daemon.user_account(), runner.id)
+                .delete_runner(&self.forges.user_account(), runner.id)
                 .await?;
         }
         let id = repository.id.clone();

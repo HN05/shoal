@@ -259,7 +259,7 @@ pub(super) async fn handle(
                 .await?,
         ),
         AgentMethod::GitCredential { host } => {
-            Body::GitCredential(manager.agent_git_credential(caller, &host).await?)
+            Body::GitCredential(manager.forges.agent_git_credential(caller, &host).await?)
         }
         AgentMethod::AgentUpdates { space } => {
             Body::PrUpdates(manager.links.agent_updates(&**manager, &space).await?)

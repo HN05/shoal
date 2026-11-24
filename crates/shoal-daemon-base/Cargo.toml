@@ -20,6 +20,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 shoal-core.workspace = true
+shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["rusqlite"] }
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-protocol = { workspace = true, features = ["rusqlite"] }

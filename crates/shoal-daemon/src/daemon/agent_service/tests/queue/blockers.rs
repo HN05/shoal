@@ -216,7 +216,7 @@ async fn issue_blockers_wait_for_closure_or_a_done_workspace_linking_them() {
     let launch = add_blocked(&manager, &repo, "launch", blockers).await;
     assert_eq!(launch.blockers, [closed, linked]);
 
-    let cleared = crate::daemon::blockers::Lookup::Cleared("it closed".into());
+    let cleared = shoal_daemon_base::blockers::Lookup::Cleared("it closed".into());
     let lookups = [((BlockerKind::Issue, closed.to_owned()), cleared)].into();
     manager
         .agents

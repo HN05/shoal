@@ -5,6 +5,7 @@
 //! protection stopped, which waits until a test says load recovered. The
 //! approval requests the gate decides are kept in memory and change as the
 //! daemon's records do; approving one records it as approved.
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -102,7 +103,17 @@ impl Fixture {
         };
         let requests = Arc::new(StandInRequests::default());
         let gates = Arc::new(Gates::default());
-        let reviews = Reviews::new(store, gates, records.clone(), requests.clone(), paths);
+        let global = test_support::global_config(config);
+        let global = Arc::new(shoal_daemon_base::config_state::ConfigState::new(global));
+        let forges = Arc::new(ForgeAccess::new(store.clone(), gates.clone(), global));
+        let reviews = Reviews::new(
+            store,
+            gates,
+            forges,
+            records.clone(),
+            requests.clone(),
+            paths,
+        );
         let daemon = StandIn {
             requests: requests.clone(),
             notified: Mutex::default(),
@@ -427,13 +438,6 @@ impl Forge for StandIn {
         &'a self,
         _workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<(ForgeRepo, Account)>> {
-        Box::pin(async { bail!("the repository has no forge") })
-    }
-
-    fn checkout_forge<'a>(
-        &'a self,
-        _repository: &'a Repository,
-    ) -> BoxFuture<'a, Result<ForgeRepo>> {
         Box::pin(async { bail!("the repository has no forge") })
     }
 

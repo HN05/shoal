@@ -59,9 +59,9 @@ pub async fn run(runner: Arc<Runner>, daemon: Arc<dyn Daemon>) {
 async fn pass(runner: &Arc<Runner>, daemon: &Arc<dyn Daemon>) -> Result<()> {
     runner.sample_job_usage(&**daemon).await?;
     runner.finish_ended_jobs(&**daemon).await?;
-    runner.rerun_stopped_jobs(&**daemon).await?;
+    runner.rerun_stopped_jobs().await?;
     runner.follow_taken_jobs(&**daemon).await?;
-    runner.release_idle_runners(&**daemon).await?;
+    runner.release_idle_runners().await?;
     claim_admitted_jobs(runner, daemon).await?;
     runner.poll_waiting_jobs(&**daemon).await
 }

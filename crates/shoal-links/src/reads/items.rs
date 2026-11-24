@@ -53,7 +53,7 @@ impl Links {
         elsewhere: bool,
         caller: Option<&Caller>,
     ) -> Result<Selected> {
-        let account = self.read_account(caller);
+        let account = self.forges.read_account(caller);
         let target = (self.selection_target(daemon, target, selection, elsewhere, caller)).await?;
         let items =
             (self.target_selection(daemon, &target, selection, elsewhere, &account)).await?;
@@ -72,7 +72,7 @@ impl Links {
         caller: Option<&Caller>,
     ) -> Result<ForgeTarget> {
         let named = match (&selection.input, elsewhere) {
-            (Some(input), true) => forges::of_input(daemon, input).await?,
+            (Some(input), true) => forges::of_input(&self.forges, input).await?,
             _ => None,
         };
         (self.forge_target(daemon, target, named, Access::Read, caller)).await
@@ -110,13 +110,10 @@ impl Links {
         number: u64,
         caller: Option<&Caller>,
     ) -> Result<LinkKind> {
-        let account = self.read_account(caller);
+        let account = self.forges.read_account(caller);
         let target = (self.forge_target(daemon, target, None, Access::Read, caller)).await?;
         match target.own_place().and_then(Place::space) {
-            Some(space) => {
-                self.space_number_kind(daemon, space, number, &account)
-                    .await
-            }
+            Some(space) => self.space_number_kind(space, number, &account).await,
             None => Ok(target.forge()?.item_kind(&account, number).await?.into()),
         }
     }
@@ -125,14 +122,13 @@ impl Links {
     /// relation, otherwise the kind the forge reports for it.
     pub async fn space_number_kind(
         &self,
-        daemon: &dyn Daemon,
         space: &LinkSpace,
         number: u64,
         account: &Account,
     ) -> Result<LinkKind> {
         match linked_kind(space, number).await? {
             Some(kind) => Ok(kind),
-            None => Ok((forges::of_space(daemon, space).await?)
+            None => Ok((forges::of_space(&self.forges, space).await?)
                 .item_kind(account, number)
                 .await?
                 .into()),
@@ -152,7 +148,7 @@ impl Links {
         let forge = self.context_forge(daemon, context).await?;
         let issue = ItemRef::in_repository(&forge, LinkKind::Issue, item)?;
         forge
-            .read_issue(&self.read_account(caller), &issue, closed)
+            .read_issue(&self.forges.read_account(caller), &issue, closed)
             .await
     }
 
@@ -167,7 +163,7 @@ impl Links {
     ) -> Result<Vec<Blocker>> {
         let forge = self.context_forge(daemon, context).await?;
         let issue = ItemRef::in_repository(&forge, LinkKind::Issue, item)?;
-        let account = self.read_account(caller);
+        let account = self.forges.read_account(caller);
         let blockers = forge.open_issue_blockers(&account, issue.issue()?).await?;
         Ok((blockers.into_iter())
             .map(|issue| Blocker::Issue(issue.into()))
@@ -185,7 +181,9 @@ impl Links {
     ) -> Result<PullRequest> {
         let forge = self.context_forge(daemon, context).await?;
         let pull = ItemRef::in_repository(&forge, LinkKind::Pr, item)?;
-        forge.pull_request(&self.read_account(caller), &pull).await
+        forge
+            .pull_request(&self.forges.read_account(caller), &pull)
+            .await
     }
 
     /// Who the PR `item` names in the `target` repository, or the space's
@@ -201,7 +199,7 @@ impl Links {
         let (target, pull) = read.await?;
         let forge = target.forge()?;
         forge
-            .reviewers(&self.read_account(caller), pull.pull()?)
+            .reviewers(&self.forges.read_account(caller), pull.pull()?)
             .await
     }
 
@@ -221,7 +219,7 @@ impl Links {
         let forge = target.forge()?;
         forge.require(Capability::ResolveThreads)?;
         forge
-            .thread(&self.read_account(caller), pull.pull()?, comment)
+            .thread(&self.forges.read_account(caller), pull.pull()?, comment)
             .await
     }
 }

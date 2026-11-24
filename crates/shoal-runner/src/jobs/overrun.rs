@@ -27,7 +27,7 @@ impl Runner {
     /// End `job`, whose runner still runs, once it has outlived the job's
     /// run on the forge by [`GRACE`], returning whether it did.
     pub async fn end_overrun_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<bool> {
-        let Some(run) = self.outlived_run(daemon, job).await? else {
+        let Some(run) = self.outlived_run(job).await? else {
             return Ok(false);
         };
         let stopped = daemon.stop_job_processes(&job.workspace_id).await?;
@@ -44,14 +44,18 @@ impl Runner {
     /// [`GRACE`], reading the run on the forge when due. A runner registered
     /// for one job that has taken none may still take one of another run,
     /// so it outlives nothing.
-    async fn outlived_run(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<Option<String>> {
+    async fn outlived_run(&self, job: &ClaimedJob) -> Result<Option<String>> {
         if job.runner_id.is_some() && !took_job(&self.job_directory(&job.id)) {
             return Ok(None);
         }
-        let forge = daemon.item_forge(&job.job.run.url).await?;
+        let forge = self.forges.item_forge(&job.job.run.url).await?;
         let url = self.reported_run_url(&forge, job);
         if self.jobs.take_run_read(&job.id)
-            && !(forge.view_run(&daemon.user_account(), &url).await?.state).unfinished()
+            && !(forge
+                .view_run(&self.forges.user_account(), &url)
+                .await?
+                .state)
+                .unfinished()
         {
             self.jobs.run_finished(&job.id);
         }

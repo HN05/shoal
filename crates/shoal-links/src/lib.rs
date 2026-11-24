@@ -1,6 +1,5 @@
 //! The issues, PRs and CI runs the daemon's spaces link. [`Links`] holds
 //! what links keep in memory and offers their operations.
-mod accounts;
 pub mod actions;
 pub mod branches;
 mod checks;
@@ -10,7 +9,6 @@ pub mod forges;
 pub mod issue;
 pub mod linked;
 mod linking;
-mod memories;
 mod merge_path;
 mod merge_review;
 pub mod merge_warning;
@@ -37,7 +35,8 @@ pub mod wait;
 use std::sync::Arc;
 
 use shoal_daemon_base::{
-    config_state::ConfigState, file_access::FileAccess, gates::Gates, notifications::Notifications,
+    config_state::ConfigState, file_access::FileAccess, forge_access::ForgeAccess, gates::Gates,
+    notifications::Notifications,
 };
 use shoal_store::Store;
 
@@ -48,8 +47,8 @@ pub struct Links {
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
     file_access: Arc<FileAccess>,
+    forges: Arc<ForgeAccess>,
     records: Arc<dyn daemon::Records>,
-    memories: memories::ForgeMemories,
     waits: wait::ActiveWaits,
     watch_starts: wait::starts::WatchStarts,
     agent_settles: issue::agent_settles::AgentSettles,
@@ -62,6 +61,7 @@ impl Links {
         config: Arc<ConfigState>,
         notifications: Arc<Notifications>,
         file_access: Arc<FileAccess>,
+        forges: Arc<ForgeAccess>,
         records: Arc<dyn daemon::Records>,
     ) -> Self {
         Self {
@@ -70,8 +70,8 @@ impl Links {
             config,
             notifications,
             file_access,
+            forges,
             records,
-            memories: Default::default(),
             waits: Default::default(),
             watch_starts: Default::default(),
             agent_settles: Default::default(),

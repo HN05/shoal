@@ -2,6 +2,7 @@
 //! labels match rather than the one claimed: kept with the claim, deleted on
 //! the forge once the job ends, and deleted before then when no job is left
 //! for the runner, which then exits so its workspace goes.
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{path::PathBuf, time::Duration};
 
 use anyhow::Result;
@@ -11,7 +12,7 @@ use shoal_forge_types::numbers::RunnerId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
 use super::ClaimedJob;
-use crate::{Runner, daemon::Daemon, log, time::UnixTime};
+use crate::{Runner, log, time::UnixTime};
 
 /// How long a runner may wait for the forge to give it a job before the
 /// daemon asks whether one is left for it.
@@ -39,19 +40,21 @@ impl Runner {
     }
 
     /// Delete the runner registered for `job` alone, if any, on its forge.
-    pub async fn delete_job_runner(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<()> {
+    pub async fn delete_job_runner(&self, job: &ClaimedJob) -> Result<()> {
         let Some(runner) = job.runner_id else {
             return Ok(());
         };
-        let forge = daemon.item_forge(&job.job.run.url).await?;
-        forge.delete_runner(&daemon.user_account(), runner).await
+        let forge = self.forges.item_forge(&job.job.run.url).await?;
+        forge
+            .delete_runner(&self.forges.user_account(), runner)
+            .await
     }
 
     /// Delete each runner registered for one job that has waited for the
     /// forge to give it one, took none and has no job left to take, so it
     /// exits and its workspace goes. One that cannot be checked is checked
     /// again on the next pass.
-    pub async fn release_idle_runners(&self, daemon: &dyn Daemon) -> Result<()> {
+    pub async fn release_idle_runners(&self) -> Result<()> {
         let now = UnixTime::now();
         for job in self.claimed_jobs().await? {
             let (Some(runner), Some(launched)) = (job.runner_id, job.launched_at) else {
@@ -61,7 +64,7 @@ impl Runner {
             if waited < IDLE_AFTER || took_job(&self.job_directory(&job.id)) {
                 continue;
             }
-            if let Err(error) = release_if_idle(daemon, &job, runner).await {
+            if let Err(error) = release_if_idle(&self.forges, &job, runner).await {
                 log!("runner: {}: {error:#}", job.job.job.name);
             }
         }
@@ -71,9 +74,9 @@ impl Runner {
 
 /// Delete `runner`, registered for `job` alone, when it runs nothing and the
 /// forge lists no job waiting for the labels it was registered with.
-async fn release_if_idle(daemon: &dyn Daemon, job: &ClaimedJob, runner: RunnerId) -> Result<()> {
-    let forge = daemon.item_forge(&job.job.run.url).await?;
-    let account = daemon.user_account();
+async fn release_if_idle(forges: &ForgeAccess, job: &ClaimedJob, runner: RunnerId) -> Result<()> {
+    let forge = forges.item_forge(&job.job.run.url).await?;
+    let account = forges.user_account();
     // A runner already gone exits by itself.
     let Some(state) = forge.runner_state(&account, runner).await? else {
         return Ok(());

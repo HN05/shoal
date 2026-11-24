@@ -1,6 +1,7 @@
 //! Where a request about a repository's issues, PRs and CI runs comes from:
 //! a space, a workspace's worktree verified, or the registered checkout of
 //! a repository, and whether it reads or changes what it acts on there.
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::path::Path;
 
 use anyhow::Result;
@@ -11,12 +12,7 @@ use shoal_protocol::{
     protocol::ItemContext,
 };
 
-use crate::{
-    Links,
-    daemon::{Daemon, Forges},
-    forges,
-    space::LinkSpace,
-};
+use crate::{Links, daemon::Daemon, space::LinkSpace};
 
 /// Whether a request only reads what it acts on or changes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,10 +63,10 @@ impl Place {
     }
 
     /// The forge of the place's `origin`.
-    pub async fn forge(&self, daemon: &dyn Forges) -> Result<ForgeRepo> {
+    pub async fn forge(&self, forges: &ForgeAccess) -> Result<ForgeRepo> {
         match self {
-            Self::Space(space) => forges::of_space(daemon, space).await,
-            Self::Checkout(checkout) => forges::of_checkout(daemon, checkout).await,
+            Self::Space(space) => crate::forges::of_space(forges, space).await,
+            Self::Checkout(checkout) => forges.checkout_forge(checkout).await,
         }
     }
 

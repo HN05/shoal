@@ -1,14 +1,13 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
 use anyhow::{Context, Result, ensure};
+use shoal_daemon_base::forge_access::ForgeHosts;
 use shoal_ids::space_ids::SpaceId;
 use shoal_links::pr::current_head;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::CommitId;
 
 use crate::{
-    daemon::{
-        forge_hosts::ForgeHosts, gates::PrGuard, manager::Manager, spaces::removal_notices::Cleanup,
-    },
+    daemon::{gates::PrGuard, manager::Manager, spaces::removal_notices::Cleanup},
     forge::{ForgeRepo, activity::status::PrStatus, items::reference::ItemRef},
     model::Workspace,
 };
@@ -253,9 +252,9 @@ impl Manager {
         for url in urls {
             let (forge, pull) = self
                 .links
-                .pr_forge(self, &workspace.path, &url.clone().into())
+                .pr_forge(&workspace.path, &url.clone().into())
                 .await?;
-            let account = self.links.user_account();
+            let account = self.forges.user_account();
             let Some(commits) = forge.merged_commits(&account, pull.pull()?).await? else {
                 return Ok(false);
             };

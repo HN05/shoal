@@ -44,7 +44,7 @@ impl Links {
     ) -> Result<Action> {
         let pull = self.context_pull(daemon, target, input, Access::Change, Some(caller));
         let (forge, url) = pull.await?;
-        let account = self.review_account();
+        let account = self.forges.review_account();
         let head = forge.verdict_head(&account, url.pull()?).await;
         let head = head.map_err(|error| naming_review_token(error, &forge.host))?;
         if review.commit.is_none() {

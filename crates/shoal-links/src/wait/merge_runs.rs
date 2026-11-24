@@ -5,6 +5,7 @@
 //! lookup, which each background poll of the space runs for
 //! [`LOOKUP_WINDOW`], linking every run it finds as related, so the space's
 //! watches report how they end.
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -66,16 +67,12 @@ impl Links {
     /// a merge commit while its window is open, link the new ones, and end
     /// the lookup once the window and the runs it linked are over. A lookup
     /// that fails is tried again by the next poll; the others go on.
-    pub async fn follow_merge_runs(
-        self: &Arc<Self>,
-        daemon: &dyn Daemon,
-        space: &LinkSpace,
-    ) -> Result<()> {
+    pub async fn follow_merge_runs(self: &Arc<Self>, space: &LinkSpace) -> Result<()> {
         let id = space.id.to_owned();
         let lookups = self.store.read(move |db| merge_lookups(db, &id)).await?;
         let mut failure = None;
         for lookup in lookups {
-            if let Err(error) = self.follow_merge_lookup(daemon, &space.id, lookup).await {
+            if let Err(error) = self.follow_merge_lookup(&space.id, lookup).await {
                 failure.get_or_insert(error);
             }
         }
@@ -84,13 +81,12 @@ impl Links {
 
     async fn follow_merge_lookup(
         self: &Arc<Self>,
-        daemon: &dyn Daemon,
         id: &SpaceId,
         lookup: MergeLookup,
     ) -> Result<()> {
         let now = UnixTime::now();
         let runs = match lookup.looking {
-            true => self.merge_runs(daemon, &lookup, now).await?,
+            true => self.merge_runs(&lookup, now).await?,
             false => Vec::new(),
         };
         let (id, links) = (id.to_owned(), self.clone());
@@ -101,13 +97,8 @@ impl Links {
 
     /// The default branch's runs for the lookup's merge commit, read as the
     /// user at `now`; none where the forge reads no runs.
-    async fn merge_runs(
-        &self,
-        daemon: &dyn Daemon,
-        lookup: &MergeLookup,
-        now: UnixTime,
-    ) -> Result<Vec<Run>> {
-        let Some(forge) = lookup_forge(daemon, lookup, now).await? else {
+    async fn merge_runs(&self, lookup: &MergeLookup, now: UnixTime) -> Result<Vec<Run>> {
+        let Some(forge) = lookup_forge(&self.forges, lookup, now).await? else {
             return Ok(Vec::new());
         };
         if !forge.supports(Capability::ReadRuns) {
@@ -122,7 +113,7 @@ impl Links {
             // it holds start between two polls.
             limit: MAX_RUNS,
         };
-        (forge.list_runs(&self.user_account(), &filter).await)
+        (forge.list_runs(&self.forges.user_account(), &filter).await)
             .with_context(|| format!("could not list the CI runs of {}", lookup.commit))
     }
 
@@ -152,7 +143,7 @@ impl Links {
     /// merged on the forge, waits for that read.
     pub async fn merge_unseen(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
         let unseen = self.unseen_prs(daemon, id).await?;
-        Ok(!unseen.watched.is_empty() || self.any_merged(daemon, unseen.opened).await?)
+        Ok(!unseen.watched.is_empty() || self.any_merged(unseen.opened).await?)
     }
 
     /// Whether a PR whose merges the space `id` follows merged on the forge
@@ -163,16 +154,16 @@ impl Links {
     pub async fn merged_unseen(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
         let unseen = self.unseen_prs(daemon, id).await?;
         let prs = [unseen.watched, unseen.opened].concat();
-        self.any_merged(daemon, prs).await
+        self.any_merged(prs).await
     }
 
     /// Whether the forge shows one of `prs` merged.
-    async fn any_merged(&self, daemon: &dyn Daemon, prs: Vec<ItemRef>) -> Result<bool> {
+    async fn any_merged(&self, prs: Vec<ItemRef>) -> Result<bool> {
         if prs.is_empty() {
             return Ok(false);
         }
         let prs = prs.into_iter().map(Lookup::from).collect();
-        let reads = (self.item_activity(daemon, prs, &Selection::default())).await?;
+        let reads = (self.item_activity(prs, &Selection::default())).await?;
         let merged = |read: &Snapshot| read.state() == Some(SnapshotState::Merged);
         Ok(reads.iter().any(|(_, read)| merged(read)))
     }
@@ -207,15 +198,15 @@ impl Links {
 /// lookup's window ends; after that there is none, so a remote on a host
 /// that serves no forge ends the lookup instead of keeping the space.
 async fn lookup_forge(
-    daemon: &dyn Daemon,
+    forges: &ForgeAccess,
     lookup: &MergeLookup,
     now: UnixTime,
 ) -> Result<Option<ForgeRepo>> {
     let remote = match &lookup.merged {
-        Merged::Pr(pr) => return Ok(Some(daemon.item_forge(pr).await?)),
+        Merged::Pr(pr) => return Ok(Some(forges.item_forge(pr).await?)),
         Merged::Push(remote) => remote,
     };
-    match daemon.resolve_forge(remote).await {
+    match forges.forge(remote).await {
         Ok(forge) => Ok(Some(forge)),
         Err(error) if now >= lookup.merged_at + LOOKUP_WINDOW => {
             log!("no forge lists the CI runs of {}: {error:#}", lookup.commit);

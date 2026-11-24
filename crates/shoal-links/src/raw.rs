@@ -60,13 +60,13 @@ impl Links {
             .forge_target(daemon, target, None, access, caller)
             .await?;
         let Some(caller) = caller else {
-            return Ok((target.into_forge()?, self.user_account()));
+            return Ok((target.into_forge()?, self.forges.user_account()));
         };
         if let (Some(write), Some(place)) = (write, target.own_place()) {
             let repository = Some(place.repository_id().clone());
             let action = Action::request(PermissionKey::ApiWrites, write, repository);
             daemon.authorize_action(Some(caller), action).await?;
         }
-        Ok((target.into_forge()?, self.agent_account()))
+        Ok((target.into_forge()?, self.forges.agent_account()))
     }
 }

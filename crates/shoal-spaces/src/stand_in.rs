@@ -5,6 +5,7 @@
 //! CI jobs, reviews, leases or demos, whose records read as empty.
 #![allow(clippy::too_many_lines, reason = "one stand-in per interface method")]
 
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsString;
 use std::ops::Deref;
@@ -221,6 +222,11 @@ impl StandIn {
             signals,
             paths.clone(),
             Arc::new(FileAccess::default()),
+            Arc::new(ForgeAccess::new(
+                store.clone(),
+                gates.clone(),
+                config.clone(),
+            )),
             removing,
             records,
         );
@@ -558,14 +564,6 @@ impl Operations for StandIn {
 }
 
 impl Links for StandIn {
-    fn forge<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async { bail!("{NOT_HERE}: forge") })
-    }
-
-    fn item_forge<'a>(&'a self, _: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async { bail!("{NOT_HERE}: item_forge") })
-    }
-
     fn current_head<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>> {
         Box::pin(async move { Ok(crate::git::head_and_branch(&workspace.path).await?.0) })
     }
@@ -604,10 +602,6 @@ impl Links for StandIn {
         Box::pin(async { bail!("{NOT_HERE}: space_forge") })
     }
 
-    fn checkout_forge<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async { bail!("{NOT_HERE}: checkout_forge") })
-    }
-
     fn linked_states<'a>(
         &'a self,
         _: &'a Result<Option<String>>,
@@ -623,14 +617,6 @@ impl Links for StandIn {
                 .current()
                 .resolve(&self.space_layers(space, None).await?)
         })
-    }
-
-    fn agent_account(&self) -> Account {
-        Default::default()
-    }
-
-    fn user_account(&self) -> Account {
-        Default::default()
     }
 
     fn settle_agents(&self, _: &SpaceId) {}

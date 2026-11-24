@@ -46,7 +46,7 @@ impl Spaces {
             return Ok(pulls);
         }
         let forge = daemon.space_forge(space).await?;
-        let account = daemon.agent_account();
+        let account = self.forges.agent_account();
         for url in urls {
             url.belongs_to(&forge)?;
             let pull = (forge.read(&account, ItemKind::Pr, url.pull()?.get()).await)

@@ -4,16 +4,17 @@
 //! store as the runner's own records reference it, an agent queue and
 //! agents a test sets, launches that each open a space whose agent then
 //! runs, and the user's account from the global config.
+use shoal_core::test_support::git;
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::Connection;
 use shoal_core::config::{
     Config, Effective,
-    forges::Whose,
     repo::{self, ConfigLayers},
 };
 use shoal_daemon_base::{
@@ -23,13 +24,7 @@ use shoal_daemon_base::{
     gates::Gates,
     notifications::{Coordinators, Notifications, Source},
 };
-use shoal_forge::{
-    RepoRequests,
-    hosts::{HostType, HostTypes},
-    items::reference::ReferenceRequests,
-    transport::account::Account,
-};
-use shoal_forge_types::{ForgeRepo, backends::ForgeKind, items::reference::ItemRef};
+use shoal_forge_types::backends::ForgeKind;
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     config::permissions::PermissionKey,
@@ -42,7 +37,7 @@ use shoal_protocol::{
 
 use crate::{
     Runner,
-    daemon::{Agents, Daemon, Forges, Permissions, Records, Repositories, Spaces, WaitingEntry},
+    daemon::{Agents, Daemon, Permissions, Records, Repositories, Spaces, WaitingEntry},
 };
 
 /// The service over a stand-in daemon with one registered repository.
@@ -53,6 +48,17 @@ pub(crate) struct Fixture {
 }
 
 impl Fixture {
+    /// Make the repository's checkout one whose `origin` is the forge
+    /// repository at `url`, on a host that serves `kind`.
+    pub(crate) fn place_on_forge(&self, url: &str, kind: ForgeKind) {
+        let path = &self.daemon.repository.path;
+        std::fs::create_dir_all(path).unwrap();
+        git(path, &["init", "-q"]);
+        git(path, &["remote", "add", "origin", url]);
+        let host = url.split('/').nth(2).expect("a URL names its host");
+        shoal_forge_types::hosts::learn(host, kind);
+    }
+
     /// A registered repository whose local config is `local`, under a
     /// global config without triggers.
     pub(crate) async fn new(local: &str) -> Self {
@@ -76,7 +82,6 @@ impl Fixture {
             local: Mutex::new(local.to_owned()),
             contribution: AtomicBool::new(false),
             removing: AtomicBool::new(false),
-            forge: Mutex::default(),
             launched: Mutex::default(),
             agents: Mutex::default(),
             queue: Mutex::default(),
@@ -205,11 +210,14 @@ async fn runner(root: &tempfile::TempDir, daemon: &Arc<StandIn>) -> Arc<Runner> 
     let store = shoal_store::test_support::unsynced_store(path)
         .await
         .unwrap();
+    let gates = Arc::new(Gates::default());
+    let forges = ForgeAccess::new(store.clone(), gates.clone(), daemon.config.clone());
     Arc::new(Runner::new(
         store.clone(),
-        Arc::new(Gates::default()),
+        gates,
         daemon.config.clone(),
         Arc::new(Notifications::new(store)),
+        Arc::new(forges),
         daemon.clone(),
         Paths::for_test(root.path()),
     ))
@@ -228,9 +236,6 @@ pub(crate) struct StandIn {
     pub(crate) contribution: AtomicBool,
     /// Whether the repository is being removed.
     pub(crate) removing: AtomicBool,
-    /// The web URL of the checkout's forge repository, and the forge every
-    /// host serves.
-    pub(crate) forge: Mutex<Option<(String, ForgeKind)>>,
     /// What each launch asked for, with the space it opened, oldest first.
     pub(crate) launched: Mutex<Vec<(SpaceId, Launch)>>,
     /// The spaces whose agent runs or waits.
@@ -290,21 +295,6 @@ impl StandIn {
             local_config: repo::parse(&local)?,
             ..Default::default()
         })
-    }
-
-    /// The forge every host serves.
-    fn hosts(&self) -> Hosts {
-        let forge = self.forge.lock().unwrap();
-        Hosts((forge.as_ref()).map_or(ForgeKind::Forgejo, |(_, kind)| *kind))
-    }
-}
-
-/// Every host serves the one forge.
-struct Hosts(ForgeKind);
-
-impl HostTypes for Hosts {
-    async fn forge_type(&self, _host: &str, _scheme: &'static str) -> Result<HostType> {
-        Ok(HostType::Settled(self.0))
     }
 }
 
@@ -427,29 +417,6 @@ impl Permissions for StandIn {
         _: Option<RepositoryId>,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
-    }
-}
-
-impl Forges for StandIn {
-    fn user_account(&self) -> Account {
-        let forges = &self.config.current().machine.forges;
-        Account::user(forges.logins(Whose::User, self.config.values()))
-    }
-
-    fn checkout_forge<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<ForgeRepo>> {
-        let url = (self.forge.lock().unwrap().as_ref()).map(|(url, _)| url.clone());
-        Box::pin(async move {
-            let url = url.context("the checkout has no forge remote")?;
-            ForgeRepo::resolve(&url, &self.hosts()).await
-        })
-    }
-
-    fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async move { ForgeRepo::resolve(url, &self.hosts()).await })
-    }
-
-    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async move { item.forge(&self.hosts()).await })
     }
 }
 

@@ -21,7 +21,7 @@ impl Links {
         context: &ItemContext,
     ) -> Result<ForgeRepo> {
         let place = self.place(daemon, context, Access::Read).await?;
-        place.forge(daemon).await
+        place.forge(&self.forges).await
     }
 
     /// The forge of the `target` repository, which `caller` reads.

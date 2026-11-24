@@ -65,7 +65,7 @@ impl Links {
         let context = match &target.context {
             Some(ItemContext::Checkout(id)) => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
-                let account = self.user_account();
+                let account = self.forges.user_account();
                 return (self.open_checkout_issue(daemon, id, issue, repository, account)).await;
             }
             Some(context) => context,
@@ -141,7 +141,7 @@ impl Links {
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
         let named = repository.context("name the repository the issue opens in with --repo")?;
-        let forge = (daemon.resolve_forge(&named).await)
+        let forge = (self.forges.forge(&named).await)
             .with_context(|| format!("{named} is not registered; name it by its URL"))?;
         let destination = IssueDestination {
             forge,
@@ -160,8 +160,8 @@ impl Links {
             );
         }
         let account = match caller {
-            Some(_) => self.agent_account(),
-            None => self.user_account(),
+            Some(_) => self.forges.agent_account(),
+            None => self.forges.user_account(),
         };
         let Created { item, unfinished } =
             (destination.forge).create_issue(&account, &issue).await?;
@@ -195,10 +195,8 @@ impl Links {
         let _gate = self.gates.lock_prs([&space.id]).await;
         let directory = self.issue_directory(daemon, &space).await?;
         let settings = daemon.acting_settings(&space).await?;
-        let own = forges::origin(daemon, &directory).await?;
-        let destination = self
-            .issue_destination(daemon, own, repository.as_deref())
-            .await?;
+        let own = self.forges.origin_forge(&directory).await?;
+        let destination = self.issue_destination(own, repository.as_deref()).await?;
         anyhow::ensure!(
             !link || !destination.elsewhere,
             "an issue in another repository cannot be linked; open it without --link"
@@ -223,7 +221,7 @@ impl Links {
             ))
             .await;
         }
-        let account = self.agent_account();
+        let account = self.forges.agent_account();
         let created = destination.create(&account, &directory, &issue, required);
         let (item, warnings) = created.await?;
         (self.keep_opened_issue(daemon, &space, item, warnings, link, caller)).await
@@ -295,7 +293,7 @@ impl Links {
         link: bool,
         proposer: Proposer,
     ) -> Result<OpenOutcome> {
-        let (forge, account) = (&destination.forge, self.agent_account());
+        let (forge, account) = (&destination.forge, self.forges.agent_account());
         conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
         forge.check_uploads(&account, &issue.attachments).await?;
         let repository = destination.repository();
@@ -318,10 +316,8 @@ impl Links {
     ) -> Result<OpenOutcome> {
         let checkout = daemon.repository(id).await?;
         let settings = daemon.repository_settings(&checkout.id).await?;
-        let own = forges::of_checkout(daemon, &checkout).await?;
-        let destination = self
-            .issue_destination(daemon, own, repository.as_deref())
-            .await?;
+        let own = self.forges.checkout_forge(&checkout).await?;
+        let destination = self.issue_destination(own, repository.as_deref()).await?;
         let required = destination.required(&settings);
         let (item, warnings) = destination
             .create(&account, &checkout.path, &issue, required)
@@ -338,11 +334,10 @@ impl Links {
     /// repository `own` without one.
     async fn issue_destination(
         self: &Arc<Self>,
-        daemon: &dyn Daemon,
         own: ForgeRepo,
         named: Option<&str>,
     ) -> Result<IssueDestination> {
-        let forge = forges::named(daemon, own.clone(), named).await?;
+        let forge = forges::named(&self.forges, own.clone(), named).await?;
         let elsewhere = forge != own;
         Ok(IssueDestination { forge, elsewhere })
     }

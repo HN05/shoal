@@ -87,7 +87,7 @@ pub(super) async fn handle(
         }
         ExecutionMethod::SessionSignalled { signal } => {
             (manager.runner)
-                .cancel_job_for_signal(&**manager, caller, signal)
+                .cancel_job_for_signal(caller, signal)
                 .await?;
             Body::Ok
         }

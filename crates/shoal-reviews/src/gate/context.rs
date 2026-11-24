@@ -2,6 +2,7 @@
 //! repository's checkout, the requesting space and its issues and PRs, the
 //! commits the request brings and what Shoal finds missing in it.
 use anyhow::{Context, Result};
+use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_refs::CommitId;
 
 use super::{
@@ -63,7 +64,11 @@ pub(super) struct Case {
 }
 
 /// The case of `request` for the gate.
-pub(super) async fn case(daemon: &dyn GateDaemon, request: &ApprovalRequest) -> Result<Case> {
+pub(super) async fn case(
+    daemon: &dyn GateDaemon,
+    forges: &ForgeAccess,
+    request: &ApprovalRequest,
+) -> Result<Case> {
     let space = daemon.space(&request.space_id).await?;
     let repository_id = (request.repository_id.as_ref())
         .or(space.repository_id.as_ref())
@@ -95,7 +100,7 @@ pub(super) async fn case(daemon: &dyn GateDaemon, request: &ApprovalRequest) -> 
         Some(_) => daemon.diff_base(&space.id).await.ok(),
         None => None,
     };
-    let warnings = warnings(daemon, request, &repository, &settings).await;
+    let warnings = warnings(forges, request, &repository, &settings).await;
     Ok(Case {
         space: request.space_id.clone(),
         action: subject::action(request),
@@ -146,7 +151,7 @@ async fn items(daemon: &dyn GateDaemon, space: &Space) -> Vec<String> {
 /// conventions; none for another request, an issue in another repository,
 /// or a forge that cannot be read.
 async fn warnings(
-    daemon: &dyn GateDaemon,
+    forges: &ForgeAccess,
     request: &ApprovalRequest,
     repository: &Repository,
     settings: &Effective,
@@ -166,7 +171,7 @@ async fn warnings(
         ),
         _ => return Vec::new(),
     };
-    match daemon.checkout_forge(repository).await {
+    match forges.checkout_forge(repository).await {
         Ok(forge) => {
             let path = &repository.path;
             conventions::proposal_warnings(&forge, path, kind, labels, body, required)

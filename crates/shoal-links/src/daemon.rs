@@ -19,9 +19,7 @@ use shoal_daemon_base::{
     notifications::Coordinators,
     permitted_actions::Action,
 };
-use shoal_forge::ci::workflow::WorkflowLink;
 use shoal_forge_types::{
-    ForgeRepo,
     items::{
         link::{ItemKind, Selection},
         reference::ItemRef,
@@ -362,47 +360,15 @@ pub trait Permissions: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-/// The forges repositories are on, by the forge each host serves.
-pub trait Forges: Send + Sync {
-    /// The repository the remote or web URL `url` names.
-    fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>>;
-
-    /// The repository `named` names, as OWNER/NAME on the forge of `own`
-    /// or as a repository URL on any forge.
-    fn resolve_named<'a>(
-        &'a self,
-        own: &'a ForgeRepo,
-        named: &'a str,
-    ) -> BoxFuture<'a, Result<ForgeRepo>>;
-
-    /// The repository the workflow URL `url` names, with the workflow and
-    /// the branch it names.
-    fn resolve_workflow<'a>(
-        &'a self,
-        url: &'a str,
-    ) -> BoxFuture<'a, Result<(ForgeRepo, WorkflowLink)>>;
-
-    /// The forge the repository of `item` is on.
-    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>>;
-}
-
 /// Everything links need of the daemon, which each of their operations
 /// that reaches beyond them takes.
 pub trait Daemon:
-    Spaces + Watches + Messages + Elsewhere + Approvals + Reviews + Forges + Permissions + Coordinators
+    Spaces + Watches + Messages + Elsewhere + Approvals + Reviews + Permissions + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Spaces
-        + Watches
-        + Messages
-        + Elsewhere
-        + Approvals
-        + Reviews
-        + Forges
-        + Permissions
-        + Coordinators
+    T: Spaces + Watches + Messages + Elsewhere + Approvals + Reviews + Permissions + Coordinators
 {
 }
 

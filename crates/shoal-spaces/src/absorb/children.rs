@@ -30,10 +30,7 @@ impl Spaces {
         folded: &Folded,
         caller: Option<&Caller>,
     ) -> Result<Vec<SpaceRef>> {
-        let account = match caller {
-            Some(_) => daemon.agent_account(),
-            None => daemon.user_account(),
-        };
+        let account = self.forges.read_account(caller);
         // Base changes take these gates, so the stack stays as planned.
         let _gates = self.lock_stack_gates(parties).await?;
         let children = self.children(&parties.target.id).await?;

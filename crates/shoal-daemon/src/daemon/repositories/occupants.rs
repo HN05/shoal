@@ -29,7 +29,7 @@ impl Occupants for Manager {
     }
 
     fn delete_runner_of_removed<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>> {
-        Box::pin(self.runner.delete_runner_of_removed(self, repo))
+        Box::pin(self.runner.delete_runner_of_removed(repo))
     }
 
     fn delete_kept_files<'a>(&'a self, repo: &'a Repository) -> BoxFuture<'a, Result<()>> {

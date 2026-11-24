@@ -1,19 +1,24 @@
-use crate::daemon::{
-    scope::Caller,
-    test_support::{configure, manager},
-};
+use std::sync::Arc;
+
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::agents::GitCredential;
 
+use crate::{
+    callers::Caller, config::Config, config_state::ConfigState, forge_access::ForgeAccess,
+};
+
 #[tokio::test]
 async fn only_scoped_callers_get_the_agent_token_of_a_host_with_one() {
-    let (_root, manager) = manager().await;
-    configure(
-        &manager,
+    let temp = tempfile::tempdir().unwrap();
+    let store = shoal_store::test_support::unsynced_store(temp.path().join("state.db"))
+        .await
+        .unwrap();
+    let config = Config::from_toml(
         "[machine.forges.\"git.example.com\"]\ntype = \"forgejo\"\nuser_token = \"user\"\nagent_token = \"agent\"\n\
          [machine.forges.\"code.example.com\"]\ntype = \"gitlab\"\nuser_token = \"user\"\n",
     )
-    .await;
+    .unwrap();
+    let access = ForgeAccess::new(store, Arc::default(), Arc::new(ConfigState::new(config)));
     let caller = Caller {
         space_id: SpaceId::generate(),
         execution: None,
@@ -22,15 +27,15 @@ async fn only_scoped_callers_get_the_agent_token_of_a_host_with_one() {
         vouched: None,
     };
 
-    let scoped = manager
+    let scoped = access
         .agent_git_credential(Some(&caller), "git.example.com")
         .await
         .unwrap();
-    let unscoped = manager
+    let unscoped = access
         .agent_git_credential(None, "git.example.com")
         .await
         .unwrap();
-    let user_token_only = manager
+    let user_token_only = access
         .agent_git_credential(Some(&caller), "code.example.com")
         .await
         .unwrap();

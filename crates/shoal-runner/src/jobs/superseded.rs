@@ -5,6 +5,7 @@
 //! before it starts, and each waiting-jobs poll checks every queued one,
 //! reading each PR's head once, so a job admission holds back does not hold
 //! the PR's checks while it waits.
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::collections::{BTreeMap, HashSet};
 
 use anyhow::Result;
@@ -35,7 +36,10 @@ impl Runner {
         forge: &ForgeRepo,
         run: &JobRun,
     ) -> Result<bool> {
-        if !forge.run_superseded(&daemon.user_account(), run).await? {
+        if !forge
+            .run_superseded(&self.forges.user_account(), run)
+            .await?
+        {
             return Ok(false);
         }
         self.cancel_superseded(daemon, name, forge, &run.url).await;
@@ -52,7 +56,7 @@ impl Runner {
         forge: &ForgeRepo,
     ) -> Result<()> {
         for (number, entries) in self.waiting_pull_jobs(repository_id).await? {
-            let Some(head) = waiting_pull_head(daemon, forge, number).await else {
+            let Some(head) = waiting_pull_head(&self.forges, forge, number).await else {
                 continue;
             };
             let superseded = entries
@@ -117,7 +121,10 @@ impl Runner {
         forge: &ForgeRepo,
         run: &ItemRef,
     ) {
-        let Err(error) = forge.cancel_unfinished(&daemon.user_account(), run).await else {
+        let Err(error) = forge
+            .cancel_unfinished(&self.forges.user_account(), run)
+            .await
+        else {
             return;
         };
         let message = format!(
@@ -134,12 +141,12 @@ impl Runner {
 /// The head of PR `number`, whose jobs wait, or `None`, logged, when it
 /// cannot be read.
 async fn waiting_pull_head(
-    daemon: &dyn Daemon,
+    forges: &ForgeAccess,
     forge: &ForgeRepo,
     number: PullNumber,
 ) -> Option<CommitId> {
     let head = forge
-        .numbered_pull_head(&daemon.user_account(), number)
+        .numbered_pull_head(&forges.user_account(), number)
         .await;
     head.inspect_err(|error| log!("runner: a PR's jobs stay queued: {error:#}"))
         .ok()

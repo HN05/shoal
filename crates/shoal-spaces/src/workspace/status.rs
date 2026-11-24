@@ -114,7 +114,7 @@ impl Spaces {
     ) -> Result<Selected> {
         let origin = daemon.origin_path(space).await?;
         let other = match elsewhere {
-            true => self.item_elsewhere(daemon, &origin, selection).await?,
+            true => self.item_elsewhere(&origin, selection).await?,
             false => None,
         };
         let items = match other {
@@ -137,17 +137,16 @@ impl Spaces {
     /// another repository than the one whose origin `checkout` has.
     pub async fn item_elsewhere(
         &self,
-        daemon: &dyn Daemon,
         checkout: &std::path::Path,
         selection: &link::Selection,
     ) -> Result<Option<SelectedItem>> {
-        let Some((forge, item)) = self.item_at_url(daemon, selection).await? else {
+        let Some((forge, item)) = self.item_at_url(selection).await? else {
             return Ok(None);
         };
         let remote = repository::remote_url_from_path(checkout)
             .await?
             .context("item lookup needs an origin remote")?;
-        if forge == daemon.forge(&remote).await? {
+        if forge == self.forges.forge(&remote).await? {
             return Ok(None);
         }
         Ok(Some(item))
@@ -157,13 +156,12 @@ impl Spaces {
     /// repository, with that repository's forge.
     pub async fn item_at_url(
         &self,
-        daemon: &dyn Daemon,
         selection: &link::Selection,
     ) -> Result<Option<(ForgeRepo, SelectedItem)>> {
         let Some(ItemInput::Url(item)) = &selection.input else {
             return Ok(None);
         };
-        let forge = daemon.item_forge(item).await?;
+        let forge = self.forges.item_forge(item).await?;
         Ok(Some((
             forge,
             SelectedItem {
