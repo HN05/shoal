@@ -42,7 +42,7 @@ fn own(machine: &Base, id: &str, chats: bool) -> Option<Value> {
 
 /// Whether `machine` runs the agent of its space `id`: a workspace's among
 /// its executions, a chat's as the chat runs.
-fn runs_agent(machine: &Base, id: &str) -> bool {
+pub(super) fn runs_agent(machine: &Base, id: &str) -> bool {
     let status = machine.ok(&["status", id]);
     let executions = status["executions"].as_array();
     status["chat"]["running"] == true
@@ -51,7 +51,7 @@ fn runs_agent(machine: &Base, id: &str) -> bool {
 
 /// Start on `machine` a space with `args` whose agent runs detached, and
 /// return its ID once its agent runs.
-fn running(machine: &Base, args: &[&str], name: &str) -> String {
+pub(super) fn running(machine: &Base, args: &[&str], name: &str) -> String {
     let started = machine.run(&[args, &["--agent", "pi", "--name", name, "--json"]].concat());
     assert!(started.status.success(), "{}", printed(&started));
     let id = machine.id(name);
@@ -62,7 +62,7 @@ fn running(machine: &Base, args: &[&str], name: &str) -> String {
 }
 
 /// The hub and a laptop joined to it, which both run the agent.
-fn machines() -> (Base, Base) {
+pub(super) fn machines() -> (Base, Base) {
     let hub = format!("{AGENT}[machine.hub]\nenabled = true\nlisten = \"127.0.0.1:0\"\n");
     let hub = hosting(Base::start(home(), &hub, "app", &[]));
     let laptop = hosting(Base::start(home(), AGENT, "app", &[]));
