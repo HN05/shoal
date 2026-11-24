@@ -26,6 +26,7 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
+pub mod held_wakes;
 pub mod unretried;
 
 /// The wait before the first attempt, doubling for each later one.
@@ -112,7 +113,13 @@ fn record_failure(
     let previous = previous_attempt(tx, space_id)?;
     let (attempt, due_at) = next_attempt(previous, execution, failed.failure, now, spread);
     let due_at = reset.map_or(due_at, |reset| due_at.max(reset + RESET_MARGIN));
-    save_retry(tx, space_id, execution, failed.failure, attempt, due_at)?;
+    let retry = Retry {
+        failure: failed.failure,
+        attempt,
+        due_at,
+        resets_at: reset,
+    };
+    save_retry(tx, space_id, execution, &retry)?;
     Ok(())
 }
 
@@ -147,9 +154,10 @@ fn record_reset(
         params![execution, reset],
     )?;
     let held = tx.execute(
-        "UPDATE space_turn_retries SET due_at=MAX(due_at,?2)
+        "UPDATE space_turn_retries SET due_at=MAX(due_at,?2),
+             resets_at=MAX(COALESCE(resets_at,?3),?3)
          WHERE execution_id=?1 AND delivered=0",
-        params![execution, reset + RESET_MARGIN],
+        params![execution, reset + RESET_MARGIN, reset],
     )?;
     Ok(held > 0)
 }
@@ -228,21 +236,37 @@ fn next_attempt(
     }
 }
 
+/// The next attempt of a space's retry, and the reset it waits past
+/// when one is known.
+struct Retry {
+    failure: TurnFailure,
+    attempt: u32,
+    due_at: UnixTime,
+    resets_at: Option<UnixTime>,
+}
+
 /// Persist the next attempt, replacing a previous one for the space.
 fn save_retry(
     db: &Connection,
     space_id: &SpaceId,
     execution: &ExecutionId,
-    failure: TurnFailure,
-    attempt: u32,
-    due_at: UnixTime,
+    retry: &Retry,
 ) -> Result<()> {
     db.execute(
-        "INSERT INTO space_turn_retries(space_id,execution_id,failure,attempt,due_at,delivered)
-             VALUES (?1,?2,?3,?4,?5,0)
+        "INSERT INTO space_turn_retries(space_id,execution_id,failure,attempt,due_at,delivered,
+                 resets_at)
+             VALUES (?1,?2,?3,?4,?5,0,?6)
              ON CONFLICT(space_id) DO UPDATE SET execution_id=excluded.execution_id,
-                 failure=excluded.failure,attempt=excluded.attempt,due_at=excluded.due_at,delivered=0",
-        params![space_id, execution, failure, attempt, due_at],
+                 failure=excluded.failure,attempt=excluded.attempt,due_at=excluded.due_at,
+                 delivered=0,resets_at=excluded.resets_at",
+        params![
+            space_id,
+            execution,
+            retry.failure,
+            retry.attempt,
+            retry.due_at,
+            retry.resets_at
+        ],
     )?;
     Ok(())
 }

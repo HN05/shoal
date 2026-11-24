@@ -34,6 +34,10 @@ impl Messages for Manager {
         self.spaces.leftovers.undelivered(id, room)
     }
 
+    fn wakes_held<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(self.agents.wakes_held(id))
+    }
+
     fn watch_messages(&self) -> watch::Receiver<u64> {
         self.signals.watch_messages()
     }

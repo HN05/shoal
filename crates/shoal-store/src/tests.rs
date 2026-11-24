@@ -867,6 +867,9 @@ pub(super) fn historical_database(version: i64) -> Result<Connection> {
         participant_posts(&db)?;
         db.execute_batch("PRAGMA foreign_keys=ON;")?;
     }
+    if version >= 295 {
+        db.execute_batch(include_str!("turn_retry_resets.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     let space = if version >= 160 {
         "space_id"
@@ -1700,6 +1703,24 @@ fn migrated_spaces_keep_their_issue_first_and_take_more() -> Result<()> {
         issues,
         [(issue(4), Some("Fix it".into())), (issue(5), None)]
     );
+    Ok(())
+}
+
+#[test]
+fn a_pending_turn_retry_waits_past_the_reset_its_proxy_reported() -> Result<()> {
+    let mut db = historical_database(294)?;
+    db.execute_batch(
+        "INSERT INTO execution_upstream_resets(execution_id,resets_at) VALUES ('execution',2000);
+         INSERT INTO space_turn_retries(space_id,execution_id,failure,attempt,due_at,delivered)
+             VALUES ('workspace','execution','rate_limited',1,2030,0);",
+    )?;
+    migrate(&mut db)?;
+    let reset: Option<UnixTime> = db.query_row(
+        "SELECT resets_at FROM space_turn_retries WHERE space_id='workspace'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(reset, Some(UnixTime::from_seconds(2000)));
     Ok(())
 }
 

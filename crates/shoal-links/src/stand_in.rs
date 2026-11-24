@@ -276,6 +276,10 @@ impl Messages for StandIn {
         Ok(Vec::new())
     }
 
+    fn wakes_held<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
+    }
+
     fn watch_messages(&self) -> watch::Receiver<u64> {
         watch::channel(0).1
     }

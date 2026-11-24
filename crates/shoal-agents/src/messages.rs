@@ -20,7 +20,7 @@ mod settle;
 mod store;
 
 pub use settle::SettleClock;
-pub use store::{ensure_holders_fit, every_unread, hand_to_user};
+pub use store::{ensure_holders_fit, every_unread, hand_to_user, user_alert_unread};
 
 /// How a queued alert reaches an idle agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

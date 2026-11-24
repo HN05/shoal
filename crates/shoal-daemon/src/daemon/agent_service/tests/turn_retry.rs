@@ -618,3 +618,5 @@ async fn a_restore_that_leaves_the_queue_after_its_execution_drops_its_retry() {
         .unwrap();
     assert_eq!(waits, None);
 }
+
+mod held_wakes;

@@ -978,7 +978,7 @@ CREATE TABLE "space_turn_retries" (
     attempt INTEGER NOT NULL CHECK(attempt > 0),
     due_at INTEGER NOT NULL,
     delivered INTEGER NOT NULL CHECK(delivered IN (0,1))
-);
+, resets_at INTEGER);
 
 CREATE TABLE review_reopens (
     review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,

@@ -17,7 +17,7 @@ use super::{
     UpdatesExt,
     followed::followed_items,
     framing::{Batch, RESPONSE_LIMIT, own_batch, with_unread_messages},
-    poll::{until, wait_for_updates, watch_deadline},
+    poll::{POLL_INTERVAL, until, wait_for_updates, watch_deadline},
     wake_log::WakeWaitLog,
 };
 use crate::{Links, daemon::Daemon};
@@ -44,27 +44,56 @@ impl Links {
             selection.input.is_none() || selection.kind.is_some(),
             "explicit items need a kind"
         );
-        let deadline = watch_deadline(seconds);
         let space = daemon.space(selector).await?;
         let repository = (self.watched_repository(daemon, &space, selection, repository)).await?;
+        let watch = Watch {
+            selection,
+            repository: repository.as_ref(),
+            deadline: watch_deadline(seconds),
+            wakes: false,
+        };
+        self.wait_activity(daemon, &space, watch).await
+    }
+
+    /// The next messages or activity of the items `watch` selects of
+    /// `space`, as [`Self::wait_items`] finds them, waiting first while a
+    /// wake's are held back.
+    async fn wait_activity(
+        &self,
+        daemon: &dyn Daemon,
+        space: &Space,
+        watch: Watch<'_>,
+    ) -> Result<Updates> {
+        let Watch {
+            selection,
+            repository,
+            deadline,
+            wakes,
+        } = watch;
         // The space's hooks deliver what a watch would, so the newest of them
         // takes it.
         let wait = self.waits().start(&space.id);
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = daemon.watch_messages();
         let mut background = daemon.watch_item_updates();
+        if wakes {
+            tokio::select! {
+                held = held_wakes(daemon, &space.id, &mut queued) => held?,
+                () = wait.superseded.notified() => return Ok(Updates::superseded()),
+            }
+        }
         let unread = daemon.unread_messages(&space.id).await?;
         let mut messages = unread.alerts;
         if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
                 updates = wait_for_updates(deadline, &mut background, || {
-                    self.poll_space_activity(daemon, &space, selection, repository.as_ref())
+                    self.poll_space_activity(daemon, space, selection, repository)
                 }) => {
                     let updates = updates?;
                     // Including settled ones queued while the wait ran. A
                     // newer delivery may take them and the updates meanwhile.
-                    let unread = daemon.deliverable_messages(&space).await?;
+                    let unread = daemon.deliverable_messages(space).await?;
                     if !wait.is_current() {
                         return Ok(Updates::superseded());
                     }
@@ -76,7 +105,7 @@ impl Links {
         }
         // Messages still settling at the deadline wait for a later delivery.
         let messages = tokio::select! {
-            settled = daemon.settled_messages(&space, messages) => settled?,
+            settled = daemon.settled_messages(space, messages) => settled?,
             () = wait.superseded.notified() => return Ok(Updates::superseded()),
             () = until(deadline) => return Ok(Updates::timed_out()),
         };
@@ -90,8 +119,8 @@ impl Links {
     /// The next messages or item activity of the agent of the space
     /// `selector` names, as an unfiltered [`Self::wait_items`] without a
     /// deadline finds them, unless a newer wait or delivery takes them
-    /// first. The wake hook's wait, so the daemon logs how one ends without
-    /// updates.
+    /// first, once no failed turn's retry holds them back. The wake hook's
+    /// wait, so the daemon logs how one ends without updates.
     pub async fn wait_space_updates(
         &self,
         daemon: &dyn Daemon,
@@ -99,10 +128,13 @@ impl Links {
     ) -> Result<Updates> {
         let space = daemon.space(selector).await?;
         let log = WakeWaitLog::start(&space.name);
-        let selector = SpaceSelector::id(&space.id);
-        let updates = self
-            .wait_items(daemon, &selector, &Selection::default(), None, None)
-            .await;
+        let watch = Watch {
+            selection: &Selection::default(),
+            repository: None,
+            deadline: None,
+            wakes: true,
+        };
+        let updates = self.wait_activity(daemon, &space, watch).await;
         log.answered(&updates);
         updates
     }
@@ -272,6 +304,34 @@ impl Links {
             .read(move |db| records.delegated(db, &id, &agents))
             .await
     }
+}
+
+/// What a wait for a space's updates takes: the items it watches, the
+/// repository of an item a chat without one names, when it gives up, and
+/// whether it wakes the agent, which waits while its wakes are held back.
+struct Watch<'a> {
+    selection: &'a Selection,
+    repository: Option<&'a RepositoryId>,
+    deadline: Option<tokio::time::Instant>,
+    wakes: bool,
+}
+
+/// Return once the updates of the space `id` may wake its agent again,
+/// looking again whenever a message is queued, as the retry's own message
+/// and the user's are, and every [`POLL_INTERVAL`] for a retry dropped
+/// without one.
+async fn held_wakes(
+    daemon: &dyn Daemon,
+    id: &SpaceId,
+    queued: &mut tokio::sync::watch::Receiver<u64>,
+) -> Result<()> {
+    while daemon.wakes_held(id).await? {
+        tokio::select! {
+            changed = queued.changed() => changed?,
+            () = tokio::time::sleep(POLL_INTERVAL) => {}
+        }
+    }
+    Ok(())
 }
 
 /// The unread messages once one that wakes an idle agent is queued.

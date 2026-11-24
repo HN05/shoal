@@ -2524,7 +2524,11 @@ upstream answers again. A rate limit's error that Claude Code's failure hook
 passes states such a reset as well when it gives a duration after `reset
 after`, `resets in`, `try again in` or `retry after`, such as `1h36m24s`, or a
 JSON error with `resets_in_seconds`, `reset_seconds` or `resets_at`; without
-one, a usage limit is checked about hourly. A turn Shoal does not retry, because `retry` is off or the error is
+one, a usage limit is checked about hourly. While a retry waits for a known
+reset, the agent's alerts and item activity, except an alert from the user,
+wake it for no turn the limit would fail, nor restore it from sleep: they
+stay unread and arrive with the retry's message, or with the user's alert
+if it comes first. A turn Shoal does not retry, because `retry` is off or the error is
 one a retry does not fix, such as failed authentication, gets a `turn_failed`
 alert naming the failure, which a child space's coordinating agent
 receives instead; later failed turns of the same agent add none until one of its
@@ -7349,7 +7353,9 @@ its context reaches the agent only through the subagent's report. Delivering thr
 the workspace, which ends with `superseded: true`. Claude Code launches also run
 `shoal internal wake` as a background `Stop` and `StopFailure` hook with
 `asyncRewake`: after each turn, including one an API error ended, it waits up to a week for the next alert or item activity, prints it and
-exits 2, so Claude Code starts the idle agent's next turn with it. No other hook
+exits 2, so Claude Code starts the idle agent's next turn with it; while a
+[turn retry](#agents) waits for a rate limit's known reset, it waits for the
+retry's message or an alert from the user instead. No other hook
 reports that turn starting, so it first reports the agent `working`, unless a
 stop of the agent came first, which leaves the update unread for its restore.
 The wait

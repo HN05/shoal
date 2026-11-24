@@ -85,11 +85,17 @@ impl Manager {
     }
 
     /// Whether messages that wake an idle agent or queued updates wait for
-    /// the space's agent. While cleanup or an item change holds the PR
-    /// gates of the spaces whose activity it receives, only messages count,
-    /// as in a hook delivery.
+    /// the space's agent, unless [`Agents::wakes_held`] holds them back.
+    /// While cleanup or an item change holds the PR gates of the spaces
+    /// whose activity it receives, only messages count, as in a hook
+    /// delivery.
+    ///
+    /// [`Agents::wakes_held`]: shoal_agents::Agents::wakes_held
     pub(crate) async fn updates_waiting(&self, selector: &SpaceSelector) -> Result<bool> {
         let space = self.spaces.space(selector).await?;
+        if self.agents.wakes_held(&space.id).await? {
+            return Ok(false);
+        }
         if self.agents.unread_messages(&space.id).await?.wakes {
             return Ok(true);
         }
@@ -120,8 +126,9 @@ impl Manager {
     }
 
     /// Whether the idle agent of `space` is due a wake: `messages_due`, or
-    /// updates as [`Self::wake_updates_due`] counts them in `phase`, and
-    /// the hook of the agent the `hooked` execution runs cannot wake it.
+    /// updates as [`Self::wake_updates_due`] counts them in `phase`, the
+    /// hook of the agent the `hooked` execution runs cannot wake it, and
+    /// its turn retry holds back no wake.
     pub(super) async fn agent_wake_due(
         &self,
         space: &Space,
@@ -129,7 +136,7 @@ impl Manager {
         messages_due: bool,
         phase: WakePhase,
     ) -> Result<bool> {
-        if !self.wakeable(&space.id, hooked).await? {
+        if !self.wakeable(&space.id, hooked).await? || self.agents.wakes_held(&space.id).await? {
             return Ok(false);
         }
         Ok(messages_due || self.wake_updates_due(space, phase).await?)

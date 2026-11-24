@@ -157,6 +157,17 @@ fn all_unread(db: &Connection, space_id: &SpaceId) -> Result<Unread> {
     Ok(unread)
 }
 
+/// Whether an unread alert from the user waits for the agent of the space
+/// `space_id`.
+pub fn user_alert_unread(db: &Connection, space_id: &SpaceId) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM alerts
+            WHERE recipient_id=?1 AND read=0 AND sender=?2)",
+        params![space_id, alerts::Sender::User],
+        |row| row.get(0),
+    )?)
+}
+
 /// Every space's unread alerts, oldest first, as its agent reads them.
 pub fn every_unread(db: &Connection) -> Result<Vec<Alert>> {
     Ok(db

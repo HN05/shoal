@@ -3161,7 +3161,10 @@ quota and then carries on. A reset the agent's proxy learns of from its upstream
 or that a rate limit's error states, holds the retry until it has passed,
 whichever of the proxy's and the agent's reports arrives first; the
 integration reads a reset from its failure event, and the daemon decides what
-it means. Retry scheduling knows no agent: an
+it means. While a retry waits for a known reset, the agent's updates wake it
+for no turn, nor restore it, since that turn would fail as the last did and
+each failure notifies; they arrive with the retry's message, and a message from
+the user still wakes it. Retry scheduling knows no agent: an
 integration that can report why a turn failed maps the agent's error to Shoal's failure, and the
 daemon persists the retry and asks the idle agent to continue through its
 messages, so hook-woken and prompt-woken agents get it alike. A retry is tied to

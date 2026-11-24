@@ -219,6 +219,10 @@ pub trait Messages: Send + Sync {
     /// as many as one delivery names in `room` bytes.
     fn undelivered_leftovers(&self, id: &SpaceId, room: usize) -> Result<Vec<Leftover>>;
 
+    /// Whether the updates of the space `id` wake its agent for no turn for
+    /// now, since one would fail as its last did.
+    fn wakes_held<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
+
     /// A receiver that changes whenever a message is queued for an agent.
     fn watch_messages(&self) -> watch::Receiver<u64>;
 
