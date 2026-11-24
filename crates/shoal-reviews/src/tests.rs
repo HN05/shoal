@@ -584,6 +584,33 @@ async fn the_reviewer_answers_a_post_in_its_finding_s_thread() {
 }
 
 #[tokio::test]
+async fn an_answer_no_longer_waited_for_runs_no_other_reviewer() {
+    // Asked to answer, it counts its run and exits without posting once
+    // the test resolved the thread; else it reviews.
+    let answers = "case \"$1\" in *'post your reply once'*)\n\
+        dir=\"$(dirname '{review}')\"; echo run >> \"$dir/runs\"\n\
+        while [ ! -e \"$dir/resolved\" ] && kill -0 {tests} 2>/dev/null; do sleep 0.1; done;;\n\
+        *) {write};; esac";
+    let fixture = fixture(
+        &[("first", answers), ("second", answers)],
+        "agent = 'first'\nfallback_agent = 'second'",
+    )
+    .await;
+    let thread = fixture.review().await.threads.remove(0);
+    let mut ended = fixture.reviews.ends();
+    fixture.records.post_as_holder(thread.number, "Really?");
+    fixture.reviews.answer_posts();
+    while !fixture.written("runs").exists() {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    fixture.records.resolve(thread.number, Some(Outcome::Fixed));
+    std::fs::write(fixture.written("resolved"), "").unwrap();
+    ended.changed().await.unwrap();
+    assert_eq!(written(&fixture, "runs"), "run\n");
+    assert!(fixture.daemon.answered.borrow().is_empty());
+}
+
+#[tokio::test]
 async fn removing_the_workspace_stops_an_answer_being_made() {
     // Asked to answer, it runs until it is stopped; else it reviews.
     let script = format!(

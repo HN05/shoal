@@ -531,7 +531,7 @@ impl Reviews {
             }
         };
         drop(scope);
-        let ended = reviewer::settled(ended, self.produced(run.task, id).await);
+        let ended = self.settle(run.task, id, ended).await;
         if !matches!(ended, Ended::Returned { .. }) {
             self.drop_run_writes(run, id).await;
         }
@@ -548,12 +548,19 @@ impl Reviews {
         }
     }
 
-    /// Whether the run for `task` of review `id` produced what it was asked
-    /// for: the review it submitted, or the answer it posted.
-    async fn produced(&self, task: Task, id: ReviewId) -> bool {
-        match task {
-            Task::Review => self.finished(id).await,
-            Task::Answer(awaited) => self.posted_answer(awaited).await,
+    /// How the run for `task` of review `id`, which ended as `ended`,
+    /// settled: as [`reviewer::settled`] tells from whether it produced the
+    /// review it submitted or the answer it posted; cancelled for an answer
+    /// that failed once its post no longer waits, which no other run could
+    /// give.
+    async fn settle(&self, task: Task, id: ReviewId, ended: Ended) -> Ended {
+        let awaited = match task {
+            Task::Review => return reviewer::settled(ended, self.finished(id).await),
+            Task::Answer(awaited) => awaited,
+        };
+        match reviewer::settled(ended, self.posted_answer(awaited).await) {
+            Ended::Failed(_) if !self.awaits(awaited).await => Ended::Cancelled,
+            ended => ended,
         }
     }
 

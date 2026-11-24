@@ -240,6 +240,18 @@ impl Reviews {
         }
     }
 
+    /// Whether the post `awaited` still waits for the reviewer's answer, as
+    /// it is taken to when that cannot be read.
+    pub(crate) async fn awaits(&self, awaited: AwaitedPost) -> bool {
+        match self.awaiting(awaited).await {
+            Ok(thread) => thread.is_some(),
+            Err(error) => {
+                log!("answering thread {}: {error:#}", awaited.thread);
+                true
+            }
+        }
+    }
+
     /// The thread of the post `awaited` while it waits for the reviewer's
     /// answer.
     async fn awaiting(&self, awaited: AwaitedPost) -> Result<Option<Thread>> {
