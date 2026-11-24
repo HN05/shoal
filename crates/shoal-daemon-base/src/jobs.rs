@@ -25,6 +25,8 @@ pub enum JobStop {
     Removal,
     /// Its runner outliving its finished run.
     Overrun,
+    /// Its job going to another runner, or ending before any took it.
+    Untaken,
     /// Load protection, for the pressure it names.
     Overload(&'static str),
     /// A signal ending its wrapper's session, as a logout or a shutdown
@@ -42,6 +44,7 @@ impl std::fmt::Display for JobStop {
             Self::Pause => f.write_str("the machine's pause"),
             Self::Removal => f.write_str("its workspace's removal"),
             Self::Overrun => f.write_str("its runner outliving its finished run"),
+            Self::Untaken => f.write_str("its job going to another runner"),
             Self::Overload(pressure) => f.write_str(pressure),
             Self::Signal(signal) => write!(f, "{signal} to its wrapper"),
         }

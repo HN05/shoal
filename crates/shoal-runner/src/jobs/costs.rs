@@ -90,6 +90,18 @@ impl Runner {
             .await
     }
 
+    /// Keep no run of the claimed job `id` for its job's cost, as for one
+    /// whose runner never took it and so used nothing a run does.
+    pub(super) async fn discard_job_usage(&self, id: &QueueEntryId) -> Result<()> {
+        let id = id.clone();
+        self.store
+            .run(move |db| {
+                db.execute("UPDATE ci_jobs SET usage_recorded=1 WHERE id=?1", [id])?;
+                Ok(())
+            })
+            .await
+    }
+
     /// What a run of `job` in `repository_id` is expected to use: the most
     /// memory its recent runs reached, none before it has run.
     pub async fn job_cost(&self, repository_id: &RepositoryId, job: &QueuedJob) -> Result<JobCost> {

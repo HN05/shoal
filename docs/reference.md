@@ -4921,7 +4921,11 @@ another run than the admitted job's waits before its first step until the
 daemon moves the workspace to that run's commit, and the job is then listed,
 counted and cancelled as the one it took; a workspace that cannot move fails
 the job. A runner GitHub gives no job is deleted once it has waited a minute
-and no job waits for its labels, and its workspace goes. The workspace skips setup
+and no job waits for its labels, and its workspace goes. A `forgejo-runner`
+whose job the forge no longer lists as waiting is stopped at the poll that
+sees it when the job's log names another runner as the one that took it, or
+the job ended before any runner took it; its workspace goes, and the run
+counts nothing towards the job's expected memory. The workspace skips setup
 and starts from the [seed build](#seed-builds) like any workspace, so the job
 rebuilds only what its commit changed. The job gets its workspace's
 environment, scope token, `TMPDIR`, `[env]` and the variables its

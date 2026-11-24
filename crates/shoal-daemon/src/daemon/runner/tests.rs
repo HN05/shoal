@@ -65,6 +65,11 @@ pub(super) async fn launch(
 /// run 8; run 9 waits for PR 13, whose head cannot be read; run 3 runs, and
 /// run 6 was cancelled.
 pub(super) struct Fixture {
+    /// The jobs the forge lists as waiting.
+    pub waiting: Arc<Mutex<Vec<Value>>>,
+    /// What the forge answers to requests by their line, before its own
+    /// answers.
+    pub answers: Arc<Mutex<HashMap<String, String>>>,
     _root: tempfile::TempDir,
     pub manager: Arc<Manager>,
     pub repository: RepositoryId,
@@ -86,12 +91,18 @@ pub(super) async fn fixture(jobs: Vec<Value>, settings: &str) -> Fixture {
     let pushed = head.clone();
     let pull_head = Arc::new(Mutex::new(head.clone()));
     let served_head = pull_head.clone();
+    let waiting = Arc::new(Mutex::new(jobs));
+    let answers = Arc::<Mutex<HashMap<String, String>>>::default();
+    let (served_jobs, served_answers) = (waiting.clone(), answers.clone());
     let server = Server::start(move |request| {
         let line = request.line.as_str();
+        if let Some(answer) = served_answers.lock().unwrap().get(line) {
+            return (200, Vec::new(), answer.clone().into());
+        }
         let body = if line == "GET /api/v1/version" {
             json!({"version": "17.0.1+gitea-1.22.0"})
         } else if line.starts_with("GET /api/v1/repos/team/repo/actions/runners/jobs?") {
-            json!(jobs)
+            json!(*served_jobs.lock().unwrap())
         } else if line == "GET /api/v1/repos/team/repo/actions/runs/1" {
             run(1, "push", &pushed, json!({"ref": "refs/heads/main"}))
         } else if line == "GET /api/v1/repos/team/repo/actions/runs/2" {
@@ -185,6 +196,8 @@ pub(super) async fn fixture(jobs: Vec<Value>, settings: &str) -> Fixture {
         .await
         .unwrap();
     Fixture {
+        waiting,
+        answers,
         _root: root,
         manager,
         repository: repo.id,
@@ -2089,4 +2102,5 @@ mod single_use;
 mod superseded;
 mod taken;
 mod triggers;
+mod untaken;
 mod waiting;

@@ -28,7 +28,7 @@ impl Runner {
     /// daemon restart. A removal that fails is tried again on the next pass.
     pub async fn finish_ended_jobs(&self, daemon: &dyn Daemon) -> Result<()> {
         let jobs = self.claimed_jobs().await?;
-        (self.jobs).keep_runs(&jobs.iter().map(|job| job.id.clone()).collect());
+        (self.jobs).keep_claimed(&jobs.iter().map(|job| job.id.clone()).collect());
         for job in jobs {
             let running = match &job.execution_id {
                 Some(execution) => {

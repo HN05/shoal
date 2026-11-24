@@ -2187,7 +2187,9 @@ run until its workspace is at that run's commit, so a check never reports on
 another commit. Polling finds jobs, which works without the webhook listener
 and the tunnel it needs; it runs every ten seconds while a job could start and every minute
 while none can, so the queue still shows new jobs and drops those other
-runners took, and conditional reads keep unchanged answers off the rate
+runners took, and a claimed job's runner that another runner beat to the job,
+or that a cancel left nothing, stops instead of holding its slot and the
+memory its job is expected to use, and conditional reads keep unchanged answers off the rate
 limit. Each job runs as a tracked execution in
 a disposable workspace at its commit, which goes once the forge's runner
 exits, at low CPU priority so that a build takes only the cores agents and the

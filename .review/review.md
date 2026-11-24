@@ -657,6 +657,8 @@ instead of the PR delivery guidance below.
   workspace at its commit that starts from the seed, and ends only through the
   forge: stopping it cancels its run there, as its wrapper has the daemon do
   when a hangup or terminate signal reaches it, protection leaves it running,
+  a runner whose job the forge gave another runner, or ended untaken, stops
+  at the waiting-jobs poll that sees it, keeping no run for the job's cost,
   and its workspace goes once the execution ends. It outlives the daemon: its
   wrapper runs apart from a systemd service's control group, in a scope of its
   own, and Shoal's log names what stopped each job's runner. Forge-specific steps are

@@ -30,6 +30,7 @@ mod reruns;
 mod single_use;
 mod superseded;
 mod taken;
+mod untaken;
 mod waiting;
 
 pub use claimed::ClaimedJob;
@@ -90,6 +91,9 @@ pub struct Runners {
     claiming: Mutex<HashSet<QueueEntryId>>,
     /// The runs of the running jobs, by queue entry.
     runs: Mutex<HashMap<QueueEntryId, RunCheck>>,
+    /// The running jobs claimed by handle whose runner the forge says took
+    /// them, by queue entry.
+    taken: Mutex<HashSet<QueueEntryId>>,
     /// When the runs of the jobs waiting to rerun were last read.
     reruns_read: Mutex<Option<Instant>>,
     /// Held while the jobs waiting to rerun are rerun.
@@ -220,9 +224,20 @@ impl Runners {
             .map(|finished| finished.elapsed())
     }
 
-    /// Forget the runs of the jobs other than `running`.
-    pub fn keep_runs(&self, running: &HashSet<QueueEntryId>) {
-        lock(&self.runs).retain(|entry, _| running.contains(entry));
+    /// Forget what is kept of the jobs other than `claimed`.
+    pub fn keep_claimed(&self, claimed: &HashSet<QueueEntryId>) {
+        lock(&self.runs).retain(|entry, _| claimed.contains(entry));
+        lock(&self.taken).retain(|entry| claimed.contains(entry));
+    }
+
+    /// The forge said the runner of the running job `entry` took it.
+    pub fn took(&self, entry: &QueueEntryId) {
+        lock(&self.taken).insert(entry.clone());
+    }
+
+    /// Whether the forge said the runner of the running job `entry` took it.
+    pub fn taken(&self, entry: &QueueEntryId) -> bool {
+        lock(&self.taken).contains(entry)
     }
 
     /// Take each run found finished to have finished `by` earlier.
