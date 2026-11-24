@@ -7,11 +7,10 @@ use shoal_ids::execution_ids::ExecutionId;
 use super::{Attaching, Target};
 use crate::{
     client::connection::CommandPaths,
-    resume::{self, Resumed, sessions::Starts},
+    model::{AgentResume, ResumeOutcome},
     sessions::{Origin, OriginExt as _},
     terminal::Session,
 };
-use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 /// An attach's steps for a caller that does its own way what `attaching`
@@ -87,32 +86,28 @@ impl<A: Attaching> Steps<'_, A> {
         if self.await_starting_launch(target.id()).await? {
             return Ok(true);
         }
-        if !self.has_stopped_work(target).await? {
+        self.resume_now(target).await
+    }
+
+    /// Resume `target`'s agent at once, as `shoal resume --now` does, and
+    /// wait for the restore or launch it starts through the queue; whether
+    /// it had one to resume, refusing a resume that found only stopped
+    /// commands.
+    async fn resume_now(&self, target: &Target) -> Result<bool> {
+        let resume = AgentResume {
+            now: true,
+            alone: true,
+            env: crate::terminal::start_environment(),
+            ..AgentResume::default()
+        };
+        let request = crate::client::agents::resume(SpaceSelector::id(target.id()), resume);
+        if !resumed(target.name(), request.send(self.paths).await?)? {
             return Ok(false);
         }
-        self.resume_now(target).await?;
-        Ok(true)
-    }
-
-    /// Whether `target` saved stopped work or a last session to restore.
-    async fn has_stopped_work(&self, target: &Target) -> Result<bool> {
-        let space = SpaceSelector::id(target.id());
-        let saved = crate::client::saved::read(self.paths, space).await?;
-        Ok(!saved.is_empty())
-    }
-
-    /// Resume `target`'s stopped agent at once, as `shoal resume --now`
-    /// does, and wait for the restore it starts through the queue; refused
-    /// when the resume started no agent.
-    async fn resume_now(&self, target: &Target) -> Result<()> {
-        let space = SpaceSelector::id(target.id());
-        let starter = self.attaching.starter();
-        let resumed = resume::now(self.paths, starter, &space, None, None, self.attaching);
-        ensure_resumed(target.name(), target.number(), resumed.await?)?;
         // A restore whose agent registered already left the queue, which
         // `awaited` finds running.
         self.resume_space(target.id()).await?;
-        Ok(())
+        Ok(true)
     }
 
     /// `target`, read again, with the session its agent, only `execution`
@@ -141,26 +136,15 @@ impl<A: Attaching> Steps<'_, A> {
     }
 }
 
-/// Refuse a resume of the agent of the space `name`, numbered `number`,
-/// that `resumed` says started none: one that failed, found only stopped
-/// commands, or left the agent to this terminal, where an attach shows no
-/// session.
-fn ensure_resumed(name: &SpaceName, number: SpaceNumber, resumed: Resumed) -> Result<()> {
-    let failed = match resumed {
-        Resumed::Starts(Starts::Elsewhere(started)) => started.output.failed,
-        Resumed::Queued(queued) => queued.failed,
-        Resumed::Starts(Starts::Here { .. }) => bail!(
-            "no terminal host starts {name}'s agent beside this terminal; shoal resume {number} --focus resumes it here"
-        ),
-        Resumed::Commands(_) => bail!("{name} has no stopped agent to resume"),
-    };
-    let errors: Vec<_> = failed.into_iter().map(|failure| failure.error).collect();
-    ensure!(
-        errors.is_empty(),
-        "{name} did not resume: {}",
-        errors.join("; ")
-    );
-    Ok(())
+/// Whether the resume of the agent of the space `name` started one, as its
+/// `outcome` says, refusing one that found only stopped commands, which
+/// an attach shows no session of.
+fn resumed(name: &SpaceName, outcome: ResumeOutcome) -> Result<bool> {
+    match outcome {
+        ResumeOutcome::Continued { .. } | ResumeOutcome::Queued { .. } => Ok(true),
+        ResumeOutcome::Commands { .. } => bail!("{name} has no stopped agent to resume"),
+        ResumeOutcome::Nothing { .. } => Ok(false),
+    }
 }
 
 /// `target`'s session at `place`, as an attach that lost its connection

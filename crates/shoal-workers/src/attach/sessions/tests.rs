@@ -1,12 +1,5 @@
 use super::*;
-use crate::{
-    client::output::{
-        batch::Failure,
-        resume::{Queued, StoppedCommands},
-    },
-    model::Protection,
-    sessions::HostName,
-};
+use crate::{model::Protection, sessions::HostName};
 
 fn agent_in(window: &str, execution: &str) -> Session {
     Session {
@@ -62,52 +55,22 @@ fn an_attach_offers_only_the_sessions_of_the_agent_while_one_shows_it() {
     assert_eq!(executions(&[left.clone(), left]), vec![None, None]);
 }
 
-/// Whether an attach goes on after a resume that `resumed` reports, and
-/// the error that refuses it otherwise.
-fn resumed_outcome(resumed: Resumed) -> Result<(), String> {
+#[test]
+fn an_attach_waits_for_what_its_resume_started_and_refuses_stopped_commands() {
     let name = SpaceName::from("work");
-    ensure_resumed(&name, SpaceNumber::new(3), resumed).map_err(|error| format!("{error:#}"))
-}
-
-#[test]
-fn an_attach_goes_on_once_the_resume_queued_the_agent() {
-    assert_eq!(resumed_outcome(Resumed::Queued(Queued::default())), Ok(()));
-}
-
-#[test]
-fn an_attach_refuses_a_resume_that_failed_naming_why() {
-    let queued = Queued {
-        failed: vec![Failure {
-            workspace: "work".into(),
-            error: "no terminal host can start queued agents".into(),
-        }],
-        ..Queued::default()
+    let outcome = |outcome| resumed(&name, outcome).map_err(|error| format!("{error:#}"));
+    let queued = ResumeOutcome::Queued {
+        entries: Vec::new(),
+        commands: Vec::new(),
     };
-
-    let refusal = resumed_outcome(Resumed::Queued(queued)).unwrap_err();
-    assert!(
-        refusal.ends_with(": no terminal host can start queued agents"),
-        "{refusal}"
-    );
-}
-
-#[test]
-fn an_attach_refuses_a_resume_that_found_only_stopped_commands() {
-    let commands = StoppedCommands {
-        workspace: "work".into(),
+    let nothing = ResumeOutcome::Nothing {
+        reason: "no stopped agents".into(),
+    };
+    let commands = ResumeOutcome::Commands {
         commands: vec![vec!["cargo".into(), "test".into()]],
     };
 
-    assert!(resumed_outcome(Resumed::Commands(commands)).is_err());
-}
-
-#[test]
-fn an_attach_refuses_an_agent_left_to_this_terminal_naming_its_focused_resume() {
-    let here = Starts::Here {
-        space: "space".into(),
-        execution: "stopped".into(),
-    };
-
-    let refusal = resumed_outcome(Resumed::Starts(here)).unwrap_err();
-    assert!(refusal.contains("shoal resume 3 --focus"), "{refusal}");
+    assert_eq!(outcome(queued), Ok(true));
+    assert_eq!(outcome(nothing), Ok(false));
+    assert!(outcome(commands).is_err());
 }

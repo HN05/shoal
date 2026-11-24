@@ -141,7 +141,7 @@ pub async fn present_space(paths: &CommandPaths, selector: &SpaceSelector) -> Re
 
 /// What `space` saved, only of `execution` when given, refusing a space
 /// with nothing to resume.
-pub async fn saved(
+async fn saved(
     paths: &CommandPaths,
     space: &Space,
     execution: Option<&ExecutionId>,

@@ -1,6 +1,6 @@
 //! Queuing the restores of stopped agents, which the daemon starts as the
 //! agent limits allow, or at once.
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use shoal_core::execution::recovery::Saved;
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use std::collections::{BTreeMap, BTreeSet};
@@ -9,7 +9,6 @@ use super::{Resuming, commands, stale};
 use crate::{
     client::{connection::CommandPaths, output::resume::Queued},
     model::{QueueEntry, Space},
-    protocol::ConfigTarget,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -34,37 +33,6 @@ pub async fn queue_stopped(
         }
     }
     Ok(queue_each(paths, queued, false, resuming).await)
-}
-
-/// Refuse, before any is queued, the restores of `stopped` agents that the
-/// daemon would start from the background when no host can take them there;
-/// a waiting wrapper restores its agent where it stopped.
-pub async fn ensure_daemon_starts(paths: &CommandPaths, stopped: &[(Space, Saved)]) -> Result<()> {
-    for (space, saved) in stopped {
-        ensure_daemon_starts_in(paths, space, saved).await?;
-    }
-    Ok(())
-}
-
-/// Refuse the restores of the agents `saved` keeps of `space` that the
-/// daemon would start from the background when no host can take them
-/// there.
-pub async fn ensure_daemon_starts_in(
-    paths: &CommandPaths,
-    space: &Space,
-    saved: &Saved,
-) -> Result<()> {
-    if !saved.restores_outside_wrappers() {
-        return Ok(());
-    }
-    let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
-    let settings = crate::settings::of(paths, target).await?;
-    crate::terminal::queued::ensure_background(&settings).with_context(|| {
-        format!(
-            "cannot restore the agents of {} in the background; pass --focus to restore one here",
-            space.name
-        )
-    })
 }
 
 /// Queue the restore of every agent and last session `stopped` saves,

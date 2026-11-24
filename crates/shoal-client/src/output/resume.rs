@@ -1,6 +1,5 @@
 //! What `shoal resume` prints.
 use serde::{Deserialize, Serialize};
-use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceName;
 
 use super::restore::Reopened;
@@ -16,34 +15,6 @@ pub struct StoppedCommands {
     pub workspace: SpaceName,
     /// Each command's arguments.
     pub commands: Vec<Vec<String>>,
-}
-
-/// A stopped agent a restore started.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestoredAgent {
-    pub workspace: SpaceName,
-    pub execution: ExecutionId,
-    /// Whether it started in the background rather than where it stopped.
-    pub background: bool,
-    /// Whether it continues its session.
-    pub reused: bool,
-}
-
-/// What a resume that started agents at once did.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct StartedRestores {
-    /// The failed launches it queued again.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub queued: Vec<QueueEntry>,
-    pub commands: Vec<StoppedCommands>,
-    pub agents: Vec<RestoredAgent>,
-    /// The removed spaces it opened again.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reopened: Vec<Reopened>,
-    /// The agents whose interrupted turns it continued.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub continued: Vec<Agent>,
-    pub failed: Vec<Failure>,
 }
 
 /// The restores a resume queued, the commands it reported, the spaces
@@ -89,4 +60,4 @@ pub struct Resumable {
     pub spaces: Vec<ResumableSpace>,
 }
 
-outputs!(StoppedCommands, StartedRestores, Queued, Resumable);
+outputs!(StoppedCommands, Queued, Resumable);

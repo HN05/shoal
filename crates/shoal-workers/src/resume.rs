@@ -1,24 +1,18 @@
-//! Resuming the stopped agents of spaces, workspaces' and chats' alike, for
-//! `shoal resume` and the other commands that bring agents back: queuing
-//! their restores, which the daemon starts, once an execution a daemon
-//! restart left unknown is proven ended, or starting them at once beside
-//! the caller's terminal, and handing the commands stopped with them to the
-//! restored agent or the user. The caller passes in what it does its own
-//! way through [`Resuming`].
+//! Resuming the stopped agents of spaces, workspaces' and chats' alike, in
+//! the caller's terminal for `shoal resume --focus`, and queuing the
+//! restores of the agents a move stopped, which the daemon starts, once an
+//! execution a daemon restart left unknown is proven ended, handing the
+//! commands stopped with them to the restored agent or the user. The caller
+//! passes in what it does its own way through [`Resuming`].
 pub mod commands;
-mod now;
 pub mod permissions;
 mod picker;
-mod places;
 pub mod queue;
-pub mod sessions;
 pub mod space;
 pub mod stale;
 
 use anyhow::Result;
 use shoal_core::execution::recovery::{SavedCommand, SavedSession};
-
-pub use now::{Resumed, Starter, now};
 
 use crate::{client::output::batch::Failure, model::Space};
 

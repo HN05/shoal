@@ -3,7 +3,7 @@ use std::io::{self, IsTerminal};
 
 use crate::client::output::{self, Output};
 use anyhow::Result;
-use shoal_workers::{hosting::Caller, places::Launcher, resume::Starter};
+use shoal_workers::hosting::Caller;
 
 use crate::{
     cli::output::{Palette, Style},
@@ -89,30 +89,12 @@ impl Context {
         Self::is_interactive(false)
     }
 
-    /// What starts the work this command opens places for beside this
-    /// terminal. A place a host opened for this process, or a terminal
-    /// without a user, keeps work in place; a call that asked for JSON
-    /// keeps its terminal's host.
-    pub(in crate::cli) fn launcher(&self) -> Launcher {
-        self.caller().launcher()
-    }
-
     /// What the hosting of places reads of this command.
     pub(in crate::cli) fn caller(&self) -> Caller<'_> {
         Caller {
             paths: &self.paths,
             json: self.json,
             place: self.place.as_ref(),
-        }
-    }
-
-    /// What starts a stopped agent this command resumes at once: this
-    /// process beside its terminal when a user is on it, otherwise the
-    /// daemon through the queue.
-    pub(in crate::cli) fn starter(&self) -> Starter {
-        match self.on_terminal() {
-            true => Starter::Caller(self.launcher()),
-            false => Starter::Daemon,
         }
     }
 

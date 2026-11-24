@@ -1,7 +1,7 @@
 //! `shoal attach`'s steps, which a local attach and the worker the daemon
 //! runs for a user on another machine both take: finding a space's agent
 //! sessions, waking an agent that sleeps or is stopped there, as
-//! [`crate::resume`] resumes one, choosing a session and showing it
+//! `shoal resume --now` resumes one, choosing a session and showing it
 //! through the host that keeps it. The caller passes in what it does its
 //! own way through [`Attaching`].
 mod elsewhere;
@@ -12,28 +12,19 @@ mod target;
 use anyhow::Result;
 use shoal_protocol::space_names::SpaceSelector;
 
-use crate::{
-    client::connection::CommandPaths,
-    model::QueueEntry,
-    resume::{Resuming, Starter},
-    terminal::Session,
-};
+use crate::{client::connection::CommandPaths, model::QueueEntry, terminal::Session};
 
 pub use elsewhere::for_viewer;
 pub use restores::entry_session;
 use restores::{POLL, WAIT};
 pub use target::Target;
 
-/// What a caller of attach does its own way: picking a session, what a
-/// resume of a stopped agent does its own way and what starts that agent,
-/// and telling the user what starts.
-pub trait Attaching: Resuming {
+/// What a caller of attach does its own way: picking a session and telling
+/// the user what starts.
+pub trait Attaching: Sync {
     /// The one of `sessions`, several an attach that named none offers,
     /// that the user picks.
     fn pick_session<'a>(&self, sessions: &[&'a Session]) -> Result<&'a Session>;
-
-    /// What starts a stopped agent the attach resumes.
-    fn starter(&self) -> Starter;
 
     /// Tell the user that the queued restore or launch `entry` starts.
     fn resuming(&self, entry: &QueueEntry) -> Result<()>;
