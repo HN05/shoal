@@ -22,11 +22,24 @@ type Prepare = fn(&Connection) -> Result<()>;
 /// A migration: the version it writes, its SQL and what runs before it.
 type Migration = (i64, &'static str, Option<Prepare>);
 
-// Append schema changes in version order; startup recovery belongs in quarantine.
+// Append schema changes in version order, each in `migrations/<version>_<name>.sql`;
+// startup recovery belongs in quarantine.
 pub(super) const MIGRATIONS: &[Migration] = &[
-    (296, include_str!("review_held_reopens.sql"), None),
-    (297, include_str!("review_submits.sql"), None),
-    (298, include_str!("agent_handoffs.sql"), None),
+    (
+        296,
+        include_str!("migrations/0296_review_held_reopens.sql"),
+        None,
+    ),
+    (
+        297,
+        include_str!("migrations/0297_review_submits.sql"),
+        None,
+    ),
+    (
+        298,
+        include_str!("migrations/0298_agent_handoffs.sql"),
+        None,
+    ),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -39,7 +52,7 @@ const REBUILDS: &[i64] = &[];
 /// `ALTER TABLE`, so applying each migration in turn takes a new database a
 /// good part of a second on a busy machine. The tests check that it is what
 /// the migrations make, and say how to write it anew.
-const SCHEMA: &str = include_str!("schema.sql");
+const SCHEMA: &str = include_str!("migrations/schema.sql");
 
 pub(super) fn migrate(db: &mut Connection) -> Result<()> {
     if is_new(db)? {
