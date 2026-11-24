@@ -164,7 +164,7 @@ impl Reviews {
     }
 
     /// The checkout running review `id`'s run holds.
-    fn run_checkout(&self, id: ReviewId) -> Result<std::path::PathBuf> {
+    pub(crate) fn run_checkout(&self, id: ReviewId) -> Result<std::path::PathBuf> {
         let checkouts = self.checkouts.lock().unwrap();
         let held =
             (checkouts.get(&id)).with_context(|| format!("review {id} holds no checkout"))?;

@@ -6,7 +6,8 @@ use super::{
     ConfigMethod, ContainerMethod, DaemonMethod, DemoMethod, DiffMethod, ExecutionMethod,
     FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod, MergingMethod, Operation,
     PortMethod, QueueMethod, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
-    SecretMethod, SimulatorMethod, SpaceMethod, ThreadMethod, TriggerMethod, WorkspaceMethod,
+    ReviewMethod, SecretMethod, SimulatorMethod, SpaceMethod, ThreadMethod, TriggerMethod,
+    WorkspaceMethod,
 };
 
 impl Operation {
@@ -57,6 +58,7 @@ impl Operation {
                         | ItemMethod::ForgeDownload { .. }
                 )
                 | Self::Alert(AlertMethod::ListAlerts { .. })
+                | Self::Review(ReviewMethod::PendingReviews)
                 | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
                 | Self::Thread(
                     ThreadMethod::ListThreads { .. }

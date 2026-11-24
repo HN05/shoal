@@ -80,15 +80,21 @@ pub struct Arguments {
     pub gate_resume: Option<Vec<String>>,
 }
 
-/// What a review's arguments name.
+/// What a one-shot run's arguments name.
 pub struct ReviewFields<'a> {
     pub prompt: &'a str,
-    /// The output schema's file.
-    pub schema: &'a Path,
-    /// The output schema's text.
-    pub schema_json: &'a str,
+    /// The output schema of a run that returns its result in one, which
+    /// only gate templates name.
+    pub schema: Option<Schema<'a>>,
     /// The file the result goes to when the arguments name it.
     pub output: &'a Path,
+}
+
+/// An output schema, as a file and as its text.
+#[derive(Clone, Copy)]
+pub struct Schema<'a> {
+    pub file: &'a Path,
+    pub json: &'a str,
 }
 
 impl Arguments {
@@ -244,20 +250,17 @@ fn oneshot_args(
     fields: &ReviewFields,
     session: Option<&AgentSessionId>,
 ) -> Vec<OsString> {
-    let (schema, output) = (
-        fields.schema.to_string_lossy(),
-        fields.output.to_string_lossy(),
-    );
-    substitute(
-        template,
-        &[
-            ("{prompt}", fields.prompt),
-            ("{schema}", &schema),
-            ("{schema_json}", fields.schema_json),
-            ("{output}", &output),
-            ("{session}", session.map_or("", AgentSessionId::as_str)),
-        ],
-    )
+    let output = fields.output.to_string_lossy();
+    let mut named = vec![
+        ("{prompt}", fields.prompt),
+        ("{output}", &output),
+        ("{session}", session.map_or("", AgentSessionId::as_str)),
+    ];
+    let schema = fields.schema.map(|schema| schema.file.to_string_lossy());
+    if let (Some(file), Some(schema)) = (&schema, fields.schema) {
+        named.extend([("{schema}", &**file), ("{schema_json}", schema.json)]);
+    }
+    substitute(template, &named)
 }
 
 /// Each argument with every placeholder in `fields` replaced once.

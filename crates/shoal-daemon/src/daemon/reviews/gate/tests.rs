@@ -51,7 +51,7 @@ async fn fixture_deciding_by(gate: &str) -> Fixture {
     let config = format!(
         "[agents.fake]\nbase = 'codex'\ncommand = ['{}']\ngate = ['{{prompt}}', '{{schema}}']\n\
          gate_resume = ['resume', '{{session}}', '{{prompt}}', '{{schema}}']\n\
-         [agents.reviewer]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n\
+         [agents.reviewer]\ncommand = ['{}']\nreview = ['{{prompt}}']\n\
          [gate]\nagent = '{gate}'\nescalate = ['a push to a tag']\n\
          [permissions]\npush = 'gate'\n\
          [machine]\nmax_heavy_agents = 4\n[machine.overload.disk]\nenabled = false\n",

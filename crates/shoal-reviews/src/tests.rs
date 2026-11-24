@@ -12,14 +12,13 @@ use crate::{
     test_support::{install_test_script, until_tests_end},
     time::UnixTime,
 };
-use shoal_protocol::threads::{Outcome, Thread};
-
-const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","reopened":[],
-"findings":[{"path":"tracked","start_line":1,"end_line":3,"severity":"should-fix",
-"title":"Unclear","body":"Name it."}]}"#;
+use shoal_protocol::code::{Lines, NewCodeRef};
+use shoal_protocol::threads::{Outcome, Thread, ThreadOpening};
 
 /// A workspace whose reviewers are `[agents.<name>]` scripts, in which
-/// `{review}` names a file holding [`REVIEW`], with the review scheduler
+/// `{review}` names a file in the directory they write to, and `{write}`
+/// says the reviewer started and waits until the test has written its
+/// review, which [`Fixture::review`] does, with the review scheduler
 /// running when there are any.
 pub(crate) async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
     fixture_with(reviewers, review, "").await
@@ -29,14 +28,16 @@ pub(crate) async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture
 async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let result = root.path().join("review.json");
-    std::fs::write(&result, REVIEW).unwrap();
     let mut config = format!("[review]\n{review}\n");
     for (name, script) in reviewers {
         let path = root.path().join(format!("{name}.sh"));
+        let script = script.replace("{write}", WRITES);
         let script = script.replace("{review}", &result.to_string_lossy());
+        let script = script.replace("{tests}", &std::process::id().to_string());
         install_test_script(&path, format!("#!/bin/sh\n{script}\n"));
         config.push_str(&format!(
-            "[agents.{name}]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n{settings}",
+            "[agents.{name}]\ncommand = ['{}']\nreview = ['{{prompt}}']\n\
+             gate = ['{{prompt}}', '{{schema}}']\n{settings}",
             path.display()
         ));
     }
@@ -47,8 +48,15 @@ async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) 
     fixture
 }
 
+/// What `{write}` runs: it says the reviewer started, once its run's
+/// checkout exists, then waits until the test wrote its review and says
+/// so, or the tests end.
+const WRITES: &str = r#"dir="$(dirname '{review}')"
+touch "$dir/started"
+i=0; while [ ! -e "$dir/written" ] && [ $i -lt 6000 ] && kill -0 {tests} 2>/dev/null; do sleep 0.1; i=$((i+1)); done"#;
+
 impl Fixture {
-    /// What a reviewer script wrote beside [`REVIEW`] as `name`.
+    /// What a reviewer script wrote in its directory as `name`.
     pub(crate) fn written(&self, name: &str) -> PathBuf {
         self.root.path().join(name)
     }
@@ -79,8 +87,55 @@ impl Fixture {
             .queue(agent.map(|agent| agent.parse().unwrap()))
             .await
             .unwrap();
-        ended.changed().await.unwrap();
+        self.write_until_ended(&mut ended).await;
         self.reviews.wait(&*self.daemon, queued.id).await.unwrap()
+    }
+
+    /// Write the review of each reviewer that waits for it, until a run
+    /// ends.
+    async fn write_until_ended(&self, ended: &mut tokio::sync::watch::Receiver<u64>) {
+        let started = self.written("started");
+        loop {
+            tokio::select! {
+                changed = ended.changed() => {
+                    changed.unwrap();
+                    break;
+                }
+                () = tokio::time::sleep(std::time::Duration::from_millis(20)) => {}
+            }
+            if std::fs::remove_file(&started).is_ok() {
+                self.write_running().await;
+            }
+        }
+        let _ = std::fs::remove_file(self.written("written"));
+    }
+
+    /// Write the running review as its reviewer would with Shoal's
+    /// commands: one should-fix finding on `tracked`, then the submit; and
+    /// tell the reviewer it may exit.
+    pub(crate) async fn write_running(&self) {
+        let (reviews, daemon) = (&self.reviews, &*self.daemon);
+        let running = (reviews.store).run(|db| store::running(db)).await.unwrap();
+        let id = running[0];
+        let checkout = reviews.run_checkout(id).unwrap();
+        let opening = ThreadOpening {
+            body: Some("Name it.".into()),
+            code: vec![NewCodeRef {
+                path: checkout.join("tracked"),
+                lines: Some(Lines { start: 0, end: 3 }),
+                contents: None,
+            }],
+            severity: Some(Severity::ShouldFix),
+            ..ThreadOpening::named("Unclear")
+        };
+        (reviews.open_run_finding(daemon, id, opening, None))
+            .await
+            .unwrap();
+        let summary = Some("One problem.".to_owned());
+        (reviews.submit_run(daemon, id, None, false, summary))
+            .await
+            .unwrap();
+        std::fs::write(self.written("written"), "").unwrap();
     }
 
     /// Queue a review of the workspace by `agent`.
@@ -168,14 +223,14 @@ fn queue_absent(db: &rusqlite::Connection, id: &SpaceId) -> anyhow::Result<Revie
     Ok(queued.id())
 }
 
-/// What the reviewer scripts write, beside [`REVIEW`].
+/// What the reviewer scripts write in their directory.
 fn written(fixture: &Fixture, name: &str) -> String {
     std::fs::read_to_string(fixture.written(name)).unwrap()
 }
 
 #[tokio::test]
 async fn a_reviewer_runs_with_the_requested_or_configured_model_and_effort() {
-    let script = "printf '%s\\n' \"$@\" > \"$(dirname '{review}')/args\"\ncat '{review}'";
+    let script = "printf '%s\\n' \"$@\" > \"$(dirname '{review}')/args\"\n{write}";
     let profile = "agent = 'modeled'\n[agents.modeled]\nbase = 'fake'\neffort = 'low'\n\
         model_args = ['--model', '{model}']\neffort_args = ['--effort', '{effort}']\n";
     let fixture = fixture(&[("fake", script)], profile).await;
@@ -196,7 +251,7 @@ async fn a_reviewer_runs_with_the_requested_or_configured_model_and_effort() {
         .await
         .unwrap();
     assert_eq!(queued.model(), Some(&model));
-    ended.changed().await.unwrap();
+    fixture.write_until_ended(&mut ended).await;
     let review = fixture
         .reviews
         .wait(&*fixture.daemon, queued.id)
@@ -211,7 +266,7 @@ async fn a_reviewer_runs_with_the_requested_or_configured_model_and_effort() {
 #[tokio::test]
 async fn a_review_reads_the_committed_head_and_stores_its_findings() {
     // Uncommitted edits stay out of the checkout.
-    let script = "[ -e uncommitted ] && exit 3\ncat '{review}'";
+    let script = "[ -e uncommitted ] && exit 3\n{write}";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     std::fs::write(fixture.workspace.path.join("uncommitted"), "edit").unwrap();
     let review = fixture.review().await;
@@ -264,10 +319,11 @@ async fn a_failed_reviewer_falls_back_once_and_failures_are_typed() {
         Some("first")
     );
 
-    fixture.configure("[review]\nagent = 'first'\nfallback_agent = 'second'\n[agents.first]\ncommand = ['false']\nreview = ['{prompt}', '{schema}']\n[agents.second]\ncommand = ['echo']\nreview = ['{prompt}', '{schema}']\n");
+    // A reviewer that exits without submitting fails its review.
+    fixture.configure("[review]\nagent = 'first'\nfallback_agent = 'second'\n[agents.first]\ncommand = ['false']\nreview = ['{prompt}']\n[agents.second]\ncommand = ['echo']\nreview = ['{prompt}']\n");
     let review = fixture.review().await;
     assert_eq!(review.state, ReviewState::Failed);
-    assert_eq!(review.failure, Some(FailureReason::InvalidOutput));
+    assert_eq!(review.failure, Some(FailureReason::NotSubmitted));
     assert_eq!(
         (
             review.agent().map(|agent| agent.name()),
@@ -282,7 +338,7 @@ async fn a_fallback_reviewer_produces_the_review() {
     let fixture = fixture(
         &[
             ("first", "echo 'You have hit your usage limit' >&2\nexit 1"),
-            ("second", "cat '{review}'"),
+            ("second", "{write}"),
         ],
         "agent = 'first'\nfallback_agent = 'second'",
     )
@@ -484,7 +540,7 @@ async fn a_run_left_in_the_repository_directory_holds_back_its_repository() {
 
 #[tokio::test]
 async fn the_next_review_receives_the_history_and_checks_fixes() {
-    let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
+    let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\n{write}";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     let first = fixture.review().await;
     let thread = &first.threads[0];
@@ -504,7 +560,7 @@ async fn the_reviewer_answers_a_post_in_its_finding_s_thread() {
     let script = "case \"$1\" in *'reply in `answer`'*)\n\
         printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\n\
         echo '{\"answer\":\"It is reachable from parse.\"}';;\n\
-        *) cat '{review}';; esac";
+        *) {write};; esac";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     let thread = fixture.review().await.threads.remove(0);
     let mut answered = fixture.daemon.answered.subscribe();
@@ -526,7 +582,7 @@ async fn the_reviewer_answers_a_post_in_its_finding_s_thread() {
 async fn removing_the_workspace_stops_an_answer_being_made() {
     // Asked to answer, it runs until it is stopped; else it reviews.
     let script = format!(
-        "case \"$1\" in *'reply in `answer`'*) {};;\n*) cat '{{review}}';; esac",
+        "case \"$1\" in *'reply in `answer`'*) {};;\n*) {{write}};; esac",
         until_tests_end()
     );
     let fixture = fixture(&[("fake", &script)], "agent = 'fake'").await;
@@ -550,7 +606,7 @@ async fn removing_the_workspace_stops_an_answer_being_made() {
 #[tokio::test]
 async fn an_answer_that_cannot_be_posted_is_not_asked_for_again() {
     let script = "case \"$1\" in *'reply in `answer`'*) echo '{\"answer\":\"Yes.\"}';;\n\
-        *) cat '{review}';; esac";
+        *) {write};; esac";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     let thread = fixture.review().await.threads.remove(0);
     fixture
@@ -586,7 +642,7 @@ async fn an_answer_that_cannot_be_posted_is_not_asked_for_again() {
 
 #[tokio::test]
 async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
-    let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
+    let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\n{write}";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     let thread = fixture.review().await.threads.remove(0);
     let reason = "The field's type names it.".to_owned();
@@ -606,7 +662,7 @@ async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
 
 #[tokio::test]
 async fn a_finding_keeps_its_outcome_when_its_false_positive_cannot_be_kept() {
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
     let review = fixture.review().await;
     // A directory where the file belongs can be neither read nor replaced.
     std::fs::create_dir_all(fixture.false_positives()).unwrap();
@@ -619,7 +675,7 @@ async fn a_finding_keeps_its_outcome_when_its_false_positive_cannot_be_kept() {
 
 #[tokio::test]
 async fn the_false_positives_go_back_when_the_outcome_cannot_be_stored() {
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
     let thread = fixture.review().await.threads.remove(0);
     let reason = "The field's type names it.".to_owned();
     let outcome = Some(Outcome::FalsePositive { reason });
@@ -637,7 +693,7 @@ async fn the_false_positives_go_back_when_the_outcome_cannot_be_stored() {
 
 #[tokio::test]
 async fn an_invalid_false_positives_file_fails_reviews_of_the_repository() {
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
     let path = fixture.false_positives();
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, "[[false_positive]]\nclaim = \"Unchecked\"\n").unwrap();
@@ -649,11 +705,7 @@ async fn an_invalid_false_positives_file_fails_reviews_of_the_repository() {
 #[tokio::test]
 async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
     let slow = until_tests_end();
-    let fixture = fixture(
-        &[("fake", "cat '{review}'"), ("slow", &slow)],
-        "agent = 'fake'",
-    )
-    .await;
+    let fixture = fixture(&[("fake", "{write}"), ("slow", &slow)], "agent = 'fake'").await;
     let (reviews, daemon) = (&fixture.reviews, &*fixture.daemon);
     fixture.review().await;
     assert_eq!(fixture.messages().len(), 1, "{:?}", fixture.messages());
@@ -681,7 +733,7 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
 #[tokio::test]
 async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     let fixture = fixture(
-        &[("fake", "cat '{review}'")],
+        &[("fake", "{write}")],
         "agent = 'fake'\nrequire_for_ready = 'agents'",
     )
     .await;
@@ -705,7 +757,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
 
     let mut ended = reviews.ends();
     assert!(require(Gate::Ready, agent).await.is_err());
-    ended.changed().await.unwrap();
+    fixture.write_until_ended(&mut ended).await;
 
     let review = (reviews.latest(daemon, &fixture.selector())).await.unwrap();
     // An approval of the same commit leaves the finding to be resolved.
@@ -736,7 +788,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
 
 #[tokio::test]
 async fn each_review_of_a_workspace_runs_in_one_checkout_in_its_repository_directory() {
-    let script = "pwd >> \"$(dirname '{review}')/cwd\"\ncat '{review}'";
+    let script = "pwd >> \"$(dirname '{review}')/cwd\"\n{write}";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     for _ in 0..2 {
         let review = fixture.review().await;
@@ -761,11 +813,10 @@ if [ "$1" = resume ]; then echo "resume $2" >> "$dir/runs"; session=$2; printf '
 else echo new >> "$dir/runs"; session="s$(wc -l < "$dir/runs" | tr -d ' ')"; fi
 echo "session id: $session" >&2
 [ "$1" = resume ] && [ -e "$dir/stale" ] && exit 1
-cat '{review}'"#;
+{write}"#;
 
 /// What makes [`RESUMER`] resume its sessions as Codex does.
-const RESUMES: &str =
-    "base = 'codex'\nreview_resume = ['resume', '{session}', '{prompt}', '{schema}']\n";
+const RESUMES: &str = "base = 'codex'\nreview_resume = ['resume', '{session}', '{prompt}']\n";
 
 #[tokio::test]
 async fn later_reviews_resume_the_session_of_the_agent_that_reviewed_last() {

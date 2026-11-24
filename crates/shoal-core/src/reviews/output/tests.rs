@@ -1,26 +1,9 @@
 use serde_json::json;
 use shoal_protocol::reviews::FailureReason;
-use shoal_protocol::reviews::Verdict;
 
 use super::*;
 
-fn review() -> Value {
-    json!({
-        "summary": "One problem.",
-        "verdict": "comment",
-        "findings": [{
-            "path": "src/a.rs", "start_line": 7, "end_line": 9, "severity": "should-fix",
-            "title": "Unchecked index", "body": "It panics on an empty list."
-        }],
-        "reopened": [{"thread": "3.1", "reason": "The empty case still panics."}]
-    })
-}
-
-fn run(
-    success: bool,
-    result: Option<&[u8]>,
-    stderr: &[u8],
-) -> Result<ReviewerOutput, FailureReason> {
+fn run(success: bool, result: Option<&[u8]>, stderr: &[u8]) -> Result<(), FailureReason> {
     run_as(&PLAIN, success, result, stderr)
 }
 
@@ -29,8 +12,8 @@ fn run_as(
     success: bool,
     result: Option<&[u8]>,
     stderr: &[u8],
-) -> Result<ReviewerOutput, FailureReason> {
-    read(
+) -> Result<(), FailureReason> {
+    outcome(
         format,
         &Run {
             success,
@@ -41,48 +24,10 @@ fn run_as(
 }
 
 #[test]
-fn output_on_the_schema_is_read() {
-    let output = run(true, Some(review().to_string().as_bytes()), b"").unwrap();
-    assert_eq!(output.findings[0].lines().to_string(), "7-9");
-    assert_eq!(output.reopened[0].thread.to_string(), "3.1");
-}
-
-#[test]
-fn output_off_the_schema_is_invalid() {
-    let mut extra = review();
-    extra["extra"] = json!(1);
-    let mut empty_title = review();
-    empty_title["findings"][0]["title"] = json!(" ");
-    let mut line_zero = review();
-    line_zero["findings"][0]["start_line"] = json!(0);
-    let mut backwards = review();
-    backwards["findings"][0]["end_line"] = json!(6);
-    let mut severity = review();
-    severity["findings"][0]["severity"] = json!("major");
-    let mut thread = review();
-    thread["reopened"][0]["thread"] = json!("1");
-    for value in [extra, empty_title, line_zero, backwards, severity, thread] {
-        let text = value.to_string();
-        assert_eq!(
-            run(true, Some(text.as_bytes()), b""),
-            Err(FailureReason::InvalidOutput),
-            "{text}"
-        );
-    }
-    assert_eq!(run(true, None, b""), Err(FailureReason::InvalidOutput));
-    assert_eq!(
-        run(true, Some(b"not json"), b""),
-        Err(FailureReason::InvalidOutput)
-    );
-}
-
-#[test]
-fn findings_and_any_verdict_are_results() {
-    let mut blocking = review();
-    blocking["verdict"] = json!("request_changes");
-    blocking["findings"][0]["severity"] = json!("blocker");
-    let output = run(true, Some(blocking.to_string().as_bytes()), b"").unwrap();
-    assert_eq!(output.verdict, Verdict::RequestChanges);
+fn a_successful_exit_is_no_failure_whatever_its_text() {
+    assert_eq!(run(true, Some(b"I submitted the review."), b""), Ok(()));
+    assert_eq!(run(true, None, b""), Ok(()));
+    assert_eq!(run_as(&CODEX, true, Some(b"Done."), b""), Ok(()));
 }
 
 #[test]
@@ -95,21 +40,17 @@ fn an_unsuccessful_exit_is_named_by_its_diagnostics() {
         run(false, None, b"thread panicked"),
         Err(FailureReason::ExecutionFailed)
     );
-    // An unsuccessful exit is a failure even with a review written.
     assert_eq!(
-        run(false, Some(review().to_string().as_bytes()), b""),
+        run(false, Some(b"{}"), b""),
         Err(FailureReason::ExecutionFailed)
     );
 }
 
 #[test]
-fn claude_envelopes_carry_the_review_or_an_error() {
-    let envelope =
-        json!({"type": "result", "is_error": false, "result": "", "structured_output": review()});
+fn claude_envelopes_carry_the_result_or_an_error() {
     let read = |value: &Value| run_as(&CLAUDE, true, Some(value.to_string().as_bytes()), b"");
-    assert!(read(&envelope).is_ok());
-    let in_result = json!({"type": "result", "result": review().to_string()});
-    assert!(read(&in_result).is_ok());
+    let done = json!({"type": "result", "is_error": false, "result": "Submitted."});
+    assert_eq!(read(&done), Ok(()));
     let failed = json!({"type": "result", "is_error": true, "result": "Something broke"});
     assert_eq!(read(&failed), Err(FailureReason::ExecutionFailed));
     let limited = json!({"type": "result", "is_error": true, "result": "You've hit your limit"});
@@ -123,6 +64,34 @@ fn claude_envelopes_carry_the_review_or_an_error() {
             b""
         ),
         Err(FailureReason::UsageLimit)
+    );
+}
+
+#[test]
+fn a_structured_result_is_the_envelopes_or_the_whole_result() {
+    let verdict = json!({"verdict": "allow"});
+    let read = |format: &ResultFormat, result: &Value| {
+        let text = result.to_string();
+        let run = Run {
+            success: true,
+            result: Some(text.as_bytes()),
+            diagnostics: [b"", b""],
+        };
+        super::result(format, &run)
+    };
+    let envelope = json!({"type": "result", "result": "", "structured_output": verdict});
+    assert_eq!(read(&CLAUDE, &envelope), Ok(verdict.clone()));
+    let in_result = json!({"type": "result", "result": verdict.to_string()});
+    assert_eq!(read(&CLAUDE, &in_result), Ok(verdict.clone()));
+    assert_eq!(read(&PLAIN, &verdict), Ok(verdict));
+    let text = Run {
+        success: true,
+        result: Some(b"not json"),
+        diagnostics: [b"", b""],
+    };
+    assert_eq!(
+        super::result(&PLAIN, &text),
+        Err(FailureReason::InvalidOutput)
     );
 }
 
@@ -150,7 +119,7 @@ fn an_answer_is_its_text_alone() {
     for value in [
         json!({"answer": " "}),
         json!({"answer": "x", "extra": 1}),
-        review(),
+        json!({"summary": "One problem."}),
     ] {
         assert_eq!(answer(value), Err(FailureReason::InvalidOutput));
     }

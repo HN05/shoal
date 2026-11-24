@@ -1,8 +1,10 @@
 use super::*;
-use crate::reviews::{Severity, Verdict, output::NewFinding, output::Reopened};
+use crate::daemon::{FindingCode, FindingThread};
+use crate::reviews::{Severity, Verdict};
 use crate::stand_in::StandInRecords;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::code::CodeAt;
+use shoal_protocol::code::{CodeAt, Lines};
+use shoal_protocol::item_numbers::ItemNumber;
 use shoal_protocol::threads::Outcome;
 use shoal_store::Store;
 
@@ -20,53 +22,67 @@ fn records() -> StandInRecords {
     }
 }
 
-fn output(findings: u32, reopened: Vec<Reopened>) -> ReviewerOutput {
-    ReviewerOutput {
-        summary: "Two problems.".into(),
-        verdict: Verdict::Comment,
-        findings: (1..=findings)
-            .map(|line| NewFinding {
-                path: "src/a.rs".into(),
-                start_line: line,
-                end_line: line + 1,
-                severity: Severity::ShouldFix,
-                title: format!("Problem {line}"),
-                body: "It breaks.".into(),
-            })
-            .collect(),
-        reopened,
-    }
+/// The reopen of the finding `thread`, which a run holds until its submit.
+struct Reopened {
+    thread: ItemNumber,
+    reason: String,
 }
 
-/// Finish running review `id` with `output` and `session`, its findings in
-/// the commit `head`.
-fn finish_with(
+/// Write running review `id` as its run does, as `reviewer`: `findings`
+/// findings in the commit `head`, the reopens `reopened` of those
+/// `fixed`, then submit it, recording the `session` its run reported.
+fn submit_with(
     tx: &rusqlite::Transaction<'_>,
     records: &StandInRecords,
     id: ReviewId,
     reviewer: &str,
-    output: &ReviewerOutput,
+    (findings, reopened): (u32, Vec<Reopened>),
     session: Option<&AgentSessionId>,
 ) -> Result<bool> {
-    let code: Vec<FindingCode> = (output.findings.iter())
-        .map(|finding| FindingCode {
+    let workspace = SpaceId::from("work");
+    attempt(tx, id, &reviewer.into())?;
+    for line in 1..=findings {
+        let code = FindingCode {
             commit: "head".into(),
             at: CodeAt {
-                path: finding.path.clone(),
-                lines: Some(finding.lines()),
+                path: "src/a.rs".into(),
+                lines: Some(Lines {
+                    start: line - 1,
+                    end: line + 1,
+                }),
                 blob: None,
             },
             snippet: None,
-        })
-        .collect();
-    let returned = Returned {
-        output,
-        code: &code,
-        session,
-    };
-    let workspace = SpaceId::from("work");
+        };
+        let finding = FindingThread {
+            review: id,
+            workspace: &workspace,
+            severity: Severity::ShouldFix,
+            title: &format!("Problem {line}"),
+            body: "It breaks.",
+            code: std::slice::from_ref(&code),
+        };
+        records.open_finding(tx, &finding)?;
+    }
+    for reopen in reopened {
+        if let Some(thread) = records.fixed_finding(tx, &workspace, reopen.thread)? {
+            hold_reopen(tx, id, thread, &reopen.reason)?;
+        }
+    }
     let now = UnixTime::from_seconds(3);
-    finish(tx, records, id, &workspace, &reviewer.into(), returned, now)
+    let submitted = submit_run(
+        tx,
+        records,
+        id,
+        &workspace,
+        Some("Two problems."),
+        false,
+        now,
+    )?;
+    if let Some(session) = session {
+        continue_session(tx, id, session)?;
+    }
+    Ok(submitted)
 }
 
 /// Queue a review of `work` and start it at `head`.
@@ -149,17 +165,28 @@ async fn findings_open_threads_and_a_later_review_reopens_a_fix_still_present() 
         .write(|tx| {
             let records = records();
             let first = started(tx, &ReviewTarget::Workspace, "one")?;
-            assert!(finish_with(
+            assert!(submit_with(
                 tx,
                 &records,
                 first,
                 "claude",
-                &output(2, Vec::new()),
+                (2, Vec::new()),
+                None
+            )?);
+            // A second submit finds it finished.
+            assert!(!submit_with(
+                tx,
+                &records,
+                first,
+                "claude",
+                (0, Vec::new()),
                 None
             )?);
             let review = load(tx, &records, first)?.unwrap();
             assert_eq!(review.workspace, "fix-login");
             assert_eq!(review.state, ReviewState::Finished);
+            assert_eq!(review.verdict, Some(Verdict::RequestChanges));
+            assert!(review.threads.iter().all(|thread| !thread.held));
             let numbers: Vec<String> = (review.threads.iter())
                 .map(|thread| thread.finding_line())
                 .collect();
@@ -181,8 +208,8 @@ async fn findings_open_threads_and_a_later_review_reopens_a_fix_still_present() 
                 reason: "Still breaks.".into(),
             };
             // Only a thread resolved fixed reopens.
-            let checked = output(0, vec![still(fixed), still(wrong)]);
-            assert!(finish_with(tx, &records, second, "claude", &checked, None)?);
+            let checked = (0, vec![still(fixed), still(wrong)]);
+            assert!(submit_with(tx, &records, second, "claude", checked, None)?);
             let review = load(tx, &records, second)?.unwrap();
             let reopened: Vec<_> = review.reopened.iter().map(|thread| thread.number).collect();
             assert_eq!(reopened, [fixed]);
@@ -254,7 +281,7 @@ async fn removing_the_workspace_deletes_its_reviews() {
         .write(|tx| {
             let records = records();
             let first = started(tx, &ReviewTarget::Workspace, "one")?;
-            finish_with(tx, &records, first, "claude", &output(1, Vec::new()), None)?;
+            submit_with(tx, &records, first, "claude", (1, Vec::new()), None)?;
             let fixed = records.threads.lock().unwrap()[0].number;
             records.resolve(fixed, Some(Outcome::Fixed));
             let second = started(tx, &ReviewTarget::Workspace, "two")?;
@@ -262,14 +289,7 @@ async fn removing_the_workspace_deletes_its_reviews() {
                 thread: fixed,
                 reason: "Still.".into(),
             };
-            finish_with(
-                tx,
-                &records,
-                second,
-                "claude",
-                &output(0, vec![reopened]),
-                None,
-            )?;
+            submit_with(tx, &records, second, "claude", (0, vec![reopened]), None)?;
             tx.execute("DELETE FROM spaces WHERE id='work'", [])?;
             let left: i64 = tx.query_row(
                 "SELECT (SELECT COUNT(*) FROM reviews)+(SELECT COUNT(*) FROM review_reopens)",
@@ -302,8 +322,8 @@ async fn a_review_resumes_the_latest_session_of_its_workspace_or_pr() {
             let review = |target: &ReviewTarget, reviewer: &str, session: Option<&str>| {
                 let id = started(tx, target, "head")?;
                 let session = session.map(|session| AgentSessionId::from(session.to_owned()));
-                let output = output(0, Vec::new());
-                finish_with(tx, &records(), id, reviewer, &output, session.as_ref())?;
+                let written = (0, Vec::new());
+                submit_with(tx, &records(), id, reviewer, written, session.as_ref())?;
                 Ok::<_, anyhow::Error>(id)
             };
             let saved = |id| -> Result<Option<(String, String)>> {

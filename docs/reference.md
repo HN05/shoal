@@ -1893,13 +1893,29 @@ resumes the session the latest earlier one saved, through the tool's
 [`review_resume` template](../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools), when the same agent saved it,
 so the reviewer keeps what it understood and its cached prompt. Another
 agent, such as the fallback, starts a new session, as does a session that
-cannot be resumed; the session goes with the workspace. A reviewer still running after 30
-minutes is stopped and the review fails as `timed-out`; after any other failure,
-`fallback_agent` reviews once more. A failed review records why as one of
-`usage-limit`, `quota-exhausted`, `rate-limit`, `authentication-failed`,
-`execution-failed`, `invalid-output`, `timed-out` or `invalid-false-positives`, never
-the reviewer's output.
-Findings and a verdict of any kind are results, not failures.
+cannot be resumed; the session goes with the workspace; only the AI tool's
+conversation carries over.
+
+The reviewer writes its review with Shoal's commands, under a scope of the
+reviewed workspace that its run alone holds: it reads what that workspace's
+scope reaches, and changes only its review. `shoal thread open "<title>" --code
+PATH:FIRST-LAST --severity blocker|should-fix|nit --body "<body>"` opens a
+finding on lines of its checkout, which point at the reviewed commit, trimmed to
+the file; a path outside the checkout is refused. `shoal send <thread> "<why>"`
+in a finding the workspace holds resolved `fixed` reopens it once the review is
+submitted, and no other post is taken. `shoal review submit --body "<summary>"`,
+with `--approve` when it approves, finishes the review at the commit its run
+reviewed, with the verdict a [written review](#your-own-reviews)'s submit gives.
+Every other change is refused. A run that exits without submitting fails the
+review as `not-submitted`, unless its result or diagnostics name a failure
+first; once it submitted, how it exits changes nothing. A reviewer still running
+after 30 minutes is stopped and the review fails as `timed-out`; after any other
+failure, `fallback_agent` reviews once more. What a run that did not submit
+opened and reopened is dropped before the fallback runs, the review fails, or it
+runs again after protection, the machine's sleep or a daemon restart. A failed
+review records why as one of `usage-limit`, `quota-exhausted`, `rate-limit`,
+`authentication-failed`, `execution-failed`, `not-submitted`, `timed-out` or
+`invalid-false-positives`, never the reviewer's output.
 
 The [`review` rule](#modes-and-rules) gives the instructions. Each review also
 receives, as context, the workspace's earlier reviews with the threads of their
@@ -1931,7 +1947,8 @@ Each finding is a [thread](#threads) of the `review` kind that Shoal opens for t
 review, held by the reviewed workspace and numbered in its space, such as `3.4`:
 its title names the thread, and its body is the opening post, pointing at its
 lines in the reviewed commit, which the thread follows as the code changes. Its
-severity, `blocker`, `should-fix` or `nit`, is shown with it. When a review ends, the
+severity, `blocker`, `should-fix` or `nit`, is shown with it. Its holder hears
+of it only once the review is submitted. When a review ends, the
 workspace's agents receive it as one message, waking an idle agent: a finished
 review's summary with each thread it opened or reopened, ending with a note that
 the reviewer is automated and can be wrong, or why it failed or that it was
@@ -1973,8 +1990,9 @@ A finding fixed after `shoal thread switch` to its thread has the changes made
 for it in the thread, which the next review checks it against. A post in a
 finding's thread, `shoal send 3.4 "<text>"` from its holder or you, reaches the
 reviewer: Shoal resumes the session the reviews of the workspace or PR continue,
-as a one-shot, read-only run in a checkout of the workspace's latest commit, and
-posts its answer, or why it gave none, in the thread, which tells the holder.
+as a one-shot, read-only run in a checkout of the workspace's latest commit,
+through the tool's `gate` template, and posts its answer, or why it gave none,
+in the thread, which tells the holder.
 A post that waits for an answer gets it after a daemon restart too. A finding that
 needs your decision stays unresolved while the agent asks in a
 [thread](#threads) of its own, which keeps the gates below closed until you
@@ -3701,7 +3719,7 @@ allows. A removed workspace it restores opens below its own space.
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-core/src/config/templates/review.md), its task,
-read-only rules, output contract and treatment of history, which no layer
+read-only rules, the commands that write the review and treatment of history, which no layer
 replaces, followed by the `review` rule's text. `{workspace}`, `{branch}`,
 `{path}`, the review's checkout, and `{base}`, the commit it compares against,
 expand in them.

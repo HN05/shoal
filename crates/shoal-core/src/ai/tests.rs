@@ -430,13 +430,12 @@ fn configured_models_follow_the_nearest_entry_per_option() {
 #[test]
 fn reviews_run_with_their_template_after_the_launcher_before_its_args() {
     let agents = parse(
-        "[agents.codex-review]\nbase = 'codex'\n[agents.grok]\nreview = ['--prompt', '{prompt}', '--schema', '{schema_json}']\n",
+        "[agents.codex-review]\nbase = 'codex'\n[agents.grok]\nreview = ['--prompt', '{prompt}']\n",
     )
     .unwrap();
     let fields = ReviewFields {
         prompt: "Review it",
-        schema: Path::new("/tmp/schema.json"),
-        schema_json: "{}",
+        schema: None,
         output: Path::new("/tmp/review.json"),
     };
     let codex = arguments(&agents, "codex-review");
@@ -448,7 +447,6 @@ fn reviews_run_with_their_template_after_the_launcher_before_its_args() {
     let claude = arguments(&agents, "claude");
     assert!(!claude.review_writes_output());
     let args = claude.review_args(&fields).unwrap();
-    assert!(args.contains(&"{}".into()));
     // Read-only whatever settings it would otherwise load.
     for flag in ["--setting-sources=", "--permission-mode=dontAsk"] {
         assert!(args.contains(&flag.into()), "{args:?}");
@@ -485,21 +483,25 @@ fn reviews_run_with_their_template_after_the_launcher_before_its_args() {
 }
 
 #[test]
-fn review_templates_need_a_prompt_and_a_schema() {
-    for template in ["['{schema}']", "['{prompt}']"] {
+fn review_templates_need_a_prompt_and_name_no_schema_and_gate_templates_both() {
+    for template in ["['{schema}']", "['{prompt}', '{schema}']"] {
         assert!(parse(&format!("[agents.claude]\nreview = {template}\n")).is_err());
     }
+    assert!(parse("[agents.claude]\ngate = ['{prompt}']\n").is_err());
+    assert!(parse("[agents.claude]\ngate = ['{prompt}', '{schema}']\n").is_ok());
 }
 
 #[test]
 fn gate_runs_reach_shoal_and_stay_read_only() {
     let agents =
-        parse("[agents.droid]\ncommand = ['droid']\nreview = ['-p', '{prompt}', '{schema}']\n")
-            .unwrap();
+        parse("[agents.droid]\ncommand = ['droid']\nreview = ['-p', '{prompt}']\n").unwrap();
+    let schema = crate::ai::Schema {
+        file: Path::new("/tmp/schema.json"),
+        json: "{}",
+    };
     let fields = ReviewFields {
         prompt: "Decide it",
-        schema: Path::new("/tmp/schema.json"),
-        schema_json: "{}",
+        schema: Some(schema),
         output: Path::new("/tmp/verdict.json"),
     };
     let session = shoal_ids::agent_session_ids::AgentSessionId::from("0199a2".to_owned());
@@ -555,21 +557,19 @@ fn gate_runs_reach_shoal_and_stay_read_only() {
 }
 
 #[test]
-fn a_resumed_review_names_its_session_and_stays_read_only() {
+fn a_resumed_review_names_its_session_and_stays_read_only_with_shoal() {
     let agents =
-        parse("[agents.droid]\ncommand = ['droid']\nreview = ['-p', '{prompt}', '{schema}']\n")
-            .unwrap();
+        parse("[agents.droid]\ncommand = ['droid']\nreview = ['-p', '{prompt}']\n").unwrap();
     let fields = ReviewFields {
         prompt: "Review it",
-        schema: Path::new("/tmp/schema.json"),
-        schema_json: "{}",
+        schema: None,
         output: Path::new("/tmp/review.json"),
     };
     let session = shoal_ids::agent_session_ids::AgentSessionId::from("0199a2".to_owned());
     let (codex, claude) = (arguments(&agents, "codex"), arguments(&agents, "claude"));
     let resumed = codex.review_resume_args(&fields, &session).unwrap();
     assert_eq!(resumed[..2], ["exec", "resume"].map(OsString::from));
-    assert!(resumed.contains(&"sandbox_mode=\"read-only\"".into()));
+    assert!(resumed.contains(&"permissions.shoal_review.filesystem={\":root\"=\"read\"}".into()));
     assert_eq!(
         resumed[resumed.len() - 2..],
         ["0199a2", "Review it"].map(OsString::from)
@@ -577,7 +577,8 @@ fn a_resumed_review_names_its_session_and_stays_read_only() {
     let resumed = claude.review_resume_args(&fields, &session).unwrap();
     let resume = resumed.iter().position(|arg| arg == "--resume").unwrap();
     assert_eq!(resumed[resume + 1], "0199a2");
-    // It allows the review's tools and no others.
+    // It allows the review's tools, Shoal's commands among them, and no
+    // others.
     let allowed = |args: Vec<OsString>| {
         args.into_iter()
             .filter(|arg| {
@@ -586,10 +587,9 @@ fn a_resumed_review_names_its_session_and_stays_read_only() {
             })
             .collect::<Vec<_>>()
     };
-    assert_eq!(
-        allowed(resumed),
-        allowed(claude.review_args(&fields).unwrap())
-    );
+    let tools = allowed(claude.review_args(&fields).unwrap());
+    assert!(tools[0].to_str().unwrap().ends_with(",Bash(shoal:*)"));
+    assert_eq!(allowed(resumed), tools);
     assert!(codex.review_resume_writes_output());
     assert!(!claude.review_resume_writes_output());
     // A tool without the template starts a new review each time.
@@ -597,7 +597,6 @@ fn a_resumed_review_names_its_session_and_stays_read_only() {
         arguments(&agents, "droid").review_resume_args(&fields, &session),
         None
     );
-    let unnamed =
-        "[agents.droid]\ncommand = ['droid']\nreview_resume = ['-p', '{prompt}', '{schema}']\n";
+    let unnamed = "[agents.droid]\ncommand = ['droid']\nreview_resume = ['-p', '{prompt}']\n";
     assert!(parse(unnamed).is_err());
 }

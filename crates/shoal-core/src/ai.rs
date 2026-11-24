@@ -13,7 +13,7 @@ mod resolve;
 pub mod validate;
 
 pub use builtin::{PROVIDERS, default_commands};
-pub use launch::{Arguments, Environment, ReviewFields, oneshot_command};
+pub use launch::{Arguments, Environment, ReviewFields, Schema, oneshot_command};
 pub use resolve::{DEFAULT_PROMPT_CACHE, LaunchProfile, Tool, Tools, inherit_launchers, tools};
 pub use shoal_protocol::integrations::IntegrationKind;
 pub use validate::validate;
@@ -49,13 +49,14 @@ pub struct Agent {
     pub model_args: Option<Vec<String>>,
     /// Arguments that select the reasoning effort `{effort}`.
     pub effort_args: Option<Vec<String>>,
-    /// Arguments of a one-shot, read-only review with `{prompt}`, `{schema}`
-    /// or `{schema_json}`, and optionally `{output}`.
+    /// Arguments of a one-shot, read-only review with `{prompt}`, and
+    /// optionally `{output}`, which lets it run Shoal's commands.
     pub review: Option<Vec<String>>,
     /// Arguments of such a review resuming session `{session}`.
     pub review_resume: Option<Vec<String>>,
-    /// Arguments of the gate's one-shot, read-only run, with `review`'s
-    /// placeholders, which also lets it run Shoal's commands.
+    /// Arguments of a one-shot run as `review`'s that returns its result in
+    /// the output schema `{schema}` or `{schema_json}` names: the gate's,
+    /// and the reviewer's answers in its findings' threads.
     pub gate: Option<Vec<String>>,
     /// Arguments of such a gate run resuming session `{session}`.
     pub gate_resume: Option<Vec<String>>,

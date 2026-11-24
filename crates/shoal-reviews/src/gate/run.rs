@@ -397,8 +397,10 @@ fn gate_command(
     std::fs::write(&schema, verdict::SCHEMA)?;
     let fields = crate::ai::ReviewFields {
         prompt,
-        schema: &schema,
-        schema_json: verdict::SCHEMA,
+        schema: Some(crate::ai::Schema {
+            file: &schema,
+            json: verdict::SCHEMA,
+        }),
         output: &output,
     };
     let tool = (case.settings.tools.get(agent.name()))
@@ -509,9 +511,9 @@ fn described(reason: FailureReason) -> String {
                 TIMEOUT.as_secs() / 60
             );
         }
-        FailureReason::ExecutionFailed | FailureReason::InvalidFalsePositives => {
-            "it exited unsuccessfully"
-        }
+        FailureReason::ExecutionFailed
+        | FailureReason::InvalidFalsePositives
+        | FailureReason::NotSubmitted => "it exited unsuccessfully",
     };
     text.to_owned()
 }

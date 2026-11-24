@@ -17,7 +17,7 @@ use crate::{
     },
     model::Workspace,
     protocol::{ItemContext, ItemMethod, RepoTarget},
-    reviews::{ReviewTarget, output::ReviewerOutput},
+    reviews::ReviewTarget,
 };
 use shoal_protocol::{space_names::SpaceSelector, time::UnixTime};
 use shoal_reviews::store;
@@ -163,16 +163,8 @@ impl Fixture {
             let review = store::queue(tx, &id, &target, &"fake".into(), &Default::default(), at(1));
             let review = review?.id();
             store::start(tx, review, &head, &"base".into(), at(2))?;
-            let output: ReviewerOutput = serde_json::from_value(serde_json::json!({
-                "summary": "Fine.", "verdict": "approve", "reopened": [], "findings": []
-            }))?;
-            let returned = store::Returned {
-                output: &output,
-                code: &[],
-                session: None,
-            };
             let records = crate::daemon::reviews::ReviewRecords;
-            store::finish(tx, &records, review, &id, &"fake".into(), returned, at(3))?;
+            store::submit_run(tx, &records, review, &id, Some("Fine."), true, at(3))?;
             Ok(())
         };
         self.manager.store.write(write).await.unwrap();

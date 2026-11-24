@@ -54,7 +54,8 @@ async fn another_machine_continues_a_kept_package_under_its_id() {
 async fn a_kept_package_carries_a_workspace_s_queued_review() {
     let (_source, exporting, repo, origin) = exporter().await;
     let (_target, importing, _) = importer(&origin).await;
-    let reviewer = "[review]\nagent = 'fake'\n[agents.fake]\ncommand = ['true']\nreview = ['{prompt}', '{schema}']\n";
+    let reviewer =
+        "[review]\nagent = 'fake'\n[agents.fake]\ncommand = ['true']\nreview = ['{prompt}']\n";
     test_support::configure(&exporting, reviewer).await;
     test_support::configure(&importing, reviewer).await;
     let fix = exporting

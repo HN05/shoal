@@ -3015,14 +3015,23 @@ saved session by the directory it ran in, so the checkout has one path per
 workspace and PR. The session adds context and decides nothing: each review is
 given its instructions and history in full, and a change of agent starts a new
 session. The
-reviewer returns findings in a fixed schema, each on a line range, and each becomes
-a `review` thread rather than a record of its own: the review run keeps its target,
-commit, reviewer, verdict and state, and Shoal opens a thread for each finding,
-held by the reviewed workspace, whose opening post points at the lines in the
-reviewed commit. A finding then reads, resolves, follows the code and shows in
-editors like every other thread about code, and its discussion is posts. One
-alert carries the review's summary and all its threads, so a review wakes the
-agent once. The holder resolves a thread Shoal opened, with a typed outcome
+reviewer writes its review with the commands everyone's reviews use, under a
+scope that ends with its run and writes only that review: `thread open` opens
+each finding on lines of its checkout, which resolve to the reviewed commit,
+`send` in a finding resolved `fixed` reopens it when the problem remains, and
+`review submit` finishes it with its summary and the written reviews' verdict
+rule. Each finding is a `review` thread rather than a record of its own,
+opened by Shoal and held by the reviewed workspace, so its holder resolves it,
+its posts wait for the reviewer's answer and false positives name it; the
+review record keeps its target, commit, reviewer, verdict and state. A finding
+then reads, resolves, follows the code and shows in editors like every other
+thread about code, and its discussion is posts. Findings hold their posts until
+the submit, which delivers the summary and all its threads in one alert, so a
+review wakes the agent once, and a reopen waits for it too, so the holder sees
+none of a run that never submits. A run that exits without submitting fails
+the review, which keeps the typed reasons failures name before it, and what the
+run wrote is dropped before the review fails, its fallback runs or it runs
+again. The holder resolves a thread Shoal opened, with a typed outcome
 carrying its reason or issue; `fixed` points at the changes attributed to the
 thread, which the next review receives with it, reopening it with a post saying
 why when the problem remains, instead of rereading free text. The gates count the
@@ -3038,9 +3047,8 @@ touching the same code is answered once. It is kept in a file beside the
 repository's local config rather than a tracked one: the outcome records it, with no
 command or commit of its own, reopening the finding's thread withdraws it, and the user edits
 the file to drop or add a claim. The
-history a review receives is context, not instructions, and the verdict is shown
-but decides nothing. Failures are typed reasons classified like the bot's, so
-backend output never reaches a message. The 30-minute limit is fixed: a review that
+history a review receives is context, not instructions. Failures are typed
+reasons classified like the bot's, so backend output never reaches a message. The 30-minute limit is fixed: a review that
 long has stopped making progress. The daemon starts the reviewer as a one-shot
 agent run, which any feature can use: an AI tool's command without a terminal,
 which may resume a session an earlier run reported, in its own process group, killed on timeout, cancel or a daemon stop and

@@ -1,48 +1,131 @@
 //! One reviewer run: an AI tool's review command run once in the review's
-//! checkout as a one-shot run, and its result, a review or an answer in a
-//! finding's thread, read back.
-use std::{fs, path::PathBuf, time::Duration};
+//! checkout as a one-shot run, under a scope of the reviewed workspace, and
+//! how it ended: a review it wrote through Shoal's commands, or an answer
+//! in a finding's thread, read back.
+use std::{ffi::OsString, fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
+use shoal_daemon_base::callers::Access;
 use tokio::sync::watch;
 
 use crate::{
+    ai::{Arguments, ReviewFields},
     log,
     oneshot::{self, AgentCommand},
     reviews::{
         FailureReason, ReviewId,
-        output::{self, Answer, ResultFormat, ReviewerOutput},
+        output::{self, Answer, ResultFormat},
     },
 };
 
-/// What a reviewer returns, read from its run's result, with the schema it
-/// is given and what a session it resumes is told first.
+/// What a reviewer's run returns, read from its result, with the schema it
+/// is given, the access its scope gives, the template it runs with and
+/// what a session it resumes is told first.
 pub trait Output: Sized {
-    const SCHEMA: &'static str;
+    /// The schema of what it returns, none for a run that writes through
+    /// Shoal's commands.
+    const SCHEMA: Option<&'static str>;
     const RESUMED: &'static str;
 
+    /// What the scope of a run for review `review` lets it change.
+    fn access(review: ReviewId) -> Access;
+
+    /// The arguments of a run with `fields` from `arguments`, resuming
+    /// `session` when given, and whether its result goes to `{output}`;
+    /// none without the template.
+    fn arguments(
+        arguments: &Arguments,
+        fields: &ReviewFields,
+        session: Option<&AgentSessionId>,
+    ) -> Option<(Vec<OsString>, bool)>;
+
     fn read(format: &ResultFormat, run: &output::Run) -> Result<Self, FailureReason>;
+
+    /// How a run of a review ended, given whether the review is `finished`.
+    fn settled(ended: Ended<Self>, finished: bool) -> Ended<Self>;
 }
 
-impl Output for ReviewerOutput {
-    const SCHEMA: &'static str = output::SCHEMA;
+/// A review's run that exited without a failure its result or diagnostics
+/// name; it writes the review itself, through Shoal's commands.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Exited;
+
+impl Output for Exited {
+    const SCHEMA: Option<&'static str> = None;
     const RESUMED: &'static str = "Earlier in this session you reviewed an earlier commit of \
         this work. Review the commit now checked out as the instructions below say; what you \
         learned before is context, and the history after them says how each earlier finding \
         was resolved.";
 
+    fn access(review: ReviewId) -> Access {
+        Access::Review(review)
+    }
+
+    fn arguments(
+        arguments: &Arguments,
+        fields: &ReviewFields,
+        session: Option<&AgentSessionId>,
+    ) -> Option<(Vec<OsString>, bool)> {
+        Some(match session {
+            Some(session) => (
+                arguments.review_resume_args(fields, session)?,
+                arguments.review_resume_writes_output(),
+            ),
+            None => (
+                arguments.review_args(fields)?,
+                arguments.review_writes_output(),
+            ),
+        })
+    }
+
     fn read(format: &ResultFormat, run: &output::Run) -> Result<Self, FailureReason> {
-        output::read(format, run)
+        output::outcome(format, run).map(|()| Exited)
+    }
+
+    /// A run that submitted its review produced it, however it exited; one
+    /// that exited cleanly without submitting failed.
+    fn settled(ended: Ended<Self>, finished: bool) -> Ended<Self> {
+        match (ended, finished) {
+            (Ended::Failed(_), true) => Ended::Returned {
+                output: Exited,
+                session: None,
+            },
+            (Ended::Returned { .. }, false) => Ended::Failed(FailureReason::NotSubmitted),
+            (ended, _) => ended,
+        }
     }
 }
 
 impl Output for Answer {
-    const SCHEMA: &'static str = output::ANSWER_SCHEMA;
+    const SCHEMA: Option<&'static str> = Some(output::ANSWER_SCHEMA);
     const RESUMED: &'static str = "Earlier in this session you reviewed this work. Answer as \
         the instructions below say; what you learned before is context.";
 
+    fn access(_: ReviewId) -> Access {
+        Access::ReadOnly
+    }
+
+    /// An answer returns its result in its schema, as the gate's runs do.
+    fn arguments(
+        arguments: &Arguments,
+        fields: &ReviewFields,
+        session: Option<&AgentSessionId>,
+    ) -> Option<(Vec<OsString>, bool)> {
+        Some(match session {
+            Some(session) => (
+                arguments.gate_resume_args(fields, session)?,
+                arguments.gate_resume_writes_output(),
+            ),
+            None => (arguments.gate_args(fields)?, arguments.gate_writes_output()),
+        })
+    }
+
     fn read(format: &ResultFormat, run: &output::Run) -> Result<Self, FailureReason> {
         output::read_answer(format, run)
+    }
+
+    fn settled(ended: Ended<Self>, _: bool) -> Ended<Self> {
+        ended
     }
 }
 use shoal_ids::agent_session_ids::AgentSessionId;
@@ -102,7 +185,7 @@ pub struct Reviewer<'a> {
 
 /// How a run ended.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Ended<O = ReviewerOutput> {
+pub enum Ended<O> {
     Returned {
         output: O,
         /// The session the reviewer reported.
@@ -212,7 +295,8 @@ pub fn write_id(files: &Files, id: ReviewId) -> Result<()> {
     fs::write(files.id(), id.to_string()).with_context(|| format!("write {}", files.id().display()))
 }
 
-/// Write the output schema `schema` the reviewer is given.
+/// Write the output schema `schema` the reviewer is given, for a run that
+/// returns one.
 pub fn write_schema(files: &Files, schema: &str) -> Result<()> {
     fs::write(files.schema(), schema).with_context(|| format!("write {}", files.schema().display()))
 }

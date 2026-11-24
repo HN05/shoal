@@ -14,12 +14,15 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_reviews::store;
 
-const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","reopened":[],
-"findings":[{"path":"tracked","start_line":1,"end_line":1,"severity":"should-fix",
-"title":"Unclear","body":"Name it."}]}"#;
+/// What `{write}` runs: it says the reviewer started, once its run's
+/// checkout exists, then waits until the test wrote its review and says
+/// so, or the tests end.
+const WRITES: &str = r#"dir="$(dirname '{review}')"
+touch "$dir/started"
+i=0; while [ ! -e "$dir/written" ] && [ $i -lt 6000 ] && kill -0 {tests} 2>/dev/null; do sleep 0.1; i=$((i+1)); done"#;
 
 struct Fixture {
-    _root: tempfile::TempDir,
+    root: tempfile::TempDir,
     manager: Arc<Manager>,
     workspace: Workspace,
     /// The repository's directory of review runs.
@@ -27,8 +30,10 @@ struct Fixture {
 }
 
 /// A workspace whose reviewers are `[agents.<name>]` scripts, in which
-/// `{review}` names a file holding [`REVIEW`], with the review scheduler and
-/// the agent queue, under a fixed agent limit, running when there are any.
+/// `{review}` names a file in the directory they write to, and `{write}`
+/// waits until the test has written the review, as [`Fixture::review`]
+/// does, with the review scheduler and the agent queue, under a fixed agent
+/// limit, running when there are any.
 async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
     fixture_with(reviewers, review, "").await
 }
@@ -37,14 +42,16 @@ async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
 async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) -> Fixture {
     let (root, manager) = manager().await;
     let result = root.path().join("review.json");
-    std::fs::write(&result, REVIEW).unwrap();
     let mut config = format!("[review]\n{review}\n");
     for (name, script) in reviewers {
         let path = root.path().join(format!("{name}.sh"));
+        let script = script.replace("{write}", WRITES);
         let script = script.replace("{review}", &result.to_string_lossy());
+        let script = script.replace("{tests}", &std::process::id().to_string());
         install_test_script(&path, format!("#!/bin/sh\n{script}\n"));
         config.push_str(&format!(
-            "[agents.{name}]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n{settings}",
+            "[agents.{name}]\ncommand = ['{}']\nreview = ['{{prompt}}']\n\
+             gate = ['{{prompt}}', '{{schema}}']\n{settings}",
             path.display()
         ));
     }
@@ -68,7 +75,7 @@ async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) 
         ));
     }
     Fixture {
-        _root: root,
+        root,
         manager,
         workspace,
         runs: ShoalDir::of(&repo, Contents::ReviewRuns),
@@ -114,12 +121,81 @@ impl Fixture {
             )
             .await
             .unwrap();
-        ended.changed().await.unwrap();
+        self.write_until_ended(&mut ended).await;
         self.manager
             .reviews
             .wait(self.manager.as_ref(), queued.id)
             .await
             .unwrap()
+    }
+
+    /// Write the review of each reviewer that waits for it, until a run
+    /// ends.
+    async fn write_until_ended(&self, ended: &mut tokio::sync::watch::Receiver<u64>) {
+        let started = self.root.path().join("started");
+        loop {
+            tokio::select! {
+                changed = ended.changed() => {
+                    changed.unwrap();
+                    break;
+                }
+                () = tokio::time::sleep(std::time::Duration::from_millis(20)) => {}
+            }
+            if std::fs::remove_file(&started).is_ok() {
+                self.write_running().await;
+            }
+        }
+        let _ = std::fs::remove_file(self.root.path().join("written"));
+    }
+
+    /// Write the running review through the requests its reviewer's
+    /// `shoal` commands send under its run's scope: one should-fix finding
+    /// on `tracked`, then the submit; and tell the reviewer it may exit.
+    async fn write_running(&self) {
+        use crate::protocol::{ReviewMethod, ThreadMethod};
+        use shoal_protocol::code::{Lines, NewCodeRef};
+        use shoal_protocol::threads::ThreadOpening;
+        let manager = &self.manager;
+        let running = (manager.store).read(|db| store::running(db)).await.unwrap();
+        let id = running[0];
+        let workspace = manager.reviews.workspace_of(id).await.unwrap();
+        let checkout = self.runs.root().join(workspace.as_str()).join("checkout");
+        let caller = crate::daemon::scope::Caller {
+            access: Access::Review(id),
+            ..crate::daemon::scope::Caller::of_space(workspace)
+        };
+        let opening = ThreadOpening {
+            body: Some("Name it.".into()),
+            code: vec![NewCodeRef {
+                path: checkout.join("tracked"),
+                lines: Some(Lines { start: 0, end: 1 }),
+                contents: None,
+            }],
+            severity: Some(crate::reviews::Severity::ShouldFix),
+            ..ThreadOpening::named("Unclear")
+        };
+        let requests = [
+            ThreadMethod::OpenThread {
+                opening,
+                kind: None,
+                to: None,
+                from: None,
+            }
+            .into(),
+            ReviewMethod::SubmitReview {
+                workspace: None,
+                approve: false,
+                summary: Some("One problem.".into()),
+            }
+            .into(),
+        ];
+        let server = crate::daemon::tests::server(manager.clone());
+        for request in requests {
+            (crate::daemon::requests::handle(&server, request, Some(&caller), None))
+                .await
+                .unwrap();
+        }
+        std::fs::write(self.root.path().join("written"), "").unwrap();
     }
 }
 
@@ -193,7 +269,7 @@ async fn a_review_protection_stops_is_queued_again() {
 
 #[tokio::test]
 async fn a_replaced_checkout_is_not_reviewed() {
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
     let repository = fixture
         .manager
         .repositories
@@ -270,7 +346,7 @@ async fn removing_the_workspace_stops_its_review() {
 #[tokio::test]
 async fn the_coordinating_agent_hears_one_line() {
     use crate::state::AgentState;
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
     let manager = &fixture.manager;
     let parent = &fixture.workspace;
     let child = manager
@@ -319,7 +395,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
         daemon::scope::{Caller, ScopedExecution, authorize},
         protocol::ReviewMethod,
     };
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
     let manager = &fixture.manager;
     let parent = &fixture.workspace;
     let child = manager
@@ -413,7 +489,7 @@ async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive
     use shoal_protocol::threads::{
         OutcomeKind, Resolving, Sender, ThreadKind, ThreadNumber, ThreadStatus,
     };
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspace);
     let review = fixture.review().await;
     let [thread] = review.threads.as_slice() else {
@@ -474,7 +550,7 @@ async fn the_reviewer_answers_its_workspace_s_post_in_a_finding_s_thread() {
     use shoal_protocol::threads::{NewPost, Sender, ThreadNumber};
     let script = "case \"$1\" in *'reply in `answer`'*)\n\
         echo '{\"answer\":\"It is reachable from parse.\"}';;\n\
-        *) cat '{review}';; esac";
+        *) {write};; esac";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspace);
     let review = fixture.review().await;
@@ -520,7 +596,7 @@ async fn the_reviewer_answers_its_workspace_s_post_in_a_finding_s_thread() {
 #[tokio::test]
 async fn a_later_review_reopens_only_a_fixed_finding_of_its_workspace() {
     use shoal_protocol::threads::{Outcome, OutcomeKind, Resolving, ThreadNumber};
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspace);
     let review = fixture.review().await;
     let (number, id) = (review.threads[0].number, review.threads[0].id);
@@ -643,12 +719,6 @@ async fn finished_reviews(
                     &"base".into(),
                     UnixTime::from_seconds(2),
                 )?;
-                let finding = serde_json::json!({"path": "a", "start_line": 1, "end_line": 1,
-                    "severity": "nit", "title": "Long", "body": body});
-                let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
-                    serde_json::json!({"summary": "Long.", "verdict": "comment", "reopened": [],
-                        "findings": vec![finding; findings]}),
-                )?;
                 let code = shoal_reviews::daemon::FindingCode {
                     commit: "head".into(),
                     at: shoal_protocol::code::CodeAt {
@@ -658,14 +728,20 @@ async fn finished_reviews(
                     },
                     snippet: None,
                 };
-                let returned = store::Returned {
-                    output: &output,
-                    code: &vec![code; findings],
-                    session: None,
-                };
-                let now = UnixTime::from_seconds(3);
                 let records = super::ReviewRecords;
-                store::finish(tx, &records, review, &id, &"absent".into(), returned, now)?;
+                for _ in 0..findings {
+                    let finding = shoal_reviews::daemon::FindingThread {
+                        review,
+                        workspace: &id,
+                        severity: shoal_protocol::reviews::Severity::Nit,
+                        title: "Long",
+                        body: &body,
+                        code: std::slice::from_ref(&code),
+                    };
+                    records.open_finding(tx, &finding)?;
+                }
+                let now = UnixTime::from_seconds(3);
+                store::submit_run(tx, &records, review, &id, Some("Long."), false, now)?;
                 ids.push(review);
             }
             Ok(ids)
@@ -753,14 +829,13 @@ async fn a_run_left_in_the_repository_directory_holds_back_its_removal() {
 #[tokio::test]
 async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     let (root, manager) = manager().await;
-    let result = root.path().join("review.json");
-    std::fs::write(&result, REVIEW).unwrap();
+    // Whatever the run does, the review records the commit it read.
     let script = root.path().join("reviewer.sh");
-    install_test_script(&script, format!("#!/bin/sh\ncat '{}'\n", result.display()));
+    install_test_script(&script, "#!/bin/sh\ntrue\n");
     configure(
         &manager,
         &format!(
-            "[review]\nagent = 'reviewer'\n[agents.reviewer]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n\
+            "[review]\nagent = 'reviewer'\n[agents.reviewer]\ncommand = ['{}']\nreview = ['{{prompt}}']\n\
              [machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n",
             script.display()
         ),

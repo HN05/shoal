@@ -29,11 +29,14 @@ pub struct Provider {
     /// The variable that sets the reasoning effort over the effort
     /// arguments, which a launch with an effort sets to the same value.
     pub(super) effort_variable: Option<&'static str>,
+    /// The arguments of a review's one-shot run: read-only, but able to
+    /// reach the daemon for Shoal's commands, which write the review.
     pub(super) review: Option<&'static [&'static str]>,
     /// The arguments of a review that resumes `{session}`.
     pub(super) review_resume: Option<&'static [&'static str]>,
-    /// The arguments of the gate's one-shot run: read-only as `review` is,
-    /// but able to reach the daemon for Shoal's commands.
+    /// The arguments of a one-shot run as `review`'s that returns the
+    /// result its output schema describes: the gate's, and the reviewer's
+    /// answers.
     pub(super) gate: Option<&'static [&'static str]>,
     /// The arguments of a gate run that resumes `{session}`.
     pub(super) gate_resume: Option<&'static [&'static str]>,
@@ -92,37 +95,49 @@ pub const PROVIDERS: &[Provider] = &[
         model_args: Some(&["-m", "{model}"]),
         effort_args: Some(&["-c", "model_reasoning_effort=\"{effort}\""]),
         effort_variable: None,
+        // Its permissions read every file and write none, and its network
+        // reaches Unix sockets, the daemon's among them, which Linux cannot
+        // allow one by one, but no host: the proxy it goes through allows
+        // none. The reviewer writes its review through Shoal's commands.
         review: Some(&[
             "exec",
-            "--sandbox",
-            "read-only",
+            "-c",
+            "default_permissions=\"shoal_review\"",
+            "-c",
+            "permissions.shoal_review.filesystem={\":root\"=\"read\"}",
+            "-c",
+            "permissions.shoal_review.network.enabled=true",
+            "-c",
+            "permissions.shoal_review.network.dangerously_allow_all_unix_sockets=true",
+            "-c",
+            "features.network_proxy=true",
             "-c",
             "approval_policy=\"never\"",
-            "--output-schema",
-            "{schema}",
             "--output-last-message",
             "{output}",
             "{prompt}",
         ]),
-        // Resuming takes no `--sandbox`, so the config sets it.
         review_resume: Some(&[
             "exec",
             "resume",
             "-c",
-            "sandbox_mode=\"read-only\"",
+            "default_permissions=\"shoal_review\"",
+            "-c",
+            "permissions.shoal_review.filesystem={\":root\"=\"read\"}",
+            "-c",
+            "permissions.shoal_review.network.enabled=true",
+            "-c",
+            "permissions.shoal_review.network.dangerously_allow_all_unix_sockets=true",
+            "-c",
+            "features.network_proxy=true",
             "-c",
             "approval_policy=\"never\"",
-            "--output-schema",
-            "{schema}",
             "--output-last-message",
             "{output}",
             "{session}",
             "{prompt}",
         ]),
-        // Its permissions read every file and write none, and its network
-        // reaches Unix sockets, the daemon's among them, which Linux cannot
-        // allow one by one, but no host: the proxy it goes through allows
-        // none.
+        // As `review`, returning the result its schema describes.
         gate: Some(&[
             "exec",
             "-c",
@@ -190,36 +205,33 @@ pub const PROVIDERS: &[Provider] = &[
             "{prompt}",
             "--output-format",
             "json",
-            "--json-schema",
-            "{schema_json}",
             // Read-only whatever the user's or the reviewed repository's
             // settings allow: none of them load, anything not approved here
             // is denied, and the sandbox keeps commands from writing
-            // outside the checkout, as `git diff --output` would.
+            // outside the checkout, as `git diff --output` would. Its
+            // sandbox reaches Unix sockets, the daemon's among them, and
+            // the allowed tools reach them only through `shoal`, whose
+            // commands write the review.
             "--setting-sources=",
             "--permission-mode=dontAsk",
             "--tools=Read,Grep,Glob,Bash",
-            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
-            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
+            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(shoal:*)",
+            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false,\"network\":{\"allowAllUnixSockets\":true}}}",
         ]),
         review_resume: Some(&[
             "-p",
             "{prompt}",
             "--output-format",
             "json",
-            "--json-schema",
-            "{schema_json}",
             "--setting-sources=",
             "--permission-mode=dontAsk",
             "--tools=Read,Grep,Glob,Bash",
-            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
-            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
+            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(shoal:*)",
+            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false,\"network\":{\"allowAllUnixSockets\":true}}}",
             "--resume",
             "{session}",
         ]),
-        // As `review`, with Shoal's commands, whose sandbox reaches Unix
-        // sockets, the daemon's among them; the allowed tools reach them
-        // only through `shoal`.
+        // As `review`, returning the result its schema describes.
         gate: Some(&[
             "-p",
             "{prompt}",

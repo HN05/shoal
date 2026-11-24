@@ -109,11 +109,7 @@ async fn a_run_opens_findings_on_the_reviewed_commit_and_submits_them_together()
 
 #[tokio::test]
 async fn a_runs_reopen_of_a_fixed_finding_waits_for_its_submit() {
-    let fixture = fixture(
-        &[("fake", "cat '{review}'"), ("slow", &waits())],
-        "agent = 'fake'",
-    )
-    .await;
+    let fixture = fixture(&[("fake", "{write}"), ("slow", &waits())], "agent = 'fake'").await;
     let first = fixture.review().await;
     let number = first.threads[0].number;
     let (reviews, daemon) = (&fixture.reviews, &*fixture.daemon);

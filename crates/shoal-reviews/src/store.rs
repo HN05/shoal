@@ -1,6 +1,7 @@
-//! Review rows: queueing and the state changes of a run, which opens a
-//! thread for each finding and reopens the earlier ones still present, each
-//! in the caller's connection or transaction.
+//! Review rows: queueing and the state changes of a run, whose reviewer
+//! opens a thread for each finding and reopens the earlier ones still
+//! present before it submits, each in the caller's connection or
+//! transaction.
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use shoal_ids::repository_ids::RepositoryId;
@@ -9,10 +10,9 @@ use shoal_refs::CommitId;
 
 use crate::{
     agent::{Agent, ModelChoice},
-    daemon::{FindingCode, FindingThread, Records},
+    daemon::Records,
     reviews::{
         Author, FailureReason, Posted, Review, ReviewId, ReviewState, ReviewStatus, ReviewTarget,
-        output::ReviewerOutput,
     },
 };
 use shoal_ids::agent_session_ids::AgentSessionId;
@@ -128,20 +128,25 @@ pub fn requeue_running(db: &Connection, kept: &[ReviewId]) -> Result<usize> {
 }
 
 /// Fail the active reviews among `kept`, whose runs a restart could not
-/// remove, and queue the other running reviews again; returns the reviews
-/// it failed and how many it queued.
+/// remove, and queue the other running reviews again, dropping what each
+/// running review's run wrote; returns the reviews it failed and how many
+/// it queued.
 pub fn settle_interrupted(
-    db: &Connection,
+    tx: &rusqlite::Transaction<'_>,
+    records: &dyn Records,
     kept: &[ReviewId],
     now: UnixTime,
 ) -> Result<(Vec<ReviewId>, usize)> {
+    for id in running(tx)? {
+        drop_run_writes(tx, records, id)?;
+    }
     let mut failed = Vec::new();
     for id in kept {
-        if fail(db, *id, None, FailureReason::ExecutionFailed, now)? {
+        if fail(tx, *id, None, FailureReason::ExecutionFailed, now)? {
             failed.push(*id);
         }
     }
-    Ok((failed, requeue_running(db, kept)?))
+    Ok((failed, requeue_running(tx, kept)?))
 }
 
 /// Queue running review `id` again after its run was stopped, by
@@ -214,74 +219,13 @@ pub fn start(
     )? == 1)
 }
 
-/// What a finished run returned: the reviewer's output, where each of its
-/// findings is in the reviewed commit, in order, and the session it
-/// reported.
-pub struct Returned<'a> {
-    pub output: &'a ReviewerOutput,
-    pub code: &'a [FindingCode],
-    pub session: Option<&'a AgentSessionId>,
-}
-
-/// Record the reviewer's result on a running review of the workspace
-/// `workspace` by `reviewer`: a thread for each finding, and the reopening
-/// of each earlier finding of the workspace resolved `fixed` that it found
-/// still present. False when the review is no longer running.
-pub fn finish(
-    tx: &rusqlite::Transaction<'_>,
-    records: &dyn Records,
-    id: ReviewId,
-    workspace: &SpaceId,
-    reviewer: &Agent,
-    returned: Returned<'_>,
-    now: UnixTime,
-) -> Result<bool> {
-    let Returned {
-        output,
-        code,
-        session,
-    } = returned;
-    let finished = tx.execute(
-        "UPDATE reviews SET state=?6,reviewer=?2,summary=?3,verdict=?4,ended_at=?5,session=?8
-            WHERE id=?1 AND state=?7",
-        params![
-            id,
-            reviewer,
-            output.summary,
-            output.verdict,
-            now,
-            ReviewState::Finished,
-            ReviewState::Running,
-            session.map(AgentSessionId::as_str)
-        ],
-    )? == 1;
-    if !finished {
-        return Ok(false);
-    }
-    for (finding, code) in output.findings.iter().zip(code) {
-        let finding = FindingThread {
-            review: id,
-            workspace,
-            severity: finding.severity,
-            title: &finding.title,
-            body: &finding.body,
-            code: std::slice::from_ref(code),
-        };
-        records.open_finding(tx, &finding)?;
-    }
-    for reopened in &output.reopened {
-        let Some(thread) = records.fixed_finding(tx, workspace, reopened.thread)? else {
-            continue;
-        };
-        if records.reopen_finding(tx, workspace, thread, &reopened.reason)? {
-            tx.execute(
-                "INSERT OR IGNORE INTO review_reopens(review_id,thread_id) VALUES (?1,?2)",
-                params![id, thread],
-            )?;
-        }
-    }
-    records.release_review_threads(tx, id)?;
-    Ok(true)
+/// Record that `agent` reviews running review `id` now.
+pub fn attempt(db: &Connection, id: ReviewId, agent: &Agent) -> Result<()> {
+    db.execute(
+        "UPDATE reviews SET reviewer=?2 WHERE id=?1 AND state=?3",
+        params![id, agent, ReviewState::Running],
+    )?;
+    Ok(())
 }
 
 /// Hold, until running review `id` is submitted, its reopen of the finding
@@ -354,16 +298,23 @@ fn post_held_reopens(
     Ok(())
 }
 
-/// Drop what running review `id`'s run wrote: the threads it opened and the
-/// reopens it held, before the review fails, its fallback runs or it runs
-/// again.
+/// Drop what the run of Shoal's review `id` wrote while the review has not
+/// finished: the threads it opened and the reopens it held, before the
+/// review fails, its fallback runs or it runs again.
 pub fn drop_run_writes(
     tx: &rusqlite::Transaction<'_>,
     records: &dyn Records,
     id: ReviewId,
 ) -> Result<()> {
-    records.drop_review_threads(tx, id)?;
-    tx.execute("DELETE FROM review_reopens WHERE review_id=?1", [id])?;
+    let unfinished: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM reviews WHERE id=?1 AND opener='shoal' AND state<>?2)",
+        params![id, ReviewState::Finished],
+        |row| row.get(0),
+    )?;
+    if unfinished {
+        records.drop_review_threads(tx, id)?;
+        tx.execute("DELETE FROM review_reopens WHERE review_id=?1", [id])?;
+    }
     Ok(())
 }
 

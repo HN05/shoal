@@ -465,8 +465,8 @@ fork = ["--resume", "{session}", "--fork-session"]    # Optional
 add_dir = ["--add-dir", "{directory}"]                # Optional
 model_args = ["--model", "{model}"]                   # Optional
 effort_args = ["--reasoning-effort", "{effort}"]      # Optional
-review = ["exec", "--schema", "{schema}", "{prompt}"] # Optional
-review_resume = ["exec", "--resume", "{session}", "--schema", "{schema}", "{prompt}"] # Optional
+review = ["exec", "--allow", "shoal", "{prompt}"]     # Optional
+review_resume = ["exec", "--resume", "{session}", "--allow", "shoal", "{prompt}"] # Optional
 gate = ["exec", "--allow", "shoal", "--schema", "{schema}", "{prompt}"] # Optional
 gate_resume = ["exec", "--resume", "{session}", "--allow", "shoal", "--schema", "{schema}", "{prompt}"] # Optional
 
@@ -505,15 +505,16 @@ Each option merges on its own across layers, so a repository can replace
   these to the default agent, and `--model` and `--effort` over both.
 - `review` runs a [local review](../../../../../../docs/reference.md#local-reviews) once: the
   launcher's words before `{args}`, or all of them, then these arguments,
-  which name the prompt `{prompt}` and the output schema as a file,
-  `{schema}`, or its text, `{schema_json}`; `{output}` names a file the result
-  goes to instead of standard output. A tool without one cannot review.
-  `review_resume` runs a review again in session `{session}`, which an earlier
-  review reported, to keep one session per workspace or PR.
-- `gate` runs the [gate](../../../../../../docs/reference.md#the-gate) once, with `review`'s
-  placeholders, read-only as a review but able to run `shoal`: the built-in
-  ones open Unix sockets in the tool's sandbox, the daemon's among them, and
-  no network host. A tool without one cannot be the gate.
+  which name the prompt `{prompt}`; `{output}` names a file the result goes to
+  instead of standard output. The run is read-only but able to run `shoal`,
+  which writes its review: the built-in ones open Unix sockets in the tool's
+  sandbox, the daemon's among them, and no network host. A tool without one
+  cannot review. `review_resume` runs a review again in session `{session}`,
+  which an earlier review reported, to keep one session per workspace or PR.
+- `gate` runs the [gate](../../../../../../docs/reference.md#the-gate), and the reviewer's
+  answers in its findings' threads, once, with `review`'s placeholders and the
+  output schema its result follows, as a file, `{schema}`, or its text,
+  `{schema_json}`. A tool without one cannot be the gate or answer.
   `gate_resume` runs it again in session `{session}`, which an earlier run
   reported, to keep a session per subject.
 - A tool without `review_resume` or `gate_resume` starts a new session each

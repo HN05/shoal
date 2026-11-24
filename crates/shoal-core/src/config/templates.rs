@@ -33,8 +33,9 @@ const SPACE_RULES: &str = include_str!("templates/space_rules.md");
 /// workspace is told after the space rules, as a start without a branch
 /// begins.
 const CONVERT_RULE: &str = include_str!("templates/convert_rule.md");
-/// A review's instructions: the fixed task, read-only rules, output contract
-/// and treatment of history, then the base the `review` rule replaces.
+/// A review's instructions: the fixed task, read-only rules, the commands
+/// that write the review and treatment of history, then the base the
+/// `review` rule replaces.
 const REVIEW: &str = include_str!("templates/review.md");
 const REVIEW_BASE_MARKER: &str = "<!-- base -->\n";
 

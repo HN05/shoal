@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 
 use super::{Agent, Agents, resolve::runs_as_agent};
 use crate::config::named_commands::{self, Commands};
@@ -72,23 +72,28 @@ pub fn entry(name: &str, agent: &Agent) -> Result<()> {
                 .with_context(|| format!("agents.{name}.{key}"))?;
         }
     }
-    for (key, argv) in [("review", &agent.review), ("gate", &agent.gate)] {
-        if let Some(argv) = argv {
-            validate_arguments(argv, &["{prompt}"])
-                .and_then(|()| validate_arguments(argv, &["{schema}", "{schema_json}"]))
-                .with_context(|| format!("agents.{name}.{key}"))?;
-        }
-    }
-    for (key, argv) in [
-        ("review_resume", &agent.review_resume),
-        ("gate_resume", &agent.gate_resume),
+    // A review writes through Shoal's commands; the gate returns a result
+    // in its schema.
+    let schema = ["{schema}", "{schema_json}"];
+    for (key, argv, resumes, returns) in [
+        ("review", &agent.review, false, false),
+        ("review_resume", &agent.review_resume, true, false),
+        ("gate", &agent.gate, false, true),
+        ("gate_resume", &agent.gate_resume, true, true),
     ] {
-        if let Some(argv) = argv {
-            validate_arguments(argv, &["{prompt}"])
-                .and_then(|()| validate_arguments(argv, &["{schema}", "{schema_json}"]))
-                .and_then(|()| validate_arguments(argv, &["{session}"]))
-                .with_context(|| format!("agents.{name}.{key}"))?;
-        }
+        let Some(argv) = argv else {
+            continue;
+        };
+        validate_arguments(argv, &["{prompt}"])
+            .and_then(|()| match returns {
+                true => validate_arguments(argv, &schema),
+                false => refuse_arguments(argv, &schema),
+            })
+            .and_then(|()| match resumes {
+                true => validate_arguments(argv, &["{session}"]),
+                false => Ok(()),
+            })
+            .with_context(|| format!("agents.{name}.{key}"))?;
     }
     // An empty `add_dir` turns the built-in one off.
     if let Some(argv) = agent.add_dir.as_ref().filter(|argv| !argv.is_empty()) {
@@ -184,6 +189,17 @@ fn validate_arguments(argv: &[String], placeholders: &[&str]) -> Result<()> {
         "arguments must not contain NUL"
     );
     Ok(())
+}
+
+/// Refuse `argv` naming one of `placeholders`, which its run never fills.
+fn refuse_arguments(argv: &[String], placeholders: &[&str]) -> Result<()> {
+    let named = placeholders
+        .iter()
+        .find(|field| argv.iter().any(|arg| arg.contains(*field)));
+    match named {
+        Some(field) => bail!("{field} names nothing here"),
+        None => Ok(()),
+    }
 }
 
 /// Each configured skill directory is absolute or under the home.

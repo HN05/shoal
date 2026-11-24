@@ -545,11 +545,13 @@ shoal thread resolve 3.5 duplicate --of 3.2
 
 `review run` queues a one-shot, read-only review of the committed HEAD;
 uncommitted edits stay out of it. With a PR URL, or from a chat for its linked
-PR, it reviews the PR in the workspace that owns its branch. Each finding is a
-`review` [thread](#threads) Shoal opens, held by the workspace and numbered in
-its space, whose opening post points at the reviewed lines; the review's
-summary and all its threads reach the workspace's agent in one message, and its
-coordinator as one line. The holder resolves a finding's thread with
+PR, it reviews the PR in the workspace that owns its branch. The reviewer
+writes its review with `thread open`, `send` and `review submit`, under a
+scope that writes only that review, and a run that does not submit fails it.
+Each finding is a `review` [thread](#threads) Shoal opens, held by the
+workspace and numbered in its space, whose opening post points at the reviewed
+lines; the review's summary and all its threads reach the workspace's agent in
+one message once submitted, and its coordinator as one line. The holder resolves a finding's thread with
 `thread resolve` and an outcome with its data, or posts in it with `send`,
 which the reviewer answers there from the workspace's latest commit. Later reviews of the
 repository receive each `false-positive` finding's title, path and reason and

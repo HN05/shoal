@@ -22,8 +22,8 @@ fn enabled_turns_an_agent_off_and_happys_agents_on() {
 #[test]
 fn a_reviewer_needs_only_its_review_command_installed() {
     let config = crate::config::Config::from_toml(
-        "[agents.present]\ncommand = ['sh']\nreview = ['{prompt}', '{schema}']\n\
-         [agents.absent]\ncommand = ['no-such-reviewer']\nreview = ['{prompt}', '{schema}']\n",
+        "[agents.present]\ncommand = ['sh']\nreview = ['{prompt}']\n\
+         [agents.absent]\ncommand = ['no-such-reviewer']\nreview = ['{prompt}']\n",
     )
     .unwrap();
     let settings = config.resolve(&Default::default()).unwrap();

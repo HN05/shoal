@@ -49,7 +49,9 @@ states!(
 );
 
 states!(
-    /// The reviewer's overall judgement, which is shown but decides nothing.
+    /// What a submitted review says of the work: it approves when its
+    /// writer says so, else asks for changes when it comments, else only
+    /// comments.
     Verdict {
         Approve => "approve",
         Comment => "comment",
@@ -66,8 +68,11 @@ states!(
         AuthenticationFailed => "authentication-failed",
         /// The reviewer exited unsuccessfully for another reason.
         ExecutionFailed => "execution-failed",
-        /// The reviewer's output is missing or does not match the schema.
+        /// The output a run returns is missing or does not match its
+        /// schema, as the gate's.
         InvalidOutput => "invalid-output",
+        /// The reviewer exited without submitting its review.
+        NotSubmitted => "not-submitted",
         TimedOut => "timed-out",
         /// The repository's false positives file cannot be read.
         InvalidFalsePositives => "invalid-false-positives",
@@ -83,7 +88,8 @@ impl FailureReason {
             Self::RateLimit => "the reviewer was rate limited; retry later",
             Self::AuthenticationFailed => "the reviewer could not authenticate; sign in again",
             Self::ExecutionFailed => "the reviewer exited unsuccessfully",
-            Self::InvalidOutput => "the reviewer's output did not match the review schema",
+            Self::InvalidOutput => "the output did not match its schema",
+            Self::NotSubmitted => "the reviewer exited without submitting its review",
             Self::TimedOut => "the reviewer ran longer than 30 minutes and was stopped",
             Self::InvalidFalsePositives => {
                 "the repository's .shoal/false-positives.toml is invalid; fix or delete it, then review again"

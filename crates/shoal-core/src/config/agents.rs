@@ -47,15 +47,17 @@ pub struct AgentToolConfig {
     /// Arguments that select the reasoning effort `{effort}`.
     pub effort_args: Option<Vec<String>>,
     /// Arguments of a one-shot, read-only review, which follow the launcher's
-    /// words before `{args}`: the prompt as `{prompt}`, the output schema as
-    /// a file, `{schema}`, or its text, `{schema_json}`, and `{output}`, a
-    /// file the result goes to instead of standard output.
+    /// words before `{args}`: the prompt as `{prompt}` and `{output}`, a
+    /// file the result goes to instead of standard output. It lets the
+    /// reviewer run Shoal's commands, which write its review.
     pub review: Option<Vec<String>>,
     /// Arguments of a review that resumes the session with ID `{session}`,
     /// with `review`'s placeholders, in place of `review`'s.
     pub review_resume: Option<Vec<String>>,
-    /// Arguments of the gate's one-shot, read-only run, with `review`'s
-    /// placeholders, which also lets it run Shoal's commands.
+    /// Arguments of a one-shot run as `review`'s that returns its result in
+    /// an output schema, as a file, `{schema}`, or its text,
+    /// `{schema_json}`: the gate's, and the reviewer's answers in its
+    /// findings' threads.
     pub gate: Option<Vec<String>>,
     /// Arguments of a gate run that resumes the session with ID
     /// `{session}`, with `gate`'s placeholders, in place of `gate`'s.

@@ -103,7 +103,7 @@ fn github_check_runs(runs: Value) -> (String, Value) {
 #[test]
 fn review_runs_the_configured_command_or_queues_an_agent_review() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\n[agents.reviewer]\ncommand = ['printf', '%s|', '{prompt}', '{args}']\n[agents.absent]\ncommand = ['no-such-reviewer']\nreview = ['{prompt}', '{schema}']\n",
+        "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\n[agents.reviewer]\ncommand = ['printf', '%s|', '{prompt}', '{args}']\n[agents.absent]\ncommand = ['no-such-reviewer']\nreview = ['{prompt}']\n",
     ));
     fixture.add("changes");
     assert!(
@@ -145,17 +145,10 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
         fixture.ok(&["review", "ls", &fixture.id("changes")]),
         serde_json::json!([])
     );
-    // Without a configured review command, the agent reviews in the daemon.
-    let result = fixture.root.path().join("review.json");
-    fs::write(
-        &result,
-        r#"{"summary":"One nit.","verdict":"comment","reopened":[],"findings":[{"path":"tracked","start_line":1,"end_line":1,"severity":"nit","title":"Name it","body":"Say what it holds."}]}"#,
-    )
-    .unwrap();
-    let fixture = Fixture::with_config(Some(&format!(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'cat {}', '{{prompt}}', '{{schema}}']\n",
-        result.display()
-    )));
+    // Without a configured review command, the agent reviews in the daemon,
+    // writing its review with Shoal's commands.
+    let fixture = Fixture::with_config(Some(REVIEWER_CONFIG));
+    install_reviewer(&fixture, WRITES_A_NIT);
     fixture.add("agent-only");
     // The daemon may start it before replying, so its state is not checked.
     let queued = fixture.ok(&["review", "run", &fixture.id("agent-only")]);
@@ -192,25 +185,75 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
     assert_eq!(viewed[0]["id"].to_string(), id);
 }
 
+/// The config of a reviewer agent, `reviewer-agent` on the fixture's path,
+/// which [`install_reviewer`] installs.
+const REVIEWER_CONFIG: &str = "agent.default = 'reviewer'\n[agents.reviewer]\n\
+    command = ['reviewer-agent']\nreview = ['{prompt}']\n";
+
+/// A reviewer that writes a review of one nit with the real `shoal`.
+const WRITES_A_NIT: &str = r#"#!/bin/sh
+'{shoal}' thread open 'Name it' --code tracked:1-1 --severity nit --body 'Say what it holds.' > /dev/null || exit 1
+'{shoal}' review submit --body 'One nit.' > /dev/null
+"#;
+
+/// Install `script` as the reviewer of [`REVIEWER_CONFIG`], with `{shoal}`
+/// naming the `shoal` binary and `{dir}` the fixture's root.
+fn install_reviewer(fixture: &Fixture, script: &str) {
+    let script = (script.replace("{shoal}", support::shoal_binary()))
+        .replace("{dir}", fixture.root.path().to_str().unwrap());
+    install_test_script(fixture.root.path().join("bin/reviewer-agent"), script);
+}
+
+/// A reviewer whose run exits without submitting leaves no findings and
+/// fails its review, and its scope refuses what is not its review.
+#[test]
+fn a_reviewer_that_does_not_submit_fails_and_leaves_no_findings() {
+    let fixture = Fixture::with_config(Some(REVIEWER_CONFIG));
+    install_reviewer(
+        &fixture,
+        r#"#!/bin/sh
+'{shoal}' thread open 'Name it' --code tracked:1-1 --severity nit > /dev/null || exit 1
+'{shoal}' thread open 'Which name?' --kind question > /dev/null 2> '{dir}/question.err'
+echo $? > '{dir}/question.code'
+"#,
+    );
+    fixture.add("unsubmitted");
+    let id = fixture.ok(&["review", "run", &fixture.id("unsubmitted")])["id"].to_string();
+    let review = fixture.ok(&["watch", "review", &id]);
+    assert_eq!(review["state"], "failed", "{review}");
+    assert_eq!(review["failure"], "not-submitted", "{review}");
+    // It opened one, which went with its run.
+    assert!(review.get("threads").is_none(), "{review}");
+    let threads = fixture.ok(&[
+        "thread",
+        "list",
+        "--space",
+        &fixture.id("unsubmitted"),
+        "--state",
+        "all",
+    ]);
+    assert!(
+        threads["threads"].as_array().is_none_or(Vec::is_empty),
+        "{threads}"
+    );
+    let code = fs::read_to_string(fixture.root.path().join("question.code")).unwrap();
+    assert_ne!(code.trim(), "0");
+    let refused = fs::read_to_string(fixture.root.path().join("question.err")).unwrap();
+    assert!(refused.contains("a review run only reads"), "{refused}");
+}
+
 #[test]
 fn a_review_watch_outlasts_a_daemon_restart() {
-    let files = tempfile::tempdir().unwrap();
-    let result = files.path().join("review.json");
-    fs::write(
-        &result,
-        r#"{"summary":"No issues found.","verdict":"approve","reopened":[],"findings":[]}"#,
-    )
-    .unwrap();
-    // The reviewer waits for the gate, for at most a minute.
-    let gate = files.path().join("gate");
-    let script = format!(
-        "i=0; while [ ! -e {} ] && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done; cat {}",
-        gate.display(),
-        result.display()
+    // The reviewer waits for the gate, for at most a minute, then approves.
+    let mut fixture = Fixture::with_config(Some(REVIEWER_CONFIG));
+    install_reviewer(
+        &fixture,
+        r#"#!/bin/sh
+i=0; while [ ! -e '{dir}/gate' ] && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done
+'{shoal}' review submit --approve --body 'No issues found.' > /dev/null
+"#,
     );
-    let mut fixture = Fixture::with_config(Some(&format!(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', '{script}', '{{prompt}}', '{{schema}}']\n"
-    )));
+    let gate = fixture.root.path().join("gate");
     fixture.add("watched");
     let id = fixture.ok(&["review", "run", &fixture.id("watched")])["id"].to_string();
     wait_until("the review to run", || {
@@ -295,7 +338,7 @@ fn review_refers_issues_to_plan_mode() {
 #[test]
 fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}']\n",
     ));
     let author = forge_origin(&fixture);
     git(&author, &["switch", "-c", "fix"]);
@@ -361,7 +404,7 @@ fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
 #[test]
 fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}']\n",
     ));
     let author = forge_origin(&fixture);
     let commit = |message: &str| {
@@ -2373,7 +2416,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
             .to_owned()
     };
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n[agents.worker]\ncommand = ['sh', '-c', 'git rev-parse HEAD > \"$HOME/agent-head\"', 'worker']\n[commands]\nreview = ['printf', '%s\\n', '{diff_base}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}']\n[agents.worker]\ncommand = ['sh', '-c', 'git rev-parse HEAD > \"$HOME/agent-head\"', 'worker']\n[commands]\nreview = ['printf', '%s\\n', '{diff_base}']\n",
     ));
     let author = forge_origin(&fixture);
     let remote = fixture.root.path().join("origin.git");

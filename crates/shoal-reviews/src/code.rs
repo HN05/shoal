@@ -6,22 +6,7 @@ use anyhow::{Context as _, Result, bail};
 use shoal_protocol::code::{self, CodeAt, Lines, NewCodeRef};
 use shoal_refs::CommitId;
 
-use crate::{daemon::FindingCode, git, log, reviews::output::NewFinding};
-
-/// Where each of `findings` is in the commit `head` of the repository the
-/// worktree `worktree` belongs to, in order.
-pub(crate) async fn finding_code(
-    worktree: &Path,
-    head: &CommitId,
-    findings: &[NewFinding],
-) -> Vec<FindingCode> {
-    let mut found = Vec::new();
-    for finding in findings {
-        let lines = Some(finding.lines());
-        found.push(at_commit(worktree, head, finding.path.clone(), lines).await);
-    }
-    found
-}
+use crate::{daemon::FindingCode, git, log};
 
 /// Where each place in `code` is in the commit `head`, checked out at
 /// `checkout`, of the repository the worktree `worktree` belongs to, in

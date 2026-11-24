@@ -1,5 +1,5 @@
 //! Local reviews: the records the client carries, and how a reviewer's
-//! output reads into findings.
+//! run reads back.
 pub use shoal_protocol::reviews::*;
 
 mod failure;

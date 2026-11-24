@@ -349,7 +349,7 @@ fn review_instructions_keep_their_fixed_part_before_any_template() {
     assert!(built_in.contains("git diff abc123...HEAD --stat"));
     assert!(!built_in.contains("<!--"));
     let replaced = review_instructions(Some("Follow .review/review.md in {path}."), &fields);
-    assert!(replaced.contains("report its thread in `reopened`"));
+    assert!(replaced.contains("shoal review submit"));
     assert!(replaced.ends_with("Follow .review/review.md in /state/reviews/7."));
     assert!(!replaced.contains("careful senior colleague"));
     assert!(!review_instructions(None, &fields).contains("careful senior colleague"));

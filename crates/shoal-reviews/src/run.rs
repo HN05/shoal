@@ -1,7 +1,8 @@
 //! Running queued reviews: each starts at once, takes the workspace's HEAD,
 //! runs its reviewer in a detached checkout at the place of the workspace's
-//! or PR's reviews, falls back to a second reviewer once, and records what
-//! it found.
+//! or PR's reviews, under a scope that writes only that review, falls back
+//! to a second reviewer once, dropping what a failed run wrote, and fails
+//! the review when no run submitted it.
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use anyhow::{Context, Result, anyhow};
@@ -16,14 +17,14 @@ use crate::{
     Reviews,
     agent::{Agent, ModelChoice},
     checkouts::CheckoutHold,
-    code,
     config::{Effective, templates},
     daemon::{Admission, AwaitedPost, Daemon},
     false_positives, findings, git, history, log,
     model::{Repository, Workspace},
     oneshot,
-    reviewer::{self, Ended, Files, Reviewer},
+    reviewer::{self, Ended, Exited, Files, Reviewer},
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
+    scope::RunScope,
     shoal_dirs::{Contents, ShoalDir},
     store,
 };
@@ -115,6 +116,8 @@ struct Attempt<'a> {
 /// What every reviewer of a run gets.
 struct Run<'a> {
     runs: &'a oneshot::Runs,
+    /// The reviewed workspace, whose scope the reviewer holds.
+    space: &'a shoal_ids::space_ids::SpaceId,
     settings: &'a Effective,
     /// The workspace's configured variables.
     configured: std::collections::BTreeMap<String, std::ffi::OsString>,
@@ -222,8 +225,7 @@ impl Reviews {
         let left_running = matches!(ended, Ok((_, Ended::LeftRunning)));
         release_run(id, &held.files, held.checkout, admission, left_running).await;
         let (reviewer, ended) = ended?;
-        self.record_end(daemon, id, &workspace, &reviewer, ended)
-            .await
+        self.record_end(daemon, id, &reviewer, ended).await
     }
 
     /// Review `id` while it is queued.
@@ -313,13 +315,13 @@ impl Reviews {
 
     /// Check the reviewed commit out in the run `place` holds and run the
     /// reviewers there, continuing the subject's session; returns the agent
-    /// that produced the result and how it ended.
+    /// that produced the review and how it ended.
     async fn run_in_checkout(
         &self,
         daemon: &dyn Daemon,
         place: &InPlace<'_>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Result<(Agent, Ended)> {
+    ) -> Result<(Agent, Ended<Exited>)> {
         let instructions = self.review_instructions(daemon, place).await?;
         let session = self.review_session(place.review, place.settings).await;
         let agent = (place.review.agent()).context("only Shoal's reviews run a reviewer")?;
@@ -359,6 +361,7 @@ impl Reviews {
         .await?;
         let run = Run {
             runs: &self.runs,
+            space: &workspace.id,
             settings,
             configured: daemon.environment(workspace, settings).await?,
             instructions,
@@ -380,8 +383,9 @@ impl Reviews {
     }
 
     /// `attempt`'s own agent at its run, resuming `session` when given, then
-    /// once the fallback agent's after any failure but a timeout; returns
-    /// the agent that produced the result and how it ended.
+    /// once the fallback agent's after any failure but a timeout, each
+    /// after what the failed one wrote is dropped; returns the agent that
+    /// produced the result and how it ended.
     async fn review_with_fallback<O: reviewer::Output>(
         &self,
         attempt: &Attempt<'_>,
@@ -406,7 +410,8 @@ impl Reviews {
                     review.id
                 );
                 let model = settings.model(&fallback, Default::default());
-                let ended = self.attempt(run, &fallback, &model, None, cancelled).await;
+                let ended =
+                    (self.attempt(run, review.id, &fallback, &model, None, cancelled)).await;
                 (fallback, ended)
             }
             (ended, _) => ((*agent).clone(), ended),
@@ -450,7 +455,7 @@ impl Reviews {
     ) -> Ended<O> {
         if let Some(session) = session {
             match self
-                .attempt(run, agent, model, Some(&session), cancelled)
+                .attempt(run, id, agent, model, Some(&session), cancelled)
                 .await
             {
                 Ended::Returned {
@@ -466,85 +471,102 @@ impl Reviews {
                 ended => return ended,
             }
         }
-        self.attempt(run, agent, model, None, cancelled).await
+        self.attempt(run, id, agent, model, None, cancelled).await
     }
 
-    /// One reviewer's attempt at `run`: agent `agent` with `model`, resuming
-    /// `session` when given.
+    /// One reviewer's attempt at `run` for review `id`: agent `agent` with
+    /// `model`, resuming `session` when given, under a scope of its own
+    /// that ends with it. What a review's run that did not produce the
+    /// review wrote is dropped.
     async fn attempt<O: reviewer::Output>(
         &self,
         run: &Run<'_>,
+        id: ReviewId,
         agent: &Agent,
         model: &ModelChoice,
         session: Option<&AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Ended<O> {
-        let reviewer = match reviewer_for::<O>(run, agent, model, session, &self.paths.home) {
-            Ok(reviewer) => reviewer,
+        self.record_attempt(id, agent).await;
+        let scope = RunScope::of(&self.operations, run.space, O::access(id));
+        let reviewer = reviewer_for::<O>(run, agent, model, session, &self.paths, &scope);
+        let ended = match reviewer {
+            Ok(reviewer) => reviewer::run(&reviewer, cancelled).await,
             Err(error) => {
                 log!("review by {agent}: {error:#}");
-                return Ended::Failed(FailureReason::ExecutionFailed);
+                Ended::Failed(FailureReason::ExecutionFailed)
             }
         };
-        reviewer::run(&reviewer, cancelled).await
+        drop(scope);
+        let ended = O::settled(ended, self.finished(id).await);
+        if !matches!(ended, Ended::Returned { .. }) {
+            self.drop_run_writes(id).await;
+        }
+        ended
     }
 
-    /// Record how the run ended, post a finished PR review and deliver the
-    /// review, under an operation guard. A cancel already recorded and
-    /// delivered it; a run that ended cancelled while still running was
-    /// stopped by protection or the machine's sleep, and its review is
-    /// queued again.
+    /// Record that `agent` reviews running review `id` now, as the run that
+    /// submits it does.
+    async fn record_attempt(&self, id: ReviewId, agent: &Agent) {
+        let agent = agent.clone();
+        let recorded = (self.store).run(move |db| store::attempt(db, id, &agent));
+        if let Err(error) = recorded.await {
+            log!("review {id}: {error:#}");
+        }
+    }
+
+    /// Whether review `id` finished, as a run that submitted it leaves it.
+    async fn finished(&self, id: ReviewId) -> bool {
+        let state = self.store.run(move |db| store::state(db, id)).await;
+        matches!(state, Ok(Some(ReviewState::Finished)))
+    }
+
+    /// Drop what review `id`'s run wrote while the review has not finished.
+    async fn drop_run_writes(&self, id: ReviewId) {
+        let records = self.records.clone();
+        let dropped = (self.store).write(move |tx| store::drop_run_writes(tx, &*records, id));
+        if let Err(error) = dropped.await {
+            log!("review {id}: {error:#}");
+        }
+    }
+
+    /// Record how the run ended under an operation guard: the session of a
+    /// run that submitted the review, which its submit posted and
+    /// delivered, or the review's failure, which it delivers. A cancel
+    /// already recorded and delivered it; a run that ended cancelled while
+    /// still running was stopped by protection or the machine's sleep, and
+    /// its review is queued again.
     async fn record_end(
         &self,
         daemon: &dyn Daemon,
         id: ReviewId,
-        workspace: &Workspace,
         reviewer: &Agent,
-        ended: Ended,
+        ended: Ended<Exited>,
     ) -> Result<Pass> {
-        // A managed update waits for the review's posting and delivery,
-        // which a restart would not redo once the result is recorded.
+        // A managed update waits for the review's delivery, which a restart
+        // would not redo once the failure is recorded.
         let _operation = self.gates.operation().await;
-        if ended == Ended::Cancelled {
-            return self.requeue_stopped(id).await;
-        }
-        let code = match &ended {
-            Ended::Returned { output, .. } => match self.reviewed_head(id).await? {
-                Some(head) => code::finding_code(&workspace.path, &head, &output.findings).await,
-                None => Vec::new(),
-            },
-            _ => Vec::new(),
+        let reason = match ended {
+            Ended::Cancelled => return self.requeue_stopped(id).await,
+            Ended::Returned { session, .. } => {
+                if let Some(session) = session {
+                    (self.store)
+                        .run(move |db| store::continue_session(db, id, &session))
+                        .await?;
+                }
+                return Ok(Pass::Ended);
+            }
+            Ended::Failed(reason) => reason,
+            Ended::LeftRunning => FailureReason::ExecutionFailed,
         };
-        let reviewer = reviewer.to_owned();
-        let (records, workspace_id) = (self.records.clone(), workspace.id.clone());
-        let now = UnixTime::now();
-        let recorded = self
+        let (reviewer, now) = (reviewer.to_owned(), UnixTime::now());
+        let failed = self
             .store
-            .write(move |tx| match ended {
-                Ended::Returned { output, session } => {
-                    let returned = store::Returned {
-                        output: &output,
-                        code: &code,
-                        session: session.as_ref(),
-                    };
-                    store::finish(tx, &*records, id, &workspace_id, &reviewer, returned, now)
-                }
-                Ended::Failed(reason) => store::fail(tx, id, Some(&reviewer), reason, now),
-                Ended::LeftRunning => {
-                    store::fail(tx, id, Some(&reviewer), FailureReason::ExecutionFailed, now)
-                }
-                Ended::Cancelled => Ok(false),
-            })
+            .run(move |db| store::fail(db, id, Some(&reviewer), reason, now))
             .await?;
-        if !recorded {
-            return Ok(Pass::Ended);
+        if failed {
+            self.deliver(daemon, id).await;
         }
-        let review = self.load(id).await?;
-        if let Some(review) = review.filter(|review| review.state == ReviewState::Finished) {
-            daemon.review_threads_changed(workspace).await;
-            self.post(daemon, &review, workspace).await;
-        }
-        self.deliver(daemon, id).await;
         Ok(Pass::Ended)
     }
 
@@ -560,11 +582,6 @@ impl Reviews {
             (true, false) => Pass::Stopped,
             (true, true) => Pass::Slept,
         })
-    }
-
-    /// The commit running review `id` reviews.
-    async fn reviewed_head(&self, id: ReviewId) -> Result<Option<CommitId>> {
-        Ok(self.load(id).await?.and_then(|review| review.head))
     }
 
     /// The review's instructions for the checkout `place` holds, then its
@@ -626,10 +643,10 @@ impl Reviews {
             self.hold_unreconciled_run(daemon, run);
         }
         let ids: Vec<ReviewId> = kept.iter().map(|run| run.id).collect();
-        let now = UnixTime::now();
+        let (records, now) = (self.records.clone(), UnixTime::now());
         let (failed, requeued) = self
             .store
-            .run(move |db| store::settle_interrupted(db, &ids, now))
+            .write(move |tx| store::settle_interrupted(tx, &*records, &ids, now))
             .await?;
         if requeued > 0 {
             log!("queued {requeued} interrupted reviews again");
@@ -742,22 +759,24 @@ pub(crate) fn resumes(settings: &Effective, agent: &Agent) -> bool {
         .is_some_and(|tool| tool.launch.arguments.review_resume.is_some())
 }
 
-/// Review `id`'s run directory with its ID, the output schema `schema` and
-/// a detached checkout of `head`.
+/// Review `id`'s run directory with its ID, the output schema `schema` of
+/// a run that returns one and a detached checkout of `head`.
 async fn prepare_checkout(
     daemon: &dyn Daemon,
     id: ReviewId,
     workspace: &Workspace,
     head: &CommitId,
     files: &Files,
-    schema: &str,
+    schema: Option<&str>,
 ) -> Result<()> {
     let repository = daemon.repository(workspace.repository()).await?;
     review_runs(&repository).create()?;
     std::fs::create_dir_all(&files.directory)
         .with_context(|| format!("create {}", files.directory.display()))?;
     reviewer::write_id(files, id)?;
-    reviewer::write_schema(files, schema)?;
+    if let Some(schema) = schema {
+        reviewer::write_schema(files, schema)?;
+    }
     git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
 }
 
@@ -894,7 +913,7 @@ pub(crate) async fn release_run(
     }
 }
 
-/// The reviewer `agent` with `model`, asked for an `O`: its review
+/// The reviewer `agent` with `model`, asked for an `O` under `scope`: its
 /// template's arguments for this run, or its resume template's when it
 /// resumes `session`, after its launcher and the arguments selecting the
 /// model.
@@ -903,7 +922,8 @@ fn reviewer_for<'a, O: reviewer::Output>(
     agent: &Agent,
     model: &ModelChoice,
     session: Option<&AgentSessionId>,
-    home: &Path,
+    paths: &shoal_protocol::paths::Paths,
+    scope: &RunScope<'_>,
 ) -> Result<Reviewer<'a>> {
     let Run {
         runs,
@@ -911,6 +931,7 @@ fn reviewer_for<'a, O: reviewer::Output>(
         configured,
         instructions,
         files,
+        ..
     } = run;
     // Config read at run time may have turned the reviewer off since.
     settings.check_reviewer(agent)?;
@@ -920,17 +941,23 @@ fn reviewer_for<'a, O: reviewer::Output>(
         .with_context(|| format!("no AI tool runs {agent}"))?;
     let arguments = &tool.launch.arguments;
     let prompt = reviewer_prompt::<O>(instructions, session);
+    let (schema, output) = (files.schema(), files.output());
     let fields = crate::ai::ReviewFields {
         prompt: &prompt,
-        schema: &files.schema(),
-        schema_json: O::SCHEMA,
-        output: &files.output(),
+        schema: (O::SCHEMA).map(|json| crate::ai::Schema {
+            file: &schema,
+            json,
+        }),
+        output: &output,
     };
-    let (args, writes_output) = review_arguments(arguments, &fields, session)
-        .with_context(|| format!("{agent} has no review template"))?;
+    let (args, writes_output) = O::arguments(arguments, &fields, session)
+        .with_context(|| format!("{agent} has no template for this run"))?;
+    let mut environment = configured.clone();
+    environment.extend(scope.environment(paths));
+    let home = &paths.home;
     Ok(Reviewer {
         runs,
-        command: oneshot::agent_command(settings, agent, model, args, configured, home)?,
+        command: oneshot::agent_command(settings, agent, model, args, &environment, home)?,
         files,
         timeout: reviewer::TIMEOUT,
         writes_output,
@@ -948,25 +975,6 @@ fn reviewer_prompt<O: reviewer::Output>(
         Some(_) => format!("{}\n\n{instructions}", O::RESUMED),
         None => instructions.to_owned(),
     }
-}
-
-/// The arguments of a review with `fields`, resuming `session` when given,
-/// and whether its result goes to `{output}`; none without the template.
-fn review_arguments(
-    arguments: &crate::ai::Arguments,
-    fields: &crate::ai::ReviewFields,
-    session: Option<&AgentSessionId>,
-) -> Option<(Vec<std::ffi::OsString>, bool)> {
-    Some(match session {
-        Some(session) => (
-            arguments.review_resume_args(fields, session)?,
-            arguments.review_resume_writes_output(),
-        ),
-        None => (
-            arguments.review_args(fields)?,
-            arguments.review_writes_output(),
-        ),
-    })
 }
 
 /// The runs a stopped daemon left in `directory`.
