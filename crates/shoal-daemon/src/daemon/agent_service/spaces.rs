@@ -27,6 +27,14 @@ use shoal_schedule::priority::Priority;
 use std::path::PathBuf;
 
 impl Spaces for Manager {
+    fn acknowledge_leftovers<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        pids: &'a [u32],
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(self.spaces.acknowledge_leftovers(selector, pids))
+    }
+
     fn stop_untracked_processes<'a>(
         &'a self,
         selector: &'a SpaceSelector,

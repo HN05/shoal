@@ -164,6 +164,26 @@ impl Agents {
         self.store.read(move |db| store::unread(db, &id)).await
     }
 
+    /// Acknowledge what the agent of the space `selector` names received:
+    /// the item updates of `deliveries`, the alerts `messages` and the
+    /// leftover processes `leftovers` it was told of. Item updates go first:
+    /// a failure then leaves both to be delivered again, while deleted
+    /// messages could not be.
+    pub async fn acknowledge_delivery(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        deliveries: Vec<String>,
+        messages: Vec<i64>,
+        leftovers: &[u32],
+    ) -> Result<()> {
+        daemon
+            .acknowledge_item_updates(selector, deliveries)
+            .await?;
+        (self.mark_agent_messages_delivered(daemon, selector, messages)).await?;
+        daemon.acknowledge_leftovers(selector, leftovers).await
+    }
+
     /// Mark exactly these alerts read once the agent of the space
     /// `selector` names has received them.
     pub async fn mark_agent_messages_delivered(

@@ -70,7 +70,9 @@ pub(super) async fn handle(
             messages,
             leftovers,
         } => {
-            acknowledge_delivery(manager, &space, deliveries, messages, &leftovers).await?;
+            (manager.agents)
+                .acknowledge_delivery(&**manager, &space, deliveries, messages, &leftovers)
+                .await?;
             Body::Ok
         }
         AgentMethod::SetAgentState {
@@ -403,27 +405,4 @@ impl Scoped for AgentMethod {
 /// The tracked execution a report comes from.
 fn execution(caller: Option<&Caller>) -> Option<ExecutionId> {
     caller.and_then(Caller::execution_id).cloned()
-}
-
-/// Acknowledge the item updates, messages and leftovers the agent of the
-/// space `selector` names received.
-async fn acknowledge_delivery(
-    manager: &Arc<Manager>,
-    selector: &SpaceSelector,
-    deliveries: Vec<String>,
-    messages: Vec<i64>,
-    leftovers: &[u32],
-) -> Result<()> {
-    // Item updates first: a failure then leaves both to be delivered
-    // again, while deleted messages could not be.
-    (manager.links)
-        .acknowledge_pr_updates(&**manager, selector, deliveries)
-        .await?;
-    (manager.agents)
-        .mark_agent_messages_delivered(&**manager, selector, messages)
-        .await?;
-    manager
-        .spaces
-        .acknowledge_leftovers(selector, leftovers)
-        .await
 }

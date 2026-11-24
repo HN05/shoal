@@ -18,6 +18,17 @@ impl Links for Manager {
         self.links.agent_settles().request(id);
     }
 
+    fn acknowledge_item_updates<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        deliveries: Vec<String>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(
+            self.links
+                .acknowledge_pr_updates(self, selector, deliveries),
+        )
+    }
+
     fn agent_updates_recorded<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(self.agent_updates_recorded(id))
     }
