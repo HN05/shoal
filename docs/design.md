@@ -963,6 +963,14 @@ automatically nor by `shoal resume --all`, only by resuming that workspace.
 Resuming it says the work is not finished, so `shoal resume` withdraws the
 completion, whichever wrapper restores the agent, and a protection stop
 restores it again; Shoal's own restores and restarts keep it.
+The daemon owns resumes: a request names a space, and that space's daemon
+decides and carries out the resume, continuing a turn an interrupt ended by
+typing the prompt through its session hosts, queuing a failed launch again,
+or queuing the restores of what a stop saved, started at once for `--now`,
+and answers with one outcome once it acted or queued. The CLI keeps only what
+needs the caller's terminal, `--focus`, so no queue entry or execution of
+another space crosses a resume, and a discard is one request naming a space
+the same way.
 An idle heavy agent, a workspace's or a chat's, sleeps once it has waited for
 the user: Shoal stops it as protection stops an agent between turns, and an
 update restores it although its assignment may be done, since Shoal rather than
@@ -1051,7 +1059,7 @@ rechecked when they exit; one that reattaches with its command running discards
 a `stopping` record, whose stop never arrived. Survivors and incomplete evidence
 keep the execution, are rechecked periodically so it clears once they exit, and
 are the only outcome that notifies; `shoal stop` names them, and
-`shoal resume` still reconciles the execution it selects. An unknown execution
+a resume still reconciles the executions it restores. An unknown execution
 whose wrapper, and child when recorded, ran in an earlier boot needs no
 evidence: restarting the machine ended its processes, while its recorded process
 group may name another's, so the daemon forgets it, keeping its record, or

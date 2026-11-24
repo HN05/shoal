@@ -1,12 +1,9 @@
-//! A space whose agent's launch failed to start restores by queuing that
-//! launch again exactly as it was: as the queue admits it, at once for
-//! `--now`, or in this terminal for `--focus`.
+//! `--focus` on a space whose agent's launch failed to start: the launch
+//! queues again exactly as it was and starts in this terminal.
 use anyhow::Result;
 
-use super::targets::Selected;
-use crate::client::output::batch::Failure;
 use crate::{
-    cli::{commands::queued_agents, context::Context, ui},
+    cli::{commands::queued_agents, context::Context},
     config::permissions::PermissionChange,
     model::QueueEntry,
     state::QueueState,
@@ -14,74 +11,13 @@ use crate::{
 use shoal_protocol::protocol::RetryStart;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Move the selected spaces with a failed launch from `selected`'s spaces
-/// to its failed starts; every space selected takes none.
-pub(in crate::cli::commands) async fn take(ctx: &Context, selected: &mut Selected) -> Result<()> {
-    let Some(selectors) = selected.spaces.take() else {
-        return Ok(());
-    };
-    let failed = of(ctx, Some(&selectors)).await?;
-    let launched = |selector: &SpaceSelector| {
-        (failed.iter()).any(|entry| {
-            entry
-                .space()
-                .is_some_and(|id| selector.given_id() == Some(id))
-        })
-    };
-    let rest = selectors.into_iter().filter(|selector| !launched(selector));
-    selected.spaces = Some(rest.collect());
-    selected.failed_starts = failed;
-    Ok(())
-}
-
-/// The failed launches of the spaces `selectors` name, each space's once,
-/// or for `None` of every space this process's scope reaches below its
-/// own, as `--all` reaches them.
-pub(in crate::cli::commands) async fn of(
-    ctx: &Context,
-    selectors: Option<&[SpaceSelector]>,
-) -> Result<Vec<QueueEntry>> {
-    let failed = queued_agents::entries(ctx).await?.into_iter();
-    let failed = failed.filter(|entry| entry.state == QueueState::Failed);
-    let spaces = crate::client::spaces::list(&ctx.paths).await?;
-    let ids: Vec<_> = match selectors {
-        Some(selectors) => (selectors.iter())
-            .filter_map(|selector| spaces.find(selector).map(|space| space.id))
-            .collect(),
-        None => (crate::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces))
-            .into_iter()
-            .map(|space| space.id)
-            .collect(),
-    };
-    Ok(failed
-        .filter(|entry| entry.space().is_some_and(|space| ids.contains(space)))
-        .collect())
-}
-
-/// Queue each of the failed launches `failed` again, starting it at once
-/// when `now`, going on after one fails, which it reports.
-pub(super) async fn retry_each(
-    ctx: &Context,
-    failed: &[QueueEntry],
-    now: bool,
-) -> (Vec<QueueEntry>, Vec<Failure>) {
-    let (mut retried, mut failures) = (Vec::new(), Vec::new());
-    for entry in failed {
-        match retry(ctx, entry, now).await {
-            Ok(entry) => retried.push(entry),
-            Err(error) => failures.push(ui::failure(ctx, "resume", &entry.name, &error)),
-        }
-    }
-    (retried, failures)
-}
-
-/// Queue the failed launch `entry` again, starting it at once when `now`.
-async fn retry(ctx: &Context, entry: &QueueEntry, now: bool) -> Result<QueueEntry> {
-    let start = match now {
-        true => RetryStart::Now,
-        false => RetryStart::Queued,
-    };
-    crate::client::queue::retry(&ctx.paths, entry.id.clone(), start).await
+/// The failed launch of the space `selector` names, if it has one.
+pub(super) async fn of(ctx: &Context, selector: &SpaceSelector) -> Result<Option<QueueEntry>> {
+    let space = super::space::present_space(ctx, selector).await?;
+    let entries = queued_agents::entries(ctx).await?.into_iter();
+    Ok(entries
+        .filter(|entry| entry.state == QueueState::Failed)
+        .find(|entry| entry.space() == Some(&space.id)))
 }
 
 /// Queue the failed launch `failed` again and start its agent in this

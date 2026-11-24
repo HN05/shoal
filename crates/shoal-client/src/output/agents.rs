@@ -71,13 +71,6 @@ pub struct Interrupted {
     pub failed: Vec<Failure>,
 }
 
-/// The agents whose interrupted turns were continued.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Continued {
-    pub continued: Vec<Agent>,
-    pub failed: Vec<Failure>,
-}
-
 /// The agents a restart restarted, those whose restart the daemon took for
 /// later, and those it left out.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,7 +149,6 @@ outputs!(
     StoppedSpaces,
     StoppedProcesses,
     Interrupted,
-    Continued,
     Restarted,
     CancelledRestarts
 );

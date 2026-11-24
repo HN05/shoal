@@ -581,28 +581,30 @@ processes do not exit is reported as pending with their PIDs and the command tha
 ends them, and restarts once they exit unless `shoal stop` cancels it.
 
 `shoal resume [space...]` brings back the agent of each space, a workspace's or
-a chat's alike: it queues the restore of each agent a saved recovery record or
-last session keeps after its wrapper exits, or only the `--execution <id>` one, and
-reports how many it queued; the [agent queue](#agent-queue) starts them as
-the agent limits allow. An [asleep](#agent-queue) agent's restore then waits only
+a chat's alike: it asks the daemon to resume each space's agent, one request
+per space, and the daemon queues the restore of each agent a saved recovery
+record or last session keeps after its wrapper exits, or only the
+`--execution <id>` one; the command reports how many it queued, and the
+[agent queue](#agent-queue) starts them as the agent limits allow, each
+where it stopped or in a background place as `--now` places them. An [asleep](#agent-queue) agent's restore then waits only
 for its turn in the queue. A space that is [removed](#checkpoints-and-restore)
 is `shoal restore`'s. Without a space, resume uses the current
 workspace when its agent can resume, otherwise a picker of the spaces whose
 agent can resume, the workspaces, saying what each would resume, then the chats,
 unfinished work first; without a terminal, or with `--json`, it lists them
 instead, each led by the number that selects it.
-A named workspace whose setup failed, or never started, is refused before
-anything resumes, naming `shoal setup <space>`, which retries the setup,
+A workspace whose setup failed, or never started, is refused, naming
+`shoal setup <space>`, which retries the setup,
 creating the worktree first when that failed too, after which the agent
 waiting for it in the queue starts as the queue admits it.
 A named space whose agent's launch [failed to start](#agent-queue), a
 workspace or a chat, queues that launch again exactly as it was, with its
 task, prompt and permissions, as the queue admits it, or at once with `--now`.
 Completion describes each workspace the same way.
-A workspace without stopped agents continues one of its last sessions at once,
-placed as `--now` places an agent, or without a terminal through the queue, started at once, when restored by itself, left by `shoal stop`
-or by an agent that exited on its own, such as one the user quit, picked as
-stopped agents are, or the `--execution` one. A workspace keeps one per agent; the next new agent started
+A workspace without stopped agents continues its last sessions at once when
+resumed by itself, placed as `--now` places an agent, left by `shoal stop`
+or by an agent that exited on its own, such as one the user quit, or the
+`--execution` one. A workspace keeps one per agent; the next new agent started
 there or `shoal done` replaces them. Unlike stopped work they use no heavy slot and never delay
 cleanup.
 Stopped commands are included in the restored agent's prompt, asking it to
@@ -611,38 +613,34 @@ built-in agents receive it as their prompt argument,
 and resume commands through `{prompt}`. Otherwise, and when no agent was
 stopped, restore prints them as `shoal run` commands. Either way they are reported once.
 Several spaces, each with stopped work or a last session, or `--all` for every
-space whose assignment is not done, restore together and report commands without an agent,
-skipping agents whose wrapper still waits to restore them; a done space's
-agent restores only when its space is named. Restoring it says the work is
+space whose assignment is not done, restore together and report commands
+without an agent; one that fails is reported without keeping the others from
+resuming, and a done space's agent restores only when its space is named. Restoring it says the work is
 not finished, so it withdraws the space's completion, as `shoal done
 --undo` does, and a later protection stop restores the agent; Shoal's own
 restores and restarts keep the completion.
-`--now` starts the agents at once regardless of the limits; with several stopped
-in one workspace, use `--execution` or pick the agent by name, stop time, reason
-and whether it was interrupted mid-turn or idle on a terminal; an agent without
-turn reports counts as interrupted. In an
+`--now` has the daemon start the agents at once regardless of the limits, every
+one a space saved, or only the `--execution` one. In an
 interactive place of an enabled host that outlives its agent, such as a Herdr pane with
 `terminal.herdr.enabled`, it restores each agent in the place it
 stopped in once that is back at its prompt. Otherwise it starts each in the background, as `shoal start` does: a
 background place per agent, labelled as `shoal start` labels it, of the host serving
-this terminal where its config lets it open places, such as `terminal.herdr.new_tab`,
+the calling terminal where its config lets it open places, such as `terminal.herdr.new_tab`,
 or of `terminal.default_host` on a terminal no host serves, such as a detached zmx
-session. Where nothing can
-start in the background, it restores a single agent
-here, unless the run also fails for a space, and otherwise lists
-the agents as `shoal resume --focus` commands to run in separate terminals.
-Without a terminal, such as from another agent's tool call, `--now` queues every
-restore instead, a workspace's last session included, and the daemon starts each
-at once regardless of the limits; restore reports the entries as a restore without
-`--now` does, and `--json` emits them. When no host can start them in the
-background, such a restore, with or without `--now`, is refused before anything
-is restored, naming `--focus` to restore one agent here. `-f`/`--focus` restores one agent in the current terminal at once,
-regardless of the limits.
+session, or for a call without a terminal. The command reports the entries
+as a restore without `--now` does, and `--json` emits them. When no host can
+start a space's agents in the background, its resume, with or without `--now`,
+is refused before any of them is restored, naming `--focus` to restore one
+agent here. `-f`/`--focus` restores one agent in the current terminal at once,
+regardless of the limits; with several stopped in one workspace, use
+`--execution` or pick the agent by name, stop time, reason and whether it was
+interrupted mid-turn or idle on a terminal; an agent without turn reports
+counts as interrupted.
 `shoal restore --discard-agent [space...]` discards the stopped agent, last
 sessions, stopped commands and failed launch of each space, every space's with
 `--all`, or the `--execution` one, without launching anything or touching files,
-branch or worktree, allowing normal idle cleanup again; without a space it
-selects as `shoal resume` does.
+branch or worktree, allowing normal idle cleanup again; an agent whose wrapper
+waits to restore it stays. Without a space it selects as `shoal resume` does.
 `--permission KEY=VALUE`, repeatable, restores each selected agent
 with that [permission](#mode-permissions) given, `KEY=mode` dropping one
 given before, while the keys it leaves out keep theirs; its records keep them
@@ -2141,8 +2139,8 @@ cleanup treat the agent as before. When the session returns control, Shoal reset
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch inside a
 zmx session (`ZMX_SESSION` is set), or in a pane or block of another enabled host, such
-as a Herdr pane with `terminal.herdr.enabled`, runs in place. Scoped callers, and callers
-without a terminal, such as another agent's tool call, start the agents of `start`, `contribute` and `resume --now` detached
+as a Herdr pane with `terminal.herdr.enabled`, runs in place. `resume`, and scoped callers and callers
+without a terminal, such as another agent's tool call, of `start` and `contribute`, start the agents detached
 through the daemon instead (see [Agent queue](#agent-queue) and `shoal resume`),
 so the call returns without running the agent and interrupting it leaves the
 agent running. An agent Happy runs leaves the call at once anyway, so a

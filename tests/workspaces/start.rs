@@ -2440,9 +2440,9 @@ fn stop_narrowed_agent(fixture: &Fixture, workspace: &Value) -> PathBuf {
 /// nothing.
 #[test]
 fn resume_changes_the_permissions_a_stopped_agent_was_given() {
-    let fixture = Fixture::with_config(Some(
-        "[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'exit 0']\n",
-    ));
+    let fixture = Fixture::with_config(Some(&format!(
+        "{NO_BACKGROUND_HOST}[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'exit 0']\n",
+    )));
     let workspace = fixture.add("stopped");
     let narrowing =
         || fixture.ok(&["status", &fixture.id("stopped")])["workspace"]["narrowing"].clone();
@@ -2465,8 +2465,6 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
     let kept = || -> Value { serde_json::from_slice(&fs::read(&record).unwrap()).unwrap() };
     // A resume refused once the change fits, here because no host can start
     // the restore in the background, changes nothing.
-    let bin = fixture.root.path().join("no-host-bin");
-    fs::create_dir(&bin).unwrap();
     let output = fixture
         .command()
         .args([
@@ -2476,7 +2474,6 @@ fn resume_changes_the_permissions_a_stopped_agent_was_given() {
             "--permission",
             "api_writes=deny",
         ])
-        .env("PATH", fixture.restricted_path(&bin))
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -3820,7 +3817,9 @@ fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
 /// the restore in place.
 #[test]
 fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
-    let fixture = Fixture::with_config(Some("[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n"));
+    let fixture = Fixture::with_config(Some(&format!(
+        "{NO_BACKGROUND_HOST}[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n"
+    )));
     let workspace = fixture.add("stopped");
     let state = fixture
         .root
@@ -3830,12 +3829,9 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
     fs::create_dir_all(&state).unwrap();
     let record = state.join("stopped-agent.recovery.json");
     fs::write(&record, r#"{"agent":"waiter","mode":"worker"}"#).unwrap();
-    let bin = fixture.root.path().join("no-host-bin");
-    fs::create_dir(&bin).unwrap();
     let output = fixture
         .command()
         .args(["resume", &fixture.id("stopped"), "--now"])
-        .env("PATH", fixture.restricted_path(&bin))
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -3848,6 +3844,11 @@ fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     assert!(record.exists());
 }
+
+/// Config under which no host takes the starts the daemon opens in the
+/// background: its default host is off.
+const NO_BACKGROUND_HOST: &str =
+    "[terminal]\ndefault_host = \"tmux\"\n[terminal.tmux]\nenabled = false\n";
 
 /// `shoal resume` queues restores, which the daemon starts in detached
 /// sessions as `max_heavy_agents` allows, leaving out done workspaces.

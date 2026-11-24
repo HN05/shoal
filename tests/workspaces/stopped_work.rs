@@ -279,8 +279,10 @@ fn resume_without_an_agent_reports_stopped_commands_once() {
     assert!(!workspace.resume(&fixture, &["--focus"]).status.success());
 }
 
+/// Each space's daemon decides its own resume: a workspace whose setup
+/// failed is refused, naming `shoal setup`, while the others resume.
 #[test]
-fn resume_refuses_a_failed_setup_before_it_resumes_anything() {
+fn resume_refuses_a_failed_setup_and_resumes_the_others() {
     let fixture = Fixture::with_config(Some(&format!("{WAITER}{AGENT}")));
     let workspace = Stopped::new(&fixture, "stopped");
     let command = workspace.start_command(&fixture);
@@ -288,9 +290,31 @@ fn resume_refuses_a_failed_setup_before_it_resumes_anything() {
     require_fix(&fixture);
     fail_setup(&fixture, "failing");
 
-    let refused = fixture.run(&["resume", &fixture.id("stopped"), &fixture.id("failing")]);
+    let resume = [
+        "--json",
+        "resume",
+        &fixture.id("stopped"),
+        &fixture.id("failing"),
+    ];
+    let refused = fixture.run(&resume);
     assert!(!refused.status.success(), "{}", printed(&refused));
-    assert!(workspace.pending());
+    let report: Value = serde_json::from_slice(&refused.stdout).unwrap();
+    let failed: Vec<_> = (report["failed"].as_array().unwrap().iter())
+        .map(|failure| failure["workspace"].as_str().unwrap())
+        .collect();
+    assert_eq!(failed, ["failing"], "{}", printed(&refused));
+    assert!(
+        failed_error(&report).contains("shoal setup"),
+        "{}",
+        printed(&refused)
+    );
+    // The other space's stopped command is reported, as its resume does.
+    assert_eq!(report["commands"][0]["workspace"], "stopped", "{report}");
+}
+
+/// The error of the one failure `report` lists.
+fn failed_error(report: &Value) -> &str {
+    report["failed"][0]["error"].as_str().unwrap()
 }
 
 #[test]

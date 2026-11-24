@@ -1596,9 +1596,8 @@ fn resume_picker_describes_what_each_space_would_resume() {
         "{}",
         printed(&output)
     );
-    // Several workspaces resume together, each with stopped work.
-    fixture.save_stopped_command(&first);
-    fixture.save_stopped_command(&second);
+    // A space with nothing to resume fails the run, and `--execution` names
+    // one space's.
     let refused = fixture.run(&["resume", &fixture.id("first"), &fixture.id("idle")]);
     assert!(!refused.status.success());
     let refused = fixture.run(&[
@@ -1609,6 +1608,9 @@ fn resume_picker_describes_what_each_space_would_resume() {
         "any",
     ]);
     assert!(!refused.status.success());
+    // Several workspaces resume together, each with stopped work.
+    fixture.save_stopped_command(&first);
+    fixture.save_stopped_command(&second);
     let picked = format!(
         "{} {}",
         first["id"].as_str().unwrap(),

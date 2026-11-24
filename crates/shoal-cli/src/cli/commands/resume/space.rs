@@ -1,12 +1,12 @@
 //! Resuming one space's stopped agent or last session, a workspace's or a
-//! chat's, in this terminal, or at once where it stopped or in the
-//! background, as `shoal_workers::resume` does.
+//! chat's, in this terminal, as `--focus` and the daemon's start of a
+//! queued restore do.
 use anyhow::{Result, ensure};
 use shoal_workers::hosting;
 use std::path::PathBuf;
 
+use super::changed;
 use super::reports::{self, Reporting};
-use super::{changed, sessions};
 use crate::execution::recovery::{LastSessionExt as _, RecordExt};
 use crate::{
     cli::context::Context,
@@ -21,31 +21,9 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_workers::execution::Restored;
 use shoal_workers::resume::{
-    self, Resumed, commands,
+    self, commands,
     space::{Choice, Restore},
 };
-
-/// Resume the stopped agent of the space `space` names at once, the
-/// `execution` one when given, from beside this terminal when it has one,
-/// otherwise through the queue, making `change` when given, and report it.
-pub(super) async fn now(
-    ctx: &Context,
-    space: SpaceSelector,
-    execution: Option<ExecutionId>,
-    change: Option<&PermissionChange>,
-) -> Result<i32> {
-    let (starter, reporting) = (ctx.starter(), Reporting(ctx));
-    let execution = execution.as_ref();
-    let resumed = resume::now(&ctx.paths, starter, &space, execution, change, &reporting);
-    match resumed.await? {
-        Resumed::Starts(starts) => sessions::report_starts(ctx, starts).await,
-        Resumed::Queued(queued) => reports::queued_code(ctx, &queued),
-        Resumed::Commands(report) => {
-            reports::commands_only(ctx, &report)?;
-            Ok(0)
-        }
-    }
-}
 
 /// Resume the stopped agent of the space `space` names in this terminal,
 /// the `execution` one when given, making `change` when given; one whose
@@ -56,7 +34,7 @@ pub(super) async fn here(
     execution: Option<ExecutionId>,
     change: Option<&PermissionChange>,
 ) -> Result<i32> {
-    let space = super::present_space(ctx, &space).await?;
+    let space = present_space(ctx, &space).await?;
     let reporting = Reporting(ctx);
     let execution = execution.as_ref();
     let choice = resume::space::choose(&ctx.paths, space, execution, change, &reporting);
@@ -65,10 +43,15 @@ pub(super) async fn here(
             reports::commands_only(ctx, &report)?;
             Ok(0)
         }
-        Choice::Queued(queued) => reports::queued_code(ctx, &queued),
+        Choice::Queued(queued) => reports::resumed(ctx, &queued),
         Choice::Restore(chosen) if chosen.last_session => continue_last_session(ctx, *chosen).await,
         Choice::Restore(chosen) => restore_agent(ctx, *chosen).await,
     }
+}
+
+/// The space `selector` names, a workspace or a chat.
+pub(super) async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space> {
+    resume::space::present_space(&ctx.paths, selector).await
 }
 
 /// Restore the stopped agent `chosen` picked in this terminal, telling it

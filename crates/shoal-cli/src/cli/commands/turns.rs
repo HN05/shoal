@@ -1,15 +1,15 @@
-//! Interrupting an agent's turn without stopping the agent, and continuing
-//! the turn an interrupt ended: Shoal types the agent's own interrupt key, or
-//! a prompt to continue, into the place it runs in, through that place's
-//! terminal host, and the daemon records that the interrupt ended the turn.
-//! Every target is resolved before Shoal types into any; a target Shoal then
-//! fails to type into does not keep it from the others.
+//! Interrupting an agent's turn without stopping the agent: Shoal types the
+//! agent's own interrupt key into the place it runs in, through that
+//! place's terminal host, and the daemon records that the interrupt ended
+//! the turn, which `shoal resume` continues. Every target is resolved before
+//! Shoal types into any; a target Shoal then fails to type into does not
+//! keep it from the others.
 use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
-use crate::client::output::agents::{Agent, Continued, Interrupted};
+use crate::client::output::agents::{Agent, Interrupted};
 use crate::{
     cli::{context::Context, ui},
     model::{RunningAgent, Space},
@@ -92,79 +92,6 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
     Ok(())
 }
 
-/// The turns an interrupt ended that `shoal resume` continues.
-#[derive(Default)]
-pub(super) struct Continuation(Vec<Target>);
-
-impl Continuation {
-    /// The turns an interrupt ended of the agents in the spaces `selected`
-    /// names, each once, by the selector `space` gives each, with those of
-    /// `selected` without one.
-    pub(super) async fn plan<T>(
-        ctx: &Context,
-        selected: Vec<T>,
-        space: impl Fn(&T) -> SpaceSelector,
-    ) -> Result<(Self, Vec<T>)> {
-        let spaces = crate::client::spaces::list(&ctx.paths).await?;
-        let mut targets = Vec::new();
-        let mut rest = Vec::new();
-        for item in selected {
-            let selector = space(&item);
-            let found = (spaces.find(&selector)).with_context(|| format!("no space {selector}"))?;
-            let interrupted: Vec<_> = agents_in(ctx, &found)
-                .await?
-                .into_iter()
-                .filter(idles_interrupted)
-                .map(|agent| Target::of(&found, agent))
-                .collect::<Result<_>>()?;
-            if interrupted.is_empty() {
-                rest.push(item);
-            }
-            targets.extend(interrupted);
-        }
-        Ok((Self(targets), rest))
-    }
-
-    pub(super) fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    /// Submit the prompt that continues each turn, returning the exit code.
-    pub(super) async fn submit(self, ctx: &Context) -> Result<i32> {
-        let report = self.submit_each(ctx).await;
-        report.finish(ctx, "", |continued, failed| Continued { continued, failed })
-    }
-
-    /// Submit the prompt that continues each turn, for a restore that
-    /// reports them with what else it restores.
-    pub(super) async fn submit_with_others(self, ctx: &Context) -> Continued {
-        let (continued, failed) = self.submit_each(ctx).await.into_parts();
-        Continued { continued, failed }
-    }
-
-    /// Submit the prompt that continues each turn, printing a line for each
-    /// as it goes, going on after one fails.
-    async fn submit_each(&self, ctx: &Context) -> ui::Report<Agent> {
-        let mut report = ui::Report::new("continue");
-        for target in &self.0 {
-            match target.continue_turn(ctx).await {
-                Ok(()) => report.done(
-                    ctx,
-                    &format!("Continued the turn of {}", target.described()),
-                    target.output(),
-                ),
-                Err(error) => report.failed(ctx, &target.space, &error),
-            }
-        }
-        report
-    }
-}
-
-/// Whether `agent` idles after an interrupt ended its turn.
-fn idles_interrupted(agent: &RunningAgent) -> bool {
-    agent.interrupted && agent.state == Some(AgentState::Idle)
-}
-
 /// Whether an agent in `state` runs a turn, which waits for the user while
 /// it asks a question or for permission.
 fn runs_turn(state: Option<AgentState>) -> bool {
@@ -230,12 +157,6 @@ impl Target {
     async fn report_typing(&self, ctx: &Context) -> Result<()> {
         let (space, execution) = (SpaceSelector::id(&self.space_id), self.execution.clone());
         crate::client::agents::report_typing(&ctx.paths, space, execution).await
-    }
-
-    /// Submit the prompt that continues the agent's interrupted turn.
-    async fn continue_turn(&self, ctx: &Context) -> Result<()> {
-        self.report_typing(ctx).await?;
-        crate::terminal::submit_prompt(&self.place, crate::terminal::CONTINUE_PROMPT).await
     }
 }
 

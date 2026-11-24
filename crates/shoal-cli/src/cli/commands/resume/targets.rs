@@ -7,7 +7,7 @@ use anyhow::Result;
 use crate::client::output::resume::{Resumable, ResumableSpace};
 use crate::{
     cli::{args::SpaceTargets, commands::queued_agents, context::Context, ui},
-    model::{QueueEntry, Spaces},
+    model::Spaces,
     state::QueueState,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -15,13 +15,9 @@ use shoal_protocol::space_names::SpaceSelector;
 /// The spaces a resume acts on.
 #[derive(Debug, Default)]
 pub(in crate::cli::commands) struct Selected {
-    /// By ID, or by a selector the daemon refuses; every space with a
-    /// stopped agent for `None`.
+    /// By ID, or by a selector the daemon refuses; every space with
+    /// something to resume for `None`.
     pub spaces: Option<Vec<SpaceSelector>>,
-    /// The failed launches of the spaces selected, which resume by queuing
-    /// them again, once [`super::failed_starts::take`] takes them from the
-    /// others.
-    pub failed_starts: Vec<QueueEntry>,
 }
 
 impl Selected {
@@ -65,30 +61,30 @@ impl Selected {
         }
         Self {
             spaces: Some(resolved),
-            ..Self::default()
         }
     }
+}
 
-    /// Whether nothing is selected, as once the spaces whose interrupted
-    /// turns continue are taken from the selection.
-    pub fn is_empty(&self) -> bool {
-        let Self {
-            spaces,
-            failed_starts,
-        } = self;
-        spaces.as_ref().is_some_and(Vec::is_empty) && failed_starts.is_empty()
-    }
+/// The spaces this process's scope reaches below its own whose agent can
+/// resume, as `--all` selects them, by ID: a done space's agent resumes only
+/// when its space is named. `done` includes the done ones, as a discard of
+/// their agents does.
+pub(in crate::cli::commands) async fn in_reach(
+    ctx: &Context,
+    done: bool,
+) -> Result<Vec<SpaceSelector>> {
+    let spaces = crate::client::spaces::list(&ctx.paths).await?;
+    let scoping = crate::scoping::Scoping::inherited(&ctx.paths.state);
+    let reached = Spaces(scoping.reached_below(spaces));
+    Ok((resumable(ctx, &reached).await?.into_iter())
+        .filter(|resumable| done || !resumable.space.done())
+        .map(|resumable| SpaceSelector::id(&resumable.space.id))
+        .collect())
+}
 
-    /// Refuse a selected workspace whose setup failed or never started,
-    /// naming `shoal setup`, which retries it before the agent waiting for
-    /// it starts; a chat has no setup.
-    pub async fn refuse_failed_setups(&self, ctx: &Context) -> Result<()> {
-        for selector in self.spaces.iter().flatten() {
-            let space = super::present_space(ctx, selector).await?;
-            shoal_workers::resume::space::refuse_failed_setup(&ctx.paths, &space).await?;
-        }
-        Ok(())
-    }
+/// The spaces `--all` resumes, as [`in_reach`] selects them.
+pub(super) async fn resumable_in_reach(ctx: &Context) -> Result<Vec<SpaceSelector>> {
+    in_reach(ctx, false).await
 }
 
 /// The spaces among `spaces` whose agent can resume: those that saved a

@@ -8,7 +8,7 @@ use crate::cli::commands::restore::reopen::ReopenedExt;
 use crate::client::output::{
     batch::Failure,
     restore::Reopened,
-    resume::{Queued, StartedRestores, StoppedCommands},
+    resume::{Queued, StoppedCommands},
 };
 use crate::{
     cli::{context::Context, ui},
@@ -16,7 +16,7 @@ use crate::{
     model::Space,
     state::QueueState,
 };
-use shoal_workers::resume::{Resuming, sessions::Started};
+use shoal_workers::resume::Resuming;
 
 /// What `shoal resume` tells the user as a resume goes.
 pub(in crate::cli::commands) struct Reporting<'a>(pub &'a Context);
@@ -34,7 +34,11 @@ impl Resuming for Reporting<'_> {
     }
 
     fn stopped_commands(&self, space: &Space, commands: &[SavedCommand]) {
-        stopped_commands(self.0, space, commands);
+        let commands: Vec<_> = commands
+            .iter()
+            .map(|command| command.argv.clone())
+            .collect();
+        stopped_commands(self.0, space, &commands);
     }
 
     fn failed(&self, space: &str, error: &anyhow::Error) -> Failure {
@@ -42,31 +46,24 @@ impl Resuming for Reporting<'_> {
     }
 }
 
-/// Report that no space has anything to restore but what `first` reports,
-/// the workspaces reopened and the turns continued, as a restore that
-/// starts agents at once when `started`, otherwise as one that queues them,
-/// returning the exit code.
-pub(super) fn nothing(ctx: &Context, first: Queued, started: bool) -> Result<i32> {
-    if first.reports_anything() {
-        queued(ctx, &first)?;
-        return Ok(if first.failed.is_empty() { 0 } else { 1 });
+/// Report what the resumes of the selected spaces did, `resumed`, or that
+/// nothing resumed, returning the exit code: 1 when any failed.
+pub(super) fn resumed(ctx: &Context, resumed: &Queued) -> Result<i32> {
+    if !resumed.reports_anything() {
+        ctx.emit("No agents to resume", Queued::default())?;
+        return Ok(0);
     }
-    let message = "No agents to resume";
-    match started {
-        true => ctx.emit(message, StartedRestores::default())?,
-        false => ctx.emit(message, Queued::default())?,
-    }
-    Ok(0)
-}
-
-/// Report what `first` reports, the workspaces reopened for a restore and
-/// the turns it continued, before the agent it restores in this terminal,
-/// returning the exit code; nothing without any.
-pub(super) fn first(ctx: &Context, first: Queued) -> Result<i32> {
-    if first.reports_anything() {
-        queued(ctx, &first)?;
-    }
-    Ok(if first.failed.is_empty() { 0 } else { 1 })
+    ctx.show(resumed, |resumed| {
+        reopened_lines(ctx, &resumed.reopened);
+        for continued in &resumed.continued {
+            let agent = (continued.agent.as_ref()).map_or("the agent", |agent| agent.name());
+            outln!("Continued the turn of {agent} in {}", continued.space);
+        }
+        if let Some(summary) = resumed.summary() {
+            outln!("{summary}");
+        }
+    })?;
+    Ok(if resumed.failed.is_empty() { 0 } else { 1 })
 }
 
 /// Report the `queued` restores and the spaces reopened.
@@ -77,13 +74,6 @@ pub(in crate::cli::commands) fn queued(ctx: &Context, queued: &Queued) -> Result
             outln!("{summary}");
         }
     })
-}
-
-/// Report the `queued` restores, returning the exit code: 1 when any
-/// failed.
-pub(super) fn queued_code(ctx: &Context, queued: &Queued) -> Result<i32> {
-    self::queued(ctx, queued)?;
-    Ok(if queued.failed.is_empty() { 0 } else { 1 })
 }
 
 /// Tell what each of the `reopened` workspaces restored.
@@ -131,53 +121,9 @@ fn summary(count: usize, starting: bool) -> String {
     format!("{done} {count} {agents}; shoal queue shows them")
 }
 
-/// Report the agents a restore `started` at once, as its output lists them:
-/// those where they wait to restore, those it started in a place, and the
-/// ones the user starts in terminals of their own.
-pub(super) fn started(ctx: &Context, started: &Started) -> Result<()> {
-    let Started {
-        output,
-        in_wrappers,
-        place,
-        listed,
-    } = started;
-    let in_wrappers = *in_wrappers;
-    ctx.show(output, |output| {
-        reopened_lines(ctx, &output.reopened);
-        if !output.queued.is_empty() {
-            let starting = (output.queued.iter()).all(|entry| entry.state == QueueState::Starting);
-            outln!("{}", summary(output.queued.len(), starting));
-        }
-        if in_wrappers > 0 {
-            let noun = if in_wrappers == 1 { "agent" } else { "agents" };
-            outln!("Starting {in_wrappers} {noun} where they wait to restore");
-        }
-        if let Some(place) = place {
-            let started = output.agents.len() - listed.len() - in_wrappers;
-            let noun = if started == 1 { "agent" } else { "agents" };
-            outln!("Resuming {started} {noun} in {place}");
-        }
-        if !listed.is_empty() {
-            outln!("Resume each agent in its own terminal:");
-        }
-        for (space, id) in listed {
-            let number = space.number.to_string();
-            let words = [
-                "shoal",
-                "resume",
-                &number,
-                "--execution",
-                id.as_str(),
-                "--focus",
-            ];
-            outln!("  {}", crate::shell::quote(&words));
-        }
-    })
-}
-
-/// List the stopped `commands` of `space`, which no agent receives, in text
-/// output.
-fn stopped_commands(ctx: &Context, space: &Space, commands: &[SavedCommand]) {
+/// List the stopped `commands` of `space`, each as its arguments, which no
+/// agent receives, in text output.
+pub(super) fn stopped_commands(ctx: &Context, space: &Space, commands: &[Vec<String>]) {
     if !commands.is_empty() && !ctx.json {
         outln!("{}", command_list(space, commands));
     }
@@ -226,15 +172,19 @@ pub(super) fn starting_changed(
 /// List `workspace`'s stopped `commands`, which the restored agent was not
 /// told about.
 pub(super) fn commands_not_told(space: &Space, commands: &[SavedCommand]) {
-    eprintln!("{}", command_list(space, commands));
+    let commands: Vec<_> = commands
+        .iter()
+        .map(|command| command.argv.clone())
+        .collect();
+    eprintln!("{}", command_list(space, &commands));
 }
 
 /// The stopped `commands` of `workspace`, each as the command that reruns
 /// it there.
-fn command_list(space: &Space, commands: &[SavedCommand]) -> String {
+fn command_list(space: &Space, commands: &[Vec<String>]) -> String {
     let mut text = format!("Stopped commands in {}, not restarted:", space.label());
-    for command in commands {
-        text.push_str(&format!("\n  {}", rerun(space, &command.argv)));
+    for argv in commands {
+        text.push_str(&format!("\n  {}", rerun(space, argv)));
     }
     text
 }

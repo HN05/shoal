@@ -303,57 +303,53 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
         "",
     );
     assert!(output.status.success(), "{} {transcript}", printed(&output));
-    let calls = herdr_calls(&fixture);
-    assert_eq!(calls.len(), 6, "{calls:?}");
-    let resumed =
-        |run: &[String], (_, id, execution): &(String, String, String), close: &[&str]| {
-            let worker = run[3].split(' ').collect::<Vec<_>>();
-            let resume = [
-                "resume",
-                id.as_str(),
-                "--execution",
-                execution.as_str(),
-                "--focus",
-            ];
-            assert_eq!(
-                worker[worker.len() - 5 - close.len()..],
-                [&resume[..], close].concat()
-            );
-        };
-    assert_eq!(calls[0][..4], ["pane", "process-info", "--pane", "w1:p5"]);
-    assert_eq!(calls[1][..3], ["pane", "run", "w1:p5"]);
-    // The reused pane keeps the watcher its tab has; the new tab closes with
-    // its workspace.
-    resumed(&calls[1], &expected[0], &[]);
+    // The daemon's queue starts both restores at once, each through a
+    // worker of its own, so their calls interleave.
+    let run_in = |calls: &[Vec<String>], pane: &str| {
+        (calls.iter())
+            .find(|call| call[..3] == ["pane", "run", pane])
+            .cloned()
+    };
+    let calls = support::wait::wait_for("both restores to run", || {
+        let calls = herdr_calls(&fixture);
+        let both = run_in(&calls, "w1:p5").is_some() && run_in(&calls, "w1:p9").is_some();
+        both.then_some(calls)
+    });
+    let resumed = |run: &[String], (_, id, execution): &(String, String, String), close: &str| {
+        let resume = format!(" resume {id} --execution {execution} --focus --queue-entry ");
+        assert!(run[3].contains(&resume), "{run:?}");
+        assert!(run[3].ends_with(close), "{run:?}");
+    };
+    // The idle pane the first agent stopped in runs its restore again; the
+    // busy one of the second does not.
+    let reused = run_in(&calls, "w1:p5").unwrap();
+    resumed(&reused, &expected[0], "");
+    assert!(run_in(&calls, "w1:p6").is_none(), "{calls:?}");
     // The reused pane's shell gets the caller's output setting for the agent,
     // and the resume there shows text to the person at that pane.
-    assert!(
-        calls[1][3].starts_with("env SHOAL_OUTPUT=text "),
-        "{calls:?}"
-    );
-    assert!(calls[1][3].contains(" --text resume "), "{calls:?}");
-    assert_eq!(calls[2][..4], ["pane", "process-info", "--pane", "w1:p6"]);
-    let create = &calls[3];
-    assert_eq!(create[..2], ["tab", "create"]);
+    assert!(reused[3].starts_with("env SHOAL_OUTPUT=text "), "{calls:?}");
+    assert!(reused[3].contains(" --text resume "), "{calls:?}");
+    let create = calls
+        .iter()
+        .find(|call| call[..2] == ["tab", "create"])
+        .unwrap();
     let cwd = create.iter().position(|arg| arg == "--cwd").unwrap();
     assert_eq!(create[cwd + 1], expected[1].0);
     let label = create.iter().position(|arg| arg == "--label").unwrap();
     assert_eq!(create[label + 1], "resumed second");
     assert!(create.iter().any(|arg| arg == "--no-focus"));
-    // The new tab's shell is read for its prompt before the run.
-    assert_eq!(calls[4][..4], ["pane", "process-info", "--pane", "w1:p9"]);
-    assert_eq!(calls[5][..3], ["pane", "run", "w1:p9"]);
-    resumed(
-        &calls[5],
-        &expected[1],
-        &["--opened-in", "herdr", "--close-in", "herdr"],
-    );
+    // The new tab closes with its workspace.
+    let opened = run_in(&calls, "w1:p9").unwrap();
+    let close = "--opened-in herdr --close-in herdr";
+    resumed(&opened, &expected[1], close);
 }
 
-#[test]
-fn herdr_resume_honors_new_tab_and_enabled_settings() {
-    let fixture = Fixture::with_config(Some("[terminal.herdr]\nnew_tab = false\n"));
-    install_fake_herdr(&fixture);
+/// Save stopped agents of new workspaces `first` and `second` that ran in
+/// Herdr panes `w1:p5` and `w1:p6`, of which only the first is back at its
+/// prompt, and record the zmx sessions restores open.
+fn herdr_stopped_agents(fixture: &Fixture) {
+    install_fake_herdr(fixture);
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fs::write(fixture.root.path().join("idle-panes"), "w1:p5\n").unwrap();
     for (name, pane) in [("first", "w1:p5"), ("second", "w1:p6")] {
         let workspace = fixture.add(name);
@@ -369,28 +365,52 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
         )
         .unwrap();
     }
-    // Without new tabs, an idle recorded pane is still reused.
-    let (output, transcript) = herdr_call(&fixture, &["resume", "--all", "--now"], "");
-    assert!(output.status.success(), "{} {transcript}", printed(&output));
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--execution second-agent"), "{stdout}");
-    let calls = herdr_calls(&fixture);
-    assert_eq!(calls.len(), 3, "{calls:?}");
-    assert_eq!(calls[1][..3], ["pane", "run", "w1:p5"]);
-    assert!(calls.iter().all(|call| call[..2] != ["tab", "create"]));
+}
 
-    // Disabled, Herdr is never called and every agent is listed.
-    fs::remove_file(fixture.root.path().join("herdr-calls")).unwrap();
-    fs::write(
-        fixture.root.path().join(".config/shoal/config.toml"),
-        "[terminal.herdr]\nenabled = false\n",
-    )
-    .unwrap();
+/// Wait until a restore sent its command into the zmx session of each of
+/// the workspaces `names`.
+fn wait_for_zmx_restores(fixture: &Fixture, names: &[&str]) {
+    wait_until("the restores' zmx sessions", || {
+        let calls = super::zmx::zmx_calls(fixture);
+        (names.iter()).all(|name| {
+            let send = ["send".to_owned(), (*name).to_owned()];
+            calls.iter().any(|call| call.starts_with(&send))
+        })
+    });
+}
+
+/// Without new tabs, an idle recorded pane is still reused, and an agent
+/// whose pane is busy starts in the default host's background session.
+#[test]
+fn herdr_resume_without_new_tabs_reuses_idle_panes() {
+    let fixture = Fixture::with_config(Some("[terminal.herdr]\nnew_tab = false\n"));
+    herdr_stopped_agents(&fixture);
+
     let (output, transcript) = herdr_call(&fixture, &["resume", "--all", "--now"], "");
+
     assert!(output.status.success(), "{} {transcript}", printed(&output));
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--execution first-agent"), "{stdout}");
-    assert!(stdout.contains("--execution second-agent"), "{stdout}");
+    wait_for_zmx_restores(&fixture, &["second"]);
+    let calls = herdr_calls(&fixture);
+    assert!(
+        calls
+            .iter()
+            .any(|call| call[..3] == ["pane", "run", "w1:p5"]),
+        "{calls:?}"
+    );
+    assert!(calls.iter().all(|call| call[..2] != ["tab", "create"]));
+}
+
+/// Turned off, Herdr is never called: every agent starts in the default
+/// host's background session.
+#[test]
+fn herdr_resume_turned_off_starts_in_the_default_host() {
+    let fixture = Fixture::with_config(Some("[terminal.herdr]\nenabled = false\n"));
+    herdr_stopped_agents(&fixture);
+
+    let (output, transcript) = herdr_call(&fixture, &["resume", "--all", "--now"], "");
+
+    assert!(output.status.success(), "{} {transcript}", printed(&output));
+    wait_for_zmx_restores(&fixture, &["first", "second"]);
     assert!(!fixture.root.path().join("herdr-calls").exists());
 }
 

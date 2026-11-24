@@ -143,8 +143,8 @@ impl<T> Report<T> {
         self.failed.push(failure_value(workspace, error));
     }
 
-    /// The items acted on and the failures, for a command that reports
-    /// them with others.
+    /// The items acted on and the failures.
+    #[cfg(test)]
     pub fn into_parts(self) -> (Vec<T>, Vec<Failure>) {
         (self.done, self.failed)
     }

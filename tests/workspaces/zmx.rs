@@ -331,6 +331,8 @@ fn background_create_opens_the_workspace_shell_in_its_session() {
 #[test]
 fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
     let fixture = Fixture::new();
+    // The daemon's queue opens the sessions, so it finds this zmx too.
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let mut expected = Vec::new();
     // Sessions are named after their workspaces' directories, not their
     // branches.
@@ -367,6 +369,15 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         "{}\n{transcript}",
         printed(&output)
     );
+    // The daemon's queue starts each restore in a detached session.
+    let sent = |calls: &[Vec<String>], name: &str| {
+        let send = ["send".to_owned(), name.to_owned()];
+        calls.iter().find(|call| call.starts_with(&send)).cloned()
+    };
+    wait_until("each restore's detached session", || {
+        let calls = zmx_calls(&fixture);
+        (expected.iter()).all(|(name, ..)| sent(&calls, name).is_some())
+    });
     let calls = zmx_calls(&fixture);
     for (name, id, execution) in &expected {
         assert!(
@@ -378,27 +389,19 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             ]),
             "{calls:?}"
         );
-        let send = calls
-            .iter()
-            .find(|call| call.starts_with(&["send".into(), name.to_string()]))
-            .unwrap();
-        assert!(
-            send[2].ends_with(&format!(
-                " resume {id} --execution {execution} --focus --opened-in zmx --close-in zmx && exit; exec \"$SHELL\" -l\r"
-            )),
-            "{send:?}"
-        );
+        let send = sent(&calls, name).unwrap();
+        let resume = format!(" resume {id} --execution {execution} --focus --queue-entry ");
+        assert!(send[2].contains(&resume), "{send:?}");
+        let close = " --opened-in zmx --close-in zmx && exit; exec \"$SHELL\" -l\r";
+        assert!(send[2].ends_with(close), "{send:?}");
     }
-    // Each failed start leaves the user's own login shell to show why.
-    wait_until("the failed restores' login shells", || {
-        fs::read_to_string(fixture.root.path().join("login-shells"))
-            .is_ok_and(|shells| shells == "-l\n-l\n")
-    });
 }
 
 #[test]
 fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
     let fixture = Fixture::new();
+    // The daemon's queue opens the session, so it finds this zmx too.
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let workspace = fixture.add("single");
     let id = workspace["id"].as_str().unwrap().to_owned();
     let state = fixture.root.path().join("state/workspaces").join(&id);
@@ -420,21 +423,26 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         "{}\n{transcript}",
         printed(&output)
     );
+    // The daemon's queue starts the restore in a detached session of its own.
+    let sent = |calls: &[Vec<String>]| {
+        let send = ["send".to_owned(), "single".to_owned()];
+        calls.iter().find(|call| call.starts_with(&send)).cloned()
+    };
+    wait_until("the restore's detached session", || {
+        sent(&zmx_calls(&fixture)).is_some()
+    });
     let calls = zmx_calls(&fixture);
     assert!(calls.iter().all(|call| call[0] != "attach"), "{calls:?}");
-    let send = calls
-        .iter()
-        .find(|call| call.starts_with(&["send".into(), "single".into()]))
-        .unwrap();
+    let send = sent(&calls).unwrap();
     assert!(
         send[2].contains(&format!(" resume {id} --execution single-agent --focus ")),
         "{send:?}"
     );
 
-    // The restore fails without a configured restore command, leaving the
-    // login shell, before the next one starts.
-    wait_until("the failed restore's login shell", || {
-        fixture.root.path().join("login-shells").exists()
+    // The restore fails without a configured restore command, which frees
+    // its queue entry, before the next one starts.
+    wait_until("the failed restore to leave the queue", || {
+        fixture.ok(&["queue"]) == serde_json::json!([])
     });
 
     // Focused, the agent's session takes this terminal; its restore fails
