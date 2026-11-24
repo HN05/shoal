@@ -126,7 +126,7 @@ async fn ensure_resumable(ctx: &Context, resuming: &Resuming, options: &Options)
 /// space named alone continues its last session at once.
 fn agent_resume(resuming: &Resuming, options: Options) -> AgentResume {
     AgentResume {
-        execution: options.execution,
+        executions: options.execution.into_iter().collect(),
         now: options.now || options.focus,
         alone: resuming.chosen == Chosen::Named && resuming.spaces.len() == 1,
         change: options.change,

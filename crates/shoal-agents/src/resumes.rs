@@ -21,8 +21,8 @@ use shoal_protocol::space_names::SpaceSelector;
 
 impl Agents {
     /// Resume the agent of the space `selector` names as `resume` says, for
-    /// `caller`, whose scope the request was checked against; without an
-    /// execution, a turn an interrupt ended continues and a failed launch
+    /// `caller`, whose scope the request was checked against; without
+    /// executions, a turn an interrupt ended continues and a failed launch
     /// queues again before anything saved restores.
     pub async fn resume_space(
         &self,
@@ -33,7 +33,7 @@ impl Agents {
     ) -> Result<ResumeOutcome> {
         let space = daemon.space(selector).await?;
         self.refuse_failed_setup(&space).await?;
-        if resume.execution.is_none() {
+        if resume.executions.is_empty() {
             if let Some(agent) = self.interrupted_agent(daemon, &space).await? {
                 ensure!(
                     resume.change.is_none(),

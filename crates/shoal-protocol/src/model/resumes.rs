@@ -2,14 +2,17 @@
 //! did with it.
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
+use std::collections::BTreeSet;
 
 /// How a space's agent resumes, as `shoal resume` asks for it.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentResume {
-    /// Only the stopped agent or last session of this execution, without
-    /// continuing an interrupted turn or a failed launch.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub execution: Option<ExecutionId>,
+    /// Only the stopped agents, last sessions and commands of these
+    /// executions, as `--execution` picks one or a move stopped them,
+    /// without continuing an interrupted turn or a failed launch; empty for
+    /// everything the space saved.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub executions: BTreeSet<ExecutionId>,
     /// Start at once, regardless of the agent limits.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,

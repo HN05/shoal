@@ -211,6 +211,29 @@ async fn a_stopped_agent_queues_its_restore() {
     assert_eq!(record.narrowing, change.set);
 }
 
+/// A resume that names executions, as a move's restore of the agents it
+/// stopped does, queues only their restores.
+#[tokio::test]
+async fn a_resume_of_named_executions_restores_only_theirs() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(&manager, &root, "fix").await;
+    for execution in ["moved", "also-moved", "earlier"] {
+        stop(&manager, &workspace, execution);
+    }
+
+    let named = AgentResume {
+        executions: ["moved".into(), "also-moved".into()].into(),
+        ..AgentResume::default()
+    };
+    let entries = queued(resume(&manager, &workspace, named).await.unwrap());
+
+    let mut restored: Vec<_> = (entries.iter())
+        .map(|entry| entry.execution.clone().unwrap())
+        .collect();
+    restored.sort();
+    assert_eq!(restored, [ExecutionId::from("also-moved"), "moved".into()]);
+}
+
 /// A last session continues at once when its space resumes alone, since
 /// it holds no heavy slot, and otherwise waits in the queue.
 #[tokio::test]
