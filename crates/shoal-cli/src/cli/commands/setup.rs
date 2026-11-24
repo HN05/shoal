@@ -93,7 +93,7 @@ pub(super) fn setting_up(skip: bool) -> Acting {
 }
 
 /// What setup sends for the workspace it picks: an operation that takes
-/// `steps` in it on this machine, where its worktree is.
+/// `steps` in it on the machine that runs it, where its worktree is.
 fn preparing(steps: Preparation) -> Acting {
     Acting::request(move |workspace| {
         let spec = OperationSpec::Prepare {

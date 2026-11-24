@@ -115,7 +115,7 @@ pub(in crate::cli::commands) async fn prepared_on(
             let number = workspace.number;
             let there = machine.map(|machine| format!(" on machine {machine}"));
             Err(crate::operations::error(failure).context(format!(
-                "preparing {}{} failed; `shoal status {number}` shows it, and `shoal setup {number}` on its machine retries it",
+                "preparing {}{} failed; `shoal status {number}` shows it, and `shoal setup {number}` retries it",
                 workspace.name,
                 there.unwrap_or_default()
             )))

@@ -456,14 +456,16 @@ impl OperationSpec {
     }
 
     /// The workspace whose machine runs the operation, wherever that is:
-    /// a merge's or an unmerge's, which change the default branch of that
+    /// a preparation's, which runs setup in that machine's worktree, and a
+    /// merge's or an unmerge's, which change the default branch of that
     /// machine's checkout. None for one that runs on the caller's machine,
-    /// in the caller's environment, as a preparation and a push do.
+    /// in the caller's environment, as a push does.
     pub fn machine_space(&self) -> Option<&SpaceSelector> {
         match self {
-            Self::Merge { workspace, .. } | Self::Unmerge { workspace } => Some(workspace),
-            Self::Prepare { .. }
-            | Self::OpenPull { .. }
+            Self::Prepare { workspace, .. }
+            | Self::Merge { workspace, .. }
+            | Self::Unmerge { workspace } => Some(workspace),
+            Self::OpenPull { .. }
             | Self::Push { .. }
             | Self::Move { .. }
             | Self::FinishMove { .. } => None,

@@ -80,7 +80,7 @@ fn a_request_with_files_attached_here_is_one_that_attaches_files() {
 }
 
 #[test]
-fn an_unmerge_starts_on_its_workspace_s_machine_without_the_caller_s_environment() {
+fn an_unmerge_and_a_preparation_start_on_their_workspace_s_machine_without_the_caller_s_env() {
     use crate::protocol::operations::{OperationSpec, Preparation};
     let space = SpaceSelector::Number(8.into());
     let start = |spec| {
@@ -89,22 +89,29 @@ fn an_unmerge_starts_on_its_workspace_s_machine_without_the_caller_s_environment
             env: Some([("HOME".to_owned(), "/caller".to_owned())].into()),
         })
     };
-    let mut unmerge = start(OperationSpec::Unmerge {
+    let unmerge = OperationSpec::Unmerge {
         workspace: space.clone(),
-    });
-    assert_eq!(unmerge.target(), Some(Target::Space(&space)));
-    assert_eq!(unmerge.forwarding(), Forwarding::Online);
-    unmerge.leave_caller_machine();
-    let Operation::Operations(OperationMethod::StartOperation { env, .. }) = unmerge else {
-        unreachable!()
     };
-    assert_eq!(env, None);
-    let prepare = start(OperationSpec::Prepare {
-        workspace: space,
+    let prepare = OperationSpec::Prepare {
+        workspace: space.clone(),
         steps: Preparation::default(),
+    };
+    for spec in [unmerge, prepare] {
+        let mut started = start(spec);
+        assert_eq!(started.target(), Some(Target::Space(&space)));
+        assert_eq!(started.forwarding(), Forwarding::Online);
+        started.leave_caller_machine();
+        let Operation::Operations(OperationMethod::StartOperation { env, .. }) = started else {
+            unreachable!()
+        };
+        assert_eq!(env, None);
+    }
+    let open_pull = start(OperationSpec::OpenPull {
+        workspace: space,
+        options: Default::default(),
     });
-    assert_eq!(prepare.target(), None);
-    assert_eq!(prepare.forwarding(), Forwarding::Never);
+    assert_eq!(open_pull.target(), None);
+    assert_eq!(open_pull.forwarding(), Forwarding::Never);
 }
 
 #[test]

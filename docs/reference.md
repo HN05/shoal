@@ -1351,7 +1351,7 @@ its other traffic, each held to what its reader has taken, so a reader that
 falls behind holds up nothing else. A machine that received a request but
 did not answer it in time fails the command, saying that the request may go
 on there, which `shoal status <space>` shows. Commands that need the
-machine they run on, such as `setup`, acquiring and releasing leases,
+machine they run on, such as acquiring and releasing leases,
 starting a demo and an agent's hooks, are refused for a space elsewhere,
 naming its machine, as is a command that attaches files, which that
 machine cannot read. Without a target, a
@@ -4676,7 +4676,9 @@ where Git lists them as ignored, and inside ignored directories the patterns
 look into; an ignored directory Git lists whole is otherwise copied whole.
 
 `setup.command` runs through the tracked execution wrapper with workspace scope and
-your CLI environment. Setup and the post-setup hook, like the push of `shoal pr open`
+your CLI environment; for a workspace another machine of the hub runs, `shoal setup`
+and `shoal refresh` run setup and the post-setup hook there, in that machine
+daemon's environment. Setup and the post-setup hook, like the push of `shoal pr open`
 and `shoal merge`, run in a process the daemon starts: the command shows their output,
 and interrupting the command interrupts them, while they go on when the command ends
 otherwise, such as when its terminal closes. `shoal start` from a terminal, or

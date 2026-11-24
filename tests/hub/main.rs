@@ -14,6 +14,7 @@ mod numbers;
 mod placement;
 mod repositories;
 mod routing;
+mod setups;
 mod shared_config;
 mod shared_repositories;
 mod starts;
