@@ -3,6 +3,7 @@
 use anyhow::{Context as _, Result, ensure};
 use shoal_core::execution::recovery::{Saved, SavedCommand, SavedSession};
 use shoal_ids::execution_ids::ExecutionId;
+use std::collections::BTreeSet;
 
 use super::{Resuming, commands, permissions, picker, stale, stopped};
 use crate::{
@@ -72,9 +73,8 @@ pub async fn choose(
     }
     let picked = picker::select_agent(resuming, &saved.agents, picker::agent_label)?;
     if picked.waits_in_wrapper {
-        saved.retain_execution(&picked.id, true);
         return Ok(Choice::Queued(
-            start_in_wrapper(paths, &space, &saved, change, resuming).await,
+            start_in_wrapper(paths, &space, &picked, change, resuming).await,
         ));
     }
     ensure!(
@@ -90,18 +90,18 @@ pub async fn choose(
     restore.chosen(paths, change).await
 }
 
-/// Have the daemon start at once the restore of the agent `saved` keeps of
-/// `space`, which its waiting wrapper carries out, with the stopped
-/// commands `saved` keeps, making `change` when given.
+/// Have the daemon start at once the restore of the stopped agent `picked`
+/// of `space`, which its waiting wrapper carries out, making `change` when
+/// given.
 async fn start_in_wrapper(
     paths: &CommandPaths,
     space: &Space,
-    saved: &Saved,
+    picked: &SavedSession,
     change: Option<&PermissionChange>,
     resuming: &impl Resuming,
 ) -> Queued {
     let resume = AgentResume {
-        executions: saved.execution_ids().into_iter().collect(),
+        executions: BTreeSet::from([picked.id.clone()]),
         now: true,
         change: change.cloned(),
         env: crate::terminal::start_environment(),
@@ -170,7 +170,7 @@ async fn saved(
 ) -> Result<Saved> {
     let mut saved = crate::client::saved::read(paths, SpaceSelector::id(&space.id)).await?;
     if let Some(execution) = execution {
-        saved.retain_execution(execution, true);
+        saved.retain_restoring(&BTreeSet::from([execution.clone()]));
     }
     ensure!(
         !saved.is_empty(),

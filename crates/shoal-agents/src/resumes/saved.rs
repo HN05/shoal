@@ -16,8 +16,9 @@ use shoal_daemon_base::callers::Caller;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Agents {
-    /// Restore what `space` saved, only that of `resume`'s executions when
-    /// it names any, for `caller`, once nothing refuses any of it.
+    /// Restore what `space` saved, only what restoring `resume`'s
+    /// executions takes when it names any, for `caller`, once nothing
+    /// refuses any of it.
     pub(super) async fn restore_saved(
         &self,
         daemon: &dyn Daemon,
@@ -27,7 +28,7 @@ impl Agents {
     ) -> Result<ResumeOutcome> {
         let mut saved = Saved::load(&self.paths, &space.id)?;
         if !resume.executions.is_empty() {
-            saved.retain(|id| resume.executions.contains(id));
+            saved.retain_restoring(&resume.executions);
         }
         if saved.is_empty() {
             let reason = format!("no stopped agents or commands for this {}", space.kind());

@@ -998,7 +998,7 @@ pub fn change_permission(
     change: &PermissionChange,
 ) -> Result<()> {
     let mut saved = Saved::load(paths, space_id)?;
-    saved.retain_execution(id, false);
+    saved.retain_execution(id);
     change_permissions(&[saved], change)
 }
 

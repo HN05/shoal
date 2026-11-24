@@ -466,7 +466,7 @@ fn each_agent_keeps_a_last_session() {
             ("codex".into(), Some("earlier".into()))
         ]
     );
-    saved.retain_execution(&ExecutionId::from("execution"), false);
+    saved.retain_execution(&ExecutionId::from("execution"));
     let kept = (saved.sessions.iter()).map(|last| (last.id.as_str(), &last.path));
     assert_eq!(
         kept.collect::<Vec<_>>(),

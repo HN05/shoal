@@ -2,7 +2,7 @@
 //! stopped, which the daemon reads from its state, and how a resume
 //! restores it.
 use shoal_ids::execution_ids::ExecutionId;
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -68,21 +68,23 @@ pub struct SavedCommand {
 }
 
 impl Saved {
-    /// Keep only the agent or last session of execution `id`; a selected
-    /// agent keeps the workspace's commands too when `with_commands`, so it
-    /// receives them.
-    pub fn retain_execution(&mut self, id: &ExecutionId, with_commands: bool) {
-        let selected = |session: &SavedSession| session.id == *id;
-        if self.agents.iter().chain(&self.sessions).any(selected) {
-            self.agents.retain(selected);
-            self.sessions.retain(selected);
-            if !with_commands {
-                self.commands.clear();
-            }
-        } else {
-            self.agents.clear();
-            self.sessions.clear();
-            self.commands.retain(|command| command.id == *id);
+    /// Keep only the agent, last session or command of execution `id`.
+    pub fn retain_execution(&mut self, id: &ExecutionId) {
+        self.retain_restoring(&BTreeSet::from([id.clone()]));
+        if !(self.agents.is_empty() && self.sessions.is_empty()) {
+            self.commands.clear();
+        }
+    }
+
+    /// Keep only what a restore of the executions `ids` takes: their
+    /// stopped agents and last sessions, with every stopped command, which
+    /// they receive, or without any, only their commands.
+    pub fn retain_restoring(&mut self, ids: &BTreeSet<ExecutionId>) {
+        let selected = |session: &SavedSession| ids.contains(&session.id);
+        self.agents.retain(selected);
+        self.sessions.retain(selected);
+        if self.agents.is_empty() && self.sessions.is_empty() {
+            self.commands.retain(|command| ids.contains(&command.id));
         }
     }
 

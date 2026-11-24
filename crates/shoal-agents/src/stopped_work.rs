@@ -92,7 +92,7 @@ impl Agents {
         let space = daemon.space(selector).await?;
         let mut saved = Saved::load(&self.paths, &space.id)?;
         if let Some(execution) = &execution {
-            saved.retain_execution(execution, false);
+            saved.retain_execution(execution);
         }
         ensure!(
             !saved.is_empty(),
@@ -123,7 +123,7 @@ impl Agents {
         saved.retain_unattended();
         let launch = match &execution {
             Some(execution) => {
-                saved.retain_execution(execution, false);
+                saved.retain_execution(execution);
                 None
             }
             None => self.failed_launch_of(&space.id).await?,
@@ -227,7 +227,7 @@ impl Agents {
         let repository = space.repository_id.as_ref().cloned();
         (daemon.ensure_change_held(giver, &space, change, repository.as_ref())).await?;
         let mut saved = Saved::load(&self.paths, &space.id)?;
-        saved.retain_execution(execution, false);
+        saved.retain_execution(execution);
         ensure!(
             !(saved.agents.is_empty() && saved.sessions.is_empty()),
             "{} has no stopped agent {execution}",
