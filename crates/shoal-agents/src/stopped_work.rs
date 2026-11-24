@@ -110,8 +110,8 @@ impl Agents {
     /// Discard what `shoal restore --discard-agent` discards of the space
     /// `selector` names: its stopped agents, last sessions and stopped
     /// commands, leaving an agent a wrapper waits to restore, and its failed
-    /// launch; only the agent of `execution` when given. Refuses a space
-    /// with none of them.
+    /// launch; only the agent of `execution` when given. A space with none
+    /// of them discards nothing.
     pub async fn discard_space_agent(
         &self,
         daemon: &dyn Daemon,
@@ -128,12 +128,10 @@ impl Agents {
             }
             None => self.failed_launch_of(&space.id).await?,
         };
-        ensure!(
-            !saved.is_empty() || launch.is_some(),
-            "{} has no stopped agent, commands or failed launch to discard",
-            space.name
-        );
-        let executions = self.forget_saved(&space, &saved).await?;
+        let executions = match saved.is_empty() {
+            true => Vec::new(),
+            false => self.forget_saved(&space, &saved).await?,
+        };
         if let Some(launch) = &launch {
             self.drop_failed_launch(&launch.id).await?;
         }

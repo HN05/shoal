@@ -350,3 +350,29 @@ async fn a_discard_takes_the_failed_launch_with_the_stopped_agent() {
     let outcome = resume(&manager, workspace, AgentResume::default()).await;
     assert!(matches!(outcome.unwrap(), ResumeOutcome::Nothing { .. }));
 }
+
+/// A discard leaves an agent its waiting wrapper restores, and discards
+/// nothing in a space with only such an agent.
+#[tokio::test]
+async fn a_discard_leaves_an_agent_its_wrapper_waits_to_restore() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(&manager, &root, "asleep").await;
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let path = recovery::record_path(&manager.paths, &workspace.id, &"asleep-agent".into());
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let record = serde_json::json!({
+        "agent": "claude", "mode": "worker", "stage": "stopped", "waiting": wrapper,
+    });
+    std::fs::write(&path, record.to_string()).unwrap();
+
+    let selector = SpaceSelector::id(&workspace.id);
+    let discarded = (manager.agents)
+        .discard_space_agent(&*manager, &selector, None)
+        .await
+        .unwrap();
+
+    assert!(discarded.is_empty());
+    assert!(path.exists());
+}

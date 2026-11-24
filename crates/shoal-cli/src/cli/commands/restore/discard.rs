@@ -24,6 +24,9 @@ pub(super) async fn run(
     let Some(selected) = targets::Selected::load(ctx, targets).await? else {
         return Ok(0);
     };
+    // A space `--all` selects may hold only agents their wrappers restore,
+    // which a discard leaves; one named or picked has to discard something.
+    let named = selected.spaces.is_some();
     let spaces = match selected.spaces {
         Some(spaces) => spaces,
         None => targets::in_reach(ctx, true).await?,
@@ -40,6 +43,12 @@ pub(super) async fn run(
             .map_or_else(|| selector.to_string(), |space| space.name.to_string());
         let discard = assignments::discard_stopped_agent(&ctx.paths, selector, execution.clone());
         match discard.await {
+            Ok(discarded) if discarded.is_empty() && named => {
+                let error =
+                    anyhow::anyhow!("no stopped agent, commands or failed launch to discard");
+                (report.failed).push(ui::failure(ctx, "discard", &name, &error));
+            }
+            Ok(discarded) if discarded.is_empty() => {}
             Ok(discarded) => {
                 report.discarded.extend(discarded.executions);
                 report.launches.extend(discarded.launch);

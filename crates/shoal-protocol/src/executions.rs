@@ -297,3 +297,10 @@ pub struct DiscardedAgent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch: Option<crate::model::QueueEntry>,
 }
+
+impl DiscardedAgent {
+    /// Whether the space had nothing to discard.
+    pub fn is_empty(&self) -> bool {
+        self.executions.is_empty() && self.launch.is_none()
+    }
+}
