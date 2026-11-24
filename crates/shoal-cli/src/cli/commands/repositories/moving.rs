@@ -1,5 +1,5 @@
 //! `shoal repo move`: move every repository directory into a new `root_dir`.
-use super::super::resume::queue::{restore_stopped, saved_executions};
+use super::super::resume::queue::{restore_stopped, saved_agents};
 use crate::cli::commands::resume::reports::QueuedExt;
 use crate::client::output::resume::Queued;
 use crate::config_file::ConfigExt;
@@ -74,9 +74,9 @@ async fn plan_moves(
 }
 
 /// Stop the spaces `executions` run in, keeping their agents' sessions, and
-/// add to `stopped` the executions each stop saved for `shoal resume`, by
-/// space, including any started since the plan or ended by a stop that
-/// failed. A CI job's workspace is waited for until the job, whose run
+/// add to `stopped` the agents and last sessions each stop saved for `shoal
+/// resume`, by space, including any started since the plan or ended by a
+/// stop that failed. A CI job's workspace is waited for until the job, whose run
 /// the stop cancelled, ends and its workspace goes, and stays out of
 /// `stopped`. An execution Shoal cannot prove ended stops once the user
 /// confirms it did, or when `confirmed`.
@@ -93,7 +93,7 @@ async fn stop_running(
         if !space_listed(ctx, workspace).await? {
             continue;
         }
-        let saved_before = saved_executions(ctx, workspace).await?;
+        let saved_before = saved_agents(ctx, workspace).await?;
         let result = ctx
             .progress(
                 "Stopping commands and agents",
@@ -117,7 +117,7 @@ async fn stop_running(
             .await?;
             continue;
         }
-        let saved = saved_executions(ctx, workspace).await?;
+        let saved = saved_agents(ctx, workspace).await?;
         stopped.insert(
             workspace.clone(),
             saved.difference(&saved_before).cloned().collect(),

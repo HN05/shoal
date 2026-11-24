@@ -49,6 +49,8 @@ fn kept(saved: &Saved) -> (Vec<&str>, Vec<&str>) {
     )
 }
 
+/// Named agents and last sessions restore with every stopped command, and
+/// named commands alone without the others.
 #[test]
 fn a_restore_of_named_agents_takes_every_stopped_command() {
     let saved = Saved {

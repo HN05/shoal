@@ -679,7 +679,7 @@ impl shoal_spaces::daemon::Agents for Manager {
     ) -> BoxFuture<'a, Result<Vec<ExecutionId>>> {
         Box::pin(async move {
             let saved = self.agents.saved_work(self, selector).await?;
-            Ok(saved.execution_ids().into_iter().collect())
+            Ok(saved.agent_ids().cloned().collect())
         })
     }
 

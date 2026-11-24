@@ -18,9 +18,9 @@ use crate::{
 
 /// Have the daemon queue the restores of the agents and last sessions
 /// among `stopped`, of each space it still lists, going on after one
-/// fails, which `resuming` tells; their stopped commands go to the
+/// fails, which `resuming` tells; their spaces' stopped commands go to the
 /// restored agents, or to the user when none restores outside a waiting
-/// wrapper.
+/// wrapper, and those of a space without one stay for `shoal resume`.
 pub async fn restore(
     paths: &CommandPaths,
     stopped: &StoppedExecutions,

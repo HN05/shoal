@@ -11,8 +11,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::transfer::StoppedExecutions;
 
 /// Have the daemon queue the restores of the agents among `stopped`, whose
-/// workspaces' stopped commands go to them, or to the user when no agent
-/// restores outside a waiting wrapper, warning when that fails, since
+/// workspaces' stopped commands go to them, while those of workspaces
+/// without one stay for `shoal resume`, warning when that fails, since
 /// `shoal resume` still resumes them.
 pub(in crate::cli::commands) async fn restore_stopped(
     ctx: &Context,
@@ -31,17 +31,12 @@ pub(in crate::cli::commands) async fn restore_stopped(
     }
 }
 
-/// The executions whose stopped work the space `space` saves for `shoal
-/// restore`.
-pub(in crate::cli::commands) async fn saved_executions(
+/// The executions of the stopped agents and last sessions the space
+/// `space` saves for `shoal resume`.
+pub(in crate::cli::commands) async fn saved_agents(
     ctx: &Context,
     space: &SpaceId,
 ) -> Result<std::collections::BTreeSet<ExecutionId>> {
-    Ok(
-        crate::client::saved::read(&ctx.paths, SpaceSelector::id(space))
-            .await?
-            .execution_ids()
-            .into_iter()
-            .collect(),
-    )
+    let saved = crate::client::saved::read(&ctx.paths, SpaceSelector::id(space)).await?;
+    Ok(saved.agent_ids().cloned().collect())
 }

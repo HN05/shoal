@@ -70,10 +70,7 @@ pub struct SavedCommand {
 impl Saved {
     /// Keep only the agent, last session or command of execution `id`.
     pub fn retain_execution(&mut self, id: &ExecutionId) {
-        self.retain_restoring(&BTreeSet::from([id.clone()]));
-        if !(self.agents.is_empty() && self.sessions.is_empty()) {
-            self.commands.clear();
-        }
+        self.retain(|execution| execution == id);
     }
 
     /// Keep only what a restore of the executions `ids` takes: their
@@ -131,6 +128,11 @@ impl Saved {
     /// wrapper still waits to restore it does not.
     pub fn is_restorable(&self) -> bool {
         !self.commands.is_empty() || self.agents.iter().any(|agent| !agent.waits_in_wrapper)
+    }
+
+    /// The executions of the saved agents and last sessions.
+    pub fn agent_ids(&self) -> impl Iterator<Item = &ExecutionId> {
+        (self.agents.iter().chain(&self.sessions)).map(|session| &session.id)
     }
 
     /// The executions of the saved agents, last sessions and commands.

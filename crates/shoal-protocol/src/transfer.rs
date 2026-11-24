@@ -342,7 +342,8 @@ pub struct MoveRecord {
     pub saved_before: StoppedExecutions,
 }
 
-/// Executions by the space whose stopped work saves them.
+/// The executions of stopped agents and last sessions, by the space that
+/// saves them.
 pub type StoppedExecutions = BTreeMap<SpaceId, BTreeSet<ExecutionId>>;
 
 /// A move the daemon runs as an operation: the spaces it takes, each with

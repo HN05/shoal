@@ -7,11 +7,11 @@ use std::collections::BTreeSet;
 /// How a space's agent resumes, as `shoal resume` asks for it.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentResume {
-    /// Only the stopped agents and last sessions of these executions, with
-    /// the space's stopped commands, or without any, only their commands,
-    /// as `--execution` picks one or a move stopped them, without
-    /// continuing an interrupted turn or a failed launch; empty for
-    /// everything the space saved.
+    /// Only what restoring these executions takes, as `--execution` picks
+    /// one or a move stopped them: their stopped agents and last sessions
+    /// with the space's stopped commands, which they receive, or without
+    /// any, only their commands; without continuing an interrupted turn or
+    /// a failed launch. Empty for everything the space saved.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub executions: BTreeSet<ExecutionId>,
     /// Start at once, regardless of the agent limits.
