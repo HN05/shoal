@@ -20,13 +20,13 @@ pub(super) async fn here(ctx: &Context, resuming: Resuming, options: Options) ->
         };
         reports::queued(ctx, &reopened)?;
     }
-    let present = super::space::present_space(ctx, space).await?;
+    let present = super::space::present_space(ctx, &space.selector).await?;
     shoal_workers::resume::space::refuse_failed_setup(&ctx.paths, &present).await?;
     let change = options.change.as_ref();
     if options.execution.is_none()
-        && let Some(failed) = failed_starts::of(ctx, space).await?
+        && let Some(failed) = failed_starts::of(ctx, &space.selector).await?
     {
         return failed_starts::retry_here(ctx, &failed, change).await;
     }
-    super::space::here(ctx, space.clone(), options.execution, change).await
+    super::space::here(ctx, space.selector.clone(), options.execution, change).await
 }

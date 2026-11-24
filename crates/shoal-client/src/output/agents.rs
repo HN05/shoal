@@ -13,6 +13,9 @@ pub struct Agent {
     pub space: SpaceName,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<shoal_protocol::agent::Agent>,
+    /// The other joined machine its space runs on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
 }
 
 /// A stopped workspace's processes, or a stopped chat.

@@ -80,5 +80,6 @@ fn add_commands(
     report.commands.push(StoppedCommands {
         workspace: space.name.clone(),
         commands,
+        machine: None,
     });
 }

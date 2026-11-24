@@ -4,14 +4,19 @@ use crate::execution::recovery::changes::Change;
 use anyhow::{Result, ensure};
 use std::fmt::Display;
 
-use crate::cli::commands::restore::reopen::ReopenedExt;
+use crate::cli::commands::{restore::reopen::ReopenedExt, space_selection::on_machine};
 use crate::client::output::{
+    agents::Skipped,
     batch::Failure,
     restore::Reopened,
-    resume::{Queued, StoppedCommands},
+    resume::{Queued, QueuedElsewhere, StoppedCommands},
 };
 use crate::{
-    cli::{context::Context, ui},
+    cli::{
+        context::Context,
+        output::{Palette, Style},
+        ui,
+    },
     execution::recovery::{SavedCommand, SavedSession},
     model::Space,
     state::QueueState,
@@ -36,7 +41,7 @@ impl Resuming for Reporting<'_> {
     }
 
     fn stopped_commands(&self, space: &Space, commands: &[Vec<String>]) {
-        stopped_commands(self.0, (space.number, &space.name), commands);
+        stopped_commands(self.0, (space.number, &space.name, None), commands);
     }
 
     fn failed(&self, space: &str, error: &anyhow::Error) -> Failure {
@@ -53,15 +58,30 @@ pub(super) fn resumed(ctx: &Context, resumed: &Queued) -> Result<i32> {
     }
     ctx.show(resumed, |resumed| {
         reopened_lines(ctx, &resumed.reopened);
+        skipped_lines(&resumed.skipped);
         for continued in &resumed.continued {
             let agent = (continued.agent.as_ref()).map_or("the agent", |agent| agent.name());
-            outln!("Continued the turn of {agent} in {}", continued.space);
+            let space = on_machine(&continued.space, continued.machine.as_deref());
+            outln!("Continued the turn of {agent} in {space}");
+        }
+        for elsewhere in &resumed.elsewhere {
+            outln!("{}", queued_elsewhere(elsewhere));
         }
         if let Some(summary) = resumed.summary() {
             outln!("{summary}");
         }
     })?;
     Ok(if resumed.failed.is_empty() { 0 } else { 1 })
+}
+
+/// Tell why each of the `skipped` spaces was left, as of an offline
+/// machine.
+pub(in crate::cli::commands) fn skipped_lines(skipped: &[Skipped]) {
+    for skipped in skipped {
+        let space = on_machine(&skipped.space, skipped.machine.as_deref());
+        let message = format!("Skipped {space}: {}", skipped.reason);
+        outln!("{}", Palette::stdout(false).paint(Style::Warning, &message));
+    }
 }
 
 /// Report the `queued` restores and the spaces reopened.
@@ -97,12 +117,16 @@ impl QueuedExt for Queued {
             commands,
             reopened,
             continued,
+            elsewhere,
+            skipped,
             failed,
         } = self;
         !(queued.is_empty()
             && commands.is_empty()
             && reopened.is_empty()
             && continued.is_empty()
+            && elsewhere.is_empty()
+            && skipped.is_empty()
             && failed.is_empty())
     }
 
@@ -114,20 +138,35 @@ impl QueuedExt for Queued {
 
 /// What the user reads once `count` restores are queued, or `starting`.
 fn summary(count: usize, starting: bool) -> String {
+    format!("{}; shoal queue shows them", agents(count, starting))
+}
+
+/// What the user reads of the restores and launches queued, or starting,
+/// in a space of another machine, whose queue lists them.
+fn queued_elsewhere(elsewhere: &QueuedElsewhere) -> String {
+    let queued = &elsewhere.queued;
+    let starting = (queued.iter()).all(|entry| entry.state == QueueState::Starting);
+    let agents = agents(queued.len(), starting);
+    format!("{agents} in {} on {}", elsewhere.space, elsewhere.machine)
+}
+
+/// `count` agents queued, or `starting`.
+fn agents(count: usize, starting: bool) -> String {
     let agents = if count == 1 { "agent" } else { "agents" };
     let done = if starting { "Starting" } else { "Queued" };
-    format!("{done} {count} {agents}; shoal queue shows them")
+    format!("{done} {count} {agents}")
 }
 
 /// List the stopped `commands` of the space numbered and named `space`,
-/// each as its arguments, which no agent receives, in text output.
+/// with the other joined machine it runs on, each as its arguments, which
+/// no agent receives, in text output.
 pub(in crate::cli::commands) fn stopped_commands(
     ctx: &Context,
-    space: (SpaceNumber, &SpaceName),
+    (number, name, machine): (SpaceNumber, &SpaceName, Option<&str>),
     commands: &[Vec<String>],
 ) {
     if !commands.is_empty() && !ctx.json {
-        outln!("{}", command_list(space, commands));
+        outln!("{}", command_list((number, name), machine, commands));
     }
 }
 
@@ -181,13 +220,22 @@ pub(super) fn commands_not_told(space: &Space, commands: &[SavedCommand]) {
         .iter()
         .map(|command| command.argv.clone())
         .collect();
-    eprintln!("{}", command_list((space.number, &space.name), &commands));
+    eprintln!(
+        "{}",
+        command_list((space.number, &space.name), None, &commands)
+    );
 }
 
-/// The stopped `commands` of the space numbered and named `space`, each as
-/// the command that reruns it there.
-fn command_list((number, name): (SpaceNumber, &SpaceName), commands: &[Vec<String>]) -> String {
+/// The stopped `commands` of the space numbered and named `space`, on the
+/// other joined machine `machine`, each as the command that reruns it
+/// there.
+fn command_list(
+    (number, name): (SpaceNumber, &SpaceName),
+    machine: Option<&str>,
+    commands: &[Vec<String>],
+) -> String {
     let label = shoal_protocol::space_names::label(number, name);
+    let label = on_machine(&label, machine);
     let mut text = format!("Stopped commands in {label}, not restarted:");
     for argv in commands {
         text.push_str(&format!("\n  {}", rerun(number, argv)));

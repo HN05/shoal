@@ -144,6 +144,7 @@ impl Target {
         Agent {
             space: self.space.clone(),
             agent: self.agent.clone(),
+            machine: None,
         }
     }
 

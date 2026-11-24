@@ -56,6 +56,15 @@ impl Offers {
         }
     }
 
+    /// The other machines' spaces in `elsewhere`, which no daemon judged,
+    /// for a picker whose spaces the command selects without asking.
+    pub(super) fn unjudged(elsewhere: Option<HubView>) -> Self {
+        Self {
+            judged: HashMap::new(),
+            elsewhere,
+        }
+    }
+
     /// The verdicts `judged` on the spaces of this machine and of the
     /// other machines in `elsewhere`.
     #[cfg(test)]

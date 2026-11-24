@@ -1,23 +1,26 @@
 //! Asking each selected space's daemon to resume its agent, and gathering
 //! what each did into one report: the restores and launches queued or
-//! started, the stopped commands no agent receives, the turns continued
-//! and the spaces it failed for.
+//! started, here or on another joined machine, the stopped commands no
+//! agent receives, the turns continued, the spaces left and those it
+//! failed for.
 use anyhow::Result;
 
-use super::{Chosen, Resuming};
+use super::{Chosen, Resuming, targets::Target};
 use crate::client::output::{
-    agents::Agent, restore::Reopened, resume::Queued, resume::StoppedCommands,
+    agents::Agent,
+    restore::Reopened,
+    resume::{Queued, QueuedElsewhere, StoppedCommands},
 };
 use crate::{
     cli::{context::Context, ui},
-    model::{AgentResume, ResumeOutcome, Space},
+    model::{AgentResume, ResumeOutcome},
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Resume the agent of each space `resuming` lists as `resume` says, one
 /// request per space, going on after one fails, and report what each did
-/// with the spaces reopened for it; a space with nothing to resume fails
-/// when it was named or picked.
+/// with the spaces reopened for it and those it left; a space with nothing
+/// to resume fails when it was named or picked.
 pub(super) async fn resume_each(
     ctx: &Context,
     resuming: Resuming,
@@ -26,15 +29,12 @@ pub(super) async fn resume_each(
     let named = resuming.chosen == Chosen::Named;
     let mut report = Queued {
         reopened: resuming.reopened,
+        skipped: resuming.skipped,
         ..Queued::default()
     };
-    let listed = crate::client::spaces::list(&ctx.paths).await?;
-    for selector in &resuming.spaces {
-        let space = listed.find(selector);
-        let name = space
-            .as_ref()
-            .map_or_else(|| selector.to_string(), |space| space.name.to_string());
-        let request = crate::client::agents::resume(selector.clone(), resume.clone());
+    for space in &resuming.spaces {
+        let name = space.shown();
+        let request = crate::client::agents::resume(space.selector.clone(), resume.clone());
         match request.send(&ctx.paths).await {
             Ok(ResumeOutcome::Nothing { reason }) if named => {
                 let error = anyhow::anyhow!(reason);
@@ -42,9 +42,9 @@ pub(super) async fn resume_each(
                     .failed
                     .push(ui::failure(ctx, "resume", &name, &error));
             }
-            Ok(outcome) => add(ctx, &mut report, space.as_ref(), outcome),
+            Ok(outcome) => add(ctx, &mut report, space, outcome),
             Err(error) => {
-                keep_saved(&mut report.reopened, selector);
+                keep_saved(&mut report.reopened, &space.selector);
                 (report.failed).push(ui::failure(ctx, "resume", &name, &error));
             }
         }
@@ -64,18 +64,28 @@ fn keep_saved(reopened: &mut [Reopened], selector: &SpaceSelector) {
     }
 }
 
-/// Add what the resume of `space` did, its `outcome`, to `report`.
-fn add(ctx: &Context, report: &mut Queued, space: Option<&Space>, outcome: ResumeOutcome) {
-    let Some(space) = space else {
+/// Add what the resume of `space` did, its `outcome`, to `report`: what
+/// another machine queued apart from this machine's queue.
+fn add(ctx: &Context, report: &mut Queued, space: &Target, outcome: ResumeOutcome) {
+    let Some((_, name)) = &space.space else {
         return;
     };
+    let machine = space.machine_name();
     match outcome {
         ResumeOutcome::Continued { agent } => report.continued.push(Agent {
-            space: space.name.clone(),
+            space: name.clone(),
             agent,
+            machine,
         }),
         ResumeOutcome::Queued { entries, commands } => {
-            report.queued.extend(entries);
+            match machine {
+                Some(machine) if !entries.is_empty() => report.elsewhere.push(QueuedElsewhere {
+                    space: name.clone(),
+                    machine,
+                    queued: entries,
+                }),
+                _ => report.queued.extend(entries),
+            }
             add_commands(ctx, report, space, commands);
         }
         ResumeOutcome::Commands { commands } => add_commands(ctx, report, space, commands),
@@ -85,13 +95,18 @@ fn add(ctx: &Context, report: &mut Queued, space: Option<&Space>, outcome: Resum
 
 /// Add the stopped `commands` of `space`, which no agent receives, to
 /// `report`, listing them in text output.
-fn add_commands(ctx: &Context, report: &mut Queued, space: &Space, commands: Vec<Vec<String>>) {
+fn add_commands(ctx: &Context, report: &mut Queued, space: &Target, commands: Vec<Vec<String>>) {
+    let Some((number, name)) = &space.space else {
+        return;
+    };
     if commands.is_empty() {
         return;
     }
-    super::reports::stopped_commands(ctx, (space.number, &space.name), &commands);
+    let machine = space.machine_name();
+    super::reports::stopped_commands(ctx, (*number, name, machine.as_deref()), &commands);
     report.commands.push(StoppedCommands {
-        workspace: space.name.clone(),
+        workspace: name.clone(),
         commands,
+        machine,
     });
 }

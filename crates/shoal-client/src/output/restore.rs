@@ -30,6 +30,9 @@ pub struct DiscardedAgents {
     /// The failed launches.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub launches: Vec<QueueEntry>,
+    /// The spaces it left, as those of an offline machine.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<super::agents::Skipped>,
     pub failed: Vec<Failure>,
 }
 

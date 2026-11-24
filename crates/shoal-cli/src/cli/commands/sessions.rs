@@ -114,8 +114,12 @@ impl Attaching for Callbacks<'_> {
         ui::pick_choice(self.0, "Attach session> ", &choices)
     }
 
-    fn stopped_commands(&self, space: (SpaceNumber, &SpaceName), commands: &[Vec<String>]) {
-        super::resume::reports::stopped_commands(self.0, space, commands);
+    fn stopped_commands(
+        &self,
+        (number, name): (SpaceNumber, &SpaceName),
+        commands: &[Vec<String>],
+    ) {
+        super::resume::reports::stopped_commands(self.0, (number, name, None), commands);
     }
 
     fn resuming(&self, entry: &QueueEntry) -> Result<()> {

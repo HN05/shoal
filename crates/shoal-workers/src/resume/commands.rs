@@ -44,6 +44,7 @@ fn report(
             .iter()
             .map(|command| command.argv.clone())
             .collect(),
+        machine: None,
     };
     resuming.stopped_commands(space, &report.commands);
     for command in commands {

@@ -28,7 +28,7 @@ use crate::{
     scoping::Scoping,
     workspace_context::{self, ScopeOrder, WorkspaceContext},
 };
-use shoal_protocol::hub::directory::Offered;
+use shoal_protocol::hub::directory::{HubView, Offered};
 use shoal_protocol::saved::SavedSummary;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -106,11 +106,13 @@ async fn named_workspaces(ctx: &Context, names: Vec<SpaceSelector>) -> Result<Ve
 
 /// The spaces `shoal resume` picks without a space: the current workspace
 /// when it is among the `resumable` spaces, else those picked among them,
-/// workspaces then chats. `None` without a terminal or anything to pick,
-/// which the caller lists instead.
+/// workspaces then chats, then the spaces of the other machines in
+/// `elsewhere` with something to resume, each naming its machine. `None`
+/// without a terminal or anything to pick, which the caller lists instead.
 pub async fn select_resumable(
     ctx: &Context,
     resumable: &[ResumableSpace],
+    elsewhere: Option<HubView>,
 ) -> Result<Option<Vec<SpaceSelector>>> {
     if let Some(id) = current_workspace_id(ctx).await?
         && resumable.iter().any(|space| space.space.id == id)
@@ -126,6 +128,8 @@ pub async fn select_resumable(
         Palette::stderr(ctx.json),
         picker_width(),
     ));
+    let elsewhere = Offers::unjudged(elsewhere);
+    entries.extend(elsewhere_entries(ctx, Offered::Resumable, &elsewhere));
     if entries.is_empty() || !ctx.interactive() {
         return Ok(None);
     }

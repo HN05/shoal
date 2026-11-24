@@ -1,18 +1,23 @@
 //! `shoal restore --discard-agent`: discarding a space's stopped agent, last
 //! sessions, stopped commands and failed launch instead of bringing them
 //! back, which leaves its files, branch and worktree as they are. Each
-//! space's daemon discards its own, one request per space.
+//! space's daemon discards its own, one request per space, on this machine
+//! or another joined machine, never waiting for an offline one.
 use anyhow::{Result, ensure};
 
-use crate::cli::commands::resume::{self, targets};
+use crate::cli::commands::resume::{
+    self,
+    targets::{Selected, Taking, Target},
+};
+use crate::cli::commands::space_selection::on_machine;
 use crate::cli::{args::SpaceTargets, context::Context, ui};
 use crate::client::assignments;
 use crate::client::output::restore::DiscardedAgents;
 use shoal_ids::execution_ids::ExecutionId;
 
 /// Discard the agents of the spaces `targets` selects as `shoal resume`
-/// selects them, every space's with one for `--all`, only the `execution`
-/// one when given.
+/// selects them, every space's with one for `--all`, and for `--machine`
+/// those of the machines it names, only the `execution` one when given.
 pub(in crate::cli::commands) async fn run(
     ctx: &Context,
     targets: SpaceTargets,
@@ -21,27 +26,29 @@ pub(in crate::cli::commands) async fn run(
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         resume::ensure_queued()?;
     }
-    let Some(selected) = targets::Selected::load(ctx, targets).await? else {
+    let Some(selected) = Selected::load(ctx, targets, Taking::Discards).await? else {
         return Ok(0);
     };
     // A space `--all` selects may hold only agents their wrappers restore,
     // which a discard leaves; one named or picked has to discard something.
-    let named = selected.spaces.is_some();
-    let spaces = match selected.spaces {
-        Some(spaces) => spaces,
-        None => targets::discardable_in_reach(ctx).await?,
+    let (spaces, named, skipped) = match selected {
+        Selected::All => (Taking::Discards.in_reach(ctx).await?, false, Vec::new()),
+        Selected::Named(spaces) => (spaces, true, Vec::new()),
+        Selected::OnMachines { spaces, skipped } => (spaces, false, skipped),
     };
-    ensure!(
-        execution.is_none() || spaces.len() == 1,
-        "--execution selects a stopped execution of one space"
-    );
-    let listed = crate::client::spaces::list(&ctx.paths).await?;
-    let mut report = DiscardedAgents::default();
+    ensure_one_here(&spaces, execution.as_ref())?;
+    let mut report = DiscardedAgents {
+        skipped,
+        ..DiscardedAgents::default()
+    };
     let mut names = Vec::new();
-    for selector in spaces {
-        let name = (listed.find(&selector))
-            .map_or_else(|| selector.to_string(), |space| space.name.to_string());
-        let discard = assignments::discard_stopped_agent(&ctx.paths, selector, execution.clone());
+    for space in spaces {
+        let name = space.shown();
+        let discard = assignments::discard_stopped_agent(
+            &ctx.paths,
+            space.selector.clone(),
+            execution.clone(),
+        );
         match discard.await {
             Ok(discarded) if discarded.is_empty() && named => {
                 let error =
@@ -52,7 +59,10 @@ pub(in crate::cli::commands) async fn run(
             Ok(discarded) => {
                 report.discarded.extend(discarded.executions);
                 report.launches.extend(discarded.launch);
-                names.push(discarded.space.to_string());
+                names.push(on_machine(
+                    &discarded.space,
+                    space.machine_name().as_deref(),
+                ));
             }
             Err(error) => (report.failed).push(ui::failure(ctx, "discard", &name, &error)),
         }
@@ -61,14 +71,36 @@ pub(in crate::cli::commands) async fn run(
     Ok(if report.failed.is_empty() { 0 } else { 1 })
 }
 
-/// Report the agents `discarded` of the spaces `names` lists, or that there
-/// was none.
+/// Refuse `--execution`, which names an execution of this machine, unless
+/// `spaces` is one space here.
+fn ensure_one_here(spaces: &[Target], execution: Option<&ExecutionId>) -> Result<()> {
+    if execution.is_none() {
+        return Ok(());
+    }
+    ensure!(
+        spaces.len() == 1,
+        "--execution selects a stopped execution of one space"
+    );
+    if let Some(space) = spaces.iter().find(|space| space.machine.is_some()) {
+        anyhow::bail!(
+            "--execution names an execution of this machine, and {} runs on another machine; leave it out",
+            space.shown()
+        );
+    }
+    Ok(())
+}
+
+/// Report the agents `discarded` of the spaces `names` lists and the spaces
+/// it left, or that there was none.
 fn report_discarded(ctx: &Context, discarded: &DiscardedAgents, names: &[String]) -> Result<()> {
-    ctx.show(discarded, |discarded| match names {
-        [] if discarded.failed.is_empty() => {
-            outln!("No stopped agents, commands or failed launches")
+    ctx.show(discarded, |discarded| {
+        resume::reports::skipped_lines(&discarded.skipped);
+        match names {
+            [] if discarded.failed.is_empty() && discarded.skipped.is_empty() => {
+                outln!("No stopped agents, commands or failed launches")
+            }
+            [] => {}
+            names => outln!("Discarded the agents of {}", names.join(", ")),
         }
-        [] => {}
-        names => outln!("Discarded the agents of {}", names.join(", ")),
     })
 }

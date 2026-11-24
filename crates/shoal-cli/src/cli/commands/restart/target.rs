@@ -9,6 +9,7 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
 };
 
+use crate::cli::commands::space_selection::on_machine;
 use crate::model::Space;
 
 #[derive(Debug, Clone)]
@@ -53,15 +54,6 @@ impl Target {
     /// Its name, with the other machine it runs on, as reports show it.
     pub(super) fn shown(&self) -> String {
         on_machine(&self.name, self.machine_name().as_deref())
-    }
-}
-
-/// The space `name`, with the other machine `machine` it runs on, as
-/// reports show it.
-pub(super) fn on_machine(name: &str, machine: Option<&str>) -> String {
-    match machine {
-        Some(machine) => format!("{name} on {machine}"),
-        None => name.to_owned(),
     }
 }
 

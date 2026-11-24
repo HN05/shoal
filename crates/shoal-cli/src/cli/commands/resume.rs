@@ -1,19 +1,21 @@
 //! `shoal resume`: bringing back the agents of the selected spaces,
-//! workspaces and chats alike. Each space's daemon decides and carries out
-//! its resume, one request per space: it continues a turn an interrupt
+//! workspaces and chats alike, on this machine or another joined machine.
+//! Each space's daemon decides and carries out its resume, one request per
+//! space, which never waits for an offline machine: it continues a turn an interrupt
 //! ended, queues a launch that failed to start again, or queues the
 //! restores of the stopped agents and last sessions, starting them at once
 //! with `--now`; a workspace whose setup failed is `shoal setup`'s. What
 //! needs this terminal stays here: `--focus` resumes one agent in it.
+use crate::client::output::agents::Skipped;
 use crate::client::output::restore::Reopened;
 use crate::{
     cli::{args::SpaceTargets, context::Context},
     config::permissions::PermissionChange,
 };
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::model::AgentResume;
-use shoal_protocol::space_names::SpaceSelector;
+use targets::{Selected, Taking, Target};
 
 /// How `shoal resume` brings back the agents of the spaces it selects.
 pub struct Options {
@@ -35,16 +37,22 @@ pub(super) async fn run(ctx: &Context, targets: SpaceTargets, options: Options) 
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         ensure_queued()?;
     }
-    let Some(selected) = targets::Selected::load(ctx, targets).await? else {
+    let Some(selected) = Selected::load(ctx, targets, Taking::Resumes).await? else {
         return Ok(0);
     };
-    let (spaces, chosen) = match selected.spaces {
-        Some(spaces) => (spaces, Chosen::Named),
-        None => (targets::resumable_in_reach(ctx).await?, Chosen::All),
+    let (spaces, chosen, skipped) = match selected {
+        Selected::All => (
+            Taking::Resumes.in_reach(ctx).await?,
+            Chosen::All,
+            Vec::new(),
+        ),
+        Selected::Named(spaces) => (spaces, Chosen::Named, Vec::new()),
+        Selected::OnMachines { spaces, skipped } => (spaces, Chosen::All, skipped),
     };
     let resuming = Resuming {
         spaces,
         chosen,
+        skipped,
         reopened: Vec::new(),
     };
     resume(ctx, resuming, options).await
@@ -60,12 +68,13 @@ pub(in crate::cli::commands) async fn reopened(
 ) -> Result<i32> {
     let mut spaces = Vec::new();
     for opened in reopened.iter_mut().filter(|opened| opened.agents_saved) {
-        spaces.push(SpaceSelector::id(&opened.space.id));
+        spaces.push(Target::here(&opened.space));
         opened.agents_saved = false;
     }
     let resuming = Resuming {
         spaces,
         chosen: Chosen::Reopened,
+        skipped: Vec::new(),
         reopened,
     };
     resume(ctx, resuming, options).await
@@ -73,8 +82,10 @@ pub(in crate::cli::commands) async fn reopened(
 
 /// The spaces a resume acts on, and what it reports with them.
 struct Resuming {
-    spaces: Vec<SpaceSelector>,
+    spaces: Vec<Target>,
     chosen: Chosen,
+    /// The spaces it leaves, as those of an offline machine.
+    skipped: Vec<Skipped>,
     /// The removed spaces `shoal restore` opened again for it.
     reopened: Vec<Reopened>,
 }
@@ -85,7 +96,7 @@ enum Chosen {
     /// The command line named them, or the user picked them, so one with
     /// nothing to resume fails.
     Named,
-    /// `--all`, every space with something to resume.
+    /// `--all` or `--machine`, every space with something to resume.
     All,
     /// `shoal restore` opened them again with the agents their removal
     /// saved.
@@ -106,16 +117,36 @@ async fn resume(ctx: &Context, resuming: Resuming, options: Options) -> Result<i
 }
 
 /// Refuse `options` for the spaces `resuming` lists before any resumes:
-/// `--execution` beyond one space, and a change to the permissions given
-/// that this process does not hold for one of them.
+/// `--execution` beyond one space, `--execution` and `--focus` for a space
+/// of another machine, which only this machine's daemon and terminal serve,
+/// and a change to the permissions given that this process does not hold
+/// for one of this machine's; another machine checks its own.
 async fn ensure_resumable(ctx: &Context, resuming: &Resuming, options: &Options) -> Result<()> {
     ensure!(
         options.execution.is_none() || resuming.spaces.len() <= 1,
         "--execution selects a stopped execution of one space"
     );
+    let elsewhere = resuming.spaces.iter().find(|space| space.machine.is_some());
+    if let Some(space) = elsewhere {
+        let refused = match (options.focus, &options.execution) {
+            (true, _) => Some("--focus resumes an agent in this terminal"),
+            (false, Some(_)) => Some("--execution names an execution of this machine"),
+            (false, None) => None,
+        };
+        if let Some(refused) = refused {
+            bail!(
+                "{refused}, and {} runs on another machine; leave it out",
+                space.shown()
+            );
+        }
+    }
     if let Some(change) = &options.change {
         let all = resuming.chosen == Chosen::All;
-        permission_change::check(ctx, &resuming.spaces, change, all).await?;
+        let here: Vec<_> = (resuming.spaces.iter())
+            .filter(|space| space.machine.is_none())
+            .map(|space| space.selector.clone())
+            .collect();
+        permission_change::check(ctx, &here, change, all).await?;
     }
     Ok(())
 }

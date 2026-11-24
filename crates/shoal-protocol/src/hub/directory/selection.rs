@@ -15,12 +15,15 @@ pub enum Offered {
     RunningChats,
     /// Their workspaces and chats.
     Spaces,
+    /// Their spaces with something `shoal resume` brings back.
+    Resumable,
 }
 
 impl Offered {
     /// Whether a picker of these offers `space`.
     pub fn offers(self, space: &SpaceSummary) -> bool {
         match (self, space.kind) {
+            (Self::Resumable, _) => space.resumable.is_some(),
             (_, SpaceKind::Workspace) | (Self::Spaces, SpaceKind::Chat) => true,
             (Self::RunningChats, SpaceKind::Chat) => space.agent_runs_or_sleeps(),
             (Self::Workspaces, SpaceKind::Chat) => false,

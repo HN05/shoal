@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use anyhow::Result;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
-use super::target::{Target, on_machine};
+use super::target::Target;
+use crate::cli::commands::space_selection::on_machine;
 use crate::client::output::agents::{PendingAgent, Restarted, RestartedAgent, Skipped};
 use crate::{
     cli::{

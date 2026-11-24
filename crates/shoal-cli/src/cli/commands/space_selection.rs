@@ -34,14 +34,17 @@ pub(super) async fn located(
     below: bool,
     acting: &Acting,
 ) -> Result<Vec<Located>> {
-    let SpaceTargets {
-        space, machines, ..
-    } = targets;
-    let selected = match machines.is_empty() {
-        true => ui::select_spaces(ctx, space, false, acting).await?,
-        false => Vec::new(),
-    };
-    crate::client::spaces::select(&ctx.paths, selected, machines, below).await
+    if !targets.machines.is_empty() {
+        return on_machines(ctx, targets.machines).await;
+    }
+    let selected = ui::select_spaces(ctx, targets.space, false, acting).await?;
+    crate::client::spaces::select(&ctx.paths, selected, Vec::new(), below).await
+}
+
+/// Every space of the joined machines `machines` names that the caller's
+/// scope reaches, this machine's but the caller's own.
+pub(super) async fn on_machines(ctx: &Context, machines: Vec<String>) -> Result<Vec<Located>> {
+    crate::client::spaces::select(&ctx.paths, Vec::new(), machines, false).await
 }
 
 impl Chosen {
@@ -56,5 +59,14 @@ impl Chosen {
             }
         }
         chosen
+    }
+}
+
+/// The space `name`, with the other machine `machine` it runs on, as
+/// reports show it.
+pub(super) fn on_machine(name: &str, machine: Option<&str>) -> String {
+    match machine {
+        Some(machine) => format!("{name} on {machine}"),
+        None => name.to_owned(),
     }
 }

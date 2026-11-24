@@ -3,7 +3,8 @@
 //! another joined machine.
 use anyhow::Result;
 
-use super::{selection, target::on_machine};
+use super::selection;
+use crate::cli::commands::space_selection::on_machine;
 use crate::cli::{args::SpaceTargets, context::Context, ui::Acting};
 use crate::client::output::{
     agents::{CancelledRestarts, RestartSpace},

@@ -3,7 +3,11 @@ use serde::{Deserialize, Serialize};
 use shoal_protocol::space_names::SpaceName;
 
 use super::restore::Reopened;
-use crate::output::{agents::Agent, batch::Failure, outputs};
+use crate::output::{
+    agents::{Agent, Skipped},
+    batch::Failure,
+    outputs,
+};
 use shoal_protocol::{
     model::{QueueEntry, Space},
     saved::SavedSummary,
@@ -15,6 +19,9 @@ pub struct StoppedCommands {
     pub workspace: SpaceName,
     /// Each command's arguments.
     pub commands: Vec<Vec<String>>,
+    /// The other joined machine its space runs on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
 }
 
 /// The restores a resume queued, the commands it reported, the spaces
@@ -30,7 +37,23 @@ pub struct Queued {
     /// The agents whose interrupted turns it continued.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub continued: Vec<Agent>,
+    /// The restores and launches it queued or started in the spaces of
+    /// other joined machines, each in its machine's queue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elsewhere: Vec<QueuedElsewhere>,
+    /// The spaces it left, as those of an offline machine.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<Skipped>,
     pub failed: Vec<Failure>,
+}
+
+/// The restores and launches a resume queued or started in a space of
+/// another joined machine, which that machine's queue lists.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueuedElsewhere {
+    pub space: SpaceName,
+    pub machine: String,
+    pub queued: Vec<QueueEntry>,
 }
 
 /// A space whose agent can resume, and what of it resumes.
