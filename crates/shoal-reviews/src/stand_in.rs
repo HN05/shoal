@@ -5,8 +5,11 @@
 //! protection stopped, which waits until a test says load recovered. The
 //! approval requests the gate decides are kept in memory and change as the
 //! daemon's records do; approving one records it as approved.
+use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_daemon_base::operations::Operations;
+use shoal_protocol::hub::Member;
+use shoal_protocol::protocol::{Body, Operation};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -44,8 +47,8 @@ use crate::{
     Reviews,
     config::{Config, Effective, repo::ConfigLayers},
     daemon::{
-        Admission, Agents, Approvals, AwaitedPost, FindingCode, FindingThread, Forge, Records,
-        Repositories, Requesters, Requests, Settings, Spaces, Threads,
+        Admission, Agents, Approvals, AwaitedPost, FindingCode, FindingThread, Forge, Machines,
+        Records, Repositories, Requesters, Requests, Settings, Spaces, Threads,
     },
     forge::{ForgeRepo, items::reference::ItemRef, items::review::NewReview},
     git,
@@ -719,6 +722,22 @@ pub(crate) fn finding(item: u32, path: &str, severity: Severity, body: &str) -> 
         code: &code,
     };
     finding_thread(item, "fix-login", &finding)
+}
+
+/// A machine in no hub.
+impl Machines for StandIn {
+    fn machines_seen<'a>(&'a self, _: Option<&'a Caller>) -> BoxFuture<'a, Result<Vec<Member>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn ask_machine<'a>(
+        &'a self,
+        machine: &'a Member,
+        _: Operation,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Body>> {
+        Box::pin(async move { anyhow::bail!("no machine {} in a hub", machine.name) })
+    }
 }
 
 /// The reviewer's answers go into the stand-in's records.

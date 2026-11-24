@@ -2,6 +2,10 @@
 //! them: the workspaces they review, their repositories and settings, the
 //! agent queue's admission of their runs, the agents and coordinators that
 //! hear of them and the forge a PR's review is posted on.
+use shoal_daemon_base::callers::Caller;
+use shoal_protocol::hub::Member;
+use shoal_protocol::protocol::{Body, Operation};
+use shoal_reviews::daemon::Machines;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -173,6 +177,24 @@ impl Agents for Manager {
                 .tell_coordinator(self, alert, false, Source::Daemon)
                 .await;
         })
+    }
+}
+
+impl Machines for Manager {
+    fn machines_seen<'a>(
+        &'a self,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Vec<Member>>> {
+        Box::pin(self.hub.machines_seen(self, caller))
+    }
+
+    fn ask_machine<'a>(
+        &'a self,
+        machine: &'a Member,
+        operation: Operation,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Body>> {
+        Box::pin(self.hub.ask_machine(self, machine, operation, caller))
     }
 }
 

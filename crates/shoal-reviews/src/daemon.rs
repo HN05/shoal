@@ -4,6 +4,9 @@
 //! coordinators that hear of them, the forge a PR's review is posted on,
 //! and for the gate the spaces whose requests it decides and the approvals
 //! that carry out its verdicts.
+use shoal_daemon_base::callers::Caller;
+use shoal_protocol::hub::Member;
+use shoal_protocol::protocol::{Body, Operation};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -188,11 +191,30 @@ pub trait Forge: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
+/// The other machines of the hub, which keep the reviews of the spaces
+/// they run.
+pub trait Machines: Send + Sync {
+    /// The other machines that run a space `caller` sees; none outside a
+    /// hub.
+    fn machines_seen<'a>(
+        &'a self,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Vec<Member>>>;
+
+    /// What `machine` answers `operation`, sent for `caller`.
+    fn ask_machine<'a>(
+        &'a self,
+        machine: &'a Member,
+        operation: Operation,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Body>>;
+}
+
 /// Everything reviews need of the daemon, which each of their operations
 /// that reaches beyond them takes.
-pub trait Daemon: Spaces + Repositories + Settings + Agents + Forge + Threads {}
+pub trait Daemon: Spaces + Repositories + Settings + Agents + Forge + Threads + Machines {}
 
-impl<T: Spaces + Repositories + Settings + Agents + Forge + Threads> Daemon for T {}
+impl<T: Spaces + Repositories + Settings + Agents + Forge + Threads + Machines> Daemon for T {}
 
 /// The spaces whose approval requests the gate decides.
 pub trait Requesters: Send + Sync {

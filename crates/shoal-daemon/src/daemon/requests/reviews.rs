@@ -11,13 +11,11 @@ use super::super::{
     target_checks::{Checked, TargetCheck},
 };
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
-use pending::Pending;
 use shoal_protocol::reviews::Review;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_reviews::written::Pending;
 use shoal_reviews::written::Writer;
-
-pub(in crate::daemon) mod pending;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -28,7 +26,7 @@ pub(super) async fn handle(
     let (reviews, daemon) = (&manager.reviews, &**manager);
     let viewer = Writer::of(caller.map(|caller| &caller.space_id));
     let forwarded = super::forwarded::from_elsewhere(manager, scope);
-    let pending = Pending::new(manager, caller, forwarded);
+    let pending = Pending::new(&manager.reviews, &**manager, caller, forwarded);
     let shown = match method {
         ReviewMethod::AwaitReview { workspace, id } => {
             let (manager, reviews) = (manager.clone(), manager.reviews.clone());
