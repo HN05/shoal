@@ -4,6 +4,7 @@
 //! to it, must cover the head the merge names, with every finding resolved.
 use anyhow::{Context, Result};
 use shoal_daemon_base::callers::Caller;
+use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_forge::{RepoRequests, capability::CapabilityRequests};
 use shoal_forge_types::{
     PullRequest,
@@ -14,7 +15,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::{model::Workspace, protocol::RepoTarget};
 use shoal_refs::CommitId;
 
-use crate::{Links, daemon::Daemon, forges, place::Access, target::ForgeTarget};
+use crate::{Links, daemon::Daemon, place::Access, target::ForgeTarget};
 
 impl Links {
     /// Hold a merge in `action` of the PR `input` names, or of `target`'s
@@ -59,7 +60,7 @@ impl Links {
     ) -> Result<Option<CommitId>> {
         let pull = self.target_item(daemon, target, input, ItemKind::Pr, Access::Read, caller);
         let (target, url) = pull.await?;
-        let repository = target_repository(daemon, &target).await?;
+        let repository = target_repository(daemon, &self.forges, &target).await?;
         let settings = daemon.settings_in(repository.as_ref()).await?;
         if !daemon.merge_review_required(&settings, caller) {
             return Ok(None);
@@ -86,6 +87,7 @@ impl Links {
 /// keeps a merge elsewhere from going ahead.
 async fn target_repository(
     daemon: &dyn Daemon,
+    forges: &ForgeAccess,
     target: &ForgeTarget,
 ) -> Result<Option<RepositoryId>> {
     if let Some(place) = target.own_place() {
@@ -93,7 +95,7 @@ async fn target_repository(
     }
     let forge = target.forge()?;
     for repository in daemon.repositories().await? {
-        if forges::origin(daemon, &repository.path).await.ok().as_ref() == Some(forge) {
+        if forges.origin_forge(&repository.path).await.ok().as_ref() == Some(forge) {
             return Ok(Some(repository.id));
         }
     }

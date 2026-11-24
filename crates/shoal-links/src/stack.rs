@@ -47,7 +47,7 @@ impl Links {
         self.verify_checked(daemon, base).await?;
         let mut merged = Vec::new();
         for url in urls {
-            match self.base_pr_commits(daemon, base, url).await {
+            match self.base_pr_commits(base, url).await {
                 Ok(Some(commits)) => merged.extend(commits),
                 Ok(None) => return Ok(None),
                 Err(error) => {
@@ -68,7 +68,7 @@ impl Links {
                 "the merged PRs do not contain the base workspace's HEAD"
             )));
         }
-        let pulls = self.base_pulls(daemon, base, urls).await?;
+        let pulls = self.base_pulls(base, urls).await?;
         let Some(target) = merged_into(&pulls) else {
             return Ok(None);
         };
@@ -95,7 +95,7 @@ impl Links {
             onto: Onto::Remote,
             new_base: base.base_workspace.as_ref().map(|base| base.id.clone()),
             cause: EventCause::Pr,
-            account: &self.user_account(),
+            account: &self.forges.user_account(),
         };
         for stacked in stacked {
             self.restack(daemon, &stacked, &restack).await?;
@@ -105,31 +105,25 @@ impl Links {
 
     async fn base_pr_commits(
         &self,
-        daemon: &dyn Daemon,
         base: &Workspace,
         url: &ItemRef,
     ) -> Result<Option<Vec<CommitId>>> {
-        let (forge, pull) = self
-            .pr_forge(daemon, &base.path, &url.clone().into())
-            .await?;
+        let (forge, pull) = self.pr_forge(&base.path, &url.clone().into()).await?;
         forge
-            .merged_commits(&self.user_account(), pull.pull()?)
+            .merged_commits(&self.forges.user_account(), pull.pull()?)
             .await
     }
 
     /// The watched PRs `urls` of `base`, in order.
-    async fn base_pulls(
-        &self,
-        daemon: &dyn Daemon,
-        base: &Workspace,
-        urls: &[ItemRef],
-    ) -> Result<Vec<PullRequest>> {
+    async fn base_pulls(&self, base: &Workspace, urls: &[ItemRef]) -> Result<Vec<PullRequest>> {
         let mut pulls = Vec::new();
         for url in urls {
-            let (forge, pull) = self
-                .pr_forge(daemon, &base.path, &url.clone().into())
-                .await?;
-            pulls.push(forge.pull_request(&self.user_account(), &pull).await?);
+            let (forge, pull) = self.pr_forge(&base.path, &url.clone().into()).await?;
+            pulls.push(
+                forge
+                    .pull_request(&self.forges.user_account(), &pull)
+                    .await?,
+            );
         }
         Ok(pulls)
     }
@@ -223,9 +217,7 @@ impl Links {
             merged_heads,
         } = pr;
         let lookup = async {
-            let (forge, pull) = self
-                .pr_forge(daemon, &workspace.path, &url.clone().into())
-                .await?;
+            let (forge, pull) = self.pr_forge(&workspace.path, &url.clone().into()).await?;
             let number = pull.pull()?;
             let current = forge.pull_request(account, &pull).await?.base;
             Ok::<_, anyhow::Error>(

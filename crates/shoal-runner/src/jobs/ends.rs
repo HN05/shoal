@@ -64,7 +64,7 @@ impl Runner {
     /// of a removal that fails, which the next pass tries again.
     async fn finish_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<()> {
         self.record_job_usage(job).await?;
-        if let Err(error) = self.delete_job_runner(daemon, job).await {
+        if let Err(error) = self.delete_job_runner(job).await {
             log!("runner: {error:#}");
         }
         if let Err(error) = daemon.remove_job_workspace(&job.workspace_id).await {

@@ -35,7 +35,7 @@ async fn waiting_jobs_are_read_every_interval_while_none_could_start() {
     let fixture = Fixture::new("[runner]\nenabled = true\n").await;
     let server = Server::start(|_| (404, Vec::new(), b"{}".to_vec()));
     let url = format!("http://{}/team/repo", server.host);
-    *fixture.daemon.forge.lock().unwrap() = Some((url.clone(), ForgeKind::Forgejo));
+    fixture.place_on_forge(&url, ForgeKind::Forgejo);
     fixture.configure(&format!(
         "[machine.forges.\"{}\"]\ntype = \"forgejo\"\nuser_token = \"user\"\n",
         server.host

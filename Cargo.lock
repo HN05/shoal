@@ -2654,6 +2654,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shoal-core",
+ "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",

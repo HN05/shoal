@@ -34,9 +34,7 @@ impl Runner {
         let Some(job) = self.workspace_claim(&space).await? else {
             return Ok(None);
         };
-        Ok(Some(
-            self.cancel_for_stop(daemon, &job, cause).await?.to_string(),
-        ))
+        Ok(Some(self.cancel_for_stop(&job, cause).await?.to_string()))
     }
 
     /// Cancel on the forge the run of a job still running in the workspace
@@ -61,7 +59,7 @@ impl Runner {
         if !running.unwrap_or(true) {
             return true;
         }
-        if let Err(error) = self.cancel_for_stop(daemon, &job, cause).await {
+        if let Err(error) = self.cancel_for_stop(&job, cause).await {
             self.notify_cancel_failed(&job, &error).await;
         }
         true
@@ -73,7 +71,6 @@ impl Runner {
     /// such as a step's command, cancels nothing.
     pub async fn cancel_job_for_signal(
         &self,
-        daemon: &dyn Daemon,
         caller: Option<&Caller>,
         signal: SessionSignal,
     ) -> Result<()> {
@@ -88,7 +85,7 @@ impl Runner {
         if !runner {
             return Ok(());
         }
-        let cancelled = (self.cancel_job_to_rerun(daemon, &job, JobStop::Signal(signal))).await;
+        let cancelled = (self.cancel_job_to_rerun(&job, JobStop::Signal(signal))).await;
         if let Err(error) = cancelled {
             self.notify_cancel_failed(&job, &error).await;
             return Err(error);
@@ -138,13 +135,8 @@ impl Runner {
     /// Cancel `job`'s run as `cause` stops its runner, recording in Shoal's
     /// log what stopped it and whether the run was cancelled, returning the
     /// cancelled run's URL.
-    async fn cancel_for_stop(
-        &self,
-        daemon: &dyn Daemon,
-        job: &ClaimedJob,
-        cause: JobStop,
-    ) -> Result<ItemRef> {
-        let cancelled = self.cancel_job_run(daemon, job).await;
+    async fn cancel_for_stop(&self, job: &ClaimedJob, cause: JobStop) -> Result<ItemRef> {
+        let cancelled = self.cancel_job_run(job).await;
         let outcome = match &cancelled {
             Ok(_) => "cancelled its run".to_owned(),
             Err(error) => format!("could not cancel its run: {error:#}"),
@@ -156,9 +148,9 @@ impl Runner {
     /// Cancel `job`'s run on the forge its URL names, or the run its
     /// runner reported taking a job of, also once its runner is gone,
     /// returning the cancelled run's URL.
-    pub async fn cancel_job_run(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<ItemRef> {
-        let forge = daemon.item_forge(&job.job.run.url).await?;
-        let account = daemon.user_account();
+    pub async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<ItemRef> {
+        let forge = self.forges.item_forge(&job.job.run.url).await?;
+        let account = self.forges.user_account();
         let url = self.reported_run_url(&forge, job);
         let run = forge.find_run(&account, &url, CiAction::Cancel).await?;
         forge

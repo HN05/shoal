@@ -16,9 +16,7 @@ use shoal_daemon_base::{
     notifications::{Coordinators, Source},
     permitted_actions::Action,
 };
-use shoal_forge::ci::workflow::WorkflowLink;
 use shoal_forge_types::{
-    ForgeRepo,
     items::{
         link::{ItemKind, Selection},
         reference::ItemRef,
@@ -43,8 +41,8 @@ use tokio::sync::watch;
 
 use crate::{
     daemon::{
-        Approvals, Elsewhere, Forges, Messages, Permissions, ProposalKind, Records, Reviews,
-        SpaceAgent, Spaces, Watches,
+        Approvals, Elsewhere, Messages, Permissions, ProposalKind, Records, Reviews, SpaceAgent,
+        Spaces, Watches,
     },
     space::LinkSpace,
 };
@@ -366,32 +364,6 @@ impl Reviews for StandIn {
 impl Coordinators for StandIn {
     fn tell<'a>(&'a self, _: NewAlert, _: bool, _: Source) -> BoxFuture<'a, Option<Sent>> {
         Box::pin(async { None })
-    }
-}
-
-impl Forges for StandIn {
-    // A test's forge is on a host whose kind it learned.
-    fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async move { ForgeRepo::parse(url) })
-    }
-
-    fn resolve_named<'a>(
-        &'a self,
-        _: &'a ForgeRepo,
-        _: &'a str,
-    ) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async { bail!(NOT_HERE) })
-    }
-
-    fn resolve_workflow<'a>(
-        &'a self,
-        _: &'a str,
-    ) -> BoxFuture<'a, Result<(ForgeRepo, WorkflowLink)>> {
-        Box::pin(async { bail!(NOT_HERE) })
-    }
-
-    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async move { Ok(item.repository().clone()) })
     }
 }
 

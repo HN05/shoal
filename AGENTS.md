@@ -159,7 +159,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   daemon uses. What it needs of a subsystem is an interface it declares, a trait whose methods
   return a `Send` `BoxFuture`, which the daemon implements; its code is no
   method of `Manager`. It depends on no Shoal crate but `shoal-core`,
-  `shoal-forge-types`, `shoal-ids`, `shoal-protocol` and `shoal-store`.
+  `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol` and
+  `shoal-store`.
 - A subsystem moved out of the daemon is a crate of its own, such as
   `crates/shoal-leases` for ports, resource permits, simulators, containers
   and secrets, `crates/shoal-reviews` for local reviews, the gate agent

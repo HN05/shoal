@@ -3,7 +3,6 @@
 mod actions;
 mod approvals;
 mod elsewhere;
-mod forges;
 pub mod issue;
 mod listing;
 mod merge_path;

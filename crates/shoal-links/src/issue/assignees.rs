@@ -19,7 +19,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::model::{Assigner, IssueAssignee};
 
-use crate::{Links, daemon::Daemon, wait::changes::record_shoal_change};
+use crate::{Links, wait::changes::record_shoal_change};
 
 /// Who a caller assigns an issue to a space as.
 pub trait AssignerOf {
@@ -51,12 +51,11 @@ impl Links {
     /// not assigned.
     pub async fn assign_on_forge(
         &self,
-        daemon: &dyn Daemon,
         id: &SpaceId,
         forge: &ForgeRepo,
         url: &ItemRef,
     ) -> Vec<String> {
-        match (self.assign_recorded(daemon, id, forge, url)).await {
+        match (self.assign_recorded(id, forge, url)).await {
             Ok(Some(assignment)) if !assignment.others.is_empty() => {
                 vec![also_assigned(url, &assignment.others)]
             }
@@ -71,13 +70,12 @@ impl Links {
     /// again.
     async fn assign_recorded(
         &self,
-        daemon: &dyn Daemon,
         id: &SpaceId,
         forge: &ForgeRepo,
         url: &ItemRef,
     ) -> Result<Option<Assignment>> {
         let gate = self.gates.lock_issue_assignees(url.url()).await;
-        let assigned = forge.assign_own(&self.user_account(), url).await?;
+        let assigned = forge.assign_own(&self.forges.user_account(), url).await?;
         let Some(assignment) = assigned else {
             return Ok(None);
         };
@@ -89,7 +87,7 @@ impl Links {
             .await?;
         if let Some(dropped) = dropped {
             drop(gate);
-            for warning in self.release_assignees(daemon, vec![dropped]).await {
+            for warning in self.release_assignees(vec![dropped]).await {
                 let alert = NewAlert::shoal(AlertKind::UnassignFailed, About::default(), warning);
                 self.notifications.notify_user(alert).await;
             }
@@ -115,14 +113,10 @@ impl Links {
     /// Take the user's logins `dropped` names off their issues where Shoal
     /// added them and no space links the issue for the same login any
     /// longer. Returns why each one that stays did.
-    pub async fn release_assignees(
-        &self,
-        daemon: &dyn Daemon,
-        dropped: Vec<Dropped>,
-    ) -> Vec<String> {
+    pub async fn release_assignees(&self, dropped: Vec<Dropped>) -> Vec<String> {
         let mut warnings = Vec::new();
         for dropped in dropped {
-            if let Err(error) = self.release_assignee(daemon, &dropped).await {
+            if let Err(error) = self.release_assignee(&dropped).await {
                 let Dropped { url, login } = dropped;
                 warnings.push(format!(
                     "{url} keeps its assignee {login}, since unassigning it on the forge failed: {error:#}; \
@@ -136,11 +130,7 @@ impl Links {
     /// [`Self::release_assignees`] for one login. Shoal forgets its
     /// assignment before asking the forge, so a failure leaves the assignee
     /// to the people who see it.
-    async fn release_assignee(
-        &self,
-        daemon: &dyn Daemon,
-        Dropped { url, login }: &Dropped,
-    ) -> Result<()> {
+    async fn release_assignee(&self, Dropped { url, login }: &Dropped) -> Result<()> {
         let _gate = self.gates.lock_issue_assignees(url).await;
         let (issue, assignee) = (url.clone(), login.clone());
         let taken = (self.store)
@@ -150,8 +140,10 @@ impl Links {
             return Ok(());
         }
         let url: ItemRef = url.parse()?;
-        let forge = daemon.item_forge(&url).await?;
-        let removal = forge.unassign(&self.user_account(), &url, login).await?;
+        let forge = self.forges.item_forge(&url).await?;
+        let removal = forge
+            .unassign(&self.forges.user_account(), &url, login)
+            .await?;
         self.record_assignee_change(&url, removal.edited).await;
         Ok(())
     }

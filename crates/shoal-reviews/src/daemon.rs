@@ -179,10 +179,6 @@ pub trait Forge: Send + Sync {
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<(ForgeRepo, Account)>>;
 
-    /// The forge of the registered checkout's `origin`.
-    fn checkout_forge<'a>(&'a self, repository: &'a Repository)
-    -> BoxFuture<'a, Result<ForgeRepo>>;
-
     /// Post `review` on the PR `pull` as `workspace`'s agents, recording
     /// the change as the space's own.
     fn post<'a>(

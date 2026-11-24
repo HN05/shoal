@@ -7,6 +7,7 @@ use crate::{
     },
     model::Workspace,
 };
+use shoal_daemon_base::blockers::{Lookup, Lookups};
 use shoal_protocol::files::Attacher;
 use shoal_protocol::progress::Blocker;
 use shoal_protocol::{

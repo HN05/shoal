@@ -25,7 +25,7 @@ pub(super) async fn register(
 ) -> Result<()> {
     let registered = manager
         .repositories
-        .register_contribution(&*manager, source, name)
+        .register_contribution(source, name)
         .await;
     let held = registered.map(|(repo, hold)| (Body::Repository(repo), hold));
     keep(stream, request_id, held, guard).await

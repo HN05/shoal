@@ -79,7 +79,7 @@ impl Links {
         daemon: &dyn Daemon,
         space: &LinkSpace,
     ) -> Result<()> {
-        let followed = self.follow_merge_runs(daemon, space).await;
+        let followed = self.follow_merge_runs(space).await;
         let polled = self.poll_space_items(daemon, space).await;
         polled.and(followed)
     }
@@ -100,7 +100,7 @@ impl Links {
         let report = branch_report(&items);
         let mut items = self.items_to_look_up(space, items).await?;
         items.extend(opened.into_iter().map(Lookup::from));
-        let activity = (self.item_activity(daemon, items, &Selection::default())).await;
+        let activity = (self.item_activity(items, &Selection::default())).await;
         let mut observations = Vec::new();
         observations.extend(
             self.background_branch_observation(daemon, space, report)

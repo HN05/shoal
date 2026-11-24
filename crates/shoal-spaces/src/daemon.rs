@@ -122,12 +122,6 @@ pub trait Operations: Send + Sync {
 /// The forges of the spaces' repositories, and the issues, PRs and CI runs
 /// spaces link on them.
 pub trait Links: Send + Sync {
-    /// The repository `remote` names, on the forge its host serves.
-    fn forge<'a>(&'a self, remote: &'a str) -> BoxFuture<'a, Result<ForgeRepo>>;
-
-    /// The forge the repository of `item` is on.
-    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>>;
-
     /// The workspace's HEAD: its branch's commit, checking it is still on
     /// the branch, or for a workspace at a commit its detached HEAD,
     /// checking it is still detached.
@@ -160,10 +154,6 @@ pub trait Links: Send + Sync {
     /// The forge of the repository `space` acts in.
     fn space_forge<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<ForgeRepo>>;
 
-    /// The forge of the registered checkout's `origin`.
-    fn checkout_forge<'a>(&'a self, repository: &'a Repository)
-    -> BoxFuture<'a, Result<ForgeRepo>>;
-
     /// The state of the PRs `pr_cleanup` watches and of the assigned
     /// `issues`, looked up on the forge of `remote`, the space's origin
     /// remote.
@@ -176,13 +166,6 @@ pub trait Links: Send + Sync {
 
     /// The settings of `space` in the repository it acts in.
     fn acting_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>>;
-
-    /// The agent account: the hosts' agent tokens, and the user's own
-    /// logins for hosts without one.
-    fn agent_account(&self) -> Account;
-
-    /// The user's own logins, which reads and the user's decisions use.
-    fn user_account(&self) -> Account;
 
     /// Settle the agent account on the issues of the space `id` once it
     /// can be.

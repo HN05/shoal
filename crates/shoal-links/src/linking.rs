@@ -111,7 +111,7 @@ impl Links {
             let context = self.link_space(daemon, selector).await?.item_context();
             let forge = self.context_forge(daemon, &context).await?;
             let item = ItemRef::in_repository(&forge, kind.into(), input)?;
-            let account = self.read_account(caller);
+            let account = self.forges.read_account(caller);
             let current = forge.read(&account, kind, item.number().get()).await?;
             anyhow::Ok(current.item.title)
         };
@@ -177,7 +177,7 @@ impl Links {
     ) -> Result<()> {
         let space = self.link_space(daemon, selector).await?;
         daemon.verify_space(&space).await?;
-        let url = self.space_item(daemon, &space, kind, input).await?;
+        let url = self.space_item(&space, kind, input).await?;
         let item = LinkedItem { url, title };
         self.record_items(&space.id, vec![(relation, item)]).await
     }
@@ -195,7 +195,7 @@ impl Links {
         let space = self.link_space(daemon, selector).await?;
         daemon.verify_space(&space).await?;
         let url = match (kind, input) {
-            (Some(kind), Some(input)) => Some(self.space_item(daemon, &space, kind, input).await?),
+            (Some(kind), Some(input)) => Some(self.space_item(&space, kind, input).await?),
             _ => None,
         };
         let removed = self
@@ -307,21 +307,19 @@ impl Links {
     /// that `input` names.
     async fn space_item(
         &self,
-        daemon: &dyn Daemon,
         space: &LinkSpace,
         kind: LinkKind,
         input: &ItemInput,
     ) -> Result<ItemRef> {
         let forge = match kind {
             // A run's URL may name another repository.
-            LinkKind::Ci => match forges::of_input(daemon, input).await? {
+            LinkKind::Ci => match forges::of_input(&self.forges, input).await? {
                 Some(forge) => forge,
-                None => forges::of_space(daemon, space).await?,
+                None => forges::of_space(&self.forges, space).await?,
             },
             LinkKind::Issue | LinkKind::Pr => {
                 let missing = "item lookup needs an origin remote";
-                self.guarded_forge(daemon, space.origin_path(), missing)
-                    .await?
+                self.guarded_forge(space.origin_path(), missing).await?
             }
         };
         ItemRef::in_repository(&forge, kind, input)

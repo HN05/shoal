@@ -16,8 +16,6 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_core::shoal_dirs::ShoalDir;
 use shoal_daemon_base::notifications::Coordinators;
-use shoal_forge::transport::account::Account;
-use shoal_forge_types::ForgeRepo;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{Repository, RepositoryRemoval, Space, SyncedRepository, Workspace},
@@ -172,23 +170,11 @@ pub trait Host: Send + Sync {
     fn clear_of_overload(&self, paths: &[&Path]) -> bool;
 }
 
-/// The forges registrations reach.
-pub trait Forges: Send + Sync {
-    /// The repository `remote` names, on the forge its host serves.
-    fn forge<'a>(&'a self, remote: &'a str) -> BoxFuture<'a, Result<ForgeRepo>>;
-
-    /// The user's own logins, which a contribution forks with.
-    fn user_account(&self) -> Account;
-}
-
 /// Everything the repositories need of the daemon.
-pub trait Daemon:
-    Spaces + Followers + Occupants + Agents + Branches + Host + Forges + Coordinators
-{
-}
+pub trait Daemon: Spaces + Followers + Occupants + Agents + Branches + Host + Coordinators {}
 
 impl<T> Daemon for T where
-    T: Spaces + Followers + Occupants + Agents + Branches + Host + Forges + Coordinators
+    T: Spaces + Followers + Occupants + Agents + Branches + Host + Coordinators
 {
 }
 

@@ -4,6 +4,7 @@ use crate::paths::StateFiles;
 
 use crate::{config::Config, daemon::store::Store, paths::Paths};
 use anyhow::Result;
+use shoal_daemon_base::forge_access::{self, ForgeAccess};
 use std::sync::Arc;
 
 pub struct Manager {
@@ -39,17 +40,24 @@ pub struct Manager {
     pub apps: shoal_apps::Apps,
     /// The demos executions run.
     pub demos: shoal_demos::Demos,
+    /// The accounts and forge hosts the daemon reaches the forges with.
+    pub forges: Arc<ForgeAccess>,
 }
 
 impl Manager {
     pub async fn open(paths: Paths) -> Result<Arc<Self>> {
         paths.prepare()?;
         let config = Config::load(&paths)?;
-        super::forge_hosts::learn_forge_pins(&Default::default(), &config.machine.forges);
+        forge_access::learn_forge_pins(&Default::default(), &config.machine.forges);
         let store = open_store(&paths).await?;
         let config_state = Arc::new(super::config_state::ConfigState::new(config));
         let notifications = Arc::new(super::notifications::Notifications::new(store.clone()));
         let gates = Arc::new(super::gates::Gates::default());
+        let forges = Arc::new(ForgeAccess::new(
+            store.clone(),
+            gates.clone(),
+            config_state.clone(),
+        ));
         let leases = shoal_leases::Leases::new(
             store.clone(),
             gates.clone(),
@@ -70,6 +78,7 @@ impl Manager {
             gates.clone(),
             config_state.clone(),
             notifications.clone(),
+            forges.clone(),
             Arc::new(super::runner::RunnerRecords),
             paths.clone(),
         ));
@@ -85,6 +94,7 @@ impl Manager {
             config_state.clone(),
             notifications.clone(),
             file_access.clone(),
+            forges.clone(),
             Arc::new(super::links::records::LinkRecords),
         ));
         let repositories = Arc::new(shoal_repositories::Repositories::new(
@@ -93,6 +103,7 @@ impl Manager {
             config_state.clone(),
             notifications.clone(),
             file_access.clone(),
+            forges.clone(),
             paths.clone(),
             Arc::new(super::repositories::RepositoryRecords(
                 space_records.clone(),
@@ -120,6 +131,7 @@ impl Manager {
         let reviews = Arc::new(shoal_reviews::Reviews::new(
             store.clone(),
             gates.clone(),
+            forges.clone(),
             Arc::new(super::reviews::ReviewRecords),
             Arc::new(super::gate::GatedRequests),
             paths.clone(),
@@ -144,6 +156,7 @@ impl Manager {
             signals.clone(),
             paths.clone(),
             file_access.clone(),
+            forges.clone(),
             space_removals,
             space_records,
         );
@@ -167,6 +180,7 @@ impl Manager {
             hub,
             apps,
             demos,
+            forges,
         }))
     }
 
@@ -198,7 +212,7 @@ impl Manager {
         if super::overload::protection_changed(&self.config(), &config) {
             self.agents.overload_recovery().reset();
         }
-        super::forge_hosts::learn_forge_pins(&self.config().machine.forges, &config.machine.forges);
+        forge_access::learn_forge_pins(&self.config().machine.forges, &config.machine.forges);
         self.config_state.publish(config);
         self.runner.wake_triggers();
     }

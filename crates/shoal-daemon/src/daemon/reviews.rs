@@ -210,14 +210,7 @@ impl Forge for Manager {
         &'a self,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<(ForgeRepo, Account)>> {
-        Box::pin(self.links.workspace_forge_account(self, workspace))
-    }
-
-    fn checkout_forge<'a>(
-        &'a self,
-        repository: &'a Repository,
-    ) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(shoal_links::forges::of_checkout(self, repository))
+        Box::pin(self.links.workspace_forge_account(workspace))
     }
 
     fn post<'a>(

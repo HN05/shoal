@@ -5,6 +5,7 @@
 //! its own. [`Repositories`] holds
 //! what they keep in memory and offers their operations; what they need of
 //! the rest of the daemon is the interface in [`daemon`].
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::sync::Arc;
 
 use shoal_core::{config, paths::Paths};
@@ -37,6 +38,7 @@ pub struct Repositories {
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
     file_access: Arc<FileAccess>,
+    forges: Arc<ForgeAccess>,
     paths: Paths,
     records: Arc<dyn daemon::Records>,
     contribution_holds: contributions::holds::ContributionHolds,
@@ -49,12 +51,17 @@ pub struct Repositories {
 }
 
 impl Repositories {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "what the repositories share with the daemon's other subsystems"
+    )]
     pub fn new(
         store: Store,
         gates: Arc<Gates>,
         config: Arc<ConfigState>,
         notifications: Arc<Notifications>,
         file_access: Arc<FileAccess>,
+        forges: Arc<ForgeAccess>,
         paths: Paths,
         records: Arc<dyn daemon::Records>,
     ) -> Self {
@@ -64,6 +71,7 @@ impl Repositories {
             config,
             notifications,
             file_access,
+            forges,
             paths,
             records,
             contribution_holds: Default::default(),

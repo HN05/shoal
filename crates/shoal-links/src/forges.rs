@@ -1,8 +1,5 @@
-//! The forge of the repository a checkout, a space or an item names, and
-//! the PR a checkout's origin names, read under the file-access stall
-//! guard.
-use std::path::Path;
-
+//! The forge of the repository a space, a name or an item names, and the
+//! PR a checkout's origin names, read under the file-access stall guard.
 use anyhow::{Context, Result};
 use shoal_core::repository::remote_url_from_path;
 use shoal_forge_types::{
@@ -12,46 +9,30 @@ use shoal_forge_types::{
         reference::{ItemInput, ItemRef},
     },
 };
-use shoal_protocol::model::Repository;
 
-use crate::{
-    Links,
-    daemon::{Daemon, Forges},
-    space::LinkSpace,
-};
+use shoal_daemon_base::forge_access::ForgeAccess;
 
-/// The forge of the `origin` of the checkout or worktree at `path`.
-pub async fn origin(daemon: &dyn Forges, path: &Path) -> Result<ForgeRepo> {
-    let remote = remote_url_from_path(path)
-        .await?
-        .context("forge actions need an origin remote")?;
-    daemon.resolve_forge(&remote).await
-}
+use crate::{Links, space::LinkSpace};
 
 /// The forge of the space's `origin`.
-pub async fn of_space(daemon: &dyn Forges, space: &LinkSpace) -> Result<ForgeRepo> {
-    origin(daemon, space.origin_path()).await
-}
-
-/// The forge of the registered checkout's `origin`.
-pub async fn of_checkout(daemon: &dyn Forges, repository: &Repository) -> Result<ForgeRepo> {
-    origin(daemon, &repository.path).await
+pub async fn of_space(forges: &ForgeAccess, space: &LinkSpace) -> Result<ForgeRepo> {
+    forges.origin_forge(space.origin_path()).await
 }
 
 /// The repository `named` names, as OWNER/NAME on the forge of `own` or
 /// as a repository URL on any forge, or `own` without one.
-pub async fn named(daemon: &dyn Forges, own: ForgeRepo, named: Option<&str>) -> Result<ForgeRepo> {
+pub async fn named(forges: &ForgeAccess, own: ForgeRepo, named: Option<&str>) -> Result<ForgeRepo> {
     match named {
-        Some(named) => daemon.resolve_named(&own, named).await,
+        Some(named) => forges.named_forge(&own, named).await,
         None => Ok(own),
     }
 }
 
 /// The repository the issue, PR or CI run URL `input` names, or none for a
 /// number.
-pub async fn of_input(daemon: &dyn Forges, input: &ItemInput) -> Result<Option<ForgeRepo>> {
+pub async fn of_input(forges: &ForgeAccess, input: &ItemInput) -> Result<Option<ForgeRepo>> {
     Ok(match input {
-        ItemInput::Url(item) => Some(daemon.item_forge(item).await?),
+        ItemInput::Url(item) => Some(forges.item_forge(item).await?),
         ItemInput::Number(_) => None,
     })
 }
@@ -61,12 +42,10 @@ impl Links {
     /// `input` names there.
     pub async fn pr_forge(
         &self,
-        daemon: &dyn Daemon,
         checkout: &std::path::Path,
         input: &ItemInput,
     ) -> Result<(ForgeRepo, ItemRef)> {
-        let forge =
-            (self.guarded_forge(daemon, checkout, "PR lookup needs an origin remote")).await?;
+        let forge = (self.guarded_forge(checkout, "PR lookup needs an origin remote")).await?;
         let pull = ItemRef::in_repository(&forge, LinkKind::Pr, input)?;
         Ok((forge, pull))
     }
@@ -76,7 +55,6 @@ impl Links {
     /// without one.
     pub async fn guarded_forge(
         &self,
-        daemon: &dyn Daemon,
         checkout: &std::path::Path,
         missing: &'static str,
     ) -> Result<ForgeRepo> {
@@ -89,6 +67,6 @@ impl Links {
             )
             .await?
             .context(missing)?;
-        daemon.resolve_forge(&remote).await
+        self.forges.forge(&remote).await
     }
 }

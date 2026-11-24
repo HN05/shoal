@@ -81,7 +81,7 @@ impl Links {
     ) -> Result<Vec<String>> {
         let space = self.link_space(daemon, selector).await?;
         daemon.verify_space(&space).await?;
-        let (forge, url) = self.issue_forge(daemon, space.origin_path(), input).await?;
+        let (forge, url) = self.issue_forge(space.origin_path(), input).await?;
         let fresh = self
             .persist_issue_assignment(&space.id, &url, title, assigner)
             .await?;
@@ -111,7 +111,7 @@ impl Links {
         };
         let mut warnings = Vec::new();
         if fresh && assign.user() {
-            warnings.extend(self.assign_on_forge(daemon, &space.id, forge, url).await);
+            warnings.extend(self.assign_on_forge(&space.id, forge, url).await);
         }
         if assign.agent() {
             // The user's assignment names the others already.
@@ -149,11 +149,7 @@ impl Links {
         let _guard = self.gates.lock_prs([&id]).await;
         let space = self.link_space(daemon, &SpaceSelector::id(&id)).await?;
         let selected = match input {
-            Some(input) => Some(
-                self.issue_forge(daemon, space.origin_path(), input)
-                    .await?
-                    .1,
-            ),
+            Some(input) => Some(self.issue_forge(space.origin_path(), input).await?.1),
             None => None,
         };
         let links = self.clone();
@@ -162,7 +158,7 @@ impl Links {
             .write(move |tx| links.unlink(tx, &id, selected.as_ref().map(ItemRef::url)))
             .await?;
         daemon.wake_cleanup();
-        let mut warnings = self.release_assignees(daemon, dropped).await;
+        let mut warnings = self.release_assignees(dropped).await;
         warnings.extend(self.settle_issue_agents(daemon, &space, &removed).await);
         Ok(warnings)
     }

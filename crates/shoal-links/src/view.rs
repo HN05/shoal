@@ -2,6 +2,7 @@
 //! reports them now, with the logs of failed checks.
 use anyhow::Result;
 use shoal_daemon_base::callers::Caller;
+use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_forge::{
     activity::view::ViewRequests, ci::checks::CheckRequests, transport::account::Account,
 };
@@ -29,7 +30,7 @@ impl Links {
         comments: bool,
         caller: Option<&Caller>,
     ) -> Result<Viewed> {
-        let account = self.read_account(caller);
+        let account = self.forges.read_account(caller);
         let target = (self.selection_target(daemon, target, selection, true, caller)).await?;
         let items = (self.view_selection(daemon, &target, selection, &account)).await?;
         // Nothing to read, so no forge is needed, as for a local repository.
@@ -40,12 +41,12 @@ impl Links {
             });
         }
         let forge = target.forge()?;
-        let mut views = read_views(daemon, forge, &account, &items, comments).await;
+        let mut views = read_views(&self.forges, forge, &account, &items, comments).await;
         // Logs are read as the agent account, whose token is the reading
         // one's for a scoped caller and the user's without one of its own.
         let own_token =
             caller.is_none() && (self.config.current().machine.forges).has_agent_token(&forge.host);
-        let agent = own_token.then(|| self.agent_account());
+        let agent = own_token.then(|| self.forges.agent_account());
         forge
             .read_failed_logs(agent.as_ref().unwrap_or(&account), &mut views)
             .await;
@@ -64,7 +65,7 @@ impl Links {
         account: &Account,
     ) -> Result<Vec<SelectedItem>> {
         let selection = match target.own_place().and_then(Place::space) {
-            Some(space) => (self.classify_number(daemon, space, selection, account)).await?,
+            Some(space) => (self.classify_number(space, selection, account)).await?,
             None => selection.clone(),
         };
         (self.target_selection(daemon, target, &selection, true, account)).await
@@ -75,7 +76,6 @@ impl Links {
     /// otherwise the kind the forge reports for it.
     async fn classify_number(
         &self,
-        daemon: &dyn Daemon,
         space: &LinkSpace,
         selection: &Selection,
         account: &Account,
@@ -83,7 +83,7 @@ impl Links {
         let (None, Some(ItemInput::Number(number))) = (selection.kind, &selection.input) else {
             return Ok(selection.clone());
         };
-        let kind = (self.space_number_kind(daemon, space, *number, account)).await?;
+        let kind = (self.space_number_kind(space, *number, account)).await?;
         Ok(Selection {
             kind: Some(kind),
             input: selection.input.clone(),
@@ -94,7 +94,7 @@ impl Links {
 /// Each issue and PR among `items` as the forge reports it now, in
 /// selection order; one that cannot be read records why.
 async fn read_views(
-    daemon: &dyn Daemon,
+    forges: &ForgeAccess,
     own: &ForgeRepo,
     account: &Account,
     items: &[SelectedItem],
@@ -103,7 +103,7 @@ async fn read_views(
     futures_util::future::join_all(items.iter().filter_map(|item| {
         let kind = item.kind().item()?;
         Some(async move {
-            match viewed_item_forge(daemon, own, &item.url).await {
+            match viewed_item_forge(forges, own, &item.url).await {
                 Ok(forge) => forge.view(account, kind, &item.url, comments).await,
                 Err(error) => ItemView {
                     url: item.url.clone(),
@@ -121,12 +121,12 @@ async fn read_views(
 /// The repository `item` is in: `own`, the one the view reads in, or the
 /// other one its URL names.
 async fn viewed_item_forge(
-    daemon: &dyn Daemon,
+    forges: &ForgeAccess,
     own: &ForgeRepo,
     item: &ItemRef,
 ) -> Result<ForgeRepo> {
     if item.repository() == own {
         return Ok(own.clone());
     }
-    daemon.item_forge(item).await
+    forges.item_forge(item).await
 }

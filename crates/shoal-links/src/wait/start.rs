@@ -57,7 +57,7 @@ impl Links {
         id: &SpaceId,
         items: Vec<ItemRef>,
     ) {
-        let read = self.read_for_start(daemon, items).await;
+        let read = self.read_for_start(items).await;
         if let Err(error) = self
             .record_watch_start(daemon, id, read, Start::Unread)
             .await
@@ -81,7 +81,7 @@ impl Links {
     ) -> Result<()> {
         let gated = async {
             let gate = self.gates.lock_prs([id]).await;
-            anyhow::Ok((gate, self.read_followed(daemon, id).await?))
+            anyhow::Ok((gate, self.read_followed(id).await?))
         };
         let (_gate, read) = tokio::select! {
             gated = gated => gated?,
@@ -93,19 +93,19 @@ impl Links {
 
     /// Read each item the space `id` follows, for its watch to start again
     /// from.
-    async fn read_followed(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<StartRead> {
+    async fn read_followed(&self, id: &SpaceId) -> Result<StartRead> {
         let owned = id.to_owned();
         let items = (self.store)
             .read(move |db| followed_items(db, &owned, None))
             .await?;
-        Ok(self.read_for_start(daemon, items).await)
+        Ok(self.read_for_start(items).await)
     }
 
     /// A read of `items` made now, leaving out those the forge does not read
     /// in full.
-    async fn read_for_start(&self, daemon: &dyn Daemon, items: Vec<ItemRef>) -> StartRead {
+    async fn read_for_start(&self, items: Vec<ItemRef>) -> StartRead {
         let start = self.poll_start();
-        let reads = self.complete_reads(daemon, items).await;
+        let reads = self.complete_reads(items).await;
         StartRead { start, reads }
     }
 

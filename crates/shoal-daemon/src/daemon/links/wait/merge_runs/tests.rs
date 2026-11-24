@@ -182,11 +182,7 @@ impl Following {
 
     async fn follow(&self) {
         let space = LinkSpace::from(self.workspace.clone());
-        self.manager
-            .links
-            .follow_merge_runs(&*self.manager, &space)
-            .await
-            .unwrap();
+        self.manager.links.follow_merge_runs(&space).await.unwrap();
     }
 
     async fn awaits(&self) -> bool {
@@ -606,11 +602,7 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
         })
         .await
         .unwrap();
-    manager
-        .links
-        .follow_merge_runs(&**manager, &space)
-        .await
-        .unwrap();
+    manager.links.follow_merge_runs(&space).await.unwrap();
     manager.spaces.sweep_completed(&**manager).await.unwrap();
     assert!(!present().await);
 }
@@ -783,7 +775,7 @@ async fn a_pushed_merge_whose_forge_cannot_be_found_ends_with_its_window() {
         following
             .manager
             .links
-            .follow_merge_runs(&*following.manager, &space)
+            .follow_merge_runs(&space)
             .await
             .is_err()
     );

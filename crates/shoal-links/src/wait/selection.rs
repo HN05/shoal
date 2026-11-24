@@ -24,7 +24,6 @@ impl Links {
     /// origin `checkout` has, or of a CI run of any.
     pub async fn explicit_item(
         &self,
-        daemon: &dyn Daemon,
         checkout: &std::path::Path,
         selection: &Selection,
     ) -> Result<Option<ItemRef>> {
@@ -34,11 +33,11 @@ impl Links {
         let remote = remote_url_from_path(checkout)
             .await?
             .context("item lookup needs an origin remote")?;
-        let forge = daemon.resolve_forge(&remote).await?;
+        let forge = self.forges.forge(&remote).await?;
         let kind = selection.kind.context("explicit items need a kind")?;
         // A run's URL may name another repository.
         let named = match kind {
-            LinkKind::Ci => forges::of_input(daemon, input).await?,
+            LinkKind::Ci => forges::of_input(&self.forges, input).await?,
             LinkKind::Issue | LinkKind::Pr => None,
         };
         let item = ItemRef::in_repository(&named.unwrap_or(forge), kind, input)?;
@@ -90,7 +89,7 @@ impl Links {
 
     /// The registered repository of `item`.
     async fn item_repository(&self, daemon: &dyn Daemon, item: &ItemRef) -> Result<RepositoryId> {
-        let repository = daemon.item_forge(item).await?.repository_url();
+        let repository = self.forges.item_forge(item).await?.repository_url();
         let registered = daemon.registered_named(Some(&repository)).await?;
         let registered = registered.with_context(|| {
             format!("{item} is in no registered repository; only those are read from a chat")
@@ -102,13 +101,10 @@ impl Links {
     /// selected kind, with every linked run.
     pub async fn selected_items(
         &self,
-        daemon: &dyn Daemon,
         space: &LinkSpace,
         selection: &Selection,
     ) -> Result<Vec<ItemRef>> {
-        let items = self
-            .selection_items(daemon, space, selection, shown_items)
-            .await?;
+        let items = self.selection_items(space, selection, shown_items).await?;
         ensure!(
             !items.is_empty() || selection.kind.is_none(),
             "{NO_LINKED_ITEMS}"
@@ -126,7 +122,7 @@ impl Links {
         selection: &Selection,
     ) -> Result<Vec<ItemRef>> {
         let items = self
-            .selection_items(daemon, space, selection, followed_items)
+            .selection_items(space, selection, followed_items)
             .await?;
         if items.is_empty() && selection.input.is_none() {
             self.ensure_links_kind(daemon, &space.id, selection.kind)
@@ -154,15 +150,11 @@ impl Links {
     /// selected kind that `linked` lists.
     pub async fn selection_items(
         &self,
-        daemon: &dyn Daemon,
         space: &LinkSpace,
         selection: &Selection,
         linked: LinkedItems,
     ) -> Result<Vec<ItemRef>> {
-        if let Some(item) = self
-            .explicit_item(daemon, space.origin_path(), selection)
-            .await?
-        {
+        if let Some(item) = self.explicit_item(space.origin_path(), selection).await? {
             return Ok(vec![item]);
         }
         let id = space.id.to_owned();

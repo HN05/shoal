@@ -2,19 +2,20 @@
 //! clearance of its kind.
 use std::collections::HashSet;
 
-use super::{Lookup, Lookups, Target};
+use shoal_forge::clearance::{Clearance, NewestRuns, clearance};
+
+use super::ForgeAccess;
 use crate::{
-    daemon::manager::Manager,
+    blockers::{Lookup, Lookups, Target},
     forge::items::{link::LinkKind, reference::ItemRef},
     state::BlockerKind,
 };
-use shoal_forge::clearance::{Clearance, NewestRuns, clearance};
 
-impl Manager {
+impl ForgeAccess {
     /// What the forge says of each of the forge blockers among `targets`.
-    pub(super) async fn look_up_blockers(&self, targets: HashSet<Target>) -> Lookups {
-        let account = self.links.user_account();
-        let hosts = self.forge_hosts();
+    pub async fn look_up_blockers(&self, targets: HashSet<Target>) -> Lookups {
+        let account = self.user_account();
+        let hosts = self.hosts();
         let mut newest = NewestRuns::default();
         let mut lookups = Lookups::new();
         for (kind, target) in targets {

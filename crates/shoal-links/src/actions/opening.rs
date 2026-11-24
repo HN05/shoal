@@ -68,7 +68,7 @@ impl Links {
         );
         let settings = daemon.workspace_settings(&workspace).await?;
         let required = &settings.pr.required_labels;
-        let (forge, account) = self.workspace_forge_account(daemon, &workspace).await?;
+        let (forge, account) = self.workspace_forge_account(&workspace).await?;
         let head_repository = head_repository(&workspace.path, &branch, &forge).await?;
         let existing = forge
             .open_pull_for(&account, &branch, head_repository.as_deref())
@@ -164,7 +164,7 @@ impl Links {
         if !daemon.pr_review_required(&settings, caller) {
             return Ok(());
         }
-        let (forge, account) = self.workspace_forge_account(daemon, &workspace).await?;
+        let (forge, account) = self.workspace_forge_account(&workspace).await?;
         let head_repository = head_repository(&workspace.path, &branch, &forge).await?;
         let existing = forge
             .open_pull_for(&account, &branch, head_repository.as_deref())

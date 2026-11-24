@@ -1,13 +1,14 @@
 //! The state on the forge of what a space's status lists: the PRs its PR
 //! cleanup watches and its assigned issues.
 use anyhow::Result;
+use shoal_daemon_base::forge_access::ForgeHosts;
 use shoal_forge::{RepoRequests, items::issue::IssueRequests, transport::account::Account};
 use shoal_protocol::links::{issue, pr::Registration};
 use shoal_protocol::status::IssueStatus;
 
 use super::pr::{self, watched};
 use crate::{
-    daemon::{forge_hosts::ForgeHosts, manager::Manager},
+    daemon::manager::Manager,
     forge::{ForgeRepo, activity::status::PrStatus, items::reference::ItemRef},
 };
 
@@ -21,8 +22,8 @@ impl Manager {
         pr_cleanup: Option<&Registration>,
         issues: &[issue::Registration],
     ) -> (Vec<PrStatus>, Vec<IssueStatus>) {
-        let account = self.links.user_account();
-        let hosts = self.forge_hosts();
+        let account = self.forges.user_account();
+        let hosts = self.forges.hosts();
         tokio::join!(
             watched(&hosts, &account, remote, pr_cleanup),
             issue_states(&hosts, &account, remote, issues)

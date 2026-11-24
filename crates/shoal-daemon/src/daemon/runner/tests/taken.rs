@@ -191,9 +191,9 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
     let (job, directory) = report(manager, 2).await;
     // A restart cut the follow short after it recorded run 2's job.
     let mut recorded = job.job.clone();
-    let forge = manager.item_forge(&job.job.run.url).await.unwrap();
+    let forge = manager.forges.item_forge(&job.job.run.url).await.unwrap();
     recorded.run = forge
-        .job_run(&manager.links.user_account(), RunId::new(2))
+        .job_run(&manager.forges.user_account(), RunId::new(2))
         .await
         .unwrap();
     let (id, recorded) = (job.id.clone(), serde_json::to_string(&recorded).unwrap());
@@ -252,11 +252,7 @@ async fn a_stop_holding_the_claim_from_before_the_follow_cancels_the_reported_ru
     // The follow records run 2 and answers while the stop holds the claim
     // it read before.
     manager.runner.follow_taken_jobs(&**manager).await.unwrap();
-    let cancelled = manager
-        .runner
-        .cancel_job_run(&**manager, &stale)
-        .await
-        .unwrap();
+    let cancelled = manager.runner.cancel_job_run(&stale).await.unwrap();
     assert!(cancelled.url().ends_with("/actions/runs/2"));
     assert_eq!(fixture.state.lock().unwrap().cancelled, ["2"]);
 }

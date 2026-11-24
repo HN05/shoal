@@ -115,7 +115,7 @@ impl Links {
         access: Access,
         caller: Option<&Caller>,
     ) -> Result<(RunPlace, ItemRef)> {
-        let named = forges::of_input(daemon, input).await?;
+        let named = forges::of_input(&self.forges, input).await?;
         let place = (self.run_place(daemon, target, named, access, caller)).await?;
         let run = ItemRef::in_repository(place.forge(), LinkKind::Ci, input)?;
         Ok((place, run))
@@ -134,7 +134,7 @@ impl Links {
             let place = (self.run_place(daemon, target, None, Access::Change, caller)).await?;
             return Ok((place, input, None));
         };
-        let (named, link) = daemon.resolve_workflow(url).await?;
+        let (named, link) = self.forges.workflow_forge(url).await?;
         let place = self.run_place(daemon, target, Some(named), Access::Change, caller);
         Ok((place.await?, Some(link.workflow), link.branch))
     }
@@ -152,7 +152,7 @@ impl Links {
         let (Some(LinkKind::Ci), Some(input)) = (selection.kind, selection.input.as_ref()) else {
             return Ok(());
         };
-        let Some(named) = forges::of_input(daemon, input).await? else {
+        let Some(named) = forges::of_input(&self.forges, input).await? else {
             return Ok(());
         };
         if daemon
@@ -165,7 +165,10 @@ impl Links {
             return Ok(());
         }
         let space = self.link_space(daemon, selector).await?;
-        ensure!(named == forges::of_space(daemon, &space).await?, ELSEWHERE);
+        ensure!(
+            named == forges::of_space(&self.forges, &space).await?,
+            ELSEWHERE
+        );
         Ok(())
     }
 }

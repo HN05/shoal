@@ -22,6 +22,8 @@ impl Links {
         caller: Option<&Caller>,
     ) -> Result<Vec<Item>> {
         let forge = self.read_forge(daemon, target, caller).await?;
-        forge.list(&self.read_account(caller), kind, search).await
+        forge
+            .list(&self.forges.read_account(caller), kind, search)
+            .await
     }
 }

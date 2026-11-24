@@ -3,6 +3,7 @@
 //! `--repo` or an item's, run's or workflow's URL names, registered or not.
 //! Every caller reads another repository; only the user changes one.
 use anyhow::{Result, bail, ensure};
+use shoal_daemon_base::forge_access::ForgeAccess;
 
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::transport::account::Account;
@@ -81,7 +82,7 @@ impl Links {
             None => None,
         };
         let own_forge = match &origin {
-            Some(place) => forges::origin(daemon, place.origin_path()).await,
+            Some(place) => self.forges.origin_forge(place.origin_path()).await,
             None => Err(anyhow::anyhow!(NO_REPOSITORY)),
         };
         // The origin's forge is needed only where something else is named
@@ -92,7 +93,7 @@ impl Links {
                 (own_forge, true)
             }
             (Some(repository), named) => {
-                let forge = target_named(daemon, own_forge.as_ref().ok(), repository);
+                let forge = target_named(&self.forges, own_forge.as_ref().ok(), repository);
                 let forge = forge.await?;
                 ensure!(named.is_none_or(|named| named == forge), CONFLICTING);
                 let own = own_forge.as_ref().ok() == Some(&forge);
@@ -120,7 +121,7 @@ impl Links {
         caller: Option<&Caller>,
     ) -> Result<(ForgeTarget, ItemRef)> {
         let named = match &input {
-            Some(input) => forges::of_input(daemon, input).await?,
+            Some(input) => forges::of_input(&self.forges, input).await?,
             None => None,
         };
         let target = (self.forge_target(daemon, target, named, access, caller)).await?;
@@ -152,8 +153,8 @@ impl Links {
     /// change, which only the user makes there.
     pub fn elsewhere_account(&self, access: Access, caller: Option<&Caller>) -> Account {
         match access {
-            Access::Read => self.read_account(caller),
-            Access::Change => self.user_account(),
+            Access::Read => self.forges.read_account(caller),
+            Access::Change => self.forges.user_account(),
         }
     }
 
@@ -180,13 +181,13 @@ impl Links {
 /// The repository `named` names: by URL on any forge, or as OWNER/NAME
 /// on the forge of `own`, the repository the request comes from.
 async fn target_named(
-    daemon: &dyn Daemon,
+    forges: &ForgeAccess,
     own: Option<&ForgeRepo>,
     named: &str,
 ) -> Result<ForgeRepo> {
     match own {
-        Some(own) => forges::named(daemon, own.clone(), Some(named)).await,
-        None if ForgeRepo::named_by_url(named) => daemon.resolve_forge(named).await,
+        Some(own) => crate::forges::named(forges, own.clone(), Some(named)).await,
+        None if ForgeRepo::named_by_url(named) => forges.forge(named).await,
         None => bail!(
             "{named} names a repository on the current repository's forge, and there is \
              none here; name it by its URL"

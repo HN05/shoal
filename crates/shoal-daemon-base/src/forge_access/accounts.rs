@@ -1,12 +1,12 @@
 //! The accounts requests to a forge go out as: the user's own logins for
 //! reads and the user's decisions, the review account for a scoped
-//! caller's verdicts, the agent account for the rest, and which one a
-//! request takes. Each remembers what the forge's responses taught it.
+//! caller's verdicts, and the agent account for the rest. Each remembers
+//! what the forge's responses taught it.
 use shoal_core::config::forges::{Forges, Whose};
-use shoal_daemon_base::callers::Caller;
 use shoal_forge::transport::account::Account;
 
-use crate::{Links, place::Place};
+use super::ForgeAccess;
+use crate::callers::Caller;
 
 /// What names the account of the user's own tokens, `forges` sets, in
 /// forge memories.
@@ -14,7 +14,7 @@ fn user_identity(forges: &Forges) -> String {
     format!("user {}", forges.identity(Whose::User))
 }
 
-impl Links {
+impl ForgeAccess {
     /// The user's own logins, which reads and the user's decisions use.
     pub fn user_account(&self) -> Account {
         let forges = &self.config.current().machine.forges;
@@ -61,16 +61,6 @@ impl Links {
         match caller {
             Some(_) => self.agent_account(),
             None => self.user_account(),
-        }
-    }
-
-    /// The account that changes items from `place`: the agent account in a
-    /// space, and the user's own logins in a registered checkout, where only
-    /// the user acts.
-    pub fn place_account(&self, place: &Place) -> Account {
-        match place {
-            Place::Checkout(_) => self.user_account(),
-            Place::Space(_) => self.agent_account(),
         }
     }
 }

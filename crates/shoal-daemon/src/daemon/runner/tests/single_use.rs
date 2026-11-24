@@ -65,34 +65,18 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     );
 
     // A runner just started waits for the forge to give it its job.
-    manager
-        .runner
-        .release_idle_runners(&**manager)
-        .await
-        .unwrap();
+    manager.runner.release_idle_runners().await.unwrap();
     launched_ago(manager, job.id.as_str(), 120).await;
     // One that runs a job, or has one left to take, stays.
     fixture.state.lock().unwrap().busy = Some(true);
-    manager
-        .runner
-        .release_idle_runners(&**manager)
-        .await
-        .unwrap();
+    manager.runner.release_idle_runners().await.unwrap();
     fixture.state.lock().unwrap().busy = Some(false);
-    manager
-        .runner
-        .release_idle_runners(&**manager)
-        .await
-        .unwrap();
+    manager.runner.release_idle_runners().await.unwrap();
     assert!(deleted(&fixture.state).is_empty());
     // The job waits for labels the runner was not registered with, as after
     // a change of the configured ones, so this runner goes.
     fixture.state.lock().unwrap().labels = vec!["shoal-old"];
-    manager
-        .runner
-        .release_idle_runners(&**manager)
-        .await
-        .unwrap();
+    manager.runner.release_idle_runners().await.unwrap();
     assert_eq!(deleted(&fixture.state), ["77"]);
 
     manager
@@ -124,11 +108,7 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
     let directory = manager.runner.job_directory(&job.id);
     std::fs::write(directory.join("took-run"), "1\n").unwrap();
     fixture.state.lock().unwrap().queued.clear();
-    manager
-        .runner
-        .release_idle_runners(&**manager)
-        .await
-        .unwrap();
+    manager.runner.release_idle_runners().await.unwrap();
     assert!(deleted(&fixture.state).is_empty());
 
     manager

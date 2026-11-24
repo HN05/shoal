@@ -3,6 +3,7 @@
 //! temporary directory, the default global config, no spaces, coordinators,
 //! reviews, runner or agents, no files other subsystems keep, and no forge a
 //! contribution could fork on.
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -18,8 +19,6 @@ use shoal_daemon_base::{
     gates::Gates,
     notifications::{Coordinators, Notifications, Source},
 };
-use shoal_forge::transport::account::Account;
-use shoal_forge_types::ForgeRepo;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{Repository, RepositoryRemoval, Space, SyncedRepository, Workspace},
@@ -31,7 +30,7 @@ use shoal_refs::BranchName;
 
 use crate::{
     Repositories,
-    daemon::{Activity, Agents, Branches, Followers, Forges, Host, Occupants, Records, Spaces},
+    daemon::{Activity, Agents, Branches, Followers, Host, Occupants, Records, Spaces},
     moves::{Running, chats::OutsideChat},
 };
 
@@ -51,12 +50,16 @@ impl Fixture {
             .await
             .unwrap();
         let config = shoal_core::test_support::global_config("");
+        let gates = Arc::new(Gates::default());
+        let config = Arc::new(ConfigState::new(config));
+        let forges = ForgeAccess::new(store.clone(), gates.clone(), config.clone());
         let repositories = Repositories::new(
             store.clone(),
-            Arc::new(Gates::default()),
-            Arc::new(ConfigState::new(config)),
+            gates,
+            config,
             Arc::new(Notifications::new(store)),
             Arc::default(),
+            Arc::new(forges),
             paths,
             Arc::new(StandIn),
         );
@@ -207,16 +210,6 @@ impl Branches for StandIn {
 impl Host for StandIn {
     fn clear_of_overload(&self, _: &[&Path]) -> bool {
         true
-    }
-}
-
-impl Forges for StandIn {
-    fn forge<'a>(&'a self, remote: &'a str) -> BoxFuture<'a, Result<ForgeRepo>> {
-        Box::pin(async move { bail!("no forge serves {remote}") })
-    }
-
-    fn user_account(&self) -> Account {
-        Account::default()
     }
 }
 

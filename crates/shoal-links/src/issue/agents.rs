@@ -117,7 +117,7 @@ impl Links {
         others: bool,
     ) -> Vec<String> {
         let assigned = match self.settle_issue_agent(daemon, url).await {
-            Ok(Some(assigned)) if others => self.besides_user(daemon, url, assigned).await,
+            Ok(Some(assigned)) if others => self.besides_user(url, assigned).await,
             Ok(_) => Vec::new(),
             Err(error) => return vec![unsettled(url, &error)],
         };
@@ -130,14 +130,9 @@ impl Links {
     /// The `logins` of the issue `url`'s assignees but the user's own,
     /// which a user who assigned the issue to themselves needs no word of;
     /// all of them when the forge does not say which is the user's.
-    async fn besides_user(
-        &self,
-        daemon: &dyn Daemon,
-        url: &ItemRef,
-        logins: Vec<String>,
-    ) -> Vec<String> {
-        let user = match daemon.item_forge(url).await {
-            Ok(forge) => forge.assignee_login(&self.user_account()).await,
+    async fn besides_user(&self, url: &ItemRef, logins: Vec<String>) -> Vec<String> {
+        let user = match self.forges.item_forge(url).await {
+            Ok(forge) => forge.assignee_login(&self.forges.user_account()).await,
             Err(error) => Err(error),
         };
         match user {
@@ -158,20 +153,16 @@ impl Links {
     ) -> Result<Option<Vec<String>>> {
         let _gate = self.gates.lock_issue_assignees(url.url()).await;
         match self.agent_works_issue(daemon, url).await? {
-            true => self.keep_agent_on(daemon, url).await,
-            false => self.take_agent_off(daemon, url).await,
+            true => self.keep_agent_on(url).await,
+            false => self.take_agent_off(url).await,
         }
     }
 
     /// Put the agent account on the issue `url`, or keep it there, and
     /// record that this Shoal did.
-    async fn keep_agent_on(
-        &self,
-        daemon: &dyn Daemon,
-        url: &ItemRef,
-    ) -> Result<Option<Vec<String>>> {
-        let forge = daemon.item_forge(url).await?;
-        let Some(assigned) = forge.assign_own(&self.agent_account(), url).await? else {
+    async fn keep_agent_on(&self, url: &ItemRef) -> Result<Option<Vec<String>>> {
+        let forge = self.forges.item_forge(url).await?;
+        let Some(assigned) = forge.assign_own(&self.forges.agent_account(), url).await? else {
             return Ok(None);
         };
         self.record_assignee_change(url, assigned.edited).await;
@@ -186,13 +177,9 @@ impl Links {
     /// Take the agent account off the issue `url` where this Shoal put or
     /// kept it there, and leave it where another Shoal acting as the same
     /// account may have, whose agent may still work the issue.
-    async fn take_agent_off(
-        &self,
-        daemon: &dyn Daemon,
-        url: &ItemRef,
-    ) -> Result<Option<Vec<String>>> {
-        let forge = daemon.item_forge(url).await?;
-        let account = self.agent_account();
+    async fn take_agent_off(&self, url: &ItemRef) -> Result<Option<Vec<String>>> {
+        let forge = self.forges.item_forge(url).await?;
+        let account = self.forges.agent_account();
         let issue = url.url().to_owned();
         if !(self.store.read(move |tx| agent_assigned_here(tx, &issue))).await? {
             return forge.others_assigned(&account, url).await;

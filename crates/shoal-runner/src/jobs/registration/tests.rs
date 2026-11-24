@@ -35,7 +35,7 @@ fn forgejo() -> (Server, Arc<Mutex<Vec<String>>>) {
 /// program the runner finds.
 fn on_forge(fixture: &Fixture, server: &Server, kind: ForgeKind, program: &str) {
     let url = format!("http://{}/team/repo", server.host);
-    *fixture.daemon.forge.lock().unwrap() = Some((url, kind));
+    fixture.place_on_forge(&url, kind);
     let bin = runner_program(fixture.root.path(), program);
     *fixture.runner.jobs.path.lock().unwrap() = Some(bin);
 }
@@ -93,11 +93,9 @@ async fn the_runner_follows_the_setting_and_goes_with_its_repository() {
     reconcile(&fixture).await;
     let daemon = fixture.daemon();
     let repository = daemon.repository(fixture.repository()).await.unwrap();
-    (fixture
-        .runner
-        .delete_runner_of_removed(&*daemon, &repository))
-    .await
-    .unwrap();
+    (fixture.runner.delete_runner_of_removed(&repository))
+        .await
+        .unwrap();
     assert_eq!(
         *changes.lock().unwrap(),
         [

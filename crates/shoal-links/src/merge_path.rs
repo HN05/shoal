@@ -27,7 +27,7 @@ impl Links {
         let open = match space.repository_id.is_some() {
             true => {
                 let space = self.own_link_space(daemon, space).await?;
-                self.open_own_pulls(daemon, space).await?
+                self.open_own_pulls(space).await?
             }
             // A chat without a repository records no links.
             false => Vec::new(),
@@ -38,15 +38,15 @@ impl Links {
     /// The PRs `space` links as assigned or opened that the forge reports
     /// open; one outside its repository, as after its `origin` changed, is
     /// refused, since its state there says nothing of the PR.
-    async fn open_own_pulls(&self, daemon: &dyn Daemon, space: LinkSpace) -> Result<Vec<ItemRef>> {
+    async fn open_own_pulls(&self, space: LinkSpace) -> Result<Vec<ItemRef>> {
         let id = space.id.clone();
         let linked = self.store.read(move |db| own_pulls(db, &id)).await?;
         // Without one, the space needs no forge.
         if linked.is_empty() {
             return Ok(linked);
         }
-        let forge = forges::of_space(daemon, &space).await?;
-        let account = self.agent_account();
+        let forge = forges::of_space(&self.forges, &space).await?;
+        let account = self.forges.agent_account();
         let mut open = Vec::new();
         for pull in linked {
             pull.belongs_to(&forge)?;

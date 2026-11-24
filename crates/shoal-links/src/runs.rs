@@ -212,7 +212,7 @@ impl Links {
             "list the runs of a branch or of a PR, not both"
         );
         let named = match &pr {
-            Some(pr) => forges::of_input(daemon, pr).await?,
+            Some(pr) => forges::of_input(&self.forges, pr).await?,
             None => None,
         };
         let place = (self.run_place(daemon, target, named, Access::Read, caller)).await?;

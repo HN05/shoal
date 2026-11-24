@@ -1,6 +1,7 @@
 //! The daemon's triggers, and the CI jobs it runs for repositories' forges.
 //! [`Runner`] holds what they keep in memory and offers their operations;
 //! what they need of the rest of the daemon is the interface in [`daemon`].
+use shoal_daemon_base::forge_access::ForgeAccess;
 use std::sync::Arc;
 
 use shoal_core::config;
@@ -23,6 +24,7 @@ pub struct Runner {
     gates: Arc<Gates>,
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
+    forges: Arc<ForgeAccess>,
     records: Arc<dyn daemon::Records>,
     paths: Paths,
     triggers: triggers::Triggers,
@@ -35,6 +37,7 @@ impl Runner {
         gates: Arc<Gates>,
         config: Arc<ConfigState>,
         notifications: Arc<Notifications>,
+        forges: Arc<ForgeAccess>,
         records: Arc<dyn daemon::Records>,
         paths: Paths,
     ) -> Self {
@@ -43,6 +46,7 @@ impl Runner {
             gates,
             config,
             notifications,
+            forges,
             records,
             paths,
             triggers: Default::default(),
@@ -55,3 +59,6 @@ impl Runner {
         self.config.current()
     }
 }
+
+#[cfg(test)]
+shoal_core::prepare_test_process!();

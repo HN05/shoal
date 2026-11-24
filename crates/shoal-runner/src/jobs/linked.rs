@@ -50,8 +50,7 @@ impl Runner {
         }
         let spaces = daemon.present_spaces().await?;
         for (id, repository, mut job) in waiting {
-            self.relink_job(daemon, &spaces, &repository, &mut job)
-                .await;
+            self.relink_job(&spaces, &repository, &mut job).await;
             linked.insert(id, job.space_ids);
         }
         Ok(linked)
@@ -62,12 +61,11 @@ impl Runner {
     /// the spaces it had.
     pub async fn relink_job(
         &self,
-        daemon: &dyn Daemon,
         spaces: &[Space],
         repository_id: &RepositoryId,
         job: &mut QueuedJob,
     ) {
-        match daemon.item_forge(&job.run.url).await {
+        match self.forges.item_forge(&job.run.url).await {
             Ok(forge) => job.space_ids = run_spaces(spaces, &forge, repository_id, &job.run),
             Err(error) => log!("runner: {}: {error:#}", job.job.name),
         }

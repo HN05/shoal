@@ -302,7 +302,7 @@ impl shoal_hub::daemon::CutOffJobs for Manager {
         &'a self,
         job: &'a shoal_protocol::hub::reruns::CutOffJob,
     ) -> BoxFuture<'a, Result<shoal_protocol::hub::reruns::CutOffRerun>> {
-        Box::pin(self.runner.rerun_cut_off(self, job))
+        Box::pin(self.runner.rerun_cut_off(job))
     }
 }
 

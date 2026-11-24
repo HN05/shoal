@@ -43,9 +43,7 @@ mod elsewhere;
 pub mod environment;
 mod exit_wait;
 pub(crate) mod fake_workers;
-pub(crate) mod forge_hosts;
 pub(crate) mod gate;
-mod git_logins;
 pub(crate) mod hub;
 mod idle_sleep;
 mod leases;
@@ -381,7 +379,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     if let Err(error) = startup.step("finishing repository moves", moves).await {
         log!("{error:#}");
     }
-    let hosts = manager.learn_recorded_forge_hosts();
+    let hosts = manager.forges.learn_recorded_forge_hosts();
     startup.step("learning forge hosts", hosts).await?;
     let audit = manager.spaces.audit_worktrees(&*manager);
     startup.step("auditing worktrees", audit).await?;

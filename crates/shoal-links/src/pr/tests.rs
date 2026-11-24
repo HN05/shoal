@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use shoal_core::test_support::{global_config, repository};
+use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_daemon_base::{
     config_state::ConfigState, file_access::FileAccess, gates::Gates, notifications::Notifications,
 };
@@ -20,12 +21,16 @@ async fn service(root: &std::path::Path) -> Arc<Links> {
     let store = shoal_store::test_support::unsynced_store(root.join("state.db"))
         .await
         .unwrap();
+    let gates = Arc::new(Gates::default());
+    let config = Arc::new(ConfigState::new(global_config("")));
+    let forges = ForgeAccess::new(store.clone(), gates.clone(), config.clone());
     Arc::new(Links::new(
         store.clone(),
-        Arc::new(Gates::default()),
-        Arc::new(ConfigState::new(global_config(""))),
+        gates,
+        config,
         Arc::new(Notifications::new(store)),
         Arc::new(FileAccess::default()),
+        Arc::new(forges),
         Arc::new(StandInRecords),
     ))
 }

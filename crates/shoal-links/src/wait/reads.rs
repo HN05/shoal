@@ -11,7 +11,7 @@ use shoal_forge::{
 use shoal_forge_types::items::{link::Selection, reference::ItemRef};
 use shoal_protocol::alerts::AlertKind;
 
-use crate::{Links, daemon::Daemon};
+use crate::Links;
 
 /// How many of one space's items a poll reads at once: each read runs curl
 /// processes.
@@ -35,17 +35,14 @@ impl Links {
     /// a worktree Git cannot read holds none of it back.
     pub async fn item_activity(
         &self,
-        daemon: &dyn Daemon,
         items: Vec<Lookup>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
-        let account = &self.user_account();
+        let account = &self.forges.user_account();
         let linked = selection.input.is_none();
         stream::iter(items)
             .map(|lookup| async move {
-                let snapshot = self
-                    .read_item_activity(daemon, account, &lookup, linked)
-                    .await?;
+                let snapshot = self.read_item_activity(account, &lookup, linked).await?;
                 Ok((lookup.item.to_string(), snapshot))
             })
             .buffered(ITEMS_READ_AT_ONCE)
@@ -55,16 +52,12 @@ impl Links {
 
     /// The activity of each of `items` the forge reads in full, leaving out
     /// the others.
-    pub async fn complete_reads(
-        &self,
-        daemon: &dyn Daemon,
-        items: Vec<ItemRef>,
-    ) -> Vec<(String, Snapshot)> {
-        let account = &self.user_account();
+    pub async fn complete_reads(&self, items: Vec<ItemRef>) -> Vec<(String, Snapshot)> {
+        let account = &self.forges.user_account();
         stream::iter(items.into_iter().map(Lookup::from))
             .map(|lookup| async move {
                 let read = self
-                    .read_item_activity(daemon, account, &lookup, false)
+                    .read_item_activity(account, &lookup, false)
                     .await
                     .ok()?;
                 let complete = read.errors().next().is_none();
@@ -83,13 +76,12 @@ impl Links {
     /// silently.
     async fn read_item_activity(
         &self,
-        daemon: &dyn Daemon,
         account: &Account,
         lookup: &Lookup,
         linked: bool,
     ) -> Result<Snapshot> {
         let item = &lookup.item;
-        let forge = daemon.item_forge(item).await?;
+        let forge = self.forges.item_forge(item).await?;
         match forge
             .item_activity(account, item, lookup.known.as_ref())
             .await

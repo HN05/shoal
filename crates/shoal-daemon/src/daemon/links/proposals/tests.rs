@@ -693,7 +693,7 @@ async fn approving_again_refuses_an_item_posted_before_the_origin_moved() {
     request.url = Some("https://forge.example/team/old/issues/7".parse().unwrap());
     // The new origin's issue 7 is another issue, which nothing may edit.
     let moved = ForgeRepo::parse("https://forge.example/team/new").unwrap();
-    let account = manager.links.user_account();
+    let account = manager.forges.user_account();
     let finished = manager
         .links
         .finish_proposed(&mut request, &moved, &account, ItemKind::Issue)

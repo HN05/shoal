@@ -184,12 +184,11 @@ impl Links {
         let (kind, titled) = match action {
             Action::Clear => (None, None),
             Action::Unwatch { url } => {
-                let kind =
-                    (self.without_pr_watch(daemon, space.origin_path(), &space.id, url)).await?;
+                let kind = (self.without_pr_watch(space.origin_path(), &space.id, url)).await?;
                 (kind, None)
             }
             Action::Watch { url, title } => {
-                let (kind, url) = self.with_pr_watch(daemon, space, url, check).await?;
+                let (kind, url) = self.with_pr_watch(space, url, check).await?;
                 (Some(kind), title.map(|title| (url, title)))
             }
             Action::Acknowledge => (Some(self.merge_acknowledgement(daemon, space).await?), None),
@@ -238,16 +237,15 @@ impl Links {
     /// that PR.
     async fn with_pr_watch(
         &self,
-        daemon: &dyn Daemon,
         space: &LinkSpace,
         input: ItemInput,
         check: WatchCheck,
     ) -> Result<(RegistrationKind, ItemRef)> {
-        let (forge, url) = self.pr_forge(daemon, space.origin_path(), &input).await?;
+        let (forge, url) = self.pr_forge(space.origin_path(), &input).await?;
         // Detect missing tools or login and invalid PRs now.
         if check == WatchCheck::Lookup {
             forge
-                .merged_commits(&self.user_account(), url.pull()?)
+                .merged_commits(&self.forges.user_account(), url.pull()?)
                 .await?;
         }
         let kind = self.adding_pr_watch(&space.id, url.clone()).await?;
@@ -274,12 +272,11 @@ impl Links {
     /// repository whose origin `checkout` has, which must be watched.
     async fn without_pr_watch(
         &self,
-        daemon: &dyn Daemon,
         checkout: &std::path::Path,
         id: &SpaceId,
         input: ItemInput,
     ) -> Result<Option<RegistrationKind>> {
-        let (_, url) = self.pr_forge(daemon, checkout, &input).await?;
+        let (_, url) = self.pr_forge(checkout, &input).await?;
         let Some(Registration {
             kind:
                 RegistrationKind::Watch {

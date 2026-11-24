@@ -49,8 +49,8 @@ impl Manager {
             return Ok(false);
         };
         let matches = async {
-            let own = self.forge(&remote).await?;
-            anyhow::Ok(own.resolve_named(named, &self.forge_hosts()).await? == own)
+            let own = self.forges.forge(&remote).await?;
+            anyhow::Ok(own.resolve_named(named, &self.forges.hosts()).await? == own)
         };
         (matches.await).with_context(|| {
             let name = repository.display_name();

@@ -13,8 +13,7 @@ use rusqlite::Connection;
 use shoal_core::config::{Config, Effective, repo::ConfigLayers};
 use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::notifications::Coordinators;
-use shoal_forge::{ci::runner::JobCommand, transport::account::Account};
-use shoal_forge_types::{ForgeRepo, items::reference::ItemRef};
+use shoal_forge::ci::runner::JobCommand;
 use shoal_ids::{
     execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, repository_ids::RepositoryId,
     space_ids::SpaceId,
@@ -120,22 +119,6 @@ pub trait Permissions: Send + Sync {
         action: String,
         repository: Option<RepositoryId>,
     ) -> BoxFuture<'a, Result<()>>;
-}
-
-/// The forges the runner registers on and acts on, as the user.
-pub trait Forges: Send + Sync {
-    /// The account the user acts as on forges.
-    fn user_account(&self) -> Account;
-
-    /// The forge repository of `repository`'s checkout.
-    fn checkout_forge<'a>(&'a self, repository: &'a Repository)
-    -> BoxFuture<'a, Result<ForgeRepo>>;
-
-    /// The forge repository at the web URL `url`.
-    fn resolve_forge<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<ForgeRepo>>;
-
-    /// The forge repository `item` belongs to.
-    fn item_forge<'a>(&'a self, item: &'a ItemRef) -> BoxFuture<'a, Result<ForgeRepo>>;
 }
 
 /// The spaces a job's run is for, and those jobs run in.
@@ -274,20 +257,12 @@ pub trait Hub: Send + Sync {
 /// Everything the triggers and the runner need of the daemon, which each of
 /// their operations that reaches beyond them takes.
 pub trait Daemon:
-    Repositories + Agents + Permissions + Forges + Spaces + Workspaces + Executions + Hub + Coordinators
+    Repositories + Agents + Permissions + Spaces + Workspaces + Executions + Hub + Coordinators
 {
 }
 
 impl<T> Daemon for T where
-    T: Repositories
-        + Agents
-        + Permissions
-        + Forges
-        + Spaces
-        + Workspaces
-        + Executions
-        + Hub
-        + Coordinators
+    T: Repositories + Agents + Permissions + Spaces + Workspaces + Executions + Hub + Coordinators
 {
 }
 

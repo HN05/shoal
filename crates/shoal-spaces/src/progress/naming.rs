@@ -119,7 +119,7 @@ impl Spaces {
                 &crate::repository::Selector::from(repository),
             ))
             .await?;
-        let forge: ForgeRepo = daemon.checkout_forge(&repository).await?;
+        let forge: ForgeRepo = self.forges.checkout_forge(&repository).await?;
         ItemRef::numbered(&forge, LinkKind::Issue, number)
     }
 }
