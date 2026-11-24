@@ -2,9 +2,13 @@ use crate::daemon::{
     scope::{Access, Caller, authorize},
     test_support::{manager, repository, workspace_below},
 };
-use crate::protocol::{AgentMethod, MergingMethod, Operation, SpaceMethod};
+use crate::protocol::{
+    AgentMethod, MergingMethod, Operation, ReviewMethod, SpaceMethod, ThreadMethod,
+};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::reviews::ReviewId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::threads::{NewPost, ThreadKind, ThreadNumber, ThreadOpening};
 
 fn caller(space: &SpaceId, access: Access) -> Caller {
     Caller {
@@ -18,7 +22,7 @@ fn caller(space: &SpaceId, access: Access) -> Caller {
 
 /// A read-only scope reads the spaces below its own, and is refused what
 /// the same scope may otherwise do there: a read that changes the agent's
-/// watch, and a change.
+/// watch, and a change. A review run's reads as it does.
 #[tokio::test]
 async fn read_only_scope_reads_without_changing() {
     let (root, manager) = manager().await;
@@ -63,7 +67,7 @@ async fn read_only_scope_reads_without_changing() {
             }),
         ]
     };
-    for access in [Access::Full, Access::ReadOnly] {
+    for access in [Access::Full, Access::ReadOnly, Access::Review(ReviewId(1))] {
         let token = manager.operations.issue(&caller(&parent.id, access));
         let mut allowed = Vec::new();
         for mut operation in operations(&child.id) {
@@ -76,4 +80,59 @@ async fn read_only_scope_reads_without_changing() {
         };
         assert_eq!(allowed, expected, "{access:?}");
     }
+}
+
+/// A review run's scope writes only its review: a thread without a kind,
+/// a post and a submit, which the daemon hands that review; a question and
+/// any other change are refused.
+#[tokio::test]
+async fn a_review_runs_scope_writes_only_its_review() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repository = manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repository.id, "reviewed".into(), None, None, None)
+        .await
+        .unwrap();
+    let open = |kind| {
+        Operation::Thread(ThreadMethod::OpenThread {
+            opening: ThreadOpening::named("Unclear"),
+            kind,
+            to: None,
+            from: None,
+        })
+    };
+    let operations = [
+        open(None),
+        Operation::Thread(ThreadMethod::Post {
+            thread: ThreadNumber::Own(1),
+            post: NewPost::default(),
+            attachments: Vec::new(),
+            code: Vec::new(),
+            changes: Vec::new(),
+            from: None,
+        }),
+        Operation::Review(ReviewMethod::SubmitReview {
+            workspace: None,
+            approve: false,
+            summary: None,
+        }),
+        open(Some(ThreadKind::Question)),
+        Operation::Review(ReviewMethod::CancelReview {
+            workspace: None,
+            id: None,
+            here: false,
+        }),
+    ];
+    let token = (manager.operations).issue(&caller(&workspace.id, Access::Review(ReviewId(1))));
+    let mut allowed = Vec::new();
+    for mut operation in operations {
+        let authorized = authorize(&manager, Some(&token), &mut operation).await;
+        allowed.push(authorized.is_ok());
+    }
+    assert_eq!(allowed, [true, true, true, false, false]);
 }

@@ -62,10 +62,20 @@ pub(super) async fn handle(
             workspace,
             approve,
             summary,
-        } => pieces(match workspace {
-            Some(workspace) => (reviews.submit(daemon, &workspace, viewer, approve, summary)).await,
-            None => pending.submit_only(approve, summary).await,
-        }),
+        } => pieces(
+            match (caller.and_then(|caller| caller.access.review()), workspace) {
+                // A review run submits the review it runs.
+                (Some(id), workspace) => {
+                    let submitted =
+                        reviews.submit_run(daemon, id, workspace.as_ref(), approve, summary);
+                    submitted.await
+                }
+                (None, Some(workspace)) => {
+                    (reviews.submit(daemon, &workspace, viewer, approve, summary)).await
+                }
+                (None, None) => pending.submit_only(approve, summary).await,
+            },
+        ),
         ReviewMethod::PendingReviews => pieces(pending.reviews().await),
         ReviewMethod::CancelReview {
             workspace,

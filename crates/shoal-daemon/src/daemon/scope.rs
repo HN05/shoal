@@ -39,15 +39,35 @@ pub(crate) async fn authorize(
             .await?
             .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?,
     };
-    ensure!(
-        !caller.access.reads_only() || method.changes_nothing(),
-        "a read-only scope only reads; this request would change something"
-    );
+    permitted(caller.access, method)?;
     let reads_only = method.reads_space();
     if let Some(target) = method.scope(manager, &caller).await? {
         confine_target(manager, &caller, target, reads_only).await?;
     }
     Ok(Some(caller))
+}
+
+/// Refuse `method` to a caller of `access` that may not change what it
+/// would.
+fn permitted(access: Access, method: &impl Scoped) -> Result<()> {
+    match access {
+        Access::Full => Ok(()),
+        Access::ReadOnly => {
+            ensure!(
+                method.changes_nothing(),
+                "a read-only scope only reads; this request would change something"
+            );
+            Ok(())
+        }
+        Access::Review(_) => {
+            ensure!(
+                method.changes_nothing() || method.writes_review(),
+                "a review run only reads, opens its findings with shoal thread open, reopens a \
+                 fixed one with shoal send and submits its review with shoal review submit"
+            );
+            Ok(())
+        }
+    }
 }
 
 /// Refuse a `target` outside `caller`'s scope, except the workspace a chat
@@ -97,6 +117,12 @@ pub(crate) trait Scoped {
     /// Whether the request changes nothing at all, which a read-only scope
     /// may send.
     fn changes_nothing(&self) -> bool {
+        false
+    }
+
+    /// Whether the request writes a review run's own review, which that
+    /// run's scope may send.
+    fn writes_review(&self) -> bool {
         false
     }
 }
@@ -160,6 +186,10 @@ impl Scoped for Operation {
 
     fn changes_nothing(&self) -> bool {
         read_only::allows(self)
+    }
+
+    fn writes_review(&self) -> bool {
+        read_only::writes_review(self)
     }
 }
 

@@ -6,6 +6,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::ExecutionKind;
 use shoal_protocol::hub::routing::VouchedSpace;
+use shoal_protocol::reviews::ReviewId;
 use shoal_protocol::space_names::SpaceSelector;
 use std::sync::Arc;
 
@@ -34,12 +35,19 @@ pub enum Access {
     /// Nothing: it only reads, as the gate's runs do, and is refused every
     /// request that would change anything.
     ReadOnly,
+    /// Only the running review it writes, as a local review's run does:
+    /// it reads as a read-only caller does, and opens that review's
+    /// findings, reopens a fixed one and submits it.
+    Review(ReviewId),
 }
 
 impl Access {
-    /// Whether it is refused every request that would change anything.
-    pub fn reads_only(self) -> bool {
-        self == Self::ReadOnly
+    /// The running review it writes, none for any other access.
+    pub fn review(self) -> Option<ReviewId> {
+        match self {
+            Self::Review(id) => Some(id),
+            Self::Full | Self::ReadOnly => None,
+        }
     }
 }
 

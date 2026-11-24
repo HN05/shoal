@@ -2,7 +2,7 @@
 //! what each requires of the space it acts on.
 use std::sync::Arc;
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use super::super::{
     answer::Answer,
@@ -12,7 +12,9 @@ use super::super::{
 };
 use super::acting::acting;
 use crate::protocol::{Body, ThreadMethod};
+use shoal_protocol::reviews::ReviewId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::threads::Thread;
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -20,6 +22,11 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     let thread = |thread| Body::SpaceThread(Box::new(thread));
+    if let Some(review) = caller.and_then(|caller| caller.access.review()) {
+        return Ok(Answer::Body(thread(
+            write_review(manager, review, method).await?,
+        )));
+    }
     Ok(Answer::Body(match method {
         ThreadMethod::AwaitPost { space, item, after } => {
             let (manager, caller) = (manager.clone(), caller.cloned());
@@ -211,6 +218,40 @@ pub(super) async fn handle(
                 .await?,
         ),
     }))
+}
+
+/// What a review run's `method` writes of its running review `review`,
+/// which its scope lets it send: a thread without a kind opens one of its
+/// findings, and a post of text alone reopens one resolved `fixed`.
+async fn write_review(
+    manager: &Arc<Manager>,
+    review: ReviewId,
+    method: ThreadMethod,
+) -> Result<Thread> {
+    let reviews = &manager.reviews;
+    match method {
+        ThreadMethod::OpenThread {
+            opening,
+            kind: None,
+            to,
+            ..
+        } => (reviews.open_run_finding(&**manager, review, opening, to.as_ref())).await,
+        ThreadMethod::Post {
+            thread,
+            post,
+            attachments,
+            code,
+            changes,
+            ..
+        } => {
+            ensure!(
+                attachments.is_empty() && code.is_empty() && changes.is_empty(),
+                "a review reopens a finding with text alone"
+            );
+            (reviews.reopen_run_finding(&**manager, review, thread, post)).await
+        }
+        _ => bail!("a review run only opens and reopens its findings"),
+    }
 }
 
 impl Checked for ThreadMethod {

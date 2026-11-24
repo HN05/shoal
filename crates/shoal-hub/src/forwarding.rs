@@ -6,7 +6,7 @@
 //! writing on it too what the caller sends the other way, as to a demo. A
 //! request that needs the caller's machine is refused, naming the space's.
 use crate::log;
-use shoal_daemon_base::callers::Caller;
+use shoal_daemon_base::callers::{Access, Caller};
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result, anyhow};
@@ -492,7 +492,8 @@ impl Hub {
             everywhere,
             permissions,
             granted: caller.granted,
-            read_only: caller.access.reads_only(),
+            // Another machine's review is none of that machine's to write.
+            read_only: caller.access != Access::Full,
             priority,
             chat_modes,
         }))
