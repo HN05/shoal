@@ -5019,7 +5019,9 @@ rebuilds only what its commit changed. The job gets its workspace's
 environment, scope token, `TMPDIR`, `[env]` and the variables its
 [presets](#build-tool-presets) give jobs, but no agent secrets and no
 forge login besides the token the forge gives the job. Once the execution ends,
-however it ended, the workspace goes whatever it holds, with its permit; after
+however it ended, Shoal stops what its steps left running in the workspace,
+naming them in a `job_ended` event in its log, and the workspace goes whatever
+it holds, with its permit; after
 a daemon restart, a job whose runner is gone goes the same way and the forge
 times it out. The service manager's stop of the service after the daemon
 exited leaves the job running for the next daemon, as it leaves
@@ -7237,10 +7239,10 @@ with its `message`. `progress_changed` events add `progress` as
 both are cleared. `child_created` and `child_removed` events, in the log of
 the space above, add `child` with its `id`, `name`, `kind` and a workspace's
 `branch`.
-`job_ended` events, when Shoal ended a [CI job](#runner), or the kernel's OOM
-killer killed processes of one, add `job` with the job's `name`, its `run`'s
-URL, the `reason` it ended for, and the processes Shoal
-`stopped` before the runner, each with its `pid` and `command`, the first 20
+`job_ended` events, when Shoal ended a [CI job](#runner), stopped what one's
+steps left running, or the kernel's OOM killer killed processes of one, add
+`job` with the job's `name`, its `run`'s URL, the `reason`, and the processes
+Shoal `stopped`, each with its `pid` and `command`, the first 20
 of them, and `omitted`, how many more, when there were more.
 `demo_started` events, when a [demo](#demos)'s command first runs, and
 `demo_stopped` events, when a demo that ran ends, add `demo` with its `name`,

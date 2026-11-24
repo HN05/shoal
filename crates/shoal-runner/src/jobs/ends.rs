@@ -1,9 +1,10 @@
 //! The end of a claimed job: once the execution running the forge's runner
 //! ends, however it ended, the runner registered for the job alone is
 //! deleted and the job's workspace is removed whatever it holds,
-//! with its permit, and the runner's directory of a job no longer claimed,
-//! however its workspace went, is deleted. A job ends only on the forge's
-//! word: stopping it, removing its workspace while it runs, or a signal
+//! with its permit, once what its steps left running there is stopped and
+//! named in the workspace's log, as for a job whose runner outlived its
+//! run; the runner's directory of a job no longer claimed, however its
+//! workspace went, is deleted. A job ends only on the forge's word: stopping it, removing its workspace while it runs, or a signal
 //! ending its wrapper's session cancels its run there, and the forge's
 //! runner then stops it, or Shoal or the wrapper does once the runner
 //! outlives the run or the signal. Only load protection ends a job without
@@ -14,12 +15,15 @@
 //! run has finished.
 //! Shoal's log names what stopped each runner.
 use anyhow::Result;
-use shoal_daemon_base::alerts::{About, NewAlert};
+use shoal_daemon_base::{
+    alerts::{About, NewAlert},
+    events::record_job_ended,
+};
 use shoal_ids::{execution_ids::ExecutionId, queue_entry_ids::QueueEntryId};
 use shoal_protocol::alerts::AlertKind;
 use shoal_store::exists;
 
-use super::ClaimedJob;
+use super::{ClaimedJob, overrun::ended_job};
 use crate::{Runner, daemon::Daemon, log};
 
 impl Runner {
@@ -60,11 +64,14 @@ impl Runner {
     }
 
     /// Finish the ended `job`: keep what it used if its runner took it,
-    /// delete the runner registered for it alone and remove its workspace,
-    /// telling the user of a removal that fails, which the next pass tries
-    /// again.
+    /// stop what its steps left running, delete the runner registered for
+    /// it alone and remove its workspace, telling the user of a removal
+    /// that fails, which the next pass tries again.
     async fn finish_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<()> {
         self.keep_job_usage(job).await?;
+        if job.execution_id.is_some() {
+            self.stop_job_leftovers(daemon, job).await;
+        }
         if let Err(error) = self.delete_job_runner(job).await {
             log!("runner: {error:#}");
         }
@@ -77,6 +84,24 @@ impl Runner {
             self.notifications.notify_user(alert).await;
         }
         Ok(())
+    }
+
+    /// Stop what the steps of the ended `job` left running in its
+    /// workspace, naming it in the workspace's log; a stop that fails is
+    /// logged, and the workspace's removal stops what it left.
+    async fn stop_job_leftovers(&self, daemon: &dyn Daemon, job: &ClaimedJob) {
+        let stopped = match daemon.stop_job_processes(&job.workspace_id).await {
+            Ok(stopped) if stopped.is_empty() => return,
+            Ok(stopped) => stopped,
+            Err(error) => {
+                log!("runner: {}: {error:#}", job.job.job.name);
+                return;
+            }
+        };
+        let (name, run) = (job.job.job.name.clone(), job.job.run.url.to_string());
+        let reason = "its steps left processes running".to_owned();
+        let ended = ended_job(name, run, reason, stopped);
+        record_job_ended(&self.store, &job.workspace_id, ended).await;
     }
 
     /// Whether Shoal ended `job`, whose runner outlived its run; a job it

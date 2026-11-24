@@ -1418,7 +1418,6 @@ impl Drop for Leftover {
 #[tokio::test]
 async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
     use crate::{
-        daemon::events::{EventItem, EventKind},
         process::identity,
         protocol::{self, Control, ExecutionEvent},
     };
@@ -1480,18 +1479,7 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
 
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
-    let ended: Vec<_> = manager
-        .space_events(None, 1000)
-        .await
-        .unwrap()
-        .into_iter()
-        .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::JobEnded => {
-                event.details.job
-            }
-            _ => None,
-        })
-        .collect();
+    let ended = ended_jobs(manager).await;
     assert_eq!(ended.len(), 1);
     assert!(ended[0].run.ends_with("/team/repo/actions/runs/6"));
     let stopped: Vec<_> = (ended[0].stopped.iter())
@@ -1499,6 +1487,70 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
         .collect();
     assert_eq!(stopped, [(pid, "sleep 600")]);
     assert_eq!(logged_stops(manager), [JobStop::Overrun]);
+}
+
+/// The `job_ended` events of every space.
+async fn ended_jobs(manager: &Manager) -> Vec<shoal_protocol::events::JobEndedEvent> {
+    use crate::daemon::events::{EventItem, EventKind};
+    (manager.space_events(None, 1000).await.unwrap().into_iter())
+        .filter_map(|item| match item {
+            EventItem::Event(event) if event.details.kind == EventKind::JobEnded => {
+                event.details.job.map(|job| *job)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_job_that_ended_stops_what_its_steps_left_and_names_it() {
+    use crate::process::identity;
+
+    let fixture = fixture(vec![job("h7", 9, 1)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
+    let workspace = manager
+        .spaces
+        .workspace_by_id(&claimed[0].workspace_id)
+        .await
+        .unwrap();
+    let (_, started) = LAUNCHED.lock().unwrap().remove(&workspace.id).unwrap();
+    // What a step left running once its runner ended: its parent gone, in
+    // a process group of its own.
+    let output = crate::daemon::test_support::unmarked("sh")
+        .args(["-c", "sleep 600 >/dev/null 2>&1 & echo $!"])
+        .current_dir(&workspace.path)
+        .process_group(0)
+        .output()
+        .unwrap();
+    let pid: u32 = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .unwrap();
+    let left = Leftover(identity::capture(pid).unwrap().unwrap());
+
+    manager
+        .agents
+        .finish_execution(
+            &**manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
+        .await
+        .unwrap();
+    finish_ended_jobs(manager).await;
+
+    assert!(!identity::alive(&left.0).unwrap());
+    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
+    let ended = ended_jobs(manager).await;
+    assert_eq!(ended.len(), 1);
+    assert!(ended[0].run.ends_with("/team/repo/actions/runs/1"));
+    let stopped: Vec<_> = (ended[0].stopped.iter())
+        .map(|process| (process.pid, process.command.as_str()))
+        .collect();
+    assert_eq!(stopped, [(pid, "sleep 600")]);
 }
 
 /// A heavy agent running in a new workspace of `repository`.

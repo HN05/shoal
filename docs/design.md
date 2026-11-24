@@ -1947,7 +1947,8 @@ knows whether its own test servers should keep running. They create no
 alert; `shoal status` lists them for the user. The same holds once an agent
 exits, whatever place it ran in: what its scope keeps is reported as the
 space's leftovers, since a restored agent may want its servers back, and
-goes with the space.
+goes with the space. A CI job's are stopped as it ends, and named in its
+workspace's log, since no agent is left to decide and the workspace goes.
 They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;
