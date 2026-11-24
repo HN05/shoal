@@ -1765,7 +1765,9 @@ in `sessions`, or a failed `zmx list`, or a session zmx cannot reach, in `sessio
 session the space's agents reported, with `agent`, `session`, the `execution` a
 workspace's agent ran as, whether the agent runs it now in `current`, its
 transcript in `path` and all its files, the transcript included, in `files`,
-which Shoal finds where the agent's tool keeps them and never reads. A session
+which Shoal finds where the agent's tool keeps them and never reads, and
+for a session a [handoff](#convert-a-chat-or-a-workspace) started, the
+`agent`, `session` and `integration` it took over from in `continued_from`. A session
 whose files are not on this machine, or of an agent whose tool Shoal does not
 know, has no `path` and no files, and one whose files could not be looked for
 says why in `error`; sessions the agents' hooks never reported, such as those
@@ -2947,11 +2949,15 @@ shoal convert workspace --issue 42       # On the branch the issue names, which 
 shoal convert workspace                  # On the branch the chat's linked issue names
 shoal convert chat                       # This workspace becomes a chat in the checkout
 shoal convert chat --space 7 --mode plan # The user's terminal converts any space
+shoal convert agent codex                # Codex takes this space's work over
+shoal convert agent codex -- "Focus on the failing test"
+shoal convert chat -a codex              # This workspace becomes a chat Codex works in
 ```
 
 `shoal convert workspace [BRANCH] [--issue N] [--base REF] [--skip-setup] [--mode MODE] [--space S]`
 turns a chat into a workspace, and `shoal convert chat [--mode MODE] [--space S]`
-turns a workspace into a chat. The space stays the same: it keeps its ID,
+turns a workspace into a chat; both take the [agent options](#hand-a-space-to-another-agent-tool)
+of `shoal convert agent`. The space stays the same: it keeps its ID,
 number, name, parent, children, links and watched PRs, threads, attached
 files, progress, `TMPDIR` and the places Shoal opened for it, such as the
 tab or session its agent runs in, and the [journal](#space-events) records a
@@ -3004,6 +3010,40 @@ workspace that becomes a chat is refused until it is the chat, which
 workspace is refused until the chat's agent runs there. A space's agent converts the spaces its scope reaches; your terminal
 converts any space, by `--space` with its number or ID, or the current
 workspace, else a picker.
+
+#### Hand a space to another agent tool
+
+`shoal convert agent AGENT [--mode MODE] [--model M] [--effort E] [--permission KEY=VALUE]... [--space S] [-- NOTE]`
+hands a space's work over to another agent tool, such as from Claude Code to
+Codex when a usage limit hits, and `-a/--agent AGENT` on `convert workspace`
+and `convert chat` does it with the kind change. Every kind of space takes
+it, a chat in a workspace's worktree and one without a repository too. The
+tool is checked as `shoal start` checks it before anything changes; `convert
+agent` refuses the space's own tool, which on the kind conversions continues
+from a fork of its session as without `-a`. A running agent hands over once
+its turn ends, as a conversion restarts one; a stopped or asleep one hands
+over at once, also with the kind change, which a conversion that keeps the
+tool refuses.
+
+Shoal never converts one tool's session into another's. It copies every
+session the space's agents reported, every file `transcripts` lists for it,
+into the space's [attached files](#attached-files) as `handoff` copies,
+whatever their size; a session an earlier handoff copied is copied again only
+once its files changed. The new tool starts a new session, also one the space
+used before. Its first message says what the space is, with its path, its
+branch and its issue, that it continues work another tool started, and lists
+each copied session, oldest first, with its tool, its session ID and the path
+of its copy, marking the one just stopped to read first and a session whose
+files are not on this machine, or whose tool Shoal does not know, as not
+copied; then its mode's instructions, then `NOTE`, which only a new tool
+takes. It runs in `--mode`, else the space's mode, with `--model` and
+`--effort` over the configured ones and `--permission` changing what the
+earlier agent was given, as `shoal resume --permission` does; on the kind
+conversions they apply to a forked agent too. A stop before the turn ends
+keeps the new tool's agent stopped for `shoal resume`, as it keeps a
+converting agent down. The [journal](#space-events) records the handoff, and
+`shoal status --json` lists the session it started in `transcripts` with the
+one it `continued_from`.
 
 ### Master session
 
@@ -7130,7 +7170,10 @@ the UUID of the space it records as `space_id`, `space_kind` (`workspace` or
 `chat`, as the space was then), `repository_id` (null for a chat without a
 repository), `name`, a workspace's `path` and `branch` (null for a detached
 HEAD), which a chat's events leave out, `kind`, `cause`, and `error`. A
-`converted` event names the kind the space became, with that kind's fields. Kinds are `created`, `ready`, `setup_failed`,
+`converted` event names the kind the space became, with that kind's fields,
+or with `handoff` the agent tool that took the space's work over: `from`
+and `to` each give an `agent`, the `session` it reported and its
+`integration`, journaled once the new tool reports its session. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
 `review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `thread_opened`, `thread_posted`, `thread_forwarded`, `thread_resolved`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`. Review events add a `review` object with the mark's `kind` and
 `url`, both null for a workspace mark. Link events add a `link`
@@ -7451,7 +7494,9 @@ terminal, lists them: each one's name, title, size,
 how it came (`message` for a file sent down with `shoal send --attach`,
 `added` for one from `shoal files add`, `result` for one handed back with
 `shoal done --attach`, `alert` and `thread` for one sent with
-`shoal send --attach` up and with a post in a thread), when, and the path of Shoal's copy in the repository
+`shoal send --attach` up and with a post in a thread, `handoff` for a copy
+of an agent's session that a [handoff to another
+tool](#convert-a-chat-or-a-workspace) made), when, and the path of Shoal's copy in the repository
 directory's `.attachments`, or for a chat without a repository that of the
 `root_dir` it started in, or for another machine's space that machine;
 `--path` lists only the paths of the copies this machine keeps.
@@ -7470,6 +7515,9 @@ and `rm` act on its chat.
 `{"kind": "user"}` for a file attached from outside any agent,
 or `{"kind": "agent"}` with the agent's name as `agent`, a workspace's or a
 chat's, its `execution` and, once the agent has reported it, its `session`.
+A handoff's copy adds `session`, the `agent`, `session` and `integration`
+it copies, the `file`'s path in that tool's session directory and whether it
+is the conversation itself in `transcript`.
 Every way of attaching takes a file as `PATH` or
 `PATH#TITLE`, splitting at the first `#`; the title, a single line of at most
 128 characters, says what the file is, and clients show the name where there is

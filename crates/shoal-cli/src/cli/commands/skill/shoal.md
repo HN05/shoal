@@ -147,6 +147,7 @@ one the user holds, or with such a space below it, as the space's
 shoal convert workspace fix-login     # This chat becomes a workspace on fix-login
 shoal convert workspace --issue 42    # On the branch the issue names, which it links
 shoal convert chat                    # This workspace becomes a chat in the checkout
+shoal convert agent codex -- "<note>" # Codex takes this space's work over
 ```
 
 `convert` keeps the space, with its number, name, parent, children, links,
@@ -161,6 +162,16 @@ Shoal restarts it in the new place from a fork of its session, told what the
 space is now and its mode's instructions; `--mode` picks that mode, `worker`
 for a workspace and `chat` for a chat by default. An agent converts its own
 space and the spaces below it.
+
+`convert agent <tool>` hands a space's work to another agent tool, and
+`-a <tool>` on `convert workspace` and `convert chat` does it with the kind
+change: once the running agent's turn ends, or at once for a stopped or
+asleep one. Shoal copies every session the space's agents reported into its
+attached files as `handoff` copies, and the new tool starts a new session
+told what the space is and where each copy is, the one just stopped to read
+first, then its mode's instructions, then the text after `--`. `--mode`
+keeps the space's mode by default, and `--model`, `--effort` and
+`--permission` set what the agent goes on with.
 
 ## Coordinate spaces below
 

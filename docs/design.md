@@ -1689,6 +1689,22 @@ branch begins as a chat in its mode, whose agent converts it once it knows the
 work, instead of a workspace on a placeholder branch whose directory would keep
 a meaningless name.
 
+`shoal convert` also hands a space's work to another agent tool, so work goes
+on when one tool's usage limit hits, through the same pending conversion and
+relocation, since the running agent's turn must end first and a stopped one
+has none to end. Context reaches the new tool as copies of the earlier
+sessions' files in the space's attached files, never by translating one
+tool's session format into another's, which Shoal never reads; the new tool
+starts a new session told where they are, also a tool the space used before,
+whose old session would miss what happened since. The copies outlive the
+tools' own files and moves between machines, and a session is copied again
+only once its files changed, so repeated handoffs keep one copy of each. A
+handoff is recorded with the session it left, and completed by the new tool's
+first session report, which is when the session it started is known: that
+gives the new session's `continued_from` and journals the handoff, so apps
+show both transcripts with the tool of each. Switching tools automatically on
+a usage limit is a proposal for a later change.
+
 `shoal create` makes a workspace as `shoal start` makes one, from the same
 arguments that choose what it starts from and where it goes, and starts no
 agent there: `create` is the way to a workspace without one, at the top from
