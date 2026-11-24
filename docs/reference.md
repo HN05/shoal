@@ -301,10 +301,11 @@ On Linux every command an execution wrapper starts for work, an agent, a CI
 job's runner, a demo, a setup or a `shoal run` command, and every one-shot
 agent the daemon runs, a [reviewer](#local-reviews) or the gate, runs in a
 transient systemd scope of its own in `shoal-work.slice`, with
-`OOMPolicy=continue`, named `shoal-<space ID>-<run>.scope` for the space whose
-work it does, wherever the wrapper runs, such as in a terminal host's
+`OOMPolicy=continue`, wherever the wrapper runs, such as in a terminal host's
 place: the command keeps the wrapper's terminal and its own environment,
-including the runtime directory and bus its configuration sets. The daemon, places, workers and
+including the runtime directory and bus its configuration sets. A wrapper
+names its command's scope `shoal-<space ID>-<run>.scope` for the space whose
+work it does. The daemon, places, workers and
 wrappers, and the pushes and merges Shoal runs, stay out of it. A CI job's
 scope ends whole with any process of it the kernel's OOM killer takes. Where
 no scope can start, as without a user bus, from a login whose processes the
