@@ -16,6 +16,8 @@ use crate::{
     model::Space,
     state::QueueState,
 };
+use shoal_ids::space_ids::SpaceNumber;
+use shoal_protocol::space_names::SpaceName;
 use shoal_workers::resume::Resuming;
 
 /// What `shoal resume` tells the user as a resume goes.
@@ -38,7 +40,7 @@ impl Resuming for Reporting<'_> {
             .iter()
             .map(|command| command.argv.clone())
             .collect();
-        stopped_commands(self.0, space, &commands);
+        stopped_commands(self.0, (space.number, &space.name), &commands);
     }
 
     fn failed(&self, space: &str, error: &anyhow::Error) -> Failure {
@@ -121,9 +123,13 @@ fn summary(count: usize, starting: bool) -> String {
     format!("{done} {count} {agents}; shoal queue shows them")
 }
 
-/// List the stopped `commands` of `space`, each as its arguments, which no
-/// agent receives, in text output.
-pub(super) fn stopped_commands(ctx: &Context, space: &Space, commands: &[Vec<String>]) {
+/// List the stopped `commands` of the space numbered and named `space`,
+/// each as its arguments, which no agent receives, in text output.
+pub(in crate::cli::commands) fn stopped_commands(
+    ctx: &Context,
+    space: (SpaceNumber, &SpaceName),
+    commands: &[Vec<String>],
+) {
     if !commands.is_empty() && !ctx.json {
         outln!("{}", command_list(space, commands));
     }
@@ -176,23 +182,24 @@ pub(super) fn commands_not_told(space: &Space, commands: &[SavedCommand]) {
         .iter()
         .map(|command| command.argv.clone())
         .collect();
-    eprintln!("{}", command_list(space, &commands));
+    eprintln!("{}", command_list((space.number, &space.name), &commands));
 }
 
-/// The stopped `commands` of `workspace`, each as the command that reruns
-/// it there.
-fn command_list(space: &Space, commands: &[Vec<String>]) -> String {
-    let mut text = format!("Stopped commands in {}, not restarted:", space.label());
+/// The stopped `commands` of the space numbered and named `space`, each as
+/// the command that reruns it there.
+fn command_list((number, name): (SpaceNumber, &SpaceName), commands: &[Vec<String>]) -> String {
+    let label = shoal_protocol::space_names::label(number, name);
+    let mut text = format!("Stopped commands in {label}, not restarted:");
     for argv in commands {
-        text.push_str(&format!("\n  {}", rerun(space, argv)));
+        text.push_str(&format!("\n  {}", rerun(number, argv)));
     }
     text
 }
 
-/// The command that runs `argv` in `space` again, selecting it by its
-/// number, since names select nothing.
-fn rerun(space: &Space, argv: &[String]) -> String {
-    let number = space.number.to_string();
+/// The command that runs `argv` in the space numbered `number` again,
+/// selecting it by its number, since names select nothing.
+fn rerun(number: SpaceNumber, argv: &[String]) -> String {
+    let number = number.to_string();
     let mut words = vec!["shoal", "run", "--workspace", &number, "--"];
     words.extend(argv.iter().map(String::as_str));
     crate::shell::quote(&words)

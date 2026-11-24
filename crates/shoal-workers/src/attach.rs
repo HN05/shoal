@@ -10,7 +10,8 @@ mod sessions;
 mod target;
 
 use anyhow::Result;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_ids::space_ids::SpaceNumber;
+use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 use crate::{client::connection::CommandPaths, model::QueueEntry, terminal::Session};
 
@@ -20,11 +21,15 @@ use restores::{POLL, WAIT};
 pub use target::Target;
 
 /// What a caller of attach does its own way: picking a session and telling
-/// the user what starts.
+/// the user what starts and what no agent receives.
 pub trait Attaching: Sync {
     /// The one of `sessions`, several an attach that named none offers,
     /// that the user picks.
     fn pick_session<'a>(&self, sessions: &[&'a Session]) -> Result<&'a Session>;
+
+    /// Tell the user of the stopped `commands`, each as its arguments, of
+    /// the space numbered and named `space`, which no agent receives.
+    fn stopped_commands(&self, space: (SpaceNumber, &SpaceName), commands: &[Vec<String>]);
 
     /// Tell the user that the queued restore or launch `entry` starts.
     fn resuming(&self, entry: &QueueEntry) -> Result<()>;

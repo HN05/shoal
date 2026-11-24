@@ -73,7 +73,7 @@ fn add_commands(ctx: &Context, report: &mut Queued, space: &Space, commands: Vec
     if commands.is_empty() {
         return;
     }
-    super::reports::stopped_commands(ctx, space, &commands);
+    super::reports::stopped_commands(ctx, (space.number, &space.name), &commands);
     report.commands.push(StoppedCommands {
         workspace: space.name.clone(),
         commands,

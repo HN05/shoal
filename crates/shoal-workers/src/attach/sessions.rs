@@ -101,13 +101,29 @@ impl<A: Attaching> Steps<'_, A> {
             ..AgentResume::default()
         };
         let request = crate::client::agents::resume(SpaceSelector::id(target.id()), resume);
-        if !resumed(target.name(), request.send(self.paths).await?)? {
+        let outcome = request.send(self.paths).await?;
+        self.report_commands(target, &outcome);
+        if !resumed(target.name(), outcome)? {
             return Ok(false);
         }
         // A restore whose agent registered already left the queue, which
         // `awaited` finds running.
         self.resume_space(target.id()).await?;
         Ok(true)
+    }
+
+    /// Tell the user of the stopped commands of `target` that its resume's
+    /// `outcome` gives back, which no agent receives.
+    fn report_commands(&self, target: &Target, outcome: &ResumeOutcome) {
+        let (ResumeOutcome::Queued { commands, .. } | ResumeOutcome::Commands { commands }) =
+            outcome
+        else {
+            return;
+        };
+        if !commands.is_empty() {
+            let space = (target.number(), target.name());
+            self.attaching.stopped_commands(space, commands);
+        }
     }
 
     /// `target`, read again, with the session its agent, only `execution`

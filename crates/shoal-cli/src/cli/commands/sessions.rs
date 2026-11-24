@@ -6,7 +6,7 @@
 
 use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
-use shoal_ids::space_ids::SpaceId;
+use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::attaching::Viewer;
 use shoal_workers::attach::{Attaching, Target};
 
@@ -26,7 +26,7 @@ use crate::{
 use shoal_protocol::{
     hub::directory::{HubView, Offered},
     model::Located,
-    space_names::SpaceSelector,
+    space_names::{SpaceName, SpaceSelector},
 };
 
 pub(super) async fn attach(
@@ -112,6 +112,10 @@ impl Attaching for Callbacks<'_> {
             .collect();
         ui::require_argument(self.0, "session", "session")?;
         ui::pick_choice(self.0, "Attach session> ", &choices)
+    }
+
+    fn stopped_commands(&self, space: (SpaceNumber, &SpaceName), commands: &[Vec<String>]) {
+        super::resume::reports::stopped_commands(self.0, space, commands);
     }
 
     fn resuming(&self, entry: &QueueEntry) -> Result<()> {
