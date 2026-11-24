@@ -44,7 +44,7 @@ impl Spaces {
         };
         ensure_run_fits(launch)?;
         let repo = self.run_repository(daemon, launch, &input, caller).await?;
-        let context = run_context(&repo, caller);
+        let context = self.run_context(&repo, caller).await?;
         let run = daemon.launch_run(&context, &input, caller).await?;
         let url = ItemRef::parse_kind(LinkKind::Ci, &run.url)?;
         launches::workspace::ensure_link_in(&repo, Some(url.repository())).await?;
@@ -85,6 +85,22 @@ impl Spaces {
                 })
             }
         }
+    }
+
+    /// Where `caller` reads a run of `repo` it starts on: from its own
+    /// space, whose repository decides whether the run is its own to link,
+    /// acting in `repo` where that space has no repository, or for the user
+    /// from `repo`'s checkout.
+    async fn run_context(&self, repo: &Repository, caller: Option<&Caller>) -> Result<ItemContext> {
+        let Some(caller) = caller else {
+            return Ok(ItemContext::Checkout(repo.id.clone()));
+        };
+        let own = self.find_space(&caller.space_id).await?;
+        let without = own.is_none_or(|space| space.repository_id.is_none());
+        Ok(ItemContext::Space {
+            space: SpaceSelector::id(&caller.space_id),
+            repository: without.then(|| repo.id.clone()),
+        })
     }
 
     /// Whether the mode `launch` names starts a chat for `caller`; the
@@ -131,16 +147,6 @@ fn named_repository(launch: &Launch) -> Option<&String> {
         _ => None,
     };
     launch.repository.as_ref().or(positional)
-}
-
-/// Where `caller` reads a run of `repo` it starts on: from its own space,
-/// whose repository decides whether the run is its own to link, or for the
-/// user from `repo`'s checkout.
-fn run_context(repo: &Repository, caller: Option<&Caller>) -> ItemContext {
-    match caller {
-        Some(caller) => ItemContext::space(SpaceSelector::id(&caller.space_id)),
-        None => ItemContext::Checkout(repo.id.clone()),
-    }
 }
 
 /// The branch of `repo` other than its default branch that `run` ran on,

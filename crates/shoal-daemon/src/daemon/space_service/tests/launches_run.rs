@@ -361,3 +361,26 @@ async fn ci_names_a_run_by_its_number_in_the_repository_the_start_names() {
     assert_eq!(forge.related(&launched).await, [forge.run(1)]);
     assert!(unplaced.is_err());
 }
+
+#[tokio::test]
+async fn a_chat_without_a_repository_starts_on_a_run_by_its_number_with_repo() {
+    let forge = Forge::new().await;
+    let master = chat(&forge.manager, "master", "orchestrate", None, None).await;
+    let caller = Caller {
+        space_id: master.id.clone(),
+        execution: None,
+        granted: None,
+        access: Access::Full,
+        vouched: None,
+    };
+    let numbered = |launch: &mut Launch| {
+        launch.target = None;
+        launch.ci = Some(ItemChoice::Named(ItemInput::Number(1)));
+        launch.repository = Some(forge.repo.id.to_string());
+    };
+
+    let launched = forge.start(1, numbered, Some(&caller)).await.unwrap();
+
+    assert_eq!(launched.space.repository_id.as_ref(), Some(&forge.repo.id));
+    assert_eq!(forge.related(&launched).await, [forge.run(1)]);
+}

@@ -52,8 +52,9 @@ pub struct Launch {
     /// The PR whose branch a new workspace starts on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr: Option<ItemChoice>,
-    /// The CI run the agent starts on, by its URL, which says where it
-    /// starts: in its PR's or branch's workspace, or else in a chat.
+    /// The CI run the agent starts on, by its URL or the number in it,
+    /// which says where it starts: in its PR's or branch's workspace, or
+    /// else in a chat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ci: Option<ItemChoice>,
     /// The workspace whose files a new workspace copies.
