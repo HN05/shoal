@@ -104,6 +104,20 @@ impl Coordination {
             .await
     }
 
+    /// Whether `caller` starts the agent of the space `selector` names past
+    /// the agent limits without asking, as its `limits` permission at
+    /// `direct` lets it.
+    pub async fn starts_beyond_limits(
+        &self,
+        daemon: &dyn Daemon,
+        caller: &Caller,
+        selector: &shoal_protocol::space_names::SpaceSelector,
+    ) -> Result<bool> {
+        let repository = self.space_repository(daemon, selector).await?;
+        let permissions = self.caller_permissions(daemon, caller, repository.as_ref());
+        Ok(permissions.await?.limits.value == Acting::Direct)
+    }
+
     /// The repository of the space `selector` names, which an action on it
     /// is in; none for a chat without one.
     pub async fn space_repository(

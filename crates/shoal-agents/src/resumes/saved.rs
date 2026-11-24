@@ -48,7 +48,7 @@ impl Agents {
             };
             (self.change_stopped_permissions(daemon, targets, change, caller)).await?;
         }
-        let entries = (self.queue_restores(daemon, caller, space, &saved, resume)).await?;
+        let entries = self.queue_restores(daemon, space, &saved, resume).await?;
         let selector = SpaceSelector::id(&space.id);
         // A resume the user makes is their interaction with its agent.
         (self.record_user_interaction(daemon, caller, &selector)).await;
@@ -123,19 +123,16 @@ impl Agents {
 
     /// Queue the restore of each agent and last session `saved` keeps of
     /// `space`, starting it at once when `resume` asks for it; a last
-    /// session, which holds no heavy slot, continues at once when the user
-    /// resumes its space alone and no stopped agent restores with it, while
-    /// a scoped `caller` starts nothing past the limits it did not ask for.
+    /// session, which holds no heavy slot, continues at once when the
+    /// resume names its space alone and no stopped agent restores with it.
     async fn queue_restores(
         &self,
         daemon: &dyn Daemon,
-        caller: Option<&Caller>,
         space: &Space,
         saved: &Saved,
         resume: AgentResume,
     ) -> Result<Vec<QueueEntry>> {
-        let last_session_alone = resume.alone && caller.is_none() && saved.agents.is_empty();
-        let now = resume.now || last_session_alone;
+        let now = resume.now || (resume.alone && saved.agents.is_empty());
         let selector = SpaceSelector::id(&space.id);
         let mut entries = Vec::new();
         for session in saved.agents.iter().chain(&saved.sessions) {

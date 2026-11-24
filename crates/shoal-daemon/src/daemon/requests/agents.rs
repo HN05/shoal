@@ -414,6 +414,12 @@ impl Scoped for AgentMethod {
                     (manager.coordination)
                         .authorize_start_beyond_limits(manager, caller, "resume", target)
                         .await?;
+                } else if resume.alone {
+                    // A last session it resumes alone starts past the limits
+                    // only where it may without asking.
+                    resume.alone = (manager.coordination)
+                        .starts_beyond_limits(manager, caller, target)
+                        .await?;
                 }
                 Some(target)
             }

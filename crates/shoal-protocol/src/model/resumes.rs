@@ -14,7 +14,8 @@ pub struct AgentResume {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
     /// The resume names this space alone, so a last session, which holds
-    /// no heavy slot, continues at once when the user resumes it.
+    /// no heavy slot, continues at once, for a scoped caller only where its
+    /// `limits` permission lets it start past the limits without asking.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub alone: bool,
     /// What it changes in the permissions the agent was given.
