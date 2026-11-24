@@ -16,8 +16,21 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
                 branch,
                 mode,
                 space,
-            } => convert::to_workspace(&ctx, space, branch, mode).await,
-            ConvertCommand::Chat { mode, space } => convert::to_chat(&ctx, space, mode).await,
+                agent,
+                carrying,
+            } => convert::to_workspace(&ctx, space, branch, mode, carrying.change(agent)).await,
+            ConvertCommand::Chat {
+                mode,
+                space,
+                agent,
+                carrying,
+            } => convert::to_chat(&ctx, space, mode, carrying.change(agent)).await,
+            ConvertCommand::Agent {
+                tool,
+                mode,
+                space,
+                carrying,
+            } => convert::to_agent(&ctx, space, mode, carrying.change(Some(tool))).await,
         },
     }
 }

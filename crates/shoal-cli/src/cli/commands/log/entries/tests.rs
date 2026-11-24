@@ -137,6 +137,12 @@ fn a_conversion_names_what_the_space_became() {
         converted(serde_json::json!({"space_kind": "chat"})),
         "to chat"
     );
+    assert_eq!(
+        converted(serde_json::json!({"handoff": {
+            "from": {"agent": "claude", "session": "c1", "integration": "claude"},
+            "to": {"agent": "codex", "session": "x1", "integration": "codex"}}})),
+        "from claude session c1 to codex session x1"
+    );
 }
 
 #[test]

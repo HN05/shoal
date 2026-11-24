@@ -41,12 +41,14 @@ pub enum CreateCommand {
     /// activity; outside one it is a top-level workspace. shoal start
     /// starts an agent of its own there.
     Create(Box<CreateArgs>),
-    /// Turn a chat into a workspace, or a workspace into a chat.
+    /// Turn a chat into a workspace or a workspace into a chat, or hand a
+    /// space's work to another agent tool.
     ///
     /// The space stays the same: it keeps its number, name, parent,
     /// children, links, threads, files and progress. Its agent restarts
     /// in the new place once its current turn ends, carrying on with its
-    /// conversation. A space's agent converts the spaces its scope reaches.
+    /// conversation, or another tool takes the work over from copies of
+    /// it. A space's agent converts the spaces its scope reaches.
     Convert {
         #[command(subcommand)]
         command: ConvertCommand,
@@ -74,6 +76,14 @@ pub enum ConvertCommand {
         /// else a picker.
         #[arg(short = 's', long)]
         space: Option<SpaceSelector>,
+        /// Hand the work to this agent tool, which starts a new session
+        /// from copies of the sessions so far, as shoal convert agent does,
+        /// also from a stopped agent; the space's own tool continues its
+        /// session.
+        #[arg(short = 'a', long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        #[command(flatten)]
+        carrying: CarryingArgs,
     },
     /// Turn a workspace into a chat in the repository's checkout.
     ///
@@ -90,7 +100,68 @@ pub enum ConvertCommand {
         /// in, else a picker.
         #[arg(short = 's', long)]
         space: Option<SpaceSelector>,
+        /// Hand the work to this agent tool, which starts a new session
+        /// from copies of the sessions so far, as shoal convert agent does,
+        /// also from a stopped agent; the space's own tool continues its
+        /// session.
+        #[arg(short = 'a', long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        #[command(flatten)]
+        carrying: CarryingArgs,
     },
+    /// Hand a space's work over to another agent tool.
+    ///
+    /// The tool starts a new session in the same space, told what the
+    /// space is and where the copies of its sessions so far are, which go
+    /// into its attached files; no session is converted between tools. A
+    /// running agent hands over once its turn ends, a stopped or asleep one
+    /// at once.
+    Agent {
+        /// The agent tool that takes the work over, a built-in agent or a
+        /// configured command; the space's own is refused.
+        #[arg(value_parser = AgentParser)]
+        tool: Agent,
+        /// The mode the new agent starts in; defaults to the space's.
+        #[arg(short = 'm', long)]
+        mode: Option<crate::config::modes::ModeName>,
+        /// The space, by number or ID; defaults to the space this runs in,
+        /// else a picker.
+        #[arg(short = 's', long)]
+        space: Option<SpaceSelector>,
+        #[command(flatten)]
+        carrying: CarryingArgs,
+    },
+}
+
+// How the agent of a converted space goes on, which every `shoal convert`
+// takes. A doc comment here would replace the description of every command
+// that flattens it.
+#[derive(Debug, Default, Clone, Args)]
+pub struct CarryingArgs {
+    #[command(flatten)]
+    pub model: ModelArgs,
+    /// Set a permission of the agent, as KEY=VALUE such as push=propose;
+    /// KEY=mode drops the value given before, and keys left out keep
+    /// theirs. Repeatable. A space's agent gives only what it holds itself.
+    #[arg(long = "permission", value_name = "KEY=VALUE", value_parser = permission_assignment)]
+    pub permissions: Vec<PermissionChange>,
+    /// What the agent tool taking the work over is told after its mode's
+    /// instructions.
+    #[arg(last = true)]
+    pub note: Vec<String>,
+}
+
+impl CarryingArgs {
+    /// The change these arguments make to the agent, handing the work to
+    /// `agent` when given.
+    pub fn change(self, agent: Option<Agent>) -> crate::protocol::AgentChange {
+        crate::protocol::AgentChange {
+            agent,
+            model: self.model.into(),
+            permissions: PermissionChange::combined(&self.permissions),
+            note: (!self.note.is_empty()).then(|| self.note.join(" ")),
+        }
+    }
 }
 
 // The branch a new workspace works on, which `shoal convert workspace`

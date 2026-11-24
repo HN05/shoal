@@ -11,11 +11,32 @@ pub(super) fn acting(command: &CreateCommand) -> Option<Acting> {
         CreateCommand::Start(_) => start::starting(),
         CreateCommand::Create(args) => copies::copying(args.copy.checkpoint),
         CreateCommand::Convert {
-            command: ConvertCommand::Workspace { mode, .. },
-        } => convert::to_workspace_request(mode.clone()),
+            command:
+                ConvertCommand::Workspace {
+                    mode,
+                    agent,
+                    carrying,
+                    ..
+                },
+        } => convert::to_workspace_request(mode.clone(), carrying.clone().change(agent.clone())),
         CreateCommand::Convert {
-            command: ConvertCommand::Chat { mode, .. },
-        } => convert::to_chat_request(mode.clone()),
+            command:
+                ConvertCommand::Chat {
+                    mode,
+                    agent,
+                    carrying,
+                    ..
+                },
+        } => convert::to_chat_request(mode.clone(), carrying.clone().change(agent.clone())),
+        CreateCommand::Convert {
+            command:
+                ConvertCommand::Agent {
+                    tool,
+                    mode,
+                    carrying,
+                    ..
+                },
+        } => convert::to_agent_request(mode.clone(), carrying.clone().change(Some(tool.clone()))),
         // A contribution forks a repository, not a space.
         CreateCommand::Contribute(_) => return None,
     })

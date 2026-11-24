@@ -172,8 +172,16 @@ fn created(event: &EventDetails) -> String {
     parts.join(", ")
 }
 
-/// What the space became: a chat, or a workspace on its branch at its path.
+/// What the space became: a chat, or a workspace on its branch at its path;
+/// or the agent tool its work went from, and the one it went to.
 fn converted(event: &EventDetails) -> String {
+    if let Some(handoff) = &event.handoff {
+        return format!(
+            "from {} to {}",
+            handed_over(&handoff.from),
+            handed_over(&handoff.to)
+        );
+    }
     match &event.space {
         EventSpace::Workspace {
             path,
@@ -183,6 +191,15 @@ fn converted(event: &EventDetails) -> String {
             format!("to workspace at {}", path.display())
         }
         EventSpace::Chat => "to chat".to_owned(),
+    }
+}
+
+/// One side of a handoff between agent tools: the agent, with its session
+/// when it reported one.
+fn handed_over(side: &shoal_protocol::transcripts::HandedOverSession) -> String {
+    match &side.session {
+        Some(session) => format!("{} session {session}", side.agent),
+        None => side.agent.to_string(),
     }
 }
 

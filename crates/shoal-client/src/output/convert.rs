@@ -14,4 +14,4 @@ pub struct Converted {
     pub workspace: Workspace,
 }
 
-outputs!(Converted);
+outputs!(Converted, shoal_protocol::protocol::AgentSwitch);
