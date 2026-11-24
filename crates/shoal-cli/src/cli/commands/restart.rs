@@ -31,12 +31,11 @@ const PARALLEL_RESTARTS: usize = 16;
 pub(super) async fn run(
     ctx: &Context,
     targets: SpaceTargets,
-    machines: &[String],
     agent: Option<Agent>,
     restart: AgentRestart,
 ) -> Result<i32> {
     let restarting = restarting();
-    let selection = selection::load(ctx, (targets, machines), agent.as_ref(), &restarting);
+    let selection = selection::load(ctx, targets, agent.as_ref(), &restarting);
     let selection = selection.await?;
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         selection::ensure_below(&selection.spaces)?;

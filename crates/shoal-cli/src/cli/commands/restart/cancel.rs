@@ -10,18 +10,14 @@ use crate::client::output::{
     batch::Failure,
 };
 
-/// Drop the recorded restart of each space `targets` or `machines` selects;
-/// with `--all` or `--machine`, reporting only the spaces that had one. A
-/// space whose daemon cannot be asked, as on an offline machine, fails
-/// alone, exiting 1 once the others were asked.
-pub(in crate::cli::commands) async fn cancel(
-    ctx: &Context,
-    targets: SpaceTargets,
-    machines: &[String],
-) -> Result<i32> {
-    let selector = targets.all || !machines.is_empty();
-    let spaces = selection::spaces(ctx, targets, machines, &cancelling()).await?;
-    let spaces = spaces.into_targets();
+/// Drop the recorded restart of each space `targets` selects; with `--all`
+/// or `--machine`, reporting only the spaces that had one. A space whose
+/// daemon cannot be asked, as on an offline machine, fails alone, exiting 1
+/// once the others were asked.
+pub(in crate::cli::commands) async fn cancel(ctx: &Context, targets: SpaceTargets) -> Result<i32> {
+    let selector = targets.all || !targets.machines.is_empty();
+    let spaces = selection::spaces(ctx, targets, &cancelling()).await?;
+    let spaces = selection::into_targets(spaces);
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         selection::ensure_below(&spaces)?;
     }

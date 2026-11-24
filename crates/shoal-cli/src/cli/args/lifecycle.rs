@@ -123,22 +123,22 @@ pub struct StopArgs {
     #[arg(short = 'y', long)]
     pub yes: bool,
     /// Keep running the spaces below the selected ones.
-    #[arg(long, conflicts_with = "all")]
+    #[arg(long, conflicts_with_all = ["all", "machines"])]
     pub skip_children: bool,
     /// Cancel the current turns of the agents instead, keeping them running.
     ///
     /// Shoal types each agent's interrupt key into its terminal session, records its turn
     /// as ended, and leaves agents without a running turn alone.
-    #[arg(long, conflicts_with_all = ["all", "yes", "skip_children"])]
+    #[arg(long, conflicts_with_all = ["all", "machines", "yes", "skip_children"])]
     pub interrupt: bool,
     /// Stop only the processes Shoal does not track, leftovers included.
     #[arg(
         long,
-        conflicts_with_all = ["all", "yes", "skip_children", "interrupt", "leftovers"]
+        conflicts_with_all = ["all", "machines", "yes", "skip_children", "interrupt", "leftovers"]
     )]
     pub processes: bool,
     /// Stop only leftovers.
-    #[arg(long, conflicts_with_all = ["all", "yes", "skip_children", "interrupt"])]
+    #[arg(long, conflicts_with_all = ["all", "machines", "yes", "skip_children", "interrupt"])]
     pub leftovers: bool,
 }
 

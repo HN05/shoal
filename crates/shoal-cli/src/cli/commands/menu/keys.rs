@@ -254,7 +254,7 @@ fn stop(space: Option<SpaceSelector>) -> Command {
     Command::Lifecycle(LifecycleCommand::Stop(StopArgs {
         targets: SpaceTargets {
             space: space.into_iter().collect(),
-            all: false,
+            ..SpaceTargets::default()
         },
         yes: false,
         skip_children: false,

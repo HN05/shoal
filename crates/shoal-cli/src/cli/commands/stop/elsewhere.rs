@@ -8,24 +8,21 @@ use shoal_protocol::{
 };
 
 use crate::{
-    cli::{commands::machines, context::Context, output::Style},
+    cli::{context::Context, output::Style},
     client::output::agents::SpaceStopped,
     protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
-/// Stop `space` on its machine, reporting it, or that the hub holds the
-/// stop.
-pub(super) async fn stop_one(ctx: &Context, space: &Listed, yes: bool) -> Result<()> {
+/// Stop `space` on its machine, reporting it, or return the stop the hub
+/// holds while that machine is offline.
+pub(super) async fn stop_one(ctx: &Context, space: &Listed, yes: bool) -> Result<Option<Queued>> {
     let selector = SpaceSelector::id(&space.space.id);
     // A process here is none of that machine's.
     let processes = UntrackedProcesses::Stop { requester: None };
     let stopped = super::stop(ctx, &selector, yes, QueuedLaunches::Cancel, processes).await;
     let stopped = match stopped {
         Ok(stopped) => stopped,
-        Err(error) => match error.downcast::<Queued>() {
-            Ok(queued) => return machines::queued(ctx, &queued).map(drop),
-            Err(error) => return Err(error),
-        },
+        Err(error) => return error.downcast::<Queued>().map(Some),
     };
     let message = format!("Stopped {} on its machine", space.space.name);
     let report = SpaceStopped {
@@ -35,5 +32,6 @@ pub(super) async fn stop_one(ctx: &Context, space: &Listed, yes: bool) -> Result
         cancelled: stopped.cancelled,
         cancelled_run: stopped.cancelled_run,
     };
-    ctx.emit_styled(Style::Success, &message, report)
+    ctx.emit_styled(Style::Success, &message, report)?;
+    Ok(None)
 }

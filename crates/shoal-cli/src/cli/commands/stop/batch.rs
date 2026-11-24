@@ -28,18 +28,23 @@ pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
         super::ensure_below(&running)?;
     }
     if running.is_empty() {
-        ctx.emit(
-            "No running agents or commands",
-            StoppedSpaces {
-                stopped: Vec::new(),
-                failed: Vec::new(),
-                cancelled: Vec::new(),
-                cancelled_runs: Vec::new(),
-            },
-        )?;
-        return Ok(0);
+        return nothing_to_stop(ctx);
     }
     stop_each(ctx, &running, "--all", false).await
+}
+
+/// Report that a stop selected nothing to stop.
+pub(super) fn nothing_to_stop(ctx: &Context) -> Result<i32> {
+    ctx.emit(
+        "No running agents or commands",
+        StoppedSpaces {
+            stopped: Vec::new(),
+            failed: Vec::new(),
+            cancelled: Vec::new(),
+            cancelled_runs: Vec::new(),
+        },
+    )?;
+    Ok(0)
 }
 
 /// Stop `spaces` in parallel, reporting each; one failure does not keep the

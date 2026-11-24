@@ -1,7 +1,10 @@
 //! Which spaces a stop takes, and refusing them before any stops.
 use anyhow::{Context as _, Result, ensure};
 
-use crate::{cli::context::Context, model::Space};
+use crate::{
+    cli::{args::SpaceTargets, commands::space_selection, context::Context},
+    model::Space,
+};
 use shoal_protocol::model::Located;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -80,6 +83,27 @@ pub(super) async fn check_targets(
         refusals.join("\n  ")
     );
     Ok(())
+}
+
+/// The spaces `--machine` selects on the machines `targets` names: those
+/// `shoal stop --all` would stop there, another machine's as it last
+/// reported them, which the hub holds a stop for while it is offline, and
+/// this machine's as its daemon selects them now.
+pub(super) async fn on_machines(ctx: &Context, targets: SpaceTargets) -> Result<Vec<Located>> {
+    let located = space_selection::located(ctx, targets, false, &super::stopping()).await?;
+    let here = match located
+        .iter()
+        .any(|located| matches!(located, Located::Here(_)))
+    {
+        true => crate::client::stopping::targets(&ctx.paths).await?,
+        false => Vec::new(),
+    };
+    Ok((located.into_iter())
+        .filter(|located| match located {
+            Located::Here(space) => here.iter().any(|target| target.id == space.id),
+            Located::Elsewhere { space, .. } => space.space.stoppable,
+        })
+        .collect())
 }
 
 /// The spaces of this machine among `located`.

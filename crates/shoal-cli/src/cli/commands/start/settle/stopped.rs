@@ -105,7 +105,7 @@ async fn resume_agent(
 ) -> Result<i32> {
     let targets = SpaceTargets {
         space: vec![SpaceSelector::id(&workspace.id)],
-        all: false,
+        ..SpaceTargets::default()
     };
     let resumed = resume::Options {
         execution: None,

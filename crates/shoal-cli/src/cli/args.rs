@@ -51,6 +51,10 @@ pub struct SpaceTargets {
     /// All workspaces.
     #[arg(short = 'A', long, conflicts_with = "space")]
     pub all: bool,
+    /// The spaces of this joined machine instead, as --all selects them here, by its name or the
+    /// ID shoal hub ls shows. Repeatable.
+    #[arg(long = "machine", value_name = "MACHINE", conflicts_with_all = ["space", "all"])]
+    pub machines: Vec<String>,
 }
 
 // A description or comment, given inline or read from a file.

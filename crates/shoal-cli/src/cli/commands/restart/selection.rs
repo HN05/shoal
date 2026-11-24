@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::hub::{Member, directory::Listed};
-use shoal_protocol::model::Located;
 
 use super::target::Target;
 use crate::client::output::agents::Skipped;
@@ -13,8 +12,9 @@ use crate::{
     agent::Agent,
     cli::{
         args::SpaceTargets,
+        commands::space_selection::{self, Chosen},
         context::Context,
-        ui::{self, Acting},
+        ui::Acting,
     },
     model::{RunningAgent, Space, Spaces},
     sessions::Origin,
@@ -31,14 +31,6 @@ pub(super) struct Selection {
     pub places: HashMap<SpaceId, Origin>,
 }
 
-/// The spaces a command names or selects, before their agents filter them:
-/// this machine's, and other machines' with the machine of each.
-#[derive(Default)]
-pub(super) struct Chosen {
-    pub here: Vec<Space>,
-    pub elsewhere: Vec<(Listed, Member)>,
-}
-
 /// `--all` selects every workspace and chat of this machine but the
 /// caller's own, `--machine` every space of the machines it names, names
 /// select theirs wherever they run, and none of them the picker, with
@@ -47,41 +39,35 @@ pub(super) struct Chosen {
 /// other machines its scope reaches.
 pub(super) async fn load(
     ctx: &Context,
-    (targets, machines): (SpaceTargets, &[String]),
+    targets: SpaceTargets,
     agent: Option<&Agent>,
     acting: &Acting,
 ) -> Result<Selection> {
-    let named = !targets.all && !targets.space.is_empty();
-    let chosen = spaces(ctx, targets, machines, acting).await?;
+    let named = !targets.space.is_empty();
+    let chosen = spaces(ctx, targets, acting).await?;
     let agents = crate::client::agents::all(&ctx.paths).await?;
     let mut selection = select(chosen.here, &agents, agent, named);
     select_elsewhere(&mut selection, chosen.elsewhere, agent, named);
     Ok(selection)
 }
 
-/// The spaces `targets` or `machines` select: with `--machine` every space
-/// of those machines, with `--all` every workspace and chat of this
-/// machine but the caller's own, else those its names select, or the
-/// picker.
+/// The spaces `targets` selects: with `--all` every workspace and chat of
+/// this machine but the caller's own, else as every command that selects
+/// spaces selects them.
 pub(super) async fn spaces(
     ctx: &Context,
     targets: SpaceTargets,
-    machines: &[String],
     acting: &Acting,
 ) -> Result<Chosen> {
-    if targets.all && machines.is_empty() {
+    if targets.all {
         let spaces = crate::client::spaces::list(&ctx.paths).await?;
         return Ok(Chosen {
             here: reached(ctx, spaces),
             elsewhere: Vec::new(),
         });
     }
-    let selected = match machines.is_empty() {
-        true => ui::select_spaces(ctx, targets.space, false, acting).await?,
-        false => Vec::new(),
-    };
-    let located = crate::client::spaces::select(&ctx.paths, selected, machines.to_vec(), false);
-    Ok(Chosen::of(located.await?))
+    let located = space_selection::located(ctx, targets, false, acting).await?;
+    Ok(Chosen::of(located))
 }
 
 /// The spaces of `spaces` that `--all` selects: every one the caller's
@@ -190,28 +176,13 @@ pub(super) fn ensure_below(spaces: &[Target]) -> Result<()> {
     Ok(())
 }
 
-impl Chosen {
-    /// The chosen spaces as targets, this machine's first.
-    pub(super) fn into_targets(self) -> Vec<Target> {
-        let elsewhere = (self.elsewhere.into_iter())
-            .map(|(listed, machine)| Target::elsewhere(&listed, machine));
-        (self.here.into_iter().map(Target::from))
-            .chain(elsewhere)
-            .collect()
-    }
-
-    /// The spaces `located`, which the daemon selected each once, by the
-    /// machine each runs on.
-    fn of(located: Vec<Located>) -> Self {
-        let mut chosen = Self::default();
-        for located in located {
-            match located {
-                Located::Here(space) => chosen.here.push(*space),
-                Located::Elsewhere { space, machine } => chosen.elsewhere.push((*space, *machine)),
-            }
-        }
-        chosen
-    }
+/// The `chosen` spaces as targets, this machine's first.
+pub(super) fn into_targets(chosen: Chosen) -> Vec<Target> {
+    let elsewhere =
+        (chosen.elsewhere.into_iter()).map(|(listed, machine)| Target::elsewhere(&listed, machine));
+    (chosen.here.into_iter().map(Target::from))
+        .chain(elsewhere)
+        .collect()
 }
 
 #[cfg(test)]

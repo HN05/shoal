@@ -217,19 +217,26 @@ pub enum HeldOutcome {
     Refused { reason: String },
 }
 
-impl std::fmt::Display for Queued {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Queued {
+    /// That the hub holds `what` for the offline machine, with when it
+    /// last saw it and when what it holds expires.
+    pub fn holding(&self, what: &str) -> String {
         let now = UnixTime::now();
         let seen = match self.last_seen {
             Some(seen) => format!("last seen {}", seen.local_ago(now)),
             None => "never connected".into(),
         };
-        write!(
-            f,
-            "machine {} is offline ({seen}); the hub delivers this once it connects, unless it is still offline at {}",
+        format!(
+            "machine {} is offline ({seen}); the hub delivers {what} once it connects, unless it is still offline at {}",
             self.name,
             self.expires_at.local_minutes()
         )
+    }
+}
+
+impl std::fmt::Display for Queued {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.holding("this"))
     }
 }
 

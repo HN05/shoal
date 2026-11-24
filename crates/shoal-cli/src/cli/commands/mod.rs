@@ -82,6 +82,7 @@ mod setup;
 mod simulators;
 mod skill;
 mod sleep;
+mod space_selection;
 mod spaces;
 mod start;
 mod stop;

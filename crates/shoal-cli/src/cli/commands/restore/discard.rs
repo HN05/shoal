@@ -13,7 +13,7 @@ use shoal_ids::execution_ids::ExecutionId;
 /// Discard the agents of the spaces `targets` selects as `shoal resume`
 /// selects them, every space's with one for `--all`, only the `execution`
 /// one when given.
-pub(super) async fn run(
+pub(in crate::cli::commands) async fn run(
     ctx: &Context,
     targets: SpaceTargets,
     execution: Option<ExecutionId>,

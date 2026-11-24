@@ -32,7 +32,7 @@ pub enum SessionsCommand {
         #[command(flatten)]
         targets: SpaceTargets,
         /// Select a stopped execution when the space has several records.
-        #[arg(long, conflicts_with = "all")]
+        #[arg(long, conflicts_with_all = ["all", "machines"])]
         execution: Option<ExecutionId>,
         /// Start at once regardless of the agent limits, where each agent
         /// stopped or in the background.
@@ -40,7 +40,7 @@ pub enum SessionsCommand {
         now: bool,
         /// Resume one agent in this terminal at once, regardless of the
         /// agent limits.
-        #[arg(short = 'f', long, conflicts_with = "all")]
+        #[arg(short = 'f', long, conflicts_with_all = ["all", "machines"])]
         focus: bool,
         /// Set a permission of the resumed agents, as KEY=VALUE such as
         /// push=direct, whatever their mode allows; KEY=mode drops the value
@@ -50,7 +50,7 @@ pub enum SessionsCommand {
             long = "permission",
             value_name = "KEY=VALUE",
             value_parser = permission_assignment,
-            conflicts_with_all = ["all", "queue_entry"]
+            conflicts_with_all = ["all", "machines", "queue_entry"]
         )]
         permissions: Vec<crate::config::permissions::PermissionChange>,
         /// The queue entry whose slot the resumed agent takes, for the
@@ -93,6 +93,15 @@ pub enum SessionsCommand {
             requires = "discard_agent"
         )]
         all: bool,
+        /// Discard the agents of the spaces of this joined machine instead, as --all does here,
+        /// with --discard-agent, by its name or the ID shoal hub ls shows. Repeatable.
+        #[arg(
+            long = "machine",
+            value_name = "MACHINE",
+            conflicts_with_all = ["space", "all"],
+            requires = "discard_agent"
+        )]
+        machines: Vec<String>,
         #[command(flatten)]
         import: ImportArgs,
         /// Return the workspace to this checkpoint after keeping its current state in a new
@@ -109,7 +118,7 @@ pub enum SessionsCommand {
         #[arg(long, conflicts_with_all = ["no_resume", "now", "focus", "permissions"])]
         discard_agent: bool,
         /// Select a stopped execution to discard when the space has several records.
-        #[arg(long, requires = "discard_agent", conflicts_with = "all")]
+        #[arg(long, requires = "discard_agent", conflicts_with_all = ["all", "machines"])]
         execution: Option<ExecutionId>,
         /// Reopen the spaces, or those --from reads, leaving their agents saved for a later shoal
         /// resume.
@@ -140,10 +149,6 @@ pub enum SessionsCommand {
     Restart {
         #[command(flatten)]
         targets: SpaceTargets,
-        /// Every space of this joined machine instead, by its name or the ID
-        /// shoal hub ls shows. Repeatable.
-        #[arg(long = "machine", value_name = "MACHINE", conflicts_with_all = ["space", "all"])]
-        machines: Vec<String>,
         /// Restart only agents of this name, such as claude.
         #[arg(short = 'a', long, value_parser = AgentParser)]
         agent: Option<Agent>,

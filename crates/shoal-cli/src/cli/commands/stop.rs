@@ -8,7 +8,7 @@ use crate::client::output::agents::SpaceStopped;
 use crate::{
     cli::{
         args::lifecycle::StopArgs,
-        commands::queued_agents,
+        commands::{machines, queued_agents, space_selection},
         context::Context,
         output::Style,
         ui::{self, Acting},
@@ -45,15 +45,19 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     {
         return Ok(code);
     }
-    let selected = ui::select_spaces(ctx, targets.space, false, &stopping()).await?;
     // A process of a space that cleared its token is still that space's.
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         targets::ensure_scoped()?;
     }
     // Every target is found, wherever it runs, and checked before any
     // stops.
-    let located = crate::client::spaces::select(&ctx.paths, selected, Vec::new(), !skip_children);
-    let located = located.await?;
+    let located = match targets.machines.is_empty() {
+        true => space_selection::located(ctx, targets, !skip_children, &stopping()).await?,
+        false => targets::on_machines(ctx, targets).await?,
+    };
+    if located.is_empty() {
+        return batch::nothing_to_stop(ctx);
+    }
     if crate::process::scoped::inherits_scope(&ctx.paths.state) {
         ensure_below(&targets::here(&located))?;
     }
@@ -66,20 +70,24 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
 
 /// Stop `located` in the selection's order, each space after the one above
 /// it: this machine's together where they follow each other, another
-/// machine's each on its machine.
+/// machine's each on its machine, reporting once per offline machine the
+/// stops the hub holds for it.
 async fn stop_located(ctx: &Context, located: Vec<Located>, yes: bool) -> Result<i32> {
     let mut code = 0;
     let mut here = Vec::new();
+    let mut held = Vec::new();
     for located in located {
         match located {
             Located::Here(space) => here.push(*space),
             Located::Elsewhere { space, .. } => {
                 code = code.max(stop_here(ctx, &std::mem::take(&mut here), yes).await?);
-                elsewhere::stop_one(ctx, &space, yes).await?;
+                held.extend(elsewhere::stop_one(ctx, &space, yes).await?);
             }
         }
     }
-    Ok(code.max(stop_here(ctx, &here, yes).await?))
+    code = code.max(stop_here(ctx, &here, yes).await?);
+    machines::queued_each(ctx, &held, "stops")?;
+    Ok(code)
 }
 
 /// Stop `spaces`, this machine's, reporting one alone and several each.

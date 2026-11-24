@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::cli::{
-    args::sessions::SessionsCommand,
+    args::{SpaceTargets, sessions::SessionsCommand},
     commands::{demo, pause, queue, restart, restore, resume, sessions, triggers},
     context::Context,
 };
@@ -59,6 +59,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
         SessionsCommand::Restore {
             space,
             all,
+            machines,
             import: _,
             checkpoint,
             discard_agent,
@@ -70,7 +71,14 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
         } => {
             let action = match (checkpoint, discard_agent, no_resume) {
                 (Some(checkpoint), ..) => restore::Action::Checkpoint(checkpoint),
-                (None, true, _) => restore::Action::DiscardAgent { all, execution },
+                (None, true, _) => {
+                    let targets = SpaceTargets {
+                        space,
+                        all,
+                        machines,
+                    };
+                    return restore::discard(&ctx, targets, execution).await;
+                }
                 (None, false, true) => restore::Action::Reopen { resume: None },
                 (None, false, false) => {
                     let options = resume::Options {
@@ -88,13 +96,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
         }
         SessionsCommand::Restart {
             targets,
-            machines,
             cancel: true,
             ..
-        } => restart::cancel(&ctx, targets, &machines).await,
+        } => restart::cancel(&ctx, targets).await,
         SessionsCommand::Restart {
             targets,
-            machines,
             agent,
             wait,
             sequential,
@@ -108,7 +114,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                 in_place,
                 change: change(&permissions),
             };
-            restart::run(&ctx, targets, &machines, agent, restart).await
+            restart::run(&ctx, targets, agent, restart).await
         }
         SessionsCommand::Queue {
             command,
