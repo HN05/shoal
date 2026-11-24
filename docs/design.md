@@ -246,6 +246,13 @@ shutdown, the delay locks that hold either off until the daemon is ready,
 and the lid, dock and idle readings that say whether the user walked away.
 What the daemon does on each, such as holding the agent queue through a
 sleep or stopping agents for a shutdown, stays with it.
+`shoal-daemon` composes them: its `Manager` holds each service and
+implements every interface they declare, mostly by calling another
+subsystem's service, so each subsystem builds and tests alone. It keeps
+request dispatch, with each request's scope and target checks, the
+connections and subscriptions requests arrive on, startup and shutdown,
+and the work that spans subsystems, such as the cleanup sweep's order,
+freeing disk space, clearing blockers and what a sleep or shutdown does.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no
