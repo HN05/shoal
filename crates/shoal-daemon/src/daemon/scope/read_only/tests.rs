@@ -22,7 +22,7 @@ fn caller(space: &SpaceId, access: Access) -> Caller {
 
 /// A read-only scope reads the spaces below its own, and is refused what
 /// the same scope may otherwise do there: a read that changes the agent's
-/// watch, and a change. A review run's reads as it does.
+/// watch, and a change. A review run's and an answer run's read as it does.
 #[tokio::test]
 async fn read_only_scope_reads_without_changing() {
     let (root, manager) = manager().await;
@@ -67,7 +67,13 @@ async fn read_only_scope_reads_without_changing() {
             }),
         ]
     };
-    for access in [Access::Full, Access::ReadOnly, Access::Review(ReviewId(1))] {
+    let accesses = [
+        Access::Full,
+        Access::ReadOnly,
+        Access::Review(ReviewId(1)),
+        Access::Answer(1),
+    ];
+    for access in accesses {
         let token = manager.operations.issue(&caller(&parent.id, access));
         let mut allowed = Vec::new();
         for mut operation in operations(&child.id) {
@@ -84,9 +90,9 @@ async fn read_only_scope_reads_without_changing() {
 
 /// A review run's scope writes only its review: a thread without a kind,
 /// a post and a submit, which the daemon hands that review; a question and
-/// any other change are refused.
+/// any other change are refused. An answer run's only posts.
 #[tokio::test]
-async fn a_review_runs_scope_writes_only_its_review() {
+async fn a_review_or_answer_runs_scope_writes_only_its_own() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repository = manager
@@ -106,33 +112,40 @@ async fn a_review_runs_scope_writes_only_its_review() {
             from: None,
         })
     };
-    let operations = [
-        open(None),
-        Operation::Thread(ThreadMethod::Post {
-            thread: ThreadNumber::Own(1),
-            post: NewPost::default(),
-            attachments: Vec::new(),
-            code: Vec::new(),
-            changes: Vec::new(),
-            from: None,
-        }),
-        Operation::Review(ReviewMethod::SubmitReview {
-            workspace: None,
-            approve: false,
-            summary: None,
-        }),
-        open(Some(ThreadKind::Question)),
-        Operation::Review(ReviewMethod::CancelReview {
-            workspace: None,
-            id: None,
-            here: false,
-        }),
-    ];
-    let token = (manager.operations).issue(&caller(&workspace.id, Access::Review(ReviewId(1))));
+    let operations = || {
+        [
+            open(None),
+            Operation::Thread(ThreadMethod::Post {
+                thread: ThreadNumber::Own(1),
+                post: NewPost::default(),
+                attachments: Vec::new(),
+                code: Vec::new(),
+                changes: Vec::new(),
+                from: None,
+            }),
+            Operation::Review(ReviewMethod::SubmitReview {
+                workspace: None,
+                approve: false,
+                summary: None,
+            }),
+            open(Some(ThreadKind::Question)),
+            Operation::Review(ReviewMethod::CancelReview {
+                workspace: None,
+                id: None,
+                here: false,
+            }),
+        ]
+    };
     let mut allowed = Vec::new();
-    for mut operation in operations {
-        let authorized = authorize(&manager, Some(&token), &mut operation).await;
-        allowed.push(authorized.is_ok());
+    for access in [Access::Review(ReviewId(1)), Access::Answer(1)] {
+        let token = (manager.operations).issue(&caller(&workspace.id, access));
+        for mut operation in operations() {
+            let authorized = authorize(&manager, Some(&token), &mut operation).await;
+            allowed.push(authorized.is_ok());
+        }
     }
-    assert_eq!(allowed, [true, true, true, false, false]);
+    let review = [true, true, true, false, false];
+    // An answer run posts, which coordination keeps to its thread.
+    let answer = [false, true, false, false, false];
+    assert_eq!(allowed, [review, answer].concat());
 }

@@ -39,6 +39,10 @@ pub enum Access {
     /// it reads as a read-only caller does, and opens that review's
     /// findings, reopens a fixed one and submits it.
     Review(ReviewId),
+    /// Only a post in the thread whose record is this, as the run that
+    /// answers a holder's post in a finding's thread makes: it reads as a
+    /// read-only caller does, and posts there for Shoal, which opened it.
+    Answer(i64),
 }
 
 impl Access {
@@ -46,7 +50,15 @@ impl Access {
     pub fn review(self) -> Option<ReviewId> {
         match self {
             Self::Review(id) => Some(id),
-            Self::Full | Self::ReadOnly => None,
+            Self::Full | Self::ReadOnly | Self::Answer(_) => None,
+        }
+    }
+
+    /// The record of the thread it answers in, none for any other access.
+    pub fn answer(self) -> Option<i64> {
+        match self {
+            Self::Answer(thread) => Some(thread),
+            Self::Full | Self::ReadOnly | Self::Review(_) => None,
         }
     }
 }

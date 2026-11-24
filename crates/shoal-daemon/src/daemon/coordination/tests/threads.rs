@@ -305,6 +305,7 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
     // went up before its post was recorded.
     let poster = shoal_coordination::threads::posting::Poster {
         side: Some(Side::Holder),
+        sender: Sender::Space,
         space: Some(ThreadSpace::here(tree.child.id.clone())),
         seen: thread.holder.clone(),
     };

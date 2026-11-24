@@ -1,3 +1,4 @@
+use shoal_protocol::reviews::{ReviewId, Severity};
 use shoal_protocol::threads::ThreadOpening;
 use shoal_protocol::{
     space_names::SpaceSelector,
@@ -6,7 +7,12 @@ use shoal_protocol::{
     },
 };
 
-use crate::{alerts::AlertKind, model::Workspace, scope::Caller, stand_in::Fixture};
+use crate::{
+    alerts::AlertKind,
+    model::Workspace,
+    scope::{Access, Caller},
+    stand_in::Fixture,
+};
 
 /// A workspace `parent` whose agent runs, two workspaces below it whose
 /// agents run, and a workspace beside it without one.
@@ -821,4 +827,84 @@ async fn a_bare_number_names_a_thread_of_the_callers_own_space() {
             .await
             .is_err()
     );
+}
+
+/// The thread of a finding of a review Shoal finished of `workspace`,
+/// which holds it.
+async fn finding(fixture: &Fixture, workspace: &Workspace) -> Thread {
+    let id = workspace.id.clone();
+    (fixture.store())
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO reviews(workspace_id,target,opener,agent,state,created_at)
+                    VALUES (?1,'{}','shoal','claude','finished',1)",
+                [&id],
+            )?;
+            let review = ReviewId(tx.last_insert_rowid());
+            let thread = super::findings::open(
+                tx,
+                &super::findings::FindingThread {
+                    review,
+                    workspace: &id,
+                    severity: Severity::ShouldFix,
+                    title: "Unclear",
+                    body: "Name it.",
+                    code: Vec::new(),
+                },
+            )?;
+            super::findings::release_of_review(tx, review)?;
+            Ok(super::findings::by_ids(tx, &[thread])?.remove(0))
+        })
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn an_answer_run_posts_for_shoal_only_in_the_open_thread_it_answers() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let holder = caller(&tree.child);
+    let thread = finding(fixture, &tree.child).await;
+    send(fixture, Some(&holder), &thread, "Is this reachable?").await;
+    let answering = Caller {
+        access: Access::Answer(thread.id),
+        ..caller(&tree.child)
+    };
+    let answered = send(fixture, Some(&answering), &thread, "It is, from parse.").await;
+    let answer = answered.posts.last().unwrap();
+    assert_eq!(
+        (answer.side, answer.sender, answer.space.is_none()),
+        (Some(Side::Opener), Sender::Shoal, true)
+    );
+    assert_eq!(alerts(fixture, &tree.child).await.len(), 1);
+
+    let other = open(fixture, Some(&holder), None).await;
+    let elsewhere = fixture.coordination.post_to_thread(
+        &**fixture,
+        Some(&answering),
+        full(&other),
+        post("Yes."),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    assert!(elsewhere.await.is_err());
+    let fixed = Resolving {
+        outcome: Some(OutcomeKind::Fixed),
+        ..Resolving::default()
+    };
+    (fixture.coordination)
+        .resolve_thread(&**fixture, Some(&holder), full(&thread), fixed)
+        .await
+        .unwrap();
+    let resolved = fixture.coordination.post_to_thread(
+        &**fixture,
+        Some(&answering),
+        full(&thread),
+        post("Still."),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    assert!(resolved.await.is_err());
 }

@@ -209,6 +209,7 @@ impl Coordination {
                 };
                 let poster = Poster {
                     side: Some(side),
+                    sender: Sender::Space,
                     space: Some(ThreadSpace::of(&space)),
                     seen: thread.holder.clone(),
                 };

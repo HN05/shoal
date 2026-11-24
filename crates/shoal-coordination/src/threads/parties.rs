@@ -156,12 +156,20 @@ impl Coordination {
     /// earlier opener, the holder's for a space above the holder, the user
     /// acting for it, or an earlier holder; else none, as a participant.
     /// Nobody but the opener's side posts in a thread that holds its posts.
+    /// An answer run posts on Shoal's side of the thread it answers alone.
     pub(super) async fn posting_side(
         &self,
         daemon: &dyn Daemon,
         caller: Option<&Caller>,
         thread: &Thread,
     ) -> Result<Option<Side>> {
+        if let Some(answered) = caller.and_then(|caller| caller.access.answer()) {
+            ensure!(
+                answered == thread.id && thread.opener == Sender::Shoal,
+                "an answer run posts only in the thread it answers"
+            );
+            return Ok(Some(Side::Opener));
+        }
         let current = self.current_side(daemon, caller, thread).await?;
         if current == Some(Side::Opener) || holds(caller, thread) {
             return Ok(current);

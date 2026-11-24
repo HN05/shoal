@@ -492,7 +492,7 @@ impl Hub {
             everywhere,
             permissions,
             granted: caller.granted,
-            // Another machine's review is none of that machine's to write.
+            // A review's or answer's run writes only on its own machine.
             read_only: caller.access != Access::Full,
             priority,
             chat_modes,

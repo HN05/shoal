@@ -91,10 +91,11 @@ fn picked(thread: &Thread, side: Option<Side>, mut post: NewPost) -> Result<NewP
     Ok(post)
 }
 
-/// Who posts: the side it takes, none for a participant, and the space it
-/// posts from, none for the user.
+/// Who posts: the side it takes, none for a participant, who sends it, and
+/// the space it posts from, none for the user or Shoal.
 pub struct Poster {
     pub side: Option<Side>,
+    pub sender: Sender,
     pub space: Option<ThreadSpace>,
     /// Who held the thread when the poster's side was checked.
     pub seen: Holder,
@@ -104,10 +105,7 @@ impl Poster {
     pub(super) fn author(&self) -> Author<'_> {
         Author {
             side: self.side,
-            sender: match self.space {
-                Some(_) => Sender::Space,
-                None => Sender::User,
-            },
+            sender: self.sender,
             space: self.space.as_ref(),
         }
     }
@@ -294,7 +292,7 @@ impl Coordination {
 
     /// Who posts for `caller` on `side`, none for a participant, checked
     /// while `seen` held the thread: its space, here or on another machine,
-    /// or the user.
+    /// Shoal for an answer run, or the user.
     pub(super) async fn poster(
         &self,
         daemon: &dyn Daemon,
@@ -302,12 +300,14 @@ impl Coordination {
         side: Option<Side>,
         seen: &Holder,
     ) -> Result<Poster> {
-        let space = match caller {
-            Some(caller) => Some(self.speaker(daemon, caller).await?),
-            None => None,
+        let (sender, space) = match caller {
+            Some(caller) if caller.access.answer().is_some() => (Sender::Shoal, None),
+            Some(caller) => (Sender::Space, Some(self.speaker(daemon, caller).await?)),
+            None => (Sender::User, None),
         };
         Ok(Poster {
             side,
+            sender,
             space,
             seen: seen.clone(),
         })

@@ -3,7 +3,7 @@
 //! the OS user.
 use crate::{
     daemon::manager::Manager,
-    protocol::{ItemMethod, Operation},
+    protocol::{ItemMethod, Operation, ThreadMethod},
 };
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;
@@ -67,6 +67,14 @@ fn permitted(access: Access, method: &impl Scoped) -> Result<()> {
             );
             Ok(())
         }
+        Access::Answer(_) => {
+            ensure!(
+                method.changes_nothing() || method.posts(),
+                "an answer run only reads and posts its answer with shoal send in the thread it \
+                 answers"
+            );
+            Ok(())
+        }
     }
 }
 
@@ -123,6 +131,12 @@ pub(crate) trait Scoped {
     /// Whether the request writes a review run's own review, which that
     /// run's scope may send.
     fn writes_review(&self) -> bool {
+        false
+    }
+
+    /// Whether the request posts in a thread, which an answer run's scope
+    /// may send, in the thread it answers.
+    fn posts(&self) -> bool {
         false
     }
 }
@@ -190,6 +204,10 @@ impl Scoped for Operation {
 
     fn writes_review(&self) -> bool {
         read_only::writes_review(self)
+    }
+
+    fn posts(&self) -> bool {
+        matches!(self, Operation::Thread(ThreadMethod::Post { .. }))
     }
 }
 
