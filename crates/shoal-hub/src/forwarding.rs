@@ -547,9 +547,6 @@ fn answered_body(frames: Vec<serde_json::Value>) -> Result<Body> {
         .into_result()
 }
 
-/// `error`, of a request for the space `space` that `machine` runs: where
-/// the machine received the request but did not answer in time, a refusal
-/// saying that it may still carry it out.
 /// Whether `error` is a call that never left or was never answered on its
 /// way, which callers tell apart by its type, rather than a refusal.
 fn in_transit(error: &anyhow::Error) -> bool {
@@ -564,6 +561,9 @@ fn naming_restore(error: anyhow::Error, id: &SpaceId) -> anyhow::Error {
     Refusal::new(reason, message).into()
 }
 
+/// `error`, of a request for the space `space` that `machine` runs: where
+/// the machine received the request but did not answer in time, a refusal
+/// saying that it may still carry it out.
 fn unanswered(machine: &Member, space: &SpaceSelector, error: anyhow::Error) -> anyhow::Error {
     if !error.is::<session::Unanswered>() {
         return error;
