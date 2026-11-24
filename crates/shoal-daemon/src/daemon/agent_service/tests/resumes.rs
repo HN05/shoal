@@ -211,15 +211,23 @@ async fn a_stopped_agent_queues_its_restore() {
     assert_eq!(record.narrowing, change.set);
 }
 
-/// A last session continues at once when its space resumes alone, since
-/// it holds no heavy slot, and otherwise waits in the queue.
+/// A last session continues at once when the user resumes its space
+/// alone, since it holds no heavy slot, and otherwise waits in the queue,
+/// as it does for a scoped process, which starts nothing past the limits
+/// unless it asks.
 #[tokio::test]
 async fn a_last_session_resumed_alone_continues_at_once() {
     let (root, manager) = manager().await;
     let alone = workspace(&manager, &root, "alone").await;
     let together = workspace(&manager, &root, "together").await;
+    let scoped = workspace(&manager, &root, "scoped").await;
     let agent = TrackedAgent::named("claude");
-    for (workspace, execution) in [(&alone, "alone-last"), (&together, "together-last")] {
+    let lasts = [
+        (&alone, "alone-last"),
+        (&together, "together-last"),
+        (&scoped, "scoped-last"),
+    ];
+    for (workspace, execution) in lasts {
         let execution = ExecutionId::from(execution);
         LastSession::save(&manager.paths, &workspace.id, &agent, &execution, None).unwrap();
     }
@@ -234,9 +242,21 @@ async fn a_last_session_resumed_alone_continues_at_once() {
             .await
             .unwrap(),
     );
+    let caller = crate::daemon::scope::Caller::of_space(alone.id.clone());
+    let selector = SpaceSelector::id(&scoped.id);
+    let resumed_alone = AgentResume {
+        alone: true,
+        ..AgentResume::default()
+    };
+    let scoped_outcome = (manager.agents)
+        .resume_space(&*manager, Some(&caller), &selector, resumed_alone)
+        .await;
+    let scoped_entries = queued(scoped_outcome.unwrap());
 
-    let states = [&alone_entries[0], &together_entries[0]].map(|entry| entry.state);
-    assert_eq!(states, [QueueState::Starting, QueueState::Queued]);
+    let states =
+        [&alone_entries, &together_entries, &scoped_entries].map(|entries| entries[0].state);
+    let expected = [QueueState::Starting, QueueState::Queued, QueueState::Queued];
+    assert_eq!(states, expected);
 }
 
 /// Stopped commands without an agent go to the user once, and then
