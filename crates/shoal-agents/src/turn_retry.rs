@@ -41,6 +41,10 @@ const JITTER: f64 = 0.2;
 /// How long after a reset the upstream named the agent is asked, so the
 /// upstream has surely reset.
 pub const RESET_MARGIN: Duration = Duration::from_secs(30);
+/// How far off a reset a turn's error states may be: past a weekly usage
+/// limit's, so one that is further, such as milliseconds read as seconds,
+/// holds nothing back.
+const MAX_STATED_RESET: Duration = Duration::from_secs(8 * 24 * 60 * 60);
 /// How often the loop looks again without a retry to wait for.
 const IDLE_RECHECK: Duration = Duration::from_secs(60 * 60);
 
@@ -109,7 +113,7 @@ fn record_failure(
     now: UnixTime,
     spread: f64,
 ) -> Result<()> {
-    let reset = known_reset(tx, execution, failed)?;
+    let reset = known_reset(tx, execution, failed, now)?;
     let previous = previous_attempt(tx, space_id)?;
     let (attempt, due_at) = next_attempt(previous, execution, failed.failure, now, spread);
     let due_at = reset.map_or(due_at, |reset| due_at.max(reset + RESET_MARGIN));
@@ -124,14 +128,18 @@ fn record_failure(
 }
 
 /// When the upstream refuses requests of `execution` until, as far as
-/// Shoal knows after the turn `failed` ended: the later of what its proxy
-/// last reported and, for a rate limit, what the turn's error states.
+/// Shoal knows after the turn `failed` ended at `now`: the later of what
+/// its proxy last reported and, for a rate limit, what the turn's error
+/// states, unless that is more than [`MAX_STATED_RESET`] away.
 fn known_reset(
     db: &Connection,
     execution: &ExecutionId,
     failed: FailedTurn,
+    now: UnixTime,
 ) -> Result<Option<UnixTime>> {
-    let stated = (failed.resets_at).filter(|_| failed.failure == TurnFailure::RateLimited);
+    let stated = (failed.resets_at).filter(|reset| {
+        failed.failure == TurnFailure::RateLimited && *reset <= now + MAX_STATED_RESET
+    });
     Ok(upstream_reset(db, execution)?.max(stated))
 }
 

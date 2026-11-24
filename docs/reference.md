@@ -2523,8 +2523,8 @@ headers, the retry waits until half a minute past it instead, until the
 upstream answers again. A rate limit's error that Claude Code's failure hook
 passes states such a reset as well when it gives a duration after `reset
 after`, `resets in`, `try again in` or `retry after`, such as `1h36m24s`, or a
-JSON error with `resets_in_seconds`, `reset_seconds` or `resets_at`; without
-one, a usage limit is checked about hourly. While a retry waits for a known
+JSON error with `resets_in_seconds`, `reset_seconds` or `resets_at`, within
+eight days; without one, a usage limit is checked about hourly. While a retry waits for a known
 reset, the agent's alerts and item activity, except an alert from the user,
 wake it for no turn the limit would fail, nor restore it from sleep: they
 stay unread and arrive with the retry's message, or with the user's alert

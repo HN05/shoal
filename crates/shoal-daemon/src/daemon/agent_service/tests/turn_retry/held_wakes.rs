@@ -3,18 +3,23 @@ use shoal_protocol::links::Updates;
 
 use super::*;
 
-/// An agent whose rate-limited turn waits to be retried past a reset far
-/// past any clock, with Shoal's alert queued meanwhile.
-async fn limited_with_alert() -> Running {
+/// An agent whose rate-limited turn waits to be retried past `reset`,
+/// with Shoal's alert queued meanwhile.
+async fn limited_with_alert(reset: UnixTime) -> Running {
     let running = agent("").await;
     let (_, manager, workspace, execution, _) = &running;
     let failed = FailedTurn {
         failure: TurnFailure::RateLimited,
-        resets_at: Some(UnixTime::from_seconds(4_000_000_000_000)),
+        resets_at: Some(reset),
     };
     fail(manager, workspace, execution.as_str(), failed).await;
     queue(manager, workspace, Sender::Shoal, "free some memory").await;
     running
+}
+
+/// A reset an hour off, past any wait of the test.
+fn in_an_hour() -> UnixTime {
+    now() + secs(60 * 60)
 }
 
 async fn queue(manager: &Manager, workspace: &Workspace, sender: Sender, text: &str) {
@@ -60,7 +65,8 @@ async fn waiting(manager: &Manager, workspace: &Workspace) -> bool {
 
 #[tokio::test]
 async fn an_alert_waits_for_the_retry_of_a_rate_limited_turn() {
-    let (_temp, manager, workspace, _execution, _connection) = limited_with_alert().await;
+    let (_temp, manager, workspace, _execution, _connection) =
+        limited_with_alert(in_an_hour()).await;
     assert!(!waiting(&manager, &workspace).await);
     let woken = wake_wait(&manager, &workspace);
     deliver_now(&manager).await;
@@ -76,7 +82,8 @@ async fn an_alert_waits_for_the_retry_of_a_rate_limited_turn() {
 
 #[tokio::test]
 async fn a_user_message_wakes_an_agent_whose_retry_waits() {
-    let (_temp, manager, workspace, _execution, _connection) = limited_with_alert().await;
+    let (_temp, manager, workspace, _execution, _connection) =
+        limited_with_alert(in_an_hour()).await;
     let woken = wake_wait(&manager, &workspace);
     queue(&manager, &workspace, Sender::User, "status?").await;
     let woken = woken.await.unwrap();
@@ -95,5 +102,12 @@ async fn a_retry_without_a_known_reset_holds_no_alert() {
     )
     .await;
     queue(&manager, &workspace, Sender::Shoal, "free some memory").await;
+    assert!(waiting(&manager, &workspace).await);
+}
+
+#[tokio::test]
+async fn a_reset_that_has_passed_holds_no_alert() {
+    let reset = now() - RESET_MARGIN - secs(1);
+    let (_temp, manager, workspace, _execution, _connection) = limited_with_alert(reset).await;
     assert!(waiting(&manager, &workspace).await);
 }

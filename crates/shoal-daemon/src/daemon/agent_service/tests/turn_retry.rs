@@ -186,9 +186,8 @@ async fn a_finished_assignment_cancels_its_retry() {
 #[tokio::test]
 async fn a_rate_limit_retries_after_the_reset_its_error_states() {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
-    // A reset far past any clock, so each wait is the reset's or the
-    // backoff's however slowly the test runs.
-    let reset = UnixTime::from_seconds(4_000_000_000_000);
+    // An hour past any backoff of a first attempt.
+    let reset = now() + secs(60 * 60);
     let stated = |failure| FailedTurn {
         failure,
         resets_at: Some(reset),
@@ -214,6 +213,19 @@ async fn a_rate_limit_retries_after_the_reset_its_error_states() {
     .await;
     let backoff = retry(&manager, &other).await.unwrap();
     assert!(backoff.due_at < reset, "{backoff:?}");
+}
+
+#[tokio::test]
+async fn a_reset_further_off_than_a_weekly_limit_holds_no_retry() {
+    let (_temp, manager, workspace, execution, _connection) = agent("").await;
+    // Milliseconds read as seconds.
+    let failed = FailedTurn {
+        failure: TurnFailure::RateLimited,
+        resets_at: Some(UnixTime::from_seconds(now().seconds() * 1000)),
+    };
+    fail(&manager, &workspace, execution.as_str(), failed).await;
+    let backoff = retry(&manager, &workspace).await.unwrap();
+    assert!(backoff.due_at < now() + secs(60 * 60), "{backoff:?}");
 }
 
 #[tokio::test]
