@@ -27,10 +27,10 @@ pub(super) async fn handle(
                 .await;
             return Ok(Answer::pages(listed, Body::CiRunJobs));
         }
-        CiMethod::ListCiRuns { target, pr, filter } => {
+        CiMethod::ListCiRuns { target, of, filter } => {
             let listed = manager
                 .links
-                .list_ci_runs(&**manager, &target, pr, filter, caller)
+                .list_ci_runs(&**manager, &target, of, filter, caller)
                 .await;
             return Ok(Answer::pages(listed, Body::CiRuns));
         }

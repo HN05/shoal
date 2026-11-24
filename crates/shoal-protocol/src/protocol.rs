@@ -58,7 +58,7 @@ pub use assignments::{AssignmentMethod, SavedAgent};
 pub use branches::BranchMethod;
 pub use changes::{ChangeFilter, ChangeMethod};
 pub use chats::{ChatMethod, ChatRoot};
-pub use ci::CiMethod;
+pub use ci::{CiMethod, RunsOf};
 pub use config::{ConfigMethod, ConfigTarget, RepositoryLayers};
 pub use containers::ContainerMethod;
 pub use conversions::{AgentChange, AgentSwitch, ConversionMethod};

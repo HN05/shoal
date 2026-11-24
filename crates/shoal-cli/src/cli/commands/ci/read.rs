@@ -22,6 +22,7 @@ use crate::{
     protocol::RepoTarget,
 };
 use shoal_forge::ci::run_view::validate_filter;
+use shoal_protocol::protocol::RunsOf;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Show the run `items` selects after `ci` with the log tails of its failed
@@ -73,14 +74,15 @@ pub(super) async fn list(
     filter: RunFilter,
 ) -> Result<i32> {
     validate_filter(&filter)?;
+    let of = pr.clone().map_or(RunsOf::Branch, RunsOf::Pull);
     let listing = {
-        let (pr, filter) = (pr.clone(), filter.clone());
+        let (of, filter) = (of.clone(), filter.clone());
         crate::cli::commands::items::in_context(move |target| {
-            crate::client::ci::runs(target, pr.clone(), filter.clone())
+            crate::client::ci::runs(target, of.clone(), filter.clone())
         })
     };
     let target = select_item_target(ctx, space, repo, pr.as_ref(), &listing).await?;
-    let runs = crate::client::ci::runs(target, pr, filter)
+    let runs = crate::client::ci::runs(target, of, filter)
         .send(&ctx.paths)
         .await?;
     ctx.show(&runs, render_runs)?;

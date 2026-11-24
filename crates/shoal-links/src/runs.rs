@@ -35,7 +35,7 @@ use shoal_forge_types::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     model::{LinkedItem, Relation},
-    protocol::RepoTarget,
+    protocol::{RepoTarget, RunsOf},
 };
 
 use crate::{
@@ -43,6 +43,7 @@ use crate::{
     daemon::Daemon,
     forges,
     place::{Access, Place},
+    runs::place::RunPlace,
     space::LinkSpace,
 };
 
@@ -222,54 +223,59 @@ impl Links {
             .with_context(|| format!("could not read a job log of CI run {run}"))
     }
 
-    /// The newest runs `filter` selects on the head commit of the PR `pr`
-    /// names, otherwise on the branch it names, by default the workspace's,
-    /// a chat's linked PR's head, or else the repository's default branch.
+    /// The newest runs `filter` selects of what `of` names.
     pub async fn list_ci_runs(
         &self,
         daemon: &dyn Daemon,
         target: &RepoTarget,
-        pr: Option<ItemInput>,
+        of: RunsOf,
         mut filter: RunFilter,
         caller: Option<&Caller>,
     ) -> Result<Vec<Run>> {
         validate_filter(&filter)?;
         ensure!(
-            pr.is_none() || filter.branch.is_none(),
-            "list the runs of a branch or of a PR, not both"
+            of == RunsOf::Branch || filter.branch.is_none(),
+            "list the runs of a branch, of a PR or of every branch, only one"
         );
-        let named = match &pr {
-            Some(pr) => forges::of_input(&self.forges, pr).await?,
-            None => None,
+        let named = match &of {
+            RunsOf::Pull(pr) => forges::of_input(&self.forges, pr).await?,
+            RunsOf::Branch | RunsOf::EveryBranch => None,
         };
         let place = (self.run_place(daemon, target, named, Access::Read, caller)).await?;
-        let (forge, account) = (place.forge(), &place.account);
         // Refuse a forge without runs before reading the PR.
-        forge.require(Capability::ReadRuns)?;
-        // A chat's checkout is not on its PR's branch, so its runs are
-        // those of its linked PR.
+        place.forge().require(Capability::ReadRuns)?;
+        let pull = match of {
+            RunsOf::EveryBranch => None,
+            RunsOf::Pull(pr) => Some(ItemRef::in_repository(place.forge(), LinkKind::Pr, &pr)?),
+            RunsOf::Branch => self.narrow_to_branch(&place, &mut filter).await?,
+        };
+        if let Some(pull) = pull {
+            narrow_to_pull(&place, &pull, &mut filter).await?;
+        }
+        (place.forge().list_runs(&place.account, &filter))
+            .await
+            .context("could not list CI runs")
+    }
+
+    /// Narrow `filter`, which may name a branch, to the runs `place` lists
+    /// of one: the named branch, else the workspace's or the default
+    /// branch; none in a chat without one named, whose checkout is not on
+    /// its linked PR's branch, which returns that PR to list instead.
+    async fn narrow_to_branch(
+        &self,
+        place: &RunPlace,
+        filter: &mut RunFilter,
+    ) -> Result<Option<ItemRef>> {
         let chat = (place.target.own_place())
             .and_then(Place::space)
             .filter(|space| space.worktree().is_none());
-        let pr = match (pr, &filter.branch, chat) {
-            (None, None, Some(chat)) => self.linked_pr(&chat.id).await?,
-            (Some(pr), ..) => Some(ItemRef::in_repository(forge, LinkKind::Pr, &pr)?),
-            (None, ..) => None,
-        };
-        match pr {
-            Some(pull) => {
-                let head = forge
-                    .pull_head(account, &pull)
-                    .await
-                    .with_context(|| format!("could not read the head of {pull}"))?;
-                filter.commit = Some(head);
-            }
-            None => filter.branch = Some(place.run_branch(filter.branch.take()).await?),
+        if let (None, Some(chat)) = (&filter.branch, chat)
+            && let Some(pull) = self.linked_pr(&chat.id).await?
+        {
+            return Ok(Some(pull));
         }
-        forge
-            .list_runs(account, &filter)
-            .await
-            .context("could not list CI runs")
+        filter.branch = Some(place.run_branch(filter.branch.take()).await?);
+        Ok(None)
     }
 
     /// The one PR linked to the space `id`, if any.
@@ -306,6 +312,15 @@ impl Links {
             title: run.workflow,
         })
     }
+}
+
+/// Narrow `filter` to the runs on the head commit of the PR `pull` in the
+/// repository of `place`.
+async fn narrow_to_pull(place: &RunPlace, pull: &ItemRef, filter: &mut RunFilter) -> Result<()> {
+    let head = (place.forge().pull_head(&place.account, pull).await)
+        .with_context(|| format!("could not read the head of {pull}"))?;
+    filter.commit = Some(head);
+    Ok(())
 }
 
 /// The link a started run gets, where the forge reports its URL and Shoal

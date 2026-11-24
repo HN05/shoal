@@ -19,12 +19,12 @@ use crate::{
         items::link::Selection,
     },
 };
-use shoal_protocol::protocol::{CiMethod, RepoTarget};
+use shoal_protocol::protocol::{CiMethod, RepoTarget, RunsOf};
 
-/// The newest runs in the `target` repository that `filter` selects, or
-/// those on the head of the PR `pr`.
-pub fn runs(target: RepoTarget, pr: Option<ItemInput>, filter: RunFilter) -> PreparedPages<Run> {
-    PreparedPages::new(CiMethod::ListCiRuns { target, pr, filter })
+/// The newest runs in the `target` repository that `filter` selects of
+/// what `of` names.
+pub fn runs(target: RepoTarget, of: RunsOf, filter: RunFilter) -> PreparedPages<Run> {
+    PreparedPages::new(CiMethod::ListCiRuns { target, of, filter })
 }
 
 /// The run `run` names.

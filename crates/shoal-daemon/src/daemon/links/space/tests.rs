@@ -229,7 +229,7 @@ async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itse
     let planning = chat(&manager, "planning", Some(&repos[0])).await;
     let list = || crate::protocol::CiMethod::ListCiRuns {
         target: ItemContext::Checkout(repos[1].id.clone()).into(),
-        pr: None,
+        of: Default::default(),
         filter: crate::forge::ci::run_view::RunFilter {
             branch: None,
             workflow: None,

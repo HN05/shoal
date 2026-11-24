@@ -1,6 +1,26 @@
 use super::{Forwarding, Target};
 use serde::{Deserialize, Serialize};
 
+/// Whose CI runs a list reads.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunsOf {
+    /// The branch its filter names, by default the workspace's, a chat's
+    /// linked PR's head or else the repository's default branch.
+    #[default]
+    Branch,
+    /// The head commit of the PR this names.
+    Pull(crate::forge::items::reference::ItemInput),
+    /// Every branch.
+    EveryBranch,
+}
+
+impl RunsOf {
+    pub fn is_branch(&self) -> bool {
+        *self == Self::Branch
+    }
+}
+
 /// Requests about CI checks and workflow runs of the target repository: that
 /// of a workspace or registered checkout, or another one `--repo` or a run's,
 /// PR's or workflow's URL names.
@@ -50,14 +70,12 @@ pub enum CiMethod {
         run: crate::forge::items::reference::ItemInput,
         job: crate::forge::ci::run_view::JobRef,
     },
-    /// The newest CI workflow runs, on the head commit of the PR `pr`
-    /// names, otherwise by default on the workspace's branch or else the
-    /// repository's default branch, sent in pages.
+    /// The newest CI workflow runs of what `of` names, sent in pages.
     ListCiRuns {
         #[serde(flatten)]
         target: super::RepoTarget,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pr: Option<crate::forge::items::reference::ItemInput>,
+        #[serde(default, skip_serializing_if = "RunsOf::is_branch")]
+        of: RunsOf,
         filter: crate::forge::ci::run_view::RunFilter,
     },
     /// Approve the run `run` names, or every run on the head of the PR `pr`
