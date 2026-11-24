@@ -314,25 +314,6 @@ async fn a_marked_alert_goes_down_in_lines_and_replaces_a_post_mark() {
     assert_eq!(messages, ["Rebase onto main:\n\n\tgit rebase main"]);
 }
 
-#[tokio::test]
-async fn only_the_agent_of_a_space_marks_its_turn() {
-    let tree = tree().await;
-    let user =
-        tree.manager
-            .spaces
-            .mark_chat_alert(&*tree.manager, None, AlertTarget::Up, Vec::new());
-    assert!(user.await.is_err());
-    // A process of the space that runs no agent.
-    let command = caller_in(&SpaceSelector::id(&tree.parent.space));
-    let marked = (tree.manager).spaces.mark_chat_alert(
-        &*tree.manager,
-        Some(&command),
-        AlertTarget::Up,
-        Vec::new(),
-    );
-    assert!(marked.await.is_err());
-}
-
 impl Agent {
     /// The user submits `prompt` in the agent's chat.
     async fn prompted(&self, manager: &Manager, prompt: &str) {

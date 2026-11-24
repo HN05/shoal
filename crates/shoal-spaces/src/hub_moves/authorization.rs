@@ -91,3 +91,6 @@ impl Spaces {
         Ok(record.is_some_and(|record| matches!(record.destination, MoveDestination::Machine(_))))
     }
 }
+
+#[cfg(test)]
+mod tests;

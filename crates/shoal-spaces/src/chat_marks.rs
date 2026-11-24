@@ -241,3 +241,6 @@ impl Spaces {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

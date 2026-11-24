@@ -266,3 +266,6 @@ fn located_elsewhere(view: &HubView, listed: &Listed) -> Located {
         machine: Box::new(machine),
     }
 }
+
+#[cfg(test)]
+mod tests;

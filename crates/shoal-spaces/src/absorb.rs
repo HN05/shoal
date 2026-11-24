@@ -53,3 +53,6 @@ impl Spaces {
         Ok(absorbed)
     }
 }
+
+#[cfg(test)]
+mod tests;

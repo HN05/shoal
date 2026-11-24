@@ -15,7 +15,6 @@ mod conversions_to_workspace;
 mod coordinated;
 mod holds;
 mod hub_moves_after_turn;
-mod hub_moves_authorization;
 mod launches;
 mod launches_chat;
 mod launches_create;

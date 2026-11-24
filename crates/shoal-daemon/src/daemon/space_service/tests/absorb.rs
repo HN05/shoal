@@ -458,31 +458,6 @@ async fn a_child_the_taking_branch_builds_on_goes_onto_what_the_absorbed_one_bui
 }
 
 #[tokio::test]
-async fn a_workspace_built_on_the_absorbed_branch_elsewhere_follows_its_work() {
-    let Tree {
-        _temp,
-        manager,
-        parent,
-        worker,
-        ..
-    } = tree().await;
-    // A sibling, not below it, built on its branch.
-    let sibling = child(&manager, &parent, "sibling", Some("worker")).await;
-    done(&manager, &worker.id).await;
-
-    manager
-        .spaces
-        .absorb_space(&manager.daemon(), &absorb(&worker), None)
-        .await
-        .unwrap();
-
-    let sibling = manager.spaces.workspace_by_id(&sibling.id).await.unwrap();
-    let base = sibling.base_workspace.as_ref().map(|base| &base.id);
-    assert_eq!(base, Some(&parent.id));
-    assert_eq!(sibling.parent.map(|above| above.id), Some(parent.id));
-}
-
-#[tokio::test]
 async fn an_absorber_built_on_the_absorbed_branch_takes_its_base_instead() {
     let Tree {
         _temp,
@@ -611,57 +586,6 @@ async fn the_chats_in_the_absorbed_worktree_go_with_the_spaces_below_them() {
 }
 
 #[tokio::test]
-async fn a_hold_on_a_chat_in_the_absorbed_worktree_asks_a_scoped_caller_first() {
-    let Tree {
-        _temp,
-        manager,
-        parent,
-        worker,
-        ..
-    } = tree().await;
-    let in_worktree = manager
-        .start_chat_in_workspace(
-            &SpaceSelector::id(&worker.id),
-            "reader".into(),
-            "claude".into(),
-            None,
-        )
-        .await
-        .unwrap();
-    for space in [&worker.id, &in_worktree.id] {
-        done(&manager, space).await;
-    }
-    manager
-        .spaces
-        .acquire_hold(
-            &*manager,
-            &SpaceSelector::id(&in_worktree.id),
-            "reading".into(),
-            None,
-            crate::model::HoldPlacer::User,
-        )
-        .await
-        .unwrap();
-    let scoped = Caller {
-        space_id: parent.id.clone(),
-        execution: None,
-        granted: None,
-        access: Access::Full,
-        vouched: None,
-    };
-    let before = head(&parent.path);
-
-    let held = manager
-        .spaces
-        .absorb_space(&manager.daemon(), &absorb(&worker), Some(&scoped))
-        .await;
-
-    assert!(held.is_err());
-    assert_eq!(head(&parent.path), before, "nothing merged");
-    assert!(manager.spaces.workspace_by_id(&worker.id).await.is_ok());
-}
-
-#[tokio::test]
 async fn a_space_below_a_chat_in_the_absorbed_worktree_cannot_take_the_work() {
     let Tree {
         _temp,
@@ -712,28 +636,17 @@ async fn a_space_below_a_chat_in_the_absorbed_worktree_cannot_take_the_work() {
 }
 
 #[tokio::test]
-async fn a_chat_in_the_absorbed_worktree_goes_with_its_whole_removal_tree() {
+async fn a_workspace_built_on_the_absorbed_branch_elsewhere_follows_its_work() {
     let Tree {
         _temp,
         manager,
+        parent,
         worker,
         ..
     } = tree().await;
-    let in_worktree = chat_in(&manager, &worker, "reader").await;
-    let parent = SpaceSelector::id(&in_worktree.id);
-    let below = (manager.spaces.create_child(
-        &*manager,
-        &parent,
-        "helper".into(),
-        None,
-        Default::default(),
-    ))
-    .await
-    .unwrap();
-    let nested = chat_in(&manager, &below, "nested").await;
-    for space in [&worker.id, &in_worktree.id, &below.id, &nested.id] {
-        done(&manager, space).await;
-    }
+    // A sibling, not below it, built on its branch.
+    let sibling = child(&manager, &parent, "sibling", Some("worker")).await;
+    done(&manager, &worker.id).await;
 
     manager
         .spaces
@@ -741,17 +654,8 @@ async fn a_chat_in_the_absorbed_worktree_goes_with_its_whole_removal_tree() {
         .await
         .unwrap();
 
-    drop(manager.gates.quiesce().await);
-    for space in [&worker.id, &in_worktree.id, &below.id, &nested.id] {
-        let left = manager.spaces.space(&SpaceSelector::id(space)).await;
-        assert!(left.is_err(), "{space} stays");
-    }
-}
-
-/// A new chat `name` in the worktree of `workspace`.
-async fn chat_in(manager: &Arc<Manager>, workspace: &Workspace, name: &str) -> crate::model::Chat {
-    let workspace = SpaceSelector::id(&workspace.id);
-    (manager.start_chat_in_workspace(&workspace, name.into(), "claude".into(), None))
-        .await
-        .unwrap()
+    let sibling = manager.spaces.workspace_by_id(&sibling.id).await.unwrap();
+    let base = sibling.base_workspace.as_ref().map(|base| &base.id);
+    assert_eq!(base, Some(&parent.id));
+    assert_eq!(sibling.parent.map(|above| above.id), Some(parent.id));
 }
