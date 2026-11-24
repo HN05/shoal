@@ -1,5 +1,7 @@
 //! The daemon's answers to [`RepositoryMethod`] requests, who may send them,
 //! and what each requires of the space it acts on.
+pub(in crate::daemon) mod contributions;
+
 use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 
@@ -7,7 +9,6 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
-    contribution_holds,
     manager::Manager,
     scope::{Caller, Scoped},
     target_checks::{Checked, TargetCheck},
@@ -56,7 +57,7 @@ pub(super) async fn handle(
         RepositoryMethod::RegisterContribution { source, name } => {
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                contribution_holds::register(stream, request_id, manager, (source, name), guard)
+                contributions::register(stream, request_id, manager, (source, name), guard)
             }));
         }
         RepositoryMethod::ReceiveCommits {
@@ -80,7 +81,7 @@ pub(super) async fn handle(
         RepositoryMethod::HoldContribution { repository } => {
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                contribution_holds::hold(stream, request_id, manager, repository, guard)
+                contributions::hold(stream, request_id, manager, repository, guard)
             }));
         }
         RepositoryMethod::RenameRepository { repository, name } => {

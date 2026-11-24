@@ -3,6 +3,7 @@
 //! subscription holds an operation guard only while it writes, so a daemon
 //! restart closes it between writes and the client subscribes again.
 mod agents;
+mod logs;
 mod snapshot;
 
 use shoal_protocol::scope_tokens::ScopeToken;

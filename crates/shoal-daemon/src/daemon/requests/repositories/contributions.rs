@@ -9,14 +9,14 @@ use tokio::net::UnixStream;
 
 use shoal_repositories::contributions::holds::ContributionHold;
 
-use super::{
+use crate::daemon::{
     answer::{self, OperationGuard},
     manager::Manager,
 };
 use crate::protocol::{self, Body, Response};
 
 /// Register `source` as a contribution, answer with it and hold it.
-pub(super) async fn register(
+pub(in crate::daemon) async fn register(
     stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
@@ -32,7 +32,7 @@ pub(super) async fn register(
 }
 
 /// Hold the registered repository `repository` again.
-pub(super) async fn hold(
+pub(in crate::daemon) async fn hold(
     stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,

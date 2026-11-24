@@ -142,7 +142,7 @@ impl Manager {
             forges.clone(),
             operations.clone(),
             Arc::new(super::reviews::ReviewRecords),
-            Arc::new(super::gate::GatedRequests),
+            Arc::new(super::reviews::gate::GatedRequests),
             paths.clone(),
         ));
         let apps = shoal_apps::Apps::new(store.clone(), config_state.clone());

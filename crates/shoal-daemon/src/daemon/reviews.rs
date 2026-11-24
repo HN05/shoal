@@ -315,5 +315,7 @@ impl Records for ReviewRecords {
     }
 }
 
+pub(super) mod gate;
+
 #[cfg(test)]
 mod tests;

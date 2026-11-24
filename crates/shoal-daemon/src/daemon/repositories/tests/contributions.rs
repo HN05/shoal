@@ -327,7 +327,7 @@ async fn a_held_contribution_stays_until_its_connection_closes() {
     let repo = contribution(&manager, root.path()).await;
     let (mut client, server) = tokio::net::UnixStream::pair().unwrap();
     let guard = Arc::new(tokio::sync::RwLock::new(())).read_owned().await;
-    let held = tokio::spawn(crate::daemon::contribution_holds::hold(
+    let held = tokio::spawn(crate::daemon::requests::repositories::contributions::hold(
         server,
         1,
         manager.clone(),

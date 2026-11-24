@@ -11,12 +11,12 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-use super::{
+use crate::config::permissions::PermissionKey;
+use crate::daemon::{
     events::{retention, shoal_log, space_log},
     manager::Manager,
     scope::Caller,
 };
-use crate::config::permissions::PermissionKey;
 
 /// How far a removed space's log looks up for a space that still exists,
 /// through the spaces removed above it.
@@ -135,10 +135,10 @@ impl Manager {
     #[cfg(any(test, feature = "test-support"))]
     pub async fn space_events(
         &self,
-        after: Option<super::events::EventCursor>,
+        after: Option<crate::daemon::events::EventCursor>,
         limit: u32,
-    ) -> Result<Vec<super::events::EventItem>> {
-        let (items, _) = super::events::page(&self.store, after, None, limit).await?;
+    ) -> Result<Vec<crate::daemon::events::EventItem>> {
+        let (items, _) = crate::daemon::events::page(&self.store, after, None, limit).await?;
         Ok(items)
     }
 }
