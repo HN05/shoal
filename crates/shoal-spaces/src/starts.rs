@@ -298,3 +298,6 @@ impl Spaces {
         Ok(Some(daemon.read_open_issue(&checkout, issue).await?.into()))
     }
 }
+
+#[cfg(test)]
+mod tests;

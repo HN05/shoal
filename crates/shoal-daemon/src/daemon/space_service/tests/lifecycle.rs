@@ -5,7 +5,6 @@ use crate::model::EventCause;
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},
-        events::EventKind,
         test_support::{git, install_test_script, manager, repository},
     },
     model::Workspace,
@@ -13,7 +12,6 @@ use crate::{
     protocol::QueuedLaunches,
     removal::{InspectionPolicy, NOTHING, UnsavedWork},
 };
-use shoal_protocol::log::{LogEntry, LogFilter};
 use shoal_protocol::space_names::SpaceSelector;
 use std::{fs, sync::Arc};
 
@@ -36,26 +34,6 @@ pub(super) async fn fixture_with_removal_hook(
     script: &str,
 ) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     fixture_with_hook("hooks.pre_remove", |_| script.to_owned()).await
-}
-
-/// The kinds and causes of the removal events the space's log shows by
-/// default, oldest first.
-pub(super) async fn removal_entries(
-    manager: &Manager,
-    space: &SpaceSelector,
-) -> Vec<(EventKind, Option<EventCause>)> {
-    let entries = manager
-        .space_log(space, LogFilter::Entries, 50)
-        .await
-        .unwrap();
-    entries
-        .into_iter()
-        .filter_map(|entry| match entry {
-            LogEntry::Event(event) => Some((event.details.kind, event.details.cause)),
-            _ => None,
-        })
-        .filter(|(kind, _)| matches!(kind, EventKind::RemovalStarted | EventKind::Retained))
-        .collect()
 }
 
 /// A workspace whose repository runs `script(root)` as the `key` hook.

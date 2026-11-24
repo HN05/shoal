@@ -26,7 +26,6 @@ mod launches_worker;
 mod launches_workspace;
 mod launches_workspace_check;
 mod lifecycle;
-mod lifecycle_abandoned;
 mod lifecycle_background;
 mod progress;
 mod progress_publish;

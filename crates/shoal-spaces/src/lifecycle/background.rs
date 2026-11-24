@@ -125,3 +125,6 @@ fn manual(unsaved: &UnsavedWork, release_holds: bool) -> Removal<'_> {
         lives_on: false,
     }
 }
+
+#[cfg(test)]
+mod tests;

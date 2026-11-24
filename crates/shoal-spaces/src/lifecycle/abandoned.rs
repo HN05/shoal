@@ -137,3 +137,6 @@ fn started_cause(tx: &Connection, id: &SpaceId) -> Result<EventCause> {
         .flatten();
     Ok(cause.unwrap_or(EventCause::Manual))
 }
+
+#[cfg(test)]
+mod tests;

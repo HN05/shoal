@@ -1,16 +1,17 @@
-use crate::daemon::lifecycle::Removal;
-use crate::daemon::space_service::tests::lifecycle::{fixture, removal_entries};
+use crate::lifecycle::Removal;
+use crate::lifecycle::tests::{fixture, removal_entries};
 use crate::model::EventCause;
 use crate::{
-    daemon::{events::EventKind, workspace::reservation::RemovalRules},
+    events::EventKind,
     removal::{InspectionPolicy, NOTHING},
     state::WorkspaceState,
+    workspace::reservation::RemovalRules,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_removal_the_daemon_stopped_fails_its_workspace_for_shoal_rm() {
-    let (_root, manager, workspace) = fixture().await;
+    let (manager, workspace) = fixture().await;
     let selector = SpaceSelector::id(&workspace.id);
     // A removal reserved it, and the daemon stopped before it finished.
     manager
@@ -18,7 +19,7 @@ async fn a_removal_the_daemon_stopped_fails_its_workspace_for_shoal_rm() {
         .reserve_lifecycle_for_removal(&workspace.id, RemovalRules::default())
         .await
         .unwrap();
-    (crate::daemon::events::record_removal_start(&manager.store, &workspace.id, EventCause::Idle))
+    (crate::events::record_removal_start(&manager.store, &workspace.id, EventCause::Idle))
         .await
         .unwrap();
     manager.spaces.interrupted_operations().await.unwrap();
@@ -51,7 +52,7 @@ async fn a_removal_the_daemon_stopped_fails_its_workspace_for_shoal_rm() {
 
 #[tokio::test]
 async fn a_removal_whose_work_ends_early_fails_its_workspace() {
-    let (_root, manager, workspace) = fixture().await;
+    let (manager, workspace) = fixture().await;
     let selector = SpaceSelector::id(&workspace.id);
     let removal = Removal::Manual {
         unsaved: &NOTHING,
