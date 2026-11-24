@@ -44,16 +44,13 @@ pub mod test_daemon {
 }
 
 /// Run the daemon in this process, given its state, whether its service
-/// manager started it and the handoff from the daemon it replaces. The future
-/// is boxed here, where the daemon's futures are laid out: laying them out in
-/// another crate, as the `shoal` binary would, exceeds rustc's query depth
-/// limit.
-pub fn run(
+/// manager started it and the handoff from the daemon it replaces.
+pub async fn run(
     paths: paths::Paths,
     managed: bool,
     handoff: Option<daemon_handoff::Handoff>,
-) -> futures_util::future::LocalBoxFuture<'static, anyhow::Result<()>> {
-    Box::pin(daemon::run(paths, managed, handoff))
+) -> anyhow::Result<()> {
+    daemon::run(paths, managed, handoff).await
 }
 
 #[cfg(test)]
