@@ -2,17 +2,15 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;
 
-use super::{Entry, RETAIN, fake};
+use super::{named_operation, operation, report};
 use crate::{
     daemon::{
         manager::Manager,
+        operations::{Entry, fake},
         test_support::{manager, repository},
     },
     model::{Repository, Workspace},
-    protocol::operations::{
-        Ended, Failure, OperationKind, OperationRef, OperationSpec, Outcome, Preparation, Prepared,
-        Progress, Report, Step, Stream,
-    },
+    protocol::operations::{OperationRef, OperationSpec, Preparation, Progress, Report, Step},
     refusal::{Reason, Refusal},
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -64,120 +62,6 @@ async fn until(entry: &Entry, done: impl Fn(&[Progress], bool) -> bool) {
     .expect("the operation got there");
 }
 
-fn output(stream: Stream, line: &str) -> Progress {
-    Progress::Output {
-        stream,
-        line: line.into(),
-    }
-}
-
-#[tokio::test]
-async fn the_reported_end_takes_effect_once_the_worker_exits_after_its_output() {
-    let (root, manager) = manager().await;
-    let repository = registered(root.path(), &manager).await;
-    let workspace = workspace(&manager, &repository, "api").await;
-    let id = manager
-        .start_operation(setup(&workspace), None, None)
-        .await
-        .unwrap();
-    let mut worker = fake::take(&id);
-    let OperationSpec::Prepare {
-        workspace: id_in_order,
-        ..
-    } = &worker.order.spec
-    else {
-        panic!("expected the setup order: {:?}", worker.order);
-    };
-    assert_eq!(*id_in_order, SpaceSelector::id(&workspace.id));
-    assert_eq!(worker.token, None);
-    let entry = manager.operation(&id, None).await.unwrap();
-    let step = Report::Step(Step::SetupStarted);
-    manager.report_operation(&id, step, None).await.unwrap();
-    worker.stdout("installing").await;
-    worker.stderr("warning: slow\r").await;
-    until(&entry, |progress, _| progress.len() == 3).await;
-    let prepared = Prepared {
-        workspace: Box::new(workspace.clone()),
-        agent: None,
-    };
-    let ended = Ended::Succeeded(Box::new(Outcome::Prepared(prepared)));
-    let report = Report::Ended(ended);
-    manager.report_operation(&id, report, None).await.unwrap();
-    assert!(
-        entry.events_from(0).1.is_none(),
-        "the worker has not exited"
-    );
-    worker.exit(0);
-    until(&entry, |_, ended| ended).await;
-    let (events, ended) = entry.events_from(0);
-    let progress: Vec<_> = events.into_iter().map(|event| event.progress).collect();
-    assert_eq!(
-        progress[0],
-        Progress::Step {
-            step: Step::SetupStarted
-        }
-    );
-    assert!(progress.contains(&output(Stream::Stdout, "installing")));
-    assert!(progress.contains(&output(Stream::Stderr, "warning: slow")));
-    assert!(matches!(
-        ended,
-        Some(Ended::Succeeded(outcome)) if matches!(*outcome, Outcome::Prepared(_))
-    ));
-    let (later, _) = entry.events_from(2);
-    assert_eq!(later.len(), 1, "a follower resumes after what it read");
-}
-
-#[tokio::test]
-async fn an_interrupted_worker_that_exits_without_a_report_fails_the_operation() {
-    let (root, manager) = manager().await;
-    let repository = registered(root.path(), &manager).await;
-    let workspace = workspace(&manager, &repository, "api").await;
-    let id = manager
-        .start_operation(setup(&workspace), None, None)
-        .await
-        .unwrap();
-    let worker = fake::take(&id);
-    let entry = manager.operation(&id, None).await.unwrap();
-    entry.interrupt();
-    assert!(worker.interrupted.load(std::sync::atomic::Ordering::SeqCst));
-    worker.exit(3);
-    until(&entry, |_, ended| ended).await;
-    let Some(Ended::Failed(Failure::Failed { message })) = entry.events_from(0).1 else {
-        panic!("expected a failure");
-    };
-    assert!(message.contains("status 3"), "{message}");
-}
-
-#[tokio::test]
-async fn an_ended_operation_is_forgotten_once_its_retention_passes_without_a_new_one() {
-    let (root, manager) = manager().await;
-    let repository = registered(root.path(), &manager).await;
-    let workspace = workspace(&manager, &repository, "api").await;
-    let id = manager
-        .start_operation(setup(&workspace), None, None)
-        .await
-        .unwrap();
-    let mut worker = fake::take(&id);
-    let entry = manager.operation(&id, None).await.unwrap();
-    worker.stdout("installing").await;
-    until(&entry, |progress, _| progress.len() == 1).await;
-    tokio::time::pause();
-    worker.exit(0);
-    until(&entry, |_, ended| ended).await;
-    tokio::time::sleep(RETAIN - Duration::from_secs(1)).await;
-    assert!(manager.operation(&id, None).await.is_ok(), "still retained");
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    tokio::task::yield_now().await;
-    assert!(manager.operation(&id, None).await.is_err(), "forgotten");
-    let (events, ended) = entry.events_from(0);
-    assert!(ended.is_some(), "a follower keeps what it holds");
-    assert!(
-        events
-            .iter()
-            .any(|event| event.progress == output(Stream::Stdout, "installing"))
-    );
-}
-
 #[tokio::test]
 async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     let (root, manager) = manager().await;
@@ -196,6 +80,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .unwrap()
         .unwrap();
     let id = manager
+        .spaces
         .start_operation(setup(&own), None, Some(&caller))
         .await
         .unwrap();
@@ -216,7 +101,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .unwrap()
         .unwrap();
     assert_eq!(acting.space_id, own.id);
-    let entry = manager.operation(&id, Some(&caller)).await.unwrap();
+    let entry = operation(&manager, &id, Some(&caller)).await.unwrap();
     worker.exit(0);
     until(&entry, |_, ended| ended).await;
     assert!(
@@ -241,6 +126,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         vouched: None,
     };
     let from_execution = manager
+        .spaces
         .start_operation(setup(&own), None, Some(&ended))
         .await
         .unwrap();
@@ -257,46 +143,21 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     );
     worker.exit(0);
     let theirs = manager
+        .spaces
         .start_operation(setup(&other), None, None)
         .await
         .unwrap();
     fake::take(&theirs);
-    let refused = manager.operation(&theirs, Some(&caller)).await;
+    let refused = operation(&manager, &theirs, Some(&caller)).await;
     assert!(
         refused.is_err(),
         "another workspace's operation was followed"
     );
-    let missing = manager.operation("missing", None).await.err().unwrap();
+    let missing = operation(&manager, "missing", None).await.err().unwrap();
     assert_eq!(
         crate::refusal::Reason::of(&missing),
         Some(crate::refusal::Reason::NotFound)
     );
-}
-
-#[tokio::test]
-async fn a_long_line_arrives_in_parts_of_bounded_size() {
-    let (root, manager) = manager().await;
-    let repository = registered(root.path(), &manager).await;
-    let workspace = workspace(&manager, &repository, "api").await;
-    let id = manager
-        .start_operation(setup(&workspace), None, None)
-        .await
-        .unwrap();
-    let mut worker = fake::take(&id);
-    worker.stdout(&"x".repeat(2 * 8 * 1024 + 10)).await;
-    worker.exit(0);
-    let entry = manager.operation(&id, None).await.unwrap();
-    until(&entry, |_, ended| ended).await;
-    let lengths: Vec<_> = entry
-        .events_from(0)
-        .0
-        .into_iter()
-        .map(|event| match event.progress {
-            Progress::Output { line, .. } => line.len(),
-            progress => panic!("expected output: {progress:?}"),
-        })
-        .collect();
-    assert_eq!(lengths, [8 * 1024, 8 * 1024, 10]);
 }
 
 #[tokio::test]
@@ -306,22 +167,24 @@ async fn an_operation_named_with_its_space_is_found_here_after_its_space_left() 
     let other = workspace(&manager, &repository, "api").await;
     // A move's operation outlives the space it moved away.
     let gone = SpaceId::generate();
-    let (id, _) = manager
-        .operations
-        .register(gone.clone(), OperationKind::Move, None);
+    let spec = setup(&other);
+    let id = (manager.operations.spawn(gone.clone(), spec, None, None))
+        .await
+        .unwrap();
+    fake::take(&id);
     let named = OperationRef::in_space(id.clone(), SpaceSelector::id(&gone));
-    let entry = manager.named_operation(&named, None).await.unwrap();
+    let entry = named_operation(&manager, &named, None).await.unwrap();
     assert_eq!(entry.workspace, gone);
     // Named with another space, it is not that space's.
     let elsewhere = OperationRef::in_space(id, SpaceSelector::id(&other.id));
-    let Err(refused) = manager.named_operation(&elsewhere, None).await else {
+    let Err(refused) = named_operation(&manager, &elsewhere, None).await else {
         panic!("another space's operation was found");
     };
     assert_eq!(Reason::of(&refused), Some(Reason::NotFound), "{refused:#}");
     // One this machine does not run is refused as the absent space's, which
     // that space's machine answers instead.
     let there = OperationRef::in_space("unknown".into(), SpaceSelector::id(&gone));
-    let Err(refused) = manager.named_operation(&there, None).await else {
+    let Err(refused) = named_operation(&manager, &there, None).await else {
         panic!("an unknown operation was found");
     };
     let absent = Refusal::absent_space(&refused);
@@ -352,7 +215,8 @@ async fn a_scoped_caller_follows_and_reports_its_own_operation_in_a_space_no_lon
     // the hub lists it at its destination, below the starter.
     let gone = SpaceId::generate();
     let id = manager
-        .spawn_operation(gone, setup(&own), None, Some(&starter))
+        .operations
+        .spawn(gone, setup(&own), None, Some(&starter))
         .await
         .unwrap();
     let worker = fake::take(&id);
@@ -363,10 +227,15 @@ async fn a_scoped_caller_follows_and_reports_its_own_operation_in_a_space_no_lon
         .unwrap()
         .unwrap();
 
-    let followed = manager.operation(&id, Some(&starter)).await;
-    let reported =
-        (manager.report_operation(&id, Report::Step(Step::SetupStarted), Some(&acting))).await;
-    let refused = manager.operation(&id, Some(&outsider)).await;
+    let followed = operation(&manager, &id, Some(&starter)).await;
+    let reported = report(
+        &manager,
+        &id,
+        Report::Step(Step::SetupStarted),
+        Some(&acting),
+    )
+    .await;
+    let refused = operation(&manager, &id, Some(&outsider)).await;
 
     followed.unwrap();
     reported.unwrap();

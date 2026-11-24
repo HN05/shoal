@@ -131,8 +131,7 @@ impl Links {
             Pushes::Deny => return Err(denied(pushes)),
             Pushes::Propose | Pushes::Gate => {}
         }
-        self.ensure_workspace_not_pushing(daemon, &workspace)
-            .await?;
+        self.ensure_workspace_not_pushing(&workspace).await?;
         anyhow::ensure!(
             push.destination.starts_with("refs/"),
             "a push names the full ref it updates, not {}",
@@ -150,13 +149,9 @@ impl Links {
     /// Refuse to decide, withdraw or replace `request` while the push its
     /// approval started runs: the push lands whatever happens to the
     /// request, and its end decides it.
-    pub fn ensure_not_pushing(
-        self: &Arc<Self>,
-        daemon: &dyn Daemon,
-        request: &ApprovalRequest,
-    ) -> Result<()> {
+    pub fn ensure_not_pushing(self: &Arc<Self>, request: &ApprovalRequest) -> Result<()> {
         if let Some(operation) = &request.operation
-            && daemon.operation_running(operation)
+            && self.operations.runs(operation)
         {
             bail!(
                 "approval request {} is pushing; wait for the push to end",
@@ -171,7 +166,6 @@ impl Links {
     /// under which approved pushes start.
     pub async fn ensure_workspace_not_pushing(
         self: &Arc<Self>,
-        daemon: &dyn Daemon,
         workspace: &Workspace,
     ) -> Result<()> {
         let requests = self.approval_requests(Some(&workspace.id)).await?;
@@ -180,7 +174,7 @@ impl Links {
             .filter(|request| {
                 request.space_id == workspace.id && request.status == DecisionStatus::Pending
             })
-            .try_for_each(|request| self.ensure_not_pushing(daemon, request))
+            .try_for_each(|request| self.ensure_not_pushing(request))
     }
 
     /// Record `push` for the user's approval.

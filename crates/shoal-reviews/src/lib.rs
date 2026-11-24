@@ -6,6 +6,7 @@
 //! operations; what they need of the rest of the daemon is the interface in
 //! [`daemon`].
 use shoal_daemon_base::forge_access::ForgeAccess;
+use shoal_daemon_base::operations::Operations;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -56,6 +57,7 @@ pub struct Reviews {
     store: Store,
     gates: Arc<Gates>,
     forges: Arc<ForgeAccess>,
+    operations: Arc<Operations>,
     records: Arc<dyn Records>,
     requests: Arc<dyn Requests>,
     /// The daemon's paths: the home directory an agent's launch
@@ -90,6 +92,7 @@ impl Reviews {
         store: Store,
         gates: Arc<Gates>,
         forges: Arc<ForgeAccess>,
+        operations: Arc<Operations>,
         records: Arc<dyn Records>,
         requests: Arc<dyn Requests>,
         paths: Paths,
@@ -98,6 +101,7 @@ impl Reviews {
             store,
             gates,
             forges,
+            operations,
             records,
             requests,
             paths,

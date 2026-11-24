@@ -190,8 +190,7 @@ impl Spaces {
             let caller = scope.map(Caller::of_space);
             let workspace = SpaceSelector::id(id);
             let spec = OperationSpec::Prepare { workspace, steps };
-            daemon
-                .start_operation(spec, env, caller.as_ref())
+            self.start_operation(spec, env, caller.as_ref())
                 .await
                 .map(Some)
         };

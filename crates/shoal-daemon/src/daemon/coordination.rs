@@ -261,10 +261,6 @@ impl Callers for Manager {
     fn execution_caller<'a>(&'a self, token: &'a ScopeToken) -> BoxFuture<'a, Option<Caller>> {
         Box::pin(async move { self.agents.executions().scope(token).await })
     }
-
-    fn operation_caller(&self, token: &ScopeToken) -> Option<Caller> {
-        self.operations.caller(token)
-    }
 }
 
 impl Hub for Manager {
@@ -458,7 +454,7 @@ impl KeptFinding for KeptFalsePositive<'_> {
 
 impl Links for Manager {
     fn ensure_not_pushing(&self, request: &ApprovalRequest) -> Result<()> {
-        self.links.ensure_not_pushing(self, request)
+        self.links.ensure_not_pushing(request)
     }
 
     fn decide_proposal<'a>(

@@ -6,6 +6,7 @@
 //! approval requests the gate decides are kept in memory and change as the
 //! daemon's records do; approving one records it as approved.
 use shoal_daemon_base::forge_access::ForgeAccess;
+use shoal_daemon_base::operations::Operations;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -15,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result, bail};
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
-use shoal_daemon_base::{callers::Caller, gates::Gates, notifications::About};
+use shoal_daemon_base::{gates::Gates, notifications::About};
 use shoal_forge::transport::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -28,7 +29,6 @@ use shoal_protocol::item_numbers::ItemNumber;
 use shoal_protocol::paths::Paths;
 use shoal_protocol::repository::Selector;
 use shoal_protocol::reviews::{ReviewId, Severity};
-use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::threads::{
     Finding, Holder, NewPost, Outcome, Post, Resolution, Sender, Side, Thread, ThreadKind,
@@ -106,10 +106,12 @@ impl Fixture {
         let global = test_support::global_config(config);
         let global = Arc::new(shoal_daemon_base::config_state::ConfigState::new(global));
         let forges = Arc::new(ForgeAccess::new(store.clone(), gates.clone(), global));
+        let operations = Arc::new(Operations::new(paths.clone(), gates.clone()));
         let reviews = Reviews::new(
             store,
             gates,
             forges,
+            operations,
             records.clone(),
             requests.clone(),
             paths,
@@ -120,7 +122,6 @@ impl Fixture {
             announced: Mutex::default(),
             approve_fails: AtomicBool::new(false),
             space_gone: AtomicBool::new(false),
-            scopes: Mutex::default(),
             config: Mutex::new(test_support::global_config(config)),
             repository: repository.clone(),
             workspace: workspace.clone(),
@@ -243,8 +244,6 @@ pub(crate) struct StandIn {
     pub(crate) approve_fails: AtomicBool,
     /// Whether the workspace is gone, as a request that outlives it finds.
     pub(crate) space_gone: AtomicBool,
-    /// The scope tokens issued, each with whether it is still live.
-    pub(crate) scopes: Mutex<Vec<(ScopeToken, Caller, bool)>>,
     config: Mutex<Config>,
     repository: Repository,
     workspace: Workspace,
@@ -790,20 +789,6 @@ impl Requesters for StandIn {
     fn notify(&self, _about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
         self.notified.lock().unwrap().push((kind, message));
         Box::pin(async {})
-    }
-
-    fn issue_scope(&self, caller: &Caller) -> ScopeToken {
-        let mut scopes = self.scopes.lock().unwrap();
-        let token = ScopeToken::from(format!("scope-{}", scopes.len()));
-        scopes.push((token.clone(), caller.clone(), true));
-        token
-    }
-
-    fn revoke_scope(&self, token: &ScopeToken) {
-        let mut scopes = self.scopes.lock().unwrap();
-        for (issued, _, live) in scopes.iter_mut() {
-            *live &= issued != token;
-        }
     }
 }
 

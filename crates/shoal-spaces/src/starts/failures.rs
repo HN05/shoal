@@ -29,7 +29,8 @@ impl Spaces {
     ) {
         let (daemon, id, operation) = (daemon.clone(), id.clone(), operation.to_owned());
         tokio::spawn(async move {
-            if let Some(Ended::Failed(failure)) = daemon.operation_ended(&operation).await {
+            if let Some(Ended::Failed(failure)) = daemon.spaces().operations.ended(&operation).await
+            {
                 (daemon.spaces())
                     .tell_preparation_failure(&*daemon, &id, &failure)
                     .await;

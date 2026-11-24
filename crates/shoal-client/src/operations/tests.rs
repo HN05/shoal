@@ -44,11 +44,7 @@ async fn a_created_workspace_is_prepared_in_an_operation_the_app_follows() {
         message: "setup command exited with status 2".into(),
     };
     let report = Report::Ended(Ended::Failed(failure));
-    daemon
-        .manager
-        .report_operation(started.operation.as_deref().unwrap(), report, None)
-        .await
-        .unwrap();
+    (daemon.report_operation(started.operation.as_deref().unwrap(), report)).await;
     worker.exit(0);
     let Ended::Failed(failure) = follow(&app, started.operation.as_deref().unwrap()).await else {
         panic!("expected the failure");

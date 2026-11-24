@@ -285,7 +285,7 @@ impl Reviews {
                 .map_err(|error| failed(request, error))?;
             let files = run_files(case, request).map_err(|error| failed(request, error))?;
             let ended = self
-                .run_gate_once(daemon, case, agent, session, prompt, &files, &mut cancelled)
+                .run_gate_once(case, agent, session, prompt, &files, &mut cancelled)
                 .await;
             match ended {
                 Ok(Ran::Stopped) => {
@@ -334,7 +334,6 @@ impl Reviews {
     #[allow(clippy::too_many_arguments)]
     async fn run_gate_once(
         &self,
-        daemon: &dyn GateDaemon,
         case: &Case,
         agent: &Agent,
         session: Option<&AgentSessionId>,
@@ -342,7 +341,7 @@ impl Reviews {
         files: &Path,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<Ran> {
-        let scope = RunScope::of(daemon, &case.space);
+        let scope = RunScope::of(&self.operations, &case.space);
         let environment = scope.environment(&self.paths);
         let home = &self.paths.home;
         let command = gate_command(case, agent, session, prompt, files, &environment, home)?;

@@ -32,6 +32,7 @@ mod verdict;
 mod view;
 pub mod wait;
 
+use shoal_daemon_base::operations::Operations;
 use std::sync::Arc;
 
 use shoal_daemon_base::{
@@ -48,6 +49,7 @@ pub struct Links {
     notifications: Arc<Notifications>,
     file_access: Arc<FileAccess>,
     forges: Arc<ForgeAccess>,
+    operations: Arc<Operations>,
     records: Arc<dyn daemon::Records>,
     waits: wait::ActiveWaits,
     watch_starts: wait::starts::WatchStarts,
@@ -55,6 +57,10 @@ pub struct Links {
 }
 
 impl Links {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "what the links share with the daemon's other subsystems"
+    )]
     pub fn new(
         store: Store,
         gates: Arc<Gates>,
@@ -62,6 +68,7 @@ impl Links {
         notifications: Arc<Notifications>,
         file_access: Arc<FileAccess>,
         forges: Arc<ForgeAccess>,
+        operations: Arc<Operations>,
         records: Arc<dyn daemon::Records>,
     ) -> Self {
         Self {
@@ -71,6 +78,7 @@ impl Links {
             notifications,
             file_access,
             forges,
+            operations,
             records,
             waits: Default::default(),
             watch_starts: Default::default(),

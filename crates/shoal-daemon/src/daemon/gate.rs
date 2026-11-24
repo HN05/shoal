@@ -10,7 +10,6 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::config::permissions::Permissions;
-use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::views::Viewed;
 use shoal_reviews::daemon::{Approvals, Requesters, Requests};
@@ -18,7 +17,6 @@ use shoal_reviews::daemon::{Approvals, Requesters, Requests};
 use super::{
     approvals::{ApprovalRequest, by_key, gated, proposals::ProposalDecision},
     manager::Manager,
-    scope::Caller,
 };
 use crate::{forge::items::link::Selection, model::Space, protocol::ItemContext};
 
@@ -59,14 +57,6 @@ impl Requesters for Manager {
 
     fn notify(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()> {
         Box::pin(self.coordination.notify_about(self, about, kind, message))
-    }
-
-    fn issue_scope(&self, caller: &Caller) -> ScopeToken {
-        self.operations.issue(caller)
-    }
-
-    fn revoke_scope(&self, token: &ScopeToken) {
-        self.operations.revoke(token);
     }
 }
 

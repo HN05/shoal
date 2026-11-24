@@ -3,11 +3,13 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Value, json};
 use shoal_core::test_support::{git, global_config, repository};
 use shoal_daemon_base::forge_access::ForgeAccess;
+use shoal_daemon_base::operations::Operations;
 use shoal_daemon_base::{
     config_state::ConfigState, file_access::FileAccess, gates::Gates, notifications::Notifications,
 };
 use shoal_forge::test_support::Server;
 use shoal_forge_types::backends::ForgeKind;
+use shoal_protocol::paths::Paths;
 use shoal_protocol::{
     model::{Assigner, Workspace},
     space_names::SpaceSelector,
@@ -74,11 +76,12 @@ impl Fixture {
         let forges = ForgeAccess::new(store.clone(), gates.clone(), config.clone());
         let links = Arc::new(Links::new(
             store.clone(),
-            gates,
+            gates.clone(),
             config,
             Arc::new(Notifications::new(store)),
             Arc::new(FileAccess::default()),
             Arc::new(forges),
+            Arc::new(Operations::new(Paths::for_test(root.path()), gates.clone())),
             Arc::new(StandInRecords),
         ));
         let daemon = StandIn {

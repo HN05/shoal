@@ -5,6 +5,7 @@
 //! caller's token reaches. [`Coordination`] holds what they keep in memory
 //! and offers their operations; what they need of the rest of the daemon is
 //! the interface in [`daemon`].
+use shoal_daemon_base::operations::Operations;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -35,6 +36,7 @@ pub struct Coordination {
     config: Arc<ConfigState>,
     notifications: Arc<Notifications>,
     signals: Arc<Signals>,
+    operations: Arc<Operations>,
     /// The scope tokens approved commands take their permission's actions
     /// with.
     grants: permissions::Grants,
@@ -48,6 +50,7 @@ impl Coordination {
         config: Arc<ConfigState>,
         notifications: Arc<Notifications>,
         signals: Arc<Signals>,
+        operations: Arc<Operations>,
         records: Arc<dyn daemon::Records>,
     ) -> Self {
         Self {
@@ -56,6 +59,7 @@ impl Coordination {
             config,
             notifications,
             signals,
+            operations,
             grants: permissions::Grants::default(),
             records,
         }

@@ -79,9 +79,13 @@ async fn an_exit_names_each_workspace_it_would_cut_off_once() {
         workspace: SpaceSelector::id(&workspace.id),
         steps: Preparation::default(),
     };
-    let preparing = manager.start_operation(prepare(&merging), None, None);
+    let preparing = manager
+        .spaces
+        .start_operation(prepare(&merging), None, None);
     let preparing = preparing.await.unwrap();
-    let before_removal = manager.start_operation(prepare(&removing), None, None);
+    let before_removal = manager
+        .spaces
+        .start_operation(prepare(&removing), None, None);
     let before_removal = before_removal.await.unwrap();
     let state = WorkspaceState::Removing;
     manager

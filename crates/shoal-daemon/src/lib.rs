@@ -2,6 +2,8 @@
 
 mod daemon;
 
+#[cfg(any(test, feature = "test-support"))]
+use shoal_core::env;
 #[cfg(test)]
 use shoal_core::reviews;
 #[cfg(any(test, feature = "test-support"))]
@@ -11,8 +13,8 @@ use shoal_core::test_support;
 #[cfg(test)]
 use shoal_core::{agents, launches, presets, tmp_dirs};
 use shoal_core::{
-    caches, config, config_file, daemon_handoff, env, execution, fsutil, git, hooks, installed,
-    paths, process, profile, refusal, releases, removal, repository, service, sessions, shoal_dirs,
+    caches, config, config_file, daemon_handoff, execution, fsutil, git, hooks, installed, paths,
+    process, profile, refusal, releases, removal, repository, service, sessions, shoal_dirs,
     terminal, tools, transfer, workers,
 };
 use shoal_forge_types as forge;
@@ -30,7 +32,6 @@ pub mod test_daemon {
     pub use crate::daemon::capacity::fake_disk_free;
     pub use crate::daemon::disk::Monitor as DiskMonitor;
     pub use crate::daemon::links::proposals::{link_item, link_space, store_issue_proposal};
-    pub use crate::daemon::operations::fake;
     pub use crate::daemon::overload::Pressure;
     pub use crate::daemon::queued_starts::fake::STARTED as STARTED_QUEUED;
     pub use crate::daemon::scope::Caller;
@@ -39,6 +40,7 @@ pub mod test_daemon {
     pub use crate::daemon::{
         executions::StopRequest, manager::Manager, stopped_work::PermissionTargets,
     };
+    pub use shoal_daemon_base::operations::fake;
 }
 
 /// Run the daemon in this process, given its state, whether its service

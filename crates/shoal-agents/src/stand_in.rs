@@ -250,13 +250,16 @@ async fn service(paths: Paths, config: Arc<ConfigState>, records: Arc<StandInRec
     let store = shoal_store::test_support::unsynced_store(paths.database())
         .await
         .unwrap();
+    let gates = Arc::new(Gates::default());
+    let operations = shoal_daemon_base::operations::Operations::new(paths.clone(), gates.clone());
     Agents::new(
         store.clone(),
-        Arc::new(Gates::default()),
+        gates,
         config,
         Arc::new(Signals::default()),
         Arc::new(Notifications::new(store.clone())),
         Arc::default(),
+        Arc::new(operations),
         paths,
         records,
         Arc::new(StandInRemovals),
@@ -727,22 +730,6 @@ impl Operations for StandIn {
 
     fn tell_start_warnings<'a>(&'a self, _: &'a Space, _: &'a [String]) -> BoxFuture<'a, ()> {
         Box::pin(async {})
-    }
-
-    fn pushing_operations(&self) -> Box<dyn Fn(&str) -> bool + Send + Sync> {
-        Box::new(|_| false)
-    }
-
-    fn operations_work_in(&self) -> HashSet<SpaceId> {
-        Default::default()
-    }
-
-    fn operation_runs_in(&self, _: &SpaceId) -> bool {
-        Default::default()
-    }
-
-    fn fakes_workers(&self) -> bool {
-        Default::default()
     }
 }
 

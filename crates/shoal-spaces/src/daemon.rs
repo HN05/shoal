@@ -47,7 +47,7 @@ use shoal_protocol::model::{
 };
 use shoal_protocol::processes::Identity;
 use shoal_protocol::progress::Blocker;
-use shoal_protocol::protocol::operations::{Ended, LaunchRequest, OperationSpec, QueuedLaunch};
+use shoal_protocol::protocol::operations::{LaunchRequest, QueuedLaunch};
 use shoal_protocol::protocol::{
     Body, ConfigTarget, ItemContext, Operation, QueuedLaunches, RepoTarget,
 };
@@ -74,46 +74,9 @@ use shoal_core::launches::SpaceRepository;
 /// The operations the daemon runs in workers of their own, and how it
 /// answers a request that failed.
 pub trait Operations: Send + Sync {
-    /// Start `spec` in a worker for `caller`, returning the operation's ID.
-    fn start_operation<'a>(
-        &'a self,
-        spec: OperationSpec,
-        env: Option<BTreeMap<String, String>>,
-        caller: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<String>>;
-
-    /// Start `spec`, which works in the space `workspace`, in a worker as
-    /// [`Self::start_operation`] does, returning the operation's ID.
-    fn spawn_operation<'a>(
-        &'a self,
-        workspace: SpaceId,
-        spec: OperationSpec,
-        env: Option<BTreeMap<String, String>>,
-        caller: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<String>>;
-
-    /// Whether an operation in the workspace `id` still runs.
-    fn operation_runs_in(&self, id: &SpaceId) -> bool;
-
-    /// Whether the operation `id` is over: it ended, or is no longer
-    /// followed, having ended long before.
-    fn operation_over<'a>(&'a self, id: &'a str) -> BoxFuture<'a, bool>;
-
-    /// How the operation `id` ended, or how its worker reported it ends,
-    /// once either came; `None` while the daemon does not follow it.
-    fn operation_ending<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Option<Option<Ended>>>;
-
-    /// How the operation `id` ends, once it does; none when it is not
-    /// followed, or its record goes first.
-    fn operation_ended<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Option<Ended>>;
-
     /// The check of the space `operation` names, as its kind declares it;
     /// none for a kind that never names one.
     fn target_check(&self, operation: &Operation) -> Option<TargetCheck>;
-
-    /// Whether this daemon starts fake workers that tests drive, as a test
-    /// daemon does, instead of running Shoal as them.
-    fn fakes_workers(&self) -> bool;
 
     /// The error body of a request that failed with `error`.
     fn failure(&self, error: &anyhow::Error) -> Body;

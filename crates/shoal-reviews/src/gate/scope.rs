@@ -8,23 +8,25 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::paths::Paths;
 use shoal_protocol::scope_tokens::ScopeToken;
 
-use crate::{daemon::GateDaemon, env};
+use shoal_daemon_base::operations::Operations;
+
+use crate::env;
 
 /// A read-only scope that ends when dropped.
 pub(super) struct RunScope<'a> {
-    daemon: &'a dyn GateDaemon,
+    operations: &'a Operations,
     token: ScopeToken,
 }
 
 impl<'a> RunScope<'a> {
     /// A read-only scope of `space` for one gate run.
-    pub(super) fn of(daemon: &'a dyn GateDaemon, space: &SpaceId) -> Self {
+    pub(super) fn of(operations: &'a Operations, space: &SpaceId) -> Self {
         let caller = Caller {
             read_only: true,
             ..Caller::of_space(space.clone())
         };
-        let token = daemon.issue_scope(&caller);
-        Self { daemon, token }
+        let token = operations.issue(&caller);
+        Self { operations, token }
     }
 
     /// The variables that give the run's `shoal` commands this scope with
@@ -39,6 +41,6 @@ impl<'a> RunScope<'a> {
 
 impl Drop for RunScope<'_> {
     fn drop(&mut self) {
-        self.daemon.revoke_scope(&self.token);
+        self.operations.revoke(&self.token);
     }
 }

@@ -5,6 +5,7 @@ use crate::paths::StateFiles;
 use crate::{config::Config, daemon::store::Store, paths::Paths};
 use anyhow::Result;
 use shoal_daemon_base::forge_access::{self, ForgeAccess};
+use shoal_daemon_base::operations::Operations;
 use std::sync::Arc;
 
 pub struct Manager {
@@ -17,7 +18,7 @@ pub struct Manager {
     /// The leases workspaces hold.
     pub leases: shoal_leases::Leases,
     pub paths: Paths,
-    pub(crate) operations: Arc<crate::daemon::operations::Operations>,
+    pub(crate) operations: Arc<Operations>,
     /// The alerts, threads, approvals, permissions and scope between spaces.
     pub coordination: shoal_coordination::Coordination,
     /// The workspaces and chats: their records and tree, lifecycle, removal
@@ -58,6 +59,11 @@ impl Manager {
             gates.clone(),
             config_state.clone(),
         ));
+        let operations = Arc::new(Operations::new(paths.clone(), gates.clone()));
+        #[cfg(any(test, feature = "test-support"))]
+        if super::fake_workers::faked() {
+            operations.fake_workers();
+        }
         let leases = shoal_leases::Leases::new(
             store.clone(),
             gates.clone(),
@@ -95,6 +101,7 @@ impl Manager {
             notifications.clone(),
             file_access.clone(),
             forges.clone(),
+            operations.clone(),
             Arc::new(super::links::records::LinkRecords),
         ));
         let repositories = Arc::new(shoal_repositories::Repositories::new(
@@ -117,12 +124,13 @@ impl Manager {
             signals.clone(),
             notifications.clone(),
             file_access.clone(),
+            operations.clone(),
             paths.clone(),
             Arc::new(super::agent_service::AgentRecords),
             Arc::new(super::agent_service::SpaceRemovals(space_removals.clone())),
             // Tests inject hosts and never discover or close the user's
             // sessions.
-            if crate::daemon::fake_workers::faked() {
+            if operations.fakes() {
                 Vec::new()
             } else {
                 crate::sessions::hosts()
@@ -132,6 +140,7 @@ impl Manager {
             store.clone(),
             gates.clone(),
             forges.clone(),
+            operations.clone(),
             Arc::new(super::reviews::ReviewRecords),
             Arc::new(super::gate::GatedRequests),
             paths.clone(),
@@ -144,6 +153,7 @@ impl Manager {
             config_state.clone(),
             notifications.clone(),
             signals.clone(),
+            operations.clone(),
             Arc::new(super::coordination::CoordinationRecords(
                 space_removals.clone(),
             )),
@@ -157,6 +167,7 @@ impl Manager {
             paths.clone(),
             file_access.clone(),
             forges.clone(),
+            operations.clone(),
             space_removals,
             space_records,
         );
@@ -168,7 +179,7 @@ impl Manager {
             store,
             gates,
             paths,
-            operations: Default::default(),
+            operations,
             coordination,
             spaces,
             signals,

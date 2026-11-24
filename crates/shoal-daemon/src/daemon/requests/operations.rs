@@ -10,7 +10,6 @@ use super::super::{
     answer::{Answer, OperationGuard},
     manager::Manager,
     moves::MoveStart,
-    operations::Entry,
     scope::{Caller, Scoped},
     starts::{Child, Opening, Preparing},
     target_checks::{Checked, TargetCheck},
@@ -20,7 +19,10 @@ use crate::protocol::{
     Body, ErrorCode, OperationMethod, Response,
     operations::{OperationSpec, Started},
 };
+use shoal_daemon_base::operations::Entry;
 use shoal_protocol::space_names::SpaceSelector;
+
+pub(in crate::daemon) mod entries;
 
 /// Whether `method` starts a workspace or an operation, whose worker an
 /// exit would cut off, which an exit that waits for work in progress holds
@@ -51,11 +53,11 @@ pub(super) async fn handle(
         OperationMethod::StartOperation { spec, env } => {
             manager.spaces.admit_explicit_preparation(&spec).await?;
             Body::OperationStarted(Started {
-                id: manager.start_operation(spec, env, caller).await?,
+                id: manager.spaces.start_operation(spec, env, caller).await?,
             })
         }
         OperationMethod::FollowOperation { operation, after } => {
-            let entry = manager.named_operation(&operation, caller).await?;
+            let entry = entries::named_operation(manager, &operation, caller).await?;
             // Another machine's follow is checked there as it goes, its
             // token here standing for its caller only while it starts.
             let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());
@@ -78,7 +80,7 @@ pub(super) async fn handle(
                     return Ok(Answer::Body(Body::MoveAfterTurn(deferred)));
                 }
             };
-            let entry = manager.operation(&id, caller).await?;
+            let entry = entries::operation(manager, &id, caller).await?;
             // Another machine's move is followed there as it goes, its
             // token here standing for its caller only while it starts.
             let scope = scope.filter(|token| manager.hub.vouched_caller(token).is_none());
@@ -175,11 +177,11 @@ pub(super) async fn handle(
             )
         }
         OperationMethod::CancelOperation { operation } => {
-            (manager.named_operation(&operation, caller).await?).interrupt();
+            (entries::named_operation(manager, &operation, caller).await?).interrupt();
             Body::Ok
         }
         OperationMethod::ReportProgress { id, report } => {
-            manager.report_operation(&id, report, caller).await?;
+            entries::report(manager, &id, report, caller).await?;
             Body::Ok
         }
     }))
@@ -273,14 +275,14 @@ impl Scoped for OperationMethod {
             // is that space's, wherever it runs.
             OperationMethod::FollowOperation { operation, .. }
             | OperationMethod::CancelOperation { operation } => match &mut operation.space {
-                Some(space) if !manager.has_operation(&operation.id) => Some(space),
+                Some(space) if manager.operations.get(&operation.id).is_none() => Some(space),
                 _ => {
-                    manager.operation(&operation.id, Some(caller)).await?;
+                    entries::operation(manager, &operation.id, Some(caller)).await?;
                     None
                 }
             },
             OperationMethod::ReportProgress { id, .. } => {
-                manager.operation(id, Some(caller)).await?;
+                entries::operation(manager, id, Some(caller)).await?;
                 None
             }
         })

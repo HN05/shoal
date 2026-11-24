@@ -9,6 +9,8 @@ pub(crate) use shoal_agents::{
     warnings,
 };
 pub(crate) use shoal_coordination::{alerts, approvals, changes, threads};
+#[cfg(test)]
+pub(crate) use shoal_daemon_base::operations;
 pub(crate) use shoal_daemon_base::{
     config_state, events, file_access, gates, item_numbers, log, notifications, retention, signals,
 };
@@ -42,6 +44,7 @@ pub(crate) mod disk;
 mod elsewhere;
 pub mod environment;
 mod exit_wait;
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) mod fake_workers;
 pub(crate) mod gate;
 pub(crate) mod hub;
@@ -52,7 +55,6 @@ pub mod links;
 mod logind;
 mod logs;
 pub mod manager;
-pub(crate) mod operations;
 mod pause;
 mod relayed;
 mod releases;

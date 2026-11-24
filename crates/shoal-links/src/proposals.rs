@@ -221,7 +221,7 @@ impl Links {
                 request.number
             );
         }
-        self.ensure_not_pushing(daemon, &request)?;
+        self.ensure_not_pushing(&request)?;
         let repository = request.repository_id.as_ref();
         let space = self
             .find_link_space(daemon, &request.space_id, repository)

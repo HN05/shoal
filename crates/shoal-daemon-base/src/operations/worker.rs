@@ -12,10 +12,8 @@ use tokio::{
 };
 
 use super::Entry;
-use crate::{
-    paths::Paths,
-    protocol::operations::{Order, Stream},
-};
+use crate::protocol::operations::{Order, Stream};
+use shoal_protocol::paths::Paths;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake;
@@ -52,12 +50,7 @@ pub(super) fn spawn(
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt as _;
 
-    use crate::workers::{Worker as Internal, detached_command, internal_command};
-
-    #[cfg(any(test, feature = "test-support"))]
-    if crate::daemon::fake_workers::faked() {
-        return Ok(fake::start(order, token));
-    }
+    use shoal_core::workers::{Worker as Internal, detached_command, internal_command};
 
     let argv = internal_command(paths, false, Internal::Operation)?;
     let mut command = detached_command(&argv);
@@ -71,10 +64,10 @@ pub(super) fn spawn(
     }
     // The worker outlives its caller: no execution's process inventory may
     // count it, or that execution's end would stop it as a survivor.
-    command.env_remove(crate::env::EXECUTION_ID);
+    command.env_remove(shoal_core::env::EXECUTION_ID);
     match token {
-        Some(token) => command.env(crate::env::SCOPE_TOKEN, token.expose()),
-        None => command.env_remove(crate::env::SCOPE_TOKEN),
+        Some(token) => command.env(shoal_core::env::SCOPE_TOKEN, token.expose()),
+        None => command.env_remove(shoal_core::env::SCOPE_TOKEN),
     };
     let mut child = command.spawn().context("start the operation's worker")?;
     let (Some(mut stdin), Some(stdout), Some(stderr)) =
@@ -86,7 +79,7 @@ pub(super) fn spawn(
     // worker's reaping cannot reach a process that took over its ID.
     let identity = child
         .id()
-        .map(crate::process::identity::capture)
+        .map(shoal_core::process::identity::capture)
         .transpose()?
         .flatten()
         .context("the operation's worker cannot be identified")?;
@@ -101,13 +94,13 @@ pub(super) fn spawn(
         stderr: Box::new(stderr),
         exit: Box::pin(async move {
             match child.wait().await {
-                Ok(status) => crate::execution::exit_code(status),
+                Ok(status) => shoal_core::execution::exit_code(status),
                 Err(_) => 1,
             }
         }),
         // The worker's tracked executions stop their commands on SIGTERM.
         interrupt: Some(Box::new(move || {
-            let _ = crate::process::identity::signal(&identity, libc::SIGTERM);
+            let _ = shoal_core::process::identity::signal(&identity, libc::SIGTERM);
         })),
     })
 }

@@ -5,6 +5,7 @@
 //! agents' queue records them. Nothing runs on another machine, no file is
 //! attached and no review or proposal is pending; a test that needs one of
 //! those drives a whole daemon instead.
+use shoal_daemon_base::operations::Operations;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -85,12 +86,14 @@ impl Fixture {
             agents: Mutex::default(),
             local: Mutex::default(),
         });
+        let gates = Arc::new(Gates::default());
         let coordination = Arc::new(Coordination::new(
             store,
-            Arc::new(Gates::default()),
+            gates.clone(),
             daemon.config.clone(),
             notifications.clone(),
             Arc::new(Signals::default()),
+            Arc::new(Operations::new(paths, gates)),
             daemon.clone(),
         ));
         let _ = daemon.coordination.set(coordination.clone());
@@ -573,10 +576,6 @@ impl Agents for StandIn {
 impl Callers for StandIn {
     fn execution_caller<'a>(&'a self, _: &'a ScopeToken) -> BoxFuture<'a, Option<Caller>> {
         Box::pin(async { None })
-    }
-
-    fn operation_caller(&self, _: &ScopeToken) -> Option<Caller> {
-        None
     }
 }
 
