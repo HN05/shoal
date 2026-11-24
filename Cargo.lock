@@ -3003,9 +3003,7 @@ name = "shoal-store"
 version = "0.21.0"
 dependencies = [
  "anyhow",
- "libc",
  "rusqlite",
- "rustix",
  "serde",
  "serde_json",
  "shoal-core",

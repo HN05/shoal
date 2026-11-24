@@ -22,11 +22,6 @@ shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }
 tokio = { workspace = true, features = ["sync"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-libc.workspace = true
-# A directory's birth time, which musl's standard library does not read.
-rustix = { version = "1", features = ["fs"] }
-
 [dev-dependencies]
 shoal-core = { workspace = true, features = ["test-support"] }
 shoal-ids = { workspace = true, features = ["test-support"] }
