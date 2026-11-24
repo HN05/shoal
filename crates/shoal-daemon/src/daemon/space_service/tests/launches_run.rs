@@ -3,6 +3,7 @@
 use std::{path::Path, sync::Arc};
 
 use shoal_core::start_plan::QueuedStart;
+use shoal_forge_types::items::reference::ItemInput;
 use shoal_protocol::launches::{ItemChoice, Launch, LaunchSource, StartTarget};
 use shoal_protocol::protocol::{Launched, operations::StartedWorkspace};
 use shoal_protocol::space_names::SpaceSelector;
@@ -339,4 +340,24 @@ async fn a_creation_on_a_branch_run_links_it_and_one_on_the_default_branch_is_re
         .collect();
     assert_eq!(related, [forge.run(3)]);
     assert!(refused.is_err());
+}
+
+#[tokio::test]
+async fn ci_names_a_run_by_its_number_in_the_repository_the_start_names() {
+    let forge = Forge::new().await;
+    let numbered = |repository: Option<String>| {
+        move |launch: &mut Launch| {
+            launch.target = None;
+            launch.ci = Some(ItemChoice::Named(ItemInput::Number(1)));
+            launch.repository = repository;
+        }
+    };
+
+    let launched = forge.start(1, numbered(Some(forge.repo.id.to_string())), None);
+    let launched = launched.await.unwrap();
+    let unplaced = forge.start(1, numbered(None), None).await;
+
+    assert_eq!(launched.space.name, "release.yml run 1 on main");
+    assert_eq!(forge.related(&launched).await, [forge.run(1)]);
+    assert!(unplaced.is_err());
 }

@@ -4,7 +4,7 @@
 //! as for those; the run is linked to the space once the start has one.
 use crate::Spaces;
 use crate::daemon::Daemon;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::launches::{Launch, StartTarget};
 use shoal_protocol::protocol::ItemContext;
@@ -12,7 +12,13 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
 use crate::{
-    forge::{ci::run_action::Run, items::reference::ItemRef},
+    forge::{
+        ci::run_action::Run,
+        items::{
+            link::LinkKind,
+            reference::{ItemInput, ItemRef},
+        },
+    },
     git::{self, default_branch::DefaultBranchLookup},
     model::{Repository, SpaceKind},
     scope::Caller,
@@ -33,13 +39,15 @@ impl Spaces {
         launch: &mut Launch,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let Some(url) = named_run(launch)?.cloned() else {
+        let Some(input) = named_run(launch)? else {
             return Ok(());
         };
         ensure_run_fits(launch)?;
-        let repo = self.run_repository(daemon, launch, &url).await?;
+        let repo = self.run_repository(daemon, launch, &input, caller).await?;
         let context = run_context(&repo, caller);
-        let run = daemon.launch_run(&context, &url, caller).await?;
+        let run = daemon.launch_run(&context, &input, caller).await?;
+        let url = ItemRef::parse_kind(LinkKind::Ci, &run.url)?;
+        launches::workspace::ensure_link_in(&repo, Some(url.repository())).await?;
         let start = match self.mode_starts_chat(daemon, launch, caller).await? {
             true => RunStart::Unbranched,
             false => RunStart::of(&run, pushed_branch(&repo, &run).await?),
@@ -47,30 +55,36 @@ impl Spaces {
         launches::run::settle(launch, (url, &run), start, repo.id.to_string())
     }
 
-    /// The registered repository of the run `url` that `launch` names: the
-    /// one it names with `--repo` or positionally, which must be the
-    /// run's, else the run's own.
+    /// The registered repository of the run `input` that `launch` names:
+    /// the one it names with `--repo` or positionally, else that of the
+    /// run's URL, or for the number in it the one the start inherits.
     async fn run_repository(
         &self,
         daemon: &dyn Daemon,
         launch: &Launch,
-        url: &ItemRef,
+        input: &ItemInput,
+        caller: Option<&Caller>,
     ) -> Result<Repository> {
         let repos = daemon.repositories().await?;
-        let positional = match &launch.target {
-            Some(StartTarget::Repository(named) | StartTarget::Number(named)) => Some(named),
-            _ => None,
-        };
-        let Some(named) = launch.repository.as_ref().or(positional) else {
-            let retry = "shoal start <run-url> --repo <repository>";
-            let repo = crate::repository::with_remote(&repos, url.repository().clone(), retry);
-            return Ok(repo.await?.clone());
-        };
-        let directory = launch.directory.as_deref();
-        let selector = crate::repository::named_in(named.clone(), directory)?;
-        let repo = crate::repository::select(&repos, selector).await?.clone();
-        launches::workspace::ensure_link_in(&repo, Some(url.repository())).await?;
-        Ok(repo)
+        if let Some(named) = named_repository(launch) {
+            let directory = launch.directory.as_deref();
+            let selector = crate::repository::named_in(named.clone(), directory)?;
+            return Ok(crate::repository::select(&repos, selector).await?.clone());
+        }
+        match input {
+            ItemInput::Url(run) => {
+                let retry = "shoal start <run-url> --repo <repository>";
+                let repo = crate::repository::with_remote(&repos, run.repository().clone(), retry);
+                Ok(repo.await?.clone())
+            }
+            ItemInput::Number(number) => {
+                let state = self.launch_state(daemon, launch, caller).await?;
+                let inherited = launches::shape::inherited_repository(&state, launch).await?;
+                inherited.with_context(|| {
+                    format!("no current registered repository has CI run {number}; pass --repo or the run's URL")
+                })
+            }
+        }
     }
 
     /// Whether the mode `launch` names starts a chat for `caller`; the
@@ -108,6 +122,15 @@ impl Spaces {
             ));
         }
     }
+}
+
+/// The repository `launch` names with `--repo` or positionally.
+fn named_repository(launch: &Launch) -> Option<&String> {
+    let positional = match &launch.target {
+        Some(StartTarget::Repository(named) | StartTarget::Number(named)) => Some(named),
+        _ => None,
+    };
+    launch.repository.as_ref().or(positional)
 }
 
 /// Where `caller` reads a run of `repo` it starts on: from its own space,

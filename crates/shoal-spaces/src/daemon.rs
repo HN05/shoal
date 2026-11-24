@@ -242,12 +242,13 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<PullRequest>>;
 
-    /// The CI run `run` a launch starts on, read from the repository of
-    /// `context` as `caller` may link it.
+    /// The CI run a launch starts on, which `run` names by its URL or the
+    /// number in it, read from the repository of `context` as `caller` may
+    /// link it.
     fn launch_run<'a>(
         &'a self,
         context: &'a ItemContext,
-        run: &'a ItemRef,
+        run: &'a ItemInput,
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Run>>;
 

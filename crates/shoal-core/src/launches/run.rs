@@ -53,28 +53,25 @@ pub fn names_run(launch: &Launch) -> bool {
     launch.ci.is_some() || matches!(launch.target, Some(StartTarget::Run(_)))
 }
 
-/// The run `launch` starts on, by its link, positionally or with `--ci`;
-/// refused for `--ci` with a number, which names no run, or without a
-/// value, which only a terminal picks.
-pub fn named_run(launch: &Launch) -> Result<Option<&ItemRef>> {
+/// The run `launch` starts on: by its link, positionally, or with `--ci`
+/// by its URL or the number in it; refused for `--ci` without a value,
+/// which only a terminal picks, or with another item's URL.
+pub fn named_run(launch: &Launch) -> Result<Option<ItemInput>> {
     let flagged = match &launch.ci {
         None => None,
         Some(ItemChoice::Pick) => {
-            bail!("--ci needs a CI run's URL; a terminal picks one without it")
+            bail!("--ci needs a CI run's number or URL; a terminal picks one without it")
         }
-        Some(ItemChoice::Named(ItemInput::Number(_))) => {
-            bail!("--ci takes a CI run's URL; a number names no run")
-        }
-        Some(ItemChoice::Named(ItemInput::Url(run))) => Some(run),
+        Some(ItemChoice::Named(run)) => Some(run),
     };
-    let positional = match &launch.target {
-        Some(StartTarget::Run(run)) => Some(run),
-        _ => None,
-    };
-    if let Some(run) = flagged {
+    if let Some(ItemInput::Url(run)) = flagged {
         run.run()?;
     }
-    Ok(flagged.or(positional))
+    let positional = match &launch.target {
+        Some(StartTarget::Run(run)) => Some(ItemInput::Url(run.clone())),
+        _ => None,
+    };
+    Ok(flagged.cloned().or(positional))
 }
 
 /// The run a settled launch starts on, which it keeps as `--ci` names it.

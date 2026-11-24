@@ -1017,7 +1017,7 @@ impl Links for StandIn {
     fn launch_run<'a>(
         &'a self,
         _: &'a ItemContext,
-        _: &'a ItemRef,
+        _: &'a ItemInput,
         _: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Run>> {
         Box::pin(async { bail!("{NOT_HERE}: launch_run") })

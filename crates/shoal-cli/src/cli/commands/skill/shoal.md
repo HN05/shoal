@@ -50,7 +50,7 @@ shoal contribute https://github.com/other/repo/issues/12 --agent claude
 ```
 
 `start` accepts a registered repository and branch, or an issue, PR, CI run
-or branch URL, `--pr` a PR's number or URL and `--ci` a run's URL; an issue,
+or branch URL, `--pr` a PR's number or URL and `--ci` a run's; an issue,
 else a run, becomes the agent's first message, followed by its mode's
 instructions, and text after `--` is the task. A run starts in its PR's or
 branch's workspace, or for a run on the default branch or a tag in a chat

@@ -56,10 +56,10 @@ fn a_run_starts_where_it_ran() {
 }
 
 #[test]
-fn a_run_is_named_once_by_its_link() {
+fn a_run_is_named_by_its_link_or_its_number() {
     for flagged in [false, true] {
         let named = launch(flagged, |_| {});
-        assert_eq!(named_run(&named).unwrap().unwrap().url(), RUN);
+        assert_eq!(named_run(&named).unwrap().unwrap().to_string(), RUN);
     }
     let beside_repository = launch(true, |launch| {
         launch.target = Some(StartTarget::Repository("app".into()));
@@ -69,7 +69,7 @@ fn a_run_is_named_once_by_its_link() {
         ci: Some(ItemChoice::Named(ItemInput::Number(2765))),
         ..Default::default()
     };
-    assert!(named_run(&numbered).is_err());
+    assert_eq!(named_run(&numbered).unwrap(), Some(ItemInput::Number(2765)));
     let issue = Launch {
         ci: Some(ItemChoice::Named(
             "https://forge.example/team/app/issues/3".parse().unwrap(),
@@ -112,7 +112,7 @@ fn a_run_refuses_what_names_the_work_another_way() {
 fn a_settled_run_starts_on_its_pr_its_branch_or_nothing() {
     let settled = |read: Run, start: RunStart, named: Option<&str>| {
         let mut launch = launch(false, |launch| launch.name = named.map(Into::into));
-        let url = named_run(&launch).unwrap().unwrap().clone();
+        let url = RUN.parse::<ItemRef>().unwrap();
         settle(&mut launch, (url, &read), start, "repo-id".into()).unwrap();
         assert_eq!(launch.repository.as_deref(), Some("repo-id"));
         let kept = launch.ci.as_ref().and_then(ItemChoice::named);

@@ -323,7 +323,7 @@ impl shoal_spaces::daemon::Links for Manager {
     fn launch_run<'a>(
         &'a self,
         context: &'a ItemContext,
-        run: &'a ItemRef,
+        run: &'a ItemInput,
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Run>> {
         let target = context.clone().into();

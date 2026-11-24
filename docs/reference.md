@@ -1562,26 +1562,26 @@ GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>`, Bitbucket's
 `/branch/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
-
-CI run links, and `--ci` with a run's URL, or without one, on a terminal, a
-run picked among the newest of each workflow and ref whose latest attempt
-failed, start where the run ran, in any state: a run for a PR opens as that
-PR's link does, a run on another branch than the default branch opens that
-branch as `--branch` does, and a run on the default branch, a tag or no
-branch names no work, so the start begins as a chat in its mode; a mode that
-starts a chat starts one on any run. The mode is `--mode`'s or the default,
-never one a PR's labels call for. A number names no run. A run refuses
-`--issue`, `--pr`, `--branch`, `--copy`, `--in` and a second link beside it.
-The new or reopened space links the run as related, so its watch reports
-later attempts, and its agent starts on the run: its workflow, number, ref,
-URL, commit, state and failed jobs, pointing to `shoal view ci` for their
-logs. A chat on a run is named `<workflow> run <number> on <ref>` unless
-`--name` names it. A scoped caller's run of another repository is refused as
-`shoal link ci` refuses it. `shoal create` takes a run link of a PR or branch
-the same way.
 `start [<repository>] --issue <number-or-url>`, or `-i`, remains available with an optional
 `--branch`, finds the repository of an omitted `<repository>` as numbers and
 links do, and launches an agent only with `--agent`.
+
+CI run links, and `--ci` with a run's URL or the number in it, which names the
+run in the repository `--repo` names or else the current one, or without one, on
+a terminal, a run picked among the newest of each workflow and ref whose latest
+attempt failed, start where the run ran, in any state: a run for a PR opens as
+that PR's link does, a run on another branch than the default branch opens that
+branch as `--branch` does, and a run on the default branch, a tag or no branch
+names no work, so the start begins as a chat in its mode; a mode that starts a
+chat starts one on any run. The mode is `--mode`'s or the default, never one a
+PR's labels call for. A run refuses `--issue`, `--pr`, `--branch`, `--copy`,
+`--in` and a second link beside it. The new or reopened space links the run as
+related, so its watch reports later attempts, and its agent starts on the run:
+its workflow, number, ref, URL, commit, state and failed jobs, pointing to
+`shoal view ci` for their logs. A chat on a run is named
+`<workflow> run <number> on <ref>` unless `--name` names it. A scoped caller's
+run of another repository is refused as `shoal link ci` refuses it.
+`shoal create` takes a run link of a PR or branch the same way.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once

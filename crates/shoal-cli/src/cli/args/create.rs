@@ -14,16 +14,6 @@ use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::launches::{ItemChoice, Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// clap parser for `--ci`: a CI run's URL, since a number names no run.
-fn run_url(input: &str) -> Result<crate::forge::items::reference::ItemInput, String> {
-    match run_input(input)? {
-        crate::forge::items::reference::ItemInput::Number(_) => {
-            Err("a number names no run; pass the run's URL".into())
-        }
-        url => Ok(url),
-    }
-}
-
 /// clap parser for [`StartTarget`].
 fn start_target(input: &str) -> Result<StartTarget, String> {
     input.parse().map_err(|error| format!("{error:#}"))
@@ -354,10 +344,11 @@ pub struct StartArgs {
     /// the label of the mode --mode names where it has one.
     #[arg(long, num_args = 0..=1, value_parser = pull_input)]
     pub pr: Option<Option<crate::forge::items::reference::ItemInput>>,
-    /// The CI run URL the agent starts on, as a run link does: in its PR's
-    /// or branch's workspace, or a chat for a run on the default branch or a
-    /// tag. Without a value, offers the runs that fail now.
-    #[arg(long, num_args = 0..=1, value_parser = run_url)]
+    /// The CI run the agent starts on, by the number in its URL or the URL,
+    /// as a run link does: in its PR's or branch's workspace, or a chat for a
+    /// run on the default branch or a tag. Without a value, offers the runs
+    /// that fail now.
+    #[arg(long, num_args = 0..=1, value_parser = run_input)]
     pub ci: Option<Option<crate::forge::items::reference::ItemInput>>,
     /// Create this worktree at an exact new directory instead of the repository default.
     #[arg(long)]
