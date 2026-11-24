@@ -64,13 +64,14 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
 
 /// Refuse a start the queue's worker would open in a background place
 /// under `settings`, for a caller whose place `env` records, when no host
-/// can take it there; a test daemon's faked workers open none.
+/// can take it there; a test daemon's faked workers, as `operations`
+/// says, open none.
 pub fn ensure_background_start(
-    daemon: &dyn Daemon,
+    operations: &Operations,
     settings: &crate::config::Effective,
     env: &std::collections::BTreeMap<String, String>,
 ) -> Result<()> {
-    if daemon.fakes_workers() {
+    if operations.fakes() {
         return Ok(());
     }
     shoal_core::terminal::queued::ensure_queued_background(settings, env)

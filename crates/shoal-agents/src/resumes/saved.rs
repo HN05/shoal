@@ -74,7 +74,7 @@ impl Agents {
             return Ok(());
         }
         let settings = daemon.space_settings(space).await?;
-        crate::queued_starts::ensure_background_start(daemon, &settings, &resume.env)
+        crate::queued_starts::ensure_background_start(&self.operations, &settings, &resume.env)
             .with_context(|| {
                 format!(
                     "cannot restore the agents of {} in the background; pass --focus to restore one here",
