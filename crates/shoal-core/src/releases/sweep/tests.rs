@@ -11,12 +11,20 @@ fn copy(root: &Path, name: &str) -> std::path::PathBuf {
     copy
 }
 
+/// What keeps no copy.
+fn nothing() -> Result<Kept> {
+    Ok(Kept {
+        current: None,
+        running: Vec::new(),
+    })
+}
+
 /// Sweep until `copy` goes, returning what that sweep removed: a process
 /// another test forks holds every open lock with this process until it execs,
 /// so a released lock can still be held for a moment.
 pub(in crate::releases) fn sweep_away(releases: &Releases, copy: &Path) -> Vec<String> {
     for _ in 0..1000 {
-        let removed = releases.sweep(SystemTime::now()).unwrap();
+        let removed = releases.sweep_keeping(SystemTime::now(), nothing).unwrap();
         if !copy.exists() {
             return removed;
         }
@@ -54,10 +62,17 @@ fn a_copy_being_created_stays_until_it_is_abandoned() {
     fs::create_dir_all(creating.join("Shoal.app")).unwrap();
     let modified = fs::metadata(&creating).unwrap().modified().unwrap();
 
-    assert!(releases.sweep(modified).unwrap().is_empty());
+    assert!(
+        releases
+            .sweep_keeping(modified, nothing)
+            .unwrap()
+            .is_empty()
+    );
     assert!(creating.exists());
 
-    releases.sweep(modified + ABANDONED).unwrap();
+    releases
+        .sweep_keeping(modified + ABANDONED, nothing)
+        .unwrap();
     assert!(!creating.exists());
 }
 
@@ -66,4 +81,61 @@ fn a_missing_directory_has_nothing_to_sweep() {
     let temp = tempfile::tempdir().unwrap();
     let releases = Releases::new(temp.path().join("releases"));
     assert!(releases.sweep(SystemTime::now()).unwrap().is_empty());
+}
+
+#[test]
+fn the_installed_release_s_copy_stays_unused() {
+    let temp = tempfile::tempdir().unwrap();
+    let releases = Releases::new(temp.path().to_owned());
+    let current = copy(temp.path(), "0.20.6-82e5d4546e2d");
+    let kept = || {
+        Ok(Kept {
+            current: Some("0.20.6-82e5d4546e2d".to_owned()),
+            running: Vec::new(),
+        })
+    };
+
+    assert!(
+        releases
+            .sweep_keeping(SystemTime::now(), kept)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(current.join("Shoal.app/Contents/MacOS/shoal").exists());
+}
+
+#[test]
+fn a_copy_stays_while_a_process_runs_a_program_in_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let releases = Releases::new(root.clone());
+    let used = copy(&root, "0.20.5-0123456789ab");
+    let unused = copy(&root, "0.20.4-ba9876543210");
+    let kept = || {
+        Ok(Kept {
+            current: None,
+            running: vec![used.join("Shoal.app/Contents/MacOS/shoal")],
+        })
+    };
+
+    let removed = releases.sweep_keeping(SystemTime::now(), kept).unwrap();
+    assert_eq!(removed, ["0.20.4-ba9876543210"]);
+    assert!(used.join("Shoal.app/Contents/MacOS/shoal").exists());
+    assert!(!unused.exists());
+}
+
+#[test]
+fn what_keeps_a_copy_is_read_only_once_one_could_go() {
+    let temp = tempfile::tempdir().unwrap();
+    let releases = Releases::new(temp.path().to_owned());
+    let used = copy(temp.path(), "0.20.6-82e5d4546e2d");
+    let lock = File::open(used.join(LOCK)).unwrap();
+    fs2::FileExt::lock_shared(&lock).unwrap();
+
+    let removed = releases
+        .sweep_keeping(SystemTime::now(), || {
+            anyhow::bail!("read what keeps copies")
+        })
+        .unwrap();
+    assert!(removed.is_empty());
 }

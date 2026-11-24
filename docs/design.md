@@ -1389,8 +1389,11 @@ filesystem allows, with `<hash>` from the main program's SHA-256, so two
 builds of one version never share one; since grants follow the bundle's
 identifier and requirement, it uses the existing grant. Each wrapper holds a
 shared lock on the copy's `lock` file, beside the bundle, and the cleanup sweep
-removes a copy it can lock exclusively, including one of the installed release,
-which the next wrapper copies again. The wrapper hands the copy the path it was
+removes a copy it can lock exclusively, unless it is the copy of the release
+the daemon was started through, which the next wrapper runs, or a process,
+such as one a wrapper started from its copy, runs a program in it, so the
+current release keeps one copy instead of a new one after each idle spell. The
+wrapper hands the copy the path it was
 started through and that file's identity, so it still finds the installed
 release and sees an upgrade. The agent's hooks run Shoal through that path,
 even after an upgrade replaced the file there, so they reach the release the

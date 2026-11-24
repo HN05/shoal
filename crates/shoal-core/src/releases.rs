@@ -6,7 +6,8 @@
 //! directory, at `<version>-<hash>/`, and holds a shared lock on the copy's
 //! `lock` file while it runs. The lock sits beside the bundle, since a file
 //! added inside it breaks its signature. The daemon's sweep removes a copy it
-//! can lock exclusively.
+//! can lock exclusively, unless it is the installed release's, which the next
+//! wrapper runs, or a process runs a program in it.
 use std::{
     ffi::OsString,
     io,
@@ -15,6 +16,7 @@ use std::{
 };
 
 mod inherited;
+mod kept;
 mod lease;
 mod sweep;
 

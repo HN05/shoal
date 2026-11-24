@@ -2,8 +2,9 @@
 //! signalling and following processes through the records of the platform
 //! back end it selects. Never expose process environments; only the
 //! explicit execution marker, ancestor PIDs, scoped ancestors' state
-//! directories and the working directories of a space's untracked processes
-//! leave this module, and the command lines [`details`] reads.
+//! directories, the working directories of a space's untracked processes and
+//! the programs processes run leave this module, and the command lines
+//! [`details`] reads.
 use crate::protocol::timing;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
@@ -439,6 +440,15 @@ pub(super) fn same_user_pids() -> Result<Vec<u32>> {
     Ok(list_same_user()?
         .into_iter()
         .map(|(pid, _, _)| pid)
+        .collect())
+}
+
+/// The files this user's live processes other than this one run, of those
+/// whose file the platform shows.
+pub(crate) fn programs() -> Result<Vec<PathBuf>> {
+    Ok(same_user_pids()?
+        .into_iter()
+        .filter_map(executable)
         .collect())
 }
 
