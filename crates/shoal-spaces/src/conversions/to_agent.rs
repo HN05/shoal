@@ -119,10 +119,25 @@ impl Spaces {
 
     /// Hand the work of `space` over to `taking`: once the turn of its
     /// running agent ends, which the conversion records, else at once, in
-    /// place of its stopped or asleep agent, recorded first so no agent
-    /// starts there while its sessions are copied. Whether it went over at
-    /// once.
+    /// place of its stopped or asleep agent. Whether it went over at once.
+    /// The hand-overs are held throughout, so the relocation, which takes a
+    /// recorded switch over from the end of a turn, never runs it too.
     async fn switch_agent(
+        &self,
+        daemon: &dyn Daemon,
+        space: &Space,
+        taking: Taking,
+    ) -> Result<bool> {
+        let handovers = &self.conversion_handovers;
+        handovers
+            .hold(self.switch_held(daemon, space, taking))
+            .await
+    }
+
+    /// [`Self::switch_agent`] once the hand-overs are held: the switch of a
+    /// stopped or asleep agent is recorded first, so no agent starts there
+    /// while its sessions are copied, and a switch that fails forgets it.
+    async fn switch_held(
         &self,
         daemon: &dyn Daemon,
         space: &Space,
@@ -149,9 +164,16 @@ impl Spaces {
             .write(move |tx| super::record::record_stopped_switch(tx, &space, recorded, switching))
             .await?;
         drop(admissions);
-        let switch = self.switch_after_turn(daemon, &id, &execution, taking, false);
-        self.conversion_handovers.hold(switch).await?;
-        Ok(true)
+        // An attach follows the agent across the switch until its restore runs.
+        let _moving = self.relocating.mark(&id);
+        let switched = (self.switch_after_turn(daemon, &id, &execution, taking, false)).await;
+        if switched.is_err() {
+            let space = id.clone();
+            (self.store)
+                .write(move |tx| super::record::forget(tx, &space))
+                .await?;
+        }
+        switched.map(|()| true)
     }
 
     /// The execution that runs the agent of the space `id`, if one runs.
