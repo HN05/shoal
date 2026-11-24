@@ -84,6 +84,10 @@ impl Spaces {
                 workspace.name
             )
         })?;
+        // Not one that waits in the agent queue, which the handoff could not
+        // replace once the worktree is gone.
+        let space = crate::model::Space::from(workspace.clone());
+        daemon.ensure_replaceable(&space).await?;
         let saved = crate::spaces::sessions::newest_saved(&self.paths, &workspace.id)?;
         Ok(ConvertedChat {
             agent: (saved.as_ref().map(|saved| saved.agent.clone()))

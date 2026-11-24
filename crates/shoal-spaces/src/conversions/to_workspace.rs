@@ -102,6 +102,12 @@ impl Spaces {
         );
         let carried = (taking.as_ref(), change);
         (self.ensure_carrying_held(daemon, &chat.id, carried, caller)).await?;
+        if !chat.running {
+            // Not an agent that waits in the agent queue, which the handoff
+            // could not replace once the chat is a workspace.
+            let space = self.space(&SpaceSelector::id(&chat.id)).await?;
+            daemon.ensure_replaceable(&space).await?;
+        }
         let narrowing = change.permissions.applied_to(chat.narrowing);
         Ok(Converting {
             chat: Chat { narrowing, ..chat },

@@ -362,3 +362,53 @@ async fn no_agent_is_admitted_while_a_switch_copies_the_sessions() {
             .is_ok()
     );
 }
+
+/// A kind conversion that hands a stopped agent's work to another tool is
+/// refused, changing nothing, while an agent waits in the agent queue there,
+/// which the handoff could not replace once the worktree is gone.
+#[tokio::test]
+async fn a_conversion_to_another_tool_waits_for_no_queued_agent() {
+    let (root, manager) = manager().await;
+    manager.publish_config(global_config(&format!(
+        "{TOOLS}[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false\n"
+    )));
+    let repo = repository_with_sessions(root.path(), &manager).await;
+    let busy = manager
+        .create_workspace(&repo.id, "busy".into(), None, None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "fix-login".into(), None, None, None)
+        .await
+        .unwrap();
+    for space in [&busy, &workspace] {
+        let launch = crate::model::QueueRequest {
+            source: None,
+            replace: false,
+            issue_labels: Vec::new(),
+            narrowing: Default::default(),
+            mode: None,
+            name: space.name.clone(),
+            agent: "claude".into(),
+            issue_title: None,
+            plan: "{}".into(),
+            env: Default::default(),
+            now: false,
+            space: SpaceSelector::id(&space.id),
+            starts_in_caller: false,
+            blockers: Vec::new(),
+        };
+        manager.agents.queue_add(&*manager, launch).await.unwrap();
+    }
+    let selector = SpaceSelector::id(&workspace.id);
+
+    let chat_mode = crate::model::chat_mode();
+    let converting =
+        (manager.spaces).convert_to_chat(&*manager, &selector, chat_mode, to("codex", None), None);
+    let refused = format!("{:#}", converting.await.unwrap_err());
+
+    assert!(refused.contains("agent queue"), "{refused}");
+    assert!(!manager.spaces.converting(&workspace.id).await.unwrap());
+    let chat = manager.spaces.chat_by_id(&workspace.id).await.unwrap();
+    assert!(chat.is_none(), "it stays a workspace");
+}
