@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use shoal_protocol::{
     code::{Lines, NewCodeRef},
     space_names::SpaceSelector,
@@ -5,7 +7,7 @@ use shoal_protocol::{
 };
 
 use crate::{
-    reviews::{Review, ReviewState, Severity, Verdict},
+    reviews::{FailureReason, Review, ReviewState, Severity, Verdict},
     stand_in::Fixture,
     test_support::until_tests_end,
     tests::fixture,
@@ -135,4 +137,26 @@ async fn a_runs_reopen_of_a_fixed_finding_waits_for_its_submit() {
     assert_eq!(reopened, [number]);
     assert!(submitted.reopened[0].resolution.is_none());
     assert_eq!(submitted.verdict, Some(Verdict::Comment));
+}
+
+#[tokio::test]
+async fn a_run_that_exits_without_submitting_drops_its_findings_and_says_so() {
+    let fixture = fixture(&[("writer", "{write}")], "agent = 'writer'").await;
+    let review = fixture.running("writer").await;
+    let (reviews, daemon) = (&fixture.reviews, &*fixture.daemon);
+    let tracked = fixture.in_checkout("tracked");
+    let opening = finding("Unclear", Some(Severity::Nit), tracked);
+    reviews
+        .open_run_finding(daemon, review.id, opening, None)
+        .await
+        .unwrap();
+    let changed = daemon.threads_changed.load(Ordering::SeqCst);
+    // The reviewer exits without submitting.
+    let mut ended = reviews.ends();
+    std::fs::write(fixture.written("written"), "").unwrap();
+    ended.changed().await.unwrap();
+    let failed = fixture.shown(review.id).await.unwrap();
+    assert_eq!(failed.failure, Some(FailureReason::NotSubmitted));
+    assert!(failed.threads.is_empty(), "{:?}", failed.threads);
+    assert!(daemon.threads_changed.load(Ordering::SeqCst) > changed);
 }

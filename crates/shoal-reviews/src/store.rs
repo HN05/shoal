@@ -300,12 +300,12 @@ fn post_held_reopens(
 
 /// Drop what the run of Shoal's review `id` wrote while the review has not
 /// finished: the threads it opened and the reopens it held, before the
-/// review fails, its fallback runs or it runs again.
+/// review fails, its fallback runs or it runs again; whether it did.
 pub fn drop_run_writes(
     tx: &rusqlite::Transaction<'_>,
     records: &dyn Records,
     id: ReviewId,
-) -> Result<()> {
+) -> Result<bool> {
     let unfinished: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM reviews WHERE id=?1 AND opener='shoal' AND state<>?2)",
         params![id, ReviewState::Finished],
@@ -315,7 +315,7 @@ pub fn drop_run_writes(
         records.drop_review_threads(tx, id)?;
         tx.execute("DELETE FROM review_reopens WHERE review_id=?1", [id])?;
     }
-    Ok(())
+    Ok(unfinished)
 }
 
 /// The session the latest earlier review of review `id`'s workspace and PR,

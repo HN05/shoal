@@ -115,9 +115,10 @@ struct Attempt<'a> {
 
 /// What every reviewer of a run gets.
 struct Run<'a> {
+    daemon: &'a dyn Daemon,
     runs: &'a oneshot::Runs,
     /// The reviewed workspace, whose scope the reviewer holds.
-    space: &'a shoal_ids::space_ids::SpaceId,
+    workspace: &'a Workspace,
     settings: &'a Effective,
     /// The workspace's configured variables.
     configured: std::collections::BTreeMap<String, std::ffi::OsString>,
@@ -361,7 +362,8 @@ impl Reviews {
         .await?;
         let run = Run {
             runs: &self.runs,
-            space: &workspace.id,
+            daemon,
+            workspace,
             settings,
             configured: daemon.environment(workspace, settings).await?,
             instructions,
@@ -488,7 +490,7 @@ impl Reviews {
         cancelled: &mut watch::Receiver<bool>,
     ) -> Ended<O> {
         self.record_attempt(id, agent).await;
-        let scope = RunScope::of(&self.operations, run.space, O::access(id));
+        let scope = RunScope::of(&self.operations, &run.workspace.id, O::access(id));
         let reviewer = reviewer_for::<O>(run, agent, model, session, &self.paths, &scope);
         let ended = match reviewer {
             Ok(reviewer) => reviewer::run(&reviewer, cancelled).await,
@@ -500,7 +502,7 @@ impl Reviews {
         drop(scope);
         let ended = O::settled(ended, self.finished(id).await);
         if !matches!(ended, Ended::Returned { .. }) {
-            self.drop_run_writes(id).await;
+            self.drop_run_writes(run, id).await;
         }
         ended
     }
@@ -521,12 +523,15 @@ impl Reviews {
         matches!(state, Ok(Some(ReviewState::Finished)))
     }
 
-    /// Drop what review `id`'s run wrote while the review has not finished.
-    async fn drop_run_writes(&self, id: ReviewId) {
+    /// Drop what review `id`'s `run` wrote while the review has not
+    /// finished, waking what waits for its workspace's threads.
+    async fn drop_run_writes(&self, run: &Run<'_>, id: ReviewId) {
         let records = self.records.clone();
         let dropped = (self.store).write(move |tx| store::drop_run_writes(tx, &*records, id));
-        if let Err(error) = dropped.await {
-            log!("review {id}: {error:#}");
+        match dropped.await {
+            Ok(true) => run.daemon.review_threads_changed(run.workspace).await,
+            Ok(false) => {}
+            Err(error) => log!("review {id}: {error:#}"),
         }
     }
 

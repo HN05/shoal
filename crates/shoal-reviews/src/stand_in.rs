@@ -137,6 +137,7 @@ impl Fixture {
             records: records.clone(),
             answered: watch::channel(Vec::new()).0,
             answer_fails: AtomicBool::new(false),
+            threads_changed: Default::default(),
         };
         Self {
             root,
@@ -269,6 +270,9 @@ pub(crate) struct StandIn {
     pub(crate) answered: watch::Sender<Vec<(i64, String)>>,
     /// Whether posting an answer fails, as in a thread too long for it.
     pub(crate) answer_fails: AtomicBool,
+    /// How many times reviews told what waits for threads that theirs
+    /// changed.
+    pub(crate) threads_changed: std::sync::atomic::AtomicUsize,
 }
 
 impl StandIn {
@@ -765,6 +769,7 @@ impl Machines for StandIn {
 /// The reviewer's answers go into the stand-in's records.
 impl Threads for StandIn {
     fn review_threads_changed<'a>(&'a self, _workspace: &'a Workspace) -> BoxFuture<'a, ()> {
+        self.threads_changed.fetch_add(1, Ordering::SeqCst);
         Box::pin(async {})
     }
 
