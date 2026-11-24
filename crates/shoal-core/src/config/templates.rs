@@ -5,7 +5,14 @@ use anyhow::{Context, Result};
 
 use crate::{
     config::{Settings, modes},
-    forge::items::{issue::IssueDetails, reference::ItemRef},
+    forge::{
+        ci::{
+            JobState,
+            run_action::Run,
+            run_view::{RunJob, RunView},
+        },
+        items::{issue::IssueDetails, reference::ItemRef},
+    },
     model::{ChatHome, Head, SpaceKind, SpaceLinks, Workspace},
 };
 
@@ -208,6 +215,43 @@ impl Subject {
             }),
         }
     }
+
+    /// The CI run `run` names, read as `view`, as an agent's subject: its
+    /// title, URL, commit and state, and its failed jobs, whose logs
+    /// `shoal view ci` shows.
+    pub fn run(run: &ItemRef, view: &RunView) -> Result<Self> {
+        let read = &view.run;
+        let mut text = format!("CI run: {}\n{run}\n", read.title(run.run()?));
+        if let Some(commit) = &read.commit {
+            text.push_str(&format!("Commit: {commit}\n"));
+        }
+        text.push_str(&run_state(read));
+        let failed = failed_jobs(&view.jobs);
+        if !failed.is_empty() {
+            text.push_str(&format!("Failed jobs: {}\n", failed.join(", ")));
+        }
+        text.push_str(&format!(
+            "\n`shoal view ci {run}` shows its jobs with the logs of the failed ones."
+        ));
+        Ok(Self::told(text))
+    }
+}
+
+/// The line of a run's subject that states `run`'s state, with the result
+/// it finished with once it finished.
+fn run_state(run: &Run) -> String {
+    match run.result {
+        Some(result) if !run.state.unfinished() => format!("State: {} ({result})\n", run.state),
+        _ => format!("State: {}\n", run.state),
+    }
+}
+
+/// The names of the failed ones of `jobs`.
+fn failed_jobs(jobs: &[RunJob]) -> Vec<&str> {
+    (jobs.iter())
+        .filter(|job| job.state == JobState::Failed)
+        .map(|job| job.name.as_str())
+        .collect()
 }
 
 /// What an agent's first message says of how many `comments` the issue

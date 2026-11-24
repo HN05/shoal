@@ -108,23 +108,26 @@ fn place_label(space: &HomeRecords, place_name: Option<PlaceName>) -> String {
 
 /// What the agent of `launch` in `space` starts on: the issue it names,
 /// read as the space reads it, open or closed, since its work goes on
-/// whatever the issue's state, else its prompt.
+/// whatever the issue's state, else the CI run it names as it stands now,
+/// else its prompt.
 async fn subject(
     starting: &impl Starting,
     space: &HomeRecords,
     launch: &QueuedLaunch,
 ) -> Result<Option<Subject>> {
-    let Some(issue) = &launch.issue else {
-        return Ok(launch.prompt.clone().map(Subject::told));
-    };
     let context = ItemContext::space(SpaceSelector::id(space.home()?.id()));
-    let issue = crate::client::forge_reads::linked_issue_details(
-        starting.caller().paths,
-        context,
-        issue.url.clone().into(),
-    )
-    .await?;
-    Ok(Some(Subject::issue(&issue)))
+    let paths = starting.caller().paths;
+    if let Some(issue) = &launch.issue {
+        let input = issue.url.clone().into();
+        let issue = crate::client::forge_reads::linked_issue_details(paths, context, input);
+        return Ok(Some(Subject::issue(&issue.await?)));
+    }
+    if let Some(run) = &launch.run {
+        let (target, input) = (context.into(), run.clone().into());
+        let view = crate::client::views::run_with_jobs(paths, &target, &input).await?;
+        return Subject::run(run, &view).map(Some);
+    }
+    Ok(launch.prompt.clone().map(Subject::told))
 }
 
 /// Launch the agent of `launch` in `space`, starting on `subject`.

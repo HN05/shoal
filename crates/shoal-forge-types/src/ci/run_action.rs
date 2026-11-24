@@ -58,6 +58,17 @@ impl Run {
     pub fn passed(&self) -> bool {
         !self.waiting && self.result == Some(CheckState::Success)
     }
+
+    /// The run, numbered `number`, as a line names it: its workflow, its
+    /// number and the ref it ran on, such as `release.yml run 2765 on
+    /// v1.4.0`.
+    pub fn title(&self, number: RunNumber) -> String {
+        let workflow = self.workflow.as_deref().unwrap_or("CI");
+        match &self.branch {
+            Some(branch) => format!("{workflow} run {number} on {branch}"),
+            None => format!("{workflow} run {number}"),
+        }
+    }
 }
 
 /// A run an action reached.

@@ -384,3 +384,56 @@ fn an_issues_subject_names_it_by_number_title_and_url() {
     assert!(!unknown.contains("Issue description"));
     assert!(!unknown.contains("The issue has"), "{unknown}");
 }
+
+#[test]
+fn a_runs_subject_states_where_it_ran_how_it_ended_and_what_failed() {
+    use crate::forge::{
+        ci::{JobState, check_state::CheckState, run_action::Run, run_view::RunJob},
+        numbers::{JobId, RunId},
+    };
+    let url: ItemRef = "https://forge.example/team/app/actions/runs/2765"
+        .parse()
+        .unwrap();
+    let job = |id, name: &str, state| RunJob {
+        id: JobId::new(id),
+        name: name.into(),
+        state,
+        result: None,
+        url: None,
+    };
+    let mut view = RunView {
+        run: Run {
+            id: RunId::new(9),
+            url: url.to_string(),
+            branch: Some("v1.4.0".into()),
+            workflow: Some("release.yml".into()),
+            commit: Some("0123abc".into()),
+            pull: None,
+            state: JobState::Failed,
+            result: Some(CheckState::Failure),
+            waiting: false,
+            finish: None,
+        },
+        jobs: vec![
+            job(1, "build", JobState::Finished),
+            job(2, "publish", JobState::Failed),
+            job(3, "notify", JobState::Failed),
+        ],
+        logs: Vec::new(),
+        errors: Vec::new(),
+    };
+    let text = Subject::run(&url, &view).unwrap().text;
+    assert!(
+        text.starts_with(&format!("CI run: release.yml run 2765 on v1.4.0\n{url}\n")),
+        "{text}"
+    );
+    assert!(text.contains("0123abc"), "{text}");
+    assert!(text.contains("State: failed (failure)"), "{text}");
+    assert!(text.contains("Failed jobs: publish, notify\n"), "{text}");
+    assert!(text.contains(&format!("`shoal view ci {url}`")), "{text}");
+    view.run.state = JobState::Running;
+    view.jobs.clear();
+    let running = Subject::run(&url, &view).unwrap().text;
+    assert!(running.contains("State: running\n"), "{running}");
+    assert!(!running.contains("Failed jobs"), "{running}");
+}

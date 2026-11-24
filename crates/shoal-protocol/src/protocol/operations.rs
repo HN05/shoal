@@ -326,6 +326,10 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
     /// The issue the agent works on, which prompts it instead of `prompt`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue: Option<LaunchIssue>,
+    /// The CI run the agent starts on where no issue prompts it, which
+    /// prompts it instead of `prompt`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<crate::forge::items::reference::ItemRef>,
     /// The variables that place its start beside the caller's terminal;
     /// without them it starts as one from no terminal does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -360,6 +364,7 @@ impl<A> QueuedLaunch<A> {
             args: Vec::new(),
             fork: None,
             issue: None,
+            run: None,
             env: None,
             now: false,
             here: false,
@@ -370,10 +375,11 @@ impl<A> QueuedLaunch<A> {
 }
 
 impl<A> QueuedLaunch<A> {
-    /// Work on `issue` unless the launch names an issue or a task of its
-    /// own.
+    /// Work on `issue` unless the launch names an issue, a run or a task
+    /// of its own.
     pub fn default_issue(&mut self, issue: LaunchIssue) {
-        if self.issue.is_none() && self.prompt.is_none() && self.args.is_empty() {
+        let own = self.issue.is_some() || self.run.is_some() || self.prompt.is_some();
+        if !own && self.args.is_empty() {
             self.issue = Some(issue);
         }
     }
@@ -389,6 +395,7 @@ impl<A> QueuedLaunch<A> {
             args,
             fork,
             issue,
+            run,
             env,
             now,
             here,
@@ -404,6 +411,7 @@ impl<A> QueuedLaunch<A> {
             args,
             fork,
             issue,
+            run,
             env,
             now,
             here,

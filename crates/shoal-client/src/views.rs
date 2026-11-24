@@ -123,7 +123,7 @@ pub async fn read_run(
 }
 
 /// The run with its jobs, which arrive in pages of their own.
-async fn run_with_jobs(
+pub async fn run_with_jobs(
     daemon: &impl Daemon,
     target: &RepoTarget,
     run: &ItemInput,
