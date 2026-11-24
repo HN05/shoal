@@ -1,4 +1,21 @@
-#!/usr/bin/env python3
+#!/bin/sh
+''':'
+# Listing devices, the call daemons make most, answers in sh without
+# starting Python, unless a test fails it; Python runs every other call:
+# this file is both, and Python reads these lines as a string.
+if [ "$*" = 'simctl list --json' ] && [ "$(cat "$HOME/sim-fail" 2>/dev/null)" != list ]; then
+  echo '["list", "--json"]' >>"$HOME/sim-events"
+  devices='[]'
+  if [ -e "$HOME/sim-devices.json" ]; then devices=$(cat "$HOME/sim-devices.json"); fi
+  runtime=com.apple.CoreSimulator.SimRuntime.iOS-Test
+  runtimes="[{\"name\": \"iOS Test\", \"identifier\": \"$runtime\", \"version\": \"26.0\", \"isAvailable\": true}]"
+  if [ -e "$HOME/sim-runtimes.json" ]; then runtimes=$(cat "$HOME/sim-runtimes.json"); fi
+  types='[{"name": "Phone", "identifier": "type.Phone"}, {"name": "Tablet", "identifier": "type.Tablet"}, {"name": "Watch", "identifier": "type.Watch"}]'
+  printf '{"devicetypes": %s, "runtimes": %s, "devices": {"%s": %s}}\n' "$types" "$runtimes" "$runtime" "$devices"
+  exit
+fi
+exec python3 "$0" "$@"
+'''
 """Isolated simctl fixture; never invokes Xcode or touches real simulator storage."""
 import json
 import os

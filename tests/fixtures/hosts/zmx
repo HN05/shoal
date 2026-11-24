@@ -9,4 +9,4 @@ if [ -z "$ZMX_TEST_ROOT" ] && [ "$1" = list ] && [ ! -e "$root/zmx-sessions" ]; 
   exit
 fi
 mkdir -p "$root"
-ZMX_TEST_ROOT=$root exec python3 "$(dirname "$0")/../zmx.py" "$@"
+ZMX_TEST_ROOT=$root exec sh "$(dirname "$0")/../zmx.py" "$@"

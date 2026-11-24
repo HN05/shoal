@@ -1,4 +1,36 @@
-#!/usr/bin/env python3
+#!/bin/sh
+''':'
+# Version checks and session listings, the calls daemons make most, answer
+# in sh without starting Python, which runs everything else: this file is
+# both, and Python reads these lines as a string.
+root=${ZMX_TEST_ROOT:-$HOME}
+case $1/$# in
+version/1)
+  : >"$root/zmx-version-called"
+  version=1.0.1
+  if [ -e "$root/zmx-version" ]; then version=$(cat "$root/zmx-version"); fi
+  printf 'zmx\t\t%s\nsocket_dir\t%s\n' "$version" "$root/zmx"
+  exit
+  ;;
+list/1)
+  if [ ! -e "$root/zmx-pause-owner-check" ]; then
+    case $(ps -o args= -p "$PPID") in
+    *' place-watch '*) log=zmx-watch-calls ;;
+    *) log=zmx-calls ;;
+    esac
+    echo '["list"]' >>"$root/$log"
+    if [ -e "$root/zmx-sessions" ]; then
+      cat "$root/zmx-sessions"
+      echo
+    else
+      echo 'no sessions found'
+    fi
+    exit
+  fi
+  ;;
+esac
+exec python3 "$0" "$@"
+'''
 import fcntl, json, os, subprocess, sys, time
 from pathlib import Path
 root = Path(os.environ.get('ZMX_TEST_ROOT', os.environ['HOME']))
