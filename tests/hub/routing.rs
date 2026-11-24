@@ -655,6 +655,9 @@ fn holding_a_laptop_thread(tree: &Tree) -> (String, String) {
     let repo = hub.repo.to_str().unwrap().to_owned();
     hub.ok(&["create", &repo, "--branch", "holder"]);
     let holder = hub.id("holder");
+    // The laptop keeps the thread, so it resolves the space it goes to
+    // among the hub's it has heard of.
+    ready_at(&tree.laptop, &holder, &hub_machine(hub));
     let asked = ask(&tree.laptop, &tree.child);
     hub.ok(&["thread", "forward", &asked, "--space", &holder]);
     (holder, asked)
