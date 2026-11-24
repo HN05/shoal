@@ -129,6 +129,11 @@ fn a_spaces_work_runs_in_a_scope_named_for_it() {
     assert_eq!(scope_space(&groups(&first)), Some(space.as_str()));
     // Each command of the space gets a scope of its own.
     assert_ne!(unit(&space).unwrap(), first);
+    // A launcher whose options end with no `--` takes no name.
+    let plain: Vec<std::ffi::OsString> = ["env", "A=1"].map(Into::into).to_vec();
+    let through = launched(tokio::process::Command::new("agent"), &plain, Some(&space));
+    let args: Vec<_> = through.as_std().get_args().collect();
+    assert_eq!(args, ["A=1", "agent"]);
     // An ID a unit's name cannot hold leaves the name to systemd.
     assert_eq!(unit(&SpaceId::from("a b")), None);
     assert_eq!(scope_space(&groups("run-p1-i2.scope")), None);

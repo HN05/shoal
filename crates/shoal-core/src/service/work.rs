@@ -79,9 +79,12 @@ pub fn launched(
 }
 
 /// `launcher` naming the scope it starts `unit`, before the `--` that
-/// ends its options; unchanged without one.
+/// ends its options; unchanged without a unit, or for a launcher whose
+/// options end with no `--`, which starts no scope of Shoal's.
 fn named(launcher: &[OsString], unit: Option<String>) -> Vec<OsString> {
-    let Some((end, options)) = launcher.split_last().filter(|_| unit.is_some()) else {
+    let ends_options = |(end, _): &(&OsString, &[OsString])| *end == "--";
+    let split = launcher.split_last().filter(ends_options);
+    let (Some((end, options)), Some(_)) = (split, &unit) else {
         return launcher.to_vec();
     };
     let unit = unit.map(|unit| OsString::from(format!("--unit={unit}")));
