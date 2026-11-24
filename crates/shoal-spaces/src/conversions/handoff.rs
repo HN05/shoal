@@ -91,7 +91,9 @@ impl Spaces {
 
     /// Save `taking` as the stopped agent of the space `id` in place of
     /// `leaving`, told what the space is and where the sessions `listed`
-    /// are: stop `leaving`, discard what it saved and record the handoff.
+    /// are, and record the handoff. What can fail is settled before
+    /// `leaving` is stopped and what it saved discarded, and `taking` is
+    /// saved right after, so a failure never leaves the space without both.
     /// Returns the execution `taking` is saved as, `leaving`'s when there
     /// was one.
     pub(crate) async fn save_taking(
@@ -103,18 +105,27 @@ impl Spaces {
         listed: &[Listed],
     ) -> Result<ExecutionId> {
         let space = self.space(&SpaceSelector::id(id)).await?;
-        self.retire_leaving(daemon, &space).await?;
         let told = brief::told(&space, leaving.as_ref(), &taking.agent, listed);
-        if let Some(leaving) = &leaving {
-            self.record_handoff(daemon, &space, leaving, &taking.agent)
-                .await?;
-        }
+        let sides = match &leaving {
+            Some(leaving) => Some(
+                self.handoff_sides(daemon, &space, leaving, &taking.agent)
+                    .await?,
+            ),
+            None => None,
+        };
         let origin = leaving.as_ref().and_then(|leaving| leaving.origin.clone());
         let execution =
             (leaving.map(|leaving| leaving.execution)).unwrap_or_else(ExecutionId::generate);
         let saved = taking.saved(execution.clone(), origin, told);
+        self.retire_leaving(daemon, &space).await?;
         saved.write(&self.paths, id)?;
         self.signals.agent_changed();
+        if let Some((from, to)) = sides {
+            let space = id.to_owned();
+            (self.store)
+                .write(move |tx| crate::store::agent_handoffs::record(tx, &space, &from, &to))
+                .await?;
+        }
         Ok(execution)
     }
 
@@ -127,15 +138,16 @@ impl Spaces {
         daemon.discard_replaced_agent(space).await
     }
 
-    /// Record that `taking` takes the work of `space` over from `leaving`,
-    /// each with the tool the space's settings give it.
-    async fn record_handoff(
+    /// The sessions a handoff of the work of `space` from `leaving` to
+    /// `taking` goes from and to, each with the tool the space's settings
+    /// give it.
+    async fn handoff_sides(
         &self,
         daemon: &dyn Daemon,
         space: &crate::model::Space,
         leaving: &Leaving,
         taking: &Agent,
-    ) -> Result<()> {
+    ) -> Result<(HandedOverSession, HandedOverSession)> {
         let settings = daemon.space_settings(space).await?;
         let from = HandedOverSession {
             agent: leaving.agent.clone(),
@@ -147,10 +159,7 @@ impl Spaces {
             session: None,
             integration: settings.integration(taking),
         };
-        let id = space.id.clone();
-        (self.store)
-            .write(move |tx| crate::store::agent_handoffs::record(tx, &id, &from, &to))
-            .await
+        Ok((from, to))
     }
 }
 
