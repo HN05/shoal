@@ -142,6 +142,18 @@ impl Agents {
         launches: QueuedLaunches,
     ) -> Result<Vec<Space>> {
         let _gate = self.agent_queue.lock_admission().await;
+        self.stop_targets_now(daemon, launches).await
+    }
+
+    /// The spaces [`Self::stop_targets`] selects, read without the queue
+    /// gate, as a report that a later one corrects reads them: a restore or
+    /// launch moving between the queue and its agent meanwhile may leave
+    /// its space out.
+    pub async fn stop_targets_now(
+        &self,
+        daemon: &dyn Daemon,
+        launches: QueuedLaunches,
+    ) -> Result<Vec<Space>> {
         let mut targets = self.store.run(|db| running_workspaces(db)).await?;
         let records = self.records.clone();
         let converting = (self.store)
