@@ -55,6 +55,16 @@ pub async fn list(repo: &Path) -> Result<Vec<Branch>> {
     Ok(branches)
 }
 
+/// Whether `remote` of the repository at `repo` has the branch `name` now,
+/// as it advertises it, whether or not a fetch stored it here.
+pub async fn on_remote(repo: &Path, remote: &str, name: &BranchName) -> Result<bool> {
+    let reference = git::local_ref(name);
+    let args = ["ls-remote", "--heads", "--", remote, &reference];
+    let heads = (git::run_isolated(repo, &args).await)
+        .with_context(|| format!("could not list branch {name} on {remote}"))?;
+    Ok((heads.lines()).any(|line| line.split_once('\t').map(|(_, head)| head) == Some(&reference)))
+}
+
 /// The ref that tracks the local branch `name`'s upstream here; empty when
 /// it has none or the branch does not exist.
 pub async fn upstream_ref(repo: &Path, name: &BranchName) -> Result<String> {

@@ -151,7 +151,34 @@ impl Links {
         input: ItemInput,
         caller: Option<&Caller>,
     ) -> Result<Run> {
-        let named = self.named_run(daemon, target, &input, Access::Read, caller);
+        (self.read_run(daemon, target, &input, Access::Read, caller)).await
+    }
+
+    /// The run `run` that a launch from `target` starts on, read as
+    /// `caller` may link it, so a scoped caller's run of another
+    /// repository is refused as its link would be.
+    pub async fn launch_run(
+        &self,
+        daemon: &dyn Daemon,
+        target: &RepoTarget,
+        run: &ItemRef,
+        caller: Option<&Caller>,
+    ) -> Result<Run> {
+        let input = ItemInput::Url(run.clone());
+        (self.read_run(daemon, target, &input, Access::Change, caller)).await
+    }
+
+    /// The run `input` names, read where a request with `access` acts on
+    /// it.
+    async fn read_run(
+        &self,
+        daemon: &dyn Daemon,
+        target: &RepoTarget,
+        input: &ItemInput,
+        access: Access,
+        caller: Option<&Caller>,
+    ) -> Result<Run> {
+        let named = self.named_run(daemon, target, input, access, caller);
         let (place, run) = named.await?;
         place
             .forge()

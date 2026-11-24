@@ -13,6 +13,7 @@ use rusqlite::{Connection, Transaction};
 use shoal_coordination::Coordination;
 use shoal_forge::transport::account::Account;
 use shoal_forge_types::activity::status::PrStatus;
+use shoal_forge_types::ci::run_action::Run;
 use shoal_forge_types::items::action::Action;
 use shoal_forge_types::items::issue::IssueDetails;
 use shoal_forge_types::items::link::{ItemKind, LinkKind, Selection};
@@ -317,6 +318,32 @@ impl shoal_spaces::daemon::Links for Manager {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<PullRequest>> {
         Box::pin(self.links.pull_request(self, context, item, caller))
+    }
+
+    fn launch_run<'a>(
+        &'a self,
+        context: &'a ItemContext,
+        run: &'a ItemRef,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Run>> {
+        let target = context.clone().into();
+        Box::pin(async move { self.links.launch_run(self, &target, run, caller).await })
+    }
+
+    fn link_related_run<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        run: &'a ItemRef,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let input = ItemInput::Url(run.clone());
+            let (kind, relation) = (LinkKind::Ci, Relation::Related);
+            (self.links)
+                .link_item(self, selector, kind, &input, relation, None, caller)
+                .await
+                .map(drop)
+        })
     }
 
     fn read_open_issue<'a>(

@@ -28,6 +28,7 @@ use shoal_daemon_base::signals::Signals;
 use shoal_daemon_base::stops::{StopPolicy, StopRequest};
 use shoal_forge::transport::account::Account;
 use shoal_forge_types::activity::status::PrStatus;
+use shoal_forge_types::ci::run_action::Run;
 use shoal_forge_types::items::action::Action;
 use shoal_forge_types::items::issue::IssueDetails;
 use shoal_forge_types::items::link::{LinkKind, Selection};
@@ -1011,6 +1012,24 @@ impl Links for StandIn {
         _: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<PullRequest>> {
         Box::pin(async { bail!("{NOT_HERE}: pull_request") })
+    }
+
+    fn launch_run<'a>(
+        &'a self,
+        _: &'a ItemContext,
+        _: &'a ItemRef,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Run>> {
+        Box::pin(async { bail!("{NOT_HERE}: launch_run") })
+    }
+
+    fn link_related_run<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+        _: &'a ItemRef,
+        _: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
     }
 
     fn read_open_issue<'a>(

@@ -29,6 +29,7 @@ use crate::{
         workspace::NewWorkspace,
     },
 };
+use shoal_core::launches;
 
 /// Where a launch's new space goes, with what only that place decides: the
 /// issue it starts on, read, and what holds its agent.
@@ -294,6 +295,7 @@ pub(super) fn agent_request(
         model: launch.model.clone(),
         args: launch.task.clone(),
         prompt: launch.prompt.clone(),
+        run: launches::run::settled_run(launch).cloned(),
         fork: launch.fork.clone(),
         env: launch.env.clone(),
         now: launch.now,

@@ -19,6 +19,7 @@ mod launches;
 mod launches_chat;
 mod launches_create;
 mod launches_labels;
+mod launches_run;
 mod launches_setup;
 mod launches_worker;
 mod launches_workspace;

@@ -18,6 +18,7 @@ use shoal_daemon_base::blockers::Readiness;
 use shoal_daemon_base::stops::{StopPolicy, StopRequest};
 use shoal_forge::transport::account::Account;
 use shoal_forge_types::activity::status::PrStatus;
+use shoal_forge_types::ci::run_action::Run;
 use shoal_forge_types::items::action::Action;
 use shoal_forge_types::items::issue::IssueDetails;
 use shoal_forge_types::items::link::{LinkKind, Selection};
@@ -240,6 +241,24 @@ pub trait Links: Send + Sync {
         item: &'a ItemInput,
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<PullRequest>>;
+
+    /// The CI run `run` a launch starts on, read from the repository of
+    /// `context` as `caller` may link it.
+    fn launch_run<'a>(
+        &'a self,
+        context: &'a ItemContext,
+        run: &'a ItemRef,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<Run>>;
+
+    /// Link the CI run `run` to the space `selector` names as related, as
+    /// `caller` links it.
+    fn link_related_run<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        run: &'a ItemRef,
+        caller: Option<&'a Caller>,
+    ) -> BoxFuture<'a, Result<()>>;
 
     /// The canonical URL, title and labels of the open issue `input` names
     /// in the repository whose origin `checkout` has, read with the user's

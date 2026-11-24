@@ -63,6 +63,7 @@ impl Spaces {
         launches::ensure_copy_fits(&launch)?;
         launches::ensure_in_fits(&launch)?;
         self.select_launch_spaces(daemon, &mut launch).await?;
+        self.settle_launch_run(daemon, &mut launch, caller).await?;
         let repository = self.checked_repository(daemon, &launch, caller).await?;
         (daemon.coordination().ensure_caller_holds(
             daemon,

@@ -105,7 +105,7 @@ impl Spaces {
     /// existing workspace the launch names, the mode's kind there decides
     /// whether the agent is the workspace's worker or a chat in its
     /// worktree.
-    async fn launch_kind(
+    pub(super) async fn launch_kind(
         &self,
         daemon: &dyn Daemon,
         launch: &Launch,

@@ -22,6 +22,7 @@ pub mod elsewhere;
 pub mod labels;
 pub mod placement;
 pub use placement::heavy;
+mod run;
 pub mod setup;
 mod shape;
 pub mod space;
@@ -81,11 +82,14 @@ impl Spaces {
         self.select_launch_spaces(&**daemon, &mut launch).await?;
         self.take_parent_repository(&**daemon, &mut launch, caller)
             .await?;
+        self.settle_launch_run(&**daemon, &mut launch, caller)
+            .await?;
+        let run = launches::run::settled_run(&launch).cloned();
         let shape = self.launch_shape(&**daemon, &launch, caller).await?;
         launches::ensure_fits(&launch, &[], shape.kind, Some(&shape.mode))?;
         self.authorize_setup(&**daemon, &launch, caller).await?;
         let manual = source == LaunchSource::Manual;
-        let launched = match shape.starts_worker(&launch) {
+        let mut launched = match shape.starts_worker(&launch) {
             true => {
                 self.launch_worker(&**daemon, launch, shape, source, caller)
                     .await
@@ -95,6 +99,7 @@ impl Spaces {
                     .await
             }
         }?;
+        (self.link_launch_run(&**daemon, run, &mut launched, caller)).await;
         if manual && launched.entry.is_some() {
             self.record_launch_interaction(&**daemon, &launched, caller)
                 .await;
