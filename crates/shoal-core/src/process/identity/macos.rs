@@ -373,28 +373,15 @@ fn split_procargs(bytes: &[u8]) -> Result<ProcArgs> {
     ensure!(bytes.len() >= 4, "incomplete process arguments");
     let argc = i32::from_ne_bytes(bytes[..4].try_into()?);
     ensure!(argc > 0, "process arguments unavailable");
-    let mut offset = 4;
-    while offset < bytes.len() && bytes[offset] != 0 {
-        offset += 1;
-    }
-    while offset < bytes.len() && bytes[offset] == 0 {
-        offset += 1;
-    }
+    let path = &bytes[4..];
+    let mut rest = after_nuls(&path[super::find_nul(path).unwrap_or(path.len())..]);
     let mut arguments = Vec::new();
     for _ in 0..argc {
-        let start = offset;
-        while offset < bytes.len() && bytes[offset] != 0 {
-            offset += 1;
-        }
-        ensure!(offset < bytes.len(), "incomplete process arguments");
-        arguments.push(bytes[start..offset].to_vec());
-        offset += 1;
+        let end = super::find_nul(rest).context("incomplete process arguments")?;
+        arguments.push(rest[..end].to_vec());
+        rest = &rest[end + 1..];
     }
-    while offset < bytes.len() && bytes[offset] == 0 {
-        offset += 1;
-    }
-    let environment = bytes[offset..]
-        .split(|b| *b == 0)
+    let environment = super::nul_separated(after_nuls(rest))
         .take_while(|entry| !entry.is_empty())
         .map(<[u8]>::to_vec)
         .collect();
@@ -402,6 +389,11 @@ fn split_procargs(bytes: &[u8]) -> Result<ProcArgs> {
         arguments,
         environment,
     })
+}
+
+/// `bytes` after the NULs that pad its start.
+fn after_nuls(bytes: &[u8]) -> &[u8] {
+    &bytes[bytes.iter().take_while(|b| **b == 0).count()..]
 }
 
 /// How long `pid` has run, `None` once it has exited.

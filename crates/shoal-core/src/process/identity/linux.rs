@@ -205,8 +205,8 @@ pub(super) fn listed() -> Result<Vec<Listed>> {
 }
 
 pub(super) fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
-    Ok(std::fs::read(format!("/proc/{pid}/environ"))?
-        .split(|b| *b == 0)
+    let environ = std::fs::read(format!("/proc/{pid}/environ"))?;
+    Ok(super::nul_separated(&environ)
         .filter(|e| !e.is_empty())
         .map(<[u8]>::to_vec)
         .collect())

@@ -27,6 +27,31 @@ use marks::left_execution;
 pub(crate) use marks::started_with;
 pub(crate) use platform::executable;
 
+/// The NUL-terminated entries of a record such as a process's environment,
+/// the last one unterminated when `bytes` does not end in a NUL, as
+/// `bytes.split(|b| *b == 0)` gives them.
+fn nul_separated(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
+    let mut rest = Some(bytes);
+    std::iter::from_fn(move || {
+        let bytes = rest?;
+        let Some(end) = find_nul(bytes) else {
+            rest = None;
+            return Some(bytes);
+        };
+        rest = Some(&bytes[end + 1..]);
+        Some(&bytes[..end])
+    })
+}
+
+/// Where the first NUL of `bytes` is. Inventories read every process's
+/// environment, so the C library's `memchr` looks for it, which unlike a
+/// byte-by-byte scan stays fast in a build without optimizations.
+fn find_nul(bytes: &[u8]) -> Option<usize> {
+    // SAFETY: memchr reads only the `bytes.len()` bytes `bytes` points to.
+    let found = unsafe { libc::memchr(bytes.as_ptr().cast(), 0, bytes.len()) };
+    (!found.is_null()).then(|| found as usize - bytes.as_ptr() as usize)
+}
+
 /// Whether `process` is an agent hook waiting for the next update, which
 /// waits rather than works.
 pub fn waiting_hook(process: &Identity) -> bool {

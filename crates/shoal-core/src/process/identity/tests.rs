@@ -1005,3 +1005,11 @@ fn children_include_those_that_exited_unreaped() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn nul_separated_entries_are_those_a_split_at_each_nul_gives() {
+    for record in [&b"HOME=/h\0\0A=\0tail"[..], b"A=1\0", b"", b"\0"] {
+        let split: Vec<&[u8]> = record.split(|byte| *byte == 0).collect();
+        assert_eq!(nul_separated(record).collect::<Vec<_>>(), split);
+    }
+}
