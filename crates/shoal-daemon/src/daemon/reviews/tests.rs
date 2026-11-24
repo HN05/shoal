@@ -484,6 +484,36 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     );
 }
 
+/// A review run's scope reads threads as its workspace's does, and writes
+/// only its review.
+#[tokio::test]
+async fn a_review_run_reads_threads() {
+    use crate::protocol::ThreadMethod;
+    use shoal_protocol::threads::{ThreadNumber, ThreadState};
+    let fixture = fixture(&[("fake", "{write}")], "agent = 'fake'").await;
+    let (manager, workspace) = (&fixture.manager, &fixture.workspace);
+    let review = fixture.review().await;
+    let caller = crate::daemon::scope::Caller {
+        access: Access::Review(review.id),
+        ..crate::daemon::scope::Caller::of_space(workspace.id.clone())
+    };
+    let server = crate::daemon::tests::server(manager.clone());
+    let reads = [
+        ThreadMethod::ShowThread {
+            thread: ThreadNumber::Full(review.threads[0].number),
+        },
+        ThreadMethod::ListThreads {
+            space: Some(SpaceSelector::id(&workspace.id)),
+            state: ThreadState::All,
+            for_user: false,
+        },
+    ];
+    for read in reads {
+        let answered = crate::daemon::requests::handle(&server, read.into(), Some(&caller), None);
+        answered.await.unwrap();
+    }
+}
+
 #[tokio::test]
 async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive() {
     use shoal_protocol::threads::{

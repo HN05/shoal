@@ -22,7 +22,10 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     let thread = |thread| Body::SpaceThread(Box::new(thread));
-    if let Some(review) = caller.and_then(|caller| caller.access.review()) {
+    // A review run's writes go to its review; its reads, as everyone's.
+    if let Some(review) = caller.and_then(|caller| caller.access.review())
+        && writes_review(&method)
+    {
         return Ok(Answer::Body(thread(
             write_review(manager, review, method).await?,
         )));
@@ -218,6 +221,15 @@ pub(super) async fn handle(
                 .await?,
         ),
     }))
+}
+
+/// Whether `method` writes the review of a review run that sends it: a
+/// thread without a kind, or a post.
+fn writes_review(method: &ThreadMethod) -> bool {
+    matches!(
+        method,
+        ThreadMethod::OpenThread { kind: None, .. } | ThreadMethod::Post { .. }
+    )
 }
 
 /// What a review run's `method` writes of its running review `review`,
