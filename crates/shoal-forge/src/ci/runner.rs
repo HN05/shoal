@@ -105,6 +105,16 @@ pub(crate) trait Runners: Supports {
         Err(capability::unsupported(self, Capability::RunJobs))
     }
 
+    /// The runner that took `job`, which a runner claims by its handle.
+    async fn job_taker(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _job: &WaitingJob,
+    ) -> Result<JobTaker> {
+        Err(capability::unsupported(self, Capability::RunJobs))
+    }
+
     /// Report the job `job`, which the repository's runner `runner` runs,
     /// cancelled as that runner, returning whether the forge has it
     /// cancelled. A forge whose runner protocol Shoal does not speak
@@ -138,6 +148,17 @@ pub struct RunnerState {
     pub busy: bool,
     /// The labels it takes jobs for, the forge's own included.
     pub labels: Vec<String>,
+}
+
+/// Which runner took a job, as the forge tells.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JobTaker {
+    /// None yet: the job waits, or the runner that took it has not said so.
+    Pending,
+    /// The runner registered with this UUID.
+    Runner(String),
+    /// None ever will: the attempt claimed ended without a runner.
+    Nobody,
 }
 
 /// What one job's run of the forge's runner needs.
@@ -276,6 +297,11 @@ impl ForgeRepo {
         runner: RunnerId,
     ) -> Result<Option<WaitingJob>> {
         self.kind().runner_job(self, account, run, runner).await
+    }
+
+    /// The runner that took `job`, which a runner claims by its handle.
+    pub async fn job_taker(&self, account: &Account, job: &WaitingJob) -> Result<JobTaker> {
+        self.kind().job_taker(self, account, job).await
     }
 
     /// Have the forge cancel the job `job`, which the repository's runner

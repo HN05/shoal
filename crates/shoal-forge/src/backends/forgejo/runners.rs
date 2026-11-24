@@ -1,6 +1,7 @@
 //! Forgejo's runner API and `forgejo-runner`: the job search, a run's event,
-//! repository runners, `forgejo-runner one-job` on the host backend, and
-//! the runner protocol Shoal speaks as the repository's runner.
+//! repository runners, `forgejo-runner one-job` on the host backend, the
+//! runner that took a job, and the runner protocol Shoal speaks as the
+//! repository's runner.
 use shoal_forge_types::{
     ForgeRepo,
     ci::runner::{JobRun, Trigger, WaitingJob},
@@ -15,7 +16,9 @@ use serde_json::Value;
 
 use super::Forgejo;
 use crate::{
-    ci::runner::{JobCommand, JobLaunch, RegisteredRunner, Runners, file_url, registration},
+    ci::runner::{
+        JobCommand, JobLaunch, JobTaker, RegisteredRunner, Runners, file_url, registration,
+    },
     transport::{
         account::Account,
         api::{Request, TransportRequests, encode},
@@ -68,6 +71,15 @@ impl Runners for Forgejo {
         job_command(repo, launch)
     }
 
+    async fn job_taker(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        job: &WaitingJob,
+    ) -> Result<JobTaker> {
+        taker::job_taker(repo, account, job).await
+    }
+
     async fn cancel_runner_job(
         &self,
         repo: &ForgeRepo,
@@ -81,6 +93,7 @@ impl Runners for Forgejo {
 }
 
 mod protocol;
+mod taker;
 
 /// The program that runs one job.
 const PROGRAM: &str = "forgejo-runner";
