@@ -29,6 +29,8 @@ fn a_workspace_whose_agent_waits_in_the_queue_reports_queued() {
 fn around() -> Around {
     Around {
         stopped: HashSet::new(),
+        saved: HashSet::new(),
+        stoppable: HashSet::new(),
         queued: Vec::new(),
         threads: Vec::new(),
         approvals: Vec::new(),
@@ -81,6 +83,64 @@ fn a_space_reports_its_parent_on_another_machine_and_its_agent() {
     let summary = summary(Space::from(workspace), None, &around);
     assert_eq!(summary.parent, Some(elsewhere));
     assert!(summary.agent);
+}
+
+/// A ready workspace named `name`, done when `done`.
+fn workspace(name: &str, done: bool) -> Workspace {
+    let mut workspace = Workspace::new_record(
+        "repo".into(),
+        name.into(),
+        format!("/{name}").into(),
+        shoal_protocol::model::Head::Branch(name.into()),
+        WorkspaceState::Ready,
+    );
+    workspace.done = done;
+    workspace
+}
+
+/// The launch of an agent in `space` that failed to start.
+fn failed_launch(space: &SpaceId) -> QueueEntry {
+    serde_json::from_value(json!({
+        "id": format!("{space}-launch"), "kind": "launch", "repository_id": "repo",
+        "name": "work", "agent": "claude", "state": "failed", "created_at": 0,
+        "space_id": space,
+    }))
+    .unwrap()
+}
+
+#[test]
+fn a_space_reports_whether_stop_all_would_stop_it() {
+    let (running, idle) = (workspace("running", false), workspace("idle", false));
+    let around = Around {
+        stoppable: [running.id.clone()].into(),
+        ..around()
+    };
+    assert!(summary(Space::from(running), None, &around).stoppable);
+    assert!(!summary(Space::from(idle), None, &around).stoppable);
+}
+
+#[test]
+fn a_space_reports_saved_work_before_a_failed_launch_unless_its_assignment_is_done() {
+    let saved = workspace("saved", false);
+    let done = workspace("done", true);
+    let failed = workspace("failed", false);
+    let done_and_failed = workspace("done-and-failed", true);
+    let nothing = workspace("nothing", false);
+    let around = Around {
+        saved: [&saved, &done, &done_and_failed]
+            .map(|workspace| workspace.id.clone())
+            .into(),
+        queued: [&saved, &failed, &done_and_failed]
+            .map(|workspace| failed_launch(&workspace.id))
+            .into(),
+        ..around()
+    };
+    let resumable = |workspace: Workspace| summary(Space::from(workspace), None, &around).resumable;
+    assert_eq!(resumable(saved), Some(Resumable::Saved));
+    assert_eq!(resumable(done), Some(Resumable::Done));
+    assert_eq!(resumable(failed), Some(Resumable::FailedLaunch));
+    assert_eq!(resumable(done_and_failed), Some(Resumable::FailedLaunch));
+    assert_eq!(resumable(nothing), None);
 }
 
 #[tokio::test(start_paused = true)]

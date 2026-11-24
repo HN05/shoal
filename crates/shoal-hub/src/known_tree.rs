@@ -113,6 +113,8 @@ fn listed(space: KnownSpace) -> Listed {
             agent_state: None,
             agent: false,
             running: None,
+            stoppable: false,
+            resumable: None,
             permissions: None,
             chat_modes: Vec::new(),
             progress: None,

@@ -13,9 +13,10 @@ use shoal_protocol::{
     agent::Agent,
     approvals::{ApprovalRequest, DecisionStatus},
     config::permissions::Permissions,
-    hub::directory::{RegisteredRepository, RepositoryOrigin, SpaceSummary},
+    hub::directory::{RegisteredRepository, RepositoryOrigin, Resumable, SpaceSummary},
     list_status::ListStatus,
     model::{ByKind, QueueEntry, Repository, RunningAgent, Space},
+    state::QueueState,
     threads::Thread,
 };
 
@@ -64,9 +65,10 @@ impl Hub {
         origins: &mut Origins,
     ) -> Result<HashMap<SpaceId, SpaceSummary>> {
         let spaces = daemon.listed_spaces(None).await?;
-        let stopped: HashSet<SpaceId> = (daemon.saved_summaries(None).await?.into_iter())
+        let saved = daemon.saved_summaries(None).await?;
+        let stopped = (saved.iter())
             .filter(|saved| saved.unfinished)
-            .map(|saved| saved.space)
+            .map(|saved| saved.space.clone())
             .collect();
         let mut threads = daemon.open_threads().await?;
         // Only a pending review's writer's side reads its comments, which
@@ -83,6 +85,8 @@ impl Hub {
         let with_agents = daemon.with_agents().await?;
         let around = Around {
             stopped,
+            saved: saved.into_iter().map(|saved| saved.space).collect(),
+            stoppable: daemon.stoppable().await?,
             queued: daemon.visible_queue().await?,
             threads,
             approvals,
@@ -152,12 +156,15 @@ impl Hub {
 }
 
 /// What a summary reads besides a space's record: the spaces whose agent's
-/// stop saved work to restore, the agents queued to start, the open
-/// threads and pending approval requests of every space, the space above
+/// stop saved work to restore, those that saved any stopped work or last
+/// sessions, those `shoal stop --all` stops, the agents queued to start or
+/// whose launch failed, the open threads and pending approval requests of every space, the space above
 /// each, which may run on another machine, the spaces with an agent, and
 /// the agent that runs in each.
 struct Around {
     stopped: HashSet<SpaceId>,
+    saved: HashSet<SpaceId>,
+    stoppable: HashSet<SpaceId>,
     queued: Vec<QueueEntry>,
     threads: Vec<Thread>,
     approvals: Vec<ApprovalRequest>,
@@ -185,6 +192,7 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
     let (mode, progress) = (space.mode.clone(), space.progress.clone());
     let agent_state = space.agent_state.map(|status| status.state);
     let stopped = around.stopped.contains(&id);
+    let resumable = resumable(&space, around);
     let status = match space.by_kind() {
         ByKind::Workspace(workspace) => {
             ListStatus::of_queued_workspace(&workspace, stopped, &around.queued)
@@ -200,6 +208,8 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         .cloned()
         .collect();
     SpaceSummary {
+        stoppable: around.stoppable.contains(&id),
+        resumable,
         id,
         number,
         name,
@@ -217,6 +227,21 @@ fn summary(space: Space, repository: Option<RepositoryOrigin>, around: &Around) 
         threads,
         approvals,
         unsent_since: None,
+    }
+}
+
+/// What `shoal resume` brings back in `space`, with what `around` holds
+/// of it: its saved work, else a launch of it that failed to start.
+fn resumable(space: &Space, around: &Around) -> Option<Resumable> {
+    let failed_launch = || {
+        (around.queued.iter())
+            .any(|entry| entry.state == QueueState::Failed && entry.space() == Some(&space.id))
+    };
+    match around.saved.contains(&space.id) {
+        true if !space.done() => Some(Resumable::Saved),
+        _ if failed_launch() => Some(Resumable::FailedLaunch),
+        true => Some(Resumable::Done),
+        false => None,
     }
 }
 

@@ -49,6 +49,14 @@ pub struct SpaceSummary {
     /// one runs that Shoal did not stop.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub running: Option<crate::agent::Agent>,
+    /// Whether `shoal stop --all` there would stop it: it runs an
+    /// execution, an agent's restore is queued or requested, or an agent
+    /// launch waits to start in it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stoppable: bool,
+    /// What `shoal resume` brings back in it; none when nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumable: Option<Resumable>,
     /// Its effective permissions, which narrow those of the spaces below it
     /// on other machines.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -161,6 +169,22 @@ pub struct Conflict {
 }
 
 shoal_states::states! {
+    /// What `shoal resume` brings back in a space, as its machine reports
+    /// it.
+    Resumable: Variants {
+        /// Stopped work or last sessions, its assignment not done, which
+        /// `shoal resume --all` resumes.
+        Saved => "saved",
+        /// Stopped work or last sessions of a space whose assignment is
+        /// done, which a resume takes only for a space named or picked.
+        Done => "done",
+        /// Only a launch that failed to start, which a resume queues again
+        /// only for a space named or picked.
+        FailedLaunch => "failed_launch",
+    }
+}
+
+shoal_states::states! {
     /// What a machine keeps of a removed space, which a request for it
     /// reaches there.
     Keeps: Variants {
@@ -241,6 +265,8 @@ impl Listed {
                 agent_state: space.agent_state,
                 agent: space.agent,
                 running: space.running.clone(),
+                stoppable: space.stoppable,
+                resumable: space.resumable,
                 permissions: space.permissions,
                 chat_modes: space.chat_modes.clone(),
                 progress: space.progress.clone(),

@@ -108,6 +108,14 @@ impl Spaces for Manager {
         })
     }
 
+    fn stoppable(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
+        Box::pin(async move {
+            let launches = shoal_protocol::protocol::QueuedLaunches::Cancel;
+            let targets = self.agents.stop_targets(self, launches).await?;
+            Ok(targets.into_iter().map(|space| space.id).collect())
+        })
+    }
+
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
         Box::pin(self.repositories.list())
     }

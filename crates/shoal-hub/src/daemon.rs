@@ -82,6 +82,11 @@ pub trait Spaces: Send + Sync {
     /// The spaces here whose agent runs.
     fn with_agents(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>>;
 
+    /// The spaces here that `shoal stop --all` stops: those with a running
+    /// execution, an agent whose restore is queued or requested, or an
+    /// agent launch waiting to start.
+    fn stoppable(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>>;
+
     /// The registered repositories.
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
 

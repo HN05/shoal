@@ -254,6 +254,10 @@ impl Spaces for StandIn {
         Box::pin(async { Ok(HashSet::new()) })
     }
 
+    fn stoppable(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>> {
+        Box::pin(async { Ok(HashSet::new()) })
+    }
+
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>> {
         let registered = self.registered().into_iter();
         let repositories = registered.map(|r| r.repository).collect();
