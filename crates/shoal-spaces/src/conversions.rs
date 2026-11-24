@@ -16,7 +16,7 @@ pub mod to_workspace;
 
 pub use handovers::Handovers;
 pub use record::Pending;
-pub use relocation::ConversionStop;
+pub use relocation::{ConversionStop, Relocating};
 pub use to_workspace::WorkspaceConversion;
 
 /// The chat a new workspace replaces, and the mode the workspace's agent

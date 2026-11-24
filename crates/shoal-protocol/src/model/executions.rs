@@ -109,9 +109,9 @@ pub struct CopyIgnored {
 pub struct SpacePlaces {
     pub executions: Vec<Execution>,
     pub places: Vec<crate::sessions::Origin>,
-    /// Whether a conversion of the space has yet to start its agent in the
-    /// new place, where a session that ends now continues.
-    pub converting: bool,
+    /// Whether a conversion moves its agent to its new place, where an
+    /// attach follows it from a session the move ends.
+    pub agent_moves: bool,
 }
 
 /// A place Shoal created for a space, a workspace or a chat, which closes

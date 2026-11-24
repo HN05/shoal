@@ -450,3 +450,52 @@ async fn a_failed_conversion_leaves_the_workspace_its_record_and_checkpoints() {
         .unwrap();
     assert!(!checkpoints.is_empty());
 }
+
+#[tokio::test]
+async fn only_a_conversion_that_restarts_its_agent_moves_it() {
+    use crate::conversions::{Pending, record};
+    let manager = Fixture::new().await;
+    let repo = registered(manager.root.path(), &manager).await;
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    let moves = || manager.spaces.moves_agent(&id);
+    let chat = ConvertedChat {
+        agent: "claude".into(),
+        execution: ExecutionId::generate(),
+        origin: None,
+        mode: crate::model::chat_mode(),
+        narrowing: Default::default(),
+    };
+    let pending = Pending::Chat {
+        chat: Box::new(chat),
+        held: false,
+    };
+    let space = id.clone();
+    (manager.store)
+        .write(move |tx| record::record(tx, &space, &pending))
+        .await
+        .unwrap();
+    assert!(moves().await.unwrap());
+
+    // A stop holds the chat it becomes for `shoal resume`.
+    let space = id.clone();
+    (manager.store)
+        .run(move |db| record::hold_chat(db, &space))
+        .await
+        .unwrap();
+    assert!(!moves().await.unwrap());
+
+    // A relocation moves it until its restart is queued.
+    let space = id.clone();
+    (manager.store)
+        .run(move |db| record::forget(db, &space))
+        .await
+        .unwrap();
+    let moving = manager.spaces.relocating.mark(&id);
+    assert!(moves().await.unwrap());
+    drop(moving);
+    assert!(!moves().await.unwrap());
+}

@@ -189,6 +189,18 @@ impl Spaces {
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;
         Ok(pending.is_some())
     }
+
+    /// Whether a conversion moves the agent of the space `id` to the new
+    /// place: one that restarts it there waits for its turn to end, or a
+    /// relocation is moving it now.
+    pub async fn moves_agent(&self, id: &SpaceId) -> Result<bool> {
+        if self.relocating.contains(id) {
+            return Ok(true);
+        }
+        let space = id.clone();
+        let pending = self.store.run(move |db| super::pending(db, &space)).await?;
+        Ok(pending.is_some_and(|pending| pending.restarts_agent()))
+    }
 }
 
 #[cfg(test)]

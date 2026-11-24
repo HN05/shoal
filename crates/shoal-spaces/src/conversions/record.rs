@@ -62,6 +62,18 @@ pub enum Pending {
     },
 }
 
+impl Pending {
+    /// Whether the conversion restarts the agent in the new place, rather
+    /// than leave it for `shoal resume`: neither a stop held it nor the new
+    /// workspace's post-setup hook failed.
+    pub fn restarts_agent(&self) -> bool {
+        match self {
+            Self::Workspace { hook_failure, .. } => hook_failure.is_none(),
+            Self::Chat { held, .. } => !held,
+        }
+    }
+}
+
 /// The columns of a chat's row, which a conversion keeps as they are.
 const CHAT_COLUMNS: &[&str] = &["id", "workspace_id", "root_dir"];
 

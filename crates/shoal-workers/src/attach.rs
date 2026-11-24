@@ -56,7 +56,7 @@ pub async fn here(
         if crate::terminal::attach(&number, &session).await? {
             return Ok(true);
         }
-        match steps.moved_session(target, &session).await? {
+        match steps.moved_session(target).await? {
             Some(moved) => (target, session) = moved,
             None => return Ok(false),
         }

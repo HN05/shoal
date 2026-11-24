@@ -46,7 +46,7 @@ pub async fn for_viewer(
         if show_chosen(&mut report, &target, &session, &viewer, &machine).await? {
             break true;
         }
-        match steps.moved_session(target, &session).await? {
+        match steps.moved_session(target).await? {
             Some(moved) => (target, session) = moved,
             None => break false,
         }

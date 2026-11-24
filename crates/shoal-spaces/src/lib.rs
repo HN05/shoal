@@ -94,6 +94,8 @@ pub struct Spaces {
     pub leftovers: leftovers::Leftovers,
     /// The agents conversions hand over between spaces.
     pub conversion_handovers: conversions::Handovers,
+    /// The spaces whose agent a conversion is moving now.
+    pub relocating: conversions::Relocating,
     /// The spaces whose removal is under way.
     pub space_removals: spaces::Removing,
     /// The spaces whose completion cleanup is under way.
@@ -140,6 +142,7 @@ impl Spaces {
             usage: Default::default(),
             leftovers: Default::default(),
             conversion_handovers: Default::default(),
+            relocating: Default::default(),
             space_removals,
             completed_owners: Default::default(),
             carried_holds: Default::default(),

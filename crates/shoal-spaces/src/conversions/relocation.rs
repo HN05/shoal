@@ -28,6 +28,33 @@ use crate::{
     },
 };
 
+/// The spaces whose agent a relocation is moving now, from its hand-over
+/// until its restart in the new place is queued or failed.
+#[derive(Default)]
+pub struct Relocating(std::sync::Mutex<std::collections::HashSet<SpaceId>>);
+
+impl Relocating {
+    /// Mark the space `id` relocating until the guard drops.
+    pub(crate) fn mark(&self, id: &SpaceId) -> RelocatingMark<'_> {
+        self.0.lock().unwrap().insert(id.clone());
+        RelocatingMark(self, id.clone())
+    }
+
+    /// Whether a relocation is moving the agent of the space `id` now.
+    pub fn contains(&self, id: &SpaceId) -> bool {
+        self.0.lock().unwrap().contains(id)
+    }
+}
+
+/// Keeps a space marked relocating until it drops.
+pub(crate) struct RelocatingMark<'a>(&'a Relocating, SpaceId);
+
+impl Drop for RelocatingMark<'_> {
+    fn drop(&mut self) {
+        (self.0).0.lock().unwrap().remove(&self.1);
+    }
+}
+
 /// How a stop of a converting workspace's agents settles its conversion.
 #[derive(Clone, Copy)]
 pub struct ConversionStop {
@@ -74,6 +101,8 @@ impl Spaces {
         let Some(pending) = pending else {
             return Ok(());
         };
+        // Attaches wait for the agent's next session while this moves it.
+        let _moving = self.relocating.mark(id);
         let relocated = match pending.clone() {
             Pending::Workspace {
                 mode,

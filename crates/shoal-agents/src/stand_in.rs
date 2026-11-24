@@ -998,7 +998,7 @@ impl Conversions for StandIn {
         Box::pin(async { Ok(()) })
     }
 
-    fn converting<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+    fn moves_agent<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
     }
 }

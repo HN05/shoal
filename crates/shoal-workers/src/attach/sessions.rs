@@ -3,6 +3,7 @@
 //! lost connection.
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::space_ids::SpaceId;
 
 use super::{Attaching, Target};
 use crate::{
@@ -126,27 +127,53 @@ impl<A: Attaching> Steps<'_, A> {
         }
     }
 
-    /// The session `target`'s agent runs in once it moved from `left`, the
-    /// session this terminal showed, which ended: where it already runs
-    /// again, or where a conversion starts it, once it runs there. `None`
-    /// when it does not move, as when it exited or was stopped.
-    pub async fn moved_session(
-        &self,
-        target: Target,
-        left: &Session,
-    ) -> Result<Option<(Target, Session)>> {
-        let target = Target::by_id(self.paths, target.id().clone()).await?;
+    /// The session `target`'s agent runs in once the session this terminal
+    /// showed ended, as a conversion moves the agent: where it runs again,
+    /// once it does. `None` once nothing starts it, as when it exited or a
+    /// stop or a failure left it for `shoal resume`.
+    pub async fn moved_session(&self, target: Target) -> Result<Option<(Target, Session)>> {
+        let id = target.id().clone();
+        let deadline = tokio::time::Instant::now() + super::WAIT;
+        let mut told = false;
+        loop {
+            let target = match self.after_session_end(&id).await? {
+                AfterEnd::Runs(target, session) => return Ok(Some((target, session))),
+                AfterEnd::Stays => return Ok(None),
+                AfterEnd::Moves(target) => target,
+            };
+            if !std::mem::replace(&mut told, true) {
+                eprintln!(
+                    "shoal: {} moves to its new place; attaching there once its agent runs",
+                    target.name()
+                );
+            }
+            ensure!(
+                tokio::time::Instant::now() < deadline,
+                "{} has no agent session after {} seconds; shoal attach {} attaches once it has one",
+                target.name(),
+                super::WAIT.as_secs(),
+                target.number()
+            );
+            tokio::time::sleep(super::POLL).await;
+        }
+    }
+
+    /// Where the agent of the space `id` stands once its session ended: it
+    /// runs in another session, or once the restore queued for it, which
+    /// starts at once, runs it; a conversion moves it; or nothing starts it.
+    async fn after_session_end(&self, id: &SpaceId) -> Result<AfterEnd> {
+        let target = Target::by_id(self.paths, id.clone()).await?;
         if let Some(session) = agent_session(target.sessions(self.paths).await?, None) {
-            return Ok(Some((target, session)));
+            return Ok(AfterEnd::Runs(target, session));
         }
-        if !(target.agent_moves(self.paths, left.execution.as_ref())).await? {
-            return Ok(None);
+        if self.resume_space(id).await? {
+            let (target, session) = self.awaited(target, None).await?;
+            return Ok(AfterEnd::Runs(target, session));
         }
-        eprintln!(
-            "shoal: {} moves to its new place; attaching there once its agent runs",
-            target.name()
-        );
-        self.awaited(target, None).await.map(Some)
+        match target.agent_moves(self.paths).await? {
+            true => Ok(AfterEnd::Moves(target)),
+            false => Ok(AfterEnd::Stays),
+        }
     }
 
     /// `target`, read again, with the session its agent, only `execution`
@@ -173,6 +200,16 @@ impl<A: Attaching> Steps<'_, A> {
             tokio::time::sleep(super::POLL).await;
         }
     }
+}
+
+/// Where a space's agent stands once the session an attach showed ended.
+enum AfterEnd {
+    /// It runs in this session of the target.
+    Runs(Target, Session),
+    /// A conversion moves it to its new place, where it has yet to run.
+    Moves(Target),
+    /// Nothing starts it.
+    Stays,
 }
 
 /// Whether the resume of the agent of the space `name` started one, as its

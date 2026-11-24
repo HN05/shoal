@@ -27,7 +27,7 @@ impl Conversions for Manager {
         Box::pin(self.spaces.hand_over_before_removal(self, id))
     }
 
-    fn converting<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(self.spaces.converting(id))
+    fn moves_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(self.spaces.moves_agent(id))
     }
 }
