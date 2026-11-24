@@ -1,14 +1,17 @@
-//! Continuing the turn an interrupt ended: the daemon submits a prompt to
-//! continue in the place the agent runs in, through the host that keeps it,
-//! after recording that the keys are Shoal's rather than the user's.
-use anyhow::{Context as _, Result};
+//! Continuing the turn an interrupt ended: the daemon queues a message for
+//! the agent that wakes it, so the wrapper that runs it types its wake
+//! prompt in the agent's terminal and the agent's hook delivers the message.
+use anyhow::Result;
 
 use crate::Agents;
 use crate::daemon::Daemon;
 use crate::model::{ResumeOutcome, RunningAgent, Space};
 use crate::state::AgentState;
-use shoal_core::terminal::CONTINUE_PROMPT;
+use shoal_daemon_base::alerts::AlertKind;
 use shoal_protocol::space_names::SpaceSelector;
+
+/// What the agent of an interrupted turn receives to continue it.
+pub const CONTINUE_MESSAGE: &str = "Continue where you left off.";
 
 impl Agents {
     /// The agent of `space` that idles after an interrupt ended its turn,
@@ -24,29 +27,15 @@ impl Agents {
             .find(|agent| agent.interrupted && agent.state == Some(AgentState::Idle)))
     }
 
-    /// Submit the prompt that continues the interrupted turn of `agent` in
-    /// `space`, refusing one that runs in no place a host types into.
+    /// Continue the interrupted turn of `agent` in `space` with a message
+    /// that wakes it.
     pub(super) async fn continue_turn(
         &self,
-        daemon: &dyn Daemon,
         space: &Space,
         agent: RunningAgent,
     ) -> Result<ResumeOutcome> {
-        let name = (agent.agent.as_ref()).map_or("the agent", |agent| agent.name());
-        let place = (agent.origin.clone()).with_context(|| {
-            format!(
-                "{name} in {} runs in no terminal session Shoal can type into",
-                space.name
-            )
-        })?;
-        let place = place.into_typed();
-        let host = (self.session_hosts.iter())
-            .find(|host| host.name() == place.host)
-            .with_context(|| format!("terminal host {} is unavailable", place.host))?;
-        let selector = SpaceSelector::id(&space.id);
-        self.report_typing(daemon, &selector, &agent.execution)
-            .await?;
-        host.submit_prompt(&place, CONTINUE_PROMPT).await?;
+        let message = CONTINUE_MESSAGE.to_owned();
+        (self.queue_agent_message(&space.id, AlertKind::AgentResumed, message)).await?;
         Ok(ResumeOutcome::Continued { agent: agent.agent })
     }
 }

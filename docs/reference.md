@@ -516,9 +516,9 @@ idle. An agent without a running turn, including one whose turn Shoal has not
 heard of since a daemon restart, is left alone. An agent that runs outside a
 terminal host, such as in Happy, or that Shoal knows no interrupt key for
 fails the command. Messages and item activity reach an interrupted
-agent as they reach any idle one. `shoal resume <space>` continues the turn:
-it submits `Continue where you left off.` in the session, until the agent
-starts another turn. A restore that names spaces with interrupted turns and
+agent as they reach any idle one. `shoal resume <space>` continues the turn,
+until the agent starts another: the daemon sends the agent `Continue where
+you left off.` as a message, which wakes it as any message does. A restore that names spaces with interrupted turns and
 others with stopped work or removed workspaces continues the turns and
 restores the others, reporting the turns in `continued` beside them; one that
 names a running chat without an interrupted turn has nothing to restore.

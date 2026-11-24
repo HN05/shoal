@@ -8,6 +8,8 @@ mod launches;
 mod saved;
 mod turns;
 
+pub use turns::CONTINUE_MESSAGE;
+
 use anyhow::{Result, ensure};
 
 use crate::Agents;
@@ -37,7 +39,7 @@ impl Agents {
                     resume.change.is_none(),
                     "an interrupted turn continues in its running agent, which keeps its permissions; restart the agent with --permission instead"
                 );
-                return self.continue_turn(daemon, &space, agent).await;
+                return self.continue_turn(&space, agent).await;
             }
             if let Some(launch) = self.failed_launch_of(&space.id).await? {
                 let outcome = self.retry_launch(daemon, caller, &space, launch, &resume);

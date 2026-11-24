@@ -52,10 +52,6 @@ pub trait Host: Send + Sync {
         place: &'a Origin,
         owner: &'a Owner,
     ) -> BoxFuture<'a, Result<()>>;
-    /// Submit `text` as a prompt in `place`, as the user would type it.
-    fn submit_prompt<'a>(&'a self, place: &'a Origin, text: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(crate::terminal::submit_prompt(place, text))
-    }
 }
 
 /// Operations on the client type [`Origin`] that only the `shoal` command uses.

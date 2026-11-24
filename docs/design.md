@@ -964,9 +964,11 @@ Resuming it says the work is not finished, so `shoal resume` withdraws the
 completion, whichever wrapper restores the agent, and a protection stop
 restores it again; Shoal's own restores and restarts keep it.
 The daemon owns resumes: a request names a space, and that space's daemon
-decides and carries out the resume, continuing a turn an interrupt ended by
-typing the prompt through its session hosts, queuing a failed launch again,
-or queuing the restores of what a stop saved, started at once for `--now`,
+decides and carries out the resume, continuing a turn an interrupt ended
+with a message that wakes the agent, whose own wrapper types the prompt in
+its terminal as for any message, so the daemon writes to no terminal,
+queuing a failed launch again, or queuing the restores of what a stop
+saved, started at once for `--now`,
 and answers with one outcome once it acted or queued. The CLI keeps only what
 needs the caller's terminal, `--focus`, so no queue entry or execution of
 another space crosses a resume, and a discard is one request naming a space

@@ -92,7 +92,6 @@ fn only_prompts_the_user_submits_reply_in_the_chat() {
     };
     assert_eq!(prompt("Use SQLite.").as_deref(), Some("Use SQLite."));
     assert!(prompt(crate::terminal::WAKE_PROMPT).is_none());
-    assert!(prompt(crate::terminal::CONTINUE_PROMPT).is_none());
     // A wake typed after a draft the user left in the input.
     assert!(prompt(&format!("half a thought{}\n", crate::terminal::WAKE_PROMPT)).is_none());
     assert!(user_prompt(r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#).is_none());

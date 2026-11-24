@@ -1,29 +1,18 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use super::queue::{add, create, register};
-use super::sessions::FakeHost;
 use crate::paths::StateFiles as _;
 use crate::{
     config::permissions::PermissionChange,
     daemon::{executions::ExecutionKind, manager::Manager, test_support::manager},
     execution::recovery::{self, LastSession, LastSessionExt, RecordExt as _},
     model::{AgentResume, QueueEntry, ResumeOutcome, Workspace},
-    sessions::{Host, HostName, Origin},
+    sessions::{HostName, Origin},
     state::{AgentState, QueueKind, QueueState, WorkspaceState},
 };
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
-
-/// A daemon that types into places through a stand-in host, which records
-/// the prompts.
-async fn typing_manager() -> (tempfile::TempDir, Arc<Manager>, Arc<FakeHost>) {
-    let (root, mut manager) = manager().await;
-    let host = Arc::new(FakeHost::default());
-    let agents = &mut Arc::get_mut(&mut manager).unwrap().agents;
-    (Arc::get_mut(agents).unwrap()).set_session_hosts(vec![host.clone() as Arc<dyn Host>]);
-    (root, manager, host)
-}
 
 /// A workspace `name` of a new repository.
 async fn workspace(manager: &Manager, root: &tempfile::TempDir, name: &str) -> Workspace {
@@ -97,12 +86,12 @@ async fn placed_agent(manager: &Manager, workspace: &Workspace, session: &str) -
     id
 }
 
-/// An interrupted turn continues in the place its agent runs, with a
-/// prompt the daemon types there, and refuses a permission change first,
-/// since the running agent keeps the launch it runs under.
+/// An interrupted turn continues with a message that wakes its agent,
+/// which the agent's wrapper prompts it with, and refuses a permission
+/// change first, since the running agent keeps the launch it runs under.
 #[tokio::test]
-async fn an_interrupted_turn_continues_where_its_agent_runs() {
-    let (root, manager, host) = typing_manager().await;
+async fn an_interrupted_turn_continues_with_a_message_that_wakes_its_agent() {
+    let (root, manager) = manager().await;
     let workspace = workspace(&manager, &root, "fix").await;
     let id = placed_agent(&manager, &workspace, "fix-session").await;
     let selector = SpaceSelector::id(&workspace.id);
@@ -126,7 +115,8 @@ async fn an_interrupted_turn_continues_where_its_agent_runs() {
         ..AgentResume::default()
     };
     assert!(resume(&manager, &workspace, changing).await.is_err());
-    assert!(host.prompts().is_empty());
+    let unread = || manager.agents.unread_messages(&workspace.id);
+    assert!(!unread().await.unwrap().wakes);
 
     let outcome = resume(&manager, &workspace, AgentResume::default()).await;
     assert_eq!(
@@ -135,11 +125,14 @@ async fn an_interrupted_turn_continues_where_its_agent_runs() {
             agent: Some("claude".into())
         }
     );
-    let continued = (
-        "fix-session".to_owned(),
-        crate::terminal::CONTINUE_PROMPT.into(),
+    let unread = unread().await.unwrap();
+    let messages: Vec<_> = (unread.alerts.iter())
+        .map(|alert| alert.message.as_str())
+        .collect();
+    assert_eq!(
+        (unread.wakes, messages),
+        (true, vec![shoal_agents::resumes::CONTINUE_MESSAGE])
     );
-    assert_eq!(host.prompts(), [continued]);
 }
 
 /// A launch that failed to start queues again as it was, waiting for the
