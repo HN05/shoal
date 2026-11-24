@@ -4986,8 +4986,11 @@ the job. A runner GitHub gives no job is deleted once it has waited a minute
 and no job waits for its labels, and its workspace goes. A `forgejo-runner`
 whose job the forge no longer lists as waiting is stopped at the poll that
 sees it when the job's log names another runner as the one that took it, or
-the job ended before any runner took it; its workspace goes, and the run
-counts nothing towards the job's expected memory. The workspace skips setup
+the job ended before any runner took it, and its workspace goes. A runner
+that ends without taking its job, however it ends, counts nothing towards the
+job's expected memory: one GitHub registered whose hook reported no job, or a
+`forgejo-runner` whose job's log names no runner of this machine, as one that
+found its job taken already. The workspace skips setup
 and starts from the [seed build](#seed-builds) like any workspace, so the job
 rebuilds only what its commit changed. The job gets its workspace's
 environment, scope token, `TMPDIR`, `[env]` and the variables its

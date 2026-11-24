@@ -2755,7 +2755,10 @@ takes the one staggered start an agent would. A run cut short, as by load
 protection, used less than a whole one, so it may raise that estimate but
 never lowers it while a whole run's peak is within the window; only the latest
 5 runs would have let a few stopped runs push every whole one out, and each
-lower estimate admitted the job where it was stopped again. A job reaches its peak late,
+lower estimate admitted the job where it was stopped again. A runner that
+ended without taking its job, however it ended, keeps no run: its few
+megabytes would otherwise push the whole runs out once those are 3 days old.
+A job reaches its peak late,
 while it builds and runs tests, so until it ends it reserves what it has yet
 to use, its expected memory less what its workspace uses now: counting it
 only while it is young let each pass admit another job against memory the

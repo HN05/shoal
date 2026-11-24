@@ -10,14 +10,7 @@ async fn claimed(fixture: &Fixture) -> SpaceId {
     let workspace = manager.runner.claimed_jobs().await.unwrap()[0]
         .workspace_id
         .clone();
-    manager
-        .store
-        .run(|db| {
-            db.execute("UPDATE ci_jobs SET peak_memory=6000000", [])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    sample_peaks(manager).await;
     workspace
 }
 
@@ -38,15 +31,6 @@ fn taken_by(fixture: &Fixture, uuid: &str) {
         "GET /api/v1/repos/team/repo/actions/jobs/11/logs?step=0".into(),
         log,
     );
-}
-
-/// How many runs of jobs the costs keep.
-async fn usage_runs(manager: &Manager) -> i64 {
-    manager
-        .store
-        .run(|db| Ok(db.query_row("SELECT count(*) FROM ci_job_usage", [], |row| row.get(0))?))
-        .await
-        .unwrap()
 }
 
 #[tokio::test]
@@ -101,4 +85,31 @@ async fn a_runner_that_took_its_job_runs_on_and_its_taker_is_read_once() {
         .filter(|request| request.line == "GET /api/v1/repos/team/repo/actions/jobs/11")
         .count();
     assert_eq!(reads, 1);
+}
+
+#[tokio::test]
+async fn a_runner_that_exits_without_its_job_counts_no_run() {
+    let fixture = fixture(vec![job("h11", 11, 3)], "").await;
+    let manager = &fixture.manager;
+    let workspace = claimed(&fixture).await;
+    // It found its job taken already and exited before a poll saw it go.
+    taken_by(&fixture, "other-uuid");
+    runner_exits(manager, &workspace).await;
+
+    finish_ended_jobs(manager).await;
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
+    assert_eq!(usage_runs(manager).await, 0);
+}
+
+#[tokio::test]
+async fn a_runner_that_ran_its_job_counts_its_run_though_no_poll_saw_it_take_it() {
+    let fixture = fixture(vec![job("h11", 11, 3)], "").await;
+    let manager = &fixture.manager;
+    let workspace = claimed(&fixture).await;
+    taken_by(&fixture, "runner-uuid");
+    runner_exits(manager, &workspace).await;
+
+    finish_ended_jobs(manager).await;
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
+    assert_eq!(usage_runs(manager).await, 1);
 }

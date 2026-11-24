@@ -3,13 +3,14 @@
 //! none: once the forge no longer lists the job as waiting and says another
 //! runner took it, or that none did, the runner holds its job slot and the
 //! job's expected memory for nothing. The waiting-jobs poll that sees it
-//! stops the runner, and the job then ends as any other does, keeping no
-//! run for its job's cost. A runner registered for one job takes any its
-//! labels match, and goes once none is left for it.
+//! stops the runner, and the job then ends as any other does. A runner
+//! registered for one job takes any its labels match, and goes once none is
+//! left for it. A runner that ended without taking its job, however it
+//! ended, keeps no run for its job's cost: it used nothing a run does.
 use std::collections::HashSet;
 
-use anyhow::Result;
-use shoal_forge::ci::runner::{JobTaker, RegisteredRunner, RunnerRequests};
+use anyhow::{Context, Result};
+use shoal_forge::ci::runner::{JobTaker, RegisteredRunner, RunnerRequests, took_job};
 use shoal_forge_types::ForgeRepo;
 use shoal_ids::repository_ids::RepositoryId;
 
@@ -82,5 +83,48 @@ impl Runner {
         daemon.stop_job_runner(&job.workspace_id, reason).await?;
         self.log_job_stop(job, JobStop::Untaken, "it had taken no job");
         Ok(())
+    }
+
+    /// Keep what the ended `job` used as a run of its job, unless its runner
+    /// never took it, as one that found its job taken already and exited.
+    pub(super) async fn keep_job_usage(&self, job: &ClaimedJob) -> Result<()> {
+        if !self.job_usage_unkept(&job.id).await? {
+            return Ok(());
+        }
+        if self.runner_took_job(job).await {
+            self.record_job_usage(job).await
+        } else {
+            self.discard_job_usage(&job.id).await
+        }
+    }
+
+    /// Whether the runner of the ended `job` took a job: one registered for
+    /// one job by its hook's report, one that claimed its job by handle by
+    /// the forge's word that this machine's runner took it. One the forge
+    /// cannot be asked about counts as having taken none, as does one that
+    /// ended before the forge names it, having run nothing of the job.
+    async fn runner_took_job(&self, job: &ClaimedJob) -> bool {
+        if job.runner_id.is_some() {
+            return took_job(&self.job_directory(&job.id));
+        }
+        if self.jobs.taken(&job.id) {
+            return true;
+        }
+        (self.taken_by_ours(job).await).unwrap_or_else(|error| {
+            log!("runner: {}: {error:#}", job.job.job.name);
+            false
+        })
+    }
+
+    /// Whether the forge names the repository's runner as the one that took
+    /// `job`.
+    async fn taken_by_ours(&self, job: &ClaimedJob) -> Result<bool> {
+        let registration = (self.runner_registration(&job.repository_id).await?)
+            .context("the repository's runner is no longer registered")?;
+        let ours = (registration.runner).context("the repository has no runner of its own")?;
+        let forge = self.forges.forge(&registration.forge_repository).await?;
+        let account = self.forges.user_account();
+        let taker = forge.job_taker(&account, &job.job.job).await?;
+        Ok(matches!(taker, JobTaker::Runner(uuid) if uuid == ours.uuid))
     }
 }

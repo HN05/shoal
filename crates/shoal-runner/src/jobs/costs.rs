@@ -13,6 +13,7 @@ use rusqlite::{OptionalExtension, params};
 use shoal_daemon_base::jobs::JobCost;
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
 use shoal_protocol::model::QueuedJob;
+use shoal_store::exists;
 
 use super::ClaimedJob;
 use crate::{Runner, daemon::Daemon, time::UnixTime};
@@ -86,6 +87,22 @@ impl Runner {
                     params![repository, workflow, name, RECENT_RUNS, now - RECENT_FOR],
                 )?;
                 Ok(())
+            })
+            .await
+    }
+
+    /// Whether a sample saw the claimed job `id` run and no run of it is
+    /// kept or discarded yet.
+    pub(super) async fn job_usage_unkept(&self, id: &QueueEntryId) -> Result<bool> {
+        let id = id.clone();
+        self.store
+            .run(move |db| {
+                exists(
+                    db,
+                    "SELECT 1 FROM ci_jobs
+                     WHERE id=?1 AND usage_recorded=0 AND peak_memory IS NOT NULL",
+                    [id],
+                )
             })
             .await
     }

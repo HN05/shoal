@@ -59,11 +59,12 @@ impl Runner {
         }
     }
 
-    /// Finish the ended `job`: keep what it used, delete the runner
-    /// registered for it alone and remove its workspace, telling the user
-    /// of a removal that fails, which the next pass tries again.
+    /// Finish the ended `job`: keep what it used if its runner took it,
+    /// delete the runner registered for it alone and remove its workspace,
+    /// telling the user of a removal that fails, which the next pass tries
+    /// again.
     async fn finish_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<()> {
-        self.record_job_usage(job).await?;
+        self.keep_job_usage(job).await?;
         if let Err(error) = self.delete_job_runner(job).await {
             log!("runner: {error:#}");
         }

@@ -2099,6 +2099,42 @@ pub(super) async fn finish_ended_jobs(manager: &Manager) {
     manager.runner.finish_ended_jobs(manager).await.unwrap();
 }
 
+/// Have a usage sample see every claimed job's runner reach 6 MB.
+pub(super) async fn sample_peaks(manager: &Manager) {
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE ci_jobs SET peak_memory=6000000", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// How many runs of jobs the costs keep.
+pub(super) async fn usage_runs(manager: &Manager) -> i64 {
+    manager
+        .store
+        .run(|db| Ok(db.query_row("SELECT count(*) FROM ci_job_usage", [], |row| row.get(0))?))
+        .await
+        .unwrap()
+}
+
+/// End the runner launched in `workspace` on its own, as it exits.
+pub(super) async fn runner_exits(manager: &Arc<Manager>, workspace: &SpaceId) {
+    let (_, started) = launched(workspace.as_str());
+    manager
+        .agents
+        .finish_execution(
+            &**manager,
+            started.plan.id.clone(),
+            ExecutionKind::Command,
+            Some(0),
+        )
+        .await
+        .unwrap();
+}
+
 mod single_use;
 mod superseded;
 mod taken;

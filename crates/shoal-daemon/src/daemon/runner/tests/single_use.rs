@@ -4,6 +4,7 @@ use rusqlite::params;
 
 use super::{
     GitHubState, admit_and_claim, finish_ended_jobs, github_fixture, github_job, launched,
+    sample_peaks, usage_runs,
 };
 use crate::{
     daemon::{executions::ExecutionKind, manager::Manager},
@@ -79,6 +80,7 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     manager.runner.release_idle_runners().await.unwrap();
     assert_eq!(deleted(&fixture.state), ["77"]);
 
+    sample_peaks(manager).await;
     manager
         .agents
         .finish_execution(
@@ -93,6 +95,8 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
     // Its end deletes the runner too, which counts as done once it is gone.
     assert_eq!(deleted(&fixture.state), ["77", "77"]);
+    // Having taken no job, it ran nothing of one.
+    assert_eq!(usage_runs(manager).await, 0);
 }
 
 #[tokio::test]
@@ -111,6 +115,7 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
     manager.runner.release_idle_runners().await.unwrap();
     assert!(deleted(&fixture.state).is_empty());
 
+    sample_peaks(manager).await;
     manager
         .agents
         .finish_execution(
@@ -123,4 +128,5 @@ async fn a_runner_that_took_a_job_stays_until_the_job_ends() {
         .unwrap();
     finish_ended_jobs(manager).await;
     assert_eq!(deleted(&fixture.state), ["77"]);
+    assert_eq!(usage_runs(manager).await, 1);
 }
