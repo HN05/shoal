@@ -10,7 +10,8 @@ use anyhow::{Context, Result};
 use zbus::proxy::CacheProperties;
 
 use super::{Lid, Platform};
-use crate::daemon::{log, logind::LoginProxy};
+use crate::logind::LoginProxy;
+use shoal_daemon_base::log;
 
 #[zbus::proxy(
     interface = "org.freedesktop.login1.User",
@@ -37,7 +38,7 @@ pub(super) trait Session {
 /// machine has one.
 const INPUT_DEVICES: &str = "/proc/bus/input/devices";
 
-pub(super) struct Logind {
+pub struct Logind {
     connection: zbus::Connection,
     manager: LoginProxy<'static>,
     user: UserProxy<'static>,
@@ -46,7 +47,7 @@ pub(super) struct Logind {
 }
 
 /// logind, when the system bus reaches it.
-pub(super) async fn connect() -> Option<Logind> {
+pub async fn connect() -> Option<Logind> {
     match Logind::connect().await {
         Ok(logind) => Some(logind),
         Err(error) => {

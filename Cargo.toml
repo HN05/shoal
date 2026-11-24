@@ -35,6 +35,7 @@ shoal-hub = { path = "crates/shoal-hub" }
 shoal-ids = { path = "crates/shoal-ids" }
 shoal-leases = { path = "crates/shoal-leases" }
 shoal-links = { path = "crates/shoal-links" }
+shoal-power = { path = "crates/shoal-power" }
 shoal-protocol = { path = "crates/shoal-protocol" }
 shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-refs = { path = "crates/shoal-refs" }

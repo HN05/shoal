@@ -8,12 +8,10 @@ use futures_util::StreamExt;
 use zbus::OwnedFd;
 
 use super::{PowerEvent, PowerEvents};
-use crate::daemon::{
-    log,
-    logind::{LoginProxy, PrepareForSleepStream, delay_limit},
-};
+use crate::logind::{LoginProxy, PrepareForSleepStream, delay_limit};
+use shoal_daemon_base::log;
 
-pub(super) struct Logind {
+pub struct Logind {
     proxy: LoginProxy<'static>,
     announcements: PrepareForSleepStream,
     /// The delay lock, while the machine is awake.
@@ -21,7 +19,7 @@ pub(super) struct Logind {
 }
 
 /// logind, when the system bus reaches it.
-pub(super) async fn connect() -> Option<Logind> {
+pub async fn connect() -> Option<Logind> {
     match Logind::connect().await {
         Ok(logind) => Some(logind),
         Err(error) => {

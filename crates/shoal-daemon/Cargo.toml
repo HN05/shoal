@@ -46,6 +46,7 @@ shoal-hub.workspace = true
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-leases.workspace = true
 shoal-links.workspace = true
+shoal-power.workspace = true
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }
 shoal-repositories.workspace = true
@@ -61,14 +62,6 @@ toml.workspace = true
 toml_edit.workspace = true
 uuid = { workspace = true, features = ["serde", "v4"] }
 webpki-roots = "1"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-# systemd-logind's shutdown delay lock and announcements, over the system bus.
-zbus = { version = "6", default-features = false, features = ["tokio", "proxy"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-# ioreg and pmset, which say whether the user walked away.
-shoal-subprocess.workspace = true
 
 [dev-dependencies]
 hmac = "0.13"

@@ -1,0 +1,27 @@
+[package]
+name = "shoal-power"
+version.workspace = true
+description = "The machine's power and the user's presence as the platform reports them to Shoal's daemon"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+shoal-daemon-base.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+futures-util.workspace = true
+libc.workspace = true
+# systemd-logind's delay locks and announcements, over the system bus.
+zbus = { version = "6", default-features = false, features = ["tokio", "proxy"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# ioreg and pmset, which say whether the user walked away.
+shoal-subprocess.workspace = true
+tokio = { workspace = true, features = ["process"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -2622,6 +2622,7 @@ dependencies = [
  "shoal-ids",
  "shoal-leases",
  "shoal-links",
+ "shoal-power",
  "shoal-protocol",
  "shoal-refs",
  "shoal-repositories",
@@ -2630,7 +2631,6 @@ dependencies = [
  "shoal-schedule",
  "shoal-spaces",
  "shoal-store",
- "shoal-subprocess",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
@@ -2638,7 +2638,6 @@ dependencies = [
  "toml_edit",
  "uuid",
  "webpki-roots",
- "zbus",
 ]
 
 [[package]]
@@ -2805,6 +2804,19 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "shoal-power"
+version = "0.20.6"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "libc",
+ "shoal-daemon-base",
+ "shoal-subprocess",
+ "tokio",
+ "zbus",
 ]
 
 [[package]]

@@ -72,6 +72,9 @@ instead of the PR delivery guidance below.
   subsystem's work, a subsystem crate that reads another's tables or calls it
   other than through such an interface, and a test of one subsystem that
   builds a `Manager` instead of the service over stand-ins.
+- `crates/shoal-power` reads the machine's power and the user's presence
+  from the platform and depends on no Shoal crate but `shoal-daemon-base`
+  and `shoal-subprocess`; flag daemon state or decisions there.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
   on neither each other; the `shoal` package's `main` joins them. Flag a
   dependency of the daemon, even a dev-dependency, on a crate that calls the

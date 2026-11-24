@@ -12,9 +12,9 @@ use super::{Lid, Platform, readings};
 /// The longest a reading may take.
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub(super) struct Mac;
+pub struct Mac;
 
-pub(super) async fn connect() -> Option<Mac> {
+pub async fn connect() -> Option<Mac> {
     Some(Mac)
 }
 

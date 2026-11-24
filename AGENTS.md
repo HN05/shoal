@@ -204,6 +204,11 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `shoal-coordination`, `shoal-coordination` itself and `shoal-schedule`.
   `shoal-spaces` calls coordination's service directly, which its interface
   gives with the daemon coordination takes.
+- `crates/shoal-power` reads the machine's power and the user's presence
+  from the platform: the announcements of a sleep or shutdown, with the
+  delay locks that hold them off, and whether the user walked away. What
+  the daemon does on each stays in the daemon. It depends on no Shoal
+  crate but `shoal-daemon-base` and `shoal-subprocess`.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that

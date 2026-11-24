@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::bail;
+use anyhow::{Result, bail};
 use tokio::sync::{mpsc, watch};
 
 use super::*;
