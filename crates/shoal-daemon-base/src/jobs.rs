@@ -44,7 +44,7 @@ impl std::fmt::Display for JobStop {
             Self::Pause => f.write_str("the machine's pause"),
             Self::Removal => f.write_str("its workspace's removal"),
             Self::Overrun => f.write_str("its runner outliving its finished run"),
-            Self::Untaken => f.write_str("its job going to another runner"),
+            Self::Untaken => f.write_str("its job going to another runner or ending untaken"),
             Self::Overload(pressure) => f.write_str(pressure),
             Self::Signal(signal) => write!(f, "{signal} to its wrapper"),
         }
