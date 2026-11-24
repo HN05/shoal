@@ -99,7 +99,8 @@ impl Spaces {
                     .await
             }
         }?;
-        (self.link_launch_run(&**daemon, run, &mut launched, caller)).await;
+        let started = (&launched.space.id, &mut launched.warnings);
+        (self.link_launch_run(&**daemon, run, started, caller)).await;
         if manual && launched.entry.is_some() {
             self.record_launch_interaction(&**daemon, &launched, caller)
                 .await;

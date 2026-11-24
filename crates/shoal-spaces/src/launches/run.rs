@@ -5,8 +5,9 @@
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::launches::{Launch, StartTarget};
-use shoal_protocol::protocol::{ItemContext, Launched};
+use shoal_protocol::protocol::ItemContext;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
@@ -87,22 +88,22 @@ impl Spaces {
         Ok(kind == SpaceKind::Chat)
     }
 
-    /// Link the CI run `launch` was settled on, if any, to the space
-    /// `launched` started for `caller`, related to it. The space started
-    /// whatever happens here, so a failure is a warning of the start.
+    /// Link the CI run a launch was settled on, if any, to the space `id`
+    /// it started for `caller`, related to it. The space started whatever
+    /// happens here, so a failure joins the start's `warnings`.
     pub(super) async fn link_launch_run(
         &self,
         daemon: &dyn Daemon,
         run: Option<ItemRef>,
-        launched: &mut Launched,
+        (id, warnings): (&SpaceId, &mut Vec<String>),
         caller: Option<&Caller>,
     ) {
         let Some(run) = run else {
             return;
         };
-        let space = SpaceSelector::id(&launched.space.id);
+        let space = SpaceSelector::id(id);
         if let Err(error) = daemon.link_related_run(&space, &run, caller).await {
-            launched.warnings.push(format!(
+            warnings.push(format!(
                 "could not link {run}: {error:#}; link it with shoal link ci {run} related"
             ));
         }

@@ -37,6 +37,9 @@ impl Spaces {
         ensure_creates(&launch)?;
         launches::ensure_copy_fits(&launch)?;
         self.select_launch_spaces(&**daemon, &mut launch).await?;
+        self.settle_launch_run(&**daemon, &mut launch, caller)
+            .await?;
+        let run = launches::run::settled_run(&launch).cloned();
         launch.setup_env = env;
         self.default_repository(&**daemon, &mut launch, below.as_ref())
             .await?;
@@ -52,7 +55,7 @@ impl Spaces {
             Placed::New(placement) => placement,
             Placed::Worker(worker) => self.reopened_placement(&worker).await?,
             Placed::Chat(..) => bail!(
-                "a workspace starts on a branch; name it with --branch, an issue, a PR or branch link, or a copy"
+                "a workspace starts on a branch; name it with --branch, an issue, a PR, branch or CI run link of a branch, or a copy"
             ),
         };
         if !reopens(&placement) {
@@ -63,7 +66,10 @@ impl Spaces {
             unfollowed: false,
         };
         let started = self.start_placed(daemon, launch, placement, follows, caller);
-        started.await?.into_workspace()
+        let mut started = started.await?.into_workspace()?;
+        let created = (&started.workspace.id, &mut started.warnings);
+        (self.link_launch_run(&**daemon, run, created, caller)).await;
+        Ok(started)
     }
 
     /// Name the repository of the space `launch` goes below, else that of

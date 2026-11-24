@@ -4,7 +4,7 @@ use std::{path::Path, sync::Arc};
 
 use shoal_core::start_plan::QueuedStart;
 use shoal_protocol::launches::{ItemChoice, Launch, LaunchSource, StartTarget};
-use shoal_protocol::protocol::Launched;
+use shoal_protocol::protocol::{Launched, operations::StartedWorkspace};
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::daemon::{
@@ -87,6 +87,18 @@ impl Forge {
         let daemon = self.manager.daemon();
         (self.manager.spaces)
             .launch(&daemon, launch, LaunchSource::Manual, caller)
+            .await
+    }
+
+    /// Create a workspace without an agent on the run numbered `number`.
+    async fn create(&self, number: u64) -> anyhow::Result<StartedWorkspace> {
+        let launch = Launch {
+            target: Some(self.run(number).parse().unwrap()),
+            ..Launch::default()
+        };
+        let daemon = self.manager.daemon();
+        (self.manager.spaces)
+            .create_placed_workspace(&daemon, launch, (None, None), None)
             .await
     }
 
@@ -306,4 +318,25 @@ async fn ci_names_the_run_as_a_positional_link_does() {
 
     assert_eq!(launched.space.kind(), SpaceKind::Chat);
     assert_eq!(forge.related(&launched).await, [forge.run(1)]);
+}
+
+#[tokio::test]
+async fn a_creation_on_a_branch_run_links_it_and_one_on_the_default_branch_is_refused() {
+    let forge = Forge::new().await;
+
+    let created = forge.create(3).await.unwrap();
+    let refused = forge.create(1).await;
+
+    let workspace = &created.workspace;
+    assert_eq!(
+        workspace.branch().map(|branch| branch.as_str()),
+        Some("fix")
+    );
+    let space = SpaceSelector::id(&workspace.id);
+    let space = forge.manager.spaces.space(&space).await.unwrap();
+    let related: Vec<_> = (space.links.related.iter())
+        .map(|item| item.url.to_string())
+        .collect();
+    assert_eq!(related, [forge.run(3)]);
+    assert!(refused.is_err());
 }
