@@ -656,7 +656,10 @@ Issues and PRs carry one or more `area/` labels and one `type/` and one
 `complexity/` label; `shoal repo labels` lists what each means, and
 `.forgejo/scripts/labels.py` creates the scheme. `type/` names what the change
 is for, wherever its code lives: work that makes the tests faster is
-`type/test`. An issue states the problem or goal and what done looks like.
+`type/test`. An issue states the problem or goal, what was observed of it,
+such as a command and its output, and what done looks like, and leaves the
+approach to the Plan section the owner settles: a fix written when the issue
+is filed goes stale, and whoever takes it on reads the code as it is then.
 One whose approach is settled is labelled `planned`, and agents implement it
 without asking; one that leaves a choice for
 the owner is labelled `needs-plan` until `shoal start --mode plan` settles a Plan section in
