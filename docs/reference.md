@@ -1354,7 +1354,15 @@ on there, which `shoal status <space>` shows. Commands that need the
 machine they run on, such as acquiring and releasing leases,
 starting a demo and an agent's hooks, are refused for a space elsewhere,
 naming its machine, as is a command that attaches files, which that
-machine cannot read. Without a target, a
+machine cannot read, and `resume --focus` and `--execution`. `shoal stop`,
+`shoal resume`, `shoal restart` and `shoal restore --discard-agent` take
+`--machine <name or ID>`, repeatable, which selects the spaces of that
+machine that `--all` would select there, by what it last reported: those
+with something to stop, those whose saved work an unfinished assignment
+resumes, those with an agent running and those with something to discard.
+The reports name the machine of each space elsewhere, as `--json` does in
+`machine`. The picker of `shoal resume` offers the other machines' spaces
+with something to resume. Without a target, a
 command's picker offers the other machines' spaces that the request it
 sends for the picked space reaches, after this machine's, as each
 machine's daemon judges its own for that request, every space of one that
@@ -1370,9 +1378,16 @@ delivers what waits, in order, once the machine connects. A request still
 waiting after seven days is dropped, and the space whose process sent it, or
 else you, hears of it in a `hub_expired` alert, as of one the machine received
 but whose link closed before it confirmed it ran, which the hub never sends
-twice. Any other command for an
+twice. A `stop --machine` reports one line per offline machine, with how
+many stops wait for it. Any other command for an
 offline machine's space, following a session included, fails at once, naming
-the machine and when the hub last saw it.
+the machine and when the hub last saw it, and `shoal restore <id>`, which
+takes the space over here, where the hub keeps a package of it;
+under `--machine`, `resume` and `restore --discard-agent` skip an offline
+machine's spaces, naming it, and go on with the others. `shoal restore` of a
+removed space whose record another machine keeps names that machine, and
+`shoal move <id> -o FILE` with `shoal restore --from FILE`, which open it
+here.
 
 `shoal start --machine <name or ID>` starts a space on another joined machine
 of the hub, a workspace or a chat, below the space `--parent` names, else

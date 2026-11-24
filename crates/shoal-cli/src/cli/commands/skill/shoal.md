@@ -213,8 +213,9 @@ a workspace's or a chat's, whoever stopped them, and a launch that failed to
 start; a workspace whose setup failed is refused, naming `shoal setup`, which
 retries it before the agent waiting for it starts. `restore --discard-agent` discards a stopped agent,
 its last sessions, stopped commands and failed launch, leaving the files. `--all`
-acts on every space below the caller's on this machine, `restart --machine
-<name>` on those of another joined machine, and `stop --yes` confirms that an
+acts on every space below the caller's on this machine, `--machine <name>`
+on those of another joined machine that `--all` would take there, a resume
+skipping those of an offline one, and `stop --yes` confirms that an
 execution Shoal cannot prove ended did. A space outside the caller's scope is
 refused with an error naming it.
 

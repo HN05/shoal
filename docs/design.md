@@ -464,7 +464,10 @@ reaches after them, unless the command acts on the space itself, through
 this machine's worktree, terminal or files; `--machine NAME|ID`,
 which repeats, makes it the named machines' spaces, a selector that, as
 `--all` does, takes no named spaces, and narrows a picker to them, while a
-named space is selected wherever it runs.
+named space is selected wherever it runs. Each machine reports with each
+space whether a stop or a resume would take it there, so `--machine` selects
+there what `--all` selects here, by that machine's last report; a stop of an
+offline machine's space waits at the hub, and a resume never does.
 A request whose
 answer goes on, as following an agent's session does, comes back on a byte
 stream as that machine's daemon writes it, failing at once while the machine

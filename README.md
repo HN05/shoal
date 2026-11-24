@@ -228,6 +228,7 @@ shoal thread resolve 3.2 answered  # Settle a thread you opened; --undo reopens 
 shoal stop 3                  # Stop agents and commands here and below; they stay down until shoal resume
 shoal stop 3 5                # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace and chat; a reboot saves agents too
+shoal stop --machine desk     # Stop what --all would there, on a machine joined to the same hub
 shoal stop --interrupt 3          # Cancel its agent's turn; the agent keeps running
 shoal stop --leftovers        # Stop what this workspace's commands left running
 shoal stop --processes 3          # Stop its processes Shoal does not track; agents keep running
@@ -236,6 +237,7 @@ shoal restart --all --sequential    # Restart one at a time
 shoal restart --all --wait          # Restart each once its turn ends; --cancel drops that
 shoal resume                  # Pick the workspaces and chats whose agent can resume
 shoal resume --all            # Queue the restore of every stopped agent; report stopped commands
+shoal resume --machine desk   # Resume what --all would there; an offline machine is skipped
 shoal resume 3                # Continue its stopped agent, or the turn shoal stop --interrupt ended
 shoal resume 3 --now          # Resume its stopped agent at once in the background
 shoal resume 3 --focus        # Resume its stopped agent in this terminal
