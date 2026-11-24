@@ -361,6 +361,14 @@ impl StandIn {
 const NOT_HERE: &str = "the agents' stand-in has no such space";
 
 impl Spaces for StandIn {
+    fn stop_untracked_processes<'a>(
+        &'a self,
+        _: &'a SpaceSelector,
+        _: Option<u32>,
+    ) -> BoxFuture<'a, Result<usize>> {
+        Box::pin(async { Ok(0) })
+    }
+
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
         let space = self.selected(selector);
         Box::pin(async { space })

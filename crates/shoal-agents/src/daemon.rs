@@ -68,6 +68,15 @@ pub trait Spaces: Send + Sync {
     /// The workspace or chat with the ID `id`.
     fn space_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>>;
 
+    /// Stop the untracked processes of the workspace or chat `selector`
+    /// names, as `shoal stop` does, other than process `requester` and the
+    /// processes that started it, returning how many it stopped.
+    fn stop_untracked_processes<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        requester: Option<u32>,
+    ) -> BoxFuture<'a, Result<usize>>;
+
     /// Whether the space `id` exists.
     fn space_exists<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 

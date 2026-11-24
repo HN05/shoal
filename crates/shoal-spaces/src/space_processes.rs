@@ -88,14 +88,16 @@ impl Spaces {
     }
 
     /// Stop the untracked processes that `selection` takes of the workspace
-    /// or chat `selector` names, as [`Self::stop_untracked`] does.
+    /// or chat `selector` names, as [`Self::stop_untracked`] does, sparing
+    /// the requesting process `requester` and the processes that started it.
     pub async fn stop_space_processes(
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
         selection: Selection,
-        requester: Option<Identity>,
+        requester: Option<u32>,
     ) -> Result<Stopped> {
+        let requester = requester_identity(requester);
         let space = self.space(selector).await?;
         let stopped = match space.to_workspace() {
             Some(workspace) => {
@@ -314,4 +316,10 @@ fn pids<'a>(processes: impl IntoIterator<Item = &'a Identity>) -> String {
         .map(|process| process.pid.to_string())
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// The identity of the requesting process `pid`, which a stop spares with
+/// the processes that started it; none when it cannot be read.
+fn requester_identity(pid: Option<u32>) -> Option<Identity> {
+    pid.and_then(|pid| identity::capture(pid).ok().flatten())
 }
