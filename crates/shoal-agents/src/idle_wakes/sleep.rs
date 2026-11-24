@@ -22,11 +22,8 @@ use shoal_protocol::{
 /// How long the agent of the space `id` sleeps.
 pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Sleep>> {
     Ok(db
-        .query_row(
-            "SELECT sleep FROM space_sleep WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
+        .prepare_cached("SELECT sleep FROM space_sleep WHERE space_id=?1")?
+        .query_row([id], |row| row.get(0))
         .optional()?)
 }
 

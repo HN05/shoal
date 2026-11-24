@@ -40,7 +40,7 @@ pub fn forget(db: &Connection, id: &SpaceId, urls: &[ItemRef]) -> Result<()> {
 
 /// The titles of the space's assigned PRs by URL.
 pub fn of_space(db: &Connection, id: &SpaceId) -> rusqlite::Result<HashMap<String, String>> {
-    db.prepare("SELECT url,title FROM space_pr_titles WHERE space_id=?1")?
+    db.prepare_cached("SELECT url,title FROM space_pr_titles WHERE space_id=?1")?
         .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect()
 }

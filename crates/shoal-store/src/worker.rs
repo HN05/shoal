@@ -7,6 +7,10 @@ use std::{
 use tokio::sync::{mpsc, oneshot, watch};
 
 const QUEUE_CAPACITY: usize = 128;
+/// Parsed statements the connection keeps, the most recently used first:
+/// enough for every statement that fills in a listed space, which a listing
+/// runs once per space.
+const STATEMENT_CACHE_CAPACITY: usize = 128;
 type Job = Box<dyn FnOnce(&mut Option<Connection>, &Path, Syncs) + Send>;
 
 pub(super) struct Worker {
@@ -125,6 +129,7 @@ fn execute_operation<T>(
 fn connect(path: &Path, syncs: Syncs) -> Result<Connection> {
     let db = Connection::open(path).context("open Shoal state database")?;
     db.busy_timeout(Duration::from_secs(5))?;
+    db.set_prepared_statement_cache_capacity(STATEMENT_CACHE_CAPACITY);
     db.execute_batch("PRAGMA foreign_keys=ON;")?;
     if let Syncs::Skipped = syncs {
         db.pragma_update(None, "synchronous", "OFF")?;

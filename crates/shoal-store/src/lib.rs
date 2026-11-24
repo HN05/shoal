@@ -133,7 +133,9 @@ pub fn write_transaction<T>(
 
 /// Whether the supplied SELECT query returns any rows.
 pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
-    Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)
+    Ok(db
+        .prepare_cached(&format!("SELECT EXISTS({sql})"))?
+        .query_row(params, |row| row.get(0))?)
 }
 
 /// SQL that holds when the path in `column` is the directory `?2` or lies
@@ -636,11 +638,11 @@ pub fn execution_count(
     space_id: &SpaceId,
     state: Option<ExecutionState>,
 ) -> Result<usize> {
-    let count: i64 = db.query_row(
-        "SELECT COUNT(*) FROM executions WHERE space_id=?1 AND (?2 IS NULL OR state=?2)",
-        rusqlite::params![space_id, state],
-        |row| row.get(0),
-    )?;
+    let count: i64 = db
+        .prepare_cached(
+            "SELECT COUNT(*) FROM executions WHERE space_id=?1 AND (?2 IS NULL OR state=?2)",
+        )?
+        .query_row(rusqlite::params![space_id, state], |row| row.get(0))?;
     Ok(usize::try_from(count)?)
 }
 

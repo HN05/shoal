@@ -746,7 +746,7 @@ fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Sour
 /// Fill in what the workspace was copied from, when it is a copy.
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.copied_from = db
-        .query_row(
+        .prepare_cached(
             "SELECT source.id, source_space.name, source.branch, copy.copied_from_checkpoint,
                 copy.starting_checkpoint, json_extract(start.record, '$.head'),
                 json_extract(start.record, '$.commit'), copy.starting_index
@@ -756,26 +756,25 @@ pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
              LEFT JOIN workspaces source ON source.id=copy.copied_from
              LEFT JOIN spaces source_space ON source_space.id=source.id
              WHERE copy.id=?1",
-            [&workspace.id],
-            |row| {
-                let workspace = match row.get::<_, Option<SpaceId>>(0)? {
-                    Some(id) => Some(WorkspaceRef {
-                        id,
-                        name: row.get(1)?,
-                        branch: row.get(2)?,
-                    }),
-                    None => None,
-                };
-                Ok(CopiedFrom {
-                    workspace,
-                    checkpoint: row.get(3)?,
-                    starting_checkpoint: row.get(4)?,
-                    head: row.get(5)?,
-                    commit: row.get(6)?,
-                    index: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                })
-            },
-        )
+        )?
+        .query_row([&workspace.id], |row| {
+            let workspace = match row.get::<_, Option<SpaceId>>(0)? {
+                Some(id) => Some(WorkspaceRef {
+                    id,
+                    name: row.get(1)?,
+                    branch: row.get(2)?,
+                }),
+                None => None,
+            };
+            Ok(CopiedFrom {
+                workspace,
+                checkpoint: row.get(3)?,
+                starting_checkpoint: row.get(4)?,
+                head: row.get(5)?,
+                commit: row.get(6)?,
+                index: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+            })
+        })
         .optional()?;
     Ok(())
 }

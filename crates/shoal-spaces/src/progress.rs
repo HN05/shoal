@@ -157,11 +157,8 @@ pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Progress>> {
 
 fn stored(db: &Connection, id: &SpaceId) -> Result<Option<(Plan, UnixTime)>> {
     let row: Option<(String, UnixTime)> = db
-        .query_row(
-            "SELECT record,updated_at FROM space_progress WHERE space_id=?1",
-            [id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
+        .prepare_cached("SELECT record,updated_at FROM space_progress WHERE space_id=?1")?
+        .query_row([id], |row| Ok((row.get(0)?, row.get(1)?)))
         .optional()?;
     row.map(|(record, updated_at)| Ok((serde_json::from_str(&record)?, updated_at)))
         .transpose()

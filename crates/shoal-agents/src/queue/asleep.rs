@@ -14,13 +14,14 @@ use shoal_ids::space_ids::SpaceId;
 /// restore Shoal queued on its own waits for it.
 pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Asleep>> {
     let found: Option<(Option<String>, Option<String>)> = db
-        .query_row(
+        .prepare_cached(
             "SELECT COALESCE(q.stop_reason,s.reason),COALESCE(q.wakes_when,s.resumes_when)
              FROM agent_queue q LEFT JOIN agent_stops s ON s.execution_id=q.execution_id
              WHERE q.space_id=?1 AND q.kind=?2 AND q.automatic ORDER BY q.seq LIMIT 1",
-            params![id, QueueKind::Restore],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
+        )?
+        .query_row(params![id, QueueKind::Restore], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
         .optional()?;
     Ok(found.map(|(reason, wakes_when)| Asleep {
         reason: reason.unwrap_or_else(|| UNKNOWN_STOP.to_owned()),

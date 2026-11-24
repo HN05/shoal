@@ -231,16 +231,15 @@ fn ensure_base(
 /// Fill in the workspace's base and the workspaces stacked on it.
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.base_workspace = db
-        .query_row(
+        .prepare_cached(
             "SELECT base.id,space.name,base.branch FROM workspaces stacked
              JOIN workspaces base ON base.id=stacked.base_workspace_id
              JOIN spaces space ON space.id=base.id WHERE stacked.id=?1",
-            [&workspace.id],
-            row,
-        )
+        )?
+        .query_row([&workspace.id], row)
         .optional()?;
     workspace.stacked_workspaces = db
-        .prepare(
+        .prepare_cached(
             "SELECT id,name,branch FROM spaces JOIN workspaces USING(id)
              WHERE base_workspace_id=?1 ORDER BY name",
         )?

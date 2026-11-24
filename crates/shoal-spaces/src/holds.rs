@@ -352,7 +352,7 @@ const COLUMNS: &str = "SELECT space_id,name,reason,created_at,placed_by FROM spa
 /// The holds on the space `id`, by name.
 pub fn list(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceHold>> {
     Ok(db
-        .prepare(&format!("{COLUMNS} WHERE space_id=?1 ORDER BY name"))?
+        .prepare_cached(&format!("{COLUMNS} WHERE space_id=?1 ORDER BY name"))?
         .query_map([id], row)?
         .collect::<rusqlite::Result<_>>()?)
 }

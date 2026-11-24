@@ -192,7 +192,7 @@ pub fn workspaces_within(
     root: Option<&SpaceId>,
 ) -> Result<Vec<Workspace>> {
     let mut workspaces = db
-        .prepare(&super::tree::subtree_query(store::WORKSPACE_COLUMNS))?
+        .prepare_cached(&super::tree::subtree_query(store::WORKSPACE_COLUMNS))?
         .query_map([root], store::workspace)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for workspace in &mut workspaces {
@@ -211,7 +211,10 @@ fn recorded_workspace(
         "SELECT {} FROM spaces JOIN workspaces USING(id) WHERE id=?1",
         store::WORKSPACE_COLUMNS
     );
-    let workspace = db.query_row(&query, [id], store::workspace).optional()?;
+    let workspace = db
+        .prepare_cached(&query)?
+        .query_row([id], store::workspace)
+        .optional()?;
     let Some(mut workspace) = workspace else {
         return Ok(None);
     };

@@ -113,11 +113,8 @@ pub fn agent_runs(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Resu
 /// The ID of the space directly above the space `id`.
 pub fn parent_id(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
     Ok(db
-        .query_row(
-            "SELECT parent_id FROM space_parents WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
+        .prepare_cached("SELECT parent_id FROM space_parents WHERE space_id=?1")?
+        .query_row([id], |row| row.get(0))
         .optional()?)
 }
 
@@ -232,7 +229,7 @@ pub fn subtree(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
 /// The spaces directly below the space `id`, by name.
 pub fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
     Ok(db
-        .prepare(
+        .prepare_cached(
             "SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM space_parents
                 JOIN spaces ON spaces.id=space_parents.space_id
                 LEFT JOIN workspaces ON workspaces.id=spaces.id
@@ -245,14 +242,13 @@ pub fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
 /// The space directly above the space `id`.
 pub fn parent(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
     Ok(db
-        .query_row(
+        .prepare_cached(
             "SELECT spaces.id,spaces.name,spaces.kind,workspaces.branch FROM space_parents
                 JOIN spaces ON spaces.id=space_parents.parent_id
                 LEFT JOIN workspaces ON workspaces.id=spaces.id
                 WHERE space_parents.space_id=?1",
-            [id],
-            space_ref,
-        )
+        )?
+        .query_row([id], space_ref)
         .optional()?)
 }
 

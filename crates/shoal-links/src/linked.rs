@@ -43,7 +43,7 @@ pub fn assigned_issues(
     db: &Connection,
     space_id: &SpaceId,
 ) -> rusqlite::Result<Vec<AssignedIssue>> {
-    db.prepare("SELECT url,title,error FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
+    db.prepare_cached("SELECT url,title,error FROM space_issue WHERE space_id=?1 ORDER BY rowid")?
         .query_map([space_id], |row| {
             Ok(AssignedIssue {
                 url: row.get(0)?,
@@ -60,7 +60,7 @@ pub fn recorded_items(
     workspace_id: &SpaceId,
     relation: Relation,
 ) -> rusqlite::Result<Vec<LinkedItem>> {
-    db.prepare(
+    db.prepare_cached(
         "SELECT kind,url,title FROM space_items WHERE space_id=?1 AND relation=?2
          ORDER BY created_at,rowid",
     )?

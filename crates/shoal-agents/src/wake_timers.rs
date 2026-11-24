@@ -40,11 +40,8 @@ pub fn cancel(db: &Connection, id: &SpaceId) -> Result<()> {
 /// When the timer of the space `id` fires, if it has one.
 pub fn due_at(db: &Connection, id: &SpaceId) -> Result<Option<UnixTime>> {
     Ok(db
-        .query_row(
-            "SELECT due_at FROM space_wake_timers WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
+        .prepare_cached("SELECT due_at FROM space_wake_timers WHERE space_id=?1")?
+        .query_row([id], |row| row.get(0))
         .optional()?)
 }
 

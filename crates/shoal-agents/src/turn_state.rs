@@ -55,13 +55,12 @@ pub fn get(db: &Connection, id: &SpaceId) -> Result<Option<AgentStatus>> {
 /// restart, so its state stays recorded and shows again once it runs.
 pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<AgentStatus>> {
     Ok(db
-        .query_row(
+        .prepare_cached(
             "SELECT s.state,s.since,s.prompt_cache_expires_at FROM space_agent_state s
              LEFT JOIN executions e ON e.id=s.execution_id
              WHERE s.space_id=?1 AND (s.execution_id IS NULL OR e.state=?2)",
-            params![id, ExecutionState::Running],
-            status,
-        )
+        )?
+        .query_row(params![id, ExecutionState::Running], status)
         .optional()?)
 }
 

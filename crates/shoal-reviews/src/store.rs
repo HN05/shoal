@@ -443,11 +443,8 @@ pub fn load(db: &Connection, records: &dyn Records, id: ReviewId) -> Result<Opti
 /// Review `id` without its threads, while its workspace exists.
 fn load_record(db: &Connection, records: &dyn Records, id: ReviewId) -> Result<Option<Review>> {
     let review = db
-        .query_row(
-            &format!("SELECT {COLUMNS} FROM reviews WHERE id=?1"),
-            [id],
-            review,
-        )
+        .prepare_cached(&format!("SELECT {COLUMNS} FROM reviews WHERE id=?1"))?
+        .query_row([id], review)
         .optional()?;
     Ok(review
         .map(|review| named(db, records, review))
@@ -553,11 +550,11 @@ pub fn latest_status(
 /// The workspace's newest review but a pending one, which is its writer's
 /// until submitted.
 fn latest_id(db: &Connection, workspace_id: &SpaceId) -> Result<Option<ReviewId>> {
-    Ok(db.query_row(
-        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND state IS NOT ?2",
-        params![workspace_id, ReviewState::Pending],
-        |row| row.get(0),
-    )?)
+    Ok(db
+        .prepare_cached("SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND state IS NOT ?2")?
+        .query_row(params![workspace_id, ReviewState::Pending], |row| {
+            row.get(0)
+        })?)
 }
 
 /// The workspace's reviews by Shoal's reviewer before `id` that returned

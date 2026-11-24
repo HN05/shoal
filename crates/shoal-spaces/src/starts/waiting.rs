@@ -289,11 +289,8 @@ pub fn preparation_waits(
     id: &SpaceId,
 ) -> Result<Option<PreparationWait>> {
     let waits: Option<String> = db
-        .query_row(
-            "SELECT waits FROM waiting_preparations WHERE workspace_id=?1",
-            [id],
-            |row| row.get(0),
-        )
+        .prepare_cached("SELECT waits FROM waiting_preparations WHERE workspace_id=?1")?
+        .query_row([id], |row| row.get(0))
         .optional()?;
     Ok(waits
         .map(|waits| serde_json::from_str(&waits))

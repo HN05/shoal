@@ -30,7 +30,7 @@ use assignees::Dropped;
 /// order the issues were assigned: the user's login it stands for, and the
 /// agent account for each issue an agent assigned it.
 pub fn assignees_of(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<IssueAssignee>> {
-    db.prepare(
+    db.prepare_cached(
         "SELECT url,?2,EXISTS(SELECT 1 FROM issue_assignments a
              WHERE a.url=s.url AND a.login=s.assignee), rowid
          FROM space_issue s WHERE space_id=?1 AND assignee IS NOT NULL

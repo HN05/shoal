@@ -29,7 +29,7 @@ mod pulls;
 
 pub fn list(db: &Connection, id: &SpaceId) -> Result<Vec<ReviewMark>> {
     Ok(db
-        .prepare(
+        .prepare_cached(
             "SELECT url,kind,created_at FROM space_review
              WHERE space_id=?1 ORDER BY created_at,url",
         )?
