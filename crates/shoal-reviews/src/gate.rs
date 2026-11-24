@@ -22,7 +22,6 @@ mod leftovers;
 mod outcome;
 pub mod prompt;
 mod run;
-mod scope;
 pub mod store;
 pub mod subject;
 pub mod verdict;

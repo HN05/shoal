@@ -17,7 +17,6 @@ use tokio::sync::watch;
 use super::{
     context::{self, Case},
     prompt,
-    scope::RunScope,
     store::{self, Session},
     verdict::{self, Invalid, Verdict},
 };
@@ -27,8 +26,10 @@ use crate::{
     daemon::{Admission, GateDaemon},
     log, oneshot,
     reviews::{FailureReason, output},
+    scope::RunScope,
     shoal_dirs::{Contents, ShoalDir},
 };
+use shoal_daemon_base::callers::Access;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::approvals::ApprovalRequest;
 
@@ -341,7 +342,7 @@ impl Reviews {
         files: &Path,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<Ran> {
-        let scope = RunScope::of(&self.operations, &case.space);
+        let scope = RunScope::of(&self.operations, &case.space, Access::ReadOnly);
         let environment = scope.environment(&self.paths);
         let home = &self.paths.home;
         let command = gate_command(case, agent, session, prompt, files, &environment, home)?;

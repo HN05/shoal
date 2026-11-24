@@ -41,6 +41,7 @@ pub mod required;
 pub mod reviewer;
 mod run;
 mod run_writes;
+mod scope;
 #[cfg(test)]
 mod stand_in;
 pub mod store;

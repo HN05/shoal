@@ -1,29 +1,28 @@
-//! The scope a gate run holds: read-only, of the requesting space, so the
-//! run's `shoal` commands read that space and the spaces below it and
-//! change nothing. It ends with the run.
-use shoal_daemon_base::callers::Access;
+//! The scope a one-shot run holds, of the space it serves, so the run's
+//! `shoal` commands read that space and the spaces below it and change only
+//! what its access allows: nothing for the gate's runs and the reviewer's
+//! answers, its own review for a review's. It ends with the run.
 use std::{collections::BTreeMap, ffi::OsString};
 
-use shoal_daemon_base::callers::Caller;
+use shoal_daemon_base::callers::{Access, Caller};
+use shoal_daemon_base::operations::Operations;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::paths::Paths;
 use shoal_protocol::scope_tokens::ScopeToken;
 
-use shoal_daemon_base::operations::Operations;
-
 use crate::env;
 
-/// A read-only scope that ends when dropped.
-pub(super) struct RunScope<'a> {
+/// A run's scope, which ends when dropped.
+pub(crate) struct RunScope<'a> {
     operations: &'a Operations,
     token: ScopeToken,
 }
 
 impl<'a> RunScope<'a> {
-    /// A read-only scope of `space` for one gate run.
-    pub(super) fn of(operations: &'a Operations, space: &SpaceId) -> Self {
+    /// A scope of `space` with `access` for one run.
+    pub(crate) fn of(operations: &'a Operations, space: &SpaceId, access: Access) -> Self {
         let caller = Caller {
-            access: Access::ReadOnly,
+            access,
             ..Caller::of_space(space.clone())
         };
         let token = operations.issue(&caller);
@@ -32,7 +31,7 @@ impl<'a> RunScope<'a> {
 
     /// The variables that give the run's `shoal` commands this scope with
     /// this daemon.
-    pub(super) fn environment(&self, paths: &Paths) -> BTreeMap<String, OsString> {
+    pub(crate) fn environment(&self, paths: &Paths) -> BTreeMap<String, OsString> {
         BTreeMap::from([
             (env::SCOPE_TOKEN.into(), self.token.expose().into()),
             (env::STATE_DIR.into(), paths.state.clone().into()),
