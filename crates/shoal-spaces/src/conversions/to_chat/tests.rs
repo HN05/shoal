@@ -154,6 +154,8 @@ async fn the_worktree_goes_with_a_checkpoint_and_the_space_stays_a_chat() {
         .unwrap();
 
     assert!(!workspace.path.exists());
+    // The agent carries on where it ran, in a place the chat keeps.
+    assert!(manager.closed_places.lock().unwrap().is_empty());
     let checkout = repo.path.clone();
     git(
         &checkout,

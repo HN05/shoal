@@ -392,14 +392,13 @@ impl Spaces {
             .await
         {
             Ok((children, worktree)) => {
-                self.forget_removed_space(daemon, &space).await;
-                // The chat a conversion makes keeps the space's temporary
-                // directory and attached files.
+                // The chat a conversion makes keeps the space's places, where
+                // its agent carries on, its temporary directory and its
+                // attached files.
                 if !removal.converts() {
-                    self.delete_removed_tmp_dir(daemon, &space).await;
-                    self.delete_unrecorded_files(daemon, &space.clone().into())
-                        .await;
+                    self.discard_removed_space(daemon, &space).await;
                 }
+                self.forget_removed_space(daemon, &space).await;
                 let worktree = match worktree {
                     Some((stage, removed)) => {
                         Some(self.complete_worktree_removal(daemon, stage, removed).await)

@@ -1644,8 +1644,9 @@ A space changes kind with `shoal convert`, since only its agent learns what the
 work is, and a merged workspace's conversation can still be worth keeping. The
 space stays the same: one transaction changes the kind its `spaces` row
 records, with its ID, number and name, and swaps the row of its kind's table,
-so what belongs to the space by ID, its links, tree, threads, files and
-progress, stays. A chat
+so what belongs to the space by ID, its links, tree, threads, files,
+progress and the places Shoal opened for it, stays: the agent carries on in
+the place it ran in, where the user may be watching it. A chat
 becomes a workspace through the creation path every workspace on a branch
 takes, with the chat's record turned into the workspace's at insertion and
 given back if the worktree cannot be made; the worktree directory comes from

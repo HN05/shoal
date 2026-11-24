@@ -191,6 +191,8 @@ pub(crate) struct StandIn {
     pub(crate) gates: Arc<Gates>,
     /// Held while an agent is admitted, which the stand-in never does.
     admissions: tokio::sync::Mutex<()>,
+    /// The spaces whose places a removal closed, in order.
+    pub(crate) closed_places: std::sync::Mutex<Vec<SpaceId>>,
 }
 
 impl StandIn {
@@ -230,6 +232,7 @@ impl StandIn {
             config,
             gates,
             admissions: Default::default(),
+            closed_places: Default::default(),
         }
     }
 
@@ -931,7 +934,8 @@ impl Agents for StandIn {
         Box::pin(async { Ok(Default::default()) })
     }
 
-    fn close_space_places<'a>(&'a self, _: &'a SpaceId, _: &'a SpaceName) -> BoxFuture<'a, ()> {
+    fn close_space_places<'a>(&'a self, id: &'a SpaceId, _: &'a SpaceName) -> BoxFuture<'a, ()> {
+        self.closed_places.lock().unwrap().push(id.clone());
         Box::pin(async {})
     }
 

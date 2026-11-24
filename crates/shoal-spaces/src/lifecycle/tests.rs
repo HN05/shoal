@@ -720,7 +720,7 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
 }
 
 #[tokio::test]
-async fn removal_retains_session_logs_until_ownership_is_released() {
+async fn removal_retains_session_logs_and_places_until_ownership_is_released() {
     let (manager, workspace) = fixture().await;
     let state = manager.paths.space_state(&workspace.id);
     fs::create_dir_all(&state).unwrap();
@@ -742,6 +742,7 @@ async fn removal_retains_session_logs_until_ownership_is_released() {
     );
     assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_ok());
     assert_eq!(fs::read_to_string(&log).unwrap(), "session output");
+    assert!(manager.closed_places.lock().unwrap().is_empty());
 
     manager
         .spaces
@@ -755,6 +756,7 @@ async fn removal_retains_session_logs_until_ownership_is_released() {
         .unwrap();
     assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
     assert!(!state.exists());
+    assert_eq!(*manager.closed_places.lock().unwrap(), [workspace.id]);
 }
 
 #[tokio::test]

@@ -2925,7 +2925,8 @@ shoal convert chat --space 7 --mode plan # The user's terminal converts any spac
 turns a chat into a workspace, and `shoal convert chat [--mode MODE] [--space S]`
 turns a workspace into a chat. The space stays the same: it keeps its ID,
 number, name, parent, children, links and watched PRs, threads, attached
-files, progress and `TMPDIR`, and the [journal](#space-events) records a
+files, progress, `TMPDIR` and the places Shoal opened for it, such as the
+tab or session its agent runs in, and the [journal](#space-events) records a
 `converted` event instead of a new space. Unread alerts go to the agent in
 the new place. Converting a space into the kind it already is, is refused.
 

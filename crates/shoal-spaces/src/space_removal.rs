@@ -332,10 +332,9 @@ impl Spaces {
     }
 
     /// Forget what `space` kept outside its record once that is deleted or,
-    /// for a workspace, converted: the places it opened, its agents'
-    /// recovery records and session logs, and a workspace's state.
+    /// for a workspace, converted: its agents' recovery records and session
+    /// logs, and a workspace's state.
     pub async fn forget_removed_space(&self, daemon: &dyn Daemon, space: &Space) {
-        daemon.close_space_places(&space.id, &space.name).await;
         daemon.forget_reports(&space.id);
         if space.worktree().is_some() {
             self.forget_workspace(daemon, &space.id).await;
@@ -343,9 +342,18 @@ impl Spaces {
         self.delete_session_logs(&space.id);
     }
 
+    /// Discard what `space` kept outside its record once that is deleted,
+    /// which a chat it converts into keeps: the places it opened, its
+    /// temporary directory and its attached files.
+    pub async fn discard_removed_space(&self, daemon: &dyn Daemon, space: &Space) {
+        daemon.close_space_places(&space.id, &space.name).await;
+        self.delete_removed_tmp_dir(daemon, space).await;
+        (self.delete_unrecorded_files(daemon, &space.clone().into())).await;
+    }
+
     /// Delete the temporary directory of the removed `space`. A failure is
     /// logged, since the removal already happened.
-    pub async fn delete_removed_tmp_dir(&self, daemon: &dyn Daemon, space: &Space) {
+    async fn delete_removed_tmp_dir(&self, daemon: &dyn Daemon, space: &Space) {
         if let Err(error) = self.delete_tmp_dir(daemon, space).await {
             crate::log!(
                 "temporary directory of {} not deleted: {error:#}",
