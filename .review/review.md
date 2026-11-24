@@ -280,9 +280,8 @@ instead of the PR delivery guidance below.
   the tracked wrapper's fixed prompt into an idle Codex's terminal session, or an
   idle Claude Code's after an interrupted turn or once it has idled with no
   wait for its updates for three minutes, once per idle stretch, the
-  agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
-  fixed prompt with which `shoal resume` continues that turn, each reported to
-  the daemon before it types; the daemon never writes to a terminal. Space events are an unscoped, durable lifecycle
+  agent's interrupt key the CLI types for `shoal stop --interrupt`, each
+  reported to the daemon before it types; the daemon never writes to a terminal. Space events are an unscoped, durable lifecycle
   stream with replay gaps, independent of alert read state, recorded
   for chats through the same path and in the same shape as workspaces, keyed
   by space ID, and kept per space: while it
