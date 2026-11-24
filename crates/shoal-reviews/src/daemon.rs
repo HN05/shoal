@@ -116,9 +116,14 @@ pub trait Threads: Send + Sync {
     /// the code they point at.
     fn review_threads_changed<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()>;
 
-    /// Post `text` from Shoal, for the reviewer, in the finding's thread
-    /// `thread`, telling its holder, unless it was resolved meanwhile.
-    fn answer_finding(&self, thread: i64, text: String) -> BoxFuture<'_, Result<()>>;
+    /// Post `text` in the thread `thread` as `caller`, as its `shoal send`
+    /// does.
+    fn post_in_thread<'a>(
+        &'a self,
+        caller: &'a Caller,
+        thread: ItemNumber,
+        text: String,
+    ) -> BoxFuture<'a, Result<()>>;
 }
 
 /// The agent queue that admits a review's run, and the agents that hear

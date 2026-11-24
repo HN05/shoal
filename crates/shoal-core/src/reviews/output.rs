@@ -1,26 +1,12 @@
 //! What a reviewer's run returns, as the review bot reads it: the failure
-//! its result or diagnostics name, the answer it gives in a finding's
-//! thread, as the answer's schema describes it, the structured result the
-//! gate returns, and the session the run reports.
-use serde::{Deserialize, Serialize};
+//! its result or diagnostics name, the structured result the gate returns,
+//! and the session the run reports.
 use serde_json::Value;
 use shoal_protocol::reviews::FailureReason;
 
 use super::failure::{
     SCAN_LIMIT, classify_diagnostic, classify_envelope, classify_text, tail, truthy,
 };
-
-/// The JSON schema of [`Answer`], which a reviewer answering a post in a
-/// finding's thread is given.
-pub const ANSWER_SCHEMA: &str = include_str!("answer_schema.json");
-
-/// A reviewer's reply to the latest post in a finding's thread, as
-/// [`ANSWER_SCHEMA`] describes it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Answer {
-    pub answer: String,
-}
 
 /// How an AI tool's integration hands back a run's result, which
 /// [`outcome`] and [`result`] unwrap.
@@ -100,13 +86,6 @@ pub struct Run<'a> {
 /// failure its result names otherwise.
 pub fn outcome(format: &ResultFormat, run: &Run) -> Result<(), FailureReason> {
     checked(format, run).map(drop)
-}
-
-/// The answer `run` returned in `format`, or why it returned none, as
-/// [`result`] tells.
-pub fn read_answer(format: &ResultFormat, run: &Run) -> Result<Answer, FailureReason> {
-    let answer = serde_json::from_value::<Answer>(result(format, run)?).ok();
-    (answer.filter(|answer| !answer.answer.trim().is_empty())).ok_or(FailureReason::InvalidOutput)
 }
 
 /// The structured result `run` returned in `format`, unchecked against any

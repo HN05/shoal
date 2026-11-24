@@ -19,7 +19,7 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::{
     item_numbers::ItemNumber,
     reviews::ReviewId,
-    threads::{Thread, ThreadSpace},
+    threads::{NewPost, Thread, ThreadNumber, ThreadSpace},
 };
 use shoal_refs::CommitId;
 use shoal_reviews::daemon::{
@@ -209,8 +209,29 @@ impl Threads for Manager {
         })
     }
 
-    fn answer_finding(&self, thread: i64, text: String) -> BoxFuture<'_, Result<()>> {
-        Box::pin(self.coordination.answer_finding(self, thread, text))
+    fn post_in_thread<'a>(
+        &'a self,
+        caller: &'a Caller,
+        thread: ItemNumber,
+        text: String,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let post = NewPost {
+                text,
+                ..NewPost::default()
+            };
+            let number = ThreadNumber::Full(thread);
+            let posted = (self.coordination).post_to_thread(
+                self,
+                Some(caller),
+                number,
+                post,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            );
+            posted.await.map(drop)
+        })
     }
 }
 

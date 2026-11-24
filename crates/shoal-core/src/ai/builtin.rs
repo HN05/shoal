@@ -29,14 +29,14 @@ pub struct Provider {
     /// The variable that sets the reasoning effort over the effort
     /// arguments, which a launch with an effort sets to the same value.
     pub(super) effort_variable: Option<&'static str>,
-    /// The arguments of a review's one-shot run: read-only, but able to
-    /// reach the daemon for Shoal's commands, which write the review.
+    /// The arguments of a review's one-shot run, or an answer's: read-only,
+    /// but able to reach the daemon for Shoal's commands, which write the
+    /// review or the answer.
     pub(super) review: Option<&'static [&'static str]>,
     /// The arguments of a review that resumes `{session}`.
     pub(super) review_resume: Option<&'static [&'static str]>,
-    /// The arguments of a one-shot run as `review`'s that returns the
-    /// result its output schema describes: the gate's, and the reviewer's
-    /// answers.
+    /// The arguments of the gate's one-shot run, as `review`'s, that returns
+    /// the result its output schema describes.
     pub(super) gate: Option<&'static [&'static str]>,
     /// The arguments of a gate run that resumes `{session}`.
     pub(super) gate_resume: Option<&'static [&'static str]>,

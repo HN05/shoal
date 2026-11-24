@@ -575,52 +575,109 @@ async fn a_finding_is_a_thread_its_workspace_resolves_keeping_its_false_positive
     assert!(!kept.contains("The type names it."), "{kept}");
 }
 
+/// A reviewer that, asked to answer, exits at once while `silent` exists,
+/// and otherwise writes its scope token to `token` and waits until the
+/// test answered for it; asked to review, it waits for the test's review.
+const ANSWERS: &str = r#"dir="$(dirname '{review}')"
+case "$1" in *'post your reply once'*)
+[ -e "$dir/silent" ] && exit 0
+printf '%s' "$SHOAL_SCOPE_TOKEN" > "$dir/token.tmp" && mv "$dir/token.tmp" "$dir/token"
+i=0; while [ ! -e "$dir/answered" ] && [ $i -lt 6000 ] && kill -0 {tests} 2>/dev/null; do sleep 0.1; i=$((i+1)); done;;
+*) {write};; esac"#;
+
 #[tokio::test]
-async fn the_reviewer_answers_its_workspace_s_post_in_a_finding_s_thread() {
-    use shoal_protocol::threads::{NewPost, Sender, ThreadNumber};
-    let script = "case \"$1\" in *'reply in `answer`'*)\n\
-        echo '{\"answer\":\"It is reachable from parse.\"}';;\n\
-        *) {write};; esac";
-    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
+async fn the_reviewer_answers_its_workspace_s_post_in_a_finding_s_thread_with_shoal_send() {
+    use crate::protocol::{Operation, ThreadMethod};
+    use shoal_protocol::scope_tokens::ScopeToken;
+    use shoal_protocol::threads::{NewPost, Sender, Side, ThreadNumber};
+    let fixture = fixture(&[("fake", ANSWERS)], "agent = 'fake'").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspace);
     let review = fixture.review().await;
-    let number = ThreadNumber::Full(review.threads[0].number);
-    let agent = crate::daemon::scope::Caller {
-        space_id: workspace.id.clone(),
-        execution: None,
-        granted: None,
-        access: Access::Full,
-        vouched: None,
-    };
-    let post = NewPost {
-        text: "Is this reachable?".into(),
+    let (id, number) = (
+        review.threads[0].id,
+        ThreadNumber::Full(review.threads[0].number),
+    );
+    let post = |text: &str| NewPost {
+        text: text.into(),
         ..NewPost::default()
     };
-    let mut changed = manager.store.watch_changes();
-    (manager.coordination.post_to_thread(
-        &**manager,
-        Some(&agent),
-        number,
-        post,
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    ))
-    .await
-    .unwrap();
-    let answer = loop {
-        let thread = manager
-            .coordination
-            .thread(&**manager, None, number)
-            .await
-            .unwrap();
-        if let [_, _, answer] = thread.posts.as_slice() {
-            break answer.clone();
-        }
-        changed.changed().await.unwrap();
+    let holder = crate::daemon::scope::Caller::of_space(workspace.id.clone());
+    let send_as_holder = |text| {
+        manager.coordination.post_to_thread(
+            &**manager,
+            Some(&holder),
+            number,
+            post(text),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
     };
-    assert_eq!(answer.sender, Sender::Shoal);
-    assert_eq!(answer.post.text, "It is reachable from parse.");
+    let posts = |count| async move {
+        let mut changed = manager.store.watch_changes();
+        loop {
+            let thread = manager.coordination.thread(&**manager, None, number);
+            let thread = thread.await.unwrap();
+            if thread.posts.len() >= count {
+                return thread.posts;
+            }
+            changed.changed().await.unwrap();
+        }
+    };
+
+    // A run that exits without posting leaves Shoal to say so.
+    let dir = fixture.root.path();
+    std::fs::write(dir.join("silent"), "").unwrap();
+    send_as_holder("Is this reachable?").await.unwrap();
+    let why = posts(3).await.pop().unwrap();
+    assert_eq!((why.side, why.sender), (Some(Side::Opener), Sender::Shoal));
+    assert!(
+        why.post.text.contains("without answering"),
+        "{}",
+        why.post.text
+    );
+
+    // Another posts its answer under its own scope, which ends with it.
+    std::fs::remove_file(dir.join("silent")).unwrap();
+    send_as_holder("Even from parse?").await.unwrap();
+    let token = loop {
+        match std::fs::read_to_string(dir.join("token")) {
+            Ok(token) => break ScopeToken::from(token),
+            Err(_) => tokio::time::sleep(std::time::Duration::from_millis(20)).await,
+        }
+    };
+    let mut answer: Operation = ThreadMethod::Post {
+        thread: number,
+        post: post("It is reachable from parse."),
+        attachments: Vec::new(),
+        code: Vec::new(),
+        changes: Vec::new(),
+        from: None,
+    }
+    .into();
+    let caller = crate::daemon::scope::authorize(manager, Some(&token), &mut answer);
+    let caller = caller.await.unwrap().unwrap();
+    assert_eq!(caller.access, Access::Answer(id));
+    let mut ended = manager.reviews.ends();
+    let server = crate::daemon::tests::server(manager.clone());
+    (crate::daemon::requests::handle(&server, answer, Some(&caller), None))
+        .await
+        .unwrap();
+    std::fs::write(dir.join("answered"), "").unwrap();
+    ended.changed().await.unwrap();
+    assert!(manager.operations.caller(&token).is_none());
+    let posts = posts(5).await;
+    assert_eq!(posts.len(), 5);
+    let texts: Vec<_> = (posts.iter())
+        .map(|post| (post.sender, post.post.text.as_str()))
+        .collect();
+    assert_eq!(
+        texts[3..],
+        [
+            (Sender::Space, "Even from parse?"),
+            (Sender::Shoal, "It is reachable from parse.")
+        ]
+    );
 }
 
 #[tokio::test]

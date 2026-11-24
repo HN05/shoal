@@ -2,10 +2,12 @@
 //! runs its reviewer in a detached checkout at the place of the workspace's
 //! or PR's reviews, under a scope that writes only that review, falls back
 //! to a second reviewer once, dropping what a failed run wrote, and fails
-//! the review when no run submitted it.
+//! the review when no run submitted it. An answer in a finding's thread
+//! runs its reviewer the same way, under a scope that posts only there.
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use anyhow::{Context, Result, anyhow};
+use shoal_daemon_base::callers::Access;
 use shoal_forge::activity::view::ViewRequests;
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_ids::repository_ids::RepositoryId;
@@ -22,7 +24,7 @@ use crate::{
     false_positives, findings, git, history, log,
     model::{Repository, Workspace},
     oneshot,
-    reviewer::{self, Ended, Exited, Files, Reviewer},
+    reviewer::{self, Ended, Files, Reviewer},
     reviews::{FailureReason, Review, ReviewId, ReviewState, ReviewTarget},
     scope::RunScope,
     shoal_dirs::{Contents, ShoalDir},
@@ -96,9 +98,45 @@ enum Pass {
     Slept,
 }
 
-/// A run in the place of a review's subject: the review, its workspace and
-/// settings, the commits it reads, and the run it holds there.
+/// What a reviewer's run is asked for: writing its review, or answering the
+/// holder's post that a finding's thread waits on.
+#[derive(Clone, Copy)]
+pub(crate) enum Task {
+    Review,
+    Answer(AwaitedPost),
+}
+
+impl Task {
+    /// What the scope of a run for review `review` lets it change.
+    fn access(self, review: ReviewId) -> Access {
+        match self {
+            Self::Review => Access::Review(review),
+            Self::Answer(awaited) => Access::Answer(awaited.thread),
+        }
+    }
+
+    /// What a session the run resumes is told first.
+    fn resumed(self) -> &'static str {
+        match self {
+            Self::Review => {
+                "Earlier in this session you reviewed an earlier commit of this work. Review the \
+                 commit now checked out as the instructions below say; what you learned before \
+                 is context, and the history after them says how each earlier finding was \
+                 resolved."
+            }
+            Self::Answer(_) => {
+                "Earlier in this session you reviewed this work. Answer as the instructions \
+                 below say; what you learned before is context."
+            }
+        }
+    }
+}
+
+/// A run in the place of a review's subject: what it is asked for, the
+/// review, its workspace and settings, the commits it reads, and the run
+/// it holds there.
 pub(crate) struct InPlace<'a> {
+    pub(crate) task: Task,
     pub(crate) review: &'a Review,
     pub(crate) workspace: &'a Workspace,
     pub(crate) settings: &'a Effective,
@@ -115,6 +153,7 @@ struct Attempt<'a> {
 
 /// What every reviewer of a run gets.
 struct Run<'a> {
+    task: Task,
     daemon: &'a dyn Daemon,
     runs: &'a oneshot::Runs,
     /// The reviewed workspace, whose scope the reviewer holds.
@@ -216,6 +255,7 @@ impl Reviews {
             return Ok(Pass::Ended);
         }
         let in_place = InPlace {
+            task: Task::Review,
             review: &review,
             workspace: &workspace,
             settings: &settings,
@@ -322,7 +362,7 @@ impl Reviews {
         daemon: &dyn Daemon,
         place: &InPlace<'_>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Result<(Agent, Ended<Exited>)> {
+    ) -> Result<(Agent, Ended)> {
         let instructions = self.review_instructions(daemon, place).await?;
         let session = self.review_session(place.review, place.settings).await;
         let agent = (place.review.agent()).context("only Shoal's reviews run a reviewer")?;
@@ -334,7 +374,7 @@ impl Reviews {
     /// resuming `session` when the run is at the subject's place, where its
     /// session is found; returns the agent that produced the result and how
     /// it ended.
-    pub(crate) async fn run_reviewer<O: reviewer::Output>(
+    pub(crate) async fn run_reviewer(
         &self,
         daemon: &dyn Daemon,
         place: &InPlace<'_>,
@@ -342,8 +382,9 @@ impl Reviews {
         instructions: String,
         session: Option<AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Result<(Agent, Ended<O>)> {
+    ) -> Result<(Agent, Ended)> {
         let InPlace {
+            task,
             review,
             workspace,
             settings,
@@ -351,16 +392,9 @@ impl Reviews {
             held,
         } = place;
         let files = &held.files;
-        prepare_checkout(
-            daemon,
-            review.id,
-            workspace,
-            &commits.head,
-            files,
-            O::SCHEMA,
-        )
-        .await?;
+        prepare_checkout(daemon, review.id, workspace, &commits.head, files).await?;
         let run = Run {
+            task: *task,
             runs: &self.runs,
             daemon,
             workspace,
@@ -388,12 +422,12 @@ impl Reviews {
     /// once the fallback agent's after any failure but a timeout, each
     /// after what the failed one wrote is dropped; returns the agent that
     /// produced the result and how it ended.
-    async fn review_with_fallback<O: reviewer::Output>(
+    async fn review_with_fallback(
         &self,
         attempt: &Attempt<'_>,
         session: Option<AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> (Agent, Ended<O>) {
+    ) -> (Agent, Ended) {
         let Attempt { run, review, agent } = attempt;
         let settings = run.settings;
         let model = settings.model(agent, review.model().cloned().unwrap_or_default());
@@ -446,7 +480,7 @@ impl Reviews {
     /// The attempt of review `id`'s own `agent` at `run`, resuming `session`
     /// when there is one, and in a new session when there is none or
     /// resuming it failed for a reason other than running too long.
-    async fn review_by_agent<O: reviewer::Output>(
+    async fn review_by_agent(
         &self,
         run: &Run<'_>,
         id: ReviewId,
@@ -454,18 +488,15 @@ impl Reviews {
         model: &ModelChoice,
         session: Option<AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Ended<O> {
+    ) -> Ended {
         if let Some(session) = session {
             match self
                 .attempt(run, id, agent, model, Some(&session), cancelled)
                 .await
             {
-                Ended::Returned {
-                    output,
-                    session: reported,
-                } => {
+                Ended::Returned { session: reported } => {
                     let session = reported.or(Some(session));
-                    return Ended::Returned { output, session };
+                    return Ended::Returned { session };
                 }
                 Ended::Failed(reason) if reason != FailureReason::TimedOut => log!(
                     "review {id}: resuming {agent}'s session failed ({reason}); it starts a new one"
@@ -480,7 +511,7 @@ impl Reviews {
     /// `model`, resuming `session` when given, under a scope of its own
     /// that ends with it. What a review's run that did not produce the
     /// review wrote is dropped.
-    async fn attempt<O: reviewer::Output>(
+    async fn attempt(
         &self,
         run: &Run<'_>,
         id: ReviewId,
@@ -488,10 +519,10 @@ impl Reviews {
         model: &ModelChoice,
         session: Option<&AgentSessionId>,
         cancelled: &mut watch::Receiver<bool>,
-    ) -> Ended<O> {
+    ) -> Ended {
         self.record_attempt(id, agent).await;
-        let scope = RunScope::of(&self.operations, &run.workspace.id, O::access(id));
-        let reviewer = reviewer_for::<O>(run, agent, model, session, &self.paths, &scope);
+        let scope = RunScope::of(&self.operations, &run.workspace.id, run.task.access(id));
+        let reviewer = reviewer_for(run, agent, model, session, &self.paths, &scope);
         let ended = match reviewer {
             Ok(reviewer) => reviewer::run(&reviewer, cancelled).await,
             Err(error) => {
@@ -500,7 +531,7 @@ impl Reviews {
             }
         };
         drop(scope);
-        let ended = O::settled(ended, self.finished(id).await);
+        let ended = reviewer::settled(ended, self.produced(run.task, id).await);
         if !matches!(ended, Ended::Returned { .. }) {
             self.drop_run_writes(run, id).await;
         }
@@ -514,6 +545,15 @@ impl Reviews {
         let recorded = (self.store).run(move |db| store::attempt(db, id, &agent));
         if let Err(error) = recorded.await {
             log!("review {id}: {error:#}");
+        }
+    }
+
+    /// Whether the run for `task` of review `id` produced what it was asked
+    /// for: the review it submitted, or the answer it posted.
+    async fn produced(&self, task: Task, id: ReviewId) -> bool {
+        match task {
+            Task::Review => self.finished(id).await,
+            Task::Answer(awaited) => self.posted_answer(awaited).await,
         }
     }
 
@@ -546,7 +586,7 @@ impl Reviews {
         daemon: &dyn Daemon,
         id: ReviewId,
         reviewer: &Agent,
-        ended: Ended<Exited>,
+        ended: Ended,
     ) -> Result<Pass> {
         // A managed update waits for the review's delivery, which a restart
         // would not redo once the failure is recorded.
@@ -602,6 +642,7 @@ impl Reviews {
             settings,
             commits,
             held,
+            ..
         } = place;
         let checkout = held.files.checkout();
         let instructions = templates::review_instructions(
@@ -764,24 +805,20 @@ pub(crate) fn resumes(settings: &Effective, agent: &Agent) -> bool {
         .is_some_and(|tool| tool.launch.arguments.review_resume.is_some())
 }
 
-/// Review `id`'s run directory with its ID, the output schema `schema` of
-/// a run that returns one and a detached checkout of `head`.
+/// Review `id`'s run directory with its ID and a detached checkout of
+/// `head`.
 async fn prepare_checkout(
     daemon: &dyn Daemon,
     id: ReviewId,
     workspace: &Workspace,
     head: &CommitId,
     files: &Files,
-    schema: Option<&str>,
 ) -> Result<()> {
     let repository = daemon.repository(workspace.repository()).await?;
     review_runs(&repository).create()?;
     std::fs::create_dir_all(&files.directory)
         .with_context(|| format!("create {}", files.directory.display()))?;
     reviewer::write_id(files, id)?;
-    if let Some(schema) = schema {
-        reviewer::write_schema(files, schema)?;
-    }
     git::detached::add(&repository.path, &files.checkout(), head.as_str()).await
 }
 
@@ -918,11 +955,11 @@ pub(crate) async fn release_run(
     }
 }
 
-/// The reviewer `agent` with `model`, asked for an `O` under `scope`: its
-/// template's arguments for this run, or its resume template's when it
+/// The reviewer `agent` with `model`, asked for `run`'s task under `scope`:
+/// its review template's arguments, or its resume template's when it
 /// resumes `session`, after its launcher and the arguments selecting the
 /// model.
-fn reviewer_for<'a, O: reviewer::Output>(
+fn reviewer_for<'a>(
     run: &Run<'a>,
     agent: &Agent,
     model: &ModelChoice,
@@ -931,6 +968,7 @@ fn reviewer_for<'a, O: reviewer::Output>(
     scope: &RunScope<'_>,
 ) -> Result<Reviewer<'a>> {
     let Run {
+        task,
         runs,
         settings,
         configured,
@@ -945,18 +983,24 @@ fn reviewer_for<'a, O: reviewer::Output>(
         .get(agent.name())
         .with_context(|| format!("no AI tool runs {agent}"))?;
     let arguments = &tool.launch.arguments;
-    let prompt = reviewer_prompt::<O>(instructions, session);
-    let (schema, output) = (files.schema(), files.output());
+    let prompt = reviewer_prompt(*task, instructions, session);
+    let output = files.output();
     let fields = crate::ai::ReviewFields {
         prompt: &prompt,
-        schema: (O::SCHEMA).map(|json| crate::ai::Schema {
-            file: &schema,
-            json,
-        }),
+        schema: None,
         output: &output,
     };
-    let (args, writes_output) = O::arguments(arguments, &fields, session)
-        .with_context(|| format!("{agent} has no template for this run"))?;
+    let (args, writes_output) = match session {
+        Some(session) => (
+            arguments.review_resume_args(&fields, session),
+            arguments.review_resume_writes_output(),
+        ),
+        None => (
+            arguments.review_args(&fields),
+            arguments.review_writes_output(),
+        ),
+    };
+    let args = args.with_context(|| format!("{agent} has no template for this run"))?;
     let mut environment = configured.clone();
     environment.extend(scope.environment(paths));
     let home = &paths.home;
@@ -970,14 +1014,11 @@ fn reviewer_for<'a, O: reviewer::Output>(
     })
 }
 
-/// What a reviewer is asked for an `O`: `instructions`, after what a
+/// What a reviewer is asked for `task`: `instructions`, after what a
 /// resumed session is told when it resumes `session`.
-fn reviewer_prompt<O: reviewer::Output>(
-    instructions: &str,
-    session: Option<&AgentSessionId>,
-) -> String {
+fn reviewer_prompt(task: Task, instructions: &str, session: Option<&AgentSessionId>) -> String {
     match session {
-        Some(_) => format!("{}\n\n{instructions}", O::RESUMED),
+        Some(_) => format!("{}\n\n{instructions}", task.resumed()),
         None => instructions.to_owned(),
     }
 }

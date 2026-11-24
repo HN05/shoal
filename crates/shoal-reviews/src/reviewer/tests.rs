@@ -31,7 +31,7 @@ async fn a_reviewer_running_past_the_limit_times_out() {
     let (_cancel, mut cancelled) = watch::channel(false);
     let mut slow = reviewer(&files, &["sh", "-c", &until_tests_end()]);
     slow.timeout = Duration::from_millis(300);
-    let ended = run::<Exited>(&slow, &mut cancelled).await;
+    let ended = run(&slow, &mut cancelled).await;
     assert_eq!(ended, Ended::Failed(FailureReason::TimedOut));
 }
 
@@ -44,7 +44,7 @@ async fn a_reviewer_whose_processes_cannot_be_proven_stopped_is_left_running() {
         .runs
         .fail_inventory
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    let ended = run::<Exited>(&reviewer, &mut cancelled).await;
+    let ended = run(&reviewer, &mut cancelled).await;
     assert_eq!(ended, Ended::LeftRunning);
     assert!(files.directory.exists());
 }
@@ -53,42 +53,32 @@ async fn a_reviewer_whose_processes_cannot_be_proven_stopped_is_left_running() {
 async fn the_result_comes_from_the_output_file_when_the_reviewer_writes_one() {
     let (_root, files) = files();
     let (_cancel, mut cancelled) = watch::channel(false);
-    let answer = r#"{"answer":"It is reachable from parse."}"#;
-    let script = format!("printf '%s' '{answer}' > '{}'", files.output().display());
+    let result = r#"{"session_id":"4f2c","result":"Posted."}"#;
+    let script = format!("printf '%s' '{result}' > '{}'", files.output().display());
     let mut writer = reviewer(&files, &["sh", "-c", &script]);
-    writer.writes_output = true;
-    let Ended::Returned { output, .. } = run::<Answer>(&writer, &mut cancelled).await else {
-        panic!("no answer returned");
-    };
-    assert_eq!(output.answer, "It is reachable from parse.");
+    (writer.writes_output, writer.format) = (true, &output::CLAUDE);
+    assert_eq!(
+        run(&writer, &mut cancelled).await,
+        Ended::Returned {
+            session: Some("4f2c".into())
+        }
+    );
     let missing = reviewer(&files, &["/nonexistent/reviewer"]);
     assert_eq!(
-        run::<Exited>(&missing, &mut cancelled).await,
+        run(&missing, &mut cancelled).await,
         Ended::Failed(FailureReason::ExecutionFailed)
     );
 }
 
-#[tokio::test]
-async fn an_oversized_result_is_invalid_output() {
-    let (_root, files) = files();
-    let (_cancel, mut cancelled) = watch::channel(false);
-    let script = format!("head -c {} /dev/zero", RESULT_LIMIT + 1);
-    let ended = run::<Answer>(&reviewer(&files, &["sh", "-c", &script]), &mut cancelled).await;
-    assert_eq!(ended, Ended::Failed(FailureReason::InvalidOutput));
-}
-
 #[test]
-fn a_review_run_produced_its_review_only_by_submitting_it() {
-    let exited = || Ended::Returned {
-        output: Exited,
-        session: None,
-    };
+fn a_run_produced_what_it_was_asked_for_only_by_writing_it() {
+    let exited = || Ended::Returned { session: None };
     let failed = || Ended::Failed(FailureReason::ExecutionFailed);
     assert_eq!(
-        Exited::settled(exited(), false),
+        settled(exited(), false),
         Ended::Failed(FailureReason::NotSubmitted)
     );
-    assert_eq!(Exited::settled(failed(), true), exited());
-    assert_eq!(Exited::settled(failed(), false), failed());
-    assert_eq!(Exited::settled(Ended::Cancelled, false), Ended::Cancelled);
+    assert_eq!(settled(failed(), true), exited());
+    assert_eq!(settled(failed(), false), failed());
+    assert_eq!(settled(Ended::Cancelled, false), Ended::Cancelled);
 }

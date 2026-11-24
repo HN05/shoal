@@ -3055,8 +3055,10 @@ why when the problem remains, instead of rereading free text. The gates count th
 threads a review opened or reopened, since a reopened finding is one that review
 raised again. A holder's post in a finding's thread, instead of a resolution,
 resumes the reviewer's session for that workspace or PR as a one-shot, read-only
-run in the subject's place, which answers in the thread, so the agent can argue
-a finding with the reviewer that made it. Whether a thread waits for an answer
+run in the subject's place, which answers in the thread with `send` under a
+scope that ends with its run and posts only there, for Shoal, so the agent can
+argue a finding with the reviewer that made it; a run that posts nothing fails
+as a review's run does, and Shoal posts why. Whether a thread waits for an answer
 is read from its posts, so a pending one outlives a daemon restart. A finding
 resolved `false-positive` outlives its workspace as a claim of its repository, which
 every later review receives, so a wrong claim the reviewer would raise in every change

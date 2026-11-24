@@ -49,14 +49,14 @@ pub struct Agent {
     pub model_args: Option<Vec<String>>,
     /// Arguments that select the reasoning effort `{effort}`.
     pub effort_args: Option<Vec<String>>,
-    /// Arguments of a one-shot, read-only review with `{prompt}`, and
-    /// optionally `{output}`, which lets it run Shoal's commands.
+    /// Arguments of a one-shot, read-only review, or answer in one of its
+    /// findings' threads, with `{prompt}`, and optionally `{output}`, which
+    /// lets it run Shoal's commands.
     pub review: Option<Vec<String>>,
-    /// Arguments of such a review resuming session `{session}`.
+    /// Arguments of such a run resuming session `{session}`.
     pub review_resume: Option<Vec<String>>,
-    /// Arguments of a one-shot run as `review`'s that returns its result in
-    /// the output schema `{schema}` or `{schema_json}` names: the gate's,
-    /// and the reviewer's answers in its findings' threads.
+    /// Arguments of the gate's one-shot run, as `review`'s, that returns its
+    /// result in the output schema `{schema}` or `{schema_json}` names.
     pub gate: Option<Vec<String>>,
     /// Arguments of such a gate run resuming session `{session}`.
     pub gate_resume: Option<Vec<String>>,

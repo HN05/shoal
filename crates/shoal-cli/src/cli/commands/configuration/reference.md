@@ -503,18 +503,19 @@ Each option merges on its own across layers, so a repository can replace
   through `model_args` and `effort_args`, which name `{model}` and `{effort}`;
   without them the tool uses its own defaults. The `[agent]` ones apply over
   these to the default agent, and `--model` and `--effort` over both.
-- `review` runs a [local review](../../../../../../docs/reference.md#local-reviews) once: the
+- `review` runs a [local review](../../../../../../docs/reference.md#local-reviews), or the
+  reviewer's answer in one of its findings' threads, once: the
   launcher's words before `{args}`, or all of them, then these arguments,
   which name the prompt `{prompt}`; `{output}` names a file the result goes to
   instead of standard output. The run is read-only but able to run `shoal`,
-  which writes its review: the built-in ones open Unix sockets in the tool's
+  which writes its review or answer: the built-in ones open Unix sockets in the tool's
   sandbox, the daemon's among them, and no network host. A tool without one
-  cannot review. `review_resume` runs a review again in session `{session}`,
-  which an earlier review reported, to keep one session per workspace or PR.
-- `gate` runs the [gate](../../../../../../docs/reference.md#the-gate), and the reviewer's
-  answers in its findings' threads, once, with `review`'s placeholders and the
-  output schema its result follows, as a file, `{schema}`, or its text,
-  `{schema_json}`. A tool without one cannot be the gate or answer.
+  cannot review. `review_resume` runs a review or answer again in session `{session}`,
+  which an earlier run reported, to keep one session per workspace or PR.
+- `gate` runs the [gate](../../../../../../docs/reference.md#the-gate) once, with `review`'s
+  placeholders and the output schema its result follows, as a file,
+  `{schema}`, or its text, `{schema_json}`. A tool without one cannot be the
+  gate.
   `gate_resume` runs it again in session `{session}`, which an earlier run
   reported, to keep a session per subject.
 - A tool without `review_resume` or `gate_resume` starts a new session each

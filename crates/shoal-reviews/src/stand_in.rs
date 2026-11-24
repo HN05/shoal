@@ -264,11 +264,11 @@ pub(crate) struct StandIn {
     pub(crate) messages: Mutex<Vec<String>>,
     /// What its coordinator was told.
     pub(crate) notices: Mutex<Vec<String>>,
-    /// The records the reviewer's answers are posted in.
+    /// The records Shoal's posts go into.
     records: Arc<StandInRecords>,
-    /// The answers posted, by thread record.
+    /// What Shoal posted for the reviewer's answers, by thread record.
     pub(crate) answered: watch::Sender<Vec<(i64, String)>>,
-    /// Whether posting an answer fails, as in a thread too long for it.
+    /// Whether such a post fails, as in a thread too long for it.
     pub(crate) answer_fails: AtomicBool,
     /// How many times reviews told what waits for threads that theirs
     /// changed.
@@ -492,6 +492,17 @@ impl StandInRecords {
         let mut post = Self::shoal_post(id, text, Vec::new());
         (post.side, post.sender) = (Some(Side::Holder), Sender::Space);
         thread.posts.push(post);
+    }
+
+    /// Post `text` in the thread `number` for Shoal, on its opener's side,
+    /// as an answer run does.
+    pub(crate) fn post_as_shoal(&self, number: ItemNumber, text: &str) {
+        let mut threads = self.threads.lock().unwrap();
+        let thread = (threads.iter_mut())
+            .find(|thread| thread.number == number)
+            .unwrap();
+        let id = thread.id * 100 + i64::try_from(thread.posts.len()).unwrap();
+        thread.posts.push(Self::shoal_post(id, text, Vec::new()));
     }
 
     /// Open the user's comment `name` of the pending review `review`,
@@ -766,28 +777,29 @@ impl Machines for StandIn {
     }
 }
 
-/// The reviewer's answers go into the stand-in's records.
+/// Shoal's posts go into the stand-in's records.
 impl Threads for StandIn {
     fn review_threads_changed<'a>(&'a self, _workspace: &'a Workspace) -> BoxFuture<'a, ()> {
         self.threads_changed.fetch_add(1, Ordering::SeqCst);
         Box::pin(async {})
     }
 
-    fn answer_finding(&self, thread: i64, text: String) -> BoxFuture<'_, Result<()>> {
+    fn post_in_thread<'a>(
+        &'a self,
+        caller: &'a Caller,
+        thread: ItemNumber,
+        text: String,
+    ) -> BoxFuture<'a, Result<()>> {
+        let answered = caller
+            .access
+            .answer()
+            .expect("Shoal posts for an answer run");
+        self.answered
+            .send_modify(|posts| posts.push((answered, text.clone())));
         if self.answer_fails.load(Ordering::SeqCst) {
-            self.answered
-                .send_modify(|answered| answered.push((thread, text)));
             return Box::pin(async { bail!("the thread is too long") });
         }
-        let mut threads = self.records.threads.lock().unwrap();
-        let answered = threads.iter_mut().find(|answered| answered.id == thread);
-        if let Some(answered) = answered {
-            let id = thread * 100 + i64::try_from(answered.posts.len()).unwrap();
-            let post = StandInRecords::shoal_post(id, &text, Vec::new());
-            answered.posts.push(post);
-        }
-        self.answered
-            .send_modify(|answered| answered.push((thread, text)));
+        self.records.post_as_shoal(thread, &text);
         Box::pin(async { Ok(()) })
     }
 }

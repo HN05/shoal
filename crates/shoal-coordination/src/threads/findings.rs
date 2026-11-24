@@ -4,9 +4,7 @@
 //! submitted, and reopening one a later review found still present; reading a review's threads, releasing those of a review its
 //! writer submitted and dropping those of one it cancelled, each in the
 //! review's own transaction, telling no one, since the review's one alert
-//! names its threads; and posting the reviewer's answers in Shoal's, which
-//! reach their holders.
-use crate::{Coordination, daemon::Daemon};
+//! names its threads.
 use anyhow::{Context as _, Result};
 use rusqlite::{Connection, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
@@ -23,7 +21,6 @@ use shoal_refs::CommitId;
 
 use super::{
     code::NewCode,
-    delivery::{self, Delivered},
     records::{self, Author, NewRecord, NewThread, Opener},
 };
 
@@ -192,33 +189,6 @@ pub fn awaits_reviewer(thread: &Thread) -> bool {
         .finding
         .is_some_and(|finding| finding.review.is_some());
     review && thread.opener == Sender::Shoal && thread.awaits() == Some(Side::Opener)
-}
-
-impl Coordination {
-    /// Post the reviewer's answer `text` from Shoal in the finding's thread
-    /// `id`, telling its holder, unless it was resolved meanwhile.
-    pub async fn answer_finding(&self, daemon: &dyn Daemon, id: i64, text: String) -> Result<()> {
-        let text = post_text(&text);
-        let outside = self.records.clone();
-        let delivered = self
-            .store
-            .write(move |tx| {
-                if !records::reread(tx, id)?.is_open() {
-                    return Ok(None);
-                }
-                record_shoal_post(tx, id, &text, &[])?;
-                let thread = records::reread(tx, id)?;
-                records::ensure_fits(&thread)?;
-                let mut delivered = Delivered::default();
-                delivery::deliver_post(tx, &*outside, &thread, &mut delivered)?;
-                Ok(Some(delivered))
-            })
-            .await?;
-        if let Some(delivered) = delivered {
-            self.announce_threads(daemon, delivered).await;
-        }
-        Ok(())
-    }
 }
 
 /// The threads whose records are `ids`, in that order.

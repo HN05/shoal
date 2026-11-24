@@ -556,33 +556,38 @@ async fn the_next_review_receives_the_history_and_checks_fixes() {
 
 #[tokio::test]
 async fn the_reviewer_answers_a_post_in_its_finding_s_thread() {
-    // Asked to answer, it writes its prompt and answers; else it reviews.
-    let script = "case \"$1\" in *'reply in `answer`'*)\n\
-        printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\n\
-        echo '{\"answer\":\"It is reachable from parse.\"}';;\n\
+    // Asked to answer, it writes its prompt and waits until the test posted
+    // its answer; else it reviews.
+    let script = "case \"$1\" in *'post your reply once'*)\n\
+        dir=\"$(dirname '{review}')\"; printf '%s' \"$1\" > \"$dir/prompt\"\n\
+        while [ ! -e \"$dir/answered\" ] && kill -0 {tests} 2>/dev/null; do sleep 0.1; done;;\n\
         *) {write};; esac";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     let thread = fixture.review().await.threads.remove(0);
-    let mut answered = fixture.daemon.answered.subscribe();
+    let mut ended = fixture.reviews.ends();
     fixture
         .records
         .post_as_holder(thread.number, "Is this reachable?");
     fixture.reviews.answer_posts();
-    let answered = answered.wait_for(|answered| !answered.is_empty()).await;
-    assert_eq!(
-        answered.unwrap().as_slice(),
-        [(thread.id, "It is reachable from parse.".to_owned())]
-    );
+    while !fixture.written("prompt").exists() {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    // The reviewer posts its answer with shoal send, as Shoal.
+    (fixture.records).post_as_shoal(thread.number, "It is reachable from parse.");
+    std::fs::write(fixture.written("answered"), "").unwrap();
+    ended.changed().await.unwrap();
+    assert!(fixture.daemon.answered.borrow().is_empty());
     let prompt = written(&fixture, "prompt");
     assert!(prompt.contains("Author: Is this reachable?"), "{prompt}");
     assert!(prompt.contains("### Finding 1.1 should-fix"), "{prompt}");
+    assert!(prompt.contains("`shoal send 1.1 "), "{prompt}");
 }
 
 #[tokio::test]
 async fn removing_the_workspace_stops_an_answer_being_made() {
     // Asked to answer, it runs until it is stopped; else it reviews.
     let script = format!(
-        "case \"$1\" in *'reply in `answer`'*) {};;\n*) {{write}};; esac",
+        "case \"$1\" in *'post your reply once'*) {};;\n*) {{write}};; esac",
         until_tests_end()
     );
     let fixture = fixture(&[("fake", &script)], "agent = 'fake'").await;
@@ -605,8 +610,8 @@ async fn removing_the_workspace_stops_an_answer_being_made() {
 
 #[tokio::test]
 async fn an_answer_that_cannot_be_posted_is_not_asked_for_again() {
-    let script = "case \"$1\" in *'reply in `answer`'*) echo '{\"answer\":\"Yes.\"}';;\n\
-        *) {write};; esac";
+    // Asked to answer, it exits without posting; else it reviews.
+    let script = "case \"$1\" in *'post your reply once'*) ;;\n*) {write};; esac";
     let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
     let thread = fixture.review().await.threads.remove(0);
     fixture
@@ -616,10 +621,14 @@ async fn an_answer_that_cannot_be_posted_is_not_asked_for_again() {
     let mut answered = fixture.daemon.answered.subscribe();
     fixture.records.post_as_holder(thread.number, "Really?");
     fixture.reviews.answer_posts();
-    answered
-        .wait_for(|answered| !answered.is_empty())
-        .await
-        .unwrap();
+    let answered = answered.wait_for(|answered| !answered.is_empty()).await;
+    assert_eq!(
+        answered.unwrap().as_slice(),
+        [(
+            thread.id,
+            "The reviewer exited without answering.".to_owned()
+        )]
+    );
     // The post still waits, but the reviewer ran for it.
     let awaited = (fixture.reviews.store)
         .run({

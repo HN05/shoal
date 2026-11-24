@@ -106,32 +106,3 @@ fn a_run_reports_its_session_as_its_tool_does() {
     assert!(session(&PLAIN, Some(envelope.as_bytes()), header).is_none());
     assert!(session(&CLAUDE, Some(b"not json"), b"").is_none());
 }
-
-#[test]
-fn an_answer_is_its_text_alone() {
-    let answer = |value: Value| run_answer(value.to_string());
-    assert_eq!(
-        answer(json!({"answer": "It is reachable from parse."}))
-            .unwrap()
-            .answer,
-        "It is reachable from parse."
-    );
-    for value in [
-        json!({"answer": " "}),
-        json!({"answer": "x", "extra": 1}),
-        json!({"summary": "One problem."}),
-    ] {
-        assert_eq!(answer(value), Err(FailureReason::InvalidOutput));
-    }
-}
-
-fn run_answer(result: String) -> Result<Answer, FailureReason> {
-    read_answer(
-        &PLAIN,
-        &Run {
-            success: true,
-            result: Some(result.as_bytes()),
-            diagnostics: [b"", b""],
-        },
-    )
-}
