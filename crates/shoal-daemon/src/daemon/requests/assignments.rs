@@ -26,7 +26,7 @@ pub(super) async fn handle(
         AssignmentMethod::DiscardStoppedAgent { space, execution } => Body::DiscardedAgent(
             manager
                 .agents
-                .discard_stopped_agent(&**manager, &space, execution)
+                .discard_space_agent(&**manager, &space, execution)
                 .await?,
         ),
         AssignmentMethod::ChangeStoppedPermissions {

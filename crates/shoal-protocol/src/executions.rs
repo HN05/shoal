@@ -293,4 +293,7 @@ pub struct DiscardedAgent {
     /// The execution IDs of the discarded stopped agents, last sessions and
     /// commands.
     pub executions: Vec<ExecutionId>,
+    /// Its discarded launch that failed to start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch: Option<crate::model::QueueEntry>,
 }

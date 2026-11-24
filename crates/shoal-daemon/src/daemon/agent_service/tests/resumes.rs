@@ -318,3 +318,35 @@ async fn a_scoped_process_resumes_only_the_spaces_below_its_own() {
 
     assert_eq!(allowed, [false, true]);
 }
+
+/// A discard of a space's agent takes its failed launch with its stopped
+/// agent, so neither resumes any longer.
+#[tokio::test]
+async fn a_discard_takes_the_failed_launch_with_the_stopped_agent() {
+    let (root, manager) = manager().await;
+    let repo = register(&manager, &root, "repo").await;
+    let entry = add(&manager, &repo, "work").await.entry.unwrap();
+    (manager.agents)
+        .fail_queue_entry(&*manager, &entry.id, "the place did not open")
+        .await
+        .unwrap();
+    let workspaces = manager.spaces.list_workspaces().await.unwrap();
+    let workspace = (workspaces.iter())
+        .find(|space| Some(&space.id) == entry.space())
+        .unwrap();
+    stop(&manager, workspace, "agent");
+
+    let selector = SpaceSelector::id(&workspace.id);
+    let discarded = (manager.agents)
+        .discard_space_agent(&*manager, &selector, None)
+        .await
+        .unwrap();
+
+    let launch = discarded.launch.map(|launch| launch.id);
+    assert_eq!(
+        (discarded.executions, launch),
+        (vec![ExecutionId::from("agent")], Some(entry.id))
+    );
+    let outcome = resume(&manager, workspace, AgentResume::default()).await;
+    assert!(matches!(outcome.unwrap(), ResumeOutcome::Nothing { .. }));
+}

@@ -99,15 +99,60 @@ impl Agents {
             "no stopped agents or commands for this {}",
             space.kind()
         );
-        let executions = self.space_executions(&space.id).await?;
-        let active = |id: &ExecutionId| executions.iter().any(|e| e.id == *id);
-        let executions = recovery::forget_saved(&saved, active)?;
-        // The saved sessions are files, so no stored change announces it.
-        self.signals.agent_changed();
+        let executions = self.forget_saved(&space, &saved).await?;
         Ok(DiscardedAgent {
             space: space.name.clone(),
             executions,
+            launch: None,
         })
+    }
+
+    /// Discard what `shoal restore --discard-agent` discards of the space
+    /// `selector` names: its stopped agents, last sessions and stopped
+    /// commands, leaving an agent a wrapper waits to restore, and its failed
+    /// launch; only the agent of `execution` when given. Refuses a space
+    /// with none of them.
+    pub async fn discard_space_agent(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        execution: Option<ExecutionId>,
+    ) -> Result<DiscardedAgent> {
+        let space = daemon.space(selector).await?;
+        let mut saved = Saved::load(&self.paths, &space.id)?;
+        saved.retain_unattended();
+        let launch = match &execution {
+            Some(execution) => {
+                saved.retain_execution(execution, false);
+                None
+            }
+            None => self.failed_launch_of(&space.id).await?,
+        };
+        ensure!(
+            !saved.is_empty() || launch.is_some(),
+            "{} has no stopped agent, commands or failed launch to discard",
+            space.name
+        );
+        let executions = self.forget_saved(&space, &saved).await?;
+        if let Some(launch) = &launch {
+            self.drop_failed_launch(&launch.id).await?;
+        }
+        Ok(DiscardedAgent {
+            space: space.name.clone(),
+            executions,
+            launch,
+        })
+    }
+
+    /// Forget what `saved` keeps of `space`, refusing a stopped agent whose
+    /// execution is still recorded, and return the executions forgotten.
+    async fn forget_saved(&self, space: &Space, saved: &Saved) -> Result<Vec<ExecutionId>> {
+        let executions = self.space_executions(&space.id).await?;
+        let active = |id: &ExecutionId| executions.iter().any(|e| e.id == *id);
+        let forgotten = recovery::forget_saved(saved, active)?;
+        // The saved sessions are files, so no stored change announces it.
+        self.signals.agent_changed();
+        Ok(forgotten)
     }
 
     /// Make `change` to the permissions each of the stopped agents and

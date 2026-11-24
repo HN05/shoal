@@ -45,7 +45,8 @@ pub fn clear_ready(
 }
 
 /// Discard `space`'s stopped agent, last sessions and stopped commands,
-/// only `execution`'s when given.
+/// leaving an agent a wrapper waits to restore, and its failed launch; only
+/// `execution`'s agent when given.
 pub async fn discard_stopped_agent(
     daemon: &impl Daemon,
     space: SpaceSelector,

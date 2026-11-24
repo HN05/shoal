@@ -27,7 +27,8 @@ pub enum AssignmentMethod {
         draft: Option<bool>,
     },
     /// Discard the space's stopped agent, last sessions and stopped
-    /// commands, only `execution`'s when given.
+    /// commands, leaving an agent a wrapper waits to restore, and its failed
+    /// launch; only `execution`'s agent when given.
     DiscardStoppedAgent {
         space: SpaceSelector,
         execution: Option<ExecutionId>,
