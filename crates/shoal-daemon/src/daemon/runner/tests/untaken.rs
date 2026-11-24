@@ -81,6 +81,8 @@ async fn a_runner_whose_job_another_runner_took_is_stopped_and_counts_no_run() {
     assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
     assert!(manager.spaces.workspace_by_id(&workspace).await.is_err());
     assert_eq!(usage_runs(manager).await, 0);
+    // The job runs on the other runner, which a cancel would end.
+    assert!(!cancelled(&fixture, 3) && !cancelled_alone(&fixture));
 }
 
 #[tokio::test]
