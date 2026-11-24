@@ -924,8 +924,9 @@ impl Links for StandIn {
         Box::pin(async { Ok(Default::default()) })
     }
 
+    /// The local merge, as no space here links a PR.
     fn merge_path<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<MergePath>> {
-        Box::pin(async { bail!("{NOT_HERE}: merge_path") })
+        Box::pin(async { Ok(MergePath::Local) })
     }
 
     fn pr_registration<'a>(

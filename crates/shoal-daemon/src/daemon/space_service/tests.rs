@@ -18,7 +18,6 @@ mod hub_moves_after_turn;
 mod hub_moves_authorization;
 mod launches;
 mod launches_chat;
-mod launches_chat_check;
 mod launches_create;
 mod launches_labels;
 mod launches_setup;

@@ -432,213 +432,6 @@ async fn creation_honors_explicit_history_and_sync_preserves_ahead_main() {
 }
 
 #[tokio::test]
-async fn creation_check_refuses_what_creation_refuses_without_creating() {
-    let f = Fixture::new().await;
-    git(&f.repo, &["branch", "topic"]);
-    let owned = f.add("owned").await;
-    let options = |base, git_profile, path| NewWorktreeOptions {
-        git_profile,
-        path,
-        base,
-        disposable: false,
-    };
-    let none = NewWorktreeOptions::default();
-    let new_path = f.root.path().join("elsewhere");
-    for (branch, existing, options) in [
-        (None, None, none),
-        (
-            Some("new"),
-            None,
-            options(Some("main"), None, Some(&*new_path)),
-        ),
-        (None, Some("topic"), options(Some("main"), None, None)),
-        (None, Some("owned"), none),
-        // The branch is unknown, so it may reopen the workspace at its path.
-        (None, None, options(None, None, Some(&*owned.path))),
-    ] {
-        f.manager
-            .spaces
-            .check_creation(&*f.manager, &f.repo_id, branch, existing, options)
-            .await
-            .unwrap();
-    }
-    for (repository, branch, existing, options) in [
-        ("missing", None, None, none),
-        (f.repo_id.as_str(), Some("bad..name"), None, none),
-        (f.repo_id.as_str(), None, Some("absent"), none),
-        (
-            f.repo_id.as_str(),
-            None,
-            Some("owned"),
-            options(Some("main"), None, None),
-        ),
-        (
-            f.repo_id.as_str(),
-            None,
-            Some("topic"),
-            NewWorktreeOptions {
-                disposable: true,
-                ..none
-            },
-        ),
-        (
-            f.repo_id.as_str(),
-            None,
-            None,
-            options(Some("absent"), None, None),
-        ),
-        (
-            f.repo_id.as_str(),
-            Some("new"),
-            None,
-            options(None, Some("absent"), None),
-        ),
-        (
-            f.repo_id.as_str(),
-            Some("new"),
-            None,
-            options(None, None, Some(&*f.repo)),
-        ),
-        // A path that no workspace can use is refused before the branch is known.
-        (
-            f.repo_id.as_str(),
-            None,
-            None,
-            options(None, None, Some(&*f.repo)),
-        ),
-    ] {
-        f.manager
-            .spaces
-            .check_creation(&*f.manager, repository, branch, existing, options)
-            .await
-            .unwrap_err();
-    }
-    assert_eq!(f.manager.spaces.list_workspaces().await.unwrap().len(), 1);
-    assert!(!new_path.exists());
-    assert!(git(&f.repo, &["branch", "--list", "new"]).is_empty());
-
-    git(&owned.path, &["switch", "--detach"]);
-    assert!(
-        f.manager
-            .spaces
-            .check_creation(&*f.manager, &f.repo_id, None, Some("owned"), none)
-            .await
-            .is_err()
-    );
-
-    // A record keeps its path after its directory and worktree are gone.
-    let gone = f.add("gone").await;
-    fs::remove_dir_all(&gone.path).unwrap();
-    git(&f.repo, &["worktree", "prune"]);
-    f.manager
-        .spaces
-        .check_creation(
-            &*f.manager,
-            &f.repo_id,
-            Some("fresh"),
-            None,
-            options(None, None, Some(&*gone.path)),
-        )
-        .await
-        .unwrap_err();
-
-    let id = f.repo_id.clone();
-    f.manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO repository_removals(repository_id) VALUES (?1)",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    f.manager
-        .spaces
-        .check_creation(&*f.manager, &f.repo_id, None, None, none)
-        .await
-        .unwrap_err();
-}
-
-#[tokio::test]
-async fn merge_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
-    let f = Fixture::new().await;
-    let workspace = f.add("worker").await;
-    let merged = f.manager.merge_workspace("worker").await.unwrap();
-    assert!(!merged.updated);
-    assert_eq!(merged.commit, git(&f.repo, &["rev-parse", "main"]).trim());
-    fs::write(workspace.path.join("feature"), "work\n").unwrap();
-    commit(&workspace.path, "feature");
-    let expected = git(&workspace.path, &["rev-parse", "HEAD"]);
-    let merged = f.manager.merge_workspace("worker").await.unwrap();
-    assert!(merged.updated && merged.fast_forward);
-    assert_eq!(merged.default_branch, "main");
-    assert_eq!(merged.commit, expected.trim());
-    assert!(merged.default_refresh.skipped.is_some());
-    assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
-    assert_eq!(
-        fs::read_to_string(f.repo.join("feature")).unwrap(),
-        "work\n"
-    );
-    // Diverged histories get a merge commit in the default checkout.
-    fs::write(f.repo.join("tracked"), "main side\n").unwrap();
-    commit(&f.repo, "tracked");
-    fs::write(workspace.path.join("feature"), "more\n").unwrap();
-    commit(&workspace.path, "feature");
-    let merged = f.manager.merge_workspace("worker").await.unwrap();
-    assert!(merged.updated && !merged.fast_forward);
-    assert_eq!(
-        git(&f.repo, &["rev-list", "--count", "--merges", "main"]),
-        "1\n"
-    );
-    assert_eq!(
-        fs::read_to_string(f.repo.join("feature")).unwrap(),
-        "more\n"
-    );
-    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
-    // Merged work counts as retained, and the merged branch is redundant.
-    let check = f
-        .manager
-        .spaces
-        .check_removal(
-            &*f.manager,
-            &SpaceSelector::id(&workspace.id),
-            InspectionPolicy::IncludeDirectoryProcesses,
-        )
-        .await
-        .unwrap();
-    assert_eq!(check.unpushed_commits, 0);
-    assert!(check.branch_preserved());
-    // A conflicting merge is aborted and leaves the default checkout untouched.
-    fs::write(f.repo.join("tracked"), "main again\n").unwrap();
-    commit(&f.repo, "tracked");
-    let main = git(&f.repo, &["rev-parse", "main"]);
-    fs::write(workspace.path.join("tracked"), "worker again\n").unwrap();
-    commit(&workspace.path, "tracked");
-    f.manager.merge_workspace("worker").await.unwrap_err();
-    assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
-    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
-    assert!(!f.repo.join(".git/MERGE_HEAD").exists());
-    assert_eq!(
-        fs::read_to_string(f.repo.join("tracked")).unwrap(),
-        "main again\n"
-    );
-    let check = f
-        .manager
-        .spaces
-        .check_removal(
-            &*f.manager,
-            &SpaceSelector::id(&workspace.id),
-            InspectionPolicy::IncludeDirectoryProcesses,
-        )
-        .await
-        .unwrap();
-    assert_eq!(check.unpushed_commits, 1);
-    assert!(!check.branch_preserved());
-}
-
-#[tokio::test]
 async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
     let f = Fixture::new().await;
     let author = f.remote();
@@ -694,59 +487,6 @@ async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
     let merged = check().await;
     assert_eq!(merged.unpushed_commits, 0);
     assert!(merged.matches_default_branch);
-}
-
-#[tokio::test]
-async fn default_branch_has_the_changes_of_a_branch_rebased_after_its_merge() {
-    let f = Fixture::new().await;
-    let author = f.remote();
-    let workspace = f.add("worker").await;
-    fs::write(workspace.path.join("one"), "one\n").unwrap();
-    commit(&workspace.path, "one");
-    let merged_head = git(&workspace.path, &["rev-parse", "HEAD"]);
-    let forge = |args: &[&str]| {
-        let mut command = vec![
-            "-c",
-            "user.name=Forge",
-            "-c",
-            "user.email=forge@example.invalid",
-        ];
-        command.extend(args);
-        git(&author, &command);
-    };
-    fs::write(author.join("other"), "other\n").unwrap();
-    forge(&["add", "other"]);
-    forge(&["commit", "-q", "-m", "other"]);
-    forge(&["push", "-q", "origin", "main"]);
-    // The agent rebases onto that main while the forge merges the PR's
-    // original commit, which only the remote has.
-    git(&workspace.path, &["fetch", "-q", "origin"]);
-    git(&workspace.path, &["rebase", "-q", "origin/main"]);
-    forge(&[
-        "fetch",
-        "-q",
-        workspace.path.to_str().unwrap(),
-        merged_head.trim(),
-    ]);
-    forge(&["merge", "-q", "--no-ff", "-m", "merge", "FETCH_HEAD"]);
-    forge(&["push", "-q", "origin", "main"]);
-    assert!(
-        f.manager
-            .spaces
-            .default_branch_has_head(&*f.manager, &workspace)
-            .await
-            .unwrap()
-    );
-    // A change the default branch lacks keeps the workspace.
-    fs::write(workspace.path.join("two"), "two\n").unwrap();
-    commit(&workspace.path, "two");
-    assert!(
-        !f.manager
-            .spaces
-            .default_branch_has_head(&*f.manager, &workspace)
-            .await
-            .unwrap()
-    );
 }
 
 #[tokio::test]
@@ -1489,217 +1229,6 @@ async fn a_pushing_merge_approval_covers_no_other_local_commits_of_main() {
 }
 
 #[tokio::test]
-async fn unpushed_commits_count_against_a_remapped_upstream() {
-    let f = Fixture::new().await;
-    let workspace = f.add("worker").await;
-    let author = f.remote();
-    fs::write(workspace.path.join("feature"), "work\n").unwrap();
-    commit(&workspace.path, "feature");
-    // main tracks origin's main as origin/cache-main, and origin/main is gone.
-    git(
-        &f.repo,
-        &[
-            "config",
-            "remote.origin.fetch",
-            "+refs/heads/*:refs/remotes/origin/cache-*",
-        ],
-    );
-    git(&f.repo, &["update-ref", "-d", "refs/remotes/origin/main"]);
-    git(&f.repo, &["fetch", "origin"]);
-    git(
-        &f.repo,
-        &["branch", "--set-upstream-to=origin/cache-main", "main"],
-    );
-    git(&f.repo, &["merge", "--ff-only", "origin/cache-main"]);
-    // main takes a commit that only another of origin's branches has.
-    fs::write(author.join("other"), "other\n").unwrap();
-    commit(&author, "other");
-    git(&author, &["push", "origin", "HEAD:other"]);
-    git(&f.repo, &["fetch", "origin"]);
-    git(&f.repo, &["merge", "--ff-only", "origin/cache-other"]);
-    let preview = f
-        .manager
-        .spaces
-        .preview_merge(
-            &*f.manager,
-            &f.manager.named("worker").await,
-            &crate::model::MergeOptions {
-                push: Some(true),
-                ..Default::default()
-            },
-            None,
-        )
-        .await
-        .unwrap();
-    assert_eq!(preview.unpushed, 1);
-    assert!(preview.unpushed_default().is_some());
-}
-
-#[tokio::test]
-async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
-    let f = Fixture::new().await;
-    let workspace = f.add("worker").await;
-    f.remote();
-    fs::write(workspace.path.join("feature"), "work\n").unwrap();
-    commit(&workspace.path, "feature");
-    let confirmed = async || crate::model::MergeOptions {
-        push: Some(true),
-        method: None,
-        message: None,
-        confirmed: Some(
-            f.manager
-                .spaces
-                .preview_merge(
-                    &*f.manager,
-                    &f.manager.named("worker").await,
-                    &crate::model::MergeOptions {
-                        push: Some(true),
-                        ..Default::default()
-                    },
-                    None,
-                )
-                .await
-                .unwrap()
-                .confirmation(),
-        ),
-    };
-    let refused = async |options: &crate::model::MergeOptions| {
-        f.manager
-            .spaces
-            .prepare_merge(&*f.manager, &f.manager.named("worker").await, options, None)
-            .await
-            .is_err()
-    };
-    // The merge asks for another method than the one confirmed.
-    let mut options = confirmed().await;
-    options.method = Some(crate::forge::items::action::MergeMethod::Squash);
-    assert!(refused(&options).await);
-    // An agent commits while the question is open.
-    let options = confirmed().await;
-    fs::write(workspace.path.join("feature"), "more\n").unwrap();
-    commit(&workspace.path, "feature");
-    assert!(refused(&options).await);
-    // Another workspace merges locally into main, which the push would publish.
-    let options = confirmed().await;
-    fs::write(f.repo.join("other"), "other\n").unwrap();
-    commit(&f.repo, "other");
-    assert!(refused(&options).await);
-    git(&f.repo, &["reset", "--hard", "HEAD~1"]);
-    // A sync that brings main up to its upstream publishes nothing new.
-    let options = confirmed().await;
-    let author = f.root.path().join("author");
-    fs::write(author.join("upstream"), "upstream\n").unwrap();
-    commit(&author, "upstream");
-    git(&author, &["push", "origin", "HEAD:main"]);
-    git(&f.repo, &["pull", "--ff-only"]);
-    assert!(
-        f.manager
-            .spaces
-            .prepare_merge(
-                &*f.manager,
-                &f.manager.named("worker").await,
-                &options,
-                None
-            )
-            .await
-            .is_ok()
-    );
-    // The default branch's upstream moves to another branch.
-    let options = confirmed().await;
-    git(&f.repo, &["push", "origin", "main:release"]);
-    git(&f.repo, &["fetch", "origin"]);
-    git(
-        &f.repo,
-        &["branch", "--set-upstream-to=origin/release", "main"],
-    );
-    assert!(refused(&options).await);
-    let plan = f
-        .manager
-        .spaces
-        .prepare_merge(
-            &*f.manager,
-            &f.manager.named("worker").await,
-            &confirmed().await,
-            None,
-        )
-        .await;
-    assert!(plan.unwrap().push.is_some());
-}
-
-#[tokio::test]
-async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
-    let f = Fixture::new().await;
-    fs::write(
-        f.repo.join(".shoal.toml"),
-        "[conflicts]\nsensitive = ['version']\n",
-    )
-    .unwrap();
-    commit(&f.repo, ".shoal.toml");
-    let workspace = f.add("worker").await;
-    for (dir, file) in [(&workspace.path, "feature"), (&f.repo, "other")] {
-        fs::write(dir.join(file), "work\n").unwrap();
-        commit(dir, file);
-        fs::write(dir.join("version"), "2\n").unwrap();
-        commit(dir, "version");
-    }
-    let confirmed = async || crate::model::MergeOptions {
-        push: Some(false),
-        method: None,
-        message: None,
-        confirmed: Some(
-            f.manager
-                .spaces
-                .preview_merge(
-                    &*f.manager,
-                    &f.manager.named("worker").await,
-                    &crate::model::MergeOptions {
-                        push: Some(false),
-                        ..Default::default()
-                    },
-                    None,
-                )
-                .await
-                .unwrap()
-                .confirmation(),
-        ),
-    };
-    // A conflict check records the files while the question is open, with
-    // the branch, main and the push unchanged.
-    let options = confirmed().await;
-    f.manager
-        .spaces
-        .check_conflicts(&*f.manager, &SpaceSelector::id(&workspace.id), None)
-        .await
-        .unwrap();
-    f.manager
-        .spaces
-        .prepare_merge(
-            &*f.manager,
-            &f.manager.named("worker").await,
-            &options,
-            None,
-        )
-        .await
-        .unwrap_err();
-    // A question that named them lets the merge go ahead.
-    let options = confirmed().await;
-    let named = options.confirmed.as_ref().unwrap();
-    assert_eq!(named.changed_on_both_sides, ["version"]);
-    assert!(
-        f.manager
-            .spaces
-            .prepare_merge(
-                &*f.manager,
-                &f.manager.named("worker").await,
-                &options,
-                None
-            )
-            .await
-            .is_ok()
-    );
-}
-
-#[tokio::test]
 async fn merge_turned_off_refuses_runs_and_agent_requests() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
@@ -1949,5 +1478,261 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
         scope::authorize(&f.manager, Some(&"adoption-test".into()), &mut method)
             .await
             .is_err()
+    );
+}
+
+#[tokio::test]
+async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
+    let f = Fixture::new().await;
+    fs::write(
+        f.repo.join(".shoal.toml"),
+        "[conflicts]\nsensitive = ['version']\n",
+    )
+    .unwrap();
+    commit(&f.repo, ".shoal.toml");
+    let workspace = f.add("worker").await;
+    for (dir, file) in [(&workspace.path, "feature"), (&f.repo, "other")] {
+        fs::write(dir.join(file), "work\n").unwrap();
+        commit(dir, file);
+        fs::write(dir.join("version"), "2\n").unwrap();
+        commit(dir, "version");
+    }
+    let confirmed = async || crate::model::MergeOptions {
+        push: Some(false),
+        method: None,
+        message: None,
+        confirmed: Some(
+            f.manager
+                .spaces
+                .preview_merge(
+                    &*f.manager,
+                    &f.manager.named("worker").await,
+                    &crate::model::MergeOptions {
+                        push: Some(false),
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .await
+                .unwrap()
+                .confirmation(),
+        ),
+    };
+    // A conflict check records the files while the question is open, with
+    // the branch, main and the push unchanged.
+    let options = confirmed().await;
+    f.manager
+        .spaces
+        .check_conflicts(&*f.manager, &SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
+    f.manager
+        .spaces
+        .prepare_merge(
+            &*f.manager,
+            &f.manager.named("worker").await,
+            &options,
+            None,
+        )
+        .await
+        .unwrap_err();
+    // A question that named them lets the merge go ahead.
+    let options = confirmed().await;
+    let named = options.confirmed.as_ref().unwrap();
+    assert_eq!(named.changed_on_both_sides, ["version"]);
+    assert!(
+        f.manager
+            .spaces
+            .prepare_merge(
+                &*f.manager,
+                &f.manager.named("worker").await,
+                &options,
+                None
+            )
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn creation_check_refuses_what_creation_refuses_without_creating() {
+    let f = Fixture::new().await;
+    git(&f.repo, &["branch", "topic"]);
+    let owned = f.add("owned").await;
+    let options = |base, git_profile, path| NewWorktreeOptions {
+        git_profile,
+        path,
+        base,
+        disposable: false,
+    };
+    let none = NewWorktreeOptions::default();
+    let new_path = f.root.path().join("elsewhere");
+    for (branch, existing, options) in [
+        (None, None, none),
+        (
+            Some("new"),
+            None,
+            options(Some("main"), None, Some(&*new_path)),
+        ),
+        (None, Some("topic"), options(Some("main"), None, None)),
+        (None, Some("owned"), none),
+        // The branch is unknown, so it may reopen the workspace at its path.
+        (None, None, options(None, None, Some(&*owned.path))),
+    ] {
+        f.manager
+            .spaces
+            .check_creation(&*f.manager, &f.repo_id, branch, existing, options)
+            .await
+            .unwrap();
+    }
+    for (repository, branch, existing, options) in [
+        ("missing", None, None, none),
+        (f.repo_id.as_str(), Some("bad..name"), None, none),
+        (f.repo_id.as_str(), None, Some("absent"), none),
+        (
+            f.repo_id.as_str(),
+            None,
+            Some("owned"),
+            options(Some("main"), None, None),
+        ),
+        (
+            f.repo_id.as_str(),
+            None,
+            Some("topic"),
+            NewWorktreeOptions {
+                disposable: true,
+                ..none
+            },
+        ),
+        (
+            f.repo_id.as_str(),
+            None,
+            None,
+            options(Some("absent"), None, None),
+        ),
+        (
+            f.repo_id.as_str(),
+            Some("new"),
+            None,
+            options(None, Some("absent"), None),
+        ),
+        (
+            f.repo_id.as_str(),
+            Some("new"),
+            None,
+            options(None, None, Some(&*f.repo)),
+        ),
+        // A path that no workspace can use is refused before the branch is known.
+        (
+            f.repo_id.as_str(),
+            None,
+            None,
+            options(None, None, Some(&*f.repo)),
+        ),
+    ] {
+        f.manager
+            .spaces
+            .check_creation(&*f.manager, repository, branch, existing, options)
+            .await
+            .unwrap_err();
+    }
+    assert_eq!(f.manager.spaces.list_workspaces().await.unwrap().len(), 1);
+    assert!(!new_path.exists());
+    assert!(git(&f.repo, &["branch", "--list", "new"]).is_empty());
+
+    git(&owned.path, &["switch", "--detach"]);
+    assert!(
+        f.manager
+            .spaces
+            .check_creation(&*f.manager, &f.repo_id, None, Some("owned"), none)
+            .await
+            .is_err()
+    );
+
+    // A record keeps its path after its directory and worktree are gone.
+    let gone = f.add("gone").await;
+    fs::remove_dir_all(&gone.path).unwrap();
+    git(&f.repo, &["worktree", "prune"]);
+    f.manager
+        .spaces
+        .check_creation(
+            &*f.manager,
+            &f.repo_id,
+            Some("fresh"),
+            None,
+            options(None, None, Some(&*gone.path)),
+        )
+        .await
+        .unwrap_err();
+
+    let id = f.repo_id.clone();
+    f.manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO repository_removals(repository_id) VALUES (?1)",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    f.manager
+        .spaces
+        .check_creation(&*f.manager, &f.repo_id, None, None, none)
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn default_branch_has_the_changes_of_a_branch_rebased_after_its_merge() {
+    let f = Fixture::new().await;
+    let author = f.remote();
+    let workspace = f.add("worker").await;
+    fs::write(workspace.path.join("one"), "one\n").unwrap();
+    commit(&workspace.path, "one");
+    let merged_head = git(&workspace.path, &["rev-parse", "HEAD"]);
+    let forge = |args: &[&str]| {
+        let mut command = vec![
+            "-c",
+            "user.name=Forge",
+            "-c",
+            "user.email=forge@example.invalid",
+        ];
+        command.extend(args);
+        git(&author, &command);
+    };
+    fs::write(author.join("other"), "other\n").unwrap();
+    forge(&["add", "other"]);
+    forge(&["commit", "-q", "-m", "other"]);
+    forge(&["push", "-q", "origin", "main"]);
+    // The agent rebases onto that main while the forge merges the PR's
+    // original commit, which only the remote has.
+    git(&workspace.path, &["fetch", "-q", "origin"]);
+    git(&workspace.path, &["rebase", "-q", "origin/main"]);
+    forge(&[
+        "fetch",
+        "-q",
+        workspace.path.to_str().unwrap(),
+        merged_head.trim(),
+    ]);
+    forge(&["merge", "-q", "--no-ff", "-m", "merge", "FETCH_HEAD"]);
+    forge(&["push", "-q", "origin", "main"]);
+    assert!(
+        f.manager
+            .spaces
+            .default_branch_has_head(&*f.manager, &workspace)
+            .await
+            .unwrap()
+    );
+    // A change the default branch lacks keeps the workspace.
+    fs::write(workspace.path.join("two"), "two\n").unwrap();
+    commit(&workspace.path, "two");
+    assert!(
+        !f.manager
+            .spaces
+            .default_branch_has_head(&*f.manager, &workspace)
+            .await
+            .unwrap()
     );
 }
