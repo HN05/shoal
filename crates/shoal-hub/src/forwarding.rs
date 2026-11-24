@@ -248,10 +248,39 @@ impl Hub {
         let sent = self
             .send_forwarded(daemon, machine, forwarded, delivery)
             .await;
+        let sent = match (sent, id) {
+            (Err(error), Some(id)) if !machine.connected => {
+                Err(self.naming_takeover(daemon, id, error).await)
+            }
+            (sent, _) => sent,
+        };
         match sent.map_err(|error| unanswered(machine, space, error))? {
             Reply::Answered(answered) => Ok(Elsewhere::Answered(answered.frames)),
             Reply::Queued(queued) => Ok(Elsewhere::Queued(queued)),
             reply => Err(anyhow!("the hub answered with an unexpected {reply:?}")),
+        }
+    }
+
+    /// `error`, the refusal of a request for the space `id` whose machine
+    /// is offline, naming `shoal restore`, which takes the space over here,
+    /// where the hub keeps a package of it.
+    async fn naming_takeover(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        error: anyhow::Error,
+    ) -> anyhow::Error {
+        match self.kept_package(daemon, id).await {
+            Ok(Some(_)) => {
+                let reason = Reason::of(&error).unwrap_or(Reason::NotReady);
+                let message = format!("{error:#}, or take it over here with shoal restore {id}");
+                Refusal::new(reason, message).into()
+            }
+            Ok(None) => error,
+            Err(lookup) => {
+                log!("hub: could not ask for a package of space {id}: {lookup:#}");
+                error
+            }
         }
     }
 
