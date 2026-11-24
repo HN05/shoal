@@ -1,6 +1,7 @@
 //! Starts queued agents and restores as slots free, and the waiting
 //! preparations of new workspaces as what they wait for allows, and keeps
 //! starting entries' slots while their launch runs.
+use shoal_daemon_base::operations::Operations;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -63,14 +64,14 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
 
 /// Run the queue start worker for `start`, detached from the daemon,
 /// with the multiplexer variables of the terminal that queued it.
-pub fn spawn_start(daemon: &dyn Daemon, paths: &Paths, start: &Start) -> Result<()> {
+pub fn spawn_start(operations: &Operations, paths: &Paths, start: &Start) -> Result<()> {
     use crate::workers::{Worker, detached_command, internal_command};
     use anyhow::Context as _;
     use std::process::Stdio;
 
     // Only a test daemon fakes them, which a build without its support
     // never runs.
-    if daemon.fakes_workers() {
+    if operations.fakes() {
         #[cfg(any(test, feature = "test-support"))]
         return fake::start(start);
     }

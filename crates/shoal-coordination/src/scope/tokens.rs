@@ -35,7 +35,7 @@ impl Coordination {
         if let Some(caller) = daemon.execution_caller(token).await {
             return Ok(Some(caller));
         }
-        if let Some(caller) = daemon.operation_caller(token) {
+        if let Some(caller) = self.operations.caller(token) {
             return Ok(Some(caller));
         }
         if let Some(caller) = self.grants.caller(token) {

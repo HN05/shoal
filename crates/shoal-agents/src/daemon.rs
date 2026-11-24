@@ -279,20 +279,6 @@ pub trait Operations: Send + Sync {
         space: &'a Space,
         warnings: &'a [String],
     ) -> BoxFuture<'a, ()>;
-
-    /// Whether an operation still pushes what the user approved, by its
-    /// name.
-    fn pushing_operations(&self) -> Box<dyn Fn(&str) -> bool + Send + Sync>;
-
-    /// The spaces an operation works in.
-    fn operations_work_in(&self) -> HashSet<SpaceId>;
-
-    /// Whether an operation runs in the space `id`, whose setup or merge
-    /// its executions are.
-    fn operation_runs_in(&self, id: &SpaceId) -> bool;
-
-    /// Whether the daemon starts fake workers, as a test daemon does.
-    fn fakes_workers(&self) -> bool;
 }
 
 /// The registered repositories, whose paths agents trust.

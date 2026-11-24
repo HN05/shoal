@@ -156,7 +156,8 @@ impl Agents {
     /// Run the queue start worker for the admitted restore `start`, ending
     /// its entry when it cannot.
     async fn spawn_restore(&self, daemon: &dyn Daemon, start: &Start) -> Result<()> {
-        let Err(error) = crate::queued_starts::spawn_start(daemon, &self.paths, start) else {
+        let Err(error) = crate::queued_starts::spawn_start(&self.operations, &self.paths, start)
+        else {
             return Ok(());
         };
         self.fail_queue_entry(daemon, &start.id, &format!("{error:#}"))

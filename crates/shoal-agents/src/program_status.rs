@@ -52,7 +52,7 @@ impl Reports {
         let reports_itself = self.reports_itself(daemon, agent).await;
         let mut sent = None;
         while self
-            .send_change(agents, daemon, controls, reports_itself, &mut sent)
+            .send_change(agents, controls, reports_itself, &mut sent)
             .await
             && before_end(&mut ended, settled(&mut changes)).await
         {}
@@ -63,12 +63,11 @@ impl Reports {
     async fn send_change(
         &self,
         agents: &Agents,
-        daemon: &dyn Daemon,
         controls: &Controls,
         reports_itself: bool,
         sent: &mut Option<ProgramStatus>,
     ) -> bool {
-        let status = self.status(agents, daemon, reports_itself).await;
+        let status = self.status(agents, reports_itself).await;
         let Some(status) = status.filter(|status| sent.as_ref() != Some(status)) else {
             return true;
         };
@@ -90,18 +89,14 @@ impl Reports {
 
     /// The space's status now; none once the space is gone or its records
     /// cannot be read.
-    async fn status(
-        &self,
-        agents: &Agents,
-        daemon: &dyn Daemon,
-        reports_itself: bool,
-    ) -> Option<ProgramStatus> {
+    async fn status(&self, agents: &Agents, reports_itself: bool) -> Option<ProgramStatus> {
         let (space, execution) = (self.space.id.clone(), self.execution.clone());
-        let pushing = daemon.pushing_operations();
+        let operations = agents.operations.clone();
+        let pushing = move |operation: &str| operations.runs(operation);
         let records = agents.records.clone();
         let facts = agents
             .store
-            .read(move |db| facts::read(db, &*records, &space, &execution, &*pushing))
+            .read(move |db| facts::read(db, &*records, &space, &execution, &pushing))
             .await;
         let facts = facts.ok()??;
         Some(decision::status(&facts, reports_itself))

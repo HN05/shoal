@@ -142,7 +142,7 @@ impl Agents {
     pub async fn dispatch_queue(&self, daemon: &dyn Daemon) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         self.expire_starting_entries(daemon).await?;
-        self.return_failed_starts(daemon).await?;
+        self.return_failed_starts().await?;
         self.adopt_orphaned_restores().await?;
         self.forget_resolved_restores().await?;
         self.fail_lost_renewals().await?;
@@ -487,7 +487,7 @@ impl Agents {
                 caller_admitted = true;
                 continue;
             }
-            match crate::queued_starts::spawn_start(daemon, &self.paths, &start) {
+            match crate::queued_starts::spawn_start(&self.operations, &self.paths, &start) {
                 Ok(()) => {
                     daemon
                         .notify(

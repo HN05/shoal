@@ -16,6 +16,7 @@ use crate::{
     daemon::test_support::{git, manager, repository},
     model::{Repository, Workspace},
 };
+use shoal_protocol::protocol::operations::Report;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A generous guard against a hang; no test waits this long when it passes.
@@ -89,6 +90,14 @@ impl TestDaemon {
             )
             .await
             .unwrap()
+    }
+
+    /// Record a worker's `report` of operation `id`, as its request from
+    /// the user does.
+    pub async fn report_operation(&self, id: &str, report: Report) {
+        super::requests::operations::entries::report(&self.manager, id, report, None)
+            .await
+            .unwrap();
     }
 
     /// A raw connection to the socket.

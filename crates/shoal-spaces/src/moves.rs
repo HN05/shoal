@@ -65,7 +65,7 @@ impl Spaces {
         let spec = OperationSpec::Move {
             order: Box::new(order),
         };
-        let started = daemon.spawn_operation(first, spec, env, caller).await?;
+        let started = self.operations.spawn(first, spec, env, caller).await?;
         Ok(MoveStart::Started(started))
     }
 
@@ -137,7 +137,7 @@ impl Spaces {
         for record in self.recorded_moves().await? {
             let space = record.space.clone();
             if held.contains(&space)
-                || daemon.operation_runs_in(&space)
+                || self.operations.runs_in(&space)
                 || MoveLock::try_take(&self.paths, &space)?.is_none()
             {
                 continue;
@@ -146,7 +146,7 @@ impl Spaces {
             let spec = OperationSpec::FinishMove {
                 record: Box::new(record),
             };
-            daemon.spawn_operation(space, spec, None, None).await?;
+            self.operations.spawn(space, spec, None, None).await?;
         }
         Ok(())
     }

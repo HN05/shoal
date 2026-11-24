@@ -110,14 +110,14 @@ async fn a_blocked_start_creates_its_worktree_on_the_done_blocker_once_it_is_don
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(!manager.operation_runs_in(&ui.id), "it started early");
+    assert!(!manager.operations.runs_in(&ui.id), "it started early");
     done(&manager, &api).await;
     manager
         .spaces
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(manager.operation_runs_in(&ui.id));
+    assert!(manager.operations.runs_in(&ui.id));
     let ui = read(&manager, &ui).await;
     assert_eq!(ui.preparation_waits, None);
     assert_eq!(
@@ -170,7 +170,7 @@ async fn a_stopped_waiting_start_waits_for_its_agent_until_prepared_explicitly()
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(!manager.operation_runs_in(&ui.id));
+    assert!(!manager.operations.runs_in(&ui.id));
     assert_eq!(read(&manager, &ui).await.preparation_waits, None);
 }
 
@@ -191,7 +191,7 @@ async fn a_start_waits_for_disk_space_before_creating_its_worktree() {
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(manager.operation_runs_in(&ui.id));
+    assert!(manager.operations.runs_in(&ui.id));
     // Its branch was never created, so the worktree comes from the default
     // branch as it is now.
     let branches = git(&repo.path, &["branch", "--list", "ui"]);
@@ -229,7 +229,7 @@ async fn a_waiting_start_goes_with_its_record() {
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(!manager.operation_runs_in(&ui.id));
+    assert!(!manager.operations.runs_in(&ui.id));
 }
 
 #[tokio::test]
@@ -250,7 +250,7 @@ async fn a_release_after_its_agent_was_stopped_keeps_the_preparation_waiting() {
         .spaces
         .release_preparation(&manager.daemon(), &ui.id, None)
         .await;
-    assert!(!manager.operation_runs_in(&ui.id));
+    assert!(!manager.operations.runs_in(&ui.id));
     assert!(read(&manager, &ui).await.preparation_waits.is_some());
 }
 
@@ -267,7 +267,7 @@ async fn a_stop_after_the_release_leaves_the_launch_to_the_started_preparation()
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(manager.operation_runs_in(&ui.id));
+    assert!(manager.operations.runs_in(&ui.id));
     // A stop that read the wait before the release cancels nothing.
     let cancelled = manager
         .agents
@@ -361,7 +361,7 @@ async fn a_released_preparation_never_stacks_its_blocker_on_itself() {
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(manager.operation_runs_in(&ui.id));
+    assert!(manager.operations.runs_in(&ui.id));
     // It holds the blocker's work without stacking on it.
     assert_eq!(read(&manager, &ui).await.part.base_workspace, None);
     let selector = SpaceSelector::id(&ui.id);
@@ -445,7 +445,7 @@ async fn a_stopped_start_without_an_agent_stays_stopped_once_disk_allows() {
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(!manager.operation_runs_in(&ui.id));
+    assert!(!manager.operations.runs_in(&ui.id));
     let waits = read(&manager, &ui).await.part.preparation_waits;
     assert_eq!(waits, Some(PreparationWait::Stopped));
 }
@@ -528,7 +528,7 @@ async fn a_blocked_copy_takes_its_source_as_it_is_once_its_blockers_clear() {
         .start_waiting_preparations(&manager.daemon())
         .await
         .unwrap();
-    assert!(manager.operation_runs_in(&copy.id));
+    assert!(manager.operations.runs_in(&copy.id));
     let selector = SpaceSelector::id(&copy.id);
     let created = manager
         .spaces

@@ -215,22 +215,19 @@ async fn a_run_holds_a_read_only_scope_of_the_space_until_it_ends() {
     let scope = std::fs::read_to_string(&path).unwrap();
     let (token, state) = scope.split_once('\n').unwrap();
     assert_eq!(std::path::Path::new(state), fixture.reviews.paths.state);
-    let issued = |live| {
-        let scopes = fixture.daemon.scopes.lock().unwrap();
-        (scopes.iter())
-            .filter(|(issued, caller, is_live)| {
-                issued.expose() == token && caller.read_only && *is_live == live
-            })
-            .count()
+    let caller = || {
+        (fixture.reviews.operations).caller(&shoal_protocol::scope_tokens::ScopeToken::from(
+            token.to_owned(),
+        ))
     };
-    assert_eq!(issued(true), 1);
+    assert!(caller().is_some_and(|caller| caller.read_only));
     fixture.mark("hold", false);
     fixture
         .request_when(&request.key, |stored| {
             stored.status == DecisionStatus::Approved
         })
         .await;
-    assert_eq!(issued(false), 1);
+    assert!(caller().is_none());
 }
 
 #[tokio::test]

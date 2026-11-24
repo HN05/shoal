@@ -111,8 +111,8 @@ the daemon shares. A migration runs only the store's code, a copy frozen at the
 shape it migrates of anything it once called elsewhere, so a later change
 elsewhere never changes what an old migration does. Over the store,
 `shoal-daemon-base` holds what every part of the daemon uses: its log, who
-sends a request, the approval requests it makes, the global config it runs
-under, the gates that order conflicting changes, the journal of events, the
+sends a request, the approval requests it makes, the operations it starts in
+workers of their own, the global config it runs under, the gates that order conflicting changes, the journal of events, the
 signals that wake waits once what they read changes, the alert record and
 the user's alerts, the numbers of threads and approval requests,
 the checks of file access that can stall and of directories the daemon writes,

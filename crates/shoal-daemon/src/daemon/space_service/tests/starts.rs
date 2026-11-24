@@ -311,9 +311,14 @@ async fn reported_for(
 ) -> (Alert, SpaceNumber) {
     let worker = fake::take(started.operation.as_deref().unwrap());
     let failed = Report::Ended(Ended::Failed(failure));
-    (manager.report_operation(started.operation.as_deref().unwrap(), failed, None))
-        .await
-        .unwrap();
+    crate::daemon::requests::operations::entries::report(
+        manager,
+        started.operation.as_deref().unwrap(),
+        failed,
+        None,
+    )
+    .await
+    .unwrap();
     worker.exit(0);
     let notification = tokio::time::timeout(HANG, async {
         loop {

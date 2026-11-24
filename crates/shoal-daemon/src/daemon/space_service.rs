@@ -43,7 +43,7 @@ use shoal_protocol::model::{
 };
 use shoal_protocol::processes::Identity;
 use shoal_protocol::progress::Blocker;
-use shoal_protocol::protocol::operations::{Ended, LaunchRequest, OperationSpec, QueuedLaunch};
+use shoal_protocol::protocol::operations::{LaunchRequest, QueuedLaunch};
 use shoal_protocol::protocol::{
     Body, ConfigTarget, ItemContext, Operation, QueuedLaunches, RepoTarget,
 };
@@ -115,64 +115,8 @@ fn review_gate(gate: ReviewGate) -> shoal_reviews::required::Gate {
 }
 
 impl shoal_spaces::daemon::Operations for Manager {
-    fn start_operation<'a>(
-        &'a self,
-        spec: OperationSpec,
-        env: Option<BTreeMap<String, String>>,
-        caller: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<String>> {
-        Box::pin(Manager::start_operation(self, spec, env, caller))
-    }
-
-    fn spawn_operation<'a>(
-        &'a self,
-        workspace: SpaceId,
-        spec: OperationSpec,
-        env: Option<BTreeMap<String, String>>,
-        caller: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<String>> {
-        Box::pin(Manager::spawn_operation(self, workspace, spec, env, caller))
-    }
-
-    fn operation_runs_in(&self, id: &SpaceId) -> bool {
-        Manager::operation_runs_in(self, id)
-    }
-
-    fn operation_over<'a>(&'a self, id: &'a str) -> BoxFuture<'a, bool> {
-        Box::pin(async move {
-            match self.operation(id, None).await {
-                Ok(entry) => entry.events_from(u64::MAX).1.is_some(),
-                Err(_) => true,
-            }
-        })
-    }
-
-    fn operation_ending<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Option<Option<Ended>>> {
-        Box::pin(async move {
-            let entry = self.operation(id, None).await.ok()?;
-            Some(entry.ending())
-        })
-    }
-
-    fn operation_ended<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Option<Ended>> {
-        Box::pin(async move {
-            let entry = self.operation(id, None).await.ok()?;
-            let mut changed = entry.watch();
-            loop {
-                if let (_, Some(ended)) = entry.events_from(u64::MAX) {
-                    return Some(ended);
-                }
-                changed.changed().await.ok()?;
-            }
-        })
-    }
-
     fn target_check(&self, operation: &Operation) -> Option<TargetCheck> {
         super::target_checks::Checked::target_check(operation)
-    }
-
-    fn fakes_workers(&self) -> bool {
-        super::fake_workers::faked()
     }
 
     fn failure(&self, error: &anyhow::Error) -> Body {

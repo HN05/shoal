@@ -75,8 +75,9 @@ impl Spaces {
             let spec = OperationSpec::Move {
                 order: Box::new(order),
             };
-            match daemon
-                .spawn_operation(first, spec, None, Some(&caller))
+            match self
+                .operations
+                .spawn(first, spec, None, Some(&caller))
                 .await
             {
                 Ok(id) => {
@@ -103,7 +104,7 @@ impl Spaces {
         (self.store)
             .write(move |tx| started(tx, &recorded, &operation))
             .await?;
-        let ending = daemon.operation_ending(id).await.flatten();
+        let ending = self.operations.ending_of(id).flatten();
         if let Some(ended) = ending {
             self.tell_move_after_turn(daemon, id, &ended).await;
         }
@@ -135,7 +136,7 @@ impl Spaces {
     /// interrupted move, tells its agent so.
     pub async fn forget_moves_cut_off(&self, daemon: &dyn Daemon) -> Result<()> {
         for (space, operation) in self.store.read(started_moves).await? {
-            if let Some(ending) = daemon.operation_ending(&operation).await {
+            if let Some(ending) = self.operations.ending_of(&operation) {
                 if let Some(ended) = ending {
                     self.tell_move_after_turn(daemon, &operation, &ended).await;
                 }

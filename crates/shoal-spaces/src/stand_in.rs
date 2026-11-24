@@ -59,7 +59,7 @@ use shoal_protocol::model::{
 use shoal_protocol::paths::Paths;
 use shoal_protocol::processes::Identity;
 use shoal_protocol::progress::Blocker;
-use shoal_protocol::protocol::operations::{Ended, LaunchRequest, OperationSpec, QueuedLaunch};
+use shoal_protocol::protocol::operations::{LaunchRequest, QueuedLaunch};
 use shoal_protocol::protocol::{
     Body, ConfigTarget, ItemContext, Operation, QueuedLaunches, RepoTarget,
 };
@@ -206,12 +206,18 @@ impl StandIn {
         let records = Arc::new(StandInRecords {
             coordination: CoordinationRecords(removing.clone()),
         });
+        // Workers are fakes, which no test here drives.
+        let operations =
+            shoal_daemon_base::operations::Operations::new(paths.clone(), gates.clone());
+        let operations = Arc::new(operations);
+        operations.fake_workers();
         let coordination = Coordination::new(
             store.clone(),
             gates.clone(),
             config.clone(),
             notifications.clone(),
             signals.clone(),
+            operations.clone(),
             Arc::new(CoordinationRecords(removing.clone())),
         );
         let spaces = Spaces::new(
@@ -227,6 +233,7 @@ impl StandIn {
                 gates.clone(),
                 config.clone(),
             )),
+            operations,
             removing,
             records,
         );
@@ -515,46 +522,7 @@ impl shoal_coordination::daemon::Records for CoordinationRecords {
 }
 
 impl Operations for StandIn {
-    fn start_operation<'a>(
-        &'a self,
-        _: OperationSpec,
-        _: Option<BTreeMap<String, String>>,
-        _: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<String>> {
-        Box::pin(async { Ok(Default::default()) })
-    }
-
-    fn spawn_operation<'a>(
-        &'a self,
-        _: SpaceId,
-        _: OperationSpec,
-        _: Option<BTreeMap<String, String>>,
-        _: Option<&'a Caller>,
-    ) -> BoxFuture<'a, Result<String>> {
-        Box::pin(async { Ok(Default::default()) })
-    }
-
-    fn operation_runs_in(&self, _: &SpaceId) -> bool {
-        Default::default()
-    }
-
-    fn operation_over<'a>(&'a self, _: &'a str) -> BoxFuture<'a, bool> {
-        Box::pin(async { Default::default() })
-    }
-
-    fn operation_ending<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Option<Option<Ended>>> {
-        Box::pin(async { Default::default() })
-    }
-
-    fn operation_ended<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Option<Ended>> {
-        Box::pin(async { Default::default() })
-    }
-
     fn target_check(&self, _: &Operation) -> Option<TargetCheck> {
-        Default::default()
-    }
-
-    fn fakes_workers(&self) -> bool {
         Default::default()
     }
 
@@ -1860,10 +1828,6 @@ impl shoal_coordination::daemon::Agents for StandIn {
 impl shoal_coordination::daemon::Callers for StandIn {
     fn execution_caller<'a>(&'a self, _: &'a ScopeToken) -> BoxFuture<'a, Option<Caller>> {
         Box::pin(async { Default::default() })
-    }
-
-    fn operation_caller(&self, _: &ScopeToken) -> Option<Caller> {
-        Default::default()
     }
 }
 

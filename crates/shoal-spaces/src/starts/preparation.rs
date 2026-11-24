@@ -85,7 +85,7 @@ impl Spaces {
             workspace: SpaceSelector::id(&workspace.id),
             steps: start.steps,
         };
-        let operation = daemon.start_operation(spec, start.env, caller).await?;
+        let operation = self.start_operation(spec, start.env, caller).await?;
         Ok((recorded, Some(operation)))
     }
 }

@@ -290,7 +290,7 @@ pub(super) async fn handle(
                 .await?,
         ),
         RemovalMethod::ReleaseHeldMove { space } => {
-            manager.spaces.release_held_move(&**manager, &space).await?;
+            manager.spaces.release_held_move(&space).await?;
             Body::Ok
         }
         RemovalMethod::ReadHeldPackage { space, copy } => {

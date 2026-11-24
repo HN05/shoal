@@ -6,6 +6,7 @@
 //! operations; what they need of the rest of the daemon is the interface in
 //! [`daemon`].
 use shoal_daemon_base::forge_access::ForgeAccess;
+use shoal_daemon_base::operations::Operations;
 use std::sync::Arc;
 
 use shoal_coordination::{alerts, approvals, changes, scope, threads};
@@ -42,6 +43,7 @@ pub mod leftovers;
 pub mod lifecycle;
 pub mod moves;
 pub mod opened_elsewhere;
+mod operations;
 pub mod ownership;
 #[cfg(any(test, feature = "test-support"))]
 mod per_daemon;
@@ -77,6 +79,7 @@ pub struct Spaces {
     pub paths: paths::Paths,
     pub file_access: Arc<FileAccess>,
     forges: Arc<ForgeAccess>,
+    operations: Arc<Operations>,
     /// How the cleanup sweep last went.
     pub cleanup_health: cleanup::CleanupHealth,
     /// How the idle sleep pass last went.
@@ -116,6 +119,7 @@ impl Spaces {
         paths: paths::Paths,
         file_access: Arc<FileAccess>,
         forges: Arc<ForgeAccess>,
+        operations: Arc<Operations>,
         space_removals: spaces::Removing,
         records: Arc<dyn daemon::Records>,
     ) -> Self {
@@ -128,6 +132,7 @@ impl Spaces {
             paths,
             file_access,
             forges,
+            operations,
             cleanup_health: Default::default(),
             idle_sleep_health: cleanup::CleanupHealth::of("Idle sleep"),
             cleanup_removals: Default::default(),

@@ -111,7 +111,11 @@ async fn a_start_whose_setup_failed_keeps_its_entry_while_its_preparation_runs()
         workspace: SpaceSelector::id(&child.id),
         steps: Preparation::default(),
     };
-    let operation = manager.start_operation(spec, None, None).await.unwrap();
+    let operation = manager
+        .spaces
+        .start_operation(spec, None, None)
+        .await
+        .unwrap();
     let _worker = crate::daemon::operations::fake::take(&operation);
     manager.agents.dispatch_queue(&*manager).await.unwrap();
     let ids: Vec<_> = (manager

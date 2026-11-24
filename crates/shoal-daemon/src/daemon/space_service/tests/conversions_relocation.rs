@@ -732,7 +732,11 @@ async fn record_preparation(
             ..Default::default()
         },
     };
-    let operation = manager.start_operation(spec, None, None).await.unwrap();
+    let operation = manager
+        .spaces
+        .start_operation(spec, None, None)
+        .await
+        .unwrap();
     let (id, recorded) = (workspace.id.clone(), operation.clone());
     (manager.store)
         .run(move |db| crate::daemon::conversions::record::record_preparation(db, &id, &recorded))
@@ -781,11 +785,18 @@ async fn a_failed_post_setup_hook_stops_the_agent_for_shoal_resume() {
     let failed = Ended::Failed(Failure::HookFailed {
         message: "hook exited 1".into(),
     });
-    (manager.report_operation(&operation, Report::Ended(failed), None))
+    crate::daemon::requests::operations::entries::report(
+        &manager,
+        &operation,
+        Report::Ended(failed),
+        None,
+    )
+    .await
+    .unwrap();
+    worker.exit(1);
+    let entry = crate::daemon::requests::operations::entries::operation(&manager, &operation, None)
         .await
         .unwrap();
-    worker.exit(1);
-    let entry = manager.operation(&operation, None).await.unwrap();
     let mut changed = entry.watch();
     while entry.events_from(0).1.is_none() {
         changed.changed().await.unwrap();

@@ -9,6 +9,7 @@
 //! the machine awake while they have work. [`Agents`] holds what they keep
 //! in memory and offers their operations; what they need of the rest of the
 //! daemon is the interface in [`daemon`].
+use shoal_daemon_base::operations::Operations;
 use std::{collections::HashMap, sync::Arc};
 
 use shoal_ids::execution_ids::ExecutionId;
@@ -73,6 +74,7 @@ pub struct Agents {
     signals: Arc<Signals>,
     notifications: Arc<Notifications>,
     file_access: Arc<FileAccess>,
+    operations: Arc<Operations>,
     paths: Paths,
     records: Arc<dyn daemon::Records>,
     /// The removals under way, which the records of new work read.
@@ -128,6 +130,7 @@ impl Agents {
         signals: Arc<Signals>,
         notifications: Arc<Notifications>,
         file_access: Arc<FileAccess>,
+        operations: Arc<Operations>,
         paths: Paths,
         records: Arc<dyn daemon::Records>,
         removals: Arc<dyn daemon::Removals>,
@@ -140,6 +143,7 @@ impl Agents {
             signals,
             notifications,
             file_access,
+            operations,
             paths,
             records,
             removals,

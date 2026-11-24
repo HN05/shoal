@@ -24,7 +24,7 @@ mod items;
 mod launches;
 mod machines;
 mod merging;
-mod operations;
+pub(in crate::daemon) mod operations;
 mod permissions;
 mod places;
 mod ports;

@@ -120,7 +120,7 @@ impl Spaces {
                 // A setup that failed waits for its repair, which readies it.
                 let workspace = self.workspace_by_id(id).await?;
                 if workspace.state != WorkspaceState::Ready
-                    || !(*prepared || self.preparation_over(daemon, preparation.as_deref()).await)
+                    || !(*prepared || self.preparation_over(preparation.as_deref()).await)
                 {
                     return Ok(false);
                 }
@@ -136,11 +136,11 @@ impl Spaces {
 
     /// Whether the preparation `operation` of a chat's new workspace is over,
     /// post-setup hook included. One no longer followed ended long before.
-    async fn preparation_over(&self, daemon: &dyn Daemon, operation: Option<&str>) -> bool {
+    async fn preparation_over(&self, operation: Option<&str>) -> bool {
         let Some(operation) = operation else {
             return true;
         };
-        daemon.operation_over(operation).await
+        self.operations.over(operation)
     }
 
     /// Keep with the conversion of the workspace `id` that its preparation
@@ -212,7 +212,7 @@ impl Spaces {
                 return Ok(());
             }
         };
-        restore_workspace(&self.paths, id, origin.as_ref(), daemon.fakes_workers()).await
+        restore_workspace(&self.paths, id, origin.as_ref(), self.operations.fakes()).await
     }
 
     /// Settle the conversion of the workspace `id` ahead of a stop of its

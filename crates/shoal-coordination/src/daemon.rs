@@ -208,9 +208,6 @@ pub trait Agents: Send + Sync {
 pub trait Callers: Send + Sync {
     /// The caller of the connected execution `token` was given to.
     fn execution_caller<'a>(&'a self, token: &'a ScopeToken) -> BoxFuture<'a, Option<Caller>>;
-
-    /// The caller of the operation `token` was given to.
-    fn operation_caller(&self, token: &ScopeToken) -> Option<Caller>;
 }
 
 /// The other machines of the hub the tree goes on to.

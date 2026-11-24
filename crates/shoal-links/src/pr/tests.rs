@@ -2,11 +2,13 @@ use std::sync::Arc;
 
 use shoal_core::test_support::{global_config, repository};
 use shoal_daemon_base::forge_access::ForgeAccess;
+use shoal_daemon_base::operations::Operations;
 use shoal_daemon_base::{
     config_state::ConfigState, file_access::FileAccess, gates::Gates, notifications::Notifications,
 };
 use shoal_forge_types::items::link::LinkKind;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::paths::Paths;
 use shoal_protocol::{
     links::pr::{Registration, RegistrationKind},
     model::Relation,
@@ -26,11 +28,12 @@ async fn service(root: &std::path::Path) -> Arc<Links> {
     let forges = ForgeAccess::new(store.clone(), gates.clone(), config.clone());
     Arc::new(Links::new(
         store.clone(),
-        gates,
+        gates.clone(),
         config,
         Arc::new(Notifications::new(store)),
         Arc::new(FileAccess::default()),
         Arc::new(forges),
+        Arc::new(Operations::new(Paths::for_test(root), gates.clone())),
         Arc::new(StandInRecords),
     ))
 }

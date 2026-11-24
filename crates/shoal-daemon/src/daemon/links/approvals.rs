@@ -51,11 +51,7 @@ impl Approvals for Manager {
         spec: OperationSpec,
         env: Option<BTreeMap<String, String>>,
     ) -> BoxFuture<'_, Result<String>> {
-        Box::pin(Manager::start_operation(self, spec, env, None))
-    }
-
-    fn operation_running(&self, id: &str) -> bool {
-        Manager::operation_running(self, id)
+        Box::pin(self.spaces.start_operation(spec, env, None))
     }
 }
 

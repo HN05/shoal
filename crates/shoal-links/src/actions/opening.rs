@@ -79,8 +79,7 @@ impl Links {
                 // The PR is linked now; approving the push updates it.
                 if let Some(push) = push {
                     self.link_open_pull(daemon, &workspace, &item).await?;
-                    self.ensure_workspace_not_pushing(daemon, &workspace)
-                        .await?;
+                    self.ensure_workspace_not_pushing(&workspace).await?;
                     let proposed = self.propose_push(daemon, &workspace, push).await?;
                     return Ok(OpenOutcome::Proposed(proposed));
                 }
@@ -100,8 +99,7 @@ impl Links {
                     push.is_some() || self.proposes_pull(daemon, &workspace, caller).await?;
                 if let Some(proposer) = proposer.filter(|_| proposes) {
                     forge.check_uploads(&account, &pull.attachments).await?;
-                    self.ensure_workspace_not_pushing(daemon, &workspace)
-                        .await?;
+                    self.ensure_workspace_not_pushing(&workspace).await?;
                     let proposed = self
                         .propose_pull(daemon, &workspace, pull, head, push, proposer)
                         .await?;

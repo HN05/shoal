@@ -88,7 +88,7 @@ pub async fn register(
     // that waits for such commands holds new ones back, except the setup or
     // merge of an operation it already waits for.
     if !reattach
-        && !daemon.operation_runs_in(&target.id)
+        && !agents.operations.runs_in(&target.id)
         && let Err(exiting) = agents.gates.admit()
     {
         return Err(Box::new(Body::error(exiting.code(), &exiting)));

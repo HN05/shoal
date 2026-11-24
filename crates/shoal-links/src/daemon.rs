@@ -277,9 +277,6 @@ pub trait Approvals: Send + Sync {
         spec: OperationSpec,
         env: Option<BTreeMap<String, String>>,
     ) -> BoxFuture<'_, Result<String>>;
-
-    /// Whether the operation `id` still runs.
-    fn operation_running(&self, id: &str) -> bool;
 }
 
 /// The local reviews a new PR and a PR merge wait for, as `[review]

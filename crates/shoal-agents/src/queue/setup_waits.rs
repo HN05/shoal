@@ -67,8 +67,8 @@ impl Agents {
     /// failed once no operation works there, so no preparation leaves its
     /// agent waiting in its place, such as when the preparation's worker
     /// ended without doing so. Requires the queue gate.
-    pub async fn return_failed_starts(&self, daemon: &dyn Daemon) -> Result<()> {
-        let (preparing, records) = (daemon.operations_work_in(), self.records.clone());
+    pub async fn return_failed_starts(&self) -> Result<()> {
+        let (preparing, records) = (self.operations.working_in(), self.records.clone());
         let returned = self
             .store
             .write(move |tx| return_failed_starts(tx, &*records, &preparing))

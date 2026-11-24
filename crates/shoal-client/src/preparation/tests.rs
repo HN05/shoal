@@ -11,11 +11,7 @@ async fn an_app_creates_a_workspace_and_follows_its_setup_to_a_typed_failure() {
     let app = daemon.connector();
     let fail = async |operation: &str, failure| {
         let report = Report::Ended(Ended::Failed(failure));
-        let manager = &daemon.manager;
-        manager
-            .report_operation(operation, report, None)
-            .await
-            .unwrap();
+        daemon.report_operation(operation, report).await;
     };
     let repository = daemon.repository.id.clone().into();
     let new = NewWorkspace {

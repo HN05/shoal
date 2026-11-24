@@ -8,7 +8,6 @@
 //! does the package of a removed space's record, which stays here as a
 //! copied space does.
 use crate::Spaces;
-use crate::daemon::Daemon;
 use crate::fsutil::off_runtime;
 use std::{
     fs::File,
@@ -122,11 +121,7 @@ impl Spaces {
     /// joined machine that started it could not take: nothing of it left
     /// here, so Shoal finishes it as one that packed only, and the space
     /// stays here with its agents' restores queued.
-    pub async fn release_held_move(
-        &self,
-        daemon: &dyn Daemon,
-        selector: &SpaceSelector,
-    ) -> Result<()> {
+    pub async fn release_held_move(&self, selector: &SpaceSelector) -> Result<()> {
         let mut record = self.held_move(selector).await?;
         // After a read of it that broke off ends here.
         let lock = MoveLock::take(&self.paths, &record.space).await?;
@@ -137,8 +132,8 @@ impl Spaces {
         let spec = OperationSpec::FinishMove {
             record: Box::new(record),
         };
-        daemon
-            .spawn_operation(space, spec, None, None)
+        self.operations
+            .spawn(space, spec, None, None)
             .await
             .map(drop)
     }

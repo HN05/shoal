@@ -582,7 +582,11 @@ async fn an_exit_that_waits_refuses_commands_that_would_stop_with_it() {
         workspace: SpaceSelector::id(&workspace.id),
         steps: Default::default(),
     };
-    let operation = manager.start_operation(spec, None, None).await.unwrap();
+    let operation = manager
+        .spaces
+        .start_operation(spec, None, None)
+        .await
+        .unwrap();
     let (body, _client, executing) = register_unattachable(&manager, &workspace).await;
     assert!(matches!(body, Body::Execution(_)), "{body:?}");
     assert!(manager.agents.executions().has_unattachable());

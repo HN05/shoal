@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
-use shoal_daemon_base::{callers::Caller, notifications::About};
+use shoal_daemon_base::notifications::About;
 use shoal_forge::transport::account::Account;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -22,7 +22,6 @@ use shoal_protocol::config::permissions::Permissions;
 use shoal_protocol::item_numbers::ItemNumber;
 use shoal_protocol::repository::Selector;
 use shoal_protocol::reviews::{ReviewId, Severity};
-use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_protocol::threads::{Thread, ThreadSpace};
 use shoal_protocol::views::Viewed;
@@ -222,13 +221,6 @@ pub trait Requesters: Send + Sync {
 
     /// Tell the user `message`, of `kind`, about what `about` names.
     fn notify(&self, about: About, kind: AlertKind, message: String) -> BoxFuture<'_, ()>;
-
-    /// A scope token for `caller`, which the daemon accepts until it is
-    /// revoked.
-    fn issue_scope(&self, caller: &Caller) -> ScopeToken;
-
-    /// End the scope `token` gave.
-    fn revoke_scope(&self, token: &ScopeToken);
 }
 
 /// The approvals that carry out the gate's verdicts.

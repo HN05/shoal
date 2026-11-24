@@ -1826,7 +1826,11 @@ async fn retry_setup(manager: &Manager, workspace: &Workspace) -> String {
             ..Default::default()
         },
     };
-    manager.start_operation(spec, None, None).await.unwrap()
+    manager
+        .spaces
+        .start_operation(spec, None, None)
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -1839,8 +1843,7 @@ async fn a_launch_in_a_workspace_whose_setup_failed_waits_until_its_hook_ran() {
     assert!(!started(&entry.id));
 
     let ended = Report::Step(Step::PostSetupEnded);
-    manager
-        .report_operation(&operation, ended, None)
+    crate::daemon::requests::operations::entries::report(&manager, &operation, ended, None)
         .await
         .unwrap();
     manager.agents.dispatch_queue(&*manager).await.unwrap();
@@ -1905,8 +1908,7 @@ async fn a_launch_keeps_waiting_when_its_workspaces_post_setup_hook_fails() {
         message: "hook failed".into(),
     });
     let report = Report::Ended(failed);
-    manager
-        .report_operation(&operation, report, None)
+    crate::daemon::requests::operations::entries::report(&manager, &operation, report, None)
         .await
         .unwrap();
     worker.exit(0);

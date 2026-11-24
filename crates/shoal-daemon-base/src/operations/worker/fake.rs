@@ -25,7 +25,7 @@ pub struct Fake {
     exit: tokio::sync::oneshot::Sender<i32>,
 }
 
-pub(super) fn start(order: &Order, token: Option<&ScopeToken>) -> Worker {
+pub(in crate::operations) fn start(order: &Order, token: Option<&ScopeToken>) -> Worker {
     let (stdout, stdout_end) = tokio::io::duplex(64 * 1024);
     let (stderr, stderr_end) = tokio::io::duplex(64 * 1024);
     let (exit, exited) = tokio::sync::oneshot::channel();

@@ -326,10 +326,6 @@ impl Approvals for StandIn {
     ) -> BoxFuture<'_, Result<String>> {
         Box::pin(async { bail!(NOT_HERE) })
     }
-
-    fn operation_running(&self, _: &str) -> bool {
-        false
-    }
 }
 
 impl Reviews for StandIn {
