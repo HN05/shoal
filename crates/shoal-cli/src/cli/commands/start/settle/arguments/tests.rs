@@ -27,3 +27,25 @@ fn a_chat_mode_refuses_the_copy_and_fork_its_pickers_would_ask_for() {
         ensure_flags_fit(&args, SpaceKind::Workspace, &mode).unwrap();
     }
 }
+
+#[test]
+fn ci_takes_a_run_url_or_a_picker_and_names_the_work_alone() {
+    let run = "https://forge.example/team/app/actions/runs/2765";
+    let parse = |args: &[&str]| Cli::try_parse_from(["shoal", "start"].iter().chain(args));
+    assert!(parse(&["--ci", "2765"]).is_err());
+    let flagged = start(&["--ci", run]).launch();
+    super::check_start_arguments(&flagged).unwrap();
+    super::check_start_arguments(&start(&["--ci"]).launch()).unwrap();
+    for refused in [
+        &["--ci", run, "--branch", "fix"][..],
+        &["--ci", "--issue", "7"],
+        &["--ci", run, "https://forge.example/team/app/pulls/3"],
+        &[run, "--pr", "3"],
+    ] {
+        let launch = start(refused).launch();
+        assert!(
+            super::check_start_arguments(&launch).is_err(),
+            "{refused:?}"
+        );
+    }
+}

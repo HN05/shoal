@@ -54,8 +54,8 @@ pub fn names_run(launch: &Launch) -> bool {
 }
 
 /// The run `launch` starts on, by its link, positionally or with `--ci`;
-/// refused with both, and for `--ci` with a number, which names no run, or
-/// without a value, which only a terminal picks.
+/// refused for `--ci` with a number, which names no run, or without a
+/// value, which only a terminal picks.
 pub fn named_run(launch: &Launch) -> Result<Option<&ItemRef>> {
     let flagged = match &launch.ci {
         None => None,
@@ -72,10 +72,6 @@ pub fn named_run(launch: &Launch) -> Result<Option<&ItemRef>> {
         _ => None,
     };
     if let Some(run) = flagged {
-        ensure!(
-            !matches!(launch.target, Some(ref target) if target.linked_repository().is_some()),
-            "--ci cannot be combined with a positional link; name the work once"
-        );
         run.run()?;
     }
     Ok(flagged.or(positional))
@@ -89,13 +85,19 @@ pub fn settled_run(launch: &Launch) -> Option<&ItemRef> {
     }
 }
 
-/// Refuse what a launch on a run takes beside it: an issue, a PR, a branch
-/// or a copy, which name the work their own way, and an existing workspace,
-/// which the run's start finds itself.
+/// Refuse what a launch on a run takes beside it: a positional link beside
+/// `--ci`, an issue, a PR, a branch or a copy, which name the work their own
+/// way, and an existing workspace, which the run's start finds itself.
 pub fn ensure_run_fits(launch: &Launch) -> Result<()> {
     if !names_run(launch) {
         return Ok(());
     }
+    let linked =
+        (launch.target.as_ref()).is_some_and(|target| target.linked_repository().is_some());
+    ensure!(
+        launch.ci.is_none() || !linked,
+        "--ci cannot be combined with a positional link; name the work once"
+    );
     let others = [
         ("--issue", launch.issue.is_some()),
         ("--pr", launch.pr.is_some()),

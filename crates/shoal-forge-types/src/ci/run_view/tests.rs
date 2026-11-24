@@ -69,3 +69,31 @@ fn a_stopped_run_takes_the_result_its_jobs_show() {
         Some(CheckState::TimedOut)
     );
 }
+
+#[test]
+fn a_run_fails_still_only_as_the_newest_of_its_workflow_on_its_ref() {
+    let run = |id, workflow: &str, branch: &str, state| Run {
+        id: RunId::new(id),
+        url: format!("https://forge.example/team/app/actions/runs/{id}"),
+        branch: Some(branch.into()),
+        workflow: Some(workflow.into()),
+        commit: None,
+        pull: None,
+        state,
+        result: None,
+        waiting: false,
+        finish: None,
+    };
+    let newest_first = vec![
+        run(6, "ci.yml", "main", JobState::Finished),
+        run(5, "release.yml", "v1.4.0", JobState::Failed),
+        run(4, "ci.yml", "fix", JobState::Failed),
+        run(3, "ci.yml", "main", JobState::Failed),
+        run(2, "ci.yml", "fix", JobState::Failed),
+        run(1, "release.yml", "v1.3.0", JobState::Cancelled),
+    ];
+    let failing: Vec<_> = (still_failing(newest_first).into_iter())
+        .map(|run| run.id.get())
+        .collect();
+    assert_eq!(failing, [5, 4]);
+}

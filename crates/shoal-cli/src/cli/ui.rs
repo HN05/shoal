@@ -10,8 +10,9 @@
 //! - [`picker`]: an fzf picker over `(id, label)` [`Entries`] that returns
 //!   the chosen id ([`pick`]), also under a header naming what cannot be
 //!   picked ([`pick_with_header`]), a typed value ([`pick_choice`]), an issue or
-//!   PR ([`pick_item`]), or the key that chose it ([`pick_with_keys`]), or
-//!   whose keys act on an entry without leaving it ([`pick_in_place`]);
+//!   PR ([`pick_item`]), a CI run ([`pick_run`]), or the key that chose it
+//!   ([`pick_with_keys`]), or whose keys act on an entry without leaving it
+//!   ([`pick_in_place`]);
 //!   [`can_pick`] tells whether one can run, for choices with a usual answer.
 //! - [`keys`]: the keys pickers bind ([`Key`]), which only this module
 //!   spells as fzf names.

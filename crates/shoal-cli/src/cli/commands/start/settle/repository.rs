@@ -191,18 +191,20 @@ async fn named_repository(
     Ok(crate::repository::select(repos, selector).await?.id.clone())
 }
 
-/// The registered repository of the issue, PR or branch `launch` links,
-/// positionally or with `--pr`, offering to register an unregistered one;
-/// none for a start on no link.
+/// The registered repository of the issue, PR, CI run or branch `launch`
+/// links, positionally or with `--pr` or `--ci`, offering to register an
+/// unregistered one; none for a start on no link.
 async fn linked_repository(
     ctx: &Context,
     launch: &Launch,
     repos: &mut Vec<Repository>,
 ) -> Result<Option<shoal_ids::repository_ids::RepositoryId>> {
-    let flagged = match &launch.pr {
-        Some(ItemChoice::Named(ItemInput::Url(pull))) => Some(pull.repository()),
-        _ => None,
-    };
+    let flagged = [&launch.pr, &launch.ci]
+        .into_iter()
+        .find_map(|item| match item {
+            Some(ItemChoice::Named(ItemInput::Url(item))) => Some(item.repository()),
+            _ => None,
+        });
     let positional = (launch.target.as_ref()).and_then(StartTarget::linked_repository);
     if let Some(linked) = positional.or(flagged) {
         let retry = "shoal start <link> --repo <repository>";

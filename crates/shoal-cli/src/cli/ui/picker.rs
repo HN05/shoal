@@ -7,7 +7,11 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use super::{Key, current_directory, require_interactive};
-use crate::{cli::context::Context, tools::Tool};
+use crate::{
+    cli::context::Context,
+    forge::items::{link::LinkKind, reference::ItemRef},
+    tools::Tool,
+};
 
 /// `(id, label)` pairs; the id is returned, only the label is shown.
 pub type Entries = Vec<(String, String)>;
@@ -179,6 +183,25 @@ pub fn pick_item(
         })
         .collect();
     Ok(pick(ctx, prompt, entries)?.parse()?)
+}
+
+/// Choose a CI run, returning its URL, each shown by its workflow, number
+/// and ref; `kind` names them when there are none.
+pub fn pick_run(
+    ctx: &Context,
+    prompt: &str,
+    kind: &str,
+    runs: Vec<crate::forge::ci::run_action::Run>,
+) -> Result<String> {
+    ensure!(!runs.is_empty(), "no {kind}");
+    let entries = (runs.into_iter())
+        .map(|run| {
+            let number = ItemRef::parse_kind(LinkKind::Ci, &run.url).and_then(|url| url.run());
+            let label = number.map_or_else(|_| run.url.clone(), |number| run.title(number));
+            (run.url, label)
+        })
+        .collect();
+    pick(ctx, prompt, entries)
 }
 
 /// Choose a typed value; labels are display-only, even when they repeat.

@@ -47,6 +47,11 @@ fn a_repository_alone_leaves_the_source_to_the_picker() {
         ..Launch::default()
     };
     assert!(!names_nothing(&linked));
+    let run = Launch {
+        ci: Some(shoal_protocol::launches::ItemChoice::Pick),
+        ..Launch::default()
+    };
+    assert!(!names_nothing(&run));
 }
 
 /// A start in an existing workspace, which has its branch, keeps what

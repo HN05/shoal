@@ -100,7 +100,7 @@ shoal rename 3 "Login retries"          # Name the space in lists and tabs
 shoal rename --request 3                # Ask its agent to choose the name
 shoal rename                            # Pick a workspace or chat, then type its name
 shoal start https://github.com/owner/repo/issues/68 # Create from an issue
-shoal start https://github.com/owner/repo/issues/34  # Start on an issue, PR, or branch link
+shoal start https://github.com/owner/repo/issues/34  # Start on an issue, PR, CI run or branch link
 shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards
 shoal link https://github.com/owner/repo/issues/34 assigned  # Assign an issue to the current workspace or chat
 shoal unlink issue assigned                # Remove the assigned issue

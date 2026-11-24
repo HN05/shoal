@@ -3280,7 +3280,7 @@ The derived branch is the issue number and at most three title words, short
 enough to read in full in branch lists, while the workspace takes the issue's
 title as its name, which says what the work is.
 
-`start <link>` recognizes issue, PR and branch URLs and selects their registered
+`start <link>` recognizes issue, PR, CI run and branch URLs and selects their registered
 repository by origin identity, offering interactive registration when missing.
 Issue links and numbers open the issue's workspace; numbers use `--repo`, the
 current checkout/workspace, then a picker.
@@ -3289,7 +3289,16 @@ the workspace is ready, as issue links associate their issue; branch links open
 an origin branch. Both use existing-branch ownership checks and retain an owned
 workspace's diff base. A fork PR has no origin branch, so its head opens in the
 PR's workspace at a commit instead, with the PR's base as its diff base, where
-`--agent` starts its agent, and `--path`, `--git-profile` and `--base` are refused. Interactive `start`
+`--agent` starts its agent, and `--path`, `--git-profile` and `--base` are refused.
+A CI run link, or `--ci`, starts where the run ran, read as the caller may
+link it: its PR's or branch's link, or for a run on the default branch, a tag
+or no branch, which names no work, a start without a branch, which begins as
+a chat named after the run; a mode that starts a chat starts one on any run.
+The run says nothing of the mode, so a PR's labels choose none. The space
+links the run as related and its agent starts on a summary of the run, with
+its failed jobs but no log tails, which `shoal view ci` shows. `--ci`
+without a run offers the newest run of each workflow and ref that failed, so
+a failure a later run fixed is not offered. Interactive `start`
 without a branch, base or issue also offers the repository's open issues and PRs,
 which open as their links do.
 Every `start` starts an agent, one rule for a new workspace, a new chat,

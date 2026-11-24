@@ -72,6 +72,16 @@ pub struct RunFilter {
     pub limit: usize,
 }
 
+/// The runs of `runs`, listed newest first, that fail now: each the newest
+/// of its workflow on its ref, so one a later run fixed is left out.
+pub fn still_failing(runs: Vec<Run>) -> Vec<Run> {
+    let mut seen = std::collections::HashSet::new();
+    (runs.into_iter())
+        .filter(|run| seen.insert((run.workflow.clone(), run.branch.clone())))
+        .filter(|run| run.state == JobState::Failed)
+        .collect()
+}
+
 /// The state of a run the forge reports as failed, from its `jobs`: one
 /// whose jobs only stopped short by being cancelled was cancelled.
 pub fn stopped_run_state(jobs: &[RunJob]) -> JobState {

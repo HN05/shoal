@@ -61,10 +61,6 @@ fn a_run_is_named_once_by_its_link() {
         let named = launch(flagged, |_| {});
         assert_eq!(named_run(&named).unwrap().unwrap().url(), RUN);
     }
-    let twice = launch(true, |launch| {
-        launch.target = Some("https://forge.example/team/app/pull/3".parse().unwrap());
-    });
-    assert!(named_run(&twice).is_err());
     let beside_repository = launch(true, |launch| {
         launch.target = Some(StartTarget::Repository("app".into()));
     });
@@ -103,6 +99,10 @@ fn a_run_refuses_what_names_the_work_another_way() {
             assert!(ensure_run_fits(&launch).is_err(), "{index} {flagged}");
         }
     }
+    let twice = launch(true, |launch| {
+        launch.target = Some("https://forge.example/team/app/pull/3".parse().unwrap());
+    });
+    assert!(ensure_run_fits(&twice).is_err());
     let mut picked = picked;
     picked.branch = Some("fix".into());
     assert!(ensure_run_fits(&picked).is_err());

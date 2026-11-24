@@ -27,7 +27,8 @@ pub(super) fn check(launch: &mut Launch) -> Result<()> {
 
 /// Refuse what `launch` asks for that its arguments alone refuse: two
 /// repositories, a link or `--pr` beside a branch, an issue, another link
-/// or a copy, and a branch that is not a literal Git branch name.
+/// or a copy, what a CI run refuses beside it, and a branch that is not a
+/// literal Git branch name.
 pub(in crate::cli::commands) fn check_start_arguments(launch: &Launch) -> Result<()> {
     let positional = crate::launches::decided_target(launch)?;
     ensure!(
@@ -44,6 +45,7 @@ pub(in crate::cli::commands) fn check_start_arguments(launch: &Launch) -> Result
         "--pr cannot be combined with an item or branch link; name the PR once"
     );
     crate::launches::ensure_copy_fits(launch)?;
+    crate::launches::run::ensure_run_fits(launch)?;
     if let Some(branch) = &launch.branch {
         shoal_core::git::check_branch_name(branch)?;
     }

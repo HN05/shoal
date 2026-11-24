@@ -49,9 +49,12 @@ shoal start --in 3 --agent claude
 shoal contribute https://github.com/other/repo/issues/12 --agent claude
 ```
 
-`start` accepts a registered repository and branch, or an issue, PR or branch
-URL, and `--pr` a PR's number or URL; an issue becomes the agent's first
-message, followed by its mode's instructions, and text after `--` is the task. Every start starts an agent:
+`start` accepts a registered repository and branch, or an issue, PR, CI run
+or branch URL, `--pr` a PR's number or URL and `--ci` a run's URL; an issue,
+else a run, becomes the agent's first message, followed by its mode's
+instructions, and text after `--` is the task. A run starts in its PR's or
+branch's workspace, or for a run on the default branch or a tag in a chat
+named after it, and the space links it as related. Every start starts an agent:
 `--agent`, else `agent.default`, else one picked on a terminal; without
 either it is refused, and `shoal create` makes a workspace without an agent.
 `--mode` picks the mode, else
@@ -127,7 +130,7 @@ shoal create --copy                      # A copy of this workspace's files
 ```
 
 `create` creates a workspace without an agent from what `shoal start` takes
-for one, such as a branch, an issue or a PR or branch link, as a child of the
+for one, such as a branch, an issue or a PR, branch or CI run link, as a child of the
 current space, a workspace or a chat, or of the one `--parent` names, with its
 own worktree, branch and setup, and returns its `path`. Shoal commands run in the
 child's directory act on the child. The child's issue and PR activity reaches

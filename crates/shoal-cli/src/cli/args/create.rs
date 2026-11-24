@@ -5,12 +5,24 @@ use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, ModelArgs, issue_input, permission_assignment, pull_input},
+    cli::args::{
+        AgentParser, ModelArgs, issue_input, permission_assignment, pull_input, run_input,
+    },
     config::permissions::PermissionChange,
 };
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::launches::{ItemChoice, Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
+
+/// clap parser for `--ci`: a CI run's URL, since a number names no run.
+fn run_url(input: &str) -> Result<crate::forge::items::reference::ItemInput, String> {
+    match run_input(input)? {
+        crate::forge::items::reference::ItemInput::Number(_) => {
+            Err("a number names no run; pass the run's URL".into())
+        }
+        url => Ok(url),
+    }
+}
 
 /// clap parser for [`StartTarget`].
 fn start_target(input: &str) -> Result<StartTarget, String> {
@@ -191,8 +203,8 @@ pub struct BranchArgs {
 // workspace starts from and where it goes.
 #[derive(Debug, Default, Clone, Args)]
 pub struct CreateArgs {
-    /// Registered repository, or an issue, PR or branch URL; defaults to the
-    /// current checkout or workspace, else a picker.
+    /// Registered repository, or an issue, PR, CI run or branch URL;
+    /// defaults to the current checkout or workspace, else a picker.
     #[arg(value_parser = start_target)]
     pub repository: Option<StartTarget>,
     /// Repository for an issue number or a pasted link.
@@ -319,8 +331,8 @@ pub struct StartArgs {
     /// and post-setup hook done, instead of once it is recorded.
     #[arg(long)]
     pub wait: bool,
-    /// Registered repository, or an issue, PR or branch URL; defaults to the
-    /// current checkout or workspace, else a picker.
+    /// Registered repository, or an issue, PR, CI run or branch URL;
+    /// defaults to the current checkout or workspace, else a picker.
     #[arg(value_parser = start_target)]
     pub repository: Option<StartTarget>,
     /// Repository for an issue number or a pasted link.
@@ -342,6 +354,11 @@ pub struct StartArgs {
     /// the label of the mode --mode names where it has one.
     #[arg(long, num_args = 0..=1, value_parser = pull_input)]
     pub pr: Option<Option<crate::forge::items::reference::ItemInput>>,
+    /// The CI run URL the agent starts on, as a run link does: in its PR's
+    /// or branch's workspace, or a chat for a run on the default branch or a
+    /// tag. Without a value, offers the runs that fail now.
+    #[arg(long, num_args = 0..=1, value_parser = run_url)]
+    pub ci: Option<Option<crate::forge::items::reference::ItemInput>>,
     /// Create this worktree at an exact new directory instead of the repository default.
     #[arg(long)]
     pub path: Option<PathBuf>,
@@ -401,7 +418,7 @@ impl StartArgs {
             git_profile: self.git_profile.clone(),
             issue: self.issue.clone().map(ItemChoice::from),
             pr: self.pr.clone().map(ItemChoice::from),
-            ci: None,
+            ci: self.ci.clone().map(ItemChoice::from),
             copy: self.copy.copy.clone().map(SpaceChoice::from),
             checkpoint: self.copy.checkpoint,
             skip_setup: self.creation.skip_setup,
