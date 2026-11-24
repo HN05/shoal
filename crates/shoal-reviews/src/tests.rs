@@ -21,7 +21,7 @@ const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","reopened"
 /// A workspace whose reviewers are `[agents.<name>]` scripts, in which
 /// `{review}` names a file holding [`REVIEW`], with the review scheduler
 /// running when there are any.
-async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
+pub(crate) async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
     fixture_with(reviewers, review, "").await
 }
 
@@ -49,12 +49,12 @@ async fn fixture_with(reviewers: &[(&str, &str)], review: &str, settings: &str) 
 
 impl Fixture {
     /// What a reviewer script wrote beside [`REVIEW`] as `name`.
-    fn written(&self, name: &str) -> PathBuf {
+    pub(crate) fn written(&self, name: &str) -> PathBuf {
         self.root.path().join(name)
     }
 
     /// The directory of the runs of the workspace's reviews.
-    fn run(&self) -> PathBuf {
+    pub(crate) fn run(&self) -> PathBuf {
         self.runs.root().join(self.workspace.id.as_str())
     }
 
@@ -68,7 +68,7 @@ impl Fixture {
     }
 
     /// A review of the workspace, once its run ended and delivered it.
-    async fn review(&self) -> Review {
+    pub(crate) async fn review(&self) -> Review {
         self.review_by(None).await
     }
 
@@ -84,7 +84,7 @@ impl Fixture {
     }
 
     /// Queue a review of the workspace by `agent`.
-    async fn queue(&self, agent: Option<crate::agent::Agent>) -> anyhow::Result<Review> {
+    pub(crate) async fn queue(&self, agent: Option<crate::agent::Agent>) -> anyhow::Result<Review> {
         let target = ReviewTarget::Workspace;
         (self.reviews.queue(
             &*self.daemon,
@@ -97,7 +97,7 @@ impl Fixture {
     }
 
     /// Review `id` as requests show it.
-    async fn shown(&self, id: ReviewId) -> anyhow::Result<Review> {
+    pub(crate) async fn shown(&self, id: ReviewId) -> anyhow::Result<Review> {
         self.reviews.review(&*self.daemon, id).await
     }
 
@@ -111,7 +111,11 @@ impl Fixture {
 
     /// Resolve the finding's thread `thread` with `outcome`, or reopen it
     /// without one, as the daemon does: its false positives first.
-    async fn resolve(&self, thread: &Thread, outcome: Option<Outcome>) -> anyhow::Result<()> {
+    pub(crate) async fn resolve(
+        &self,
+        thread: &Thread,
+        outcome: Option<Outcome>,
+    ) -> anyhow::Result<()> {
         let kept = self
             .reviews
             .keep_false_positive(&*self.daemon, thread, outcome.as_ref());
@@ -120,7 +124,7 @@ impl Fixture {
         Ok(())
     }
 
-    fn messages(&self) -> Vec<String> {
+    pub(crate) fn messages(&self) -> Vec<String> {
         self.daemon.messages.lock().unwrap().clone()
     }
 

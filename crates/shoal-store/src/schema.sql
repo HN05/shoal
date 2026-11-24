@@ -982,7 +982,7 @@ CREATE TABLE "space_turn_retries" (
 
 CREATE TABLE review_reopens (
     review_id INTEGER NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
-    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE, reason TEXT,
     PRIMARY KEY(review_id, thread_id)
 );
 

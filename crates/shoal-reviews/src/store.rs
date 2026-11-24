@@ -174,6 +174,15 @@ pub fn waits_for_recovery(db: &Connection, id: ReviewId) -> Result<bool> {
         .unwrap_or(false))
 }
 
+/// The state of review `id`, none once it is gone.
+pub fn state(db: &Connection, id: ReviewId) -> Result<Option<ReviewState>> {
+    Ok(db
+        .query_row("SELECT state FROM reviews WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?)
+}
+
 /// The reviews that are running.
 pub fn running(db: &Connection) -> Result<Vec<ReviewId>> {
     Ok(db
@@ -273,6 +282,89 @@ pub fn finish(
     }
     records.release_review_threads(tx, id)?;
     Ok(true)
+}
+
+/// Hold, until running review `id` is submitted, its reopen of the finding
+/// whose thread is `thread`, with the `reason` its post gives.
+pub fn hold_reopen(db: &Connection, id: ReviewId, thread: i64, reason: &str) -> Result<()> {
+    db.execute(
+        "INSERT INTO review_reopens(review_id,thread_id,reason) VALUES (?1,?2,?3)
+            ON CONFLICT(review_id,thread_id) DO UPDATE SET reason=excluded.reason",
+        params![id, thread, reason],
+    )?;
+    Ok(())
+}
+
+/// Finish running review `id` as its reviewer submitted it, with `summary`
+/// and the verdict its threads give, at the commits its run recorded:
+/// post the reopens it held and let its threads post as any thread does.
+/// False when it is no longer running.
+pub fn submit_run(
+    tx: &rusqlite::Transaction<'_>,
+    records: &dyn Records,
+    id: ReviewId,
+    workspace: &SpaceId,
+    summary: Option<&str>,
+    approve: bool,
+    now: UnixTime,
+) -> Result<bool> {
+    let comments = records.review_threads(tx, id)?.len();
+    let verdict = crate::written::verdict(approve, comments);
+    let submitted = tx.execute(
+        "UPDATE reviews SET state=?2,summary=?3,verdict=?4,ended_at=?5 WHERE id=?1 AND state=?6",
+        params![
+            id,
+            ReviewState::Finished,
+            summary,
+            verdict,
+            now,
+            ReviewState::Running
+        ],
+    )? == 1;
+    if !submitted {
+        return Ok(false);
+    }
+    post_held_reopens(tx, records, id, workspace)?;
+    records.release_review_threads(tx, id)?;
+    Ok(true)
+}
+
+/// Post the reopens review `id` held in the threads of the workspace
+/// `workspace`, dropping each whose thread is no longer a finding resolved
+/// `fixed`.
+fn post_held_reopens(
+    tx: &rusqlite::Transaction<'_>,
+    records: &dyn Records,
+    id: ReviewId,
+    workspace: &SpaceId,
+) -> Result<()> {
+    let held: Vec<(i64, String)> = tx
+        .prepare(
+            "SELECT thread_id,reason FROM review_reopens WHERE review_id=?1 AND reason IS NOT NULL",
+        )?
+        .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (thread, reason) in held {
+        let sql = match records.reopen_finding(tx, workspace, thread, &reason)? {
+            true => "UPDATE review_reopens SET reason=NULL WHERE review_id=?1 AND thread_id=?2",
+            false => "DELETE FROM review_reopens WHERE review_id=?1 AND thread_id=?2",
+        };
+        tx.execute(sql, params![id, thread])?;
+    }
+    Ok(())
+}
+
+/// Drop what running review `id`'s run wrote: the threads it opened and the
+/// reopens it held, before the review fails, its fallback runs or it runs
+/// again.
+pub fn drop_run_writes(
+    tx: &rusqlite::Transaction<'_>,
+    records: &dyn Records,
+    id: ReviewId,
+) -> Result<()> {
+    records.drop_review_threads(tx, id)?;
+    tx.execute("DELETE FROM review_reopens WHERE review_id=?1", [id])?;
+    Ok(())
 }
 
 /// The session the latest earlier review of review `id`'s workspace and PR,

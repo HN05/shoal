@@ -178,7 +178,7 @@ impl Reviews {
 /// Refuse a summary that is empty, holds control characters other than
 /// newlines and tabs, or leaves the message that delivers it no room for
 /// its comments.
-fn validate_summary(summary: &str) -> Result<()> {
+pub(crate) fn validate_summary(summary: &str) -> Result<()> {
     validate::agent_message(summary).context("invalid summary")?;
     ensure!(
         summary.len() <= MAX_SUMMARY_LEN,
@@ -190,7 +190,7 @@ fn validate_summary(summary: &str) -> Result<()> {
 /// What a review submitted with `comments` says: it approves when its
 /// writer says so, else asks for changes when it comments, else only
 /// comments.
-fn verdict(approve: bool, comments: usize) -> Verdict {
+pub(crate) fn verdict(approve: bool, comments: usize) -> Verdict {
     match (approve, comments) {
         (true, _) => Verdict::Approve,
         (false, 0) => Verdict::Comment,

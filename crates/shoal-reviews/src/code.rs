@@ -1,16 +1,15 @@
 //! Where a review's findings are in the commit it reviewed, which the
 //! opening posts of their threads point at.
-use std::path::Path;
+use std::path::{Component, Path};
 
-use shoal_protocol::code::{self, CodeAt, Lines};
+use anyhow::{Context as _, Result, bail};
+use shoal_protocol::code::{self, CodeAt, Lines, NewCodeRef};
 use shoal_refs::CommitId;
 
 use crate::{daemon::FindingCode, git, log, reviews::output::NewFinding};
 
 /// Where each of `findings` is in the commit `head` of the repository the
-/// worktree `worktree` belongs to, in order: its lines, within its file, and
-/// the blob and snippet of its file there, which a file the commit lacks,
-/// or one a reference keeps no versions of, goes without.
+/// worktree `worktree` belongs to, in order.
 pub(crate) async fn finding_code(
     worktree: &Path,
     head: &CommitId,
@@ -18,28 +17,80 @@ pub(crate) async fn finding_code(
 ) -> Vec<FindingCode> {
     let mut found = Vec::new();
     for finding in findings {
-        let text = match file_at(worktree, head, &finding.path).await {
-            Ok(text) => text,
-            Err(error) => {
-                log!("{} at {}: {error:#}", finding.path, head.short());
-                None
-            }
-        };
-        let lines = match &text {
-            Some((_, text)) => within(finding.lines(), text),
-            None => finding.lines(),
-        };
-        found.push(FindingCode {
-            commit: head.clone(),
-            snippet: text.as_ref().map(|(_, text)| code::snippet(text, lines)),
-            at: CodeAt {
-                path: finding.path.clone(),
-                lines: Some(lines),
-                blob: text.map(|(blob, _)| blob),
-            },
-        });
+        let lines = Some(finding.lines());
+        found.push(at_commit(worktree, head, finding.path.clone(), lines).await);
     }
     found
+}
+
+/// Where each place in `code` is in the commit `head`, checked out at
+/// `checkout`, of the repository the worktree `worktree` belongs to, in
+/// order; refused for a place outside the checkout.
+pub(crate) async fn in_checkout(
+    checkout: &Path,
+    worktree: &Path,
+    head: &CommitId,
+    code: &[NewCodeRef],
+) -> Result<Vec<FindingCode>> {
+    let mut found = Vec::new();
+    for place in code {
+        let path = within_checkout(checkout, &place.path)?;
+        found.push(at_commit(worktree, head, path, place.lines).await);
+    }
+    Ok(found)
+}
+
+/// The path of `path` relative to the checkout `checkout`, with `/`
+/// between its parts, as a commit names it; refused outside the checkout.
+fn within_checkout(checkout: &Path, path: &Path) -> Result<String> {
+    let canonical = |path: &Path| {
+        std::fs::canonicalize(path).with_context(|| format!("{} cannot be read", path.display()))
+    };
+    let (root, place) = (canonical(checkout)?, canonical(path)?);
+    let Ok(relative) = place.strip_prefix(&root) else {
+        bail!(
+            "{} is outside the checkout of the reviewed commit, {}",
+            path.display(),
+            checkout.display()
+        );
+    };
+    let parts = relative.components().map(|part| match part {
+        Component::Normal(part) => part.to_str().context("a path that is not UTF-8"),
+        _ => bail!("{} is no path in the checkout", path.display()),
+    });
+    Ok(parts.collect::<Result<Vec<_>>>()?.join("/"))
+}
+
+/// Where `path`'s `lines` are in the commit `head` of the repository the
+/// worktree `worktree` belongs to: within its file, and with the blob and
+/// snippet of its file there, which a file the commit lacks, or one a
+/// reference keeps no versions of, goes without.
+async fn at_commit(
+    worktree: &Path,
+    head: &CommitId,
+    path: String,
+    lines: Option<Lines>,
+) -> FindingCode {
+    let text = match file_at(worktree, head, &path).await {
+        Ok(text) => text,
+        Err(error) => {
+            log!("{path} at {}: {error:#}", head.short());
+            None
+        }
+    };
+    let lines = match &text {
+        Some((_, text)) => lines.map(|lines| within(lines, text)),
+        None => lines,
+    };
+    FindingCode {
+        commit: head.clone(),
+        snippet: (text.as_ref()).and_then(|(_, text)| Some(code::snippet(text, lines?))),
+        at: CodeAt {
+            path,
+            lines,
+            blob: text.map(|(blob, _)| blob),
+        },
+    }
 }
 
 /// The blob of the file `path` in the commit `head` and its text, when a
