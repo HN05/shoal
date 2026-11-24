@@ -440,10 +440,11 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
     );
 
     // The restore fails without a configured restore command, which frees
-    // its queue entry, before the next one starts.
+    // its queue entry and ends its session, before the next one starts.
     wait_until("the failed restore to leave the queue", || {
         fixture.ok(&["queue"]) == serde_json::json!([])
     });
+    wait_zmx_sessions_ended(fixture.root.path());
 
     // Focused, the agent's session takes this terminal; its restore fails
     // as the detached one did, so only the zmx calls show the path taken.
