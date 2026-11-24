@@ -29,7 +29,7 @@ pub(super) async fn run(
     let named = selected.spaces.is_some();
     let spaces = match selected.spaces {
         Some(spaces) => spaces,
-        None => targets::in_reach(ctx, true).await?,
+        None => targets::discardable_in_reach(ctx).await?,
     };
     ensure!(
         execution.is_none() || spaces.len() == 1,

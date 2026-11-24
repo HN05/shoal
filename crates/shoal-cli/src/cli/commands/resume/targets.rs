@@ -66,25 +66,32 @@ impl Selected {
 }
 
 /// The spaces this process's scope reaches below its own whose agent can
-/// resume, as `--all` selects them, by ID: a done space's agent resumes only
-/// when its space is named. `done` includes the done ones, as a discard of
-/// their agents does.
-pub(in crate::cli::commands) async fn in_reach(
-    ctx: &Context,
-    done: bool,
-) -> Result<Vec<SpaceSelector>> {
+/// resume, with what of it resumes.
+async fn in_reach(ctx: &Context) -> Result<Vec<ResumableSpace>> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let scoping = crate::scoping::Scoping::inherited(&ctx.paths.state);
-    let reached = Spaces(scoping.reached_below(spaces));
-    Ok((resumable(ctx, &reached).await?.into_iter())
-        .filter(|resumable| done || !resumable.space.done())
+    resumable(ctx, &Spaces(scoping.reached_below(spaces))).await
+}
+
+/// The spaces in reach that `--all` resumes, by ID: those that saved
+/// stopped work or last sessions, since a failed launch queues again only
+/// for its space named or picked, and a done space's agent resumes only
+/// when its space is named.
+pub(super) async fn resumable_in_reach(ctx: &Context) -> Result<Vec<SpaceSelector>> {
+    Ok((in_reach(ctx).await?.into_iter())
+        .filter(|resumable| resumable.saved.is_some() && !resumable.space.done())
         .map(|resumable| SpaceSelector::id(&resumable.space.id))
         .collect())
 }
 
-/// The spaces `--all` resumes, as [`in_reach`] selects them.
-pub(super) async fn resumable_in_reach(ctx: &Context) -> Result<Vec<SpaceSelector>> {
-    in_reach(ctx, false).await
+/// The spaces in reach whose agents `--all` discards, by ID: every one with
+/// saved work or a failed launch, done or not.
+pub(in crate::cli::commands) async fn discardable_in_reach(
+    ctx: &Context,
+) -> Result<Vec<SpaceSelector>> {
+    Ok((in_reach(ctx).await?.into_iter())
+        .map(|resumable| SpaceSelector::id(&resumable.space.id))
+        .collect())
 }
 
 /// The spaces among `spaces` whose agent can resume: those that saved a
