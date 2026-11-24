@@ -16,7 +16,10 @@ use crate::{
     validate,
 };
 
+mod pending;
 pub mod store;
+
+pub use pending::Pending;
 
 /// Longest summary of a review its writer submits, in bytes: half of the
 /// message that delivers it, so its comments and how to answer them fit.

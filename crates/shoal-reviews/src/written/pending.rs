@@ -7,6 +7,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use futures_util::future::join_all;
 use serde::de::DeserializeOwned;
+use shoal_daemon_base::{callers::Caller, log};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::Member,
@@ -14,13 +15,14 @@ use shoal_protocol::{
     reviews::Review,
     space_names::SpaceSelector,
 };
-use shoal_reviews::written::Writer;
 
-use crate::daemon::{log, manager::Manager, scope::Caller};
+use super::Writer;
+use crate::{Reviews, daemon::Daemon};
 
 /// The pending reviews of a request's caller, the user without one.
-pub(in crate::daemon) struct Pending<'a> {
-    manager: &'a Manager,
+pub struct Pending<'a> {
+    reviews: &'a Reviews,
+    daemon: &'a dyn Daemon,
     caller: Option<&'a Caller>,
     /// Whether another machine forwarded the request here.
     forwarded: bool,
@@ -33,13 +35,15 @@ struct Kept {
 }
 
 impl<'a> Pending<'a> {
-    pub(in crate::daemon) fn new(
-        manager: &'a Manager,
+    pub fn new(
+        reviews: &'a Reviews,
+        daemon: &'a dyn Daemon,
         caller: Option<&'a Caller>,
         forwarded: bool,
     ) -> Self {
         Self {
-            manager,
+            reviews,
+            daemon,
             caller,
             forwarded,
         }
@@ -47,18 +51,14 @@ impl<'a> Pending<'a> {
 
     /// The caller's pending reviews, oldest first, leaving out those of a
     /// machine that cannot be asked, as while it is offline.
-    pub(in crate::daemon) async fn reviews(&self) -> Result<Vec<Review>> {
+    pub async fn reviews(&self) -> Result<Vec<Review>> {
         let kept = self.kept().await?;
         Ok(kept.into_iter().map(|kept| kept.review).collect())
     }
 
     /// Submit the caller's only pending review with `summary`, approving
     /// its work when `approve`.
-    pub(in crate::daemon) async fn submit_only(
-        &self,
-        approve: bool,
-        summary: Option<String>,
-    ) -> Result<Review> {
+    pub async fn submit_only(&self, approve: bool, summary: Option<String>) -> Result<Review> {
         let kept = self.kept().await?;
         ensure!(
             !kept.is_empty(),
@@ -69,13 +69,8 @@ impl<'a> Pending<'a> {
         let workspace = SpaceSelector::id(&only.review.workspace_id);
         match only.machine {
             None => {
-                let submitted = (self.manager.reviews).submit(
-                    self.manager,
-                    &workspace,
-                    self.writer(),
-                    approve,
-                    summary,
-                );
+                let submitted =
+                    (self.reviews).submit(self.daemon, &workspace, self.writer(), approve, summary);
                 submitted.await
             }
             Some(machine) => {
@@ -92,21 +87,16 @@ impl<'a> Pending<'a> {
     /// Cancel, for a command run in the workspace `here` names, the
     /// caller's pending review of it, else its queued or running one, else
     /// the caller's only pending review.
-    pub(in crate::daemon) async fn cancel_here(&self, here: &SpaceSelector) -> Result<Review> {
-        let reviews = &self.manager.reviews;
-        if let Some(id) = reviews
-            .to_cancel(self.manager, here, &self.writer())
-            .await?
-        {
-            return reviews
-                .cancel(self.manager, None, Some(id), self.by())
-                .await;
+    pub async fn cancel_here(&self, here: &SpaceSelector) -> Result<Review> {
+        let reviews = self.reviews;
+        if let Some(id) = reviews.to_cancel(self.daemon, here, &self.writer()).await? {
+            return reviews.cancel(self.daemon, None, Some(id), self.by()).await;
         }
         let only = only(self.kept().await?)
             .context("nothing here to cancel, nor is any one review of yours pending")?;
         match only.machine {
             None => {
-                let cancelled = reviews.cancel(self.manager, None, Some(only.review.id), self.by());
+                let cancelled = reviews.cancel(self.daemon, None, Some(only.review.id), self.by());
                 cancelled.await
             }
             Some(machine) => {
@@ -123,7 +113,7 @@ impl<'a> Pending<'a> {
     /// The caller's pending reviews with the machine that keeps each,
     /// oldest first.
     async fn kept(&self) -> Result<Vec<Kept>> {
-        let here = (self.manager.reviews).pending_reviews(self.manager, self.writer());
+        let here = (self.reviews).pending_reviews(self.daemon, self.writer());
         let mut kept: Vec<Kept> = (here.await?.into_iter())
             .map(|review| Kept {
                 review,
@@ -142,7 +132,7 @@ impl<'a> Pending<'a> {
     /// The other machines that run a space the caller sees, which keep the
     /// reviews of those spaces; none while the hub cannot be asked.
     async fn machines(&self) -> Vec<Member> {
-        let machines = self.manager.hub.machines_seen(self.manager, self.caller);
+        let machines = self.daemon.machines_seen(self.caller);
         machines.await.unwrap_or_else(|error| {
             log!("could not ask the hub which machines keep pending reviews: {error:#}");
             Vec::new()
@@ -175,7 +165,7 @@ impl<'a> Pending<'a> {
     /// What `machine` answers the caller's review request `method`.
     async fn ask<T: DeserializeOwned>(&self, machine: &Member, method: ReviewMethod) -> Result<T> {
         let operation = Operation::Review(method);
-        let asked = (self.manager.hub).ask_machine(self.manager, machine, operation, self.caller);
+        let asked = self.daemon.ask_machine(machine, operation, self.caller);
         let Body::ReviewPieces(pieces) = asked.await? else {
             bail!(
                 "machine {} answered a review request unexpectedly",
