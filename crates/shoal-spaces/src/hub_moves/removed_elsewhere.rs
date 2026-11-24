@@ -1,8 +1,9 @@
 //! Finding the removal record of a space another joined machine removed:
 //! the hub's directory lists the machine that keeps it, which answers for
 //! it as it answers its own callers, so a move to a file can take it from
-//! there.
-use anyhow::{Context as _, Result};
+//! there, and a restore here names that machine.
+use anyhow::{Context as _, Result, bail};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     hub::Member,
     model::{LocatedRemoved, RemovedSpace},
@@ -39,6 +40,47 @@ impl Spaces {
             space: Box::new(space),
             machine: Box::new(machine),
         })
+    }
+}
+
+impl Spaces {
+    /// The removed space `selector` names, as [`Self::restorable_space`]
+    /// finds it, which a restore here reopens; refused naming the other
+    /// joined machine that keeps its record when this one keeps none.
+    pub async fn restorable_here(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+    ) -> Result<RemovedSpace> {
+        let missing = match self.restorable_space(daemon, selector).await {
+            Ok(space) => return Ok(space),
+            Err(missing) => missing,
+        };
+        if let Some(id) = selector.given_id() {
+            self.refuse_kept_elsewhere(daemon, id).await?;
+        }
+        Err(missing)
+    }
+
+    /// Refuse the restore of the removed space `id` whose removal record
+    /// another joined machine keeps and this one does not, naming that
+    /// machine and how to open the space here.
+    pub(crate) async fn refuse_kept_elsewhere(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+    ) -> Result<()> {
+        if self.removed_here(id).await? {
+            return Ok(());
+        }
+        let selector = SpaceSelector::id(id);
+        if let Ok(Some(machine)) = daemon.record_keeper(&selector).await {
+            bail!(
+                "machine {} keeps the record of removed space {id}; restore it there, or open it here with shoal move {id} -o FILE, then shoal restore --from FILE",
+                machine.name
+            );
+        }
+        Ok(())
     }
 }
 

@@ -9,7 +9,7 @@ use super::support::{
     fixture::{Base, home},
     git,
     home::Home,
-    install_test_script, shoal_binary,
+    install_test_script, printed, shoal_binary,
     wait::wait_for,
 };
 
@@ -198,6 +198,26 @@ fn a_restore_of_a_space_another_machine_runs_is_refused() {
     assert!(!refused.status.success());
     let error = String::from_utf8_lossy(&refused.stderr);
     assert!(error.contains("runs on machine laptop"), "{error}");
+}
+
+#[test]
+fn a_restore_of_a_space_another_machine_removed_names_how_to_move_it_here() {
+    let hub = machine(true, "app");
+    let laptop = machine(false, "app");
+    let laptop_id = join(&laptop, &hub, "laptop");
+    let work = workspace(&laptop, "work");
+    listed(&hub, &work, &laptop_id);
+    laptop.ok(&["rm", "--wait", &work, "--yes"]);
+    wait_for("the hub to drop the removed space", || {
+        let spaces = hub.ok(&["list"]);
+        let mut spaces = spaces.as_array().unwrap().iter();
+        (!spaces.any(|listed| listed["id"] == work)).then_some(())
+    });
+    let refused = hub.run(&["restore", &work]);
+    assert!(!refused.status.success(), "{}", printed(&refused));
+    let error = String::from_utf8_lossy(&refused.stderr);
+    assert!(error.contains("laptop"), "{error}");
+    assert!(error.contains(&format!("shoal move {work} -o")), "{error}");
 }
 
 #[test]

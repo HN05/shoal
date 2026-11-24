@@ -77,7 +77,7 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::RemovedSpaces));
         }
         RemovalMethod::RemovedSpace { space } => Body::RemovedSpaces(vec![
-            manager.spaces.restorable_space(&**manager, &space).await?,
+            manager.spaces.restorable_here(&**manager, &space).await?,
         ]),
         RemovalMethod::LocateRemovedSpace { space } => Body::LocatedRemoved(Box::new(
             manager

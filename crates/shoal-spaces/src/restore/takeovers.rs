@@ -149,7 +149,7 @@ impl Spaces {
     }
 
     /// Whether this machine has a removal record of the space `id`.
-    async fn removed_here(&self, id: &SpaceId) -> Result<bool> {
+    pub(crate) async fn removed_here(&self, id: &SpaceId) -> Result<bool> {
         let removed = self.removed_spaces().await?;
         Ok(removed.iter().any(|removed| &removed.space_id == id))
     }

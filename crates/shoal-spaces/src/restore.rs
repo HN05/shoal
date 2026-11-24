@@ -54,6 +54,7 @@ impl Spaces {
         }
         if let Some(id) = selector.given_id() {
             daemon.refuse_live_elsewhere(id).await?;
+            self.refuse_kept_elsewhere(daemon, id).await?;
         }
         self.reopen_space(daemon, selector, caller).await
     }
