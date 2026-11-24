@@ -27,9 +27,9 @@ pub async fn restore(
     resuming: &impl Resuming,
 ) -> Result<Queued> {
     let mut report = Queued::default();
+    let listed = crate::client::spaces::list(paths).await?;
     for (space, executions) in stopped.iter().filter(|(_, ids)| !ids.is_empty()) {
-        let selector = SpaceSelector::id(space);
-        let Some(space) = crate::client::spaces::present_space(paths, &selector).await? else {
+        let Some(space) = listed.find(&SpaceSelector::id(space)) else {
             continue;
         };
         let resume = AgentResume {
