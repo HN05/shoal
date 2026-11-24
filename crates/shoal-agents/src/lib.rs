@@ -236,9 +236,10 @@ impl Agents {
         &self.overload_recovery
     }
 
-    /// Admit an agent to the workspace `selector` names, unless it
-    /// converts. The guard, held until the agent is tracked, keeps the
-    /// workspace from becoming a chat meanwhile.
+    /// Admit an agent to the space `selector` names, unless it converts.
+    /// The guard, held until the agent is tracked, keeps a workspace from
+    /// becoming a chat, or another agent tool's switch from being recorded,
+    /// meanwhile.
     pub async fn admit_agent(
         &self,
         daemon: &dyn daemon::Daemon,

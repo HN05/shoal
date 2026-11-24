@@ -100,8 +100,8 @@ pub async fn register(
             .await
             .map_err(refused)?;
     }
-    // Only a workspace's agent may meet a conversion in progress.
-    let admitted = match tracks_agent && target.worktree().is_some() {
+    // An agent may meet a conversion in progress, of either kind of space.
+    let admitted = match tracks_agent {
         true => Some(agents.admit_agent(daemon, &space).await.map_err(refused)?),
         false => None,
     };

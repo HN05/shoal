@@ -96,26 +96,25 @@ impl Spaces {
         })
     }
 
-    /// Refuse an agent of the workspace `selector` names while it converts:
-    /// one that becomes a chat, whose agent carries on there, or a chat that
-    /// became it, whose agent's turn end, which another agent's reports
-    /// would hide, moves it there. The caller holds the agents' admissions.
+    /// Refuse an agent of the space `selector` names while it converts: a
+    /// workspace that becomes a chat, whose agent carries on there, or a
+    /// chat that became it, whose agent's turn end, which another agent's
+    /// reports would hide, moves it there, or a space whose work goes over to
+    /// another agent tool. The caller holds the agents' admissions.
     pub async fn ensure_takes_agents(&self, selector: &SpaceSelector) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        let id = workspace.id.clone();
+        let space = self.space(selector).await?;
+        let id = space.id.clone();
         let pending = self.store.run(move |db| super::pending(db, &id)).await?;
+        let (kind, name) = (space.kind(), &space.name);
         match pending {
             Some(super::Pending::Chat { .. }) => bail!(
-                "workspace {} becomes a chat once its agent's turn ends; restore the agent in the chat then",
-                workspace.name
+                "workspace {name} becomes a chat once its agent's turn ends; restore the agent in the chat then"
             ),
             Some(super::Pending::Workspace { .. }) => bail!(
-                "the agent of the chat that became workspace {} moves there once its turn ends; start another agent there then",
-                workspace.name
+                "the agent of the chat that became workspace {name} moves there once its turn ends; start another agent there then"
             ),
             Some(super::Pending::Agent { taking, .. }) => bail!(
-                "the work of workspace {} goes over to {} once its agent's turn ends; start another agent there then",
-                workspace.name,
+                "the work of {kind} {name} goes over to {}; start another agent there once it has",
                 taking.agent
             ),
             None => Ok(()),

@@ -275,9 +275,9 @@ impl Spaces {
     }
 
     /// Hand the work of the space `id` over to `taking` once the agent
-    /// `execution` runs ended its turn, as [`Self::hand_off`] does, keeping
-    /// it stopped when `held`, and forget the conversion.
-    async fn switch_after_turn(
+    /// `execution` runs or ran ended its turn, as [`Self::hand_off`] does,
+    /// keeping it stopped when `held`.
+    pub(super) async fn switch_after_turn(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
@@ -286,11 +286,7 @@ impl Spaces {
         held: bool,
     ) -> Result<()> {
         let leaving = self.leaving_agent(id, execution).await?;
-        self.hand_off(daemon, id, leaving, taking, held).await?;
-        let space = id.to_owned();
-        (self.store)
-            .write(move |tx| super::record::forget(tx, &space))
-            .await
+        self.hand_off(daemon, id, leaving, taking, held).await
     }
 
     /// Settle the conversion of the workspace `id` ahead of a stop of its

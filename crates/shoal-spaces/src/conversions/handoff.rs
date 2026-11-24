@@ -55,10 +55,12 @@ pub struct Taking {
 }
 
 impl Spaces {
-    /// Hand the work of the space `id` over from `leaving`, the agent it
-    /// had, if any, to `taking`: copy its agents' sessions into its attached
-    /// files, then save `taking` in place of `leaving`, which starts at once
-    /// unless `held` keeps it for `shoal resume`.
+    /// Hand the work of the space `id`, whose recorded conversion keeps
+    /// any agent from starting there meanwhile, over from `leaving`, the
+    /// agent it had, if any, to `taking`: copy its agents' sessions into its
+    /// attached files, save `taking` in place of `leaving` and forget the
+    /// conversion, then start `taking` unless `held` keeps it for `shoal
+    /// resume`.
     pub async fn hand_off(
         &self,
         daemon: &dyn Daemon,
@@ -73,6 +75,10 @@ impl Spaces {
             .await?;
         let origin = leaving.as_ref().and_then(|leaving| leaving.origin.clone());
         let execution = (self.save_taking(daemon, id, leaving, taking, &listed)).await?;
+        let space = id.to_owned();
+        (self.store)
+            .write(move |tx| super::record::forget(tx, &space))
+            .await?;
         if held {
             return Ok(());
         }

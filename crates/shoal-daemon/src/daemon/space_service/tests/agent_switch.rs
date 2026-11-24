@@ -317,3 +317,48 @@ async fn a_scoped_conversion_gives_only_permissions_its_caller_holds() {
     assert!(chat.is_some(), "it stays a chat");
     assert!(!manager.spaces.converting(&talk.id).await.unwrap());
 }
+
+/// No agent starts in a space, a chat as a workspace, while the switch of
+/// its stopped agent's work to another tool copies its sessions.
+#[tokio::test]
+async fn no_agent_is_admitted_while_a_switch_copies_the_sessions() {
+    let (root, manager) = manager().await;
+    let repo = repository_with_sessions(root.path(), &manager).await;
+    let talk = crate::daemon::test_support::chat(&manager, "talk", "chat", Some(&repo), None).await;
+    let selector = SpaceSelector::id(&talk.id);
+    let taking = crate::daemon::conversions::handoff::Taking {
+        agent: "codex".into(),
+        mode: crate::model::chat_mode(),
+        model: Default::default(),
+        narrowing: Default::default(),
+        note: None,
+    };
+    let id = talk.id.clone();
+    (manager.store)
+        .write(move |tx| {
+            let execution = ExecutionId::generate();
+            crate::daemon::conversions::record::record_stopped_switch(tx, &id, execution, taking)
+        })
+        .await
+        .unwrap();
+
+    assert!(
+        manager
+            .agents
+            .admit_agent(&*manager, &selector)
+            .await
+            .is_err()
+    );
+    let id = talk.id.clone();
+    (manager.store)
+        .write(move |tx| crate::daemon::conversions::record::forget(tx, &id))
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .agents
+            .admit_agent(&*manager, &selector)
+            .await
+            .is_ok()
+    );
+}

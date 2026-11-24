@@ -119,16 +119,18 @@ impl Spaces {
 
     /// Hand the work of `space` over to `taking`: once the turn of its
     /// running agent ends, which the conversion records, else at once, in
-    /// place of its stopped or asleep agent. Whether it went over at once.
+    /// place of its stopped or asleep agent, recorded first so no agent
+    /// starts there while its sessions are copied. Whether it went over at
+    /// once.
     async fn switch_agent(
         &self,
         daemon: &dyn Daemon,
         space: &Space,
         taking: Taking,
     ) -> Result<bool> {
+        let id = space.id.clone();
         let admissions = daemon.lock_agent_admissions().await;
-        if let Some(execution) = self.running_agent(daemon, &space.id).await? {
-            let id = space.id.clone();
+        if let Some(execution) = self.running_agent(daemon, &id).await? {
             (self.store)
                 .write(move |tx| super::record::record_agent_switch(tx, &id, execution, taking))
                 .await?;
@@ -138,11 +140,17 @@ impl Spaces {
             self.signals.agent_changed();
             return Ok(false);
         }
-        drop(admissions);
+        // Not one that waits in the agent queue.
         daemon.ensure_replaceable(space).await?;
-        let leaving = crate::spaces::sessions::newest_saved(&self.paths, &space.id)?;
-        let handoff = self.hand_off(daemon, &space.id, leaving, taking, false);
-        self.conversion_handovers.hold(handoff).await?;
+        let saved = crate::spaces::sessions::newest_saved(&self.paths, &id)?;
+        let execution = (saved.map(|saved| saved.execution)).unwrap_or_else(ExecutionId::generate);
+        let (space, recorded, switching) = (id.clone(), execution.clone(), taking.clone());
+        (self.store)
+            .write(move |tx| super::record::record_stopped_switch(tx, &space, recorded, switching))
+            .await?;
+        drop(admissions);
+        let switch = self.switch_after_turn(daemon, &id, &execution, taking, false);
+        self.conversion_handovers.hold(switch).await?;
         Ok(true)
     }
 

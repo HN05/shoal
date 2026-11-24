@@ -305,6 +305,23 @@ pub fn record_agent_switch(
     record(tx, id, &pending)
 }
 
+/// Record that `taking` takes the work of the space `id` over from its
+/// stopped or asleep agent, which saved itself as `execution`, while it
+/// copies the space's sessions: no agent starts there until it is done.
+pub fn record_stopped_switch(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    execution: ExecutionId,
+    taking: Taking,
+) -> Result<()> {
+    let pending = Pending::Agent {
+        execution,
+        taking: Box::new(taking),
+        held: false,
+    };
+    record(tx, id, &pending)
+}
+
 /// Replace the chat `id`, whose workspace row was just inserted under its
 /// ID, with that workspace, whose agent runs in `mode` with the permissions
 /// `narrowing` gives it, unless a stop saved the chat meanwhile and no other
