@@ -664,7 +664,8 @@ its body. Issues with neither, such as tracking and meta issues, stay out of tha
 flow. Comment on an issue only to add what changes its work, such as a new cause,
 failure mode or fix: another sighting of a failure it already describes, or a
 status its watcher already gets from Shoal, such as a PR opening or CI
-passing, is not posted.
+passing, is not posted. To agree with an issue or a comment, react to it with
+`shoal issue react`, which reaches no watcher.
 A PR description follows
 `.forgejo/pull_request_template.md`. Push the branch and let CI verify instead
 of running the full suite locally first.
