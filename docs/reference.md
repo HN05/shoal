@@ -1993,8 +1993,9 @@ for it in the thread, which the next review checks it against. A post in a
 finding's thread, `shoal send 3.4 "<text>"` from its holder or you, reaches the
 reviewer: Shoal resumes the session the reviews of the workspace or PR continue,
 as a one-shot, read-only run in a checkout of the workspace's latest commit,
-through the tool's `gate` template, and posts its answer, or why it gave none,
-in the thread, which tells the holder.
+through the tool's `review` template, which posts its answer in the thread for
+Shoal with `shoal send`, telling the holder; when it posts none, Shoal posts
+why.
 A post that waits for an answer gets it after a daemon restart too. A finding that
 needs your decision stays unresolved while the agent asks in a
 [thread](#threads) of its own, which keeps the gates below closed until you
