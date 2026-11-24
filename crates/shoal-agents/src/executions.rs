@@ -57,7 +57,7 @@ pub use completion::agent_execution_space;
 pub use shoal_protocol::executions::ExecutionKind;
 pub use state::{Completing, Connections, Executions};
 pub use stopping::StopPolicy;
-pub use stopping::{Save, StopRequest, UnprovenStop};
+pub use stopping::{Save, SpaceStop, StopRequest, UnprovenStop};
 
 /// A restored connection for a wrapper whose command kept running.
 #[derive(Debug)]

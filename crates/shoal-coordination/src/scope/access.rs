@@ -193,6 +193,23 @@ impl Coordination {
         Ok(space)
     }
 
+    /// Whether removing the space `selector` names at `caller`'s request
+    /// releases the user's holds of it and of the spaces below it: the
+    /// user's own request always does, and a scoped caller's once its
+    /// `user_holds` permission lets it take the holds there are. A hold the
+    /// user places after that still refuses the removal.
+    pub async fn releases_user_holds(
+        &self,
+        daemon: &dyn Daemon,
+        caller: Option<&Caller>,
+        selector: &SpaceSelector,
+    ) -> Result<bool> {
+        match caller {
+            Some(caller) => (self.authorize_held_removal(daemon, caller, selector, true)).await,
+            None => Ok(true),
+        }
+    }
+
     /// Let `caller` remove the space `selector` names, releasing the user's
     /// holds of it and of the spaces below it, as its `user_holds`
     /// permission allows: a removal that `takes` the holds uses up its

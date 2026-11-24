@@ -27,6 +27,20 @@ use shoal_schedule::priority::Priority;
 use std::path::PathBuf;
 
 impl Spaces for Manager {
+    fn stop_untracked_processes<'a>(
+        &'a self,
+        selector: &'a SpaceSelector,
+        requester: Option<u32>,
+    ) -> BoxFuture<'a, Result<usize>> {
+        Box::pin(async move {
+            let selection = shoal_protocol::processes::Selection::Processes;
+            let stopped = self
+                .spaces
+                .stop_space_processes(self, selector, selection, requester);
+            Ok(stopped.await?.processes)
+        })
+    }
+
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
         Box::pin(self.spaces.space(selector))
     }

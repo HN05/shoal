@@ -18,13 +18,11 @@ use super::super::{
     target_checks::{Checked, TargetCheck},
 };
 use crate::{
-    model::StoppedSpace,
-    process::identity,
-    protocol::{self, Body, QueuedLaunches, RemovalMethod, Response, UntrackedProcesses},
+    protocol::{self, Body, QueuedLaunches, RemovalMethod, Response},
     removal::InspectionPolicy,
     transfer::{MoveDestination, PackageImport, PackageSource},
 };
-use shoal_protocol::processes::Selection;
+use shoal_agents::executions::SpaceStop;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Whether `method` moves a space through a lifecycle state that an exit
@@ -110,7 +108,11 @@ pub(super) async fn handle(
                 launches,
                 processes,
             };
-            Body::StoppedSpace(stop_space(manager, &space, stop).await?)
+            Body::StoppedSpace(
+                (manager.agents)
+                    .stop_space_at_request(&**manager, &space, stop)
+                    .await?,
+            )
         }
         RemovalMethod::CheckStop { space } => {
             // A chat has no lifecycle state that refuses a stop.
@@ -126,7 +128,7 @@ pub(super) async fn handle(
         } => Body::StoppedProcesses(
             manager
                 .spaces
-                .stop_space_processes(&**manager, &space, selection, identity_of(requester))
+                .stop_space_processes(&**manager, &space, selection, requester)
                 .await?,
         ),
         RemovalMethod::CheckRemoval {
@@ -145,7 +147,10 @@ pub(super) async fn handle(
             above,
         } => {
             let inspection = InspectionPolicy::GitOnly;
-            let releases = !keep_user_holds && releases_holds(manager, caller, &space).await?;
+            let releases = !keep_user_holds
+                && (manager.coordination)
+                    .releases_user_holds(&**manager, caller, &space)
+                    .await?;
             Body::RemovalResult(match (above, releases) {
                 (Some(cause), _) => {
                     let confirmed = unsaved.children();
@@ -172,7 +177,9 @@ pub(super) async fn handle(
             })
         }
         RemovalMethod::StartRemoval { space, unsaved } => {
-            let release_holds = releases_holds(manager, caller, &space).await?;
+            let release_holds = (manager.coordination)
+                .releases_user_holds(&**manager, caller, &space)
+                .await?;
             (manager.spaces.start_removal(
                 &manager.daemon(),
                 &space,
@@ -382,68 +389,6 @@ async fn import_streamed(
         Err(error) => answer::failure(&error),
     };
     answer::reply(&mut stream, request_id, body).await
-}
-
-/// Whether removing `space` at `caller`'s request releases the user's holds
-/// of it and of the spaces below it: the user's own request always does,
-/// and a scoped caller's once its `user_holds` permission lets it take the
-/// holds there are. A hold the user places after that still refuses the
-/// removal.
-async fn releases_holds(
-    manager: &Manager,
-    caller: Option<&Caller>,
-    space: &SpaceSelector,
-) -> Result<bool> {
-    match caller {
-        Some(caller) => {
-            manager
-                .coordination
-                .authorize_held_removal(manager, caller, space, true)
-                .await
-        }
-        None => Ok(true),
-    }
-}
-
-/// What a [`RemovalMethod::StopSpace`] request asks of the stop.
-struct SpaceStop {
-    acknowledge_unproven: bool,
-    launches: QueuedLaunches,
-    processes: UntrackedProcesses,
-}
-
-/// Stop the agents and commands of `space`, then its untracked processes
-/// as `stop` says, reporting whether the stop saved work for `shoal
-/// restore`; a CI job's workspace has its run cancelled instead.
-async fn stop_space(
-    manager: &Manager,
-    space: &SpaceSelector,
-    stop: SpaceStop,
-) -> Result<StoppedSpace> {
-    let mut stopped = manager
-        .agents
-        .stop_space_manually(manager, space, stop.acknowledge_unproven, stop.launches)
-        .await?;
-    if stopped.cancelled_run.is_some() {
-        return Ok(stopped);
-    }
-    if let UntrackedProcesses::Stop { requester } = stop.processes {
-        let untracked = manager
-            .spaces
-            .stop_space_processes(manager, space, Selection::Processes, identity_of(requester))
-            .await?;
-        stopped.other_processes = untracked.processes;
-    }
-    // A read that fails reports nothing saved rather than failing the stop.
-    stopped.saved =
-        (manager.agents.saved_work(manager, space).await).is_ok_and(|saved| !saved.is_empty());
-    Ok(stopped)
-}
-
-/// The identity of the requesting process `pid`, which a stop of untracked
-/// processes spares with the processes that started it.
-fn identity_of(pid: Option<u32>) -> Option<identity::Identity> {
-    pid.and_then(|pid| identity::capture(pid).ok().flatten())
 }
 
 impl Checked for RemovalMethod {

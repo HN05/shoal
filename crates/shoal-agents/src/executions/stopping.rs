@@ -13,8 +13,8 @@ use crate::model::Workspace;
 use crate::process::execution::Processes;
 use crate::process::identity as process;
 use crate::process::identity::Identity;
-use crate::protocol::QueuedLaunches;
 use crate::protocol::timing;
+use crate::protocol::{QueuedLaunches, UntrackedProcesses};
 use crate::state::ExecutionState;
 use crate::state::WorkspaceState;
 use anyhow::{Result, ensure};
@@ -31,6 +31,16 @@ use crate::daemon::Daemon;
 use shoal_daemon_base::jobs::JobStop;
 pub use shoal_daemon_base::stops::{Save, StopPolicy, StopRequest};
 
+/// What a `shoal stop` of a space asks beyond stopping its agents.
+pub struct SpaceStop {
+    /// Count executions whose launch identity was never recorded as ended
+    /// once nothing of them is visible, as the caller confirmed.
+    pub acknowledge_unproven: bool,
+    /// What becomes of the launches that wait to start there.
+    pub launches: QueuedLaunches,
+    /// What becomes of its processes Shoal does not track.
+    pub processes: UntrackedProcesses,
+}
 /// The workspaces with a running execution. One whose wrapper is gone is
 /// left for `shoal stop <workspace>` rather than failing every bulk stop.
 fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<SpaceId>> {
@@ -222,6 +232,32 @@ impl Agents {
             cancelled,
             ..StoppedSpace::default()
         })
+    }
+
+    /// Stop `selector`'s space as `shoal stop` asks: its agents and commands,
+    /// as [`Self::stop_space_manually`] does, then its untracked processes
+    /// where `stop` says, reporting whether the stop saved work for `shoal
+    /// restore`. A CI job's workspace has its run cancelled instead.
+    pub async fn stop_space_at_request(
+        &self,
+        daemon: &dyn Daemon,
+        selector: &SpaceSelector,
+        stop: SpaceStop,
+    ) -> Result<StoppedSpace> {
+        let mut stopped = self
+            .stop_space_manually(daemon, selector, stop.acknowledge_unproven, stop.launches)
+            .await?;
+        if stopped.cancelled_run.is_some() {
+            return Ok(stopped);
+        }
+        if let UntrackedProcesses::Stop { requester } = stop.processes {
+            stopped.other_processes =
+                (daemon.stop_untracked_processes(selector, requester)).await?;
+        }
+        // A read that fails reports nothing saved rather than failing the stop.
+        stopped.saved =
+            (self.saved_work(daemon, selector).await).is_ok_and(|saved| !saved.is_empty());
+        Ok(stopped)
     }
 
     /// Stop executions other than agents that protection already stopped,
