@@ -14,12 +14,13 @@ use super::super::{
 };
 use crate::config::permissions::PermissionKey;
 use crate::protocol::{Body, WorkspaceMethod};
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{scope_tokens::ScopeToken, space_names::SpaceSelector};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: WorkspaceMethod,
     caller: Option<&Caller>,
+    scope: Option<&ScopeToken>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         WorkspaceMethod::OpenBranch {
@@ -187,12 +188,14 @@ pub(super) async fn handle(
                 .refresh_workspace(&**manager, &workspace, caller)
                 .await?,
         ),
-        WorkspaceMethod::InspectWorkspace { workspace } => Body::Inspection(
-            manager
+        WorkspaceMethod::InspectWorkspace { workspace } => {
+            let mut inspection = manager
                 .spaces
                 .inspect_workspace(&**manager, &workspace)
-                .await?,
-        ),
+                .await?;
+            inspection.machine = super::forwarded::answering_machine(manager, scope).await?;
+            Body::Inspection(inspection)
+        }
         WorkspaceMethod::CopyOrigin { source } => {
             Body::CopyOrigin(manager.spaces.copy_origin(&source).await?)
         }

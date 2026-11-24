@@ -119,7 +119,9 @@ async fn prepare_after_setup(
     let ended = follow(paths, starting, preparing).await?;
     Ok(match ended {
         Ok(prepared) => (prepared, Ok(())),
-        Err(Unprepared { workspace, failure }) => {
+        Err(Unprepared {
+            workspace, failure, ..
+        }) => {
             let agent = None;
             (Prepared { workspace, agent }, Err(error(failure)))
         }

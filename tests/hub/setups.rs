@@ -3,7 +3,7 @@
 //! environment.
 use std::{fs, path::PathBuf};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{
     directory::{join, listed, machine},
@@ -97,6 +97,13 @@ fn a_failed_setup_elsewhere_names_its_commands_and_skip_runs_the_hook_there() {
     assert_eq!(
         laptop.ok(&["status", &there])["workspace"]["state"],
         "failed"
+    );
+    // The inspection a terminal's delete prompt reads names the machine
+    // whose worktree it would delete.
+    let inspection = hub.request(json!({"inspect_workspace": {"workspace": there}}));
+    assert_eq!(
+        inspection["data"]["machine"]["name"], "laptop",
+        "{inspection}"
     );
     let skipped = on_hub(&hub, &["setup", &there, "--skip"]);
     assert_eq!(skipped["state"], "ready", "{skipped}");

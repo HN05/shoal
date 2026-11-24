@@ -14,6 +14,7 @@ use crate::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::{
+    hub::Machine,
     model::{QueueEntry, Workspace},
     protocol::{
         CopySource, CreationOptions, OperationMethod,
@@ -366,12 +367,13 @@ impl<'d, D: Daemon> Preparing<'d, D> {
     /// The failure it ended with, with the workspace as the failure left it.
     async fn unprepared(&mut self) -> Result<Unprepared> {
         let selector = SpaceSelector::id(&self.workspace.id);
-        let workspace = crate::workspaces::inspect(selector)
+        let inspection = crate::workspaces::inspect(selector)
             .send(self.daemon)
             .await?;
         let failure = self.failed.take().context("the preparation did not fail")?;
         Ok(Unprepared {
-            workspace: Box::new(workspace.workspace),
+            workspace: Box::new(inspection.workspace),
+            machine: inspection.machine,
             failure,
         })
     }
@@ -381,6 +383,9 @@ impl<'d, D: Daemon> Preparing<'d, D> {
 #[derive(Debug)]
 pub struct Unprepared {
     pub workspace: Box<Workspace>,
+    /// The other joined machine that runs the workspace, where its
+    /// worktree is.
+    pub machine: Option<Machine>,
     pub failure: Failure,
 }
 

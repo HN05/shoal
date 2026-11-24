@@ -1,9 +1,9 @@
 //! Running a workspace's setup and post-setup hook in an operation the
 //! daemon starts, and settling a setup that failed as the frontend says.
 use anyhow::{Result, ensure};
-use shoal_protocol::{recovery::ReconcileOptions, space_names::SpaceSelector};
+use shoal_protocol::{hub::Machine, recovery::ReconcileOptions, space_names::SpaceSelector};
 
-use super::{Frontend, Settling, follow, unsettled, unverified};
+use super::{FailedSetup, Frontend, Settling, follow, unsettled, unverified};
 use crate::{
     client::{
         connection::CommandPaths,
@@ -158,7 +158,11 @@ pub async fn settle_setup(
         Err(unprepared) => unprepared,
     };
     let set_up = unprepared.set_up();
-    let Unprepared { workspace, failure } = unprepared;
+    let Unprepared {
+        workspace,
+        machine,
+        failure,
+    } = unprepared;
     match failure {
         Failure::SetupUnverified { exit_code } => {
             frontend.unverified(unverified(&workspace, exit_code))?;
@@ -172,26 +176,35 @@ pub async fn settle_setup(
             agent: None,
         })),
         failure if set_up => Err(error(failure)),
-        failure => settle_failure(paths, frontend, &workspace, failure, retry).await,
+        failure => {
+            let machine = machine.as_ref();
+            settle_failure(paths, frontend, &workspace, machine, failure, retry).await
+        }
     }
 }
 
 /// Retry, delete, ignore or keep the workspace whose setup failed with
-/// `failure`, as `frontend` decides, or fail naming the commands that do
-/// where it does not; a workspace whose failure is ignored has not run its
-/// post-setup hook, nor has one retried without `retry`, which says what a
-/// retry runs. A setup that did not start leaves nothing to delete or
-/// ignore.
+/// `failure`, on `machine` when another runs it, as `frontend` decides, or
+/// fail naming the commands that do where it does not; a workspace whose
+/// failure is ignored has not run its post-setup hook, nor has one retried
+/// without `retry`, which says what a retry runs. A setup that did not
+/// start leaves nothing to delete or ignore.
 async fn settle_failure(
     paths: &CommandPaths,
     frontend: &impl Frontend,
     workspace: &Workspace,
+    machine: Option<&Machine>,
     failure: Failure,
     retry: Option<Preparation>,
 ) -> Result<Option<SetUp>> {
-    let ran = !matches!(failure, Failure::SetupNotStarted { .. });
     let reason = format!("{:#}", error(failure.clone()));
-    let Some(settling) = frontend.settle(workspace, &reason, ran)? else {
+    let failed = FailedSetup {
+        workspace,
+        machine,
+        error: &reason,
+        ran: !matches!(failure, Failure::SetupNotStarted { .. }),
+    };
+    let Some(settling) = frontend.settle(&failed)? else {
         return Err(unsettled(workspace, failure));
     };
     match settling {

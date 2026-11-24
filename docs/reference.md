@@ -4688,7 +4688,8 @@ surviving processes. When that command is interrupted before setup starts,
 `shoal setup` prepares the workspace and `shoal rm` removes it. On failure, interactive mode asks whether to retry setup, delete the
 new workspace and branch, ignore the failure and continue, or keep it for
 inspection (default); a setup that never started, which the daemon refused,
-offers only retry or keep. JSON/noninteractive mode returns nonzero, keeps the
+offers only retry or keep, and deleting a workspace another machine runs names
+that machine. JSON/noninteractive mode returns nonzero, keeps the
 workspace, and sends setup output to stderr. The agent `shoal start` or an app
 launches there waits in the [agent queue](#agent-queue) for the setup,
 holding no slot, even when the process that prepared the workspace ended

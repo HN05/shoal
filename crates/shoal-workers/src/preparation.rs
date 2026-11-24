@@ -6,6 +6,7 @@
 mod setup;
 
 use anyhow::{Result, anyhow};
+use shoal_protocol::hub::Machine;
 
 pub use setup::{
     SetUp, follow_setup, ignore_failure, run_post_setup, settle_setup, setup_workspace,
@@ -30,13 +31,24 @@ pub trait Frontend {
     /// What shows an operation's steps while the process follows it.
     fn display(&self) -> impl Display;
 
-    /// What to do with `workspace`, whose setup failed with `error`, or did
-    /// not start unless `ran`; `None` where no user decides.
-    fn settle(&self, workspace: &Workspace, error: &str, ran: bool) -> Result<Option<Settling>>;
+    /// What to do with the workspace whose setup `failed`; `None` where no
+    /// user decides.
+    fn settle(&self, failed: &FailedSetup<'_>) -> Result<Option<Settling>>;
 
     /// Tell a user `message`, that setup's processes may still run, which
     /// fails where no user reads it.
     fn unverified(&self, message: String) -> Result<()>;
+}
+
+/// A workspace whose setup failed, for a frontend to settle.
+pub struct FailedSetup<'a> {
+    pub workspace: &'a Workspace,
+    /// The other joined machine that runs the workspace, where its
+    /// worktree is.
+    pub machine: Option<&'a Machine>,
+    pub error: &'a str,
+    /// Whether setup ran; false for one that did not start.
+    pub ran: bool,
 }
 
 /// What a user decided to do with a workspace whose setup failed.
@@ -67,7 +79,7 @@ impl Frontend for Unattended {
         Quiet
     }
 
-    fn settle(&self, _: &Workspace, _: &str, _: bool) -> Result<Option<Settling>> {
+    fn settle(&self, _: &FailedSetup<'_>) -> Result<Option<Settling>> {
         Ok(None)
     }
 

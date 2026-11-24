@@ -387,6 +387,7 @@ async fn inspect(
             ports: vec![],
             resources: vec![],
             simulators: vec![],
+            machine: None,
         };
         protocol::write(
             stream.get_mut(),

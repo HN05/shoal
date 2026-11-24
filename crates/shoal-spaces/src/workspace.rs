@@ -126,6 +126,7 @@ impl Spaces {
                     resources,
                     simulators,
                     workspace,
+                    machine: None,
                 })
             })
             .await?;

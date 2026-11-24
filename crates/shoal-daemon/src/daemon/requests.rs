@@ -85,7 +85,9 @@ pub(super) async fn handle(
         Operation::Repository(method) => {
             repositories::handle(&server.manager, method, caller).await
         }
-        Operation::Workspace(method) => workspaces::handle(&server.manager, method, caller).await,
+        Operation::Workspace(method) => {
+            workspaces::handle(&server.manager, method, caller, scope).await
+        }
         Operation::Space(method) => spaces::handle(&server.manager, method, caller, scope).await,
         Operation::Place(method) => places::handle(&server.manager, method).await,
         Operation::Permission(method) => permissions::handle(&server.manager, method, caller).await,

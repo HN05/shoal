@@ -111,7 +111,9 @@ pub(in crate::cli::commands) async fn prepared_on(
     let preparing = Preparing::follow(&ctx.paths, started).await?;
     match shoal_workers::preparation::follow(&ctx.paths, ctx, preparing).await? {
         Ok(prepared) => Ok(prepared),
-        Err(Unprepared { workspace, failure }) => {
+        Err(Unprepared {
+            workspace, failure, ..
+        }) => {
             let number = workspace.number;
             let there = machine.map(|machine| format!(" on machine {machine}"));
             Err(crate::operations::error(failure).context(format!(

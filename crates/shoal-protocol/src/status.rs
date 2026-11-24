@@ -23,6 +23,10 @@ pub struct Inspection {
     pub ports: Vec<PortReservation>,
     pub resources: Vec<ResourceLease>,
     pub simulators: Vec<Simulator>,
+    /// The other joined machine that runs it and answered for it, where
+    /// its worktree is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<crate::hub::Machine>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

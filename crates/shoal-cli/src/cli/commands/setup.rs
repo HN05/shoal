@@ -4,7 +4,7 @@
 use anyhow::{Result, ensure};
 use shoal_workers::{
     following::Display,
-    preparation::{self, Frontend, Settling},
+    preparation::{self, FailedSetup, Frontend, Settling},
 };
 
 use crate::{
@@ -13,7 +13,6 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Acting, Fallback},
     },
-    model::Workspace,
     protocol::operations::{OperationSpec, Preparation},
     state::WorkspaceState,
 };
@@ -115,21 +114,22 @@ impl Frontend for Context {
         super::operations::steps(self)
     }
 
-    fn settle(&self, workspace: &Workspace, error: &str, ran: bool) -> Result<Option<Settling>> {
+    fn settle(&self, failed: &FailedSetup<'_>) -> Result<Option<Settling>> {
         if !self.interactive() {
             return Ok(None);
         }
-        let failed = match ran {
+        let heading = match failed.ran {
             true => "Setup failed",
             false => "Setup did not start",
         };
         eprintln!(
-            "{} for {}: {error}",
-            Palette::stderr(self.json).paint(Style::Error, failed),
-            workspace.name
+            "{} for {}: {}",
+            Palette::stderr(self.json).paint(Style::Error, heading),
+            failed.workspace.name,
+            failed.error
         );
-        Ok(Some(match ui::setup_failure_choice(ran)? {
-            Settling::Delete if !deletes(self, workspace)? => Settling::Cancel,
+        Ok(Some(match ui::setup_failure_choice(failed.ran)? {
+            Settling::Delete if !deletes(self, failed)? => Settling::Cancel,
             settling => settling,
         }))
     }
@@ -144,12 +144,16 @@ impl Frontend for Context {
     }
 }
 
-/// Whether the user confirms deleting `workspace` with its setup's changes.
-fn deletes(ctx: &Context, workspace: &Workspace) -> Result<bool> {
+/// Whether the user confirms deleting the workspace whose setup `failed`
+/// with its setup's changes, naming the machine its worktree is on when
+/// another runs it.
+fn deletes(ctx: &Context, failed: &FailedSetup<'_>) -> Result<bool> {
+    let workspace = failed.workspace;
+    let on = (failed.machine).map_or_else(String::new, |machine| format!(" on {}", machine.name));
     ui::confirm(
         ctx,
         &format!(
-            "Delete workspace {} at {} (including setup changes)?",
+            "Delete workspace {} at {}{on} (including setup changes)?",
             workspace.name,
             workspace.path.display(),
         ),
