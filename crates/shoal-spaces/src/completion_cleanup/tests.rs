@@ -46,7 +46,6 @@ async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
 /// of its own.
 async fn stacked_fixture() -> (Fixture, Workspace, Workspace) {
     let (manager, base) = fixture().await;
-    let _root = &manager.root;
     let workspace = manager
         .create_workspace(
             base.repository(),
@@ -719,4 +718,125 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
         .await
         .unwrap();
     assert_eq!(record, "not json");
+}
+
+#[tokio::test]
+async fn an_unreadable_chat_completion_leaves_other_spaces_to_completion_cleanup() {
+    let (manager, workspace) = fixture().await;
+    let chat = manager.chat("notes", "chat", None, None).await;
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_completion(space_id,record,cause) VALUES (?1,'{','manual')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .spaces
+        .mark_space_done(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    // The chat's cleanup fails, which retains it, and the workspace goes all
+    // the same.
+    manager.spaces.sweep_completed(&*manager).await.unwrap();
+    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
+    assert!(manager.spaces.chat_by_id(&chat.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
+    let (manager, parent) = fixture().await;
+    manager
+        .spaces
+        .acquire_hold(
+            &*manager,
+            &SpaceSelector::id(&parent.id),
+            "review".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
+        .await
+        .unwrap();
+    let mut above = parent.id.clone();
+    let mut chats = Vec::new();
+    for name in ["sub", "nested"] {
+        let start = crate::chats::NewChat {
+            priority: None,
+            narrowing: Default::default(),
+            mode: "chat".into(),
+            name: name.into(),
+            agent: "claude".into(),
+            origin: None,
+            parent: Some(above),
+        };
+        let chat = manager
+            .spaces
+            .start_new_chat(
+                &*manager,
+                Some(parent.repository().clone().into()),
+                None,
+                start,
+            )
+            .await
+            .unwrap();
+        manager.run_agent(&chat.id).await;
+        above = chat.id.clone();
+        chats.push(chat);
+    }
+
+    manager
+        .spaces
+        .mark_space_done(
+            &*manager,
+            &SpaceSelector::id(&parent.id),
+            Done::default(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    // The nested chat goes first, then the chat it was below.
+    manager.spaces.sweep_completed(&*manager).await.unwrap();
+    assert!(
+        manager
+            .spaces
+            .chat_by_id(&chats[1].id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        manager
+            .spaces
+            .chat_by_id(&chats[0].id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    manager.spaces.sweep_completed(&*manager).await.unwrap();
+    assert!(
+        manager
+            .spaces
+            .chat_by_id(&chats[0].id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        manager
+            .spaces
+            .find_workspace(&parent.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
 }

@@ -336,3 +336,28 @@ async fn a_branch_a_paused_rebase_will_update_stays() {
     assert!(branch_exists(&repo, "topic"));
     git(&elsewhere, &["rebase", "--abort"]);
 }
+
+#[tokio::test]
+async fn a_ref_outside_the_fetch_mapping_does_not_approve_deletion() {
+    let (manager, repo, other) = fixture().await;
+    kept(&manager, &repo, "topic").await;
+    git(&repo.path, &["push", "-q", "origin", "topic"]);
+    // Fetching origin no longer refreshes origin/topic, which the remote
+    // then drops.
+    git(&repo.path, &["remote", "set-branches", "origin", "main"]);
+    git(&other, &["push", "-q", "origin", "--delete", "topic"]);
+
+    manager.sweep(&mut Default::default()).await.unwrap();
+    assert!(!git(&repo.path, &["rev-parse", "refs/remotes/origin/topic"]).is_empty());
+    assert!(branch_exists(&repo, "topic"));
+    assert_eq!(remembered(&manager, &repo).await, ["topic"]);
+    // The stale ref hides its commits from the count, not the branch from
+    // shoal cleanup branches.
+    let listed = manager
+        .spaces
+        .list_kept_branches(&*manager, None)
+        .await
+        .unwrap();
+    let names: Vec<_> = listed.iter().map(|branch| branch.branch.as_str()).collect();
+    assert_eq!(names, ["topic"]);
+}

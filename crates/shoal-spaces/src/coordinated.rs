@@ -120,3 +120,6 @@ fn working_coordinator(db: &Connection, id: &SpaceId, agents: &TrackedAgents) ->
         None => Working::Above,
     })
 }
+
+#[cfg(test)]
+mod tests;

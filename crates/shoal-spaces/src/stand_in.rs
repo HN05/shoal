@@ -389,6 +389,102 @@ impl StandIn {
         crate::events::space_log::read(&self.store, id, filter, limit).await
     }
 
+    /// Have the space `id` ask its coordinator, or else the user, `text` in
+    /// a new question.
+    pub(crate) async fn ask(&self, id: &SpaceId, text: &str) -> Thread {
+        use shoal_protocol::threads::{NewPost, ThreadKind, ThreadNumber, ThreadOpening};
+        let caller = Caller::of_space(id.clone());
+        let opening = ThreadOpening::named(text);
+        let thread = (self.coordination).open_thread(
+            self,
+            Some(&caller),
+            opening,
+            Some(ThreadKind::Question),
+            None,
+        );
+        let thread = thread.await.unwrap();
+        let post = NewPost {
+            text: text.into(),
+            ..NewPost::default()
+        };
+        let number = ThreadNumber::Full(thread.number);
+        (self.coordination.post_to_thread(
+            self,
+            Some(&caller),
+            number,
+            post,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ))
+        .await
+        .unwrap()
+    }
+
+    /// Have the user reply `text` in the thread `number`, as its holder.
+    pub(crate) async fn answer(
+        &self,
+        number: shoal_protocol::item_numbers::ItemNumber,
+        text: &str,
+    ) -> Thread {
+        use shoal_protocol::threads::{NewPost, ThreadNumber};
+        let post = NewPost {
+            text: text.into(),
+            ..NewPost::default()
+        };
+        (self.coordination.post_to_thread(
+            self,
+            None,
+            ThreadNumber::Full(number),
+            post,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ))
+        .await
+        .unwrap()
+    }
+
+    /// One pass of the daemon's cleanup sweep: the spaces' own steps, in
+    /// the order the daemon runs them among the other subsystems'.
+    pub(crate) async fn sweep(
+        &self,
+        timers: &mut crate::cleanup::Timers,
+    ) -> Result<(), shoal_daemon_base::failures::SweepFailures> {
+        use crate::cleanup::{kept_branches, merged, observe_branches, sweep_idle};
+        let spaces = &self.spaces;
+        let mut failed = shoal_daemon_base::failures::SweepFailures::default();
+        let mut step = |name: &str, result: Result<()>| failed.step(name, result);
+        step(
+            "ownership recheck",
+            spaces.recheck_startup_failures(self).await,
+        );
+        step("grace periods", spaces.begin_grace_pass().await);
+        step("branch observation", observe_branches(self).await);
+        step("completion cleanup", spaces.sweep_completed(self).await);
+        let users = shoal_core::process::DirectoryUsers::default();
+        step("idle cleanup", sweep_idle(self, timers, &users).await);
+        step(
+            "merged cleanup",
+            merged::sweep(self, &mut timers.merged, &users).await,
+        );
+        step(
+            "kept branches",
+            kept_branches::sweep(self, &mut timers.kept_branches).await,
+        );
+        step("checkpoint expiry", spaces.expire_checkpoints(self).await);
+        step("result expiry", spaces.expire_results(self).await);
+        step("fetched copies", spaces.expire_fetched(self).await);
+        step(
+            "carried commits",
+            spaces.release_unclaimed_carried(self).await,
+        );
+        step("temporary directories", spaces.sweep_tmp_dirs(self).await);
+        step("leftovers", spaces.find_leftovers(self).await);
+        step("grace periods", spaces.end_unclaimed_grace().await);
+        failed.into_result()
+    }
+
     /// The messages of the user's completion notices, the oldest first.
     pub(crate) async fn done_notices(&self) -> Vec<String> {
         let notifications = self.spaces.notifications.list(false, 100).await.unwrap();
@@ -1212,8 +1308,10 @@ impl Repositories for StandIn {
         Box::pin(async { Ok(()) })
     }
 
+    /// Fresh: the stand-in fetches nothing, so a checkout holds what its
+    /// test put there.
     fn default_branch_fresh<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, bool> {
-        Box::pin(async { Default::default() })
+        Box::pin(async { true })
     }
 
     fn empty_caches<'a>(

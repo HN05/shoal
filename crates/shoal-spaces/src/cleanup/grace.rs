@@ -72,3 +72,6 @@ impl Spaces {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests;

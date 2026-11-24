@@ -1092,26 +1092,6 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
 }
 
 #[tokio::test]
-async fn deleted_parent_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
-    let (_temp, manager, parent, child) = split_across_directories(false).await;
-    fs::remove_dir_all(&parent.path).unwrap();
-    manager.file_access.stall_rechecking(&child.path);
-
-    sweep(&manager, &mut Timers::default()).await.unwrap();
-
-    let remaining: Vec<_> = manager
-        .spaces
-        .list_workspaces()
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|workspace| workspace.name)
-        .collect();
-    assert_eq!(remaining.len(), 2, "{remaining:?}");
-    assert!(child.path.exists());
-}
-
-#[tokio::test]
 async fn pr_cleanup_skips_a_base_whose_stacked_workspace_elsewhere_stalled() {
     let (_temp, manager, base, stacked) = split_across_directories(true).await;
     let id = base.id.clone();
@@ -1139,31 +1119,6 @@ async fn pr_cleanup_skips_a_base_whose_stacked_workspace_elsewhere_stalled() {
         .unwrap()
         .unwrap();
     assert_eq!(registration.error, None);
-}
-
-#[tokio::test]
-async fn a_child_keeps_while_its_completed_parent_elsewhere_stalled() {
-    let (_temp, manager, parent, child) = split_across_directories(false).await;
-    manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&parent.id),
-            Done {
-                cleanup: true,
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    manager.file_access.stall_rechecking(&parent.path);
-
-    sweep(&manager, &mut Timers::default()).await.unwrap();
-
-    // The parent's completion cannot be read, so it takes neither.
-    assert!(parent.path.exists());
-    assert!(child.path.exists());
 }
 
 #[tokio::test]
@@ -1379,51 +1334,6 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
 }
 
 #[tokio::test]
-async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
-    let (temp, manager) = crate::daemon::test_support::manager().await;
-    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
-    manager
-        .write_local_config(
-            opened.repository(),
-            Some("[cleanup]\ngrace_minutes = 600\n".into()),
-        )
-        .await
-        .unwrap();
-    let completion = manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&chat.id),
-            Done {
-                cleanup: true,
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    let chat = manager.spaces.chat_by_id(&chat.id).await.unwrap().unwrap();
-    manager.file_access.stall_rechecking(&opened.path);
-    let removed = manager
-        .spaces
-        .remove_completed_by(&*manager, &chat.id, &completion)
-        .await;
-    assert!(removed.is_err());
-    assert_eq!(manager.spaces.cleanup_at(&chat.id).await.unwrap(), None);
-    // Once access recovers, the grace period starts, and only then runs.
-    manager.file_access.recover_at(&opened.path);
-    assert!(
-        !manager
-            .spaces
-            .remove_completed_by(&*manager, &chat.id, &completion)
-            .await
-            .unwrap()
-    );
-    assert!(manager.spaces.cleanup_at(&chat.id).await.unwrap().is_some());
-    assert!(manager.spaces.workspace_by_id(&opened.id).await.is_ok());
-}
-
-#[tokio::test]
 async fn a_stopped_chat_withdraws_its_completion_and_stays() {
     let (temp, manager) = crate::daemon::test_support::manager().await;
     let (chat, opened) = chat_with_workspace(&temp, &manager).await;
@@ -1452,32 +1362,6 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
     let stopped = manager.spaces.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(stopped.completion, None);
     assert!(manager.spaces.workspace_by_id(&opened.id).await.is_ok());
-}
-
-#[tokio::test]
-async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
-    let (temp, manager) = crate::daemon::test_support::manager().await;
-    let (chat, opened) = chat_with_workspace(&temp, &manager).await;
-    manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&chat.id),
-            Done {
-                cleanup: true,
-                ..Done::default()
-            },
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // A question asked after the completion keeps the chat.
-    crate::daemon::test_support::ask(&manager, &chat.id, "Which database?").await;
-
-    manager.spaces.sweep_completed(&*manager).await.unwrap();
-    assert!(manager.spaces.chat_by_id(&chat.id).await.unwrap().is_some());
-    assert!(manager.spaces.workspace_by_id(&opened.id).await.is_err());
-    assert!(!opened.path.exists());
 }
 
 #[tokio::test]

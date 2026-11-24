@@ -219,3 +219,6 @@ pub fn walk_with_git_state(root: &Path, git_dir: Option<&Path>) -> Result<Tree> 
     }
     Ok(tree)
 }
+
+#[cfg(test)]
+mod tests;

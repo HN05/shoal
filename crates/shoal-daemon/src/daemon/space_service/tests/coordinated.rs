@@ -119,30 +119,6 @@ async fn report(manager: &Manager, workspace: &Workspace, state: AgentState) {
 }
 
 #[tokio::test]
-async fn a_child_without_an_agent_lists_as_its_coordinators_work() {
-    let (root, manager) = manager().await;
-    let (parent, child) = split_child(&manager, root.path()).await;
-    assert!(!parent_working(&manager, &child).await);
-    report(&manager, &parent, AgentState::Working).await;
-    assert!(parent_working(&manager, &child).await);
-    // A grandchild split from it is the same agent's work.
-    let grandchild = manager
-        .spaces
-        .create_child(
-            &*manager,
-            &SpaceSelector::id(&child.id),
-            "grandchild".into(),
-            None,
-            Default::default(),
-        )
-        .await
-        .unwrap();
-    assert!(parent_working(&manager, &grandchild).await);
-    report(&manager, &parent, AgentState::Waiting).await;
-    assert!(!parent_working(&manager, &child).await);
-}
-
-#[tokio::test]
 async fn a_child_that_had_its_own_agent_lists_as_before() {
     let (root, manager) = manager().await;
     let (parent, child) = split_child(&manager, root.path()).await;
