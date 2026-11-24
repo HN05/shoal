@@ -104,7 +104,8 @@ fn scope_unit(space: &SpaceId) -> Option<String> {
 
 /// The ID of the space whose work a process runs in the scope of, as its
 /// control groups `groups` place it; `None` outside such a scope.
-pub fn scope_space(groups: &str) -> Option<&str> {
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn scope_space(groups: &str) -> Option<&str> {
     let slice = format!("/shoal.slice/{SLICE}/");
     let path = (groups.lines()).find_map(|line| line.strip_prefix("0::"))?;
     let unit = path.split_once(&slice)?.1.split('/').next()?;
