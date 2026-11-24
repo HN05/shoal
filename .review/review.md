@@ -829,8 +829,8 @@ configured command for another agent, plus proven child
   the shapes this release reads; daemon startup
   quarantines interrupted operations atomically after migration and before ownership
   auditing, requests, or cleanup. Failure aborts startup without undoing migration.
-  A migration that drops one-time upgrade state refuses a database that still
-  holds some, naming the release to start first; earlier migrations stay.
+  A database below the store's floor is refused unchanged, naming the
+  release to start first.
   The separate native simulator state enum preserves
   unfamiliar strings and native spellings; only confirmed shutdown frees running
   capacity. Shoal promises earlier versions no compatibility: flag an
