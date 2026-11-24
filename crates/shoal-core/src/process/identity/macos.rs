@@ -210,6 +210,11 @@ pub(super) fn unreaped(identity: &Identity) -> Result<bool> {
         && format!("{}:{}", bsd.pbi_start_tvsec, bsd.pbi_start_tvusec) == identity.birth)
 }
 
+/// Work runs in no scope of a space's here.
+pub(super) fn work_space(_pid: u32) -> Option<String> {
+    None
+}
+
 /// `pid`'s working directory, which macOS shows for a platform binary too.
 pub(super) fn working_directory(pid: u32) -> Option<PathBuf> {
     let info = pid_info::<libc::proc_vnodepathinfo>(pid, libc::PROC_PIDVNODEPATHINFO, 0).ok()??;

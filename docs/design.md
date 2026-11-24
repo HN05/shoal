@@ -1287,7 +1287,8 @@ slice holds Shoal's work, and only it, for the memory limit and the kernel's
 accounting. `systemd-run --scope` runs the command in its own place, so its
 PID, process group, terminal and environment stay as a direct start leaves
 them. The wrapper finds the launcher once, trying a scope; where none starts,
-it starts commands directly.
+it starts commands directly. It names each scope for the space whose work
+it runs, so what a command leaves there stays tied to the space after it ends.
 `KillMode=process` is rejected: it would leave them in the stopped service's
 control group, which the next start reports as left over, sharing its memory
 accounting and OOM kills. A live daemon's SIGTERM still stops agents. Where
@@ -1927,7 +1928,8 @@ carries its identity, including those hooks and exported environments started,
 and its leftovers. A leftover is a detached process, one whose parent exited and
 left it to launchd, init or the subreaper that takes the daemon's orphans (such
 as `systemd --user`), or a descendant of one, that the space's worktree,
-temporary directory, program or identity ties to it, with everything it started: no live process outside the
+temporary directory, program, identity or, on Linux, the scope of its work
+ties to it, with everything it started: no live process outside the
 space keeps it, and the ties cover platform binaries whose hidden environment
 cannot show the identity and programs built in the worktree that run elsewhere.
 Exclusion follows live ancestry, not environment variables: the processes of
@@ -1942,7 +1944,10 @@ Leftovers are reported, not stopped on sight: the cleanup sweep finds every
 space's from one process listing and keeps them in memory, so no tool call
 waits for a scan, and the agent's hook names each new one once, since the agent
 knows whether its own test servers should keep running. They create no
-alert; `shoal status` lists them for the user.
+alert; `shoal status` lists them for the user. The same holds once an agent
+exits, whatever place it ran in: what its scope keeps is reported as the
+space's leftovers, since a restored agent may want its servers back, and
+goes with the space.
 They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;

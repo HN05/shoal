@@ -1,6 +1,7 @@
 //! The processes of each space, a workspace or chat, that Shoal does not
 //! track: those carrying its identity, and its leftovers, detached processes
-//! tied to it with every process they started. A process a tracked one
+//! tied to it, as by running in the scope of its work, with every process
+//! they started. A process a tracked one
 //! started, or one that started a tracked one, belongs to that one instead.
 use super::{
     Identity, Lineage, MAX_ANCESTRY,
@@ -8,7 +9,7 @@ use super::{
     descends_from_detached,
     marks::{Marker, Marks},
     owners,
-    platform::{executable, working_directory},
+    platform::{executable, work_space, working_directory},
 };
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -42,16 +43,24 @@ impl Space {
         }
     }
 
-    /// Whether a process working in `directory` and running `program` is
-    /// tied to the space by where it runs.
-    fn places(&self, directory: Option<&Path>, program: Option<&Path>) -> bool {
-        directory.is_some_and(|directory| {
-            self.directories
-                .iter()
-                .any(|root| directory.starts_with(root))
-        }) || program
-            .zip(self.programs.as_ref())
-            .is_some_and(|(program, root)| program.starts_with(root))
+    /// Whether a process working in `directory`, running `program` and in
+    /// the scope of the work of the space `scope` is tied to the space by
+    /// where it runs.
+    fn places(
+        &self,
+        directory: Option<&Path>,
+        program: Option<&Path>,
+        scope: Option<&str>,
+    ) -> bool {
+        scope == Some(self.id.as_str())
+            || directory.is_some_and(|directory| {
+                self.directories
+                    .iter()
+                    .any(|root| directory.starts_with(root))
+            })
+            || program
+                .zip(self.programs.as_ref())
+                .is_some_and(|(program, root)| program.starts_with(root))
     }
 }
 
@@ -103,6 +112,8 @@ struct Survey<'a> {
     marks: HashMap<u32, Marks>,
     directories: HashMap<u32, PathBuf>,
     programs: HashMap<u32, PathBuf>,
+    /// The space whose work's scope each process runs in.
+    scopes: HashMap<u32, String>,
     /// Processes of tracked ones, and terminal servers.
     excluded: HashSet<u32>,
 }
@@ -135,6 +146,10 @@ impl<'a> Survey<'a> {
             programs: own
                 .iter()
                 .filter_map(|pid| Some((*pid, executable(*pid)?)))
+                .collect(),
+            scopes: own
+                .iter()
+                .filter_map(|pid| Some((*pid, work_space(*pid)?)))
                 .collect(),
             lineages,
             own,
@@ -226,6 +241,7 @@ impl<'a> Survey<'a> {
                     || space.places(
                         self.directories.get(pid).map(PathBuf::as_path),
                         self.programs.get(pid).map(PathBuf::as_path),
+                        self.scopes.get(pid).map(String::as_str),
                     )
             })
             .collect();

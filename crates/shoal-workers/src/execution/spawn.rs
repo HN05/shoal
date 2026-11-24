@@ -384,7 +384,8 @@ pub(super) fn spawn(
         ),
         _ => (Stdio::inherit(), Stdio::inherit(), Stdio::inherit()),
     };
-    let mut process = shoal_core::service::work::launched(process, launcher);
+    let space = Some(&plan.space.id);
+    let mut process = shoal_core::service::work::launched(process, launcher, space);
     restore_terminal_stops(&mut process);
     shoal_core::process::oom::start_at_last(&mut process);
     if let Some(terminal) = terminal {

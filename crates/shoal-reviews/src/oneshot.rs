@@ -297,7 +297,7 @@ fn command(run: &Run, launcher: &[std::ffi::OsString]) -> Result<Command> {
     }
     command.env(env::ONESHOT_RUN, run.files);
     command.current_dir(run.directory);
-    let mut command = shoal_core::service::work::launched(command, launcher);
+    let mut command = shoal_core::service::work::launched(command, launcher, None);
     command
         .stdin(Stdio::null())
         .stdout(fs::File::create(stdout(run.files))?)

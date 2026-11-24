@@ -100,6 +100,12 @@ pub(super) fn working_directory(pid: u32) -> Option<PathBuf> {
     std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
 }
 
+/// The ID of the space whose work's scope `pid` runs in.
+pub(super) fn work_space(pid: u32) -> Option<String> {
+    let groups = std::fs::read_to_string(format!("/proc/{pid}/cgroup")).ok()?;
+    crate::service::work::scope_space(&groups).map(str::to_owned)
+}
+
 pub(crate) fn executable(pid: u32) -> Option<PathBuf> {
     std::fs::read_link(format!("/proc/{pid}/exe")).ok()
 }

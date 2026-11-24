@@ -121,11 +121,14 @@ fn own_scope<'a>(groups: &'a str, own: &str) -> Option<&'a str> {
 
 /// The path of the transient scope the control groups `groups` of a
 /// process name on the unified hierarchy, as `systemd-run --scope` names
-/// one, relative to the hierarchy's root.
+/// one, or Shoal one for a space's work, relative to the hierarchy's root.
 fn transient_scope(groups: &str) -> Option<&str> {
     let path = unified(groups)?;
     let unit = path.rsplit('/').next()?;
-    (unit.starts_with("run-") && unit.ends_with(".scope")).then_some(path)
+    let transient = ["run-", crate::service::work::SCOPE_PREFIX]
+        .iter()
+        .any(|prefix| unit.starts_with(prefix));
+    (transient && unit.ends_with(".scope")).then_some(path)
 }
 
 /// The group the control groups `groups` name on the unified hierarchy,

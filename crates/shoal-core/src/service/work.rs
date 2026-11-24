@@ -3,16 +3,23 @@
 //! scope of its own there, wherever the wrapper runs, such as in a terminal
 //! host's place, so the command keeps that terminal while the slice holds
 //! its memory. The daemon, places, workers and wrappers stay out of it.
+//! A scope for a space's work is named for the space, so what its command
+//! leaves running there stays the space's once the command has ended.
 //! Where no scope can start, as without a user bus or before systemd 254,
 //! and in a build that leaves the user's files to the installed Shoal, the
 //! command starts directly.
 use std::{ffi::OsString, path::PathBuf};
 
+use shoal_ids::space_ids::SpaceId;
 use tokio::sync::OnceCell;
 
 /// The slice of the user's service manager Shoal's work runs in, which
 /// systemd nests in `shoal.slice`.
 const SLICE: &str = "shoal-work.slice";
+
+/// What the name of a scope for a space's work starts with, before the
+/// space's ID.
+pub(crate) const SCOPE_PREFIX: &str = "shoal-";
 
 /// The launcher [`launcher`] found, unset until it first runs.
 static LAUNCHER: OnceCell<Vec<OsString>> = OnceCell::const_new();
@@ -32,24 +39,27 @@ pub async fn launcher() -> &'static [OsString] {
 }
 
 /// `command`, whose environment and directory are set, started through
-/// `launcher` instead, which [`launcher`] gives: with the same arguments,
+/// `launcher` instead, which [`launcher`] gives, in a scope named for
+/// `space` when it does the space's work: with the same arguments,
 /// environment and directory, and the bus variables its environment sets
 /// given back to it after the launcher reached the user's service manager
 /// with this process's. Its standard streams and hooks are set after.
 pub fn launched(
     command: tokio::process::Command,
     launcher: &[OsString],
+    space: Option<&SpaceId>,
 ) -> tokio::process::Command {
     if launcher.is_empty() {
         return command;
     }
+    let launcher = named(launcher, space.and_then(scope_unit));
     let own = command.as_std();
     let set = |name: &str| {
         (own.get_envs())
             .find(|(variable, _)| *variable == name)
             .map(|(_, value)| value.map(ToOwned::to_owned))
     };
-    let restore = super::scope::restore_bus(launcher, set);
+    let restore = super::scope::restore_bus(&launcher, set);
     let mut argv = launcher.iter().chain(&restore);
     let mut through = tokio::process::Command::new(argv.next().expect("a launcher has a program"));
     through
@@ -66,6 +76,40 @@ pub fn launched(
         through.current_dir(directory);
     }
     through
+}
+
+/// `launcher` naming the scope it starts `unit`, before the `--` that
+/// ends its options; unchanged without one.
+fn named(launcher: &[OsString], unit: Option<String>) -> Vec<OsString> {
+    let Some((end, options)) = launcher.split_last().filter(|_| unit.is_some()) else {
+        return launcher.to_vec();
+    };
+    let unit = unit.map(|unit| OsString::from(format!("--unit={unit}")));
+    (options.iter().cloned())
+        .chain(unit)
+        .chain([end.clone()])
+        .collect()
+}
+
+/// The unit of a new scope for the work of `space`, named for it and
+/// unique, so a command started while an earlier one's scope remains gets
+/// its own; `None` for an ID a unit's name cannot hold, whose work runs in
+/// a scope systemd names.
+fn scope_unit(space: &SpaceId) -> Option<String> {
+    let id = space.as_str();
+    let fits = (id.bytes()).all(|byte| byte.is_ascii_alphanumeric() || byte == b'-');
+    let run = uuid::Uuid::new_v4().simple();
+    fits.then(|| format!("{SCOPE_PREFIX}{id}-{run}.scope"))
+}
+
+/// The ID of the space whose work a process runs in the scope of, as its
+/// control groups `groups` place it; `None` outside such a scope.
+pub fn scope_space(groups: &str) -> Option<&str> {
+    let slice = format!("/shoal.slice/{SLICE}/");
+    let path = (groups.lines()).find_map(|line| line.strip_prefix("0::"))?;
+    let unit = path.split_once(&slice)?.1.split('/').next()?;
+    let named = unit.strip_prefix(SCOPE_PREFIX)?.strip_suffix(".scope")?;
+    Some(named.rsplit_once('-')?.0)
 }
 
 /// The slice's control group, where the user's service manager keeps it;

@@ -301,7 +301,8 @@ On Linux every command an execution wrapper starts for work, an agent, a CI
 job's runner, a demo, a setup or a `shoal run` command, and every one-shot
 agent the daemon runs, a [reviewer](#local-reviews) or the gate, runs in a
 transient systemd scope of its own in `shoal-work.slice`, with
-`OOMPolicy=continue`, wherever the wrapper runs, such as in a terminal host's
+`OOMPolicy=continue`, named `shoal-<space ID>-<run>.scope` for the space whose
+work it does, wherever the wrapper runs, such as in a terminal host's
 place: the command keeps the wrapper's terminal and its own environment,
 including the runtime directory and bus its configuration sets. The daemon, places, workers and
 wrappers, and the pushes and merges Shoal runs, stay out of it. A CI job's
@@ -688,8 +689,11 @@ one once, up to ten per delivery, and they create no alert. A space's untracked 
 processes whose parent exited, so that launchd or init adopted them, or on
 Linux the subreaper that adopts the daemon's orphans, such as `systemd --user`,
 or that descend from such a process, working in the worktree or the space's temporary
-directory, running a program inside the worktree, or carrying its identity,
-with every process they started wherever it runs. Never among them are the
+directory, running a program inside the worktree, carrying its identity,
+or on Linux running in the scope of the space's [work](#work-slice), with
+every process they started wherever it runs. So what an agent's command left
+in its scope stays the space's leftovers after the agent exits, until
+`shoal stop` or the space's removal stops them. Never among them are the
 processes of tracked executions and chat agents, the processes that started
 those, terminal session servers such as zmx, tmux or Zellij, and the process that asks.
 A process whose parent still runs elsewhere, such as a shell the user opened in

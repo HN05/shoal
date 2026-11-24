@@ -330,3 +330,35 @@ fn ancestry_passes_through_setuid_programs() {
     assert!(found.contains(&child), "{found:?}");
     assert!(!found.contains(&sudo), "{found:?}");
 }
+
+/// What a space's command left in the scope of its work is the space's,
+/// wherever it works and whatever its environment, while what the command
+/// still runs there is its own.
+#[test]
+fn the_scope_of_a_spaces_work_ties_what_its_command_left_there() {
+    let (agent, tool, left, other) = (1_000_010, 1_000_011, 1_000_012, 1_000_013);
+    let owners = Owners::default();
+    let adopted = |pid| {
+        let (pid, mut observed) = listed_process(pid, 1, Evidence::Unmarked);
+        observed.lineage.adopted = true;
+        (pid, observed)
+    };
+    let inventory = Inventory {
+        observed: HashMap::from([
+            listed_process(agent, 1, Evidence::Unmarked),
+            listed_process(tool, agent, Evidence::Unmarked),
+            adopted(left),
+            adopted(other),
+        ]),
+        ..Inventory::new(&owners)
+    };
+    let tracked = inventory.observed[&agent].lineage.identity.clone();
+    let mut survey = Survey::of(&inventory, &[tracked]);
+    survey.scopes = HashMap::from([agent, tool, left].map(|pid| (pid, "workspace-id".to_owned())));
+    survey.scopes.insert(other, "other-id".to_owned());
+
+    let found: Vec<_> = (survey.untracked(&identified("workspace-id")).into_iter())
+        .map(|process| (process.identity.pid, process.leftover))
+        .collect();
+    assert_eq!(found, [(left, true)]);
+}

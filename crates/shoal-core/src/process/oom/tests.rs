@@ -17,6 +17,8 @@ fn only_a_transient_scope_of_its_own_counts_as_a_commands_scope() {
     );
     let service = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/shoal.service\n";
     assert_eq!(transient_scope(service), None);
+    let named = "0::/user.slice/user-1000.slice/user@1000.service/shoal.slice/shoal-work.slice/shoal-s-1.scope\n";
+    assert!(transient_scope(named).is_some());
     let terminal = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-rex.scope\n";
     assert_eq!(transient_scope(terminal), None);
     assert_eq!(transient_scope("1:name=systemd:/run-p1-i1.scope\n"), None);
