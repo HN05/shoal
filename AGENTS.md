@@ -691,10 +691,11 @@ test and log excerpt. Rerun a failed check only once its fix or issue exists,
 never instead of them.
 
 A check that was cancelled rather than failed, whose log names no failing step
-or command, such as a `rustc` killed with SIGKILL, and ends `context canceled`,
-is no defect: people and Shoal stop jobs on purpose, and Shoal reruns those it
-cut off once their run has finished. Rerun one that is still cancelled after
-its run finished, and file nothing for it.
+or command and ends `context canceled`, is no defect: people and Shoal stop
+jobs on purpose, and Shoal reruns those it cut off once their run has finished.
+Rerun one that is still cancelled after its run finished, and file nothing for
+it. A log that names a command killed with SIGKILL, such as `rustc`, records a
+failure.
 
 ## Committing
 
