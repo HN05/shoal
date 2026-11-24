@@ -18,9 +18,9 @@ use crate::{
     client::{connection::CommandPaths, output::batch::Failure},
     model::Space,
     protocol::{ErrorCode, RemoteError, operations::Step},
-    resume::{Resuming, queue::queue_each},
+    resume::{Resuming, stopped::restore},
 };
-use shoal_core::execution::recovery::{SavedCommand, SavedSession};
+use shoal_core::execution::recovery::SavedSession;
 use shoal_core::transfer::{
     Arrived, Carrying, ExportedSpace, Manifest, MoveDestination, MoveLock, MoveOrder, SpaceMoved,
     SshDestination, StoppedExecutions,
@@ -266,26 +266,14 @@ pub(super) async fn stays_here(
     error.context("it stays here")
 }
 
-/// Queue the restores of the agents among `stopped`, warning when that
-/// fails, since `shoal resume` still resumes them.
+/// Have the daemon queue the restores of the agents among `stopped`,
+/// warning when that fails, since `shoal resume` still resumes them.
 async fn restore_here(paths: &CommandPaths, stopped: StoppedExecutions) {
-    let mut restoring = Vec::new();
-    for (space, executions) in stopped {
-        let selector = SpaceSelector::id(&space);
-        let present = crate::client::spaces::present_space(paths, &selector).await;
-        let Ok(Some(space)) = present else {
-            continue;
-        };
-        let Ok(mut saved) = crate::client::saved::read(paths, selector).await else {
-            super::warn("warning: cannot read the stopped agents; run shoal resume");
-            continue;
-        };
-        saved.retain(|id| executions.contains(id));
-        if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
-            restoring.push((space, saved));
-        }
+    if let Err(error) = restore(paths, &stopped, &RestoringHere).await {
+        super::warn(&format!(
+            "warning: cannot resume the stopped agents; run shoal resume: {error:#}"
+        ));
     }
-    queue_each(paths, restoring, false, &RestoringHere).await;
 }
 
 /// How a move restores here the agents it stopped: without a terminal to
@@ -297,15 +285,15 @@ impl Resuming for RestoringHere {
         anyhow::bail!("multiple stopped agents; run shoal resume to pick one")
     }
 
-    fn stopped_commands(&self, space: &Space, commands: &[SavedCommand]) {
-        if !commands.is_empty() {
-            let message = format!(
-                "warning: {} has {} stopped commands; shoal resume lists them",
-                space.name,
-                commands.len()
-            );
-            super::warn(&message);
+    fn stopped_commands(&self, space: &Space, commands: &[Vec<String>]) {
+        let mut message = format!(
+            "warning: {} stopped these commands, which were not restarted:",
+            space.name
+        );
+        for command in commands {
+            message.push_str(&format!("\n  {}", crate::shell::quote(command)));
         }
+        super::warn(&message);
     }
 
     fn failed(&self, space: &str, error: &anyhow::Error) -> Failure {

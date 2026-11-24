@@ -9,7 +9,7 @@ use crate::{
         test_support::{ProcessGroup, agent_process, manager, repository},
     },
     model::{Chat, Repository, Workspace},
-    protocol::{AlertMethod, AlertTarget, ItemContext, ItemMethod, QueueMethod, SpaceMethod},
+    protocol::{AgentMethod, AlertMethod, AlertTarget, ItemContext, ItemMethod, SpaceMethod},
     state::AgentState,
 };
 use shoal_ids::space_ids::SpaceId;
@@ -484,11 +484,12 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     )
     .unwrap();
     last.write(&manager.paths, &user.id).unwrap();
-    let mut resume = QueueMethod::QueueRestore {
-        workspace: SpaceSelector::id(&user.id),
-        execution: "e1".into(),
-        env: Default::default(),
-        now: false,
+    let mut resume = AgentMethod::ResumeAgent {
+        space: SpaceSelector::id(&user.id),
+        resume: crate::model::AgentResume {
+            executions: ["e1".into()].into(),
+            ..Default::default()
+        },
     };
     crate::daemon::scope::authorize(&manager, Some(&token), &mut resume)
         .await

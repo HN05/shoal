@@ -114,38 +114,13 @@ pub(super) async fn handle(
                 .set_priority(&**manager, caller, &space, priority)
                 .await?,
         ),
-        QueueMethod::QueueRestore {
-            workspace,
-            execution,
-            env,
-            now,
-        } => {
-            manager
-                .agents
-                .record_user_interaction(&**manager, caller, &workspace)
-                .await;
-            Body::QueueEntry(match now {
-                false => {
-                    (manager
-                        .agents
-                        .queue_stopped_restore(&**manager, &workspace, &execution, env))
-                    .await?
-                }
-                true => {
-                    (manager
-                        .agents
-                        .start_stopped_restore(&**manager, &workspace, &execution, env))
-                    .await?
-                }
-            })
-        }
     }))
 }
 
 impl Checked for QueueMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
-            Self::SetPriority { .. } | Self::QueueRestore { .. } => Some(TargetCheck::Space),
+            Self::SetPriority { .. } => Some(TargetCheck::Space),
             Self::QueueAgent { .. } => Some(TargetCheck::Workspace),
             Self::ListQueue
             | Self::QueuedPlan { .. }
@@ -184,19 +159,6 @@ impl Scoped for QueueMethod {
                     (manager
                         .coordination
                         .authorize_start_beyond_limits(manager, caller, "start", target))
-                    .await?;
-                }
-                Some(target)
-            }
-            QueueMethod::QueueRestore { workspace, now, .. } => {
-                let target = manager
-                    .coordination
-                    .stopped_below(manager, caller, workspace)
-                    .await?;
-                if *now {
-                    (manager
-                        .coordination
-                        .authorize_start_beyond_limits(manager, caller, "restore", target))
                     .await?;
                 }
                 Some(target)

@@ -7,8 +7,8 @@ use crate::{
     },
     model::Workspace,
     protocol::{
-        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, PlaceMethod, QueueMethod,
-        RemovalMethod, ThreadMethod, WorkspaceMethod,
+        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, PlaceMethod, RemovalMethod,
+        ThreadMethod, WorkspaceMethod,
     },
     removal::{InspectionPolicy, UnsavedWork},
 };
@@ -327,11 +327,13 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         })
     };
     let restore_now = |workspace: &str, execution: &str, now| {
-        Operation::from(QueueMethod::QueueRestore {
-            workspace: workspace.into(),
-            execution: execution.into(),
-            env: Default::default(),
-            now,
+        Operation::from(AgentMethod::ResumeAgent {
+            space: workspace.into(),
+            resume: crate::model::AgentResume {
+                executions: [execution.into()].into(),
+                now,
+                ..Default::default()
+            },
         })
     };
     let restore = |workspace: &str, execution: &str| restore_now(workspace, execution, false);

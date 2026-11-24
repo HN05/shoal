@@ -1,6 +1,5 @@
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
-use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 
 use super::{Forwarding, Lifetime, Target};
@@ -92,15 +91,6 @@ pub enum QueueMethod {
         space: SpaceSelector,
         priority: shoal_schedule::priority::Priority,
     },
-    /// Queue the restore of a stopped agent, which the daemon starts with
-    /// `env` once admitted, or with `now` at once, regardless of the limits.
-    QueueRestore {
-        workspace: SpaceSelector,
-        execution: ExecutionId,
-        env: std::collections::BTreeMap<String, String>,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        now: bool,
-    },
 }
 
 /// How a failed launch queued again starts.
@@ -134,12 +124,12 @@ impl QueueMethod {
 }
 
 impl QueueMethod {
-    /// A space's priority and a stopped agent's restore change its state;
+    /// A space's priority changes its state;
     /// an entry, named by an ID only its machine knows, and a start the
     /// caller makes are the caller's machine's.
     pub fn forwarding(&self) -> Forwarding {
         match self {
-            Self::SetPriority { .. } | Self::QueueRestore { .. } => Forwarding::Online,
+            Self::SetPriority { .. } => Forwarding::Online,
             Self::QueueAgent { .. }
             | Self::ListQueue
             | Self::QueuedPlan { .. }
@@ -157,9 +147,7 @@ impl QueueMethod {
 
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
-            Self::QueueAgent { workspace, .. } | Self::QueueRestore { workspace, .. } => {
-                Some(Target::Space(workspace))
-            }
+            Self::QueueAgent { workspace, .. } => Some(Target::Space(workspace)),
             Self::SetPriority { space, .. } => Some(Target::Space(space)),
             // It names the space its entry's start opened.
             Self::QueueAttach { .. }

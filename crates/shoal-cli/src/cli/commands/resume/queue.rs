@@ -1,5 +1,5 @@
-//! Queuing the restores of the agents a move stopped, which the daemon
-//! starts as the agent limits allow.
+//! Restoring the agents a move stopped through their space's daemon, which
+//! starts them as the agent limits allow.
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 
@@ -8,26 +8,21 @@ use crate::cli::context::Context;
 use crate::client::output::resume::Queued;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transfer::StoppedExecutions;
 
-pub(in crate::cli::commands) use shoal_workers::resume::queue::Stopped;
-
-/// Queue the restores of the agents among `stopped`; their workspaces'
-/// stopped commands go to them, and those of workspaces without one stay
-/// for `shoal resume`.
-async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Queued> {
-    shoal_workers::resume::queue::queue_stopped(&ctx.paths, stopped, &Reporting(ctx)).await
-}
-
-/// Queue the restores of the agents among `stopped`, warning when that
-/// fails, since `shoal resume` still resumes them.
+/// Have the daemon queue the restores of the agents among `stopped`, whose
+/// workspaces' stopped commands go to them, or to the user when no agent
+/// restores outside a waiting wrapper, warning when that fails, since
+/// `shoal resume` still resumes them.
 pub(in crate::cli::commands) async fn restore_stopped(
     ctx: &Context,
-    stopped: &Stopped,
+    stopped: &StoppedExecutions,
 ) -> Option<Queued> {
     if stopped.is_empty() {
         return None;
     }
-    match queue_stopped(ctx, stopped).await {
+    let reporting = Reporting(ctx);
+    match shoal_workers::resume::stopped::restore(&ctx.paths, stopped, &reporting).await {
         Ok(queued) => Some(queued),
         Err(error) => {
             eprintln!("warning: cannot resume the stopped agents; run shoal resume: {error:#}");

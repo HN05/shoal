@@ -179,7 +179,6 @@ const REQUESTS: &[&str] = &[
     r#"{"queue_fail":{"entry":"q1","error":"no agent"}}"#,
     r#"{"queue_retry":{"entry":"q1","start":"here"}}"#,
     r#"{"set_priority":{"space":"fix","priority":75}}"#,
-    r#"{"queue_restore":{"workspace":"fix","execution":"e1","env":{}}}"#,
     // Demos.
     r#"{"list_demos":{"workspace":null}}"#,
     r#"{"demo_progress":{"workspace":"fix","launch":"l1"}}"#,

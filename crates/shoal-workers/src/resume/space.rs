@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, ensure};
 use shoal_core::execution::recovery::{Saved, SavedCommand, SavedSession};
 use shoal_ids::execution_ids::ExecutionId;
 
-use super::{Resuming, commands, permissions, picker, queue, stale};
+use super::{Resuming, commands, permissions, picker, stale, stopped};
 use crate::{
     client::{
         connection::CommandPaths,
@@ -14,6 +14,7 @@ use crate::{
     model::Space,
     state::WorkspaceState,
 };
+use shoal_protocol::model::AgentResume;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::status::Inspection;
 
@@ -72,9 +73,8 @@ pub async fn choose(
     let picked = picker::select_agent(resuming, &saved.agents, picker::agent_label)?;
     if picked.waits_in_wrapper {
         saved.retain_execution(&picked.id, true);
-        let stopped = vec![(space, saved)];
         return Ok(Choice::Queued(
-            queue::queue_each(paths, stopped, true, resuming).await,
+            start_in_wrapper(paths, &space, &saved, change, resuming).await,
         ));
     }
     ensure!(
@@ -88,6 +88,28 @@ pub async fn choose(
         commands: saved.commands,
     };
     restore.chosen(paths, change).await
+}
+
+/// Have the daemon start at once the restore of the agent `saved` keeps of
+/// `space`, which its waiting wrapper carries out, with the stopped
+/// commands `saved` keeps, making `change` when given.
+async fn start_in_wrapper(
+    paths: &CommandPaths,
+    space: &Space,
+    saved: &Saved,
+    change: Option<&PermissionChange>,
+    resuming: &impl Resuming,
+) -> Queued {
+    let resume = AgentResume {
+        executions: saved.execution_ids().into_iter().collect(),
+        now: true,
+        change: change.cloned(),
+        env: crate::terminal::start_environment(),
+        ..AgentResume::default()
+    };
+    let mut queued = Queued::default();
+    stopped::resume_one(paths, space, resume, resuming, &mut queued).await;
+    queued
 }
 
 impl Restore {

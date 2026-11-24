@@ -1,9 +1,8 @@
 //! The agent queue: admitting launches under `max_heavy_agents`, the entries
 //! waiting, and the hold that keeps a starting entry's slot.
-use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::queue::WorkerStart;
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 
 use anyhow::Result;
 use tokio::{io::AsyncReadExt as _, sync::oneshot};
@@ -109,24 +108,6 @@ pub async fn retry(
     start: shoal_protocol::protocol::RetryStart,
 ) -> Result<QueueEntry> {
     request(daemon, QueueMethod::QueueRetry { entry, start }).await
-}
-
-/// Queue the restore of `execution`'s agent in `workspace`, which starts
-/// with `env`, at once regardless of the limits when `now`.
-pub async fn restore(
-    daemon: &impl Daemon,
-    workspace: SpaceSelector,
-    execution: ExecutionId,
-    env: BTreeMap<String, String>,
-    now: bool,
-) -> Result<QueueEntry> {
-    let method = QueueMethod::QueueRestore {
-        workspace,
-        execution,
-        env,
-        now,
-    };
-    request(daemon, method).await
 }
 
 /// Keeps a starting entry's slot, or a waiting entry out of admission for

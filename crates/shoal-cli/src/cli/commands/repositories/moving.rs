@@ -1,10 +1,11 @@
 //! `shoal repo move`: move every repository directory into a new `root_dir`.
-use super::super::resume::queue::{Stopped, restore_stopped, saved_executions};
+use super::super::resume::queue::{restore_stopped, saved_executions};
 use crate::cli::commands::resume::reports::QueuedExt;
 use crate::client::output::resume::Queued;
 use crate::config_file::ConfigExt;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transfer::StoppedExecutions;
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
@@ -50,7 +51,7 @@ pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<()> {
     if let Some(root) = root {
         save_root(ctx, &root).await?;
     }
-    let mut stopped = Stopped::new();
+    let mut stopped = StoppedExecutions::new();
     let moved = async {
         stop_running(ctx, &moves.executions, confirmed, &mut stopped).await?;
         move_repositories(ctx, regular_dir).await
@@ -83,7 +84,7 @@ async fn stop_running(
     ctx: &Context,
     executions: &[Execution],
     confirmed: bool,
-    stopped: &mut Stopped,
+    stopped: &mut StoppedExecutions,
 ) -> Result<()> {
     let workspaces: BTreeSet<_> = executions.iter().map(|e| &e.space_id).collect();
     for workspace in workspaces {

@@ -9,12 +9,13 @@ use anyhow::{Context as _, Result};
 use shoal_core::transfer::CarriedRecord;
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::transfer::StoppedExecutions;
 
 use crate::{
     client::{connection::CommandPaths, output::restore::Reopened},
     model::{RemovedSpace, RestoredChat, RestoredSpace, RestoredWorkspace, Space},
     preparation::{self, Frontend},
-    resume::{Resuming, queue::Stopped},
+    resume::Resuming,
     state::WorkspaceState,
 };
 
@@ -158,9 +159,9 @@ pub async fn queue_agents(
     if executions.is_empty() {
         return;
     }
-    let stopped = Stopped::from([(reopened.space.id.clone(), executions)]);
+    let stopped = StoppedExecutions::from([(reopened.space.id.clone(), executions)]);
     let resuming = reopening.resuming();
-    match crate::resume::queue::queue_stopped(paths, &stopped, &resuming).await {
+    match crate::resume::stopped::restore(paths, &stopped, &resuming).await {
         Ok(queued) => {
             reopened.queued = Some(queued);
             reopened.agents_saved = false;

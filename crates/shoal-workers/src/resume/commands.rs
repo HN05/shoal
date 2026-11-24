@@ -45,7 +45,7 @@ fn report(
             .map(|command| command.argv.clone())
             .collect(),
     };
-    resuming.stopped_commands(space, commands);
+    resuming.stopped_commands(space, &report.commands);
     for command in commands {
         consume(&command.path)?;
     }

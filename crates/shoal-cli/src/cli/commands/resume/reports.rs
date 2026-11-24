@@ -35,12 +35,8 @@ impl Resuming for Reporting<'_> {
         ui::pick_choice(self.0, "Resume agent> ", &choices)
     }
 
-    fn stopped_commands(&self, space: &Space, commands: &[SavedCommand]) {
-        let commands: Vec<_> = commands
-            .iter()
-            .map(|command| command.argv.clone())
-            .collect();
-        stopped_commands(self.0, (space.number, &space.name), &commands);
+    fn stopped_commands(&self, space: &Space, commands: &[Vec<String>]) {
+        stopped_commands(self.0, (space.number, &space.name), commands);
     }
 
     fn failed(&self, space: &str, error: &anyhow::Error) -> Failure {
