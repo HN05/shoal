@@ -26,21 +26,18 @@ impl Releases {
     /// A locked copy of the bundle whose main program `executable`, or the
     /// file it links to, is; none for a program outside a bundle.
     pub(crate) fn lease(&self, executable: &Path) -> io::Result<Option<Lease>> {
-        let executable = &fs::canonicalize(executable)?;
-        let Some(bundle) = crate::fsutil::executables::app_bundle(executable) else {
+        let Some(release) = Release::of(executable)? else {
             return Ok(None);
         };
-        let copy = self.root.join(copy_name(bundle, executable)?);
-        let program = Path::new(bundle.file_name().unwrap_or_default())
-            .join(executable.strip_prefix(bundle).map_err(io::Error::other)?);
+        let copy = self.root.join(&release.name);
         for _ in 0..ATTEMPTS {
             if !copy.join(LOCK).exists() {
-                self.create(bundle, &copy)?;
+                self.create(&release.bundle, &copy)?;
             }
             if let Some(lock) = lock_shared(&copy)? {
                 return Ok(Some(Lease {
                     lock,
-                    executable: copy.join(&program),
+                    executable: copy.join(&release.program),
                 }));
             }
         }
@@ -76,6 +73,33 @@ impl Releases {
             Err(_) if copy.join(LOCK).exists() => Ok(()),
             Err(error) => Err(error),
         }
+    }
+}
+
+/// A release bundle, and where a copy of it goes.
+pub(super) struct Release {
+    bundle: PathBuf,
+    /// The main program's path in a copy.
+    program: PathBuf,
+    /// The copy's name in the directory of the release copies.
+    pub(super) name: String,
+}
+
+impl Release {
+    /// The release whose main program `executable`, or the file it links
+    /// to, is; none for a program outside a bundle.
+    pub(super) fn of(executable: &Path) -> io::Result<Option<Self>> {
+        let executable = fs::canonicalize(executable)?;
+        let Some(bundle) = crate::fsutil::executables::app_bundle(&executable) else {
+            return Ok(None);
+        };
+        let program = Path::new(bundle.file_name().unwrap_or_default())
+            .join(executable.strip_prefix(bundle).map_err(io::Error::other)?);
+        Ok(Some(Self {
+            name: copy_name(bundle, &executable)?,
+            bundle: bundle.to_owned(),
+            program,
+        }))
     }
 }
 
