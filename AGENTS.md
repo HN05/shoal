@@ -690,6 +690,12 @@ Any other failure outside the change gets an issue of its own with the failing
 test and log excerpt. Rerun a failed check only once its fix or issue exists,
 never instead of them.
 
+A check that was cancelled rather than failed, whose log names no failing step
+or command, such as a `rustc` killed with SIGKILL, and ends `context canceled`,
+is no defect: people and Shoal stop jobs on purpose, and Shoal reruns those it
+cut off once their run has finished. Rerun one that is still cancelled after
+its run finished, and file nothing for it.
+
 ## Committing
 
 - Keep commits small enough to review on their own. An issue is a PR-sized unit,
