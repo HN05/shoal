@@ -5,7 +5,9 @@ use std::time::SystemTime;
 use anyhow::Result;
 use shoal_core::execution::recovery;
 use shoal_ids::{agent_session_ids::AgentSessionId, execution_ids::ExecutionId};
-use shoal_protocol::{list_status::ListStatus, space_names::SpaceSelector, validate};
+use shoal_protocol::{
+    executions::FailedTurn, list_status::ListStatus, space_names::SpaceSelector, validate,
+};
 
 use crate::{
     agents::{
@@ -17,6 +19,7 @@ use crate::{
     model::AgentStatus,
     protocol::TurnEnd,
     state::{AgentState, TurnFailure},
+    time::UnixTime,
 };
 
 /// Report `state` for the agent of the space `space` names, else the one
@@ -41,8 +44,9 @@ pub async fn report_state(
 }
 
 /// Report the turn that the hook event of an agent with `integration`
-/// says an API error ended, which leaves the agent idle. An event the
-/// integration cannot read reports an unknown failure.
+/// says an API error ended, which leaves the agent idle, with the reset its
+/// error states. An event the integration cannot read reports an unknown
+/// failure.
 pub async fn report_failure(
     paths: &CommandPaths,
     json: bool,
@@ -50,10 +54,12 @@ pub async fn report_failure(
     integration: IntegrationKind,
 ) -> Result<i32> {
     let event = super::input::event().unwrap_or_default();
+    let integration_of = self::integration(integration);
     let report = Report::TurnFailure {
-        failure: self::integration(integration)
+        failure: integration_of
             .turn_failure(&event)
             .unwrap_or(TurnFailure::Other),
+        resets_at: integration_of.stated_reset(&event, UnixTime::now()),
         session: session_of(&event),
         turn_end: turn_end(paths, integration),
     };
@@ -110,9 +116,13 @@ async fn send(
         } => agents::set_state(paths, space, state, session, turn_end, made).await,
         Report::TurnFailure {
             failure,
+            resets_at,
             session,
             turn_end,
-        } => agents::report_turn_failure(paths, space, failure, session, turn_end, made).await,
+        } => {
+            let failed = FailedTurn { failure, resets_at };
+            agents::report_turn_failure(paths, space, failed, session, turn_end, made).await
+        }
     }
 }
 

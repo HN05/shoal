@@ -245,6 +245,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         let mut method = AgentMethod::ReportTurnFailure {
             workspace: SpaceSelector::id(&own.id),
             failure: TurnFailure::Overloaded,
+            resets_at: None,
             session: None,
             execution,
             turn_end: Default::default(),

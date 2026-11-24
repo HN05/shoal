@@ -24,7 +24,7 @@ use crate::{
     turn_state::TurnEnding,
 };
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{executions::FailedTurn, space_names::SpaceSelector};
 
 /// How often the daemon looks for the reports hooks left, besides each
 /// time a wrapper reattaches, which a report may wait for.
@@ -259,13 +259,13 @@ impl Agents {
             }
             Report::TurnFailure {
                 failure,
+                resets_at,
                 session,
                 turn_end,
             } => {
-                self.fail_turn(
-                    daemon, selector, failure, execution, session, turn_end, late,
-                )
-                .await?;
+                let failed = FailedTurn { failure, resets_at };
+                self.fail_turn(daemon, selector, failed, execution, session, turn_end, late)
+                    .await?;
             }
         }
         Ok(())

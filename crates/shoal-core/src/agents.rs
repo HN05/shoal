@@ -180,6 +180,17 @@ pub trait Integration: Sync {
         None
     }
 
+    /// When the upstream that refused the request of the turn `event`
+    /// reports failed says it accepts requests again, read at `now`; `None`
+    /// when the event states no reset.
+    fn stated_reset(
+        &self,
+        _event: &serde_json::Value,
+        _now: crate::time::UnixTime,
+    ) -> Option<crate::time::UnixTime> {
+        None
+    }
+
     /// The change to the agent's running subagents that `event`, from its
     /// hook for a subagent's start or stop or its session's start, reports;
     /// `None` for an agent without subagent hooks or an event that changes

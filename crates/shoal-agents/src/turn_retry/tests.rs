@@ -67,7 +67,7 @@ async fn fail(fixture: &Fixture, workspace: &Workspace, execution: &str, failure
         .report_turn_failure(
             &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
-            failure,
+            failure.into(),
             Some(execution.into()),
             None,
             Default::default(),
@@ -418,7 +418,7 @@ async fn a_reset_and_a_failure_hold_the_retry_in_either_order() -> Result<()> {
                 tx,
                 &id,
                 &execution,
-                failure,
+                failure.into(),
                 UnixTime::from_seconds(1000),
                 0.5,
             )?;
@@ -430,7 +430,7 @@ async fn a_reset_and_a_failure_hold_the_retry_in_either_order() -> Result<()> {
                 tx,
                 &id,
                 &execution,
-                failure,
+                failure.into(),
                 UnixTime::from_seconds(1000),
                 0.5,
             )?;
@@ -460,14 +460,14 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
             let mut now = start;
             // Drive the scheduling clock, without sleeping through usage limits.
             while now < start + secs(8 * 24 * 60 * 60) {
-                record_failure(tx, &id, &scheduling_execution, failure, now, 0.5)?;
+                record_failure(tx, &id, &scheduling_execution, failure.into(), now, 0.5)?;
                 let pending = get(tx, &id)?.context("pending usage-limit retry")?;
                 assert!(pending.due_at > now);
                 assert!(deliver(tx, &*records, &id, pending.due_at)?);
                 tx.execute("DELETE FROM alerts WHERE recipient_id=?1", [&id])?;
                 now = pending.due_at;
             }
-            record_failure(tx, &id, &scheduling_execution, failure, now, 0.5)?;
+            record_failure(tx, &id, &scheduling_execution, failure.into(), now, 0.5)?;
             get(tx, &id)?.context("retry after eight days")
         })
         .await?;

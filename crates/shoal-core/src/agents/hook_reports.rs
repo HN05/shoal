@@ -19,6 +19,7 @@ use crate::{
     paths::Paths,
     protocol::TurnEnd,
     state::{AgentState, TurnFailure},
+    time::UnixTime,
 };
 use shoal_ids::{
     agent_session_ids::AgentSessionId, execution_ids::ExecutionId, space_ids::SpaceId,
@@ -35,9 +36,12 @@ pub enum Report {
         session: Option<AgentSessionId>,
         turn_end: Option<TurnEnd>,
     },
-    /// The turn `failure` ended.
+    /// The turn `failure` ended, whose error says its upstream refuses
+    /// requests until `resets_at` when it says.
     TurnFailure {
         failure: TurnFailure,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resets_at: Option<UnixTime>,
         session: Option<AgentSessionId>,
         turn_end: TurnEnd,
     },

@@ -9,12 +9,13 @@ use crate::connection::{Daemon, Prepared, request};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
+    executions::FailedTurn,
     model::{
         AgentRestart, AgentResume, AgentSession, AgentStatus, RestartOutcome, ResumeOutcome,
         RunningAgent,
     },
     protocol::{AgentMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn},
-    state::{AgentState, TurnFailure},
+    state::AgentState,
 };
 
 /// Record `state` for the agent of `workspace`, running `session`, as a
@@ -46,18 +47,20 @@ pub async fn start_woken_turn(daemon: &impl Daemon, workspace: SpaceSelector) ->
 }
 
 /// Record the turn of `workspace`'s agent, running `session`, that
-/// `failure` ended, as a hook `made` the report.
+/// `failure` ended, with the reset its error states, as a hook `made` the
+/// report.
 pub async fn report_turn_failure(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
-    failure: TurnFailure,
+    failed: FailedTurn,
     session: Option<AgentSessionId>,
     turn_end: TurnEnd,
     made: Option<std::time::SystemTime>,
 ) -> Result<AgentStatus> {
     let method = AgentMethod::ReportTurnFailure {
         workspace,
-        failure,
+        failure: failed.failure,
+        resets_at: failed.resets_at,
         session,
         execution: None,
         turn_end,

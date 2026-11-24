@@ -2,7 +2,9 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
 use std::time::Duration;
 
-use shoal_agents::turn_retry::{RESET_MARGIN, TurnRetry, continuation, get, upstream_reset};
+use shoal_agents::turn_retry::{
+    FailedTurn, RESET_MARGIN, TurnRetry, continuation, get, upstream_reset,
+};
 
 use crate::{
     daemon::{
@@ -85,13 +87,18 @@ async fn retry(manager: &Manager, workspace: &Workspace) -> Option<TurnRetry> {
     manager.store.run(move |db| get(db, &id)).await.unwrap()
 }
 
-async fn fail(manager: &Manager, workspace: &Workspace, execution: &str, failure: TurnFailure) {
+async fn fail(
+    manager: &Manager,
+    workspace: &Workspace,
+    execution: &str,
+    failure: impl Into<FailedTurn>,
+) {
     let status = manager
         .agents
         .report_turn_failure(
             manager,
             &SpaceSelector::id(&workspace.id),
-            failure,
+            failure.into(),
             Some(execution.into()),
             None,
             Default::default(),
@@ -174,6 +181,39 @@ async fn a_finished_assignment_cancels_its_retry() {
         .unwrap();
     assert_eq!(deliver_now(&manager).await, None);
     assert!(messages(&manager, &workspace).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_rate_limit_retries_after_the_reset_its_error_states() {
+    let (_temp, manager, workspace, execution, _connection) = agent("").await;
+    // A reset far past any clock, so each wait is the reset's or the
+    // backoff's however slowly the test runs.
+    let reset = UnixTime::from_seconds(4_000_000_000_000);
+    let stated = |failure| FailedTurn {
+        failure,
+        resets_at: Some(reset),
+    };
+    fail(
+        &manager,
+        &workspace,
+        execution.as_str(),
+        stated(TurnFailure::RateLimited),
+    )
+    .await;
+    let pending = retry(&manager, &workspace).await.unwrap();
+    assert_eq!((pending.attempt, pending.due_at), (1, reset + RESET_MARGIN));
+
+    // Only a rate limit's error is read for a reset.
+    let (other, execution, _other_connection) = another_agent(&manager, "other").await;
+    fail(
+        &manager,
+        &other,
+        execution.as_str(),
+        stated(TurnFailure::Overloaded),
+    )
+    .await;
+    let backoff = retry(&manager, &other).await.unwrap();
+    assert!(backoff.due_at < reset, "{backoff:?}");
 }
 
 #[tokio::test]
@@ -352,12 +392,12 @@ async fn a_chats_failed_turn_waits_past_its_reset_until_the_chat_is_done() {
         .report_upstream_reset(&*manager, &selector, execution.clone(), Some(reset))
         .await
         .unwrap();
-    let fail = |failure| {
+    let fail = |failure: TurnFailure| {
         let execution = Some(execution.clone());
         manager.agents.report_turn_failure(
             &*manager,
             &selector,
-            failure,
+            failure.into(),
             execution,
             None,
             Default::default(),

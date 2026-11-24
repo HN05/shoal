@@ -59,6 +59,22 @@ fn stop_failure_errors_name_the_turn_failure() {
 }
 
 #[test]
+fn a_stop_failure_states_the_reset_its_upstream_error_names() {
+    let now = UnixTime::from_seconds(1_000);
+    let event = |details: &str, message: &str| json!({"error": "rate_limit", "error_details": details, "last_assistant_message": message});
+    let reset = |event: &Value| Claude.stated_reset(event, now).map(|at| at.seconds());
+    assert_eq!(
+        reset(&event("resets in 60s", "retry after 90s")),
+        Some(1_060)
+    );
+    assert_eq!(
+        reset(&event("rate limited", "retry after 90s")),
+        Some(1_090)
+    );
+    assert_eq!(reset(&event("rate limited", "rate limited")), None);
+}
+
+#[test]
 fn a_chat_agent_runs_a_workspace_agents_hooks_without_what_needs_a_worktree() {
     let chat = settings_of(&Claude.hook_args(AgentSpace::Chat, false).unwrap());
     let workspace = settings_of(&Claude.hook_args(WORKSPACE.into(), false).unwrap());

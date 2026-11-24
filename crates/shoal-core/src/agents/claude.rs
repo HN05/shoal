@@ -12,6 +12,7 @@ use super::{
 use crate::{
     ai::IntegrationKind,
     state::{AgentState, TurnFailure},
+    time::UnixTime,
 };
 
 pub(super) struct Claude;
@@ -132,6 +133,15 @@ impl Integration for Claude {
             "server_error" => TurnFailure::ServerError,
             _ => TurnFailure::Other,
         })
+    }
+
+    /// `StopFailure` carries the upstream's error in `error_details`, and
+    /// the error as Claude Code shows it in `last_assistant_message`.
+    fn stated_reset(&self, event: &Value, now: UnixTime) -> Option<UnixTime> {
+        ["error_details", "last_assistant_message"]
+            .into_iter()
+            .filter_map(|field| event[field].as_str())
+            .find_map(|text| reset::stated(text, now))
     }
 
     fn subagent_change(&self, event: &Value) -> Option<crate::protocol::SubagentChange> {
@@ -353,6 +363,7 @@ const PROMPT_CACHE_1H: &str = "ENABLE_PROMPT_CACHING_1H";
 mod changes;
 mod plan;
 mod prompt_cache;
+mod reset;
 mod settings;
 mod timers;
 

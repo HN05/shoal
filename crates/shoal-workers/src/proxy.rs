@@ -446,6 +446,7 @@ impl Reporter {
         self.send(crate::protocol::AgentMethod::ReportTurnFailure {
             workspace: SpaceSelector::id(&self.workspace),
             failure,
+            resets_at: None,
             session: None,
             execution: Some(self.execution.clone()),
             turn_end: Default::default(),

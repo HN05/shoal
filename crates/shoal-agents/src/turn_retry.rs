@@ -1,10 +1,11 @@
 //! Retrying a turn an API failure ended. An agent whose integration reports
 //! failed turns, with `retry` on, is asked to continue once the failure has
-//! had time to pass, or once the reset its upstream named has passed, and
-//! again after each turn that still fails, until one succeeds. The retry is
-//! persisted, so it outlasts a daemon restart and the agent's sleep, whose
-//! restore its message starts, and knows no agent: any report of a failed
-//! turn schedules one, or tells of a turn Shoal does not retry.
+//! had time to pass, or once the reset its upstream named, through its
+//! proxy or a rate limit's error, has passed, and again after each turn
+//! that still fails, until one succeeds. The retry is persisted, so it
+//! outlasts a daemon restart and the agent's sleep, whose restore its
+//! message starts, and knows no agent: any report of a failed turn
+//! schedules one, or tells of a turn Shoal does not retry.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
@@ -12,7 +13,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Result;
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-pub use shoal_protocol::executions::TurnRetry;
+pub use shoal_protocol::executions::{FailedTurn, TurnRetry};
 
 use self::unretried::Unretried;
 use crate::{
@@ -91,28 +92,40 @@ fn spread() -> f64 {
     (uuid::Uuid::new_v4().as_u128() % 1_000_000) as f64 / 1_000_000.0
 }
 
-/// Record the turn `failure` ended in `execution` as its space's
+/// Record the turn `failed` ended in `execution` as its space's
 /// retry: the next attempt after a delivered one, the first for a new
 /// execution or a change between usage limits and transient failures, and the
 /// same one when the failure is reported again before it is due. A delivered
 /// retry lasts only until the turn it started ends, so a failure while it
-/// stands is that turn's, though a restore runs it in a new execution. An attempt
-/// waits past the reset the execution's proxy last reported, read in the
-/// same transaction as a report of it, so neither can slip between.
+/// stands is that turn's, though a restore runs it in a new execution. An
+/// attempt waits past the [`known_reset`], read in the same transaction as
+/// a report of the proxy's, so neither can slip between.
 fn record_failure(
     tx: &Transaction<'_>,
     space_id: &SpaceId,
     execution: &ExecutionId,
-    failure: TurnFailure,
+    failed: FailedTurn,
     now: UnixTime,
     spread: f64,
 ) -> Result<()> {
-    let reset = upstream_reset(tx, execution)?;
+    let reset = known_reset(tx, execution, failed)?;
     let previous = previous_attempt(tx, space_id)?;
-    let (attempt, due_at) = next_attempt(previous, execution, failure, now, spread);
+    let (attempt, due_at) = next_attempt(previous, execution, failed.failure, now, spread);
     let due_at = reset.map_or(due_at, |reset| due_at.max(reset + RESET_MARGIN));
-    save_retry(tx, space_id, execution, failure, attempt, due_at)?;
+    save_retry(tx, space_id, execution, failed.failure, attempt, due_at)?;
     Ok(())
+}
+
+/// When the upstream refuses requests of `execution` until, as far as
+/// Shoal knows after the turn `failed` ended: the later of what its proxy
+/// last reported and, for a rate limit, what the turn's error states.
+fn known_reset(
+    db: &Connection,
+    execution: &ExecutionId,
+    failed: FailedTurn,
+) -> Result<Option<UnixTime>> {
+    let stated = (failed.resets_at).filter(|_| failed.failure == TurnFailure::RateLimited);
+    Ok(upstream_reset(db, execution)?.max(stated))
 }
 
 /// Keep `reset`, when the upstream of `execution`'s proxy refuses requests
@@ -377,7 +390,7 @@ pub fn continuation(failure: TurnFailure, attempt: u32) -> String {
 }
 
 impl Agents {
-    /// Schedule the retry of the turn `failure` ended in `execution` when
+    /// Schedule the retry of the turn `failed` ended in `execution` when
     /// its agent has `retry` on and a retry fixes the failure, or tell of
     /// the turn Shoal does not retry.
     /// Failures only log, since the report still records the agent idle.
@@ -385,11 +398,11 @@ impl Agents {
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
-        failure: TurnFailure,
+        failed: FailedTurn,
         execution: &ExecutionId,
     ) {
         if let Err(error) = self
-            .schedule_turn_retry(daemon, selector, failure, execution)
+            .schedule_turn_retry(daemon, selector, failed, execution)
             .await
         {
             log!("turn retry for {selector}: {error:#}");
@@ -400,13 +413,14 @@ impl Agents {
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
-        failure: TurnFailure,
+        failed: FailedTurn,
         execution: &ExecutionId,
     ) -> Result<()> {
         let Some(agent) = self.agent_name(execution).await else {
             return Ok(());
         };
         let space = daemon.space(selector).await?;
+        let failure = failed.failure;
         if let Some(reason) = Unretried::of(failure, self.retries(daemon, &space, &agent).await) {
             return self
                 .leave_failed_turn(daemon, &space, execution, &agent, failure, reason)
@@ -415,7 +429,7 @@ impl Agents {
         let (id, execution) = (space.id.clone(), execution.to_owned());
         let (now, spread) = (UnixTime::now(), spread());
         self.store
-            .write(move |tx| record_failure(tx, &id, &execution, failure, now, spread))
+            .write(move |tx| record_failure(tx, &id, &execution, failed, now, spread))
             .await?;
         self.signals.wake_turn_retry();
         Ok(())

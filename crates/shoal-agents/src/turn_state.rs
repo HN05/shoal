@@ -19,8 +19,9 @@ use crate::{
         identity::{AgentTrees, Scan},
     },
     protocol::TurnEnd,
-    state::{AgentState, ExecutionState, TurnFailure},
+    state::{AgentState, ExecutionState},
     time::UnixTime,
+    turn_retry::FailedTurn,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -566,7 +567,7 @@ impl Agents {
         Ok(())
     }
 
-    /// Record the turn `failure` ended as reported from `execution`, as its
+    /// Record the turn `failed` ended as reported from `execution`, as its
     /// hook `made` the report, which leaves the agent idle and may retry
     /// the turn. The retry is scheduled
     /// first, since the agent going idle finishes a delivered one.
@@ -578,7 +579,7 @@ impl Agents {
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
-        failure: TurnFailure,
+        failed: FailedTurn,
         execution: Option<ExecutionId>,
         session: Option<AgentSessionId>,
         turn_end: TurnEnd,
@@ -590,10 +591,8 @@ impl Agents {
                 .recorded_status(daemon, selector, AgentState::Idle)
                 .await;
         }
-        self.fail_turn(
-            daemon, selector, failure, execution, session, turn_end, made,
-        )
-        .await
+        self.fail_turn(daemon, selector, failed, execution, session, turn_end, made)
+            .await
     }
 
     /// [`Self::report_turn_failure`] for a report made at `made`, as
@@ -607,14 +606,14 @@ impl Agents {
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
-        failure: TurnFailure,
+        failed: FailedTurn,
         execution: Option<ExecutionId>,
         session: Option<AgentSessionId>,
         turn_end: TurnEnd,
         made: Option<SystemTime>,
     ) -> Result<AgentStatus> {
         if let Some(execution) = &execution {
-            self.retry_failed_turn(daemon, selector, failure, execution)
+            self.retry_failed_turn(daemon, selector, failed, execution)
                 .await;
         }
         let ending = TurnEnding {

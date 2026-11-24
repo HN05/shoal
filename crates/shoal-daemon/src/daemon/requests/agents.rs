@@ -17,7 +17,7 @@ use crate::{
     time::UnixTime,
 };
 use shoal_protocol::progress::ProgressChange;
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{executions::FailedTurn, space_names::SpaceSelector};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -129,6 +129,7 @@ pub(super) async fn handle(
         AgentMethod::ReportTurnFailure {
             workspace,
             failure,
+            resets_at,
             session,
             execution: reported,
             turn_end,
@@ -139,7 +140,7 @@ pub(super) async fn handle(
                 .report_turn_failure(
                     &**manager,
                     &workspace,
-                    failure,
+                    FailedTurn { failure, resets_at },
                     execution(caller).or(reported),
                     session,
                     turn_end,

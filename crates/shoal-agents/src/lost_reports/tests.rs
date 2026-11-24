@@ -243,6 +243,7 @@ async fn a_lost_report_waits_for_its_agent_to_register() {
         .unwrap();
     let failed = Report::TurnFailure {
         failure: crate::state::TurnFailure::Overloaded,
+        resets_at: None,
         session: None,
         turn_end: TurnEnd::default(),
     };
@@ -433,6 +434,7 @@ async fn a_failed_turn_lost_before_a_later_idle_report_is_still_retried() {
     };
     lose_from(Report::TurnFailure {
         failure: crate::state::TurnFailure::Overloaded,
+        resets_at: None,
         session: None,
         turn_end: TurnEnd::default(),
     });

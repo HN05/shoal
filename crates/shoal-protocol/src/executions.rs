@@ -255,6 +255,24 @@ pub struct TurnRetry {
     pub delivered: bool,
 }
 
+/// A turn an API failure ended, and when its error says the upstream
+/// refuses requests until, when it says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FailedTurn {
+    pub failure: TurnFailure,
+    pub resets_at: Option<crate::time::UnixTime>,
+}
+
+/// A failure whose error states no reset.
+impl From<TurnFailure> for FailedTurn {
+    fn from(failure: TurnFailure) -> Self {
+        Self {
+            failure,
+            resets_at: None,
+        }
+    }
+}
+
 /// A retry the proxy waits to make.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProxyRetry {

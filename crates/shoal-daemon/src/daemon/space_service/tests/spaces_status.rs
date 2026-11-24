@@ -162,7 +162,7 @@ async fn a_chats_status_shows_its_agents_retries() {
         .report_turn_failure(
             &*manager,
             &selector,
-            failure,
+            failure.into(),
             Some(execution),
             None,
             Default::default(),

@@ -3157,9 +3157,11 @@ that time; a restore that cannot pass them waits, as a launch is refused. Deskto
 Turn retry defaults to on for Claude and its launch profiles, off for other
 tools, and is overridden per tool with `retry`. Backoff is built in, and no
 failure a retry can fix has a deadline: an agent waits out an outage or a weekly
-quota and then carries on. A reset the agent's proxy learns of from its upstream
-holds the retry until it has passed, whichever of the proxy's and the agent's
-reports arrives first. Retry scheduling knows no agent: an
+quota and then carries on. A reset the agent's proxy learns of from its upstream,
+or that a rate limit's error states, holds the retry until it has passed,
+whichever of the proxy's and the agent's reports arrives first; the
+integration reads a reset from its failure event, and the daemon decides what
+it means. Retry scheduling knows no agent: an
 integration that can report why a turn failed maps the agent's error to Shoal's failure, and the
 daemon persists the retry and asks the idle agent to continue through its
 messages, so hook-woken and prompt-woken agents get it alike. A retry is tied to

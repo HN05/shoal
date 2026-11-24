@@ -48,12 +48,15 @@ pub enum AgentMethod {
     /// leaves the update for its restore. Answers whether the turn starts.
     StartWokenTurn { workspace: SpaceSelector },
     /// [`Self::SetAgentState`] idle for a turn `failure` ended, which may
-    /// schedule a retry of the turn. An unscoped caller, such as the wrapper
-    /// whose proxy ended the turn, names the reporting `execution`; a scoped
-    /// one reports for its own.
+    /// schedule a retry of the turn, after `resets_at` when the turn's
+    /// error says its upstream refuses requests until then. An unscoped
+    /// caller, such as the wrapper whose proxy ended the turn, names the
+    /// reporting `execution`; a scoped one reports for its own.
     ReportTurnFailure {
         workspace: SpaceSelector,
         failure: crate::state::TurnFailure,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resets_at: Option<crate::time::UnixTime>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<AgentSessionId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

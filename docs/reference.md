@@ -2520,9 +2520,11 @@ passes and the agent carries on; switching between transient failures and usage
 limits starts the wait over. When the agent's proxy learns when the upstream
 refuses requests until, such as a usage limit's reset from its error or
 headers, the retry waits until half a minute past it instead, until the
-upstream answers again. Claude Code's
-failure hook names no reset time, so without a proxy a usage limit is checked
-about hourly. A turn Shoal does not retry, because `retry` is off or the error is
+upstream answers again. A rate limit's error that Claude Code's failure hook
+passes states such a reset as well when it gives a duration after `reset
+after`, `resets in`, `try again in` or `retry after`, such as `1h36m24s`, or a
+JSON error with `resets_in_seconds`, `reset_seconds` or `resets_at`; without
+one, a usage limit is checked about hourly. A turn Shoal does not retry, because `retry` is off or the error is
 one a retry does not fix, such as failed authentication, gets a `turn_failed`
 alert naming the failure, which a child space's coordinating agent
 receives instead; later failed turns of the same agent add none until one of its

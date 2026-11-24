@@ -134,7 +134,7 @@ async fn a_failed_turn_leaves_the_agent_idle() {
         .report_turn_failure(
             &*fixture.daemon,
             &SpaceSelector::id(&workspace.id),
-            TurnFailure::Overloaded,
+            TurnFailure::Overloaded.into(),
             None,
             None,
             Default::default(),
