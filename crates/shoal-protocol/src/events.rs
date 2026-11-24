@@ -498,10 +498,9 @@ pub struct JobEndedEvent {
     pub name: String,
     /// The web URL of the run it belongs to.
     pub run: String,
-    /// Why it ended.
+    /// Why Shoal ended it, or stopped what it left.
     pub reason: String,
-    /// The processes of the job's workspace Shoal stopped before its runner,
-    /// as many as fit.
+    /// The processes of the job's workspace Shoal stopped, as many as fit.
     pub stopped: Vec<StoppedProcess>,
     /// How many more it stopped.
     #[serde(default, skip_serializing_if = "is_zero")]
