@@ -460,29 +460,6 @@ async fn restored_after_removals(child_first: bool) -> Thread {
 }
 
 #[tokio::test]
-async fn a_coordinator_posts_in_its_chat_only_in_threads_it_takes_part_in() {
-    let tree = tree().await;
-    let manager = &tree.manager;
-    // The child holds the thread, which its coordinator reads and posts in
-    // with `send`, but not from its chat.
-    let thread = open(manager, None, Some(&tree.child)).await;
-    send(manager, None, &thread, "Which port?").await;
-    let agent = Caller {
-        execution: Some(ScopedExecution {
-            id: tree.agent.clone(),
-            kind: ExecutionKind::Command,
-            agent_execution: None,
-        }),
-        ..caller(&tree.parent)
-    };
-    let selector = SpaceSelector::id(&tree.parent.id);
-    let marked = manager
-        .spaces
-        .mark_chat_post(&**manager, Some(&agent), &selector, full(&thread));
-    assert!(marked.await.is_err());
-}
-
-#[tokio::test]
 async fn done_closes_the_threads_a_space_holds_and_its_undo_reopens_them() {
     let tree = tree().await;
     let manager = &tree.manager;

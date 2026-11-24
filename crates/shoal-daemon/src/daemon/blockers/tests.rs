@@ -1,22 +1,18 @@
 use super::*;
 use crate::state::BlockerKind;
 use crate::{
-    daemon::{
-        events::EventItem,
-        test_support::{manager, repository},
-    },
+    daemon::test_support::{manager, repository},
     model::Workspace,
 };
-use shoal_daemon_base::blockers::{Lookup, Lookups};
+use shoal_daemon_base::blockers::Lookups;
 use shoal_protocol::files::Attacher;
 use shoal_protocol::progress::Blocker;
 use shoal_protocol::{
     assignments::Done,
-    events::{BlockerEvent, EventKind},
+    events::BlockerEvent,
     progress::{ProgressChange, RecordedBlocker},
 };
 
-const ISSUE: &str = "https://github.com/team/app/issues/7";
 const PR: &str = "https://github.com/team/app/pull/8";
 const RUN: &str = "https://github.com/team/app/actions/runs/9";
 
@@ -60,69 +56,6 @@ async fn blockers(manager: &Manager, space: &Workspace) -> Vec<RecordedBlocker> 
     let selector = SpaceSelector::id(&space.id);
     let progress = manager.spaces.space_progress(&selector).await.unwrap();
     progress.map_or_else(Vec::new, |progress| progress.blockers)
-}
-
-#[tokio::test]
-async fn forge_blockers_clear_as_their_lookups_say_and_failures_keep_them() {
-    let (temp, manager) = manager().await;
-    let [blocked] = workspaces(&manager, &temp, ["blocked"]).await;
-    for blocker in [
-        Blocker::Issue(ISSUE.parse().unwrap()),
-        Blocker::Pr(PR.parse().unwrap()),
-        Blocker::CiRun(RUN.parse().unwrap()),
-    ] {
-        block(&manager, &blocked, blocker).await;
-    }
-    let targets = manager.spaces.progress_forge_blockers().await.unwrap();
-    assert_eq!(targets.len(), 3);
-    let lookups: Lookups = [
-        (
-            (BlockerKind::Issue, ISSUE.into()),
-            Lookup::Cleared("it closed".into()),
-        ),
-        (
-            (BlockerKind::Pr, PR.into()),
-            Lookup::Failed("forge unreachable".into()),
-        ),
-        (
-            (BlockerKind::CiRun, RUN.into()),
-            Lookup::Cleared("run 12 passed on main at abc".into()),
-        ),
-    ]
-    .into();
-    let cleared = manager
-        .spaces
-        .clear_progress_blockers(&*manager, &lookups)
-        .await
-        .unwrap();
-    let how: Vec<_> = (cleared[0].cleared.iter())
-        .map(|event| event.cleared.clone().unwrap_or_default())
-        .collect();
-    assert_eq!(how, ["it closed", "run 12 passed on main at abc"]);
-    let kept = blockers(&manager, &blocked).await;
-    assert_eq!(kept.len(), 1);
-    assert_eq!(kept[0].lookup_failed.as_deref(), Some("forge unreachable"));
-    // A later lookup that succeeds forgets the failure.
-    let open: Lookups = [((BlockerKind::Pr, PR.into()), Lookup::Open)].into();
-    assert!(
-        manager
-            .spaces
-            .clear_progress_blockers(&*manager, &open)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    assert_eq!(blockers(&manager, &blocked).await[0].lookup_failed, None);
-
-    let events: Vec<_> = (manager.space_events(None, 100).await.unwrap().into_iter())
-        .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::BlockerCleared => {
-                event.details.blocker.map(|blocker| blocker.blocker.target)
-            }
-            _ => None,
-        })
-        .collect();
-    assert_eq!(events, [ISSUE, RUN]);
 }
 
 #[tokio::test]

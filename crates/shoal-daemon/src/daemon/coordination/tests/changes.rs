@@ -542,28 +542,6 @@ async fn a_change_s_lines_follow_its_code_and_its_version_stays_kept() {
 }
 
 #[tokio::test]
-async fn a_change_in_no_thread_expires_as_checkpoints_do() {
-    let fixture = fixture().await;
-    let thread = fixture.thread("Keep it").await;
-    fixture.write("lib.rs", "a\n");
-    fixture.switch(Some(&thread)).await;
-    fixture.edit("lib.rs", "a\n", "a\nb\n").await;
-    fixture.switch(None).await;
-    fixture.edit("lib.rs", "a\nb\n", "a\nb\nc\n").await;
-    (fixture.manager.store)
-        .write(|tx| Ok(tx.execute("UPDATE space_changes SET made_at=0", [])?))
-        .await
-        .unwrap();
-    fixture
-        .manager
-        .spaces
-        .expire_checkpoints(&*fixture.manager)
-        .await
-        .unwrap();
-    assert_eq!(fixture.recorded().await, ["1 agent text lib.rs:2"]);
-}
-
-#[tokio::test]
 async fn a_command_s_change_of_a_file_the_user_edited_meanwhile_is_mixed() {
     let fixture = fixture().await;
     fixture.write("lib.rs", "a\n");

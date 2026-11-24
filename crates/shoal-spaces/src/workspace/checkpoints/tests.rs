@@ -604,3 +604,91 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
     f.git(&["switch", "-q", "-c", "other"]);
     refused(Some(&own)).await;
 }
+
+/// The changes the agent of `f`'s workspace makes, as its tools report
+/// them.
+struct Changes<'a> {
+    f: &'a Fixture,
+    agent: crate::scope::Caller,
+}
+
+impl Changes<'_> {
+    /// A request thread the agent opens.
+    async fn thread(&self, name: &str) -> shoal_protocol::threads::Thread {
+        use shoal_protocol::threads::{ThreadKind, ThreadOpening};
+        let opened = (self.f.manager).coordination.open_thread(
+            &*self.f.manager,
+            Some(&self.agent),
+            ThreadOpening::named(name),
+            Some(ThreadKind::Request),
+            None,
+        );
+        opened.await.unwrap()
+    }
+
+    /// Send the agent's changes from now on to `thread`, or to none.
+    async fn switch(&self, thread: Option<&shoal_protocol::threads::Thread>) {
+        use shoal_protocol::{space_names::SpaceSelector, threads::ThreadNumber};
+        let number = thread.map(|thread| ThreadNumber::Full(thread.number));
+        let own = SpaceSelector::id(&self.f.workspace.id);
+        let switched = self.f.manager.coordination.switch_thread(
+            &*self.f.manager,
+            Some(&self.agent),
+            &own,
+            number,
+        );
+        switched.await.unwrap();
+    }
+
+    /// An edit tool's write of `contents` to `path`, whose hunks it reports.
+    async fn edit(&self, path: &str, before: &str, contents: &str) {
+        use shoal_protocol::changes::ToolChange;
+        self.f.write(path, contents);
+        let hunks = shoal_protocol::changes::diff(before, contents);
+        let path = self.f.workspace.path.join(path);
+        let change = ToolChange::Edited { path, hunks };
+        let recorded =
+            (self.f.manager.coordination).record_tool_change(&*self.f.manager, &self.agent, change);
+        recorded.await.unwrap();
+    }
+
+    /// Every change recorded, as `number author kind path:lines`.
+    async fn recorded(&self) -> Vec<String> {
+        use shoal_coordination::changes::records;
+        let changes = (self.f.manager.store)
+            .read(|tx| records::query(tx, "", [], records::change))
+            .await
+            .unwrap();
+        (changes.iter())
+            .map(|change| {
+                let (number, author, kind) = (change.number, change.author, change.kind);
+                format!("{number} {author} {kind} {}", change.latest)
+            })
+            .collect()
+    }
+}
+
+#[tokio::test]
+async fn a_change_in_no_thread_expires_as_checkpoints_do() {
+    let f = Fixture::new().await;
+    let changes = Changes {
+        f: &f,
+        agent: crate::scope::Caller::of_space(f.workspace.id.clone()),
+    };
+    let thread = changes.thread("Keep it").await;
+    f.write("lib.rs", "a\n");
+    changes.switch(Some(&thread)).await;
+    changes.edit("lib.rs", "a\n", "a\nb\n").await;
+    changes.switch(None).await;
+    changes.edit("lib.rs", "a\nb\n", "a\nb\nc\n").await;
+    (f.manager.store)
+        .write(|tx| Ok(tx.execute("UPDATE space_changes SET made_at=0", [])?))
+        .await
+        .unwrap();
+    f.manager
+        .spaces
+        .expire_checkpoints(&*f.manager)
+        .await
+        .unwrap();
+    assert_eq!(changes.recorded().await, ["1 agent text lib.rs:2"]);
+}
