@@ -834,38 +834,57 @@ impl Agents {
         kind: ExecutionKind,
         exit_code: Option<i32>,
     ) -> Result<bool> {
+        self.finish_execution_scanned(daemon, id, kind, exit_code, None)
+            .await
+    }
+
+    /// [`Self::finish_execution`], deciding completion from `cleared`, where
+    /// given: a scan taken since the command reported its exit that found
+    /// nothing of it left, and stopped nothing.
+    pub async fn finish_execution_scanned(
+        &self,
+        daemon: &dyn Daemon,
+        id: ExecutionId,
+        kind: ExecutionKind,
+        exit_code: Option<i32>,
+        cleared: Option<process::Scan>,
+    ) -> Result<bool> {
         self.forget_proxy_reports(&id, exit_code.is_some()).await;
-        let scan = match exit_code {
-            Some(_) => {
-                // Daemon-side reservations can be registered without a
-                // wrapper while a command is prepared. There is no process
-                // ownership to reconcile in that state, and a whole-process
-                // scan on macOS can observe an unrelated process whose
-                // environment is disappearing. Skip that inventory until a
-                // wrapper, child, or process group has been recorded.
-                let query_id = id.clone();
-                let needs_scan = self
-                    .store
-                    .run(move |db| {
-                        Ok(
-                            shoal_store::find_execution(db, &query_id)?.is_none_or(|execution| {
-                                execution.wrapper.is_some()
-                                    || execution.child.is_some()
-                                    || execution.group_id.is_some()
-                            }),
-                        )
-                    })
-                    .await?;
-                Some(if needs_scan {
-                    process::scan(HashSet::from([id.clone()])).await
-                } else {
-                    Ok(process::Scan::default())
-                })
-            }
-            None => None,
+        let scan = match (exit_code, cleared) {
+            (None, _) => None,
+            (Some(_), Some(cleared)) => Some(Ok(cleared)),
+            (Some(_), None) => Some(self.completion_scan(&id).await?),
         };
         self.finish_execution_after_scan(daemon, id, kind, exit_code, scan)
             .await
+    }
+
+    /// Scan for the processes of the execution `id`, which reported its exit.
+    async fn completion_scan(&self, id: &ExecutionId) -> Result<Result<process::Scan>> {
+        // Daemon-side reservations can be registered without a wrapper while
+        // a command is prepared. There is no process ownership to reconcile
+        // in that state, and a whole-process scan on macOS can observe an
+        // unrelated process whose environment is disappearing. Skip that
+        // inventory until a wrapper, child, or process group has been
+        // recorded.
+        let query_id = id.clone();
+        let needs_scan = self
+            .store
+            .run(move |db| {
+                Ok(
+                    shoal_store::find_execution(db, &query_id)?.is_none_or(|execution| {
+                        execution.wrapper.is_some()
+                            || execution.child.is_some()
+                            || execution.group_id.is_some()
+                    }),
+                )
+            })
+            .await?;
+        Ok(if needs_scan {
+            process::scan(HashSet::from([id.clone()])).await
+        } else {
+            Ok(process::Scan::default())
+        })
     }
 
     pub async fn finish_execution_after_scan(

@@ -858,12 +858,14 @@ async fn finish(
         .reported_end(&execution_id, result.as_ref().ok().copied())
         .await;
     // Setup instead fails on what it leaves running, and merge runs Git.
-    if kind == ExecutionKind::Command && result.is_ok() {
+    let cleared = if kind == ExecutionKind::Command && result.is_ok() {
         agents
             .executions
             .set_completing(&execution_id, Completing::StoppingSurvivors);
-        agents.stop_exited_processes(daemon, &execution_id).await;
-    }
+        agents.stop_exited_processes(daemon, &execution_id).await
+    } else {
+        None
+    };
     // The record goes with the execution, so a start waiting on it learns
     // from the daemon that its command never ran.
     let unrun = daemon
@@ -874,7 +876,7 @@ async fn finish(
         .executions
         .set_completing(&execution_id, Completing::Verifying);
     let complete = agents
-        .finish_execution(daemon, execution_id.clone(), kind, reported)
+        .finish_execution_scanned(daemon, execution_id.clone(), kind, reported, cleared)
         .await?;
     drop(spawning);
     daemon.end_viewer(&execution_id);

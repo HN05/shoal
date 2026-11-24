@@ -657,9 +657,14 @@ impl Agents {
     /// Stop what a command or agent that reported its exit left running
     /// outside its process group, such as background shell commands, so
     /// nothing outlives it. An agent's turn is kept first, while that work
-    /// still shows whether it was in flight. The completion scan that follows
-    /// decides whether anything survived.
-    pub async fn stop_exited_processes(&self, daemon: &dyn Daemon, id: &ExecutionId) {
+    /// still shows whether it was in flight. A completion scan decides
+    /// whether anything survived: the scan this takes, which it returns,
+    /// when it finds nothing of the execution left, and otherwise a later one.
+    pub async fn stop_exited_processes(
+        &self,
+        daemon: &dyn Daemon,
+        id: &ExecutionId,
+    ) -> Option<crate::process::identity::Scan> {
         let query_id = id.to_owned();
         let stopped = async {
             let record = self
@@ -669,14 +674,17 @@ impl Agents {
                 .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
             let scan = scan_processes(&record).await?;
             self.keep_stopped_turn(id, Some(&scan)).await;
-            self.inspect_execution(daemon, &record, &scan)
-                .await?
-                .stop_owned()
-                .await
+            let processes = self.inspect_execution(daemon, &record, &scan).await?;
+            if processes.command_stopped() {
+                return Ok(Some(scan));
+            }
+            processes.stop_owned().await?;
+            anyhow::Ok(None)
         };
-        if let Err(error) = stopped.await {
+        stopped.await.unwrap_or_else(|error| {
             log!("processes of exited execution {id} not stopped: {error:#}");
-        }
+            None
+        })
     }
 
     /// Stop the execution's verified survivors and report what keeps its
