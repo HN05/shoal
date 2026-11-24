@@ -279,31 +279,42 @@ impl Records for ReviewRecords {
         &self,
         tx: &rusqlite::Transaction<'_>,
         finding: &FindingThread<'_>,
-    ) -> Result<()> {
-        let code = &finding.code;
+    ) -> Result<i64> {
+        let code = (finding.code.iter())
+            .map(|code| super::threads::findings::FindingCode {
+                commit: &code.commit,
+                at: &code.at,
+                snippet: code.snippet.as_deref(),
+            })
+            .collect();
         let finding = super::threads::findings::FindingThread {
             review: finding.review,
             workspace: finding.workspace,
             severity: finding.severity,
             title: finding.title,
             body: finding.body,
-            code: super::threads::findings::FindingCode {
-                commit: &code.commit,
-                at: &code.at,
-                snippet: code.snippet.as_deref(),
-            },
+            code,
         };
         super::threads::findings::open(tx, &finding)
+    }
+
+    fn fixed_finding(
+        &self,
+        db: &rusqlite::Connection,
+        workspace: &SpaceId,
+        number: ItemNumber,
+    ) -> Result<Option<i64>> {
+        super::threads::findings::fixed_finding(db, workspace, number)
     }
 
     fn reopen_finding(
         &self,
         tx: &rusqlite::Transaction<'_>,
         workspace: &SpaceId,
-        number: ItemNumber,
+        thread: i64,
         why: &str,
-    ) -> Result<Option<i64>> {
-        super::threads::findings::reopen(tx, workspace, number, why)
+    ) -> Result<bool> {
+        super::threads::findings::reopen(tx, workspace, thread, why)
     }
 
     fn drop_review_threads(&self, tx: &rusqlite::Transaction<'_>, review: ReviewId) -> Result<()> {

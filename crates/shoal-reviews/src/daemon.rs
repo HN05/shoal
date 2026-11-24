@@ -321,7 +321,7 @@ pub struct FindingThread<'a> {
     pub severity: Severity,
     pub title: &'a str,
     pub body: &'a str,
-    pub code: &'a FindingCode,
+    pub code: &'a [FindingCode],
 }
 
 /// Where a finding is in the reviewed commit `commit`: its file, lines and
@@ -362,21 +362,31 @@ pub trait Records: Send + Sync {
     ) -> Result<Vec<SpaceId>>;
 
     /// Open the `review` thread of `finding` from Shoal, held by its
-    /// workspace, with its body as the opening post. It tells no one: the
-    /// review's own alert names its threads.
-    fn open_finding(&self, tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<()>;
+    /// workspace, with its body as the opening post, holding its posts
+    /// until its review is submitted; the thread's record ID. It tells no
+    /// one: the review's own alert names its threads.
+    fn open_finding(&self, tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<i64>;
 
-    /// Reopen the thread `number` with a post from Shoal saying `why`, when
-    /// it is a `review` thread `workspace` holds resolved `fixed`; its
-    /// record's ID, none for any other thread. Like opening, it tells no
-    /// one.
+    /// The record ID of the thread `number` when it is a `review` thread
+    /// Shoal opened that `workspace` holds resolved `fixed`, which a later
+    /// review may reopen.
+    fn fixed_finding(
+        &self,
+        db: &Connection,
+        workspace: &SpaceId,
+        number: ItemNumber,
+    ) -> Result<Option<i64>>;
+
+    /// Reopen the thread `thread` with a post from Shoal saying `why`,
+    /// while [`Self::fixed_finding`] still names it; whether it did. Like
+    /// opening, it tells no one.
     fn reopen_finding(
         &self,
         tx: &Transaction<'_>,
         workspace: &SpaceId,
-        number: ItemNumber,
+        thread: i64,
         why: &str,
-    ) -> Result<Option<i64>>;
+    ) -> Result<bool>;
 
     /// Delete the threads of review `review`, which its writer cancelled
     /// while it was pending.

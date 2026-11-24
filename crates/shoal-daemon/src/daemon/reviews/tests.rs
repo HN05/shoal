@@ -523,14 +523,19 @@ async fn a_later_review_reopens_only_a_fixed_finding_of_its_workspace() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
     let (manager, workspace) = (&fixture.manager, &fixture.workspace);
     let review = fixture.review().await;
-    let number = review.threads[0].number;
+    let (number, id) = (review.threads[0].number, review.threads[0].id);
     let reopen = |why: &'static str| {
         let workspace = workspace.id.clone();
-        manager
-            .store
-            .write(move |tx| crate::daemon::threads::findings::reopen(tx, &workspace, number, why))
+        manager.store.write(move |tx| {
+            let fixed = crate::daemon::threads::findings::fixed_finding(tx, &workspace, number)?;
+            assert_eq!(
+                fixed.is_some(),
+                crate::daemon::threads::findings::reopen(tx, &workspace, id, why)?
+            );
+            Ok(fixed.is_some())
+        })
     };
-    assert_eq!(reopen("Still.").await.unwrap(), None);
+    assert!(!reopen("Still.").await.unwrap());
     let fixed = Resolving {
         outcome: Some(OutcomeKind::Fixed),
         ..Resolving::default()
@@ -540,12 +545,7 @@ async fn a_later_review_reopens_only_a_fixed_finding_of_its_workspace() {
         .resolve_thread(&**manager, None, ThreadNumber::Full(number), fixed))
     .await
     .unwrap();
-    assert!(
-        reopen("The empty case still panics.")
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(reopen("The empty case still panics.").await.unwrap());
     let thread = (manager
         .coordination
         .thread(&**manager, None, ThreadNumber::Full(number)))
@@ -569,7 +569,7 @@ async fn a_later_review_reopens_only_a_fixed_finding_of_its_workspace() {
         .resolve_thread(&**manager, None, ThreadNumber::Full(number), wont))
     .await
     .unwrap();
-    assert_eq!(reopen("Still.").await.unwrap(), None);
+    assert!(!reopen("Still.").await.unwrap());
     let thread = (manager
         .coordination
         .thread(&**manager, None, ThreadNumber::Full(number)))

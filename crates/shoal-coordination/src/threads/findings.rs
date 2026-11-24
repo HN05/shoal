@@ -1,7 +1,7 @@
 //! The `review` threads of reviews: those Shoal opens for a local review's
 //! findings, held by the reviewed workspace, opening one with its finding
-//! as the opening post and reopening one a later review found still
-//! present; reading a review's threads, releasing those of a review its
+//! as the opening post, which holds its posts until the review is
+//! submitted, and reopening one a later review found still present; reading a review's threads, releasing those of a review its
 //! writer submitted and dropping those of one it cancelled, each in the
 //! review's own transaction, telling no one, since the review's one alert
 //! names its threads; and posting the reviewer's answers in Shoal's, which
@@ -36,7 +36,7 @@ pub struct FindingThread<'a> {
     pub title: &'a str,
     pub body: &'a str,
     /// Where the finding is in the reviewed commit.
-    pub code: FindingCode<'a>,
+    pub code: Vec<FindingCode<'a>>,
 }
 
 /// Where a finding is in the reviewed commit `commit`: its file, lines and
@@ -56,8 +56,9 @@ pub struct AwaitedPost {
 
 /// Open the `review` thread of `finding` from Shoal in the workspace that
 /// holds it, its title the thread's name and its body the opening post,
-/// pointing at its code.
-pub fn open(tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<()> {
+/// pointing at its code, holding its posts until its review is submitted;
+/// the thread's record ID.
+pub fn open(tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<i64> {
     let name = shorten(one_line(finding.title), MAX_MESSAGE_LEN);
     let new = NewThread {
         kind: ThreadKind::Review,
@@ -65,51 +66,74 @@ pub fn open(tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<()> {
             severity: Some(finding.severity),
             review: Some(finding.review),
         }),
-        held: false,
+        held: true,
         name: &name,
         opener: Opener::Shoal,
         space_id: finding.workspace,
         holder: Some(&ThreadSpace::here(finding.workspace.clone())),
     };
     let id = records::insert_thread(tx, &new)?;
-    let code = finding_code(tx, finding)?;
+    let code = (finding.code.iter())
+        .map(|code| finding_code(tx, finding.workspace, code))
+        .collect::<Result<Vec<_>>>()?;
     let body = match post_text(finding.body) {
         body if body.trim().is_empty() => name.clone(),
         body => body,
     };
-    record_shoal_post(tx, id, &body, &[code])
+    record_shoal_post(tx, id, &body, &code)?;
+    Ok(id)
 }
 
-/// The reference the opening post of `finding`'s thread makes, in the
-/// worktree of the workspace that holds it.
-fn finding_code(db: &Connection, finding: &FindingThread<'_>) -> Result<NewCode> {
+/// The reference to `code` the opening post of a finding's thread makes, in
+/// the worktree of the workspace `workspace` that holds it.
+fn finding_code(db: &Connection, workspace: &SpaceId, code: &FindingCode<'_>) -> Result<NewCode> {
     let (space_name, repository_id): (_, Option<_>) = db.query_row(
         "SELECT name,repository_id FROM spaces WHERE id=?1",
-        [finding.workspace],
+        [workspace],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
     Ok(NewCode {
-        space_id: finding.workspace.clone(),
+        space_id: workspace.clone(),
         space_name,
         repository_id: repository_id.context("a workspace belongs to a repository")?,
-        commit: Some(finding.code.commit.clone()),
-        at: finding.code.at.clone(),
-        snippet: finding.code.snippet.map(str::to_owned),
+        commit: Some(code.commit.clone()),
+        at: code.at.clone(),
+        snippet: code.snippet.map(str::to_owned),
     })
 }
 
-/// Reopen the thread `number` with a post from Shoal saying `why`, when it
-/// is a `review` thread Shoal opened that the workspace `workspace` holds
-/// resolved `fixed`; the thread's record ID, none for any other.
-pub fn reopen(
-    tx: &Transaction<'_>,
+/// The record ID of the thread `number` when it is a finding the workspace
+/// `workspace` holds resolved `fixed`, which a later review may reopen.
+pub fn fixed_finding(
+    db: &Connection,
     workspace: &SpaceId,
     number: ItemNumber,
-    why: &str,
 ) -> Result<Option<i64>> {
-    let Some(thread) = records::by_number(tx, number)? else {
-        return Ok(None);
-    };
+    let thread = records::by_number(db, number)?;
+    Ok(thread
+        .filter(|thread| is_fixed_finding(thread, workspace))
+        .map(|thread| thread.id))
+}
+
+/// Reopen the thread `id` with a post from Shoal saying `why`, while it is
+/// a finding the workspace `workspace` holds resolved `fixed`; whether it
+/// did.
+pub fn reopen(tx: &Transaction<'_>, workspace: &SpaceId, id: i64, why: &str) -> Result<bool> {
+    if !is_fixed_finding(&records::reread(tx, id)?, workspace) {
+        return Ok(false);
+    }
+    records::set_resolution(tx, id, None)?;
+    let text = format!(
+        "A later review found this still present: {}",
+        post_text(why)
+    );
+    record_shoal_post(tx, id, &text, &[])?;
+    Ok(true)
+}
+
+/// Whether `thread` is a `review` thread Shoal opened that the workspace
+/// `workspace` holds resolved `fixed`.
+fn is_fixed_finding(thread: &Thread, workspace: &SpaceId) -> bool {
     let fixed = (thread.resolution.as_ref())
         .is_some_and(|resolution| resolution.outcome.kind() == OutcomeKind::Fixed);
     let held = thread
@@ -117,16 +141,7 @@ pub fn reopen(
         .space()
         .is_some_and(|holder| holder.id == *workspace);
     let shoals = thread.kind == ThreadKind::Review && thread.opener == Sender::Shoal;
-    if !shoals || !fixed || !held {
-        return Ok(None);
-    }
-    records::set_resolution(tx, thread.id, None)?;
-    let text = format!(
-        "A later review found this still present: {}",
-        post_text(why)
-    );
-    record_shoal_post(tx, thread.id, &text, &[])?;
-    Ok(Some(thread.id))
+    shoals && fixed && held
 }
 
 /// Delete the threads of review `review`, which its writer cancelled while

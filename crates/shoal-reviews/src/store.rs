@@ -256,19 +256,22 @@ pub fn finish(
             severity: finding.severity,
             title: &finding.title,
             body: &finding.body,
-            code,
+            code: std::slice::from_ref(code),
         };
         records.open_finding(tx, &finding)?;
     }
     for reopened in &output.reopened {
-        let thread = records.reopen_finding(tx, workspace, reopened.thread, &reopened.reason)?;
-        if let Some(thread) = thread {
+        let Some(thread) = records.fixed_finding(tx, workspace, reopened.thread)? else {
+            continue;
+        };
+        if records.reopen_finding(tx, workspace, thread, &reopened.reason)? {
             tx.execute(
                 "INSERT OR IGNORE INTO review_reopens(review_id,thread_id) VALUES (?1,?2)",
                 params![id, thread],
             )?;
         }
     }
+    records.release_review_threads(tx, id)?;
     Ok(true)
 }
 

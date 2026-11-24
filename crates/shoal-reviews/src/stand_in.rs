@@ -574,7 +574,7 @@ impl Records for StandInRecords {
         Ok(listed.then(|| self.workspace.into()).into_iter().collect())
     }
 
-    fn open_finding(&self, tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<()> {
+    fn open_finding(&self, tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<i64> {
         let mut threads = self.threads.lock().unwrap();
         let item = u32::try_from(threads.len()).unwrap() + 1;
         let thread = finding_thread(item, self.name, finding);
@@ -584,30 +584,42 @@ impl Records for StandInRecords {
                 VALUES (?1,?2,?3,'review',?4,0,'shoal')",
             rusqlite::params![thread.id, thread.space_id, item, thread.name],
         )?;
+        let id = thread.id;
         threads.push(thread);
-        Ok(())
+        Ok(id)
+    }
+
+    fn fixed_finding(
+        &self,
+        _db: &Connection,
+        workspace: &SpaceId,
+        number: ItemNumber,
+    ) -> Result<Option<i64>> {
+        let threads = self.threads.lock().unwrap();
+        let found = threads.iter().find(|thread| thread.number == number);
+        Ok(found
+            .filter(|thread| fixed_in(thread, workspace))
+            .map(|thread| thread.id))
     }
 
     fn reopen_finding(
         &self,
         _tx: &Transaction<'_>,
         workspace: &SpaceId,
-        number: ItemNumber,
+        id: i64,
         why: &str,
-    ) -> Result<Option<i64>> {
+    ) -> Result<bool> {
         let mut threads = self.threads.lock().unwrap();
-        let Some(thread) = threads.iter_mut().find(|thread| thread.number == number) else {
-            return Ok(None);
+        let Some(thread) = threads.iter_mut().find(|thread| thread.id == id) else {
+            return Ok(false);
         };
-        let fixed = (thread.resolution.as_ref())
-            .is_some_and(|resolution| resolution.outcome == Outcome::Fixed);
-        if !fixed || thread.space_id != *workspace {
-            return Ok(None);
+        if !fixed_in(thread, workspace) {
+            return Ok(false);
         }
         thread.resolution = None;
         let post = Self::shoal_post(thread.id * 100, why, Vec::new());
         thread.posts.push(post);
-        Ok(Some(thread.id))
+        Ok(true)
     }
 
     fn drop_review_threads(&self, _tx: &Transaction<'_>, review: ReviewId) -> Result<()> {
@@ -657,6 +669,14 @@ impl Records for StandInRecords {
 
 /// The thread `1.item` the stand-in's records open for `finding` in the
 /// workspace named `name`.
+/// Whether `thread` is a finding the workspace `workspace` holds resolved
+/// `fixed`.
+fn fixed_in(thread: &Thread, workspace: &SpaceId) -> bool {
+    let fixed =
+        (thread.resolution.as_ref()).is_some_and(|resolution| resolution.outcome == Outcome::Fixed);
+    fixed && thread.space_id == *workspace
+}
+
 fn finding_thread(item: u32, name: &str, finding: &FindingThread<'_>) -> Thread {
     let id = i64::from(item);
     let space = ThreadSpace {
@@ -664,15 +684,17 @@ fn finding_thread(item: u32, name: &str, finding: &FindingThread<'_>) -> Thread 
         name: Some(name.into()),
         number: Some(SpaceNumber::new(1)),
     };
-    let code = CodeRef {
-        id,
-        space: space.clone(),
-        commit: Some(finding.code.commit.clone()),
-        original: finding.code.at.clone(),
-        snippet: finding.code.snippet.clone(),
-        latest: finding.code.at.clone(),
-        state: CodeState::Unchanged,
-    };
+    let code = (finding.code.iter())
+        .map(|code| CodeRef {
+            id,
+            space: space.clone(),
+            commit: Some(code.commit.clone()),
+            original: code.at.clone(),
+            snippet: code.snippet.clone(),
+            latest: code.at.clone(),
+            state: CodeState::Unchanged,
+        })
+        .collect();
     Thread {
         id,
         number: ItemNumber {
@@ -691,10 +713,10 @@ fn finding_thread(item: u32, name: &str, finding: &FindingThread<'_>) -> Thread 
         opener_space: None,
         holder: Holder::Space(space),
         created_at: UnixTime::from_seconds(id),
-        posts: vec![StandInRecords::shoal_post(id, finding.body, vec![code])],
+        posts: vec![StandInRecords::shoal_post(id, finding.body, code)],
         resolution: None,
         working: false,
-        held: false,
+        held: true,
         changes: Vec::new(),
     }
 }
@@ -719,7 +741,7 @@ pub(crate) fn finding(item: u32, path: &str, severity: Severity, body: &str) -> 
         severity,
         title: &title,
         body,
-        code: &code,
+        code: std::slice::from_ref(&code),
     };
     finding_thread(item, "fix-login", &finding)
 }
