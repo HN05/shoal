@@ -5,11 +5,14 @@
 use anyhow::Result;
 
 use super::{Chosen, Resuming};
-use crate::client::output::{agents::Agent, resume::Queued, resume::StoppedCommands};
+use crate::client::output::{
+    agents::Agent, restore::Reopened, resume::Queued, resume::StoppedCommands,
+};
 use crate::{
     cli::{context::Context, ui},
     model::{AgentResume, ResumeOutcome, Space},
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// Resume the agent of each space `resuming` lists as `resume` says, one
 /// request per space, going on after one fails, and report what each did
@@ -40,12 +43,25 @@ pub(super) async fn resume_each(
                     .push(ui::failure(ctx, "resume", &name, &error));
             }
             Ok(outcome) => add(ctx, &mut report, space.as_ref(), outcome),
-            Err(error) => report
-                .failed
-                .push(ui::failure(ctx, "resume", &name, &error)),
+            Err(error) => {
+                keep_saved(&mut report.reopened, selector);
+                (report.failed).push(ui::failure(ctx, "resume", &name, &error));
+            }
         }
     }
     Ok(report)
+}
+
+/// Mark the space `selector` names, when `shoal restore` reopened it for
+/// this resume, as keeping its saved agents, which its resume left there,
+/// so its report names the `shoal resume` that resumes them.
+fn keep_saved(reopened: &mut [Reopened], selector: &SpaceSelector) {
+    let opened = reopened
+        .iter_mut()
+        .find(|opened| selector.given_id() == Some(&opened.space.id));
+    if let Some(opened) = opened {
+        opened.agents_saved = true;
+    }
 }
 
 /// Add what the resume of `space` did, its `outcome`, to `report`.
