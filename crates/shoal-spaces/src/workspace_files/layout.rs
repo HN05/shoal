@@ -17,6 +17,7 @@ use crate::{
     shoal_dirs::{Contents, ShoalDir, remove_dir, remove_if_empty},
 };
 use shoal_daemon_base::file_copies::{incomplete_copies, keep_copies};
+use shoal_protocol::files::SessionCopy;
 
 /// The directory below a repository's attached files that keeps what
 /// workspaces handed back, which no workspace ID names.
@@ -76,12 +77,26 @@ impl Layout {
     /// `workspace_id`. The same message with the same files reuses its
     /// copies, so sending it again collapses with the unread one.
     pub fn keep(&self, workspace_id: &SpaceId, message: &str, files: &[NewFile]) -> Result<Kept> {
-        self.keep_in(
-            &self.root().join(workspace_id),
-            workspace_id,
-            message,
-            files,
-        )
+        let directory = self.root().join(workspace_id);
+        self.keep_in(&directory, workspace_id, message, files, Limit::Sent)
+    }
+
+    /// Copies of the files of an agent's session, each with the
+    /// [`SessionCopy`] it copies, for the space `space_id`, whatever their
+    /// size: a handoff that dropped one would lose the history it holds.
+    pub fn keep_session(
+        &self,
+        space_id: &SpaceId,
+        message: &str,
+        files: &[(NewFile, SessionCopy)],
+    ) -> Result<Kept> {
+        let directory = self.root().join(space_id);
+        let new: Vec<NewFile> = files.iter().map(|(file, _)| file.clone()).collect();
+        let mut kept = self.keep_in(&directory, space_id, message, &new, Limit::None)?;
+        for (copy, (_, session)) in kept.copies.iter_mut().zip(files) {
+            copy.session = Some(session.clone());
+        }
+        Ok(kept)
     }
 
     /// Copies of the files `files` that the workspace `workspace_id` hands
@@ -94,19 +109,21 @@ impl Layout {
         files: &[NewFile],
     ) -> Result<Kept> {
         let directory = self.root().join(RESULTS).join(workspace_id);
-        self.keep_in(&directory, workspace_id, message, files)
+        self.keep_in(&directory, workspace_id, message, files, Limit::Sent)
     }
 
-    /// Copies of `files` in `directory`, for the workspace `workspace_id`.
+    /// Copies of `files` in `directory`, for the workspace `workspace_id`,
+    /// each refused as `limit` says.
     fn keep_in(
         &self,
         directory: &Path,
         workspace_id: &SpaceId,
         message: &str,
         files: &[NewFile],
+        limit: Limit,
     ) -> Result<Kept> {
         for file in files {
-            super::check_path(&file.path)?;
+            limit.check(&file.path)?;
             file.check()?;
         }
         self.dir.create()?;
@@ -231,6 +248,29 @@ impl Layout {
     /// goes.
     pub fn remove(&self) -> Result<()> {
         self.dir.remove()
+    }
+}
+
+/// Which files a copy refuses.
+#[derive(Clone, Copy)]
+enum Limit {
+    /// What a message cannot send, as [`super::check_path`] refuses it.
+    Sent,
+    /// Anything but an absolute path to a file.
+    None,
+}
+
+impl Limit {
+    fn check(self, path: &Path) -> Result<()> {
+        match self {
+            Self::Sent => super::check_path(path),
+            Self::None => {
+                let shown = path.display();
+                ensure!(path.is_absolute(), "{shown}: give an absolute path");
+                ensure!(path.is_file(), "{shown} is not a file");
+                Ok(())
+            }
+        }
     }
 }
 

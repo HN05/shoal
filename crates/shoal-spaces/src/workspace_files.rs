@@ -33,8 +33,8 @@ pub use records::{claim, count, keep_removed, kept_ids, rebase, record, restore}
 use layout::{Kept, Layout};
 
 pub use shoal_protocol::files::{
-    AttachedFile, AttachedTo, Attacher, FileSource, KeptCopy, NewFile, SentFile, check_path,
-    check_sent, missing_selection,
+    AttachedFile, AttachedTo, Attacher, FileSource, KeptCopy, NewFile, SentFile, SessionCopy,
+    check_path, check_sent, missing_selection,
 };
 
 /// The space, a workspace or chat, whose attached files a request names:
@@ -141,6 +141,9 @@ impl From<Chat> for Space {
 /// The text copies of added files are kept under, which tells them from a
 /// message that is only its files.
 const ADDED: &str = "shoal files add";
+
+/// The text copies of a handoff's session files are kept under.
+const HANDOFF: &str = "shoal convert agent";
 
 /// Copies of `files`, attached to `message` for the workspace or chat
 /// `space_id`, made off the async runtime. Callers hold the gate of the
@@ -449,6 +452,24 @@ impl Spaces {
         let kept = keep(layout, &space.id, ADDED, files).await?;
         self.record_or_discard(&space.id, FileSource::Added, attacher, kept)
             .await
+    }
+
+    /// Attach copies of the files of an agent's session to `space` for a
+    /// handoff, each file with the [`SessionCopy`] it copies, whatever their
+    /// size, and return their records. Files unchanged since an earlier
+    /// handoff copied them keep the copies they have.
+    pub async fn attach_session_files(
+        &self,
+        daemon: &dyn Daemon,
+        space: &Space,
+        files: Vec<(NewFile, SessionCopy)>,
+    ) -> Result<Vec<AttachedFile>> {
+        let (layout, _files) = self.lock_files(daemon, space).await?;
+        let id = space.id.clone();
+        let kept = tokio::task::spawn_blocking(move || layout.keep_session(&id, HANDOFF, &files))
+            .await??;
+        let source = FileSource::Handoff;
+        (self.record_or_discard(&space.id, source, &Attacher::User, kept)).await
     }
 
     /// Record the copies `kept` as attached to the workspace or chat
