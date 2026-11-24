@@ -17,7 +17,27 @@ pub const NO_QUEUED_HOST: &str = "no terminal host can start queued agents";
 /// this terminal under `settings`: one no host takes, or whose first host a
 /// queued start from here would try is not installed.
 pub fn ensure_background(settings: &Effective) -> Result<()> {
-    groups::first_queued_host(settings, current_origin().as_ref())
+    ensure_background_near(settings, current_origin().as_ref())
+}
+
+/// [`ensure_background`] for a start queued with `env`, which records the
+/// place its caller's terminal runs in, as [`super::start_environment`]
+/// gives it.
+pub fn ensure_queued_background(
+    settings: &Effective,
+    env: &std::collections::BTreeMap<String, String>,
+) -> Result<()> {
+    let origin = match env.get(env::ORIGIN) {
+        Some(recorded) => recorded_origin(recorded)?,
+        None => None,
+    };
+    ensure_background_near(settings, origin.as_ref())
+}
+
+/// Refuse a background start from `origin` that no host takes under
+/// `settings`, or whose first host is not installed.
+fn ensure_background_near(settings: &Effective, origin: Option<&Origin>) -> Result<()> {
+    groups::first_queued_host(settings, origin)
         .context(NO_QUEUED_HOST)?
         .host
         .ensure_installed()

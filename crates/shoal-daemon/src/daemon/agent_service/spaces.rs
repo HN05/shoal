@@ -17,11 +17,13 @@ use crate::model::Repository;
 use crate::model::Space;
 use crate::model::Workspace;
 use crate::model::WorkspaceUsage;
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::config::permissions::PermissionChange;
 use shoal_protocol::config::permissions::PermissionsConfig;
 use shoal_protocol::progress::Progress;
+use shoal_protocol::recovery::ReconcileOptions;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_schedule::priority::Priority;
 use std::path::PathBuf;
@@ -213,6 +215,29 @@ impl Spaces for Manager {
 
     fn verify_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>> {
         Box::pin(self.spaces.verify_space(self, space))
+    }
+
+    fn prove_execution_ended<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        execution: &'a ExecutionId,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            let options = ReconcileOptions {
+                repair: true,
+                // A protection handoff is persisted only after Shoal has
+                // decided to stop the agent, and its pause clears the child
+                // identity before the daemon can restart, so the launch
+                // proof is unavailable even though the process scan proves
+                // that no survivor is visible.
+                acknowledge_stopped: true,
+                ..Default::default()
+            };
+            let report = (self.spaces)
+                .reconcile(self, &SpaceSelector::id(id), options)
+                .await?;
+            Ok((report.executions.iter()).any(|ended| ended.id == *execution && ended.cleared))
+        })
     }
 
     fn touch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()> {

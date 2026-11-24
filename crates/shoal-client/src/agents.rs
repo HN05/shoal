@@ -9,7 +9,10 @@ use crate::connection::{Daemon, Prepared, request};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
-    model::{AgentRestart, AgentSession, AgentStatus, RestartOutcome, RunningAgent},
+    model::{
+        AgentRestart, AgentResume, AgentSession, AgentStatus, RestartOutcome, ResumeOutcome,
+        RunningAgent,
+    },
     protocol::{AgentMethod, SubagentChange, TurnEnd, WakeEnd, WokenTurn},
     state::{AgentState, TurnFailure},
 };
@@ -123,6 +126,13 @@ pub fn restart(space: SpaceSelector, restart: AgentRestart) -> Prepared<RestartO
 /// how it would have restarted, if anything was recorded.
 pub fn cancel_restart(space: SpaceSelector) -> Prepared<Option<AgentRestart>> {
     Prepared::new(AgentMethod::CancelRestart { space })
+}
+
+/// Resume the agent of `space` as `resume` says, answering with what the
+/// daemon did: continued its turn, queued or started its restores, reported
+/// its stopped commands or found nothing to resume.
+pub fn resume(space: SpaceSelector, resume: AgentResume) -> Prepared<ResumeOutcome> {
+    Prepared::new(AgentMethod::ResumeAgent { space, resume })
 }
 
 /// The agents connected in `space`, a workspace or a running chat.

@@ -254,6 +254,12 @@ pub(super) async fn handle(
         AgentMethod::CancelRestart { space } => {
             Body::CancelledRestart(manager.agents.cancel_restart(&**manager, &space).await?)
         }
+        AgentMethod::ResumeAgent { space, resume } => Body::Resume(
+            manager
+                .agents
+                .resume_space(&**manager, caller, &space, resume)
+                .await?,
+        ),
         AgentMethod::AgentSession { space } => Body::AgentSession(
             manager
                 .agents
@@ -294,6 +300,7 @@ impl Checked for AgentMethod {
             | Self::AwaitAgentWake { .. }
             | Self::SpaceAgents { .. }
             | Self::CancelRestart { .. }
+            | Self::ResumeAgent { .. }
             | Self::AgentSession { .. }
             | Self::AgentUpdates { .. }
             | Self::WaitAgentUpdates { .. }
@@ -398,6 +405,18 @@ impl Scoped for AgentMethod {
                     )
                     .await?,
             ),
+            // Whoever stopped them, as the restores it queues.
+            AgentMethod::ResumeAgent { space, resume } => {
+                let target = (manager.coordination)
+                    .stopped_below(manager, caller, space)
+                    .await?;
+                if resume.now {
+                    (manager.coordination)
+                        .authorize_start_beyond_limits(manager, caller, "resume", target)
+                        .await?;
+                }
+                Some(target)
+            }
         })
     }
 }

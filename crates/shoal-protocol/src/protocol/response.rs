@@ -211,6 +211,7 @@ response_bodies! {
     RunningAgents(Vec<crate::model::RunningAgent>),
     Restart(crate::model::RestartOutcome),
     CancelledRestart(Option<crate::model::AgentRestart>),
+    Resume(crate::model::ResumeOutcome),
     OwnedPlaces(Vec<crate::model::OwnedPlace>),
     SpacePlaces(crate::model::SpacePlaces),
     PlaceClose(crate::sessions::PlaceClose),

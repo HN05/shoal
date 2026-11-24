@@ -202,6 +202,15 @@ pub trait Spaces: Send + Sync {
     /// workspace whose worktree moved.
     fn verify_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;
 
+    /// Clear `execution`, which a daemon restart or a stop Shoal could not
+    /// prove left unknown in the workspace `id`, once a repair proves that
+    /// none of its processes remain; whether it cleared it.
+    fn prove_execution_ended<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        execution: &'a ExecutionId,
+    ) -> BoxFuture<'a, Result<bool>>;
+
     /// Record that the space `id` was used now.
     fn touch<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()>;
 

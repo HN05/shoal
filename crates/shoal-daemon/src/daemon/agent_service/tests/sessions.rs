@@ -25,6 +25,8 @@ pub(super) struct FakeHost {
     remaining: Mutex<Vec<(String, SpaceId)>>,
     demos: Mutex<std::collections::HashMap<String, String>>,
     closed: Mutex<Vec<String>>,
+    /// Each prompt submitted, by the place it went to.
+    prompts: Mutex<Vec<(String, String)>>,
     fail: AtomicBool,
 }
 
@@ -45,6 +47,10 @@ impl FakeHost {
         Ok(())
     }
 
+    pub(super) fn prompts(&self) -> Vec<(String, String)> {
+        self.prompts.lock().unwrap().clone()
+    }
+
     pub(super) fn closed(&self) -> Result<Vec<String>> {
         Ok(self
             .closed
@@ -57,6 +63,11 @@ impl FakeHost {
 impl Host for FakeHost {
     fn name(&self) -> HostName {
         self.name.unwrap_or(HostName::Zmx)
+    }
+    fn submit_prompt<'a>(&'a self, place: &'a Origin, text: &'a str) -> BoxFuture<'a, Result<()>> {
+        let prompt = (place.id().to_owned(), text.to_owned());
+        self.prompts.lock().unwrap().push(prompt);
+        Box::pin(async { Ok(()) })
     }
     fn ensure_installed(&self) -> Result<()> {
         Ok(())

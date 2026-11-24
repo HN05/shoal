@@ -165,6 +165,13 @@ pub enum AgentMethod {
     /// Drop the restart the daemon recorded for the agent of `space`,
     /// answering with the one it dropped, if any.
     CancelRestart { space: SpaceSelector },
+    /// Resume the agent of `space` as `resume` says, answering once the
+    /// daemon continued its turn, queued or started its restores, or found
+    /// nothing to resume.
+    ResumeAgent {
+        space: SpaceSelector,
+        resume: crate::model::AgentResume,
+    },
     /// The session of the space's agent that a fork starts from: the
     /// caller's own agent there, else its only one.
     AgentSession { space: SpaceSelector },
@@ -279,7 +286,8 @@ impl AgentMethod {
             | Self::SpaceAgents { .. }
             | Self::InterruptTurn { .. }
             | Self::RestartAgent { .. }
-            | Self::CancelRestart { .. } => Forwarding::Online,
+            | Self::CancelRestart { .. }
+            | Self::ResumeAgent { .. } => Forwarding::Online,
             // A fork starts from the session files where the caller runs;
             // the list is of this machine's agents.
             Self::AgentSession { .. }
@@ -329,6 +337,7 @@ impl AgentMethod {
             | Self::InterruptTurn { space, .. }
             | Self::RestartAgent { space, .. }
             | Self::CancelRestart { space }
+            | Self::ResumeAgent { space, .. }
             | Self::AgentSession { space }
             | Self::AgentUpdates { space }
             | Self::WaitAgentUpdates { space }

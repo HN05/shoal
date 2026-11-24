@@ -15,6 +15,7 @@ mod ready;
 mod removal;
 mod repositories;
 mod restarts;
+mod resumes;
 mod spaces;
 mod sync;
 mod workspaces;
@@ -52,6 +53,7 @@ pub use repositories::{
     RepositoryRemovalPreview, SpaceWork, WorktreeWork,
 };
 pub use restarts::{AgentRestart, RestartOutcome, RestartWait};
+pub use resumes::{AgentResume, ResumeOutcome};
 pub use spaces::{
     ByKind, Everywhere, EverywherePart, Located, Offer, Part, RefPart, RenamedSpace, Space,
     SpaceKind, SpaceMode, SpaceOffer, SpacePart, SpaceRef, SpaceTarget, Spaces, Workdir,

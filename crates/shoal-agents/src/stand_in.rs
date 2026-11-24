@@ -525,6 +525,14 @@ impl Spaces for StandIn {
         Box::pin(async { Ok(()) })
     }
 
+    fn prove_execution_ended<'a>(
+        &'a self,
+        _: &'a SpaceId,
+        _: &'a ExecutionId,
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(true) })
+    }
+
     fn touch<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, ()> {
         Box::pin(async {})
     }

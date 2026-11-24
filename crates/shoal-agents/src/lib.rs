@@ -52,6 +52,7 @@ pub mod queue;
 pub mod queued_starts;
 pub mod restart_recovery;
 pub mod restarts;
+pub mod resumes;
 pub mod sessions;
 pub mod shutdown_stop;
 #[cfg(test)]
