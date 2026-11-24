@@ -506,3 +506,29 @@ async fn only_a_conversion_that_restarts_its_agent_moves_it() {
     drop(moving);
     assert!(!moves().await.unwrap());
 }
+
+#[tokio::test]
+async fn converting_a_chat_refuses_it_as_no_workspace() {
+    let manager = Fixture::new().await;
+    let repo = registered(manager.root.path(), &manager).await;
+    let talk = manager.chat("talk", "chat", Some(&repo), None).await;
+
+    let refused = manager
+        .spaces
+        .convert_to_chat(
+            &*manager,
+            &SpaceSelector::id(&talk.id),
+            crate::model::chat_mode(),
+            Default::default(),
+            None,
+        )
+        .await
+        .unwrap_err();
+
+    let reason = crate::refusal::Reason::of(&refused);
+    assert_eq!(
+        reason,
+        Some(crate::refusal::Reason::NotFound),
+        "{refused:#}"
+    );
+}

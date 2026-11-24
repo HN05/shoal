@@ -47,3 +47,33 @@ async fn a_workspace_is_a_workspace_already() {
 
     assert!(refused.contains("is a workspace already"), "{refused}");
 }
+
+#[tokio::test]
+async fn a_mode_no_config_defines_is_refused_before_anything_changes() {
+    let manager = Fixture::new().await;
+    let repo = registered(manager.root.path(), &manager).await;
+    let talk = manager.chat("talk", "worker", Some(&repo), None).await;
+    let conversion = WorkspaceConversion {
+        mode: "missing".into(),
+        agent: Default::default(),
+        ..conversion()
+    };
+
+    let refused = manager
+        .spaces
+        .convert_to_workspace(
+            &manager.daemon(),
+            &SpaceSelector::id(&talk.id),
+            conversion,
+            None,
+            None,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        format!("{refused:#}").contains("no mode missing"),
+        "{refused:#}"
+    );
+    assert!(manager.spaces.chat_by_id(&talk.id).await.unwrap().is_some());
+}

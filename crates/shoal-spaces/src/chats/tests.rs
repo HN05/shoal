@@ -45,3 +45,33 @@ async fn the_diff_base_names_only_the_workspaces_own_worktree() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let (_, workspace) = workspace(temp.path(), &manager).await;
+    let selected = SpaceSelector::id(&workspace.id);
+    let start = |name: &'static str| manager.chat_in(&selected, name);
+    let moved = temp.path().join("moved");
+    std::fs::rename(&workspace.path, &moved).unwrap();
+    assert!(start("missing").await.is_err());
+    // Another directory at its path is not its worktree.
+    std::fs::create_dir(&workspace.path).unwrap();
+    crate::stand_in::git(&workspace.path, &["init", "-q"]);
+    assert!(start("replaced").await.is_err());
+    std::fs::remove_dir_all(&workspace.path).unwrap();
+    std::fs::rename(&moved, &workspace.path).unwrap();
+
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(start("failed").await.is_err());
+    assert!(manager.spaces.chats().await.unwrap().is_empty());
+}

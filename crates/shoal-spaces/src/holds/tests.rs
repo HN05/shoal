@@ -124,3 +124,77 @@ async fn release_remains_available_during_lifecycle_operations_and_hooks() {
             .is_empty()
     );
 }
+
+/// A chat of a new repository `repo`.
+async fn chat(manager: &Fixture) -> crate::model::Chat {
+    let repo = manager.repository("repo").await;
+    manager.chat("audit", "chat", Some(&repo), None).await
+}
+
+#[tokio::test]
+async fn a_hold_keeps_a_chat_until_it_is_released() {
+    let manager = Fixture::new().await;
+    let chat = chat(&manager).await;
+    let selected = SpaceSelector::id(&chat.id);
+    let hold =
+        (manager
+            .spaces
+            .acquire_hold(&*manager, &selected, "notes".into(), None, HoldPlacer::User))
+        .await
+        .unwrap();
+    assert_eq!(hold.space_id, chat.id);
+    assert_eq!(manager.spaces.holds(&selected).await.unwrap(), [hold]);
+    // Only the hold keeps it, as its release shows below.
+    assert!(
+        manager
+            .spaces
+            .keep_reason(&*manager, &chat.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    // A removal that leaves the user's holds in place refuses it.
+    let parent = crate::lifecycle::Removal::Parent {
+        cause: crate::model::EventCause::Parent,
+        refuse_holds: true,
+        confirmed: None,
+        moved: None,
+        lives_on: false,
+    };
+    let Err(refused) = manager.spaces.reserve_space(&chat.id, parent).await else {
+        panic!("the user's hold keeps the chat");
+    };
+    assert!(format!("{refused:#}").contains("holds"), "{refused:#}");
+    manager
+        .spaces
+        .release_hold(&selected, "notes".into(), HoldPlacer::User)
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .spaces
+            .keep_reason(&*manager, &chat.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn a_removal_reserving_a_chat_takes_no_new_hold() {
+    let manager = Fixture::new().await;
+    let chat = chat(&manager).await;
+    let _removal = manager.spaces.space_removals.reserve(&chat.id).unwrap();
+    manager
+        .spaces
+        .acquire_hold(
+            &*manager,
+            &SpaceSelector::id(&chat.id),
+            "late".into(),
+            None,
+            HoldPlacer::User,
+        )
+        .await
+        .unwrap_err();
+    assert!(!manager.spaces.has_holds(&chat.id).await.unwrap());
+}

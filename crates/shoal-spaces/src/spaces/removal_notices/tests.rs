@@ -33,6 +33,26 @@ async fn notices(manager: &Fixture) -> Vec<(AlertKind, Option<String>)> {
 }
 
 #[tokio::test]
+async fn a_retained_chat_records_its_cleanup_as_the_cause() {
+    let manager = Fixture::new().await;
+    let chat = manager.chat("notes", "chat", None, None).await;
+
+    let removal: Result<bool> = Err(anyhow::anyhow!("agent running"));
+    let space: crate::model::Space = chat.into();
+    (manager
+        .spaces
+        .announce_removal(&*manager, &space, Cleanup::Idle, &removal))
+    .await
+    .unwrap();
+
+    assert_eq!(retentions(&manager).await, [Some(EventCause::Idle)]);
+    assert_eq!(
+        notices(&manager).await,
+        [(AlertKind::CleanupFailed, Some("notes".to_owned()))]
+    );
+}
+
+#[tokio::test]
 async fn a_retained_workspace_records_its_cleanup_as_the_cause() {
     let manager = Fixture::new().await;
     let root = &manager.root;

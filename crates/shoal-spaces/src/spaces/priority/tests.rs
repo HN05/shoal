@@ -35,3 +35,24 @@ async fn a_workspace_at_a_commit_records_the_priority_it_is_given() {
     let stored = manager.store.read(move |tx| current(tx, &id)).await;
     assert_eq!(stored.unwrap(), Priority::URGENT);
 }
+
+#[tokio::test]
+async fn a_chat_started_with_a_priority_records_it() {
+    let manager = Fixture::new().await;
+    let new = crate::chats::NewChat {
+        priority: Some(Priority::URGENT),
+        name: "urgent".into(),
+        agent: "claude".into(),
+        mode: "chat".into(),
+        narrowing: Default::default(),
+        origin: None,
+        parent: None,
+    };
+    let chat = manager
+        .spaces
+        .start_new_chat(&*manager, None, None, new)
+        .await
+        .unwrap();
+    let stored = manager.store.read(move |tx| current(tx, &chat.id)).await;
+    assert_eq!(stored.unwrap(), Priority::URGENT);
+}

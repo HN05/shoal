@@ -164,6 +164,15 @@ impl Fixture {
     pub(crate) fn daemon(&self) -> Arc<dyn Daemon> {
         self.daemon.clone()
     }
+
+    /// Register a new repository `name` in the fixture's root, checked out
+    /// on `main` with one commit.
+    pub(crate) async fn repository(&self, name: &str) -> Repository {
+        let checkout = repository(self.root.path(), name);
+        (self.register_repository(checkout.to_str().unwrap().into(), None, None))
+            .await
+            .unwrap()
+    }
 }
 
 impl Deref for Fixture {
@@ -436,6 +445,45 @@ impl StandIn {
         (self.spaces)
             .create_workspace_with(self, repository, name, base, new)
             .await
+    }
+
+    /// Record the chat `name` in `mode`, of `repository` or without one,
+    /// below `parent`, as a start records it before its agent runs.
+    pub(crate) async fn chat(
+        &self,
+        name: &str,
+        mode: impl Into<crate::config::modes::ModeName>,
+        repository: Option<&Repository>,
+        parent: Option<&SpaceId>,
+    ) -> Chat {
+        let new = crate::chats::NewChat {
+            priority: None,
+            name: name.into(),
+            agent: "claude".into(),
+            mode: mode.into(),
+            narrowing: Default::default(),
+            origin: None,
+            parent: parent.cloned(),
+        };
+        let repository = repository.map(|repository| repository.id.clone().into());
+        (self.spaces.start_new_chat(self, repository, None, new))
+            .await
+            .unwrap()
+    }
+
+    /// Record the chat `name` in the worktree of the workspace `workspace`
+    /// names, as a start in it records it before its agent runs.
+    pub(crate) async fn chat_in(&self, workspace: &SpaceSelector, name: &str) -> Result<Chat> {
+        let new = crate::chats::NewChat {
+            priority: None,
+            name: name.into(),
+            agent: "claude".into(),
+            mode: crate::model::chat_mode(),
+            narrowing: Default::default(),
+            origin: None,
+            parent: None,
+        };
+        (self.spaces.start_new_chat(self, None, Some(workspace), new)).await
     }
 
     /// Open the removed workspace `selector` names again for the user, as
@@ -1091,8 +1139,13 @@ impl Repositories for StandIn {
         Box::pin(async { Default::default() })
     }
 
+    /// The `shoal` directory of the fixture's home, which no test configures.
     fn prepare_chat_root(&self) -> BoxFuture<'_, Result<PathBuf>> {
-        Box::pin(async { Ok(Default::default()) })
+        Box::pin(async {
+            let root = self.paths.home.join("shoal");
+            std::fs::create_dir_all(&root)?;
+            Ok(std::fs::canonicalize(root)?)
+        })
     }
 
     fn register_repository(

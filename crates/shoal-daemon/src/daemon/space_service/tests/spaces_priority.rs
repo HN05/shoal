@@ -76,28 +76,6 @@ async fn a_scoped_caller_gives_at_most_its_own_spaces_priority() {
 }
 
 #[tokio::test]
-async fn a_chat_started_with_a_priority_records_it() {
-    let (_temp, manager) = manager().await;
-    let new = crate::daemon::chats::NewChat {
-        priority: Some(Priority::URGENT),
-        name: "urgent".into(),
-        agent: "claude".into(),
-        mode: "chat".into(),
-        narrowing: Default::default(),
-        origin: None,
-        parent: None,
-    };
-    let chat = manager
-        .spaces
-        .start_new_chat(&*manager, None, None, new)
-        .await
-        .unwrap();
-    let chat = manager.run_chat_agent(chat, None).await.unwrap();
-    let stored = manager.store.read(move |tx| current(tx, &chat.id)).await;
-    assert_eq!(stored.unwrap(), Priority::URGENT);
-}
-
-#[tokio::test]
 async fn a_started_or_split_workspace_records_the_priority_it_is_given() {
     use crate::daemon::starts::{Child, Opening};
     use crate::protocol::operations::WorkspaceStart;

@@ -855,36 +855,6 @@ async fn a_chat_in_a_workspace_names_it_and_runs_only_while_its_worktree_is_ther
 }
 
 #[tokio::test]
-async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
-    let (temp, manager) = manager().await;
-    let (_, workspace) = workspace(temp.path(), &manager).await;
-    let selected = SpaceSelector::id(&workspace.id);
-    let start =
-        |name: &str| manager.start_chat_in_workspace(&selected, name.into(), "claude".into(), None);
-    let moved = temp.path().join("moved");
-    std::fs::rename(&workspace.path, &moved).unwrap();
-    assert!(start("missing").await.is_err());
-    // Another directory at its path is not its worktree.
-    std::fs::create_dir(&workspace.path).unwrap();
-    crate::daemon::test_support::git(&workspace.path, &["init", "-q"]);
-    assert!(start("replaced").await.is_err());
-    std::fs::remove_dir_all(&workspace.path).unwrap();
-    std::fs::rename(&moved, &workspace.path).unwrap();
-
-    let id = workspace.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [id])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    assert!(start("failed").await.is_err());
-    assert!(manager.spaces.chats().await.unwrap().is_empty());
-}
-
-#[tokio::test]
 async fn a_chat_records_the_mode_its_agent_started_in() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
