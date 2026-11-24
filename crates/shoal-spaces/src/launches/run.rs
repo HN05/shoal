@@ -129,6 +129,6 @@ async fn pushed_branch(repo: &Repository, run: &Run) -> Result<Option<String>> {
         return Ok(None);
     };
     let branch = BranchName::from(other);
-    let pushed = git::existing_branch::on_remote(&repo.path, "origin", &branch).await?;
+    let pushed = git::remote_has_branch(&repo.path, "origin", &branch).await?;
     Ok(pushed.then(|| other.to_owned()))
 }

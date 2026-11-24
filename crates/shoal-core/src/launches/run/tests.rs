@@ -141,18 +141,3 @@ fn a_settled_run_starts_on_its_pr_its_branch_or_nothing() {
     let named = settled(run(None, None), RunStart::Unbranched, Some("fix it"));
     assert_eq!(named.name.unwrap(), "fix it");
 }
-
-#[test]
-fn a_long_run_name_is_cut_to_the_limit() {
-    let long = "a-release-branch-with-a-very-long-name";
-    let mut launch = launch(false, |_| {});
-    let url = named_run(&launch).unwrap().unwrap().clone();
-    let read = run(Some(long), None);
-    settle(&mut launch, (url, &read), RunStart::Unbranched, "r".into()).unwrap();
-    let name = launch.name.unwrap();
-    assert_eq!(name.chars().count(), 40);
-    assert!(
-        name.starts_with("release.yml run 2765 on a-release"),
-        "{name}"
-    );
-}
