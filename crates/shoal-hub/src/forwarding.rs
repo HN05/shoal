@@ -270,12 +270,11 @@ impl Hub {
         id: &SpaceId,
         error: anyhow::Error,
     ) -> anyhow::Error {
+        if in_transit(&error) {
+            return error;
+        }
         match self.kept_package(daemon, id).await {
-            Ok(Some(_)) => {
-                let reason = Reason::of(&error).unwrap_or(Reason::NotReady);
-                let message = format!("{error:#}, or take it over here with shoal restore {id}");
-                Refusal::new(reason, message).into()
-            }
+            Ok(Some(_)) => naming_restore(error, id),
             Ok(None) => error,
             Err(lookup) => {
                 log!("hub: could not ask for a package of space {id}: {lookup:#}");
@@ -551,6 +550,20 @@ fn answered_body(frames: Vec<serde_json::Value>) -> Result<Body> {
 /// `error`, of a request for the space `space` that `machine` runs: where
 /// the machine received the request but did not answer in time, a refusal
 /// saying that it may still carry it out.
+/// Whether `error` is a call that never left or was never answered on its
+/// way, which callers tell apart by its type, rather than a refusal.
+fn in_transit(error: &anyhow::Error) -> bool {
+    (error.chain()).any(|cause| cause.is::<session::Unsent>() || cause.is::<session::Unanswered>())
+}
+
+/// `error`, a refusal of a request for the offline machine's space `id`,
+/// with its reason, naming `shoal restore`, which takes the space over.
+fn naming_restore(error: anyhow::Error, id: &SpaceId) -> anyhow::Error {
+    let reason = Reason::of(&error).unwrap_or(Reason::NotReady);
+    let message = format!("{error:#}, or take it over here with shoal restore {id}");
+    Refusal::new(reason, message).into()
+}
+
 fn unanswered(machine: &Member, space: &SpaceSelector, error: anyhow::Error) -> anyhow::Error {
     if !error.is::<session::Unanswered>() {
         return error;

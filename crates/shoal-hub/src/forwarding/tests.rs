@@ -114,3 +114,22 @@ async fn a_request_told_while_the_hub_cannot_be_reached_waits_in_the_outbox() {
     );
     assert!(request.unheard, "the user hears nothing of it: {request:?}");
 }
+
+#[test]
+fn an_offline_refusal_names_the_takeover_and_keeps_its_reason() {
+    let id = SpaceId::from("space-seven".to_owned());
+    let refused: anyhow::Error = Refusal::new(Reason::NotReady, "machine laptop is offline").into();
+    assert!(!in_transit(&refused));
+    let named = naming_restore(refused, &id);
+    assert_eq!(Reason::of(&named), Some(Reason::NotReady));
+    assert!(
+        named.to_string().ends_with("shoal restore space-seven"),
+        "{named}"
+    );
+}
+
+#[test]
+fn a_call_unanswered_on_its_way_keeps_its_type_without_a_takeover() {
+    let unanswered = anyhow::Error::new(session::Unanswered("the link closed".into()));
+    assert!(in_transit(&unanswered.context("forwarding")));
+}
