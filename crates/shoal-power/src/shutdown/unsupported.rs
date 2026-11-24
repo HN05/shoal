@@ -6,9 +6,9 @@ use anyhow::Result;
 
 use super::LoginManager;
 
-pub(super) enum Unsupported {}
+pub enum Unsupported {}
 
-pub(super) async fn connect() -> Option<Unsupported> {
+pub async fn connect() -> Option<Unsupported> {
     None
 }
 

@@ -6,18 +6,16 @@ use futures_util::StreamExt;
 use zbus::OwnedFd;
 
 use super::LoginManager;
-use crate::daemon::{
-    log,
-    logind::{LoginProxy, PrepareForShutdownStream, delay_limit},
-};
+use crate::logind::{LoginProxy, PrepareForShutdownStream, delay_limit};
+use shoal_daemon_base::log;
 
-pub(super) struct Logind {
+pub struct Logind {
     proxy: LoginProxy<'static>,
     announcements: PrepareForShutdownStream,
 }
 
 /// logind, when the system bus reaches it.
-pub(super) async fn connect() -> Option<Logind> {
+pub async fn connect() -> Option<Logind> {
     match Logind::connect().await {
         Ok(logind) => Some(logind),
         Err(error) => {

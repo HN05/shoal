@@ -1,7 +1,5 @@
 //! Tell the hub before the machine sleeps. The daemon learns of a coming
-//! sleep from the platform, which waits for it a while: logind's
-//! `PrepareForSleep` under a sleep delay lock on Linux, IOKit's will-sleep
-//! notification on macOS, whose acknowledgement it may delay. From then
+//! sleep from the platform, which waits for it a while. From then
 //! until the machine fully wakes, the agent queue admits nothing, and the
 //! hub link sends the notice and packages within the platform's allowance,
 //! then stays closed, so a dark wake, as macOS's Power Nap makes, neither
@@ -14,41 +12,7 @@ use tokio::time::Instant;
 
 use super::{log, manager::Manager};
 use shoal_daemon_base::jobs::JobStop;
-
-#[cfg(target_os = "macos")]
-mod iokit;
-#[cfg(target_os = "linux")]
-mod logind;
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-mod unsupported;
-
-#[cfg(target_os = "macos")]
-use iokit::connect;
-#[cfg(target_os = "linux")]
-use logind::connect;
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-use unsupported::connect;
-
-/// What the platform announces of the machine's sleep.
-pub(super) enum PowerEvent<H> {
-    /// The machine goes to sleep once `hold` drops, or once `allowance`
-    /// passes, without a hold where the platform gave none.
-    Sleeping {
-        hold: Option<H>,
-        allowance: Duration,
-    },
-    /// The machine fully woke.
-    Woke,
-}
-
-/// The platform's sleep announcements.
-pub(super) trait PowerEvents {
-    /// Holds a coming sleep off until dropped.
-    type Hold;
-
-    /// The next announcement; none once announcements end.
-    async fn next(&mut self) -> Option<PowerEvent<Self::Hold>>;
-}
+use shoal_power::sleep::{PowerEvent, PowerEvents, connect};
 
 /// The part of a sleep's allowance the daemon leaves the platform, so the
 /// hold drops before the platform gives up waiting for it.

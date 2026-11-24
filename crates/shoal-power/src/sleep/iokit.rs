@@ -14,7 +14,7 @@ use shoal_daemon_base::frameworks::Library;
 use tokio::sync::mpsc;
 
 use super::{PowerEvent, PowerEvents};
-use crate::daemon::log;
+use shoal_daemon_base::log;
 
 /// How long macOS waits for a will-sleep notification's acknowledgement.
 const ALLOWANCE: Duration = Duration::from_secs(30);
@@ -81,7 +81,7 @@ struct Context {
 
 /// A will-sleep notification's acknowledgement, which lets the sleep go
 /// once dropped.
-pub(super) struct Acknowledgement {
+pub struct Acknowledgement {
     allow: unsafe extern "C" fn(kernel_port: u32, notification: isize) -> i32,
     port: u32,
     notification: isize,
@@ -94,12 +94,12 @@ impl Drop for Acknowledgement {
     }
 }
 
-pub(super) struct IoKit {
+pub struct IoKit {
     events: mpsc::UnboundedReceiver<PowerEvent<Acknowledgement>>,
 }
 
 /// IOKit's notifications, once their thread registered for them.
-pub(super) async fn connect() -> Option<IoKit> {
+pub async fn connect() -> Option<IoKit> {
     let (sender, events) = mpsc::unbounded_channel();
     let (registered, answer) = tokio::sync::oneshot::channel();
     let spawned = std::thread::Builder::new()

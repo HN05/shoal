@@ -240,6 +240,12 @@ writer its frames go to.
 The walks up and down the tree of spaces, and
 whether a space on the way has an agent, are `shoal-store`'s, which every
 subsystem that follows the tree takes in its own transactions.
+`shoal-power` reads the machine's power and the user's presence from the
+platform: logind's and IOKit's announcements of a sleep, logind's of a
+shutdown, the delay locks that hold either off until the daemon is ready,
+and the lid, dock and idle readings that say whether the user walked away.
+What the daemon does on each, such as holding the agent queue through a
+sleep or stopping agents for a shutdown, stays with it.
 Changing the CLI rebuilds neither the daemon nor `shoal-core`, changing
 the daemon neither the CLI nor `shoal-core`, and changing `shoal-client` or
 `shoal-workers` neither the daemon nor its tests: the daemon depends on no

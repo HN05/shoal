@@ -51,8 +51,6 @@ pub(crate) mod hub;
 mod idle_sleep;
 mod leases;
 pub mod links;
-#[cfg(target_os = "linux")]
-mod logind;
 mod logs;
 pub mod manager;
 mod pause;
