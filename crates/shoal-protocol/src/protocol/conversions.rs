@@ -18,7 +18,7 @@ use crate::{
 pub struct AgentChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<Agent>,
-    #[serde(default, skip_serializing_if = "ModelChoice::is_empty")]
+    #[serde(default, flatten)]
     pub model: ModelChoice,
     #[serde(default, skip_serializing_if = "PermissionChange::is_empty")]
     pub permissions: PermissionChange,
@@ -53,8 +53,8 @@ pub enum ConversionMethod {
     /// or a new one from `base`, linked to `issue` when given, and start
     /// preparing it in an operation, with `env` as
     /// [`super::OperationMethod::StartOperation`] takes it; its agent
-    /// restarts there in `mode`, `worker` by default, once its turn ends.
-    /// Answers with [`super::Body::WorkspaceStarted`].
+    /// restarts there in `mode`, `worker` by default, as `agent` says, once
+    /// its turn ends. Answers with [`super::Body::WorkspaceStarted`].
     ConvertToWorkspace {
         chat: SpaceSelector,
         branch: String,
@@ -66,16 +66,20 @@ pub enum ConversionMethod {
         options: CreationOptions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<ModeName>,
+        #[serde(default, skip_serializing_if = "AgentChange::is_empty")]
+        agent: AgentChange,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
     /// Make the workspace a chat in `mode`, `chat` by default, once its
     /// agent's turn ends: its worktree goes as `shoal rm` removes it, and
-    /// its agent restarts in the repository's checkout.
+    /// its agent restarts in the repository's checkout as `agent` says.
     ConvertToChat {
         workspace: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<ModeName>,
+        #[serde(default, skip_serializing_if = "AgentChange::is_empty")]
+        agent: AgentChange,
     },
     /// Hand the work of `space` over to the agent tool `agent` names, in
     /// `mode`, the space's own by default: once the turn of its running

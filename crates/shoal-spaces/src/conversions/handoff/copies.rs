@@ -51,7 +51,7 @@ enum Located {
 impl Spaces {
     /// The sessions of `space` a handoff lists, oldest first, once the ones
     /// whose files changed since a handoff copied them are copied again.
-    pub(super) async fn copy_sessions(
+    pub(crate) async fn copy_sessions(
         &self,
         daemon: &dyn Daemon,
         space: &crate::model::Space,

@@ -56,6 +56,7 @@ pub(super) async fn to_workspace(
             ..Default::default()
         },
         mode,
+        agent: Default::default(),
     };
     let env = crate::env::without_secrets();
     let started = (crate::client::conversions::to_workspace(new, env))
@@ -82,7 +83,7 @@ pub(super) async fn to_chat(
 ) -> Result<i32> {
     let converting = to_chat_request(mode.clone());
     let workspace = ui::select_space(ctx, space, own_space(&converting)).await?;
-    let workspace = (crate::client::conversions::to_chat(workspace, mode))
+    let workspace = (crate::client::conversions::to_chat(workspace, mode, Default::default()))
         .send(&ctx.paths)
         .await?;
     let text = format!(
@@ -139,6 +140,7 @@ pub(super) fn to_workspace_request(mode: Option<ModeName>) -> Acting {
             base: None,
             options: CreationOptions::default(),
             mode: mode.clone(),
+            agent: Default::default(),
         };
         crate::client::conversions::to_workspace(new, Default::default())
     })
@@ -147,5 +149,7 @@ pub(super) fn to_workspace_request(mode: Option<ModeName>) -> Acting {
 /// What converting a workspace into a chat with `mode` sends for the
 /// workspace a picker picks.
 pub(super) fn to_chat_request(mode: Option<ModeName>) -> Acting {
-    Acting::request(move |space| crate::client::conversions::to_chat(space, mode.clone()))
+    Acting::request(move |space| {
+        crate::client::conversions::to_chat(space, mode.clone(), Default::default())
+    })
 }

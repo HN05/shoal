@@ -472,6 +472,7 @@ async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
     let pending = crate::daemon::conversions::Pending::Chat {
         chat: Box::new(chat),
         held: true,
+        carrying: Default::default(),
     };
     let id = workspace.id.clone();
     (manager.store)
@@ -498,6 +499,7 @@ async fn no_agent_starts_in_a_workspace_a_chats_agent_moves_to() {
     let converting = crate::daemon::conversions::Converting {
         chat: talk,
         mode: crate::config::modes::ModeName::DEFAULT,
+        carrying: Default::default(),
     };
     // The chat's agent works on where it ran, its turn not yet ended.
     let workspace = manager

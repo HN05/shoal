@@ -48,6 +48,8 @@ pub enum Pending {
         /// Why its post-setup hook failed, when it did.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hook_failure: Option<String>,
+        #[serde(default, skip_serializing_if = "Carrying::is_default")]
+        carrying: Carrying,
     },
     /// A workspace that becomes the chat `chat` once the agent it carries on
     /// stopped, with what its agent ran as and with, which outlives the
@@ -60,6 +62,8 @@ pub enum Pending {
         chat: Box<ConvertedChat>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         held: bool,
+        #[serde(default, skip_serializing_if = "Carrying::is_default")]
+        carrying: Carrying,
     },
     /// A space whose work `taking` takes over from the agent `execution`
     /// runs once its turn ends. A stop that keeps that agent down until
@@ -82,6 +86,23 @@ impl Pending {
             Self::Workspace { hook_failure, .. } => hook_failure.is_none(),
             Self::Chat { held, .. } | Self::Agent { held, .. } => !held,
         }
+    }
+}
+
+/// How the agent of a space converted into the other kind goes on besides
+/// its mode: with the model asked of it, from a fork of its session, or
+/// else as the agent tool `taking` names takes its work over.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Carrying {
+    #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
+    pub model: crate::agent::ModelChoice,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taking: Option<Box<Taking>>,
+}
+
+impl Carrying {
+    fn is_default(&self) -> bool {
+        self.model.is_empty() && self.taking.is_none()
     }
 }
 
@@ -236,12 +257,15 @@ pub fn forget(db: &Connection, id: &SpaceId) -> Result<()> {
 }
 
 /// Record that the workspace `id` becomes `chat` once its agent's turn ends,
-/// while the workspace is ready and that agent's execution runs, as a stop,
-/// which first reserves the workspace, has not ended it.
+/// its agent carrying on as `carrying` says, while the workspace is ready
+/// and that agent's execution runs, as a stop, which first reserves the
+/// workspace, has not ended it; an agent tool that takes the work over
+/// takes it from a stopped agent too.
 pub fn record_chat_conversion(
     tx: &Transaction<'_>,
     id: &SpaceId,
     chat: ConvertedChat,
+    carrying: Carrying,
 ) -> Result<()> {
     let ready = crate::store::exists(
         tx,
@@ -251,12 +275,13 @@ pub fn record_chat_conversion(
     let running = crate::store::execution_state(tx, &chat.execution)?
         == Some((id.to_owned(), crate::state::ExecutionState::Running));
     anyhow::ensure!(
-        ready && running,
+        ready && (running || carrying.taking.is_some()),
         "the workspace's agent was stopped meanwhile; it stays a workspace"
     );
     let pending = Pending::Chat {
         chat: Box::new(chat),
         held: false,
+        carrying,
     };
     record(tx, id, &pending)
 }
@@ -282,21 +307,24 @@ pub fn record_agent_switch(
 
 /// Replace the chat `id`, whose workspace row was just inserted under its
 /// ID, with that workspace, whose agent runs in `mode` with the permissions
-/// `narrowing` gives it, unless a stop saved the chat meanwhile: its
-/// threads, approval requests and unread messages become the workspace's,
-/// and its agent's scope token, which it keeps, acts for the workspace until
-/// the agent restarts there.
-/// Returns the row the chat had and the execution its agent runs as.
+/// `narrowing` gives it, unless a stop saved the chat meanwhile and no other
+/// agent tool `switches` to take its work over: its threads, approval
+/// requests and unread messages become the workspace's, and its agent's
+/// scope token, which it keeps, acts for the workspace until the agent
+/// restarts there.
+/// Returns the row the chat had and the execution its agent runs as, or a
+/// new one for a stopped chat.
 pub fn replace_chat(
     tx: &Transaction<'_>,
     id: &SpaceId,
-    mode: &ModeName,
-    narrowing: &PermissionsConfig,
+    (mode, narrowing): (&ModeName, &PermissionsConfig),
+    switches: bool,
 ) -> Result<(ChatRow, ExecutionId)> {
     // A chat's executions run its agent and nothing else.
     let chat = crate::store::exists(tx, "SELECT 1 FROM chats WHERE id=?1", [id])?;
     let execution = (crate::store::newest_execution(tx, id)?)
         .filter(|_| chat)
+        .or_else(|| (chat && switches).then(ExecutionId::generate))
         .context("the chat was stopped meanwhile; it stays a chat")?;
     let row = chat_row(tx, id)?;
     forget_completion(tx, id)?;

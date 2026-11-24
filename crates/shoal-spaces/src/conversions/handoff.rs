@@ -25,6 +25,8 @@ use shoal_protocol::transcripts::HandedOverSession;
 mod brief;
 mod copies;
 
+pub use copies::Listed;
+
 /// The agent a handoff takes a space's work from: its tool, the session it
 /// reported last, the execution it ran as and where it ran.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,10 +57,8 @@ pub struct Taking {
 impl Spaces {
     /// Hand the work of the space `id` over from `leaving`, the agent it
     /// had, if any, to `taking`: copy its agents' sessions into its attached
-    /// files, stop `leaving` and discard what it saved, record the handoff,
-    /// and save `taking` as the space's stopped agent, told where the
-    /// copies are, which starts at once unless `held` keeps it for `shoal
-    /// resume`.
+    /// files, then save `taking` in place of `leaving`, which starts at once
+    /// unless `held` keeps it for `shoal resume`.
     pub async fn hand_off(
         &self,
         daemon: &dyn Daemon,
@@ -68,34 +68,11 @@ impl Spaces {
         held: bool,
     ) -> Result<()> {
         let selector = SpaceSelector::id(id);
-        let space = self.space(&selector).await?;
-        let listed = self.copy_sessions(daemon, &space).await?;
-        self.retire_leaving(daemon, &space).await?;
-        let settings = daemon.space_settings(&space).await?;
-        let told = brief::told(&space, leaving.as_ref(), &taking.agent, &listed);
-        if let Some(leaving) = &leaving {
-            let from = HandedOverSession {
-                agent: leaving.agent.clone(),
-                session: leaving.session.clone(),
-                integration: settings.integration(&leaving.agent),
-            };
-            let to = HandedOverSession {
-                agent: taking.agent.clone(),
-                session: None,
-                integration: settings.integration(&taking.agent),
-            };
-            let space = id.to_owned();
-            (self.store)
-                .write(move |tx| crate::store::agent_handoffs::record(tx, &space, &from, &to))
-                .await?;
-        }
+        let listed = self
+            .copy_sessions(daemon, &self.space(&selector).await?)
+            .await?;
         let origin = leaving.as_ref().and_then(|leaving| leaving.origin.clone());
-        let execution =
-            (leaving.map(|leaving| leaving.execution)).unwrap_or_else(ExecutionId::generate);
-        taking
-            .saved(execution.clone(), origin.clone(), told)
-            .write(&self.paths, id)?;
-        self.signals.agent_changed();
+        let execution = (self.save_taking(daemon, id, leaving, taking, &listed)).await?;
         if held {
             return Ok(());
         }
@@ -106,6 +83,35 @@ impl Spaces {
             .map(drop)
     }
 
+    /// Save `taking` as the stopped agent of the space `id` in place of
+    /// `leaving`, told what the space is and where the sessions `listed`
+    /// are: stop `leaving`, discard what it saved and record the handoff.
+    /// Returns the execution `taking` is saved as, `leaving`'s when there
+    /// was one.
+    pub(crate) async fn save_taking(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        leaving: Option<Leaving>,
+        taking: Taking,
+        listed: &[Listed],
+    ) -> Result<ExecutionId> {
+        let space = self.space(&SpaceSelector::id(id)).await?;
+        self.retire_leaving(daemon, &space).await?;
+        let told = brief::told(&space, leaving.as_ref(), &taking.agent, listed);
+        if let Some(leaving) = &leaving {
+            self.record_handoff(daemon, &space, leaving, &taking.agent)
+                .await?;
+        }
+        let origin = leaving.as_ref().and_then(|leaving| leaving.origin.clone());
+        let execution =
+            (leaving.map(|leaving| leaving.execution)).unwrap_or_else(ExecutionId::generate);
+        let saved = taking.saved(execution.clone(), origin, told);
+        saved.write(&self.paths, id)?;
+        self.signals.agent_changed();
+        Ok(execution)
+    }
+
     /// Stop the agent of `space` that leaves, keeping nothing of it, and
     /// discard what a stop saved of it, so that the agent taking over is
     /// its only one.
@@ -113,6 +119,32 @@ impl Spaces {
         let request = StopRequest::handoff();
         (daemon.stop_space_agent_executions(&space.id, &request)).await?;
         daemon.discard_replaced_agent(space).await
+    }
+
+    /// Record that `taking` takes the work of `space` over from `leaving`,
+    /// each with the tool the space's settings give it.
+    async fn record_handoff(
+        &self,
+        daemon: &dyn Daemon,
+        space: &crate::model::Space,
+        leaving: &Leaving,
+        taking: &Agent,
+    ) -> Result<()> {
+        let settings = daemon.space_settings(space).await?;
+        let from = HandedOverSession {
+            agent: leaving.agent.clone(),
+            session: leaving.session.clone(),
+            integration: settings.integration(&leaving.agent),
+        };
+        let to = HandedOverSession {
+            agent: taking.clone(),
+            session: None,
+            integration: settings.integration(taking),
+        };
+        let id = space.id.clone();
+        (self.store)
+            .write(move |tx| crate::store::agent_handoffs::record(tx, &id, &from, &to))
+            .await
     }
 }
 

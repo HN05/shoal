@@ -11,11 +11,11 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::Converting;
+use super::{Carrying, Converting, to_agent::switching};
 use crate::{
     config::modes::ModeName,
-    model::{Chat, OpenedWorkspace},
-    protocol::{CreationOptions, operations::StartedWorkspace},
+    model::{Chat, OpenedWorkspace, SpaceKind},
+    protocol::{AgentChange, CreationOptions, operations::StartedWorkspace},
     {
         scope::Caller,
         starts::{Preparing, Recorded},
@@ -25,20 +25,22 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// What a chat becomes: a workspace on `branch`, which the issue `issue`
 /// links when given, from `base` when the branch is new, leaving out what
-/// `options` say, with its agent in `mode`.
+/// `options` say, with its agent in `mode`, carrying on as `agent` asks.
 pub struct WorkspaceConversion {
     pub branch: String,
     pub issue: Option<crate::forge::items::reference::ItemInput>,
     pub base: Option<String>,
     pub options: CreationOptions,
     pub mode: ModeName,
+    pub agent: AgentChange,
 }
 
 impl Spaces {
     /// Turn the chat `selector` names into the workspace `conversion`
     /// describes, for the space `caller` runs in, and start preparing it in
     /// the caller's environment `env`. Its agent restarts there, resuming its
-    /// session, once its turn ends and the workspace is ready.
+    /// session, once its turn ends and the workspace is ready, or another
+    /// agent tool takes its work over then, also from a stopped agent.
     pub async fn convert_to_workspace(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -57,13 +59,14 @@ impl Spaces {
             !conversion.options.disposable,
             "a converted chat's workspace keeps its work; leave out --disposable"
         );
+        let converting = self.converting_chat(&**daemon, chat, &settings, &conversion, caller);
+        let converting = converting.await?;
         let warnings = match &conversion.issue {
-            Some(input) => (self.link_converted_issue(&**daemon, &chat, input, caller)).await?,
+            Some(input) => {
+                let chat = &converting.chat;
+                (self.link_converted_issue(&**daemon, chat, input, caller)).await?
+            }
             None => Vec::new(),
-        };
-        let converting = Converting {
-            chat,
-            mode: conversion.mode.clone(),
         };
         // Held until the preparation is recorded, which the relocation then
         // waits for.
@@ -74,6 +77,42 @@ impl Spaces {
         self.signals.agent_changed();
         started.warnings.extend(warnings);
         Ok(started)
+    }
+
+    /// How `chat` becomes a workspace as `conversion` asks for `caller`,
+    /// under its repository's `settings`: its running agent carries on there
+    /// with the permissions `conversion` gives it, or another agent tool
+    /// takes the work over, also from a stopped agent.
+    async fn converting_chat(
+        &self,
+        daemon: &dyn Daemon,
+        chat: Chat,
+        settings: &crate::config::Effective,
+        conversion: &WorkspaceConversion,
+        caller: Option<&Caller>,
+    ) -> Result<Converting> {
+        let current = self.agent_of(&chat.id).await?;
+        let place = (settings, (SpaceKind::Workspace, true));
+        let (mode, change) = (&conversion.mode, &conversion.agent);
+        let taking = switching(chat.narrowing, place, mode, change, current.as_ref())?;
+        ensure!(
+            chat.running || taking.is_some(),
+            "chat {} is stopped; restore it before converting it, or hand its work to another agent tool with --agent",
+            chat.name
+        );
+        if let Some(taking) = &taking {
+            self.ensure_taking_held(daemon, &chat.id, taking, caller)
+                .await?;
+        }
+        let narrowing = change.permissions.applied_to(chat.narrowing);
+        Ok(Converting {
+            chat: Chat { narrowing, ..chat },
+            mode: mode.clone(),
+            carrying: Carrying {
+                model: change.model.clone(),
+                taking: taking.map(Box::new),
+            },
+        })
     }
 
     /// Make the workspace `converting` turns its chat into as `conversion`
@@ -122,7 +161,7 @@ impl Spaces {
     }
 
     /// The chat `selector` names, refusing a workspace and a chat that
-    /// cannot become one.
+    /// cannot become one wherever its agent stands.
     async fn convertible_chat(&self, selector: &SpaceSelector) -> Result<Chat> {
         let chat = match self.space(selector).await?.by_kind() {
             ByKind::Chat(chat) => chat,
@@ -131,11 +170,6 @@ impl Spaces {
             }
         };
         self.ensure_not_converting(&chat.id, &chat.name).await?;
-        ensure!(
-            chat.running,
-            "chat {} is stopped; restore it before converting it",
-            chat.name
-        );
         if let Some(workspace) = chat.workdir.workspace() {
             bail!(
                 "chat {} runs in the worktree of {}, which stays that workspace's; start a chat in the checkout to convert",

@@ -18,16 +18,17 @@ pub mod to_chat;
 pub mod to_workspace;
 
 pub use handovers::Handovers;
-pub use record::Pending;
+pub use record::{Carrying, Pending};
 pub use relocation::{ConversionStop, Relocating};
 pub use to_workspace::WorkspaceConversion;
 
-/// The chat a new workspace replaces, and the mode the workspace's agent
-/// starts in.
+/// The chat a new workspace replaces, the mode the workspace's agent
+/// starts in and how it carries on.
 #[derive(Debug, Clone)]
 pub struct Converting {
     pub chat: crate::model::Chat,
     pub mode: ModeName,
+    pub carrying: Carrying,
 }
 
 impl Converting {
@@ -47,8 +48,9 @@ impl Converting {
     /// Replace the chat with the workspace just recorded under its ID, and
     /// record that the chat's agent restarts there once its turn ends.
     pub fn replace_chat(&self, tx: &Transaction<'_>) -> Result<()> {
-        let (chat, execution) =
-            record::replace_chat(tx, &self.chat.id, &self.mode, &self.chat.narrowing)?;
+        let switches = self.carrying.taking.is_some();
+        let agent = (&self.mode, &self.chat.narrowing);
+        let (chat, execution) = record::replace_chat(tx, &self.chat.id, agent, switches)?;
         let pending = Pending::Workspace {
             mode: self.mode.clone(),
             chat,
@@ -56,6 +58,7 @@ impl Converting {
             preparation: None,
             prepared: false,
             hook_failure: None,
+            carrying: self.carrying.clone(),
         };
         record::record(tx, &self.chat.id, &pending)
     }

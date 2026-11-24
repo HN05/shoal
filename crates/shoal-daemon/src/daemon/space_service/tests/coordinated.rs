@@ -244,6 +244,7 @@ async fn idle_cleanup_keeps_a_child_while_its_chat_becomes_a_workspace() {
     let converting = crate::daemon::conversions::Converting {
         chat: chat.clone(),
         mode: crate::config::modes::ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     // Its agent runs on where it ran until it is handed over.

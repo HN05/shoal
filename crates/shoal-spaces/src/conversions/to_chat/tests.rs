@@ -26,6 +26,8 @@ async fn refusal(manager: &Fixture, id: &shoal_ids::space_ids::SpaceId) -> Strin
             &**manager,
             &SpaceSelector::id(id),
             crate::model::chat_mode(),
+            Default::default(),
+            None,
         )
         .await
         .unwrap_err();
@@ -309,7 +311,9 @@ async fn a_conversion_of_a_workspace_whose_agent_stopped_is_not_recorded() {
     let id = workspace.id.clone();
 
     let refused = (manager.store)
-        .write(move |tx| crate::conversions::record::record_chat_conversion(tx, &id, chat))
+        .write(move |tx| {
+            crate::conversions::record::record_chat_conversion(tx, &id, chat, Default::default())
+        })
         .await
         .unwrap_err();
 
@@ -387,6 +391,7 @@ async fn nothing_builds_on_a_workspace_that_becomes_a_chat() {
         crate::conversions::Pending::Chat {
             chat: Box::new(chat),
             held: false,
+            carrying: Default::default(),
         },
     );
     (manager.store)
@@ -473,6 +478,7 @@ async fn only_a_conversion_that_restarts_its_agent_moves_it() {
     let pending = Pending::Chat {
         chat: Box::new(chat),
         held: false,
+        carrying: Default::default(),
     };
     let space = id.clone();
     (manager.store)

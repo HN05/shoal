@@ -28,6 +28,8 @@ async fn converting_a_chat_refuses_it_as_no_workspace() {
             &*manager,
             &SpaceSelector::id(&talk.id),
             crate::model::chat_mode(),
+            Default::default(),
+            None,
         )
         .await
         .unwrap_err();

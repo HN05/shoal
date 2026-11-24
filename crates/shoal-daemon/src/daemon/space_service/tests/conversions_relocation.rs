@@ -50,6 +50,7 @@ async fn converted(
     let converting = Converting {
         chat: talk,
         mode: ModeName::PLAN,
+        carrying: Default::default(),
     };
     let workspace = manager
         .spaces
@@ -387,6 +388,7 @@ async fn record_chat_conversion(
         crate::daemon::conversions::Pending::Chat {
             chat: Box::new(chat),
             held: false,
+            carrying: Default::default(),
         },
     );
     (manager.store)
@@ -678,6 +680,7 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
     let converting = Converting {
         chat: below,
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
     let converted = manager
         .spaces

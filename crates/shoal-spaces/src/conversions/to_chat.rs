@@ -5,11 +5,13 @@ use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::record::ConvertedChat;
+use super::record::{Carrying, ConvertedChat};
 use crate::{
     config::modes::ModeName,
-    model::{CheckpointCause, HoldPlacer, Workspace},
+    model::{CheckpointCause, HoldPlacer, SpaceKind, Workspace},
+    protocol::AgentChange,
     removal::InspectionPolicy,
+    scope::Caller,
     target_checks,
 };
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
@@ -17,42 +19,82 @@ use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
     /// Record that the workspace `selector` names becomes a chat in `mode`,
-    /// once its agent's turn ends; the checks of the removal it makes then
-    /// come first.
+    /// once its agent's turn ends, its agent carrying on as `change` asks
+    /// for `caller`; the checks of the removal it makes then come first.
     pub async fn convert_to_chat(
         &self,
         daemon: &dyn Daemon,
         selector: &SpaceSelector,
         mode: ModeName,
+        change: AgentChange,
+        caller: Option<&Caller>,
     ) -> Result<Workspace> {
         let workspace = self.convertible_workspace(daemon, selector).await?;
         // The chat runs in the checkout, under its settings, not the worktree's.
         let settings = (daemon.repository_settings_with_templates(workspace.repository())).await?;
         super::ensure_mode(&settings, &mode)?;
+        let current = self.agent_of(&workspace.id).await?;
+        let place = (&settings, (SpaceKind::Chat, true));
+        let narrowing = workspace.narrowing;
+        let taking =
+            super::to_agent::switching(narrowing, place, &mode, &change, current.as_ref())?;
+        if let Some(taking) = &taking {
+            (self.ensure_taking_held(daemon, &workspace.id, taking, caller)).await?;
+        }
+        let carrying = Carrying {
+            model: change.model.clone(),
+            taking: taking.map(Box::new),
+        };
         // No agent starts in the workspace from when the one that carries on
         // is chosen.
         let _admissions = daemon.lock_agent_admissions().await;
-        let execution = daemon
-            .running_agents()
-            .await?
-            .into_iter()
-            .find(|agent| agent.space_id == workspace.id && agent.agent.is_some())
-            .map(|agent| agent.execution)
-            .with_context(|| {
-                format!(
-                    "no agent runs in {} to carry on in a chat; start one first",
-                    workspace.name
-                )
-            })?;
-        let chat = self.converted_chat(&workspace.id, mode, execution).await?;
+        let chat = (self.carrying_on(daemon, &workspace, mode, &change, &carrying)).await?;
         let id = workspace.id.clone();
         self.store
-            .write(move |tx| super::record::record_chat_conversion(tx, &id, chat))
+            .write(move |tx| super::record::record_chat_conversion(tx, &id, chat, carrying))
             .await?;
         // The relocation waits for the agent's turn to end, which it may
         // have already.
         self.signals.agent_changed();
         Ok(workspace)
+    }
+
+    /// The stopped chat `workspace` becomes in `mode`: its running agent,
+    /// with the permissions `change` gives it, which carries on in it as
+    /// `carrying` says, or else the agent it saved last, whose work an agent
+    /// tool `carrying` names takes over.
+    async fn carrying_on(
+        &self,
+        daemon: &dyn Daemon,
+        workspace: &Workspace,
+        mode: ModeName,
+        change: &AgentChange,
+        carrying: &Carrying,
+    ) -> Result<ConvertedChat> {
+        let running = self.running_agent(daemon, &workspace.id).await?;
+        if let Some(execution) = running {
+            let chat = self.converted_chat(&workspace.id, mode, execution).await?;
+            return Ok(ConvertedChat {
+                narrowing: change.permissions.applied_to(chat.narrowing),
+                ..chat
+            });
+        }
+        let taking = (carrying.taking.as_ref()).with_context(|| {
+            format!(
+                "no agent runs in {} to carry on in a chat; start one first",
+                workspace.name
+            )
+        })?;
+        let saved = crate::spaces::sessions::newest_saved(&self.paths, &workspace.id)?;
+        Ok(ConvertedChat {
+            agent: (saved.as_ref().map(|saved| saved.agent.clone()))
+                .unwrap_or_else(|| taking.agent.clone()),
+            execution: (saved.as_ref().map(|saved| saved.execution.clone()))
+                .unwrap_or_else(ExecutionId::generate),
+            origin: saved.and_then(|saved| saved.origin),
+            mode,
+            narrowing: taking.narrowing,
+        })
     }
 
     /// Refuse an agent of the workspace `selector` names while it converts:

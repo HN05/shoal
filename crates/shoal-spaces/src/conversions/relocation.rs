@@ -15,7 +15,7 @@ use anyhow::Result;
 use super::{
     Pending,
     handoff::{Leaving, Taking},
-    record::{ChatRow, ConvertedChat},
+    record::{Carrying, ChatRow, ConvertedChat},
 };
 use crate::protocol::operations::{Ended, Failure};
 use crate::{
@@ -29,6 +29,7 @@ use crate::{
         notifications::{About, AlertKind},
     },
 };
+use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces whose agent a relocation is moving now, from its hand-over
 /// until it queued the agent's restart in the new place or failed to.
@@ -63,6 +64,19 @@ pub struct ConversionStop {
     /// Whether the stop keeps them down until `shoal resume`, which keeps the
     /// chat a conversion makes of the workspace stopped too.
     pub holds: bool,
+    /// Whether the workspace goes, which drops the switch to another agent
+    /// tool its conversion asked for.
+    pub removes: bool,
+}
+
+/// The chat that became a workspace: the mode its agent goes on in, the
+/// row the chat had, the execution its agent runs or ran as, and how it
+/// carries on.
+struct Converted {
+    mode: ModeName,
+    chat: ChatRow,
+    execution: ExecutionId,
+    carrying: Carrying,
 }
 
 impl Spaces {
@@ -111,17 +125,27 @@ impl Spaces {
                 chat,
                 execution,
                 hook_failure,
+                carrying,
                 ..
-            } => match hook_failure {
-                Some(failure) => {
-                    (self.stop_after_failed_hook(daemon, id, mode, chat, execution, &failure)).await
+            } => {
+                let converted = Converted {
+                    mode,
+                    chat,
+                    execution,
+                    carrying,
+                };
+                match hook_failure {
+                    Some(failure) => {
+                        (self.stop_after_failed_hook(daemon, id, converted, &failure)).await
+                    }
+                    None => self.relocate_to_workspace(daemon, id, converted).await,
                 }
-                None => {
-                    self.relocate_to_workspace(daemon, id, mode, chat, execution)
-                        .await
-                }
-            },
-            Pending::Chat { chat, held } => self.relocate_to_chat(daemon, id, *chat, held).await,
+            }
+            Pending::Chat {
+                chat,
+                held,
+                carrying,
+            } => (self.relocate_to_chat(daemon, id, *chat, held, carrying)).await,
             Pending::Agent {
                 execution,
                 taking,
@@ -201,21 +225,19 @@ impl Spaces {
         }
     }
 
-    /// Stop the agent of the chat that became the workspace `id`, whose row
-    /// was `chat`, as a stop of the workspace's agents does, keeping its
-    /// session as `execution` for `shoal resume` in `mode`, since the
-    /// workspace's post-setup hook failed with `failure`, and tell the user.
-    /// A hand-over that fails leaves the conversion pending, to try again.
+    /// Stop the agent of the chat that became the workspace `id` as
+    /// `converted` says, as a stop of the workspace's agents does, keeping
+    /// what carries on for `shoal resume`, since the workspace's post-setup
+    /// hook failed with `failure`, and tell the user. A hand-over that fails
+    /// leaves the conversion pending, to try again.
     async fn stop_after_failed_hook(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
-        mode: ModeName,
-        chat: ChatRow,
-        execution: ExecutionId,
+        converted: Converted,
         failure: &str,
     ) -> Result<()> {
-        if let Err(error) = self.hand_over(daemon, id, mode, &chat, execution).await {
+        if let Err(error) = self.hand_over(daemon, id, converted).await {
             log!("agent of {id} not handed over yet: {error:#}");
             return Ok(());
         }
@@ -232,19 +254,17 @@ impl Spaces {
         Ok(())
     }
 
-    /// Restart the agent of the chat that became the workspace `id`, whose
-    /// row was `chat`, in the worktree in `mode`, as [`Self::hand_over`]
-    /// keeps it as `execution`. A hand-over that fails leaves the agent
-    /// running where it was and the conversion pending, to try again.
+    /// Restart the agent of the chat that became the workspace `id` in the
+    /// worktree as `converted` says, as [`Self::hand_over`] keeps it. A
+    /// hand-over that fails leaves the agent running where it was and the
+    /// conversion pending, to try again.
     async fn relocate_to_workspace(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
-        mode: ModeName,
-        chat: ChatRow,
-        execution: ExecutionId,
+        converted: Converted,
     ) -> Result<()> {
-        let origin = match self.hand_over(daemon, id, mode, &chat, execution).await {
+        let origin = match self.hand_over(daemon, id, converted).await {
             Ok(origin) => origin,
             Err(error) => {
                 log!("agent of {id} not handed over yet: {error:#}");
@@ -265,13 +285,7 @@ impl Spaces {
         taking: Taking,
         held: bool,
     ) -> Result<()> {
-        let leaving = self.converting_agent(id, execution).await?;
-        let leaving = leaving.map(|(agent, origin)| Leaving {
-            agent,
-            session: self.latest_session(id, execution),
-            execution: execution.clone(),
-            origin,
-        });
+        let leaving = self.leaving_agent(id, execution).await?;
         self.hand_off(daemon, id, leaving, taking, held).await?;
         let space = id.to_owned();
         (self.store)
@@ -311,12 +325,25 @@ impl Spaces {
             mode,
             chat,
             execution,
+            carrying,
             ..
         }) = pending
         else {
             return Ok(false);
         };
-        self.hand_over(daemon, id, mode, &chat, execution).await?;
+        // A removal keeps no copies for another agent tool, which never
+        // takes over there.
+        let carrying = match stop.removes {
+            true => Carrying::default(),
+            false => carrying,
+        };
+        let converted = Converted {
+            mode,
+            chat,
+            execution,
+            carrying,
+        };
+        self.hand_over(daemon, id, converted).await?;
         Ok(true)
     }
 
@@ -327,7 +354,10 @@ impl Spaces {
         let space = id.to_owned();
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;
         if let Some(Pending::Workspace { .. }) = pending {
-            let stop = ConversionStop { holds: false };
+            let stop = ConversionStop {
+                holds: false,
+                removes: true,
+            };
             self.stop_converting_agent(daemon, id, stop).await?;
         }
         Ok(())
@@ -343,39 +373,33 @@ impl Spaces {
             .await
     }
 
-    /// Keep the session of the agent of the chat that became the workspace
-    /// `id`, whose row was `chat`, which runs or ran as `execution`, as the
-    /// workspace's last session under that execution, marked converted, in
-    /// `mode`, then stop the agent where it ran, and forget the conversion
-    /// and the scope the agent carried there. Returns where the agent ran in
-    /// a terminal host, when it ran in one.
+    /// Keep what carries on in the chat that became the workspace `id` as
+    /// `converted` says, then stop the agent where it ran, and forget the
+    /// conversion and the scope the agent carried there: the agent's session
+    /// as the workspace's last session under its execution, marked
+    /// converted, or else the agent tool that takes its work over from
+    /// copies of its sessions. Returns where the agent ran in a terminal
+    /// host, when it ran in one.
     async fn hand_over(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
-        mode: ModeName,
-        chat: &ChatRow,
-        execution: ExecutionId,
+        converted: Converted,
     ) -> Result<Option<Origin>> {
+        let Converted {
+            mode,
+            chat,
+            execution,
+            carrying,
+        } = converted;
         let row = chat.agent()?;
-        let ran = self.converting_agent(id, &execution).await?;
-        if let Some((agent, origin)) = &ran {
-            let last = LastSession {
-                session: self.latest_session(id, &execution),
-                execution,
-                agent: agent.clone(),
-                moved: false,
-                copied: None,
-                converted: true,
-                handoff: None,
-                origin: origin.clone(),
-                stop: None,
-                turn: None,
-                model: Default::default(),
-                mode,
-                narrowing: row.narrowing()?,
-            };
-            last.write(&self.paths, id)?;
+        let leaving = self.leaving_agent(id, &execution).await?;
+        let listed = self.copies_for(daemon, id, &carrying).await?;
+        if let Some(leaving) = leaving.clone()
+            && carrying.taking.is_none()
+        {
+            let forked = forked(leaving, mode, carrying.model, row.narrowing()?);
+            forked.write(&self.paths, id)?;
         }
         // The workspace runs nothing else before the agent moves there.
         let request = crate::stops::StopRequest::conversion();
@@ -385,7 +409,57 @@ impl Spaces {
             .write(move |tx| super::record::relocated_chat(tx, &space, token.as_ref()))
             .await?;
         self.signals.agent_changed();
-        Ok(ran.and_then(|(_, origin)| origin))
+        let origin = leaving.as_ref().and_then(|leaving| leaving.origin.clone());
+        if let Some(taking) = carrying.taking {
+            (self.save_taking(daemon, id, leaving, *taking, &listed)).await?;
+        }
+        Ok(origin)
+    }
+
+    /// The sessions of the space `id` copied for the agent tool `carrying`
+    /// names to take its work over from; none when its own agent carries
+    /// on.
+    async fn copies_for(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        carrying: &Carrying,
+    ) -> Result<Vec<super::handoff::Listed>> {
+        if carrying.taking.is_none() {
+            return Ok(Vec::new());
+        }
+        let space = self.space(&SpaceSelector::id(id)).await?;
+        self.copy_sessions(daemon, &space).await
+    }
+
+    /// The agent of the workspace `id` that carries on in the chat `chat`,
+    /// with the session it continues.
+    fn converted_agent(&self, id: &SpaceId, chat: &ConvertedChat) -> Leaving {
+        Leaving {
+            agent: chat.agent.clone(),
+            session: self.latest_session(id, &chat.execution),
+            execution: chat.execution.clone(),
+            origin: chat.origin.clone(),
+        }
+    }
+
+    /// The agent that leaves the space `id`: the one that runs or ran as
+    /// `execution`, with the session it continues, else the one the space
+    /// saved last.
+    async fn leaving_agent(
+        &self,
+        id: &SpaceId,
+        execution: &ExecutionId,
+    ) -> Result<Option<Leaving>> {
+        let Some((agent, origin)) = self.converting_agent(id, execution).await? else {
+            return crate::spaces::sessions::newest_saved(&self.paths, id);
+        };
+        Ok(Some(Leaving {
+            agent,
+            session: self.latest_session(id, execution),
+            execution: execution.clone(),
+            origin,
+        }))
     }
 
     /// The agent that runs or ran as `execution` in the space `id`, with
@@ -408,37 +482,41 @@ impl Spaces {
         Ok(LastSession::load(&path)?.map(|last| (last.agent, last.origin)))
     }
 
-    /// Make the workspace `id` the stopped `chat` its agent carries on in:
-    /// stop the agent, remove the worktree as `shoal rm` does, and restore
-    /// the chat's agent in the repository's checkout through the agent
-    /// queue, continuing the session the agent reported last, whether it
-    /// still runs or exited, told what the space is now, unless a stop
-    /// `held` it, which leaves the chat for `shoal resume`.
+    /// Make the workspace `id` the stopped `chat` its agent carries on in
+    /// as `carrying` says: stop the agent, remove the worktree as `shoal rm`
+    /// does, and restore the chat's agent in the repository's checkout
+    /// through the agent queue, continuing the session the agent reported
+    /// last, whether it still runs or exited, told what the space is now, or
+    /// else the agent tool that takes its work over from copies of its
+    /// sessions, unless a stop `held` it, which leaves the chat for `shoal
+    /// resume`.
     async fn relocate_to_chat(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
         chat: ConvertedChat,
         held: bool,
+        carrying: Carrying,
     ) -> Result<()> {
-        let session = self.latest_session(id, &chat.execution);
-        self.convert_worktree_to_chat(daemon, id, &chat).await?;
-        let last = LastSession {
-            execution: chat.execution.clone(),
-            agent: chat.agent.clone(),
-            session,
-            moved: false,
-            copied: None,
-            converted: true,
-            handoff: None,
-            origin: chat.origin.clone(),
-            stop: None,
-            turn: None,
-            model: Default::default(),
-            mode: chat.mode.clone(),
-            narrowing: chat.narrowing,
+        // What leaves is read before the removal stops it.
+        let (leaving, listed) = match &carrying.taking {
+            Some(_) => (
+                self.leaving_agent(id, &chat.execution).await?,
+                self.copies_for(daemon, id, &carrying).await?,
+            ),
+            None => (Some(self.converted_agent(id, &chat)), Vec::new()),
         };
-        last.write(&self.paths, id)?;
+        self.convert_worktree_to_chat(daemon, id, &chat).await?;
+        match (carrying.taking, leaving) {
+            (Some(taking), leaving) => {
+                (self.save_taking(daemon, id, leaving, *taking, &listed)).await?;
+            }
+            (None, Some(leaving)) => {
+                let forked = forked(leaving, chat.mode.clone(), carrying.model, chat.narrowing);
+                forked.write(&self.paths, id)?;
+            }
+            (None, None) => {}
+        }
         if held {
             return Ok(());
         }
@@ -516,6 +594,32 @@ impl Spaces {
                 message,
             )
             .await;
+    }
+}
+
+/// The last session in which `leaving` continues from a fork of its
+/// session in the space it converted, in `mode` with `model` and the
+/// permissions `narrowing` gives it.
+fn forked(
+    leaving: Leaving,
+    mode: ModeName,
+    model: crate::agent::ModelChoice,
+    narrowing: crate::config::permissions::PermissionsConfig,
+) -> LastSession {
+    LastSession {
+        execution: leaving.execution,
+        agent: leaving.agent,
+        session: leaving.session,
+        moved: false,
+        copied: None,
+        converted: true,
+        handoff: None,
+        origin: leaving.origin,
+        stop: None,
+        turn: None,
+        model,
+        mode,
+        narrowing,
     }
 }
 

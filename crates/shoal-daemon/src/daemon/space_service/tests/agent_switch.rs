@@ -229,3 +229,54 @@ async fn a_running_agent_hands_over_once_its_turn_ends() {
     assert_eq!(files.len(), 1, "{files:?}");
     assert!(restore_queued(&manager, &talk.id).await);
 }
+
+#[tokio::test]
+async fn a_workspace_whose_agent_stopped_becomes_a_chat_another_tool_takes_over() {
+    let (root, manager) = manager().await;
+    manager.publish_config(global_config(TOOLS));
+    let workspace = stopped_workspace(root.path(), &manager).await;
+    transcript(root.path(), "s1", "{}\n");
+    let selector = SpaceSelector::id(&workspace.id);
+    let chat_mode = crate::model::chat_mode();
+
+    // The same tool continues its own session, which needs it running.
+    let same = (manager.spaces)
+        .convert_to_chat(
+            &*manager,
+            &selector,
+            chat_mode.clone(),
+            to("claude", None),
+            None,
+        )
+        .await
+        .unwrap_err();
+    assert!(format!("{same:#}").contains("no agent runs"), "{same:#}");
+
+    (manager.spaces)
+        .convert_to_chat(
+            &*manager,
+            &selector,
+            chat_mode.clone(),
+            to("codex", None),
+            None,
+        )
+        .await
+        .unwrap();
+    manager
+        .spaces
+        .relocate_finished_turns(&*manager)
+        .await
+        .unwrap();
+
+    let chat = manager.spaces.chat_by_id(&workspace.id).await.unwrap();
+    assert!(chat.is_some(), "the workspace became a chat");
+    let last = only_last_session(&manager, &workspace.id);
+    assert_eq!((last.agent.name(), last.mode), ("codex", chat_mode));
+    assert!(last.handoff.is_some() && !last.converted);
+    let files = manager.spaces.attached_files(&selector).await.unwrap();
+    let sessions: Vec<_> = (files.iter())
+        .filter_map(|file| Some(file.session.as_ref()?.session.as_str()))
+        .collect();
+    assert_eq!(sessions, ["s1"]);
+    assert!(restore_queued(&manager, &workspace.id).await);
+}

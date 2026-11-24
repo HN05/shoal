@@ -13,10 +13,14 @@ impl Conversions for Manager {
         id: &'a SpaceId,
         holds: bool,
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(
-            self.spaces
-                .stop_converting_agent(self, id, ConversionStop { holds }),
-        )
+        Box::pin(self.spaces.stop_converting_agent(
+            self,
+            id,
+            ConversionStop {
+                holds,
+                removes: false,
+            },
+        ))
     }
 
     fn ensure_takes_agents<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<()>> {

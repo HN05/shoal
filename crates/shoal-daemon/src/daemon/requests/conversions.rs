@@ -27,6 +27,7 @@ pub(super) async fn handle(
             base,
             options,
             mode,
+            agent,
             env,
         } => {
             // Its preparation runs in an operation, whose worker an exit
@@ -38,6 +39,7 @@ pub(super) async fn handle(
                 base,
                 options,
                 mode: mode.unwrap_or(crate::config::modes::ModeName::DEFAULT),
+                agent,
             };
             Body::WorkspaceStarted(
                 manager
@@ -46,16 +48,18 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        ConversionMethod::ConvertToChat { workspace, mode } => Body::Workspace(
-            manager
-                .spaces
-                .convert_to_chat(
-                    &**manager,
-                    &workspace,
-                    mode.unwrap_or_else(crate::model::chat_mode),
-                )
-                .await?,
-        ),
+        ConversionMethod::ConvertToChat {
+            workspace,
+            mode,
+            agent,
+        } => {
+            let mode = mode.unwrap_or_else(crate::model::chat_mode);
+            Body::Workspace(
+                (manager.spaces)
+                    .convert_to_chat(&**manager, &workspace, mode, agent, caller)
+                    .await?,
+            )
+        }
         ConversionMethod::ConvertAgent { space, mode, agent } => Body::AgentSwitch(Box::new(
             manager
                 .spaces

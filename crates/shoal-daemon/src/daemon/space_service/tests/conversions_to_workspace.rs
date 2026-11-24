@@ -28,6 +28,7 @@ fn conversion() -> WorkspaceConversion {
         base: None,
         options: Default::default(),
         mode: ModeName::DEFAULT,
+        agent: Default::default(),
     }
 }
 
@@ -75,6 +76,7 @@ async fn an_agent_converts_the_spaces_its_scope_reaches() {
             base: None,
             options: Default::default(),
             mode: None,
+            agent: Default::default(),
             env: None,
         };
         let authorized =
@@ -131,6 +133,7 @@ async fn a_mode_no_config_defines_is_refused_before_anything_changes() {
     let talk = chat(&manager, "talk", "worker", Some(&repo), None).await;
     let conversion = WorkspaceConversion {
         mode: "missing".into(),
+        agent: Default::default(),
         ..conversion()
     };
 

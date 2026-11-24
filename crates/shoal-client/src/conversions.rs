@@ -1,6 +1,6 @@
 //! Converting a chat into a workspace, which the daemon then prepares in an
-//! operation, and a workspace into a chat: the requests of
-//! [`ConversionMethod`].
+//! operation, a workspace into a chat, and a space's work to another agent
+//! tool: the requests of [`ConversionMethod`].
 use std::collections::BTreeMap;
 
 use crate::connection::Prepared;
@@ -8,7 +8,9 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     config::modes::ModeName,
     model::Workspace,
-    protocol::{ConversionMethod, CreationOptions, operations::StartedWorkspace},
+    protocol::{
+        AgentChange, AgentSwitch, ConversionMethod, CreationOptions, operations::StartedWorkspace,
+    },
 };
 
 /// The workspace a chat becomes.
@@ -24,6 +26,8 @@ pub struct NewWorkspace {
     pub options: CreationOptions,
     /// The mode its agent restarts in; `worker` without one.
     pub mode: Option<ModeName>,
+    /// How its agent carries on there.
+    pub agent: AgentChange,
 }
 
 /// Turn a chat into the workspace `new` describes and start preparing it
@@ -39,6 +43,7 @@ pub fn to_workspace(
         base,
         options,
         mode,
+        agent,
     } = new;
     let method = ConversionMethod::ConvertToWorkspace {
         chat,
@@ -47,13 +52,32 @@ pub fn to_workspace(
         base,
         options,
         mode,
+        agent,
         env: Some(env),
     };
     Prepared::new(method)
 }
 
 /// Make `workspace` a chat in `mode`, `chat` without one, once its agent's
-/// turn ends.
-pub fn to_chat(workspace: SpaceSelector, mode: Option<ModeName>) -> Prepared<Workspace> {
-    Prepared::new(ConversionMethod::ConvertToChat { workspace, mode })
+/// turn ends, its agent carrying on there as `agent` says.
+pub fn to_chat(
+    workspace: SpaceSelector,
+    mode: Option<ModeName>,
+    agent: AgentChange,
+) -> Prepared<Workspace> {
+    Prepared::new(ConversionMethod::ConvertToChat {
+        workspace,
+        mode,
+        agent,
+    })
+}
+
+/// Hand the work of `space` over to the agent tool `agent` names, in
+/// `mode`, the space's own without one.
+pub fn to_agent(
+    space: SpaceSelector,
+    mode: Option<ModeName>,
+    agent: AgentChange,
+) -> Prepared<Box<AgentSwitch>> {
+    Prepared::new(ConversionMethod::ConvertAgent { space, mode, agent })
 }

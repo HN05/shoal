@@ -324,7 +324,8 @@ const REQUESTS: &[&str] = &[
     r#"{"start_child":{"parent":"fix","name":"part","base":"HEAD"}}"#,
     // Conversions.
     r#"{"convert_to_workspace":{"chat":"app-chat","branch":"fix","issue":"https://forge.example/team/app/issues/42"}}"#,
-    r#"{"convert_to_chat":{"workspace":"fix","mode":"plan"}}"#,
+    r#"{"convert_to_chat":{"workspace":"fix","mode":"plan","agent":{"agent":"codex"}}}"#,
+    r#"{"convert_agent":{"space":"fix","agent":{"agent":"codex","model":"gpt-5","permissions":{"set":{"push":"propose"}},"note":"Focus on the failing test"}}}"#,
 ];
 
 #[test]

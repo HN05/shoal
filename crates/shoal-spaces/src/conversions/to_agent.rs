@@ -9,7 +9,7 @@ use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use super::handoff::Taking;
 use crate::{
     agent::Agent,
-    config::{Effective, modes::ModeName},
+    config::{Effective, modes::ModeName, permissions::PermissionsConfig},
     model::{Space, SpaceKind},
     protocol::{AgentChange, AgentSwitch, operations::QueuedLaunch},
     scope::Caller,
@@ -49,8 +49,14 @@ impl Spaces {
         let mode = mode.unwrap_or_else(|| default_mode(space.kind()));
         let settings = (daemon.space_settings_with_templates(&space, None)).await?;
         let place = (space.kind(), space.repository_id.is_some());
-        let taking = taking(&space, (&settings, place), to.clone(), mode, change)?;
-        self.ensure_taking_held(daemon, &space, &taking, caller)
+        let taking = taking(
+            space.narrowing,
+            (&settings, place),
+            to.clone(),
+            mode,
+            change,
+        )?;
+        self.ensure_taking_held(daemon, &space.id, &taking, caller)
             .await?;
         let at_once = self.switch_agent(daemon, &space, taking).await?;
         Ok(AgentSwitch {
@@ -61,16 +67,17 @@ impl Spaces {
         })
     }
 
-    /// Refuse `taking` to the scoped `caller` where its mode and the
-    /// permissions given to it exceed what the caller's own space holds.
+    /// Refuse `taking` in the space `id` to the scoped `caller` where its
+    /// mode and the permissions given to it exceed what the caller's own
+    /// space holds.
     pub(super) async fn ensure_taking_held(
         &self,
         daemon: &dyn Daemon,
-        space: &Space,
+        id: &SpaceId,
         taking: &Taking,
         caller: Option<&Caller>,
     ) -> Result<()> {
-        let selector = SpaceSelector::id(&space.id);
+        let selector = SpaceSelector::id(id);
         (daemon.coordination().ensure_agent_held(
             daemon,
             caller,
@@ -111,7 +118,7 @@ impl Spaces {
     }
 
     /// The execution that runs the agent of the space `id`, if one runs.
-    async fn running_agent(
+    pub(super) async fn running_agent(
         &self,
         daemon: &dyn Daemon,
         id: &SpaceId,
@@ -122,12 +129,12 @@ impl Spaces {
     }
 }
 
-/// The agent `agent` that takes the work of `space` over in `mode` as
+/// The agent `agent` that takes the work of a space over in `mode` as
 /// `change` asks, refused as a start under `settings` in a space of the kind
 /// `place` says refuses it, with the permissions `change` gives it over
-/// those of the space's agent.
+/// `narrowing`, those of the space's agent.
 pub(super) fn taking(
-    space: &Space,
+    narrowing: PermissionsConfig,
     (settings, place): (&Effective, (SpaceKind, bool)),
     agent: Agent,
     mode: ModeName,
@@ -142,9 +149,33 @@ pub(super) fn taking(
         agent,
         mode,
         model: change.model,
-        narrowing: change.permissions.applied_to(space.narrowing),
+        narrowing: change.permissions.applied_to(narrowing),
         note: change.note,
     })
+}
+
+/// The agent tool that takes the work of a space, whose agent is `current`
+/// and was given `narrowing`, over in `mode` as `change` asks, in a
+/// conversion to a space of the kind `place` says under its settings; none
+/// when `change` keeps the space's tool, which continues from a fork of its
+/// session and takes no note.
+pub(super) fn switching(
+    narrowing: PermissionsConfig,
+    place: (&Effective, (SpaceKind, bool)),
+    mode: &ModeName,
+    change: &AgentChange,
+    current: Option<&Agent>,
+) -> Result<Option<Taking>> {
+    let agent =
+        (change.agent.as_ref().map(Agent::normalized)).filter(|agent| Some(agent) != current);
+    let Some(agent) = agent else {
+        ensure!(
+            change.note.is_none(),
+            "a note goes to another agent tool taking the work over; the agent continuing its own session takes none"
+        );
+        return Ok(None);
+    };
+    taking(narrowing, place, agent, mode.clone(), change.clone()).map(Some)
 }
 
 /// The mode a space of `kind` whose agent recorded none starts in.

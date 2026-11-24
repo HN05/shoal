@@ -19,6 +19,7 @@ fn conversion() -> WorkspaceConversion {
         base: None,
         options: Default::default(),
         mode: ModeName::DEFAULT,
+        agent: Default::default(),
     }
 }
 

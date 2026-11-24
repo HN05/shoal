@@ -48,6 +48,7 @@ async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     let workspace = manager
@@ -122,6 +123,7 @@ async fn a_worktree_that_cannot_be_made_gives_the_chat_back() {
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     let base = Some("no-such-ref".to_owned());
@@ -178,6 +180,7 @@ async fn a_branch_another_workspace_holds_is_refused_before_anything_changes() {
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     let error = manager
@@ -209,6 +212,7 @@ async fn the_chats_open_threads_stay_with_the_space() {
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     manager
@@ -251,6 +255,7 @@ async fn a_remote_branch_named_with_its_remote_opens_as_that_branch() {
     let converting = Converting {
         chat: talk,
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     let workspace = manager
@@ -280,6 +285,7 @@ async fn a_branch_only_the_remote_has_opens_without_a_fetch() {
     let converting = Converting {
         chat: talk,
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     let workspace = manager
@@ -308,6 +314,7 @@ async fn a_new_branch_whose_namespace_a_branch_blocks_is_allocated_as_any() {
     let converting = Converting {
         chat: talk,
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     let workspace = manager
@@ -337,6 +344,7 @@ async fn a_chat_stopped_before_its_conversion_records_stays_a_chat() {
     let converting = Converting {
         chat: talk.clone(),
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
 
     let refused = manager
@@ -376,6 +384,7 @@ async fn a_mode_the_branch_does_not_define_gives_the_chat_back() {
     let converting = Converting {
         chat: talk.clone(),
         mode: "extra".into(),
+        carrying: Default::default(),
     };
 
     let refused = manager
@@ -410,6 +419,7 @@ async fn a_conversion_during_the_repositorys_removal_waits_for_it() {
     let converting = Converting {
         chat: first,
         mode: ModeName::DEFAULT,
+        carrying: Default::default(),
     };
     // Its agent waits to be handed over, which the removal does.
     manager
@@ -433,6 +443,7 @@ async fn a_conversion_during_the_repositorys_removal_waits_for_it() {
         let converting = Converting {
             chat: second,
             mode: ModeName::DEFAULT,
+            carrying: Default::default(),
         };
         async move {
             (manager.spaces.create_converted_workspace(
