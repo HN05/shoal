@@ -80,6 +80,9 @@ pub async fn survey(
     spaces: Vec<Space>,
     tracked: Vec<Identity>,
 ) -> Result<HashMap<SpaceId, Vec<Untracked>>> {
+    if spaces.is_empty() {
+        return Ok(HashMap::new());
+    }
     let spaces: Vec<Space> = spaces.into_iter().map(Space::canonical).collect();
     inventory(&owners::OWNERS, move |inventory| {
         let survey = Survey::of(inventory, &tracked);
