@@ -534,3 +534,73 @@ fn checkpoint_refs(repo: &std::path::Path) -> Vec<String> {
     refs.sort();
     refs
 }
+
+#[tokio::test]
+async fn restore_refuses_what_it_would_lose_or_disturb() {
+    let f = Fixture::new().await;
+    let manager = &f.manager;
+    let checkpoint = manager
+        .spaces
+        .take_checkpoint(&**manager, &manager.named("topic").await, None)
+        .await
+        .unwrap();
+    let refused = async |own: Option<&crate::scope::Caller>| {
+        manager
+            .spaces
+            .restore_checkpoint(
+                &**manager,
+                &manager.named("topic").await,
+                checkpoint.number,
+                own,
+            )
+            .await
+            .unwrap_err();
+        let workspace = manager
+            .spaces
+            .workspace(&manager.named("topic").await)
+            .await
+            .unwrap();
+        assert_eq!(workspace.state, WorkspaceState::Ready);
+    };
+
+    // Another execution runs; the caller's own does not count.
+    let agent = manager.run_agent(&f.workspace.id).await;
+    refused(None).await;
+    let own = crate::scope::Caller {
+        space_id: f.workspace.id.clone(),
+        execution: Some(shoal_coordination::scope::ScopedExecution {
+            id: agent,
+            kind: shoal_protocol::executions::ExecutionKind::Command,
+            agent_execution: None,
+        }),
+        granted: None,
+        access: shoal_daemon_base::callers::Access::Full,
+        vouched: None,
+    };
+    manager
+        .spaces
+        .restore_checkpoint(
+            &**manager,
+            &manager.named("topic").await,
+            checkpoint.number,
+            Some(&own),
+        )
+        .await
+        .unwrap();
+
+    // Unsaved files no checkpoint can keep.
+    repository(&f.workspace.path, "nested");
+    refused(Some(&own)).await;
+    fs::remove_dir_all(f.workspace.path.join("nested")).unwrap();
+
+    // A Git operation under way.
+    let git_dir = f.git(&["rev-parse", "--absolute-git-dir"]);
+    let merge_head = std::path::Path::new(git_dir.trim()).join("MERGE_HEAD");
+    fs::write(&merge_head, format!("{}\n", checkpoint.head)).unwrap();
+    refused(Some(&own)).await;
+    fs::remove_file(merge_head).unwrap();
+
+    // Another branch.
+    f.git(&["switch", "-q", "-c", "other"]);
+    refused(Some(&own)).await;
+}

@@ -203,3 +203,6 @@ async fn ensure_replayable(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

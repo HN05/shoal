@@ -9,8 +9,6 @@ use crate::{
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
 
-const STATUS: &[&str] = &["status", "--porcelain", "--untracked-files=all"];
-
 impl Fixture {
     /// A fixture whose checkout ignores `build/`, with the workspace
     /// `topic` to copy.
@@ -54,62 +52,6 @@ impl Fixture {
 }
 
 #[tokio::test]
-async fn a_copy_takes_its_sources_files_again_and_keeps_what_it_had() {
-    let (f, source) = Fixture::copied().await;
-    let copy = f.copy(&source, "copy", None, false).await;
-    let unset = f.copy(&source, "unset", None, true).await;
-    let started = copy.copied_from.clone().unwrap();
-    assert!(f.refresh(&copy).await.unwrap().up_to_date);
-
-    let path = &source.path;
-    let committed = add_commit(path, "committed");
-    fs::write(path.join("staged"), "staged\n").unwrap();
-    git(path, &["add", "staged"]);
-    fs::write(path.join("tracked"), "unstaged\n").unwrap();
-    fs::write(path.join("untracked"), "untracked\n").unwrap();
-    fs::create_dir_all(path.join("build")).unwrap();
-    fs::write(path.join("build/output"), "ignored\n").unwrap();
-
-    let refreshed = f.refresh(&copy).await.unwrap();
-    assert_eq!(
-        (
-            refreshed.target.as_str(),
-            refreshed.up_to_date,
-            refreshed.setup
-        ),
-        ("workspace topic", false, true)
-    );
-    assert_eq!(refreshed.to, committed);
-    assert_eq!(git(&copy.path, STATUS), git(path, STATUS));
-    assert_eq!(
-        git(&copy.path, &["diff", "--cached"]),
-        git(path, &["diff", "--cached"])
-    );
-    let output = fs::read_to_string(copy.path.join("build/output")).unwrap();
-    assert_eq!(output, "ignored\n");
-    assert_eq!(git(&copy.path, &["rev-parse", "copy"]).trim(), committed);
-    let now = refreshed.workspace.part.copied_from.unwrap();
-    assert_ne!(now.starting_checkpoint, started.starting_checkpoint);
-    assert_eq!(now.head, committed);
-    // A checkpoint still keeps what it had, which restore returns to.
-    let checkpoints = (f
-        .manager
-        .spaces
-        .checkpoints(&SpaceSelector::id(&copy.id), None))
-    .await
-    .unwrap()
-    .unwrap();
-    assert!(checkpoints.iter().any(|kept| kept.head == started.head));
-    assert!(f.refresh(&copy).await.unwrap().up_to_date);
-
-    let without_setup = f.refresh(&unset).await.unwrap();
-    assert_eq!(
-        (without_setup.up_to_date, without_setup.setup),
-        (false, false)
-    );
-}
-
-#[tokio::test]
 async fn a_copys_own_changes_and_commits_are_refused() {
     let (f, source) = Fixture::copied().await;
     let copy = f.copy(&source, "copy", None, false).await;
@@ -145,28 +87,6 @@ async fn a_copy_of_a_removed_workspace_has_nothing_to_refresh_from() {
         .unwrap();
     let refused = f.refresh(&copy).await.unwrap_err().to_string();
     assert!(refused.contains("source topic was removed"), "{refused}");
-}
-
-#[tokio::test]
-async fn a_copy_of_a_checkpoint_is_up_to_date() {
-    let (f, source) = Fixture::copied().await;
-    let checkpoint =
-        (f.manager
-            .spaces
-            .take_checkpoint(&*f.manager, &SpaceSelector::id(&source.id), None))
-        .await
-        .unwrap();
-    let copy = f
-        .copy(&source, "copy", Some(checkpoint.number), false)
-        .await;
-    add_commit(&source.path, "later");
-
-    let refreshed = f.refresh(&copy).await.unwrap();
-    assert!(refreshed.up_to_date);
-    assert_eq!(
-        refreshed.target,
-        format!("checkpoint {} of topic", checkpoint.number)
-    );
 }
 
 #[tokio::test]

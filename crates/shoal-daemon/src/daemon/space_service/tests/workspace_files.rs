@@ -115,53 +115,6 @@ async fn chat(
 }
 
 mod events;
-#[tokio::test]
-async fn files_from_outside_any_agent_are_the_users() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    assert_eq!(
-        manager.spaces.attacher(&*manager, None).await,
-        Attacher::User
-    );
-    // A workspace terminal or a command, scoped without an agent.
-    let terminal = Caller {
-        space_id: workspace.id.clone(),
-        execution: None,
-        granted: None,
-        access: Access::Full,
-        vouched: None,
-    };
-    assert_eq!(
-        manager.spaces.attacher(&*manager, Some(&terminal)).await,
-        Attacher::User
-    );
-    let command = command_caller(&manager, &workspace, None).await;
-    assert_eq!(
-        manager.spaces.attacher(&*manager, Some(&command)).await,
-        Attacher::User
-    );
-
-    let file = temp.path().join("notes.md");
-    std::fs::write(&file, "plan").unwrap();
-    let attacher = manager.spaces.attacher(&*manager, None).await;
-    let [added] = manager
-        .spaces
-        .add_attached_files(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            vec![file.into()],
-            &attacher,
-        )
-        .await
-        .unwrap()
-        .try_into()
-        .unwrap();
-    assert_eq!(added.attached_by, Attacher::User);
-    assert_eq!(
-        serde_json::to_value(&added).unwrap()["attached_by"],
-        serde_json::json!({"kind": "user"})
-    );
-}
 
 #[tokio::test]
 async fn an_agents_files_name_its_kind_and_session() {
@@ -261,46 +214,6 @@ async fn an_agents_files_name_its_kind_and_session() {
     assert!(
         files.iter().all(|file| file.attached_by == attacher),
         "{files:?}"
-    );
-}
-
-#[tokio::test]
-async fn results_name_the_agent_that_handed_them_back() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager).await;
-    let caller = agent_caller(&manager, &workspace.id, &workspace.name, "codex").await;
-    let attacher = manager.spaces.attacher(&*manager, Some(&caller)).await;
-    let report = temp.path().join("report.md");
-    std::fs::write(&report, "done").unwrap();
-    manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            Done {
-                results: vec![report.into()],
-                ..Done::default()
-            },
-            &attacher,
-        )
-        .await
-        .unwrap();
-    let files = manager
-        .spaces
-        .attached_files(&SpaceSelector::id(&workspace.id))
-        .await
-        .unwrap();
-    let [result] = files.as_slice() else {
-        panic!("{files:?}");
-    };
-    assert_eq!(result.source, FileSource::Result);
-    assert_eq!(
-        result.attached_by,
-        Attacher::Agent {
-            agent: "codex".into(),
-            execution: caller.execution_id().unwrap().clone(),
-            session: None,
-        }
     );
 }
 

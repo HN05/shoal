@@ -582,17 +582,22 @@ impl StandIn {
             .unwrap()
     }
 
-    /// Run an agent in the space `id`, recorded as the execution the agents
-    /// record it as, which the stand-in reports as its agent until
-    /// [`Self::end_agent`]; the execution it runs as.
+    /// Run `claude` in the space `id`, as [`Self::run_named_agent`] does.
     pub(crate) async fn run_agent(&self, id: &SpaceId) -> ExecutionId {
+        self.run_named_agent(id, "claude").await
+    }
+
+    /// Run the agent `agent` in the space `id`, recorded as the execution
+    /// the agents record it as, which the stand-in reports as its agent
+    /// until [`Self::end_agent`]; the execution it runs as.
+    pub(crate) async fn run_named_agent(&self, id: &SpaceId, agent: &str) -> ExecutionId {
         let execution = ExecutionId::generate();
-        let (recorded, space) = (execution.clone(), id.clone());
+        let (recorded, space, name) = (execution.clone(), id.clone(), agent.to_owned());
         (self.store.write(move |tx| {
             tx.execute(
                 "INSERT INTO executions(id,space_id,state,agent,mode)
-                 VALUES (?1,?2,'running','claude','worker')",
-                rusqlite::params![recorded, space],
+                 VALUES (?1,?2,'running',?3,'worker')",
+                rusqlite::params![recorded, space, name],
             )?;
             Ok(())
         }))
@@ -600,7 +605,7 @@ impl StandIn {
         .unwrap();
         let ran = Ran {
             space: id.clone(),
-            agent: "claude".into(),
+            agent: agent.into(),
             state: None,
         };
         self.agents.0.lock().unwrap().insert(execution.clone(), ran);

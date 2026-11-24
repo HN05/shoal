@@ -1,5 +1,9 @@
+use crate::scope::Caller;
 use crate::stand_in::Fixture;
+use crate::workspace_files::FileSource;
 use shoal_core::test_support::repository;
+use shoal_daemon_base::callers::{Access, ScopedExecution};
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
 
 use crate::model::Workspace;
@@ -576,4 +580,109 @@ async fn removal_deletes_the_directories_of_files_already_deleted() {
         .await
         .unwrap();
     assert!(!directory.exists());
+}
+
+#[tokio::test]
+async fn files_from_outside_any_agent_are_the_users() {
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let workspace = workspace(temp, &manager).await;
+    assert_eq!(
+        manager.spaces.attacher(&*manager, None).await,
+        Attacher::User
+    );
+    // A workspace terminal or a command, scoped without an agent.
+    let terminal = Caller {
+        space_id: workspace.id.clone(),
+        execution: None,
+        granted: None,
+        access: Access::Full,
+        vouched: None,
+    };
+    assert_eq!(
+        manager.spaces.attacher(&*manager, Some(&terminal)).await,
+        Attacher::User
+    );
+    let command = Caller {
+        execution: Some(ScopedExecution {
+            id: ExecutionId::generate(),
+            kind: shoal_protocol::executions::ExecutionKind::Command,
+            agent_execution: None,
+        }),
+        ..terminal.clone()
+    };
+    assert_eq!(
+        manager.spaces.attacher(&*manager, Some(&command)).await,
+        Attacher::User
+    );
+
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "plan").unwrap();
+    let attacher = manager.spaces.attacher(&*manager, None).await;
+    let [added] = manager
+        .spaces
+        .add_attached_files(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            vec![file.into()],
+            &attacher,
+        )
+        .await
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert_eq!(added.attached_by, Attacher::User);
+    assert_eq!(
+        serde_json::to_value(&added).unwrap()["attached_by"],
+        serde_json::json!({"kind": "user"})
+    );
+}
+
+#[tokio::test]
+async fn results_name_the_agent_that_handed_them_back() {
+    let manager = Fixture::new().await;
+    let temp = &manager.root;
+    let workspace = workspace(temp, &manager).await;
+    let agent = manager.run_named_agent(&workspace.id, "codex").await;
+    let caller = Caller {
+        execution: Some(ScopedExecution {
+            id: agent,
+            kind: shoal_protocol::executions::ExecutionKind::Command,
+            agent_execution: None,
+        }),
+        ..Caller::of_space(workspace.id.clone())
+    };
+    let attacher = manager.spaces.attacher(&*manager, Some(&caller)).await;
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "done").unwrap();
+    manager
+        .spaces
+        .mark_space_done(
+            &*manager,
+            &SpaceSelector::id(&workspace.id),
+            Done {
+                results: vec![report.into()],
+                ..Done::default()
+            },
+            &attacher,
+        )
+        .await
+        .unwrap();
+    let files = manager
+        .spaces
+        .attached_files(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    let [result] = files.as_slice() else {
+        panic!("{files:?}");
+    };
+    assert_eq!(result.source, FileSource::Result);
+    assert_eq!(
+        result.attached_by,
+        Attacher::Agent {
+            agent: "codex".into(),
+            execution: caller.execution_id().unwrap().clone(),
+            session: None,
+        }
+    );
 }
