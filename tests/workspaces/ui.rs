@@ -1329,7 +1329,15 @@ esac
         &fixture,
         "asker",
         "Which database?",
-        &["Postgres or SQLite?", "--recommend", "SQLite"],
+        &[
+            "Postgres or SQLite?",
+            "--choice",
+            "Postgres",
+            "--choice",
+            "SQLite",
+            "--recommend",
+            "SQLite",
+        ],
     );
     let id = asker["id"].as_str().unwrap();
     let listed = fixture.run(&["internal", "menu-rows", "inbox"]);
@@ -1890,7 +1898,15 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         &fixture,
         "asker",
         "Which database?",
-        &["Postgres or SQLite?", "--recommend", "SQLite"],
+        &[
+            "Postgres or SQLite?",
+            "--choice",
+            "Postgres",
+            "--choice",
+            "SQLite",
+            "--recommend",
+            "SQLite",
+        ],
     );
 
     let items = fixture.ok(&["inbox"]);

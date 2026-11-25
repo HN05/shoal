@@ -1079,16 +1079,12 @@ CREATE TABLE "thread_posts" (
     sender_id TEXT,
     sender_name TEXT,
     text TEXT NOT NULL,
-    choices TEXT NOT NULL DEFAULT '[]',
-    recommendation TEXT,
-    reason TEXT,
-    choice INTEGER,
     files TEXT NOT NULL DEFAULT '[]',
     in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1)),
     forwards INTEGER NOT NULL DEFAULT 0 CHECK(forwards IN (0,1)),
     forwarded_to TEXT,
     alert_id INTEGER
-, sender_number INTEGER, forwarded_name TEXT, forwarded_number INTEGER);
+, sender_number INTEGER, forwarded_name TEXT, forwarded_number INTEGER, ui TEXT, answer TEXT);
 
 CREATE TABLE "reviews" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1727,16 +1723,6 @@ CREATE TRIGGER thread_opened AFTER INSERT ON threads WHEN NOT NEW.held BEGIN
     ) FROM space_event_records WHERE id=NEW.space_id;
 END;
 
-CREATE TRIGGER thread_resolved AFTER UPDATE OF outcome ON threads
-WHEN OLD.outcome IS NOT NEW.outcome AND NOT NEW.held BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','thread_resolved',
-        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
-            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name,
-            'outcome',json_extract(NEW.outcome,'$.outcome'))
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
 CREATE TRIGGER thread_released AFTER UPDATE OF held ON threads
 WHEN OLD.held AND NOT NEW.held BEGIN
     INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
@@ -1752,21 +1738,6 @@ WHEN OLD.held AND NOT NEW.held BEGIN
                 CASE p.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END))
     ) FROM thread_posts p JOIN space_event_records r ON r.id=NEW.space_id
     WHERE p.thread_id=NEW.id AND NOT p.forwards ORDER BY p.id;
-END;
-
-CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
-    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
-        '$.kind',iif(NEW.forwards,'thread_forwarded','thread_posted'),
-        '$.thread',json_object('space_number',t.space_number,'item',t.number,
-            'number',t.space_number||'.'||t.number,'name',t.name,'text',NEW.text,
-            'sender',COALESCE(NEW.sender_name,
-                CASE NEW.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END),
-            'to',CASE WHEN NOT NEW.forwards THEN NULL
-                WHEN NEW.forwarded_to IS NULL THEN 'the user'
-                ELSE COALESCE((SELECT name FROM spaces WHERE id=NEW.forwarded_to),
-                    NEW.forwarded_name, NEW.forwarded_to) END)
-    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id
-    WHERE t.id=NEW.thread_id AND NOT t.held;
 END;
 
 CREATE TRIGGER agent_handoff_started AFTER UPDATE OF session ON agent_handoffs
@@ -1814,4 +1785,29 @@ CREATE TRIGGER file_removed AFTER DELETE ON space_files BEGIN
             'attached_by',json(OLD.attached_by),'session',json(OLD.session))
     ) FROM (SELECT OLD.space_id IN (SELECT id FROM spaces WHERE kind='chat')
         OR OLD.space_id IN (SELECT space_id FROM removed_space_files WHERE chat) AS chat);
+END;
+
+CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
+    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
+        '$.kind',iif(NEW.forwards,'thread_forwarded','thread_posted'),
+        '$.thread',json_object('space_number',t.space_number,'item',t.number,
+            'number',t.space_number||'.'||t.number,'name',t.name,'text',NEW.text,
+            'sender',COALESCE(NEW.sender_name,
+                CASE NEW.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END),
+            'to',CASE WHEN NOT NEW.forwards THEN NULL
+                WHEN NEW.forwarded_to IS NULL THEN 'the user'
+                ELSE COALESCE((SELECT name FROM spaces WHERE id=NEW.forwarded_to),
+                    NEW.forwarded_name, NEW.forwarded_to) END)
+    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id
+    WHERE t.id=NEW.thread_id AND NOT t.held;
+END;
+
+CREATE TRIGGER thread_resolved AFTER UPDATE OF outcome ON threads
+WHEN OLD.outcome IS NOT NEW.outcome AND NOT NEW.held BEGIN
+    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
+        '$.kind','thread_resolved',
+        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
+            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name,
+            'outcome',json_extract(NEW.outcome,'$.outcome'))
+    ) FROM space_event_records WHERE id=NEW.space_id;
 END;

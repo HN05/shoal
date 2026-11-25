@@ -274,7 +274,7 @@ fn send_posts_in_a_thread_its_number_leads_and_else_sends_an_alert() {
         thread("3.2", Some("SQLite"))
     );
     assert_eq!(
-        post(parse(&["2", "--choose", "1"]).unwrap()),
+        post(parse(&["2", "--action", "1"]).unwrap()),
         thread("2", None)
     );
     assert_eq!(

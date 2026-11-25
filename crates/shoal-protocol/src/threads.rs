@@ -12,11 +12,10 @@ pub use crate::alerts::Sender;
 use crate::item_numbers::ItemNumber;
 use crate::model::{Located, Space};
 use crate::space_names::SpaceName;
+use crate::surfaces::Surface;
 
 /// Longest post, in bytes; posts may span lines.
 pub const MAX_POST_LEN: usize = crate::validate::MAX_AGENT_MESSAGE_LEN;
-/// Most choices a post may offer.
-pub const MAX_CHOICES: usize = 20;
 /// Most bytes a thread takes as JSON, which keeps it, with the response
 /// around it, to one protocol frame.
 pub const MAX_THREAD_BYTES: usize = crate::protocol::MAX_FRAME - 8 * 1024;
@@ -93,11 +92,8 @@ states!(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "kebab-case")]
 pub enum Outcome {
-    /// A question got its answer, optionally a choice it offered.
-    Answered {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        choice: Option<u32>,
-    },
+    /// A question got its answer.
+    Answered,
     /// A request's work was made and its opener accepted it.
     Done,
     /// A finding's code was changed to address it; the next review checks
@@ -127,7 +123,6 @@ impl Outcome {
     pub fn new(
         thread: ThreadKind,
         kind: OutcomeKind,
-        choice: Option<u32>,
         of: Option<ItemNumber>,
         reason: Option<String>,
         issue: Option<String>,
@@ -137,17 +132,17 @@ impl Outcome {
         }
         let present = |text: Option<String>| text.filter(|text| !text.trim().is_empty());
         let (reason, issue) = (present(reason), present(issue));
-        Ok(match (kind, choice, of, reason, issue) {
-            (OutcomeKind::Answered, choice, None, None, None) => Self::Answered { choice },
-            (OutcomeKind::Done, None, None, None, None) => Self::Done,
-            (OutcomeKind::Fixed, None, None, None, None) => Self::Fixed,
-            (OutcomeKind::FalsePositive, None, None, Some(reason), None) => {
+        Ok(match (kind, of, reason, issue) {
+            (OutcomeKind::Answered, None, None, None) => Self::Answered,
+            (OutcomeKind::Done, None, None, None) => Self::Done,
+            (OutcomeKind::Fixed, None, None, None) => Self::Fixed,
+            (OutcomeKind::FalsePositive, None, Some(reason), None) => {
                 Self::FalsePositive { reason }
             }
-            (OutcomeKind::WontFix, None, None, Some(reason), None) => Self::WontFix { reason },
-            (OutcomeKind::Deferred, None, None, None, Some(issue)) => Self::Deferred { issue },
-            (OutcomeKind::Duplicate, None, Some(of), None, None) => Self::Duplicate { of },
-            (OutcomeKind::Withdrawn, None, None, reason, None) => Self::Withdrawn { reason },
+            (OutcomeKind::WontFix, None, Some(reason), None) => Self::WontFix { reason },
+            (OutcomeKind::Deferred, None, None, Some(issue)) => Self::Deferred { issue },
+            (OutcomeKind::Duplicate, Some(of), None, None) => Self::Duplicate { of },
+            (OutcomeKind::Withdrawn, None, reason, None) => Self::Withdrawn { reason },
             (OutcomeKind::Closed, ..) => {
                 bail!("only Shoal closes threads, when a space that took part finishes or goes")
             }
@@ -157,7 +152,7 @@ impl Outcome {
 
     pub fn kind(&self) -> OutcomeKind {
         match self {
-            Self::Answered { .. } => OutcomeKind::Answered,
+            Self::Answered => OutcomeKind::Answered,
             Self::Done => OutcomeKind::Done,
             Self::Fixed => OutcomeKind::Fixed,
             Self::FalsePositive { .. } => OutcomeKind::FalsePositive,
@@ -172,10 +167,7 @@ impl Outcome {
     /// The outcome with its data, as one line.
     pub fn describe(&self) -> String {
         match self {
-            Self::Answered { choice: None } => "answered".into(),
-            Self::Answered {
-                choice: Some(choice),
-            } => format!("answered with choice {choice}"),
+            Self::Answered => "answered".into(),
             Self::Done => "done".into(),
             Self::Fixed => "fixed".into(),
             Self::FalsePositive { reason } => format!("false-positive: {reason}"),
@@ -200,8 +192,7 @@ impl OutcomeKind {
     /// The options the outcome takes.
     fn data(self) -> &'static str {
         match self {
-            Self::Answered => "only --choose",
-            Self::Done | Self::Fixed => "nothing",
+            Self::Answered | Self::Done | Self::Fixed => "nothing",
             Self::FalsePositive | Self::WontFix => "--reason and nothing else",
             Self::Deferred => "--issue and nothing else",
             Self::Duplicate => "--of and nothing else",
@@ -313,20 +304,32 @@ impl Holder {
     }
 }
 
-/// What a new post says: its text, and optionally choices with the one it
-/// recommends and why, or the number of a choice it picks.
+/// What a new post says: its Markdown text, and optionally a surface it
+/// offers, an interface to pick or fill in, or the action of the other
+/// side's surface it answers.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewPost {
     pub text: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub choices: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub recommendation: Option<String>,
+    pub ui: Option<Surface>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    /// The number of a choice the other side offered that the post picks.
+    pub answer: Option<Answer>,
+}
+
+/// An answer to a surface: one of its actions, with the values entered for
+/// the inputs it takes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Answer {
+    /// The post whose surface it answers. A new post without one answers
+    /// the latest surface the other side posted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub choice: Option<u32>,
+    pub post: Option<i64>,
+    /// The action's id.
+    pub action: String,
+    /// A new post's values by input key; a recorded answer's whole context
+    /// of the action, as its event carries it.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub values: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A post in a thread.
@@ -415,8 +418,6 @@ pub struct Resolving {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outcome: Option<OutcomeKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub choice: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub of: Option<ThreadNumber>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -427,7 +428,7 @@ pub struct Resolving {
 impl Resolving {
     /// Whether it names any outcome data, which reopening takes none of.
     pub fn has_data(&self) -> bool {
-        self.choice.is_some() || self.of.is_some() || self.reason.is_some() || self.issue.is_some()
+        self.of.is_some() || self.reason.is_some() || self.issue.is_some()
     }
 }
 
@@ -622,11 +623,54 @@ impl Thread {
         self.name.replace(['\n', '\t'], " ")
     }
 
-    /// The choices of the latest post that offered any.
-    pub fn choices(&self) -> &[String] {
-        (self.posts.iter().rev())
-            .find(|post| !post.post.choices.is_empty())
-            .map_or(&[], |post| &post.post.choices)
+    /// The latest post from `side` with a surface, the only one of that
+    /// side's surfaces whose actions an answer takes.
+    pub fn surface_from(&self, side: Side) -> Option<&Post> {
+        (self.posts.iter().rev()).find(|post| post.side == Some(side) && post.post.ui.is_some())
+    }
+
+    /// The post `id` as `view thread` numbers it, among the posts that
+    /// speak.
+    pub fn post_number(&self, id: i64) -> Option<usize> {
+        let speaking = self.posts.iter().filter(|post| post.speaks());
+        (1..)
+            .zip(speaking)
+            .find_map(|(number, post)| (post.id == id).then_some(number))
+    }
+
+    /// What `post` offers and answers, as lines of text: its surface, with
+    /// the command that answers each of its actions while it is its side's
+    /// latest, and the action it answers with its values.
+    pub fn interaction_lines(&self, post: &Post) -> Vec<String> {
+        let mut lines = Vec::new();
+        if let Some(ui) = &post.post.ui {
+            let current = (post.side.and_then(|side| self.surface_from(side)))
+                .is_some_and(|latest| latest.id == post.id);
+            let answer = current.then(|| format!("shoal send {}", self.number));
+            lines.extend(ui.text_lines(answer.as_deref()));
+        }
+        if let Some(answer) = &post.post.answer {
+            lines.push(self.answer_line(answer));
+        }
+        lines
+    }
+
+    /// An answer as a line: the action it takes on which post, and the
+    /// context it carries.
+    fn answer_line(&self, answer: &Answer) -> String {
+        let post = (answer.post.and_then(|id| self.post_number(id)))
+            .map_or(String::new(), |number| format!(" on #{number}"));
+        let values: Vec<String> = (answer.values.iter())
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect();
+        match &values[..] {
+            [] => format!("Answered{post}: {}", answer.action),
+            values => format!(
+                "Answered{post}: {} with {}",
+                answer.action,
+                values.join(", ")
+            ),
+        }
     }
 
     /// The place in code its opening post points at first, which a
@@ -664,7 +708,8 @@ impl Thread {
         let mut text = format!("thread {number} ({})", self.one_line());
         if let Some(post) = self.last_post() {
             text.push_str(&format!(": {}", post.post.text.replace(['\n', '\t'], " ")));
-            if let Some(recommendation) = &post.post.recommendation {
+            if let Some(recommendation) = (post.post.ui.as_ref()).and_then(Surface::recommendation)
+            {
                 text.push_str(&format!(" Recommended: {recommendation}"));
             }
         }

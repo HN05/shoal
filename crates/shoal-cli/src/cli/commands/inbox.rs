@@ -561,11 +561,12 @@ impl ItemExt for Item {
     }
 }
 
-/// The recommendation of the thread's latest post from a side, which the
-/// user answers, and the names of the files sent with it.
+/// The action the surface of the thread's latest post from a side
+/// recommends, which the user answers, and the names of the files sent
+/// with it.
 fn thread_note(thread: &Thread) -> String {
     let last = thread.last_turn();
-    let recommendation = (last.and_then(|post| post.post.recommendation.as_ref()))
+    let recommendation = (last.and_then(|post| post.post.ui.as_ref()?.recommendation()))
         .map(|recommendation| format!("recommends {recommendation}"));
     let names: Vec<&str> = (last.into_iter())
         .flat_map(|post| &post.files)

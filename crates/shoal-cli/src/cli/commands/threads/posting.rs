@@ -1,13 +1,14 @@
-//! `shoal send <thread>`: post in a thread, optionally offering choices
-//! with a recommendation or picking one the other side offered, wait for
-//! the other side's next post, or mark the agent's turn to post its final
-//! message instead.
+//! `shoal send <thread>`: post in a thread, optionally offering a surface,
+//! the other side's interface to pick or fill in, or answering one of its
+//! actions, wait for the other side's next post, or mark the agent's turn
+//! to post its final message instead.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
     space_names::SpaceSelector,
-    threads::{NewPost, Post, Side, Thread, ThreadNumber},
+    surfaces::Surface,
+    threads::{Answer, NewPost, Post, Side, Thread, ThreadNumber},
 };
 
 use crate::{
@@ -26,7 +27,7 @@ use crate::{
 /// A post `shoal send` makes in a thread.
 pub(in crate::cli) struct Posting {
     pub(in crate::cli) thread: ThreadNumber,
-    /// The text given inline; none with --body-file, --choose or --in-chat.
+    /// The text given inline; none with --body-file, --action or --in-chat.
     pub(in crate::cli) text: Option<String>,
     pub(in crate::cli) body_file: Option<PathBuf>,
     pub(in crate::cli) attach: Vec<String>,
@@ -70,8 +71,8 @@ pub(in crate::cli) async fn post(ctx: &Context, mut posting: Posting) -> Result<
     print_reply(ctx, &replied, after).await
 }
 
-/// What `posting` says, its text read from `--body-file` when it names
-/// one, without the file's trailing newline.
+/// What `posting` says: its text, read from `--body-file` when it names
+/// one, the surface it offers and the action it answers.
 fn new_post(posting: Posting) -> Result<NewPost> {
     let Posting {
         text,
@@ -80,19 +81,58 @@ fn new_post(posting: Posting) -> Result<NewPost> {
         ..
     } = posting;
     let text = match body_file {
-        Some(path) => std::fs::read_to_string(&path)
-            .with_context(|| format!("read {}", path.display()))?
-            .trim_end()
-            .to_owned(),
+        Some(path) => read_text(&path)?,
         None => text.unwrap_or_default(),
     };
     Ok(NewPost {
         text,
-        choices: options.choices,
-        recommendation: options.recommend,
-        reason: options.reason,
-        choice: options.choose,
+        ui: offered(&options)?,
+        answer: (options.action).map(|action| answering(action, options.values)),
     })
+}
+
+/// The text of the file `path`, without its trailing newline.
+fn read_text(path: &std::path::Path) -> Result<String> {
+    let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    Ok(text.trim_end().to_owned())
+}
+
+/// The surface `options` offer: the file `--ui` names, or the one the
+/// `--choice` shorthand builds.
+fn offered(options: &PostArgs) -> Result<Option<Surface>> {
+    if let Some(path) = &options.ui {
+        let surface = Surface::parse(&read_text(path)?);
+        return surface
+            .with_context(|| format!("read the surface in {}", path.display()))
+            .map(Some);
+    }
+    if options.choices.is_empty() {
+        return Ok(None);
+    }
+    let (recommend, reason) = (options.recommend.as_deref(), options.reason.as_deref());
+    Ok(Some(Surface::choices(&options.choices, recommend, reason)))
+}
+
+/// The answer that takes the action `action` with `values`, a key given
+/// more than once selecting each of its values.
+fn answering(action: String, values: Vec<(String, String)>) -> Answer {
+    let mut given = serde_json::Map::new();
+    for (key, value) in values {
+        let value = serde_json::Value::String(value);
+        match given.remove(&key) {
+            None => given.insert(key, value),
+            Some(serde_json::Value::Array(mut several)) => {
+                several.push(value);
+                given.insert(key, serde_json::Value::Array(several))
+            }
+            Some(first) => given.insert(key, serde_json::Value::Array(vec![first, value])),
+        };
+    }
+    Answer {
+        post: None,
+        action,
+        values: given,
+    }
 }
 
 /// Mark the agent's turn as posting its final message in the thread
@@ -146,7 +186,7 @@ async fn print_reply(ctx: &Context, thread: &Thread, after: i64) -> Result<i32> 
             resolution.outcome.describe()
         ),
         (replies, _) => (replies.iter())
-            .map(|post| format!("{}: {}", post.author(), post.post.text))
+            .map(|post| reply_text(thread, post))
             .collect::<Vec<_>>()
             .join("\n"),
     };
@@ -157,4 +197,14 @@ async fn print_reply(ctx: &Context, thread: &Thread, after: i64) -> Result<i32> 
         crate::client::alerts::mark_read(&ctx.paths, read).await?;
     }
     Ok(0)
+}
+
+/// A reply of `thread` as `send --wait` prints it: who sent it, its text,
+/// and what it offers or answers.
+fn reply_text(thread: &Thread, post: &Post) -> String {
+    let interaction = thread.interaction_lines(post).into_iter();
+    std::iter::once(format!("{}: {}", post.author(), post.post.text))
+        .chain(interaction.map(|line| format!("  {line}")))
+        .collect::<Vec<_>>()
+        .join("\n")
 }

@@ -2,7 +2,7 @@
 //! a thread.
 use std::{path::PathBuf, str::FromStr};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use clap::{Args, Subcommand};
 
 use crate::cli::args::BodyArgs;
@@ -78,7 +78,7 @@ pub enum ThreadCommand {
         #[command(flatten)]
         data: OutcomeData,
         /// Reopen a resolved thread.
-        #[arg(long, conflicts_with_all = ["outcome", "choose", "of", "reason", "issue"])]
+        #[arg(long, conflicts_with_all = ["outcome", "of", "reason", "issue"])]
         undo: bool,
     },
     /// Say which thread your changes from now on are for, until the next
@@ -140,9 +140,6 @@ pub enum ThreadCommand {
 // comment here would replace that command's description.
 #[derive(Debug, Args)]
 pub struct OutcomeData {
-    /// The number of the choice an answer settled on.
-    #[arg(long, value_name = "N", conflicts_with_all = ["of", "reason", "issue"])]
-    pub choose: Option<u32>,
     /// The thread a duplicate repeats.
     #[arg(long, value_name = "THREAD", conflicts_with_all = ["reason", "issue"])]
     pub of: Option<ThreadNumber>,
@@ -159,20 +156,29 @@ pub struct OutcomeData {
 // replace the command's help.
 #[derive(Debug, Default, Args)]
 pub struct PostArgs {
-    /// A possible answer the post offers; repeat for each. The other side
-    /// picks one with --choose.
+    /// Offer an interface to pick or fill in: an A2UI 1.0 createSurface
+    /// message as JSON, of the components of A2UI's basic catalog, whose
+    /// images name files sent with --attach.
+    #[arg(long, value_name = "FILE", conflicts_with = "choices")]
+    pub ui: Option<PathBuf>,
+    /// Offer a possible answer as a button of the post's surface; repeat
+    /// for each. The other side answers the Nth with --action N.
     #[arg(long = "choice", value_name = "CHOICE")]
     pub choices: Vec<String>,
-    /// The answer the post recommends.
-    #[arg(long, value_name = "ANSWER")]
+    /// The choice the post recommends, by its text or number.
+    #[arg(long, value_name = "CHOICE", requires = "choices")]
     pub recommend: Option<String>,
     /// Why it recommends it.
     #[arg(long, requires = "recommend")]
     pub reason: Option<String>,
-    /// Pick the choice of this number the other side offered last; text is
-    /// never read as a choice number.
-    #[arg(long, value_name = "N")]
-    pub choose: Option<u32>,
+    /// Answer the latest surface the other side posted with its action of
+    /// this id, as the post lists them; text is never read as an action.
+    #[arg(long, value_name = "ID")]
+    pub action: Option<String>,
+    /// A value the action takes, such as name=Ada; repeat a key to select
+    /// several options.
+    #[arg(long = "value", value_name = "KEY=VALUE", requires = "action", value_parser = parse_value)]
+    pub values: Vec<(String, String)>,
     /// A file, or its lines as PATH:FIRST-LAST, in a worktree your scope
     /// reaches that the post points at; repeat for more. The other side
     /// receives each at its lines then; --attach sends a copy instead.
@@ -195,14 +201,21 @@ pub struct PostArgs {
 impl PostArgs {
     /// Whether any option only a post in a thread takes is given.
     pub fn given(&self) -> bool {
-        !self.choices.is_empty()
-            || self.recommend.is_some()
-            || self.choose.is_some()
+        self.ui.is_some()
+            || !self.choices.is_empty()
+            || self.action.is_some()
             || !self.code.is_empty()
             || !self.changes.is_empty()
             || self.wait
             || self.resume.is_some()
     }
+}
+
+/// A `--value KEY=VALUE`, split at its first `=`.
+fn parse_value(text: &str) -> Result<(String, String)> {
+    let (key, value) = (text.split_once('='))
+        .with_context(|| format!("{text} is no KEY=VALUE, such as name=Ada"))?;
+    Ok((key.to_owned(), value.to_owned()))
 }
 
 /// A place in code `--code` names: a path, and its lines after the last

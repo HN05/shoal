@@ -753,12 +753,12 @@ message goes unsent.
 ```sh
 shoal thread open "<name>" [--space <space>] [--kind question|request] [--code PATH[:FIRST-LAST]] \
   [--body T | --body-file F] [--severity blocker|should-fix|nit]
-shoal send <thread> "<text>" [--choice A --choice B --recommend A --reason R] \
+shoal send <thread> "<text>" [--choice A --choice B --recommend A --reason R | --ui FILE] \
   [--attach FILE] [--code PATH[:FIRST-LAST]] [--changes 12,14] [--body-file F] [--wait]
-shoal send <thread> --choose <N>     # Pick a choice the other side offered
+shoal send <thread> --action <ID> [--value KEY=VALUE]  # Answer the other side's surface
 shoal send <thread> --in-chat        # Your turn's final message is the post
 shoal thread forward <thread> [--space <space>] [--note "<text>"] [--unlink]
-shoal thread resolve <thread> answered [--choose N]   # A request: done; any: duplicate --of, withdrawn --reason
+shoal thread resolve <thread> answered   # A request: done; any: duplicate --of, withdrawn --reason
 shoal thread resolve <thread> --undo
 shoal thread list [--space <space>] [--state open|resolved|all]
 shoal view thread <thread>
@@ -783,12 +783,18 @@ that space; give others their full `S.N`.
 You post on the side you took part on, such as the opener's or an earlier
 holder's, and your post reaches that side's current party too. Any other space
 that reads the thread posts as a participant. A participant's post reaches
-both sides and takes no turn. A participant neither offers nor picks choices,
-and hears the replies from then on.
+both sides and takes no turn. A participant neither offers nor answers a
+surface, and hears the replies from then on.
 
-A post states its text. It may offer numbered choices, with the one it
-recommends and why. `--choose` picks a choice the other side offered; Shoal
-never reads text as a choice number. `--wait` waits, without a time limit,
+A post states its text, in Markdown. It may offer a surface, an interface the
+other side picks or fills in. `--choice`, repeated, offers one button per
+choice, numbered from 1, with the one it recommends and why. `--ui FILE` offers
+any A2UI 1.0 `createSurface` message of the basic catalog's components; its
+images name files sent with `--attach`. A post shows its surface as text. The
+text ends with one line per action: its id, label, the `--value` keys it takes
+and the command that answers it. `--action ID` answers the other side's latest
+surface with that action, and `--value KEY=VALUE` gives each value it takes.
+Shoal never reads text as an action. `--wait` waits, without a time limit,
 for the next post from another side and prints it. `--in-chat` makes your
 turn's final message the post, for an agent with Shoal's hooks. When the user
 submits a prompt in your chat, that prompt answers it. A turn has one such

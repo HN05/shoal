@@ -1,6 +1,6 @@
-//! Posting in a thread: the post's checks, the choice it picks, and
-//! recording and delivering it from the poster's side, or from a
-//! participant on neither.
+//! Posting in a thread: the post's checks, the surface it offers and the
+//! one it answers, and recording and delivering it from the poster's side,
+//! or from a participant on neither.
 use crate::{Coordination, daemon::Daemon};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -12,7 +12,7 @@ use shoal_protocol::{
     code::NewCodeRef,
     space_names::SpaceSelector,
     threads::{
-        Holder, MAX_CHOICES, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber, ThreadSpace,
+        Answer, Holder, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber, ThreadSpace,
     },
 };
 
@@ -25,27 +25,6 @@ use super::{
 use crate::{alerts::send_with_files, daemon::Records, model::Space, scope::Caller};
 use shoal_protocol::files::{FileSource, NewFile, SentFile};
 
-/// Refuse a post that is empty, too long, or offers too many choices.
-fn validate(post: &NewPost) -> Result<()> {
-    validate_text(&post.text)?;
-    ensure!(
-        post.choices.len() <= MAX_CHOICES,
-        "a post offers at most {MAX_CHOICES} choices"
-    );
-    for choice in &post.choices {
-        crate::validate::message(choice).context("invalid choice")?;
-    }
-    for (field, value) in [
-        ("recommendation", &post.recommendation),
-        ("reason", &post.reason),
-    ] {
-        if let Some(value) = value {
-            crate::validate::message(value).with_context(|| format!("invalid {field}"))?;
-        }
-    }
-    Ok(())
-}
-
 /// Refuse a post's text that is empty or too long.
 pub(super) fn validate_text(text: &str) -> Result<()> {
     ensure!(
@@ -57,38 +36,70 @@ pub(super) fn validate_text(text: &str) -> Result<()> {
     Ok(())
 }
 
-/// `post` with the choice it picks checked against the choices the other
-/// side of `thread` offered last, and its text that choice's when it has
-/// none. A participant's post, on neither `side`, offers no choices and
-/// picks none.
-fn picked(thread: &Thread, side: Option<Side>, mut post: NewPost) -> Result<NewPost> {
+/// `post` as it is recorded from `side` of `thread`: its surface checked,
+/// its images naming files of `attached`, and its answer resolved against
+/// the latest surface the other side posted, with that action's label as
+/// its text when it has none. A participant's post, on neither side,
+/// offers no surface and answers none.
+fn interacting(
+    thread: &Thread,
+    side: Option<Side>,
+    mut post: NewPost,
+    attached: &[&str],
+) -> Result<NewPost> {
     let Some(side) = side else {
         ensure!(
-            post.choices.is_empty() && post.recommendation.is_none() && post.choice.is_none(),
-            "you post in thread {} as a participant, on neither side, which offers no choices \
-             and picks none",
+            post.ui.is_none() && post.answer.is_none(),
+            "you post in thread {} as a participant, on neither side, which offers no surface \
+             and answers none",
             thread.number
         );
         return Ok(post);
     };
-    let Some(choice) = post.choice else {
-        return Ok(post);
-    };
-    let offered = (thread.posts.iter().rev())
-        .find(|earlier| {
-            earlier.side.is_some_and(|earlier| earlier != side) && !earlier.post.choices.is_empty()
-        })
-        .map_or(&[][..], |earlier| &earlier.post.choices[..]);
-    let text = (choice.checked_sub(1))
-        .and_then(|index| offered.get(usize::try_from(index).ok()?))
-        .with_context(|| match offered.len() {
-            0 => format!("thread {} offers you no choices", thread.number),
-            count => format!("choose a number from 1 to {count}"),
-        })?;
-    if post.text.trim().is_empty() {
-        post.text = text.clone();
+    post.ui = (post.ui).map(|ui| ui.checked(attached)).transpose()?;
+    if let Some(answer) = post.answer.take() {
+        let (answer, label) = answered(thread, side, answer)?;
+        if post.text.trim().is_empty() {
+            post.text = label;
+        }
+        post.answer = Some(answer);
     }
     Ok(post)
+}
+
+/// `answer` from `side` of `thread` as it is recorded: on the latest
+/// surface the other side posted, the only one that takes actions, with
+/// the action's whole context; and the action's label.
+fn answered(thread: &Thread, side: Side, answer: Answer) -> Result<(Answer, String)> {
+    let other = thread.party(side.other());
+    let offer = (thread.surface_from(side.other())).with_context(|| {
+        format!(
+            "thread {} has no surface from {other} to answer",
+            thread.number
+        )
+    })?;
+    let named = |id: i64| {
+        (thread.post_number(id)).map_or_else(|| id.to_string(), |number| format!("#{number}"))
+    };
+    if let Some(post) = answer.post {
+        ensure!(
+            post == offer.id,
+            "post {} of thread {} is not the latest surface {other} posted, which alone takes \
+             actions; answer {}",
+            named(post),
+            thread.number,
+            named(offer.id)
+        );
+    }
+    let surface = (offer.post.ui.as_ref()).context("the offer has a surface")?;
+    let values = surface.resolve(&answer.action, answer.values)?;
+    let label = (surface.action(&answer.action)).map_or_else(String::new, |action| action.label);
+    let answer = Answer {
+        post: Some(offer.id),
+        action: answer.action,
+        values,
+    };
+    Ok((answer, label))
 }
 
 /// Who posts: the side it takes, none for a participant, who sends it, and
@@ -222,8 +233,11 @@ impl Coordination {
         let changes = self.named_changes(daemon, caller, None, &changes).await?;
         let thread = self.readable_thread(daemon, caller, number).await?;
         let side = self.posting_side(daemon, caller, &thread).await?;
-        let post = picked(&thread, side, post)?;
-        validate(&post)?;
+        let attached: Vec<&str> = (attachments.iter())
+            .filter_map(|file| file.path.file_name()?.to_str())
+            .collect();
+        let post = interacting(&thread, side, post, &attached)?;
+        validate_text(&post.text)?;
         let poster = self.poster(daemon, caller, side, &thread.holder).await?;
         let files_space = self.files_space(daemon, &poster, &thread).await?;
         let attacher = daemon.attacher(caller).await;

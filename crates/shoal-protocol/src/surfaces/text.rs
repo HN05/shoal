@@ -11,20 +11,21 @@ use super::{Component, Surface, SurfaceAction};
 const INDENT: usize = 2;
 
 impl Surface {
-    /// The surface as lines of text, then a line for each action naming
-    /// the values it takes and the command that answers it, which starts
-    /// with `answer`, such as `shoal send 3.2`.
-    pub fn text_lines(&self, answer: &str) -> Vec<String> {
+    /// The surface as lines of text, then, with `answer`, the command that
+    /// answers it, such as `shoal send 3.2`, a line for each action naming
+    /// the values it takes and that command.
+    pub fn text_lines(&self, answer: Option<&str>) -> Vec<String> {
         let mut drawing = Drawing {
             surface: self,
             lines: Vec::new(),
             drawn: BTreeSet::new(),
         };
         drawing.draw("root", 0, "");
-        let actions = self.actions();
+        let actions = answer.map_or_else(Vec::new, |_| self.actions());
         if !actions.is_empty() {
             drawing.lines.push("Actions:".to_owned());
         }
+        let answer = answer.unwrap_or_default();
         let commands = actions.iter().map(|action| action_line(action, answer));
         drawing
             .lines

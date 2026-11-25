@@ -95,7 +95,7 @@ const POSTS: &str = concat!(
     "SELECT p.id,p.thread_id,p.created_at,p.side,p.sender,p.sender_id,
         COALESCE(s.name,p.sender_name) AS sender_name,
         COALESCE(s.number,p.sender_number) AS sender_number,p.text,
-        p.choices,p.recommendation,p.reason,p.choice,p.in_chat,p.forwards,p.forwarded_to,
+        p.ui,p.answer,p.in_chat,p.forwards,p.forwarded_to,
         COALESCE(f.name,p.forwarded_name) AS forwarded_name,
         COALESCE(f.number,p.forwarded_number) AS forwarded_number,p.alert_id,",
     sent_files!("p.files"),
@@ -129,10 +129,8 @@ fn post(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, Post)> {
         space,
         post: NewPost {
             text: row.get("text")?,
-            choices: (shoal_store::json_column(row, "choices")?).unwrap_or_default(),
-            recommendation: row.get("recommendation")?,
-            reason: row.get("reason")?,
-            choice: row.get("choice")?,
+            ui: shoal_store::json_column(row, "ui")?,
+            answer: shoal_store::json_column(row, "answer")?,
         },
         files: (shoal_store::json_column(row, "files")?).unwrap_or_default(),
         code: Vec::new(),
@@ -444,9 +442,9 @@ pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i
     let forwarded_to = new.forwards.flatten();
     tx.execute(
         "INSERT INTO thread_posts(thread_id,created_at,side,sender,sender_id,sender_name,
-                sender_number,text,choices,recommendation,reason,choice,files,in_chat,forwards,
-                forwarded_to,forwarded_name,forwarded_number)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+                sender_number,text,ui,answer,files,in_chat,forwards,forwarded_to,forwarded_name,
+                forwarded_number)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
         params![
             new.thread,
             crate::time::UnixTime::now(),
@@ -456,10 +454,12 @@ pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i
             sender.and_then(|space| space.name.as_ref()),
             sender.and_then(|space| space.number),
             new.post.text,
-            serde_json::to_string(&new.post.choices)?,
-            new.post.recommendation,
-            new.post.reason,
-            new.post.choice,
+            (new.post.ui.as_ref())
+                .map(serde_json::to_string)
+                .transpose()?,
+            (new.post.answer.as_ref())
+                .map(serde_json::to_string)
+                .transpose()?,
             sent_ids(new.files)?,
             new.in_chat,
             new.forwards.is_some(),

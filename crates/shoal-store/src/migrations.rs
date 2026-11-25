@@ -4,8 +4,10 @@
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
+mod post_surfaces;
+
 /// Schema version written by this build; older databases are migrated on open.
-pub const SCHEMA_VERSION: i64 = 299;
+pub const SCHEMA_VERSION: i64 = 301;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it to a later release's deletes the migrations at or
@@ -41,6 +43,12 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         None,
     ),
     (299, include_str!("migrations/0299_run_usage.sql"), None),
+    (300, include_str!("migrations/0300_post_surfaces.sql"), None),
+    (
+        301,
+        include_str!("migrations/0301_drop_post_choices.sql"),
+        Some(post_surfaces::rewrite_choices),
+    ),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their

@@ -94,11 +94,7 @@ impl Coordination {
         resolving: Resolving,
     ) -> Result<Resolution> {
         let Resolving {
-            choice,
-            of,
-            reason,
-            issue,
-            ..
+            of, reason, issue, ..
         } = resolving;
         let of = match of {
             Some(of) => {
@@ -113,17 +109,7 @@ impl Coordination {
                 crate::validate::message(text).with_context(|| format!("invalid {field}"))?;
             }
         }
-        let outcome = Outcome::new(thread.kind, kind, choice, of, reason, issue)?;
-        if let Outcome::Answered {
-            choice: Some(choice),
-        } = outcome
-        {
-            let offered = thread.choices().len();
-            ensure!(
-                usize::try_from(choice).is_ok_and(|choice| (1..=offered).contains(&choice)),
-                "choose a number from 1 to {offered}"
-            );
-        }
+        let outcome = Outcome::new(thread.kind, kind, of, reason, issue)?;
         Ok(Resolution {
             outcome,
             by: match caller {

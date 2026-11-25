@@ -86,7 +86,17 @@ fn a_saved_chats_waiting_thread_stays_in_the_inbox() {
         };
         let opened = in_chat(&["thread", "open", "Which database?"]);
         let id = opened["number"].as_str().unwrap().to_owned();
-        in_chat(&["send", &id, "Postgres or SQLite?", "--recommend", "SQLite"]);
+        in_chat(&[
+            "send",
+            &id,
+            "Postgres or SQLite?",
+            "--choice",
+            "Postgres",
+            "--choice",
+            "SQLite",
+            "--recommend",
+            "SQLite",
+        ]);
         let output = fixture.run(&["daemon", "stop"]);
         assert!(output.status.success(), "{}", printed(&output));
     });

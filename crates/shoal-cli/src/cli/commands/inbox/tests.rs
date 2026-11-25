@@ -28,6 +28,7 @@ fn a_lone_sync_failure_names_its_repository() {
 
 #[test]
 fn a_thread_notes_its_latest_recommendation_and_files() {
+    use shoal_protocol::surfaces::Surface;
     let file = |id, name: &str| shoal_protocol::files::SentFile {
         id,
         space: "w1".into(),
@@ -43,7 +44,7 @@ fn a_thread_notes_its_latest_recommendation_and_files() {
         "holder": {"kind": "user"}, "created_at": 0,
         "posts": [{
             "id": 1, "created_at": 0, "side": "opener", "sender": "space",
-            "text": "A or B?", "recommendation": "A",
+            "text": "A or B?", "ui": Surface::choices(&["A".into(), "B".into()], Some("A"), None),
             "files": [file(1, "a.png"), file(2, "b.png")],
         }],
     }))
@@ -215,7 +216,7 @@ fn another_machines_thread_names_its_machine() {
                 "kind": "question", "name": "Which database?", "opener": "space",
                 "holder": {"kind": "user"}, "created_at": 0,
                 "posts": [{"id": 1, "created_at": 0, "side": "opener", "sender": "space",
-                           "text": "Postgres or SQLite?", "recommendation": "SQLite"}],
+                           "text": "Postgres or SQLite?"}],
             }],
         }],
     }))

@@ -98,7 +98,8 @@ fn picker_rows(threads: &[Thread]) -> Entries {
 /// end of input cancels.
 async fn reply(ctx: &Context, thread: Thread) -> Result<i32> {
     eprintln!("{}", render::details(&thread, Palette::stderr(ctx.json)));
-    let recommendation = (thread.last_turn()).and_then(|post| post.post.recommendation.clone());
+    let recommendation =
+        (thread.last_turn()).and_then(|post| post.post.ui.as_ref()?.recommendation());
     let prompt = match &recommendation {
         Some(recommendation) => format!("Reply [{recommendation}]"),
         None => "Reply".to_owned(),

@@ -207,14 +207,8 @@ impl Texts {
             agent.push(' ');
         }
         agent.push_str(&post.post.text);
-        for (index, choice) in (1..).zip(&post.post.choices) {
-            agent.push_str(&format!("\n  {index}. {choice}"));
-        }
-        if let Some(recommendation) = &post.post.recommendation {
-            agent.push_str(&format!("\nRecommended: {recommendation}"));
-        }
-        if let Some(reason) = &post.post.reason {
-            agent.push_str(&format!("\nReason: {reason}"));
+        for line in thread.interaction_lines(post) {
+            agent.push_str(&format!("\n  {line}"));
         }
         let reader = Party::of(thread, to);
         agent.push_str(&code_lines(post, reader.as_ref()));
@@ -276,6 +270,9 @@ impl Texts {
         let reader = Party::of(thread, side);
         for post in thread.posts.iter().filter(|post| post.speaks()) {
             agent.push_str(&format!("\n{}: {}", post.author(), post.post.text));
+            for line in thread.interaction_lines(post) {
+                agent.push_str(&format!("\n  {line}"));
+            }
             agent.push_str(&code_lines(post, reader.as_ref()));
         }
         agent.push_str(&format!("\n{}", hint(thread, side)));
@@ -386,7 +383,7 @@ fn hint(thread: &Thread, side: Side) -> String {
     let number = thread.number;
     match (side, thread.kind) {
         (Side::Holder, ThreadKind::Question) => format!(
-            "Reply with `shoal send {number} \"<answer>\"`, `--choose N` picking a choice; pass it on with `shoal thread forward {number}`."
+            "Reply with `shoal send {number} \"<answer>\"`, or with `--action` answering its surface; pass it on with `shoal thread forward {number}`."
         ),
         (Side::Holder, ThreadKind::Request) => format!(
             "Once it is done, say what you did with `shoal send {number} \"<text>\"`, or there why you cannot; pass it on with `shoal thread forward {number}`."

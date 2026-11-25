@@ -154,7 +154,7 @@ fn the_shorthand_numbers_its_actions_and_marks_the_recommended_one() {
     assert_eq!(elsewhere.recommendation(), None);
     assert!(
         elsewhere
-            .text_lines("x")
+            .text_lines(None)
             .contains(&"Recommended: Neither".to_owned())
     );
 }
@@ -234,7 +234,7 @@ fn values_given_as_text_take_their_input_type() {
 
 #[test]
 fn the_text_shows_the_inputs_and_how_to_answer_each_action() {
-    let lines = form().text_lines("shoal send 3.2");
+    let lines = form().text_lines(Some("shoal send 3.2"));
     assert_eq!(
         lines,
         [
@@ -265,13 +265,13 @@ fn the_text_repeats_a_lists_template_for_each_item_and_shows_images() {
         ]),
         json!({"items": [{"name": "First"}, {"name": "Second"}]}),
     );
-    assert_eq!(list.text_lines("x"), ["    First", "    Second"]);
+    assert_eq!(list.text_lines(None), ["    First", "    Second"]);
     let pictured = surface(
         json!([{"id": "root", "component": "Text", "text": "See ![Latency](latency.svg)"}]),
         json!({}),
     );
     assert_eq!(
-        pictured.text_lines("x"),
+        pictured.text_lines(None),
         ["See [image: Latency, attached file latency.svg]"]
     );
 }

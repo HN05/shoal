@@ -1351,7 +1351,15 @@ fn agents_withdraw_threads_they_no_longer_need_answered() {
         &fixture,
         "asker",
         "Which database?",
-        &["Postgres or SQLite?", "--recommend", "SQLite"],
+        &[
+            "Postgres or SQLite?",
+            "--choice",
+            "Postgres",
+            "--choice",
+            "SQLite",
+            "--recommend",
+            "SQLite",
+        ],
     );
     let id = asked["number"].as_str().unwrap().to_owned();
     let output = scoped_command(&fixture, "asker", &["thread", "resolve", &id, "withdrawn"]);
@@ -1382,7 +1390,17 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
     };
     let opened = in_chat(&["thread", "open", "Which database?"]);
     let id = opened["number"].as_str().unwrap().to_owned();
-    let asked = in_chat(&["send", &id, "Postgres or SQLite?", "--recommend", "SQLite"]);
+    let asked = in_chat(&[
+        "send",
+        &id,
+        "Postgres or SQLite?",
+        "--choice",
+        "Postgres",
+        "--choice",
+        "SQLite",
+        "--recommend",
+        "SQLite",
+    ]);
     assert_eq!(asked["space"], "planning", "{asked}");
     // The user sees it under the chat's name, and the answer reaches the chat.
     let listed = fixture.ok(&["thread", "list", "--space", &fixture.id("planning")]);
@@ -1490,7 +1508,7 @@ fn a_wait_prints_the_other_side_s_next_post() {
     assert_eq!(thread["space"], "asker");
     let renamed = fixture.rename_branch("asker", "renamed");
     assert_eq!(renamed["data"]["branch"], "renamed", "{renamed}");
-    let output = scoped_command(&fixture, "asker", &["send", &id, "--choose", "2"]);
+    let output = scoped_command(&fixture, "asker", &["send", &id, "--action", "2"]);
     assert!(output.status.success(), "{}", printed(&output));
     let output = user.wait_with_output().unwrap();
     assert!(output.status.success(), "{}", printed(&output));

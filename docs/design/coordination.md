@@ -129,8 +129,8 @@ the user or a space, whoever is asked now, with posts from both sides and
 from any other space that reads it, so a question can be discussed before it
 is settled, asked downward by the user or a parent of a child, and passed on
 to another agent. A thread has a typed
-kind, which decides the outcomes it takes: a `question` ends `answered`,
-optionally on a choice, a `request`, which asks its holder to do something,
+kind, which decides the outcomes it takes: a `question` ends `answered`, a
+`request`, which asks its holder to do something,
 `done` once its opener accepts the work, and every kind `duplicate` of
 another thread, `withdrawn` or `closed`, which only Shoal sets. Unknown kinds
 and outcomes are refused rather than kept as text. Editors draw a thread with
@@ -147,18 +147,43 @@ and keeps nothing, so `thread open` only reserves its number. A space posts
 on the side it took part on: the opener's as its opener, the holder's as its
 holder, a space above it or an earlier holder, so a coordinator that passed a
 question on still answers it. Any other space that reads the thread posts on
-neither side, as a participant: its post leaves whose turn it is, offers and
-picks no choices, and links the thread for it, so it hears the replies. Each
+neither side, as a participant: its post leaves whose turn it is, offers no
+surface and answers none, and links the thread for it, so it hears the
+replies. Each
 post reaches the other side's current party as an alert, and its own side's
 when someone else posted for it, a participant's both, through the alert
 delivery hooks already use, waking an idle agent; the alert is queued in the
-transaction that records the post and names the thread as its subject. A post
-may offer numbered choices with a recommendation and a reason, or pick a
-choice the other side offered by number, never by parsing text, so
-`--choose 2` and a post that says "2" cannot be confused. `--wait` waits for
+transaction that records the post and names the thread as its subject.
+`--wait` waits for
 the next post from a side other than the poster's and prints it, marking its
 alert read, for agents without Shoal's hooks; a wait an upgrade interrupts
 resumes after the same post.
+
+A post's text is Markdown, and a post may offer a surface: an interface to
+pick or fill in, described in [A2UI](https://a2ui.org), which apps render
+natively and the terminal and agents read as text. A surface is the only way
+a post offers something to pick. Shoal pins one A2UI version, 1.0, vendors
+its schema and records the version on each surface; moving to a later
+version is an ordinary change whose store migration rewrites stored
+surfaces. A surface is one `createSurface` message that carries its
+components and data model, never a stream of messages, and it never changes
+once posted: an agent shows new state with a new post. It uses only the
+components of A2UI's basic catalog, so every app renders every surface. Its
+images, an `Image` or one in a `Text`'s Markdown, name files attached to the
+post; code and changes stay on the post as `--code` and `--changes`, which
+Shoal follows as code moves. The daemon checks a surface when its post
+arrives, against the schema and the catalog, for references to components
+it lacks, for two buttons with one action and for its size of at most
+32 KiB, and refuses it naming what is wrong. `--choice` is shorthand for the
+standard surface of one button per choice, numbered from 1, the recommended
+one primary, and the reason. An answer is a post that names an action of a
+surface, the event of one of its buttons, with values for the inputs that
+action's context binds, never read from text. Only the other side answers,
+as for a reply, never a participant, and only the latest surface a side
+posted takes actions, so an answer to an older one is refused naming the
+current one. The answer records the action's whole context, the values given
+and the data model's for the rest, as the event an app's renderer would
+send.
 
 The current party of either side forwards its role, the holder's or, as
 when a coordinator takes over its child's question, the opener's: down, to a

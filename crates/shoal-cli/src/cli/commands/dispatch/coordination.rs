@@ -47,7 +47,7 @@ pub(in crate::cli::commands) async fn run(
                         text,
                         body_file,
                         attach,
-                        options: post,
+                        options: *post,
                     };
                     threads::post(&ctx, posting).await
                 }

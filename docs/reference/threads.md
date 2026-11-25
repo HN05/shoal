@@ -5,13 +5,13 @@ This file says what the `thread` and `changes` commands do.
 ```sh
 shoal thread open "<name>" [--kind question|request] [--space S] [--code PATH[:FIRST-LAST]]...
   [--body T | --body-file F] [--severity blocker|should-fix|nit]
-shoal send <thread> "<text>" [--choice C]... [--recommend R --reason R] [--attach FILE]...
+shoal send <thread> "<text>" [--ui FILE | --choice C... [--recommend C --reason R]] [--attach FILE]...
   [--code PATH[:FIRST-LAST]]... [--changes N[,N]...] [--wait]
 shoal send <thread> --body-file F    # The text from a file
-shoal send <thread> --choose N       # Pick a choice the other side offered
+shoal send <thread> --action ID [--value KEY=VALUE]...  # Answer the other side's surface
 shoal send <thread> --in-chat        # The turn's final message in the chat is the post
 shoal thread forward <thread> [--space S] [--note "<text>"] [--unlink]
-shoal thread resolve <thread> <outcome> [--choose N | --of <thread> | --reason R]
+shoal thread resolve <thread> <outcome> [--of <thread> | --reason R]
 shoal thread resolve <thread> --undo
 shoal thread list [--space S] [--state open|resolved|all] [-p]
 shoal thread switch [<thread> | --none] [--space S]
@@ -66,7 +66,7 @@ the inbox.
 thread number, `--body-file` or one of a post's options, a single argument is
 an [alert](alerts.md)'s text.
 
-A post's text is up to 8 KiB and may span lines. `--body-file` reads it from a
+A post's text is Markdown, up to 8 KiB, and may span lines. `--body-file` reads it from a
 file. `--attach` sends files with the post, as an alert sends them. A thread
 can hold about 56 KiB, what one response carries. A post that would make it
 longer is refused: open a new thread to go on.
@@ -80,8 +80,8 @@ A space posts on the side it took part on:
   holder.
 
 Any other space that reads the thread posts as a participant, on neither side.
-A participant's post leaves the turn where it was and offers and picks no
-choices. It also links the thread for that space.
+A participant's post leaves the turn where it was. It offers no surface and
+answers none. It also links the thread for that space.
 
 ### Who receives a post
 
@@ -92,17 +92,86 @@ Each post sends a `thread_posted` alert to:
 - both sides' parties, for a participant's post,
 - the spaces that linked the thread.
 
-Nobody receives their own post. An agent's alert carries the choices and how
-to reply. Yours is one line.
+Nobody receives their own post. An agent's alert carries the post's surface as
+text and how to reply. When the alert would pass 8 KiB, it cuts the post's
+text and surface short, keeps the commands that answer it, and names
+`shoal view thread` for the rest. Yours is one line.
 
-### Choices
+### Surfaces
 
-A post may offer numbered choices with `--choice`, each one line.
-`--recommend` names the one it recommends and `--reason` says why.
+A post may offer a surface: an interface the other side picks or fills in. A
+surface is one [A2UI](https://a2ui.org) 1.0 `createSurface` message. It
+carries its components and data model, and never changes once posted.
+`--ui FILE` posts one written in JSON, such as:
 
-`--choose N` picks choice `N` of those the other side offered last. The choice's
-text becomes the post's, unless the post gives its own. Shoal never reads text
-as a choice number.
+```json
+{"version": "1.0", "createSurface": {"surfaceId": "size",
+  "components": [
+    {"id": "root", "component": "Column", "children": ["pick", "ok"]},
+    {"id": "pick", "component": "ChoicePicker", "label": "Size",
+     "options": [{"label": "Small", "value": "s"}, {"label": "Large", "value": "l"}],
+     "value": {"@path": "/size"}},
+    {"id": "ok", "component": "Button", "child": "ok-label", "variant": "primary",
+     "action": {"event": {"name": "order", "context": {"size": {"@path": "/size"}}}}},
+    {"id": "ok-label", "component": "Text", "text": "Order"}],
+  "dataModel": {"size": ["s"]}}}
+```
+
+A surface uses only the components of A2UI's basic catalog. It takes that
+catalog's `catalogId` when it names none. A `Text` takes Markdown. An image
+names a file sent with `--attach` by its file name: an `Image`'s literal `url`,
+or one in Markdown, in a `Text` or in the data model. Code and changes stay
+`--code` and `--changes`.
+
+Shoal refuses a surface that:
+
+- takes more than 32 KiB,
+- breaks A2UI's schema, or uses a component type the catalog lacks,
+- refers to a component it lacks, or has no `root`,
+- has two buttons that dispatch the same action,
+- holds a control character, or a newline in a name.
+
+The refusal names what is wrong.
+
+`--choice C`, repeated, is shorthand for the standard surface: one button per
+choice, whose actions are numbered from 1. `--recommend`, a choice's text or
+number, makes that choice's button the primary one. `--reason` says why,
+below the buttons.
+
+### Answers
+
+An action is the event a button dispatches. Its id is the event's `name`. It
+takes a value for each key of its `context` that binds an input's data: a text
+field's text, a checkbox's `true` or `false`, a slider's number or a choice
+picker's option values.
+
+`--action ID` answers the latest surface the other side posted with that
+action. `--value KEY=VALUE` gives each value; repeat a key to select several
+options. The action's label is the post's text, unless the post gives its own.
+Shoal never reads text as an action.
+
+Shoal refuses:
+
+- an action the surface lacks, and a value it does not take or its input
+  refuses,
+- an answer from a participant, or to your own side's surface,
+- an answer to a surface older than that side's latest, naming the current
+  post.
+
+The post records the action's whole context: the values given, and the data
+model's for the rest.
+
+### Surfaces as text
+
+`view thread`, `send --wait`, the inbox and agents' alerts show a surface as
+text:
+
+- its text, inputs and layout as indented blocks,
+- an image as its alt text and file,
+- then, for the latest surface of a side, one line per action. The line gives
+  the action's id, label, the values it takes and the command that answers it.
+
+`--json` gives the surface itself.
 
 ### Wait for a reply
 
@@ -216,7 +285,7 @@ neither forward nor resolve.
 
 `shoal thread resolve` settles a thread with an outcome its kind takes:
 
-- `answered`, for a question. `--choose` names the choice it settled on.
+- `answered`, for a question.
 - `done`, for a request whose work its opener accepted.
 - a review finding's outcome, which [local reviews](reviews.md#local-reviews)
   list.
@@ -299,9 +368,10 @@ something else resolved since stays resolved.
 `--json` gives a thread's:
 
 - `kind`, `name`, `opener` and `holder`,
-- `posts`, each with its `side`, `sender`, `space`, `text`, `choices`,
-  `recommendation`, `reason`, `choice`, `files`, `code`, `changes`, `in_chat`
-  and the holder it `forwarded_to`,
+- `posts`, each with its `side`, `sender`, `space`, `text`, `ui`, the surface
+  it offers, `answer`, with the `post` it answers, the `action` and its
+  `values`, `files`, `code`, `changes`, `in_chat` and the holder it
+  `forwarded_to`,
 - `resolution`, with its `outcome`, its data, `by`, `by_space` and
   `resolved_at`,
 - `working`, whether its holder's agent has switched to it,

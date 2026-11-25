@@ -167,7 +167,7 @@ fn a_database_newer_than_this_version_is_refused_without_changes() -> Result<()>
 #[test]
 fn a_failed_migration_rolls_back_every_step_of_its_batch() -> Result<()> {
     let mut db = at_floor()?;
-    // The last migration creates this table.
+    // A migration creates this table.
     db.execute_batch("CREATE TABLE run_usage (id INTEGER PRIMARY KEY);")?;
     let before = contents(&db)?;
     assert!(migrate(&mut db).is_err());
@@ -240,3 +240,114 @@ fn ci_job_runs_move_to_the_runs_as_whole_runs_of_their_job() -> Result<()> {
 }
 
 mod schema;
+
+/// A thread at the floor where the holder offered choices twice, the user
+/// picked the second of the first offer, a post on the holder's own side
+/// picked one too, and the user resolved it with the first of the second
+/// offer.
+fn thread_with_picks(db: &Connection) -> Result<()> {
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+        INSERT INTO spaces(id,kind,repository_id,name) VALUES ('chat','chat','repo','asker');
+        INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
+                holder_id,outcome,resolved_by,resolved_at)
+            VALUES (1,'chat',1,1,'question','Which database?',1,'user','chat',
+                '{\"outcome\":\"answered\",\"choice\":1}','user',9);
+        INSERT INTO thread_posts(id,thread_id,created_at,side,sender,sender_id,text,choices,
+                recommendation,reason)
+            VALUES (1,1,2,'holder','space','chat','Which?','[\"Postgres\",\"SQLite\"]',
+                'SQLite','Fewer moving parts');
+        INSERT INTO thread_posts(id,thread_id,created_at,side,sender,text,choice)
+            VALUES (2,1,3,'opener','user','SQLite',2);
+        INSERT INTO thread_posts(id,thread_id,created_at,side,sender,sender_id,text,choice)
+            VALUES (3,1,4,'holder','space','chat','Mine',1);
+        INSERT INTO thread_posts(id,thread_id,created_at,side,sender,sender_id,text,choices)
+            VALUES (4,1,5,'holder','space','chat','And the cache?','[\"Redis\",\"None\"]');",
+    )?;
+    Ok(())
+}
+
+/// The `ui` and `answer` of the post `id`, as JSON.
+fn interaction(
+    db: &Connection,
+    id: i64,
+) -> Result<(Option<serde_json::Value>, Option<serde_json::Value>)> {
+    let (ui, answer): (Option<String>, Option<String>) = db.query_row(
+        "SELECT ui,answer FROM thread_posts WHERE id=?1",
+        [id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let parse = |text: Option<String>| text.map(|text| serde_json::from_str(&text)).transpose();
+    Ok((parse(ui)?, parse(answer)?))
+}
+
+#[test]
+fn choices_become_the_surfaces_the_shorthand_builds() -> Result<()> {
+    let mut db = at_floor()?;
+    thread_with_picks(&db)?;
+    migrate(&mut db)?;
+    let choices = ["Postgres".to_owned(), "SQLite".to_owned()];
+    let built = shoal_protocol::surfaces::Surface::choices(
+        &choices,
+        Some("SQLite"),
+        Some("Fewer moving parts"),
+    );
+    assert_eq!(interaction(&db, 1)?.0.as_ref(), Some(built.as_json()));
+    Ok(())
+}
+
+#[test]
+fn picks_become_answers_to_the_other_side_s_choices() -> Result<()> {
+    let mut db = at_floor()?;
+    thread_with_picks(&db)?;
+    migrate(&mut db)?;
+    assert_eq!(
+        interaction(&db, 2)?.1,
+        Some(serde_json::json!({"post": 1, "action": "2"}))
+    );
+    // Its own side's choices answer nothing.
+    assert_eq!(interaction(&db, 3)?, (None, None));
+    Ok(())
+}
+
+#[test]
+fn a_resolution_s_pick_becomes_the_opener_s_answer_before_it() -> Result<()> {
+    let mut db = at_floor()?;
+    thread_with_picks(&db)?;
+    let journaled = |db: &Connection| -> Result<i64> {
+        Ok(db.query_row("SELECT COUNT(*) FROM space_events", [], |row| row.get(0))?)
+    };
+    let before = journaled(&db)?;
+    migrate(&mut db)?;
+    let (id, side, sender, text, created_at): (i64, String, String, String, i64) = db.query_row(
+        "SELECT id,side,sender,text,created_at FROM thread_posts ORDER BY id DESC LIMIT 1",
+        [],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
+    )?;
+    assert_eq!(
+        (side.as_str(), sender.as_str(), text.as_str(), created_at),
+        ("opener", "user", "Redis", 9)
+    );
+    assert_eq!(
+        interaction(&db, id)?.1,
+        Some(serde_json::json!({"post": 4, "action": "1"}))
+    );
+    let outcome: String = db.query_row("SELECT outcome FROM threads", [], |row| row.get(0))?;
+    assert_eq!(outcome, r#"{"outcome":"answered"}"#);
+    assert_eq!(journaled(&db)?, before);
+    // The journal records the posts that come after.
+    db.execute(
+        "INSERT INTO thread_posts(thread_id,created_at,side,sender,text) VALUES (1,10,'opener','user','Thanks')",
+        [],
+    )?;
+    assert_eq!(journaled(&db)?, before + 1);
+    Ok(())
+}

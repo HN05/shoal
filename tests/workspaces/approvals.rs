@@ -183,7 +183,15 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
         &fixture,
         "agent",
         "Which database?",
-        &["Postgres or SQLite?", "--recommend", "SQLite"],
+        &[
+            "Postgres or SQLite?",
+            "--choice",
+            "Postgres",
+            "--choice",
+            "SQLite",
+            "--recommend",
+            "SQLite",
+        ],
     );
     let number = question["number"].as_str().unwrap().to_owned();
     install_test_script(fixture.root.path().join("bin/fzf"), "#!/bin/sh\nexit 77\n");
@@ -439,7 +447,13 @@ fn a_thread_prompt_takes_the_recommendation_with_enter_and_text_as_typed() {
             &fixture,
             "asker",
             &name,
-            &["Which?", "--recommend", recommendation],
+            &[
+                "Which?",
+                "--choice",
+                recommendation,
+                "--recommend",
+                recommendation,
+            ],
         );
         let id = asked["number"].as_str().unwrap().to_owned();
         let (output, transcript) =

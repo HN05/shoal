@@ -107,7 +107,7 @@ pub(super) fn details(thread: &Thread, palette: Palette) -> String {
         }
         number += u32::from(post.speaks());
         lines.push(String::new());
-        lines.extend(post_lines(number, post, palette));
+        lines.extend(post_lines(thread, number, post, palette));
     }
     for entry in entries {
         lines.push(String::new());
@@ -143,9 +143,10 @@ fn entry_lines(entry: &ChangeEntry, palette: Palette) -> Vec<String> {
         .collect()
 }
 
-/// A post, `number` among those that speak: who sent it, as a participant
-/// on neither side too, its text, and what it offers or picks.
-fn post_lines(number: u32, post: &Post, palette: Palette) -> Vec<String> {
+/// A post of `thread`, `number` among those that speak: who sent it, as a
+/// participant on neither side too, its text, and what it offers or
+/// answers.
+fn post_lines(thread: &Thread, number: u32, post: &Post, palette: Palette) -> Vec<String> {
     let author = post.author();
     let heading = match (&post.forwarded_to, post.side) {
         (Some(to), Some(Side::Opener)) => {
@@ -158,18 +159,8 @@ fn post_lines(number: u32, post: &Post, palette: Palette) -> Vec<String> {
     };
     let mut lines = vec![format!("  {}", palette.paint(Style::Muted, heading))];
     lines.extend((post.post.text.lines()).map(|line| format!("    {line}").trim_end().to_owned()));
-    for (number, choice) in (1..).zip(&post.post.choices) {
-        lines.push(format!("    {number}. {choice}"));
-    }
-    if let Some(recommendation) = &post.post.recommendation {
-        lines.push(format!("    Recommended: {recommendation}"));
-    }
-    if let Some(reason) = &post.post.reason {
-        lines.push(format!("    Reason: {reason}"));
-    }
-    if let Some(choice) = post.post.choice {
-        lines.push(format!("    Chose {choice}"));
-    }
+    let interaction = thread.interaction_lines(post).into_iter();
+    lines.extend(interaction.map(|line| format!("    {line}").trim_end().to_owned()));
     for file in &post.files {
         lines.push(format!("    Attached file: {}", file.shown()));
     }

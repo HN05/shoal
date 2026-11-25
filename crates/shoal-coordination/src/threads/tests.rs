@@ -2,8 +2,10 @@ use shoal_protocol::reviews::{ReviewId, Severity};
 use shoal_protocol::threads::ThreadOpening;
 use shoal_protocol::{
     space_names::SpaceSelector,
+    surfaces::Surface,
     threads::{
-        NewPost, Outcome, OutcomeKind, Resolving, Sender, Side, Thread, ThreadKind, ThreadNumber,
+        Answer, NewPost, Outcome, OutcomeKind, Resolving, Sender, Side, Thread, ThreadKind,
+        ThreadNumber,
     },
 };
 
@@ -595,68 +597,90 @@ async fn the_opener_resolves_its_thread_and_takes_back_an_unread_notice() {
     );
 }
 
-#[tokio::test]
-async fn an_answer_picks_one_of_the_choices_the_other_side_offered() {
-    let tree = tree().await;
-    let fixture = &tree.fixture;
-    let child = caller(&tree.child);
-    let thread = open(fixture, Some(&child), None).await;
-    let asked = NewPost {
-        choices: vec!["Postgres".into(), "SQLite".into()],
-        recommendation: Some("SQLite".into()),
-        ..post("Which database?")
-    };
+/// A post asking `text` with the surface `--choice` builds for `choices`.
+fn asking(text: &str, choices: &[&str], recommended: Option<&str>) -> NewPost {
+    let choices: Vec<String> = choices.iter().map(|choice| (*choice).to_owned()).collect();
+    NewPost {
+        ui: Some(Surface::choices(&choices, recommended, None)),
+        ..post(text)
+    }
+}
+
+/// Post `post` in `thread` as `caller`.
+async fn post_as(
+    fixture: &Fixture,
+    thread: &Thread,
+    caller: &Caller,
+    post: NewPost,
+) -> anyhow::Result<Thread> {
     (fixture.coordination.post_to_thread(
         &**fixture,
-        Some(&child),
-        full(&thread),
-        asked,
+        Some(caller),
+        full(thread),
+        post,
         Vec::new(),
         Vec::new(),
         Vec::new(),
     ))
     .await
-    .unwrap();
-    let parent = caller(&tree.parent);
-    let choose = |choice| NewPost {
-        choice: Some(choice),
+}
+
+/// A post answering the action `action` of the post `on`, or else the
+/// latest surface of the other side.
+fn answering(action: &str, on: Option<i64>) -> NewPost {
+    NewPost {
+        answer: Some(Answer {
+            post: on,
+            action: action.to_owned(),
+            ..Answer::default()
+        }),
         ..NewPost::default()
-    };
-    let outside = fixture.coordination.post_to_thread(
-        &**fixture,
-        Some(&parent),
-        full(&thread),
-        choose(3),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
+    }
+}
+
+#[tokio::test]
+async fn an_answer_takes_an_action_of_the_other_side_s_latest_surface() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let (child, parent) = (caller(&tree.child), caller(&tree.parent));
+    let thread = open(fixture, Some(&child), None).await;
+    let asked = post_as(
+        fixture,
+        &thread,
+        &child,
+        asking("Which database?", &["Postgres", "SQLite"], Some("SQLite")),
     );
-    assert!(outside.await.is_err());
-    let chose = fixture
-        .coordination
-        .post_to_thread(
-            &**fixture,
-            Some(&parent),
-            full(&thread),
-            choose(2),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        )
+    let first = asked.await.unwrap().last_post().unwrap().id;
+    let unknown = post_as(fixture, &thread, &parent, answering("3", None))
+        .await
+        .unwrap_err();
+    assert!(unknown.to_string().contains("it has 1, 2"), "{unknown:#}");
+    // The opener answers no surface of its own.
+    let own = post_as(fixture, &thread, &child, answering("1", None))
+        .await
+        .unwrap_err();
+    assert!(own.to_string().contains("no surface from"), "{own:#}");
+
+    let asked = post_as(
+        fixture,
+        &thread,
+        &child,
+        asking("And the cache?", &["Redis", "None"], None),
+    );
+    let second = asked.await.unwrap().last_post().unwrap().id;
+    let older = post_as(fixture, &thread, &parent, answering("2", Some(first)))
+        .await
+        .unwrap_err();
+    assert!(older.to_string().contains("answer #2"), "{older:#}");
+    let answered = post_as(fixture, &thread, &parent, answering("1", Some(second)))
         .await
         .unwrap();
-    assert_eq!(chose.last_post().unwrap().post.text, "SQLite");
-    // The opener offered no choices to itself.
-    let own = fixture.coordination.post_to_thread(
-        &**fixture,
-        Some(&child),
-        full(&thread),
-        choose(1),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
+    let answer = answered.last_post().unwrap();
+    assert_eq!(answer.post.text, "Redis");
+    assert_eq!(
+        answer.post.answer.as_ref().map(|answer| answer.post),
+        Some(Some(second))
     );
-    assert!(own.await.is_err());
 }
 
 #[tokio::test]
@@ -711,10 +735,7 @@ async fn a_space_that_forwarded_a_question_still_answers_it_for_the_holder() {
     let fixture = &tree.fixture;
     let (child, parent) = (caller(&tree.child), caller(&tree.parent));
     let thread = open(fixture, Some(&child), None).await;
-    let asked = NewPost {
-        choices: vec!["Postgres".into(), "SQLite".into()],
-        ..post("Which database?")
-    };
+    let asked = asking("Which database?", &["Postgres", "SQLite"], None);
     (fixture.coordination.post_to_thread(
         &**fixture,
         Some(&child),
@@ -745,10 +766,7 @@ async fn a_space_that_forwarded_a_question_still_answers_it_for_the_holder() {
             &**fixture,
             Some(&parent),
             full(&thread),
-            NewPost {
-                choice: Some(1),
-                ..NewPost::default()
-            },
+            answering("1", None),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -784,10 +802,7 @@ async fn a_participant_posts_to_both_sides_without_taking_a_turn() {
         &**fixture,
         Some(&beside),
         full(&thread),
-        NewPost {
-            choices: vec!["8080".into(), "9090".into()],
-            ..post("Pick one")
-        },
+        asking("Pick one", &["8080", "9090"], None),
         Vec::new(),
         Vec::new(),
         Vec::new(),

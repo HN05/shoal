@@ -189,7 +189,6 @@ pub(super) fn resolving(
     }
     Ok(Resolving {
         outcome,
-        choice: data.choose,
         of: data.of,
         reason: data.reason,
         issue: data.issue.map(|issue| issue.to_string()),
