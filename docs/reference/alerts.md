@@ -92,7 +92,7 @@ code, or a note to run `shoal stop` when it left processes behind), an
 agent's failed [turn-state report](agents.md#agent-state), [agent queue](queue.md)
 starts and failures, [runner](ci.md#runner) failures, [seed build](setup.md#seed-builds)
 failures, [shared caches](setup.md#shared-caches) it emptied, a
-[sleep inhibitor](machine.md#keeping-the-machine-awake) that failed, and workspaces it
+[sleep inhibitor](machine.md#sleep-inhibitor) that failed, and workspaces it
 removed or retained on its own through PR, merge, or idle cleanup, automatic
 cleanup that starts failing, a workspace config file it ignores, a directory
 whose file access stalled, and, when the daemon starts or reloads its config,

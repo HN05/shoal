@@ -257,7 +257,7 @@ machine cannot remove raises a `space_conflict` alert naming the error and
 
 A machine joined to a hub hands its spaces over as it shuts down, whether
 it is `always_on` or `intermittent`, and under
-[`keep_awake = "handover"`](machine.md#keeping-the-machine-awake) those with something
+[`keep_awake = "handover"`](machine.md#handing-work-over) those with something
 to do once its user walks away or [pauses it](machine.md#pausing-a-machine); a machine
 in no hub keeps its spaces, and so does the hub's own until it is paused. Once the stop before the shutdown saved its agents, it
 sends the hub the final package of every workspace whose worktree is ready,
@@ -427,7 +427,7 @@ do, stays on your machine. The hub places it from what each connected
 machine last reported with its spaces: the origins of its repositories, its
 `max_heavy_agents`, the heavy agents its admission would start now, the
 memory new work may use, the heavy agents waiting in its queue and whether
-its user walked away while its [`keep_awake`](machine.md#keeping-the-machine-awake)
+its user walked away while its [`keep_awake`](machine.md#walking-away)
 admits nothing new then, or [paused it](machine.md#pausing-a-machine), which
 `hub ls --json` shows as `capacity`. A start that finds the machine full
 meanwhile waits in its queue there; placement never moves a space once it
