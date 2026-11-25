@@ -259,3 +259,35 @@ async fn a_release_for_a_request_holding_the_simulators_lock_never_waits_on_it()
         .await
         .expect("the release waited on the lock its request holds");
 }
+
+/// An asleep agent keeps its permit with no end and its simulator until it
+/// has slept its limit; an agent that is not asleep keeps nothing to show.
+#[tokio::test]
+async fn an_asleep_agent_keeps_its_permit_and_its_simulator_until_its_limit() {
+    let fixture = Fixture::new(POOL, "").await;
+    let space = fixture.workspace.id.clone();
+    acquire_permit(&fixture, "permit", &space).await;
+    fixture.lease_simulator("sim", agent(&space)).await;
+    let kept = || fixture.leases.kept_by(&fixture.daemon, &space);
+    assert_eq!(kept().await.unwrap(), []);
+
+    let keeps = Duration::from_secs(30 * 60);
+    let asleep = sleeper(&space, Duration::ZERO, keeps);
+    let since = asleep.since;
+    *fixture.daemon.sleepers.lock().unwrap() = vec![asleep];
+
+    let mut kept = kept().await.unwrap();
+    kept.sort_by_key(|kept| kept.kind.to_string());
+    let lease = |kind, name: &str, until| KeptLease {
+        kind,
+        name: Some(name.into()),
+        until,
+    };
+    assert_eq!(
+        kept,
+        [
+            lease(KeptKind::Resource, "lock", None),
+            lease(KeptKind::Simulator, "sim", Some(since + keeps)),
+        ]
+    );
+}

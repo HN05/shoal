@@ -524,45 +524,6 @@ async fn a_simulator_release_a_lifecycle_operation_holds_off_waits() {
     assert_eq!(Reason::of(&error), Some(Reason::NotReady), "{error:#}");
 }
 
-/// A release decided for an agent's lease leaves it alone once the user
-/// has taken it over since.
-#[tokio::test]
-async fn a_release_decided_for_an_agent_leaves_a_lease_the_user_took_over_since() {
-    let fixture = Fixture::new(POOL).await;
-    let (_, caller) = fixture.agent().await;
-    let agent = fixture.its_agent();
-    fixture.acquire("permit", Some(&caller)).await;
-    fixture.lease_simulator("sim", agent.clone()).await;
-    let manager = &fixture.manager;
-    fixture.acquire("permit", None).await;
-    (manager
-        .leases
-        .give_simulator_lease_to_user(&fixture.workspace.id, "sim"))
-    .await
-    .unwrap();
-
-    let selector = fixture.selector();
-    let permit = manager.leases.release_resource_held_by(
-        &**manager,
-        &selector,
-        "lock".into(),
-        "permit".into(),
-        Some(&agent),
-    );
-    permit.await.unwrap();
-    let sim =
-        manager
-            .leases
-            .release_simulator_held_by(&**manager, &selector, "sim".into(), Some(&agent));
-    sim.await.unwrap();
-
-    assert_eq!(
-        fixture.permits().await,
-        [self::permit("permit", &Acquirer::User)]
-    );
-    assert_eq!(fixture.simulators().await, ["sim"]);
-}
-
 /// Releasing an ended agent's leases is not use of its workspace, so idle
 /// cleanup keeps counting from when the agent last worked.
 #[tokio::test]

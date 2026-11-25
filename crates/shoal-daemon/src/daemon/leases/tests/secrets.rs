@@ -147,34 +147,6 @@ async fn written(
 }
 
 #[tokio::test]
-async fn a_written_secret_reaches_a_process_that_may_fetch_it() -> Result<()> {
-    let (_temp, manager, caller) = setup().await;
-    let value = Value::Written("s3cret".into());
-    configure_value(&manager, value.clone(), Lifetime::Workspace);
-    let scoped = Some(&caller);
-
-    assert_eq!(written(&manager, scoped, "OPEN", &value).await?, "s3cret");
-    assert!(written(&manager, scoped, "GATED", &value).await.is_err());
-    // A launch that read another value is told to restart.
-    let other = Value::Written("earlier".into());
-    assert!(written(&manager, scoped, "OPEN", &other).await.is_err());
-
-    let request = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
-    (manager.coordination)
-        .decide_approval(
-            &*manager,
-            request.number,
-            true,
-            None,
-            Default::default(),
-            None,
-        )
-        .await?;
-    assert_eq!(written(&manager, scoped, "GATED", &value).await?, "s3cret");
-    Ok(())
-}
-
-#[tokio::test]
 async fn the_daemon_reads_no_secret_its_process_reads_itself() -> Result<()> {
     let (_temp, manager, _) = setup().await;
     let value = Value::Cmd {

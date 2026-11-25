@@ -108,3 +108,42 @@ async fn a_failing_release_hook_keeps_the_permit_as_the_users_and_tells_the_user
             .contains("shoal release resource lock --name agent --space 1")
     );
 }
+
+/// A release decided for an agent's lease leaves it alone once the user
+/// has taken it over since.
+#[tokio::test]
+async fn a_release_decided_for_an_agent_leaves_a_lease_the_user_took_over_since() {
+    let fixture = Fixture::new(POOL, "").await;
+    let space = fixture.workspace.id.clone();
+    let its_agent = Acquirer::Agent {
+        space_id: space.clone(),
+    };
+    acquire(&fixture, "permit", Some(&agent(&space))).await;
+    fixture.lease_simulator("sim", its_agent.clone()).await;
+    acquire(&fixture, "permit", None).await;
+    let leases = &fixture.leases;
+    leases
+        .give_simulator_lease_to_user(&space, "sim")
+        .await
+        .unwrap();
+
+    let selector = fixture.selector();
+    let permit = leases.release_resource_held_by(
+        &fixture.daemon,
+        &selector,
+        "lock".into(),
+        "permit".into(),
+        Some(&its_agent),
+    );
+    permit.await.unwrap();
+    let sim = leases.release_simulator_held_by(
+        &fixture.daemon,
+        &selector,
+        "sim".into(),
+        Some(&its_agent),
+    );
+    sim.await.unwrap();
+
+    assert_eq!(permits(&fixture).await, [("permit".into(), Acquirer::User)]);
+    assert_eq!(fixture.simulators().await, ["sim"]);
+}

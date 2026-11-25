@@ -141,36 +141,3 @@ async fn the_users_request_takes_from_any_asleep_agent() {
     assert!(granted);
     assert_eq!(fixture.permits().await, []);
 }
-
-/// An asleep agent keeps its permit with no end and its simulator until it
-/// has slept its limit; an agent that is not asleep keeps nothing to show.
-#[tokio::test]
-async fn an_asleep_agent_keeps_its_permit_and_its_simulator_until_its_limit() {
-    use shoal_protocol::model::{KeptKind, KeptLease};
-    let fixture = Fixture::new(&format!("{POOL}[sleep]\nkeep_leases_minutes = 30\n")).await;
-    let (execution, caller) = fixture.agent().await;
-    fixture.acquire("permit", Some(&caller)).await;
-    fixture.lease_simulator("sim", fixture.its_agent()).await;
-    let (manager, id) = (&fixture.manager, &fixture.workspace.id);
-    let kept = || manager.leases.kept_by(&**manager, id);
-    assert_eq!(kept().await.unwrap(), []);
-
-    let since = UnixTime::from_seconds(UnixTime::now().seconds());
-    fixture.sleep_since(&execution, since).await;
-
-    let mut keeps = kept().await.unwrap();
-    keeps.sort_by_key(|kept| kept.kind.to_string());
-    let lease = |kind, name: &str, until| KeptLease {
-        kind,
-        name: Some(name.into()),
-        until,
-    };
-    let limit = since + Duration::from_secs(30 * 60);
-    assert_eq!(
-        keeps,
-        [
-            lease(KeptKind::Resource, "lock", None),
-            lease(KeptKind::Simulator, "sim", Some(limit)),
-        ]
-    );
-}

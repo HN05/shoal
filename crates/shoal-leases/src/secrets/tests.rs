@@ -1,6 +1,7 @@
 use super::*;
 use crate::stand_in::Fixture;
 use shoal_protocol::approvals::DecisionStatus;
+use shoal_protocol::config::value::Value;
 
 /// A repository with a gated and an open secret, each read by `command`.
 fn secrets(command: &str) -> String {
@@ -112,5 +113,43 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
     let release = || leases.release_secret(&fixture.daemon, &selector, "GATED".into());
     release().await?;
     assert!(release().await.is_err(), "nothing is left to release");
+    Ok(())
+}
+
+/// What `caller` reads for the secret `name`, as a launch resolved
+/// `value`.
+async fn readable(
+    fixture: &Fixture,
+    caller: Option<&Caller>,
+    name: &str,
+    value: &Value,
+) -> Result<Value> {
+    let source = SecretSpecification {
+        value: value.recorded(),
+        tools: vec!["agent-browser".into()],
+    };
+    let (leases, selector) = (&fixture.leases, fixture.selector());
+    let secret = leases.readable_secret(&fixture.daemon, &selector, name.into(), source, caller);
+    Ok(secret.await?.value)
+}
+
+#[tokio::test]
+async fn a_written_secret_reaches_a_process_that_may_fetch_it() -> Result<()> {
+    let written = "[secrets.GATED]\nvalue = 's3cret'\ntools = ['agent-browser']\nrequires_approval = true\n\
+         [secrets.OPEN]\nvalue = 's3cret'\ntools = ['agent-browser']\n";
+    let fixture = Fixture::new("", written).await;
+    let caller = Caller::of_space(fixture.workspace.id.clone());
+    let (scoped, value) = (Some(&caller), Value::Written("s3cret".into()));
+
+    assert_eq!(readable(&fixture, scoped, "OPEN", &value).await?, value);
+    assert!(readable(&fixture, scoped, "GATED", &value).await.is_err());
+    // A launch that read another value is told to restart.
+    let other = Value::Written("earlier".into());
+    assert!(readable(&fixture, scoped, "OPEN", &other).await.is_err());
+
+    pending(request(&fixture, scoped, "GATED", Some("sign in")).await?);
+    let target = Target::Secret("GATED".into());
+    (fixture.records).decide(&target, "GATED", DecisionStatus::Approved);
+    assert_eq!(readable(&fixture, scoped, "GATED", &value).await?, value);
     Ok(())
 }
