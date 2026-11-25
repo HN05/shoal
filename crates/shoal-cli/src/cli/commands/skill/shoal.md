@@ -116,7 +116,8 @@ queue entry. The entry waits while the daemon creates the worktree and runs
 setup. Until the worktree exists, commands that read it refuse the workspace.
 `--wait` returns once preparation ends.
 
-When preparation fails, your agent hears of it, or else the user.
+When preparation fails, the agent of the nearest space above with an agent
+hears of it, or else the user.
 `shoal setup <space>` retries it, and `shoal rm <space>` removes the space.
 When an agent fails to start, `shoal queue` and `shoal inbox` show its entry
 as `failed`, with its error. `shoal resume <space>` queues it again.
@@ -129,7 +130,8 @@ space's priority, at most your own space's.
 
 `--add-blocker <space|queued agent|issue>`, repeatable, holds the agent until
 that work is done. A bare number is an issue. Select a space by its ID and a
-queued agent by its entry's ID. The new workspace waits as `preparing`, then
+queued agent by its entry's ID. An issue's agent also waits for the issues its
+forge records as blocking it. The new workspace waits as `preparing`, then
 starts on the done workspace's branch. `blockers` lists what still blocks the
 agent.
 
@@ -580,8 +582,10 @@ Shoal leaves out what the space itself did through Shoal. Activity from before
 an item was linked, or before a new agent session started, is not reported;
 `shoal view` shows it.
 
-Where `[pr] watch_merge_runs` is on, a merge into the default branch also
-links that commit's CI runs on the default branch as related. Shoal reports
+Where `[pr] watch_merge_runs` is on, the space's own merge into the default
+branch also links that commit's CI runs on the default branch as related. Its
+own merge is the merge of a PR linked as assigned or opened, or a local
+`shoal merge` that pushes its branch. Shoal reports
 their ends, and they keep a done space until they finish.
 
 Hooks deliver activity to Claude Code, and to a workspace's Codex in a place
