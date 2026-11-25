@@ -125,6 +125,20 @@ the global file. Shoal saves the result only when it is valid on its own and
 under this machine's global file. An edit of the global file checks it over the
 shared config in turn. Only the user's own terminal edits the shared config.
 
+## Replace or reload the global config
+
+`config install <name>` replaces the whole global file with a packaged
+template. `config reset` installs `default`. Both move the current file to
+`config.toml.backup` without asking, replacing an older backup. An unknown name
+fails and changes neither file. Shoal copies a template, so a package upgrade
+leaves an installed file's edits alone. Neither command needs a daemon, and a
+running daemon applies the new file at once.
+
+After you edit the global or shared file by hand, run `config reload`. The
+daemon then rereads both files and keeps its running agents and leases. An
+invalid file leaves its previous settings in place. Scoped processes may run
+`config reload`.
+
 ## Store repository config outside Git
 
 ```sh

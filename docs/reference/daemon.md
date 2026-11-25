@@ -60,18 +60,8 @@ the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
 `ZDOTDIR` when set) contains an active initialization command, and names the
 default terminal host when it is not installed, suggesting one to install or an
 installed host to set as `terminal.default_host`, and suggests `shoal skill
-install` when no AI tool has Shoal's skill. `shoal config
-install <name>` replaces the entire global file with a packaged template;
-`shoal config reset` installs `default`. Both move the current file to
-`config.toml.backup` (replacing an older backup) without asking. Templates are
-copied, so package upgrades leave installed edits alone. Unknown names fail
-without changing either file; installation needs no daemon. `shoal config` edits,
-installs and resets apply to a running daemon at once; after editing the file by
-hand, run `shoal config reload`, which scoped processes may also run and which
-rereads the shared config too. Reloading
-keeps running agents and leases, and an invalid file leaves the daemon's previous
-settings in place. [Configuration](../../crates/shoal-cli/src/cli/commands/configuration/reference.md) describes the config files, their
-layers and every option. Setup preserves compatible
+install` when no AI tool has Shoal's skill. [`shoal config`](config.md)
+edits, replaces and reloads the file. Setup preserves compatible
 daemons and commands until restart; incompatible daemons restart automatically.
 Changing the service state directory requires stopping it with its existing
 `--state-dir` first.
