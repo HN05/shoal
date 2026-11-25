@@ -45,7 +45,7 @@ including after upgrades. The function lets `start` and `cd` enter workspaces
 and moves you out of a removed one. If cleanup removes your directory while an
 agent runs, the shell returns to the nearest surviving parent after exit or at
 the next prompt, preserving the exit status. `shoal cd` always opens fzf, `shoal cd
-<name>` goes directly, and `shoal cd -` switches back to the workspace it last
+<space>` goes directly, and `shoal cd -` switches back to the workspace it last
 left or entered. Scoped agents cannot navigate outside their worktree. Without
 the function, Shoal prints the destination and, in an interactive terminal,
 explains how to load the integration; `--json` prints the path and navigates

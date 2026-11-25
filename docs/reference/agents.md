@@ -25,7 +25,7 @@ or for an agent that starts detached its queue entry.
 
 `shoal start --in [WORKSPACE]` in a mode that starts in a workspace, `worker`
 without a terminal, starts the agent of that existing, ready workspace instead
-of a new space: the named workspace, by number, name or ID, else the current
+of a new space: the named workspace, by number or ID, else the current
 one, else a picker. Nothing is created: the workspace keeps its place in the
 tree, its name and its links, whose activity reaches the new agent, and the
 start reports its record and the agent's queue entry as a new workspace's

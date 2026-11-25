@@ -313,7 +313,7 @@ shoal unlink pr 43 assigned   # Cancel one assigned PR
 shoal unlink pr assigned      # Cancel assigned PRs
 ```
 
-For workspace actions, omit the name to use your scoped or current workspace;
+For workspace actions, omit the space to use your scoped or current workspace;
 outside one, choose from the interactive picker or pass a target for `--json`
 and noninteractive calls. Bare `shoal cd` always opens a picker. `shoal cd -`,
 `shoal attach -` and other commands that open, show or run something in a
