@@ -426,7 +426,8 @@ repository, registered or not. An agent reads other repositories' items;
 changing them is the user's job.
 
 `issue ls` and `pr ls` match their words both by keyword and by meaning by
-default; `--match` picks one way. `shoal pr revert [<number>]` opens a PR that
+default, or by keyword alone on a forge that cannot search by meaning.
+`--match` picks one way. `shoal pr revert [<number>]` opens a PR that
 undoes a merged one.
 
 Some of these commands follow a [permitted action](#permitted-actions):
@@ -932,7 +933,7 @@ in a new one. It refuses while another command runs in the workspace.
 below, and resumes its agents; `--no-resume` leaves them for `shoal resume`.
 An agent restores a space whose parent its scope reaches. When a space's
 `intermittent` machine is offline, `restore <space>` takes the space over
-here, from the copy the hub keeps.
+here, from the copy the hub keeps, as the space's `admin` permission allows.
 
 `cleanup spaces` removes every space that automatic cleanup would remove,
 without waiting for its idle delay. `--dry-run` lists those, and says why each
@@ -1179,7 +1180,9 @@ Installing, starting, stopping and restarting the daemon, `shoal update`, and
 space's `daemon` [permission](#permitted-actions). Stopping the daemon stops
 every agent.
 
-While the daemon restarts, agents' `shoal` commands fail.
+While a stop or restart waits for the daemon's own work, commands that start
+more work, such as `shoal rm`, wait and run on the next daemon. Agents' other
+`shoal` commands fail while it restarts.
 `shoal config reload` applies the config on disk without stopping anything.
 An invalid file leaves the previous settings in place.
 
