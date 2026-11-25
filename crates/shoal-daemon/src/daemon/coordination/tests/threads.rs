@@ -341,45 +341,6 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
     assert!(!kept.posts.iter().any(|post| post.post.text == "8080"));
 }
 
-#[tokio::test]
-async fn the_user_s_threads_list_past_larger_newer_threads() {
-    let tree = tree().await;
-    let manager = &tree.manager;
-    let asked = open(manager, None, Some(&tree.beside)).await;
-    send(manager, Some(&caller(&tree.beside)), &asked, "Which port?").await;
-    // Newer threads that wait for spaces fill a response on their own.
-    let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN);
-    for space in [&tree.child, &tree.sibling] {
-        let thread = open(manager, None, Some(space)).await;
-        while (manager.coordination.post_to_thread(
-            &**manager,
-            None,
-            full(&thread),
-            post(&long),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        ))
-        .await
-        .is_ok()
-        {}
-    }
-    let open = shoal_protocol::threads::ThreadState::Open;
-    let all = manager
-        .coordination
-        .threads(&**manager, None, None, open, false)
-        .await
-        .unwrap();
-    assert!(!all.threads.iter().any(|thread| thread.id == asked.id));
-    let mine = manager
-        .coordination
-        .threads(&**manager, None, None, open, true)
-        .await
-        .unwrap();
-    let numbers: Vec<_> = mine.threads.iter().map(|thread| thread.number).collect();
-    assert_eq!(numbers, [asked.number]);
-}
-
 /// Remove the space `id`, its unsaved work and all.
 async fn remove(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) {
     use crate::removal::{InspectionPolicy, UnsavedWork};
@@ -877,32 +838,6 @@ async fn cancelling_a_pending_review_deletes_its_threads() {
             .await
             .is_err()
     );
-}
-
-#[tokio::test]
-async fn a_thread_that_holds_its_posts_reaches_nobody_and_its_holder_takes_no_side() {
-    let tree = tree().await;
-    let manager = &tree.manager;
-    let thread = open(manager, None, Some(&tree.child)).await;
-    let id = thread.id;
-    (manager.store)
-        .write(move |tx| Ok(tx.execute("UPDATE threads SET held=1 WHERE id=?1", [id])?))
-        .await
-        .unwrap();
-    let posted = send(manager, None, &thread, "Call it retries").await;
-    assert!(posted.held);
-    assert!(alerts(manager, &tree.child).await.is_empty());
-    let child = caller(&tree.child);
-    let replied = manager.coordination.post_to_thread(
-        &**manager,
-        Some(&child),
-        full(&thread),
-        post("Done"),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    );
-    assert!(replied.await.is_err());
 }
 
 #[tokio::test]

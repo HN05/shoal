@@ -23,3 +23,6 @@ pub(super) fn versioned(code: &[NewCode]) -> BTreeMap<RepositoryId, BTreeSet<Spa
     }
     versioned
 }
+
+#[cfg(test)]
+mod tests;

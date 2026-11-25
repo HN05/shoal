@@ -16,16 +16,21 @@ use crate::{
 
 /// A workspace `parent` whose agent runs, two workspaces below it whose
 /// agents run, and a workspace beside it without one.
-struct Tree {
-    fixture: Fixture,
-    parent: Workspace,
-    child: Workspace,
-    sibling: Workspace,
-    beside: Workspace,
+pub(crate) struct Tree {
+    pub(crate) fixture: Fixture,
+    pub(crate) parent: Workspace,
+    pub(crate) child: Workspace,
+    pub(crate) sibling: Workspace,
+    pub(crate) beside: Workspace,
 }
 
-async fn tree() -> Tree {
+/// The tree, each workspace in a Git repository, where the code a thread
+/// points at is followed.
+pub(crate) async fn tree() -> Tree {
     let fixture = Fixture::new().await;
+    for name in ["parent", "child", "sibling", "beside"] {
+        shoal_core::test_support::repository(fixture.root.path(), name);
+    }
     let parent = fixture.workspace("parent", None).await;
     let child = fixture.workspace("child", Some(&parent.id)).await;
     let sibling = fixture.workspace("sibling", Some(&parent.id)).await;
@@ -44,22 +49,26 @@ async fn tree() -> Tree {
     }
 }
 
-fn caller(workspace: &Workspace) -> Caller {
+pub(crate) fn caller(workspace: &Workspace) -> Caller {
     Caller::of_space(workspace.id.clone())
 }
 
-fn post(text: &str) -> NewPost {
+pub(crate) fn post(text: &str) -> NewPost {
     NewPost {
         text: text.into(),
         ..NewPost::default()
     }
 }
 
-fn full(thread: &Thread) -> ThreadNumber {
+pub(crate) fn full(thread: &Thread) -> ThreadNumber {
     ThreadNumber::Full(thread.number)
 }
 
-async fn open(fixture: &Fixture, from: Option<&Caller>, to: Option<&Workspace>) -> Thread {
+pub(crate) async fn open(
+    fixture: &Fixture,
+    from: Option<&Caller>,
+    to: Option<&Workspace>,
+) -> Thread {
     let to = to.map(|workspace| SpaceSelector::id(&workspace.id));
     fixture
         .coordination
@@ -74,7 +83,12 @@ async fn open(fixture: &Fixture, from: Option<&Caller>, to: Option<&Workspace>) 
         .unwrap()
 }
 
-async fn send(fixture: &Fixture, from: Option<&Caller>, thread: &Thread, text: &str) -> Thread {
+pub(crate) async fn send(
+    fixture: &Fixture,
+    from: Option<&Caller>,
+    thread: &Thread,
+    text: &str,
+) -> Thread {
     fixture
         .coordination
         .post_to_thread(
@@ -91,7 +105,7 @@ async fn send(fixture: &Fixture, from: Option<&Caller>, thread: &Thread, text: &
 }
 
 /// The alerts about threads queued for `workspace`'s agent.
-async fn alerts(fixture: &Fixture, workspace: &Workspace) -> Vec<String> {
+pub(crate) async fn alerts(fixture: &Fixture, workspace: &Workspace) -> Vec<String> {
     (fixture.queued(&workspace.id).await.into_iter())
         .filter(|message| message.contains("hread"))
         .collect()
@@ -907,4 +921,70 @@ async fn an_answer_run_posts_for_shoal_only_in_the_open_thread_it_answers() {
         Vec::new(),
     );
     assert!(resolved.await.is_err());
+}
+
+#[tokio::test]
+async fn the_user_s_threads_list_past_larger_newer_threads() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let asked = open(fixture, None, Some(&tree.beside)).await;
+    send(fixture, Some(&caller(&tree.beside)), &asked, "Which port?").await;
+    // Newer threads that wait for spaces fill a response on their own.
+    let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN);
+    for space in [&tree.child, &tree.sibling] {
+        let thread = open(fixture, None, Some(space)).await;
+        while (fixture.coordination.post_to_thread(
+            &**fixture,
+            None,
+            full(&thread),
+            post(&long),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ))
+        .await
+        .is_ok()
+        {}
+    }
+    let open = shoal_protocol::threads::ThreadState::Open;
+    let all = fixture
+        .coordination
+        .threads(&**fixture, None, None, open, false)
+        .await
+        .unwrap();
+    assert!(!all.threads.iter().any(|thread| thread.id == asked.id));
+    let mine = fixture
+        .coordination
+        .threads(&**fixture, None, None, open, true)
+        .await
+        .unwrap();
+    let numbers: Vec<_> = mine.threads.iter().map(|thread| thread.number).collect();
+    assert_eq!(numbers, [asked.number]);
+}
+
+#[tokio::test]
+async fn a_thread_that_holds_its_posts_reaches_nobody_and_its_holder_takes_no_side() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let thread = open(fixture, None, Some(&tree.child)).await;
+    let id = thread.id;
+    fixture
+        .store()
+        .write(move |tx| Ok(tx.execute("UPDATE threads SET held=1 WHERE id=?1", [id])?))
+        .await
+        .unwrap();
+    let posted = send(fixture, None, &thread, "Call it retries").await;
+    assert!(posted.held);
+    assert!(alerts(fixture, &tree.child).await.is_empty());
+    let child = caller(&tree.child);
+    let replied = fixture.coordination.post_to_thread(
+        &**fixture,
+        Some(&child),
+        full(&thread),
+        post("Done"),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    assert!(replied.await.is_err());
 }
