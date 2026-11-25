@@ -39,10 +39,10 @@ installation, which Homebrew updates.
 
 ## After an update
 
-A managed daemon notices the new binary and restarts on it once the
-[work it runs itself](daemon.md#daemon-restarts) is done. Until then, commands
-of the new release wait for it, up to ten minutes. `shoal daemon restart`
-applies the update at once.
+A managed daemon notices the new binary and restarts on it once no daemon
+operation, setup or merge runs. Until then, commands of the new release wait
+for it, up to ten minutes. `shoal daemon restart` applies the update at once,
+after the [work the daemon runs itself](daemon.md#daemon-restarts).
 
 Tracked agents and commands keep running while the daemon restarts, and
 reattach to the next one. Followed event and alert streams and item waits
@@ -50,8 +50,8 @@ reconnect too, and continue in the new release when its protocol differs.
 
 The state directory and installed skills live outside the package and survive
 an update. The next `shoal` command
-[updates the installed skills](#skill-updates). Reload the
-[shell integration](#shell-integration) in open terminals.
+[updates the installed skills](#skill-updates). Open terminals need the
+[shell integration](#shell-integration) loaded again.
 
 A daemon refuses a state database that a release before v0.21.0 wrote, and
 changes nothing in it. To upgrade from such a release, start v0.21.0 once
