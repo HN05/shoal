@@ -17,6 +17,7 @@ impl Surface {
     /// must name one of `attached`, the names of the files posted with it.
     pub fn checked(mut self, attached: &[&str]) -> Result<Self> {
         self.check_size()?;
+        check_characters(&self.0)?;
         self.check_shape()?;
         self.name_catalog();
         self.check_catalog()?;
@@ -175,6 +176,71 @@ impl Surface {
         }
         Ok(())
     }
+}
+
+/// The fields whose text names something, such as a component or an
+/// action, which commands and pickers print as a word.
+const NAMING: &[&str] = &[
+    "id",
+    "name",
+    "child",
+    "children",
+    "trigger",
+    "content",
+    "componentId",
+    "surfaceId",
+    "catalogId",
+    "@catalogId",
+    "@path",
+    "@call",
+];
+
+/// Refuse control characters in any text of `value`, which the terminal
+/// and agents' alerts print as it is: in every key and every name, and in
+/// other text all but the newlines Markdown takes.
+pub(super) fn check_characters(value: &Value) -> Result<()> {
+    check_text(value, false)
+}
+
+/// [`check_characters`] for `value`, a name, or held by one, when `naming`.
+fn check_text(value: &Value, naming: bool) -> Result<()> {
+    match value {
+        Value::String(text) => ensure!(
+            plain(text, !naming),
+            "{} holds a control character{}",
+            serde_json::to_string(text)?,
+            if naming {
+                "; a name takes none, nor a newline"
+            } else {
+                ""
+            }
+        ),
+        Value::Array(values) => {
+            for value in values {
+                check_text(value, naming)?;
+            }
+        }
+        Value::Object(fields) => {
+            for (key, value) in fields {
+                ensure!(
+                    plain(key, false),
+                    "the key {} holds a control character",
+                    serde_json::to_string(key)?
+                );
+                check_text(value, NAMING.contains(&key.as_str()))?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Whether `text` holds no control characters, but newlines where
+/// `newlines` allows them.
+pub(super) fn plain(text: &str, newlines: bool) -> bool {
+    !text
+        .chars()
+        .any(|c| c.is_control() && !(newlines && c == '\n'))
 }
 
 /// The first catalog other than the basic one that `value` names anywhere,

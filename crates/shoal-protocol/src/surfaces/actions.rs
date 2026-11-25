@@ -76,6 +76,11 @@ impl Surface {
     /// data model's. A value is refused unless the action takes it and
     /// its input accepts it.
     pub fn resolve(&self, id: &str, mut values: Map<String, Value>) -> Result<Map<String, Value>> {
+        ensure!(
+            super::checks::plain(id, false),
+            "an action's id holds no control characters"
+        );
+        super::checks::check_characters(&Value::Object(values.clone()))?;
         let Some(action) = self.action(id) else {
             let ids: Vec<String> = self.actions().into_iter().map(|action| action.id).collect();
             match &ids[..] {

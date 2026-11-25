@@ -312,3 +312,27 @@ fn an_action_s_inputs_come_in_the_order_they_render() {
     let keys: Vec<&str> = go.inputs.iter().map(|input| input.key.as_str()).collect();
     assert_eq!(keys, ["b-size", "a-note"]);
 }
+
+#[test]
+fn control_characters_are_refused_but_newlines_in_text() {
+    let escaped = surface(
+        json!([{"id": "root", "component": "Text", "text": "Red \u{1b}[31m"}]),
+        json!({}),
+    );
+    assert!(refusal(escaped, &[]).contains("control character"));
+    let mut named = form();
+    named.0["createSurface"]["components"][4]["action"]["event"]["name"] = json!("sub\nmit");
+    assert!(refusal(named, &[]).contains("a name takes none"));
+    let lines = surface(
+        json!([{"id": "root", "component": "Text", "text": "First\nSecond"}]),
+        json!({}),
+    );
+    lines.checked(&[]).unwrap();
+    let typed = form().resolve("submit", values(&[("name", json!("Ada\u{7}"))]));
+    assert!(typed.unwrap_err().to_string().contains("control character"));
+    assert!(
+        form()
+            .resolve("sub\u{1b}mit", serde_json::Map::new())
+            .is_err()
+    );
+}
