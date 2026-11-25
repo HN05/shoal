@@ -355,3 +355,6 @@ async fn previous_build(layout: &Layout, tip: &CommitId) -> Result<Option<Previo
         changed,
     }))
 }
+
+#[cfg(test)]
+mod tests;

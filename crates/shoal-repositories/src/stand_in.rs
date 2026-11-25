@@ -1,13 +1,16 @@
 //! A stand-in for the rest of the daemon, which the repositories' tests
 //! build the service over: a home with its state directory under a
 //! temporary directory, the global config a test publishes, the workspaces
-//! and chats a test records, no coordinators,
+//! and chats a test records, a host a test may strain, no coordinators,
 //! reviews, runner or agents, no files other subsystems keep, and no forge a
 //! contribution could fork on.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use anyhow::{Context, Result, bail};
@@ -219,13 +222,20 @@ impl Worktree {
     }
 }
 
-/// A daemon whose spaces are those a test records.
+/// A daemon whose spaces are those a test records and whose host is clear
+/// of overload until a test strains it.
 #[derive(Clone, Default)]
 pub(crate) struct StandIn {
     spaces: Arc<Mutex<Vec<Space>>>,
+    strained: Arc<AtomicBool>,
 }
 
 impl StandIn {
+    /// Put the host over its overload thresholds, or clear it.
+    pub(crate) fn strain(&self, strained: bool) {
+        self.strained.store(strained, Ordering::Relaxed);
+    }
+
     /// The recorded space `selector` names.
     fn recorded(&self, selector: &SpaceSelector) -> Option<Space> {
         let spaces = self.spaces.lock().unwrap();
@@ -366,7 +376,7 @@ impl Branches for StandIn {
 
 impl Host for StandIn {
     fn clear_of_overload(&self, _: &[&Path]) -> bool {
-        true
+        !self.strained.load(Ordering::Relaxed)
     }
 }
 
