@@ -399,7 +399,7 @@ the terminal needs. Each action returns to your shell.
 
 The inbox lists what needs you, each item with its workspace:
 
-- threads whose turn is yours, with their [number](threads.md);
+- threads whose turn is yours, with their [number](threads.md#numbers);
 - pending approval requests that no coordinating agent decides, including
   issue [proposals](approvals.md#approval-for-agent-issues-and-prs) whose
   workspace is gone;

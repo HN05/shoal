@@ -219,7 +219,7 @@ these requests, merge requests from a scoped `shoal merge`,
 [proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <space>` lists
 the requests a space made or proposed and those it decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
 `shoal approvals` opens a picker; selecting a pending request or naming its
-[number](threads.md), such as `shoal approvals 3.2`, shows its recorded settings and prompts for `y` to approve or `n` to deny,
+[number](threads.md#numbers), such as `shoal approvals 3.2`, shows its recorded settings and prompts for `y` to approve or `n` to deny,
 case-insensitively; any other input cancels. In the list, Ctrl-A approves
 and Ctrl-D denies the highlighted request without leaving it: the outcome or
 error shows above the key hints and the list updates. JSON and nonterminal output
