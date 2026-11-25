@@ -244,7 +244,7 @@ fn values_given_as_text_take_their_input_type() {
     let resolved = settings.resolve("save", given).unwrap();
     assert_eq!(
         Value::Object(resolved),
-        json!({"notify": true, "volume": 7.0})
+        json!({"notify": true, "volume": 7})
     );
     let loud = settings.resolve("save", values(&[("volume", json!("11"))]));
     assert!(loud.unwrap_err().to_string().contains("from 0 to 10"));

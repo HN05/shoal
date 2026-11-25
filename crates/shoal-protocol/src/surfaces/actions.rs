@@ -268,20 +268,29 @@ impl InputKind {
 }
 
 /// `given`, a number or its text, as the number of the input `key`, within
-/// `min` and `max`.
+/// `min` and `max`: an integer stays one, as a renderer sends it.
 fn number(key: &str, given: &Value, min: Option<f64>, max: Option<f64>) -> Result<Value> {
-    let value = match given {
-        Value::Number(number) => number.as_f64(),
-        Value::String(text) => text.trim().parse().ok(),
+    let number = match given {
+        Value::Number(number) => Some(number.clone()),
+        Value::String(text) => parsed(text.trim()),
         _ => None,
     }
     .with_context(|| format!("{key} takes a number, not {given}"))?;
+    let value = number.as_f64().unwrap_or(f64::NAN);
     ensure!(
         min.is_none_or(|min| value >= min) && max.is_none_or(|max| value <= max),
-        "{key} takes {}, not {value}",
+        "{key} takes {}, not {number}",
         InputKind::Number { min, max }.describe()
     );
-    Ok(serde_json::Number::from_f64(value).map_or(Value::Null, Value::Number))
+    Ok(Value::Number(number))
+}
+
+/// The number `text` spells, an integer where it is one.
+fn parsed(text: &str) -> Option<serde_json::Number> {
+    match text.parse::<i64>() {
+        Ok(integer) => Some(integer.into()),
+        Err(_) => serde_json::Number::from_f64(text.parse().ok()?),
+    }
 }
 
 /// `given`, one option's value or a list of them, as the selection of the
