@@ -56,7 +56,7 @@ class AffectedPackagesTests(unittest.TestCase):
         for path in ("Cargo.lock", ".config/nextest.toml", ".forgejo/workflows/ci.yml",
                      "scripts/affected_packages.py"):
             with self.subTest(path=path):
-                self.assertEqual(WORKSPACE.affected(["docs/design.md", path]), ALL)
+                self.assertEqual(WORKSPACE.affected(["docs/design/overview.md", path]), ALL)
         self.assertEqual(WORKSPACE.affected([".config.toml"]), [])
 
     def test_a_change_every_package_depends_on_selects_all(self):

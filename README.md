@@ -586,7 +586,7 @@ terminals.
 
 ## Development
 
-See [docs/design.md](docs/design.md) for decisions, the [command reference](docs/reference/) for behavior and the [configuration reference](crates/shoal-cli/src/cli/commands/configuration/reference.md) for every option.
+See [the design docs](docs/design/) for decisions, the [command reference](docs/reference/) for behavior and the [configuration reference](crates/shoal-cli/src/cli/commands/configuration/reference.md) for every option.
 Create releases through **Actions → release** ([setup](docs/releases.md)).
 
 Requires Rust at least as new as `package.rust-version` in [Cargo.toml](Cargo.toml)

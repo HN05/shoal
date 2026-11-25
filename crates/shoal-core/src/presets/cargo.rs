@@ -2,7 +2,7 @@
 //! wrapper `RUSTC_WORKSPACE_WRAPPER` names, which keeps the workspace
 //! crates' incremental state usable in every workspace, and the one
 //! `RUSTC_WRAPPER` names, which does the same for `cargo clippy`.
-//! docs/design.md says why they take these flags.
+//! docs/design/repositories.md says why they take these flags.
 use std::path::Path;
 
 use anyhow::Result;

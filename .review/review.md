@@ -2,7 +2,7 @@
 
 Rust CLI plus a local daemon that owns shared state for coding-agent
 workspaces, ports, simulator leases and permits. `AGENTS.md` holds the working
-rules and `docs/design.md` the product decisions; `docs/reference/` documents
+rules and `docs/design/` the product decisions; `docs/reference/` documents
 behavior. When a change touches lifecycle, ownership, resource leases or
 removal, check it against the rule those files state before judging it.
 Repository code audits use [audit.md](audit.md) for inspection instructions

@@ -1,7 +1,8 @@
 # Shoal
 
-Read `docs/design.md` for product decisions and the implementation order. Update it
-when behavior changes, distinguishing decisions from proposals.
+Read the files of `docs/design/` that cover your change for product decisions, and
+`docs/design/overview.md` for the implementation order. Update them when behavior
+changes, distinguishing decisions from proposals.
 
 Read this whole file before you start, in as many reads as it takes: the rules
 for delivering a PR, under Committing near the end, decide when work is done.
@@ -651,7 +652,7 @@ request one; Committing below says which heads a review covers. A draft PR
 gets no review; a request label added while it is a draft is answered when it
 leaves draft.
 `.review/review.md` is its project brief;
-keep it current when a rule here or in `docs/design.md` changes.
+keep it current when a rule here or in `docs/design/` changes.
 Opening a ready PR already requests its review; never add reviewer request labels
 with its opening classification labels. Claude and Codex use independent queues,
 so one of each can run concurrently. Review and audit workflows follow review-bot's
