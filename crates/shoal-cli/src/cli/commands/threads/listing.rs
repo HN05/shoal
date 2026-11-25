@@ -3,7 +3,8 @@
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
     space_names::SpaceSelector,
-    threads::{NewPost, Thread, ThreadNumber, ThreadState},
+    surfaces::SurfaceAction,
+    threads::{Answer, NewPost, Thread, ThreadNumber, ThreadState},
 };
 
 use super::render;
@@ -11,7 +12,7 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
-        ui::{self, Entries, WidthLimit},
+        ui::{self, Answering, Entries, WidthLimit},
     },
     client::threads,
 };
@@ -93,28 +94,59 @@ fn picker_rows(threads: &[Thread]) -> Entries {
         .collect()
 }
 
-/// Show `thread` and post the user's reply: Enter alone takes the
-/// recommendation of the latest post from a side, and cancels without one; Ctrl-C or
-/// end of input cancels.
+/// Show `thread` and post the user's reply: an action of the other side's
+/// latest surface, picked with the values it takes, or a reply in words.
+/// Ctrl-C or end of input cancels.
 async fn reply(ctx: &Context, thread: Thread) -> Result<i32> {
     eprintln!("{}", render::details(&thread, Palette::stderr(ctx.json)));
-    let recommendation =
-        (thread.last_turn()).and_then(|post| post.post.ui.as_ref()?.recommendation());
-    let prompt = match &recommendation {
-        Some(recommendation) => format!("Reply [{recommendation}]"),
-        None => "Reply".to_owned(),
+    let number = ThreadNumber::Full(thread.number);
+    let posted = match answerable(&thread) {
+        Some((post, asked, actions)) => match ui::pick_answer(ctx, &asked, &actions)? {
+            Answering::Action { id, values } => {
+                let answer = Answer {
+                    post: Some(post),
+                    action: id,
+                    values,
+                };
+                threads::answer(&ctx.paths, number, answer, None).await?
+            }
+            Answering::Words(text) => post_words(ctx, number, text).await?,
+        },
+        None => {
+            let text = ui::input_or_cancel(ctx, "Reply")?.ok_or(ui::SelectionCanceled)?;
+            post_words(ctx, number, text).await?
+        }
     };
-    let response = ui::read_input(ctx, &prompt)?.ok_or(ui::SelectionCanceled)?;
-    let text = match (response.as_str(), recommendation) {
-        ("", Some(recommendation)) => recommendation,
-        ("", None) => return Err(ui::SelectionCanceled.into()),
-        _ => response,
-    };
+    ctx.emit(&format!("Replied in thread {}.", posted.number), &posted)?;
+    Ok(0)
+}
+
+/// The post the user answers in `thread`, the other side's latest surface,
+/// when it offers actions: its ID, what it asks, its text and surface, and
+/// its actions.
+fn answerable(thread: &Thread) -> Option<(i64, String, Vec<SurfaceAction>)> {
+    let other = thread.last_turn()?.side?;
+    let post = thread.surface_from(other)?;
+    let surface = post.post.ui.as_ref()?;
+    let actions = surface.actions();
+    let asked = std::iter::once(format!("{}: {}", post.author(), post.post.text))
+        .chain(
+            surface
+                .text_lines(None)
+                .into_iter()
+                .map(|line| format!("  {line}")),
+        )
+        .collect::<Vec<_>>()
+        .join("\n");
+    (!actions.is_empty()).then_some((post.id, asked, actions))
+}
+
+/// Post `text` in the thread `number` as the user.
+async fn post_words(ctx: &Context, number: ThreadNumber, text: String) -> Result<Thread> {
     let post = NewPost {
         text,
         ..NewPost::default()
     };
-    let number = ThreadNumber::Full(thread.number);
     let posted = threads::post(
         &ctx.paths,
         number,
@@ -124,7 +156,5 @@ async fn reply(ctx: &Context, thread: Thread) -> Result<i32> {
         Vec::new(),
         None,
     );
-    let posted = posted.await?;
-    ctx.emit(&format!("Replied in thread {}.", posted.number), &posted)?;
-    Ok(0)
+    posted.await
 }

@@ -1329,15 +1329,7 @@ esac
         &fixture,
         "asker",
         "Which database?",
-        &[
-            "Postgres or SQLite?",
-            "--choice",
-            "Postgres",
-            "--choice",
-            "SQLite",
-            "--recommend",
-            "SQLite",
-        ],
+        &["Postgres or SQLite?"],
     );
     let id = asker["id"].as_str().unwrap();
     let listed = fixture.run(&["internal", "menu-rows", "inbox"]);
@@ -1485,8 +1477,6 @@ esac
     );
     assert!(args.contains("internal menu-next"), "{args}");
     assert!(rows.contains("Which database?"), "{rows}");
-    // The thread offers its recommendation as the default reply.
-    assert!(transcript.contains("[SQLite]"), "{transcript}");
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     // A row Tab loaded is chosen like the first view's: Enter on a
     // notification enters its workspace.

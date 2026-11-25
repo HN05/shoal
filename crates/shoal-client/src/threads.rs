@@ -8,7 +8,8 @@ use shoal_protocol::{
     protocol::ThreadMethod,
     space_names::SpaceSelector,
     threads::{
-        Listing, NewPost, Resolving, Thread, ThreadKind, ThreadNumber, ThreadOpening, ThreadState,
+        Answer, Listing, NewPost, Resolving, Thread, ThreadKind, ThreadNumber, ThreadOpening,
+        ThreadState,
     },
 };
 
@@ -53,6 +54,23 @@ pub async fn post(
         from,
     };
     Ok(*request::<Box<Thread>>(daemon, method).await?)
+}
+
+/// Answer a surface in the thread `thread`, acting as the space `from`,
+/// with `answer`: an action of the other side's latest surface and the
+/// values entered for its inputs. Its post's text is the action's label.
+pub async fn answer(
+    daemon: &impl Daemon,
+    thread: ThreadNumber,
+    answer: Answer,
+    from: Option<SpaceSelector>,
+) -> Result<Thread> {
+    let answering = NewPost {
+        answer: Some(answer),
+        ..NewPost::default()
+    };
+    let (attachments, code, changes) = (Vec::new(), Vec::new(), Vec::new());
+    post(daemon, thread, answering, attachments, code, changes, from).await
 }
 
 /// Mark the turn of `space`'s calling agent as posting its final message in

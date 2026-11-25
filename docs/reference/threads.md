@@ -336,12 +336,16 @@ It lists your own space's by default, or every thread from your terminal.
 that fit one response and counts the older ones it leaves out.
 
 On a terminal, `thread list` opens a picker. Choosing a thread shows its
-posts, as `shoal view thread` does. When its turn is yours, a `Reply` prompt
-follows:
+posts, as `shoal view thread` does. When its turn is yours and the other
+side's latest surface offers actions, a picker offers them under that post:
 
-- Enter takes the latest post's recommendation, shown in brackets.
-- Anything typed is the reply as written.
+- The recommended action comes first, where the picker starts.
+- Picking an action asks for each value it takes, in the order its inputs
+  show, picking among an input's options.
+- Picking the reply in words asks for the reply.
 - Ctrl-C leaves.
+
+Without such a surface, a `Reply` prompt takes the reply as written.
 
 With `-p`, `--json` or redirected input or output, listing and viewing print
 records without prompting.

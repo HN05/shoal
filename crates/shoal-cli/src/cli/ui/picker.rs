@@ -65,8 +65,8 @@ pub fn pick(ctx: &Context, prompt: &str, entries: Entries) -> Result<String> {
     Ok(run_picker(ctx, prompt, entries, Vec::new(), false)?.id)
 }
 
-/// [`pick`] under `header`, a line above the entries that names what the
-/// user cannot pick.
+/// [`pick`] under `header`, lines above the entries, such as what they
+/// answer or what the user cannot pick.
 pub fn pick_with_header(
     ctx: &Context,
     prompt: &str,

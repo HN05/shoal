@@ -16,6 +16,8 @@
 //!   [`can_pick`] tells whether one can run, for choices with a usual answer.
 //! - [`keys`]: the keys pickers bind ([`Key`]), which only this module
 //!   spells as fzf names.
+//! - [`answers`]: an answer to a thread post's surface, one of its actions
+//!   with the values it takes, or a reply in words ([`pick_answer`]).
 //! - [`linked`]: one of the issues and PRs a space links, to view or open in
 //!   the browser ([`pick_linked`]).
 //! - [`modes`]: the mode a start takes, named or picked among the modes
@@ -45,6 +47,7 @@
 //! [`require_one_of`]. A new kind of input or choice
 //! belongs here, built on these operations, so the next command can use it too.
 mod acting;
+mod answers;
 mod elsewhere;
 mod fzf;
 mod keys;
@@ -61,6 +64,7 @@ mod views;
 mod workspaces;
 
 pub use acting::Acting;
+pub use answers::{Answering, pick_answer};
 use elsewhere::elsewhere_entries;
 pub use keys::Key;
 pub use linked::pick_linked;

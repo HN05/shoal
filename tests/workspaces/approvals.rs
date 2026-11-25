@@ -217,7 +217,7 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
             "{details}"
         );
         assert!(
-            !transcript.contains("[y/n]") && !transcript.contains("[SQLite]:"),
+            !transcript.contains("[y/n]") && !transcript.contains("Reply:"),
             "{transcript}"
         );
     }
@@ -401,14 +401,14 @@ fn approval_list_shortcuts_find_requests_of_workspaces_below_the_caller() {
     assert!(stderr.contains("routed to them"), "{stderr}");
 }
 
-/// The text of the latest post of the thread `number`.
-fn last_post(fixture: &Fixture, number: &str) -> Value {
+/// The latest post of the thread `number`.
+fn latest(fixture: &Fixture, number: &str) -> Value {
     let posts = fixture.ok(&["view", "thread", number])["posts"].clone();
-    posts.as_array().unwrap().last().unwrap()["text"].clone()
+    posts.as_array().unwrap().last().unwrap().clone()
 }
 
 #[test]
-fn thread_picker_replies_to_the_selected_thread_with_its_recommendation() {
+fn thread_picker_answers_the_selected_thread_with_the_action_picked() {
     let fixture = Fixture::new();
     fixture.add("asker");
     let question = ask(
@@ -417,49 +417,76 @@ fn thread_picker_replies_to_the_selected_thread_with_its_recommendation() {
         "Which database?",
         &[
             "Postgres or SQLite?",
-            "--recommend",
-            "SQLite",
-            "--choice",
-            "SQLite",
             "--choice",
             "Postgres",
+            "--choice",
+            "SQLite",
+            "--recommend",
+            "SQLite",
         ],
     );
     let id = question["number"].as_str().unwrap().to_owned();
-    let (output, rows) = fixture.pick(&["thread", "list"], &id, "\n");
+    let (output, rows) = fixture.pick(&["thread", "list"], &format!("{id} action:2"), "");
     assert!(output.status.success(), "{}", printed(&output));
-    assert!(rows.contains("Which database?"), "{rows}");
-    assert_eq!(last_post(&fixture, &id), "SQLite");
+    // The recommended action comes first, where the picker starts.
+    assert!(rows.starts_with("action:2\t"), "{rows}");
+    let answer = latest(&fixture, &id);
+    assert_eq!(answer["text"], "SQLite", "{answer}");
+    assert_eq!(answer["answer"]["action"], "2", "{answer}");
 }
 
 #[test]
-fn a_thread_prompt_takes_the_recommendation_with_enter_and_text_as_typed() {
+fn thread_picker_asks_for_the_values_an_action_takes() {
     let fixture = Fixture::new();
     fixture.add("asker");
-    for (recommendation, input, expected) in [
-        ("SQLite", "\n", "SQLite"),
-        ("2", "\n", "2"),
-        ("2", "4\n", "4"),
-        ("/cancel", "\n", "/cancel"),
-    ] {
-        let name = format!("Choose {recommendation} for {input:?}?");
-        let asked = ask(
-            &fixture,
-            "asker",
-            &name,
-            &[
-                "Which?",
-                "--choice",
-                recommendation,
-                "--recommend",
-                recommendation,
-            ],
-        );
+    let form = fixture.root.path().join("form.json");
+    fs::write(
+        &form,
+        serde_json::json!({"version": "1.0", "createSurface": {"surfaceId": "name",
+            "components": [
+                {"id": "root", "component": "Column", "children": ["name", "ok"]},
+                {"id": "name", "component": "TextField", "label": "Name",
+                 "value": {"@path": "/name"}},
+                {"id": "ok", "component": "Button", "child": "ok-label",
+                 "action": {"event": {"name": "submit",
+                     "context": {"name": {"@path": "/name"}}}}},
+                {"id": "ok-label", "component": "Text", "text": "Save"}],
+            "dataModel": {"name": ""}}})
+        .to_string(),
+    )
+    .unwrap();
+    let question = ask(
+        &fixture,
+        "asker",
+        "Your name?",
+        &["What should I call you?", "--ui", form.to_str().unwrap()],
+    );
+    let id = question["number"].as_str().unwrap().to_owned();
+    let (output, _) = fixture.pick(&["thread", "list"], &format!("{id} action:submit"), "Ada\n");
+    assert!(output.status.success(), "{}", printed(&output));
+    let answer = latest(&fixture, &id);
+    assert_eq!(answer["text"], "Save", "{answer}");
+    assert_eq!(
+        answer["answer"]["values"],
+        serde_json::json!({"name": "Ada"}),
+        "{answer}"
+    );
+}
+
+#[test]
+fn a_thread_prompt_without_a_surface_posts_text_as_typed() {
+    let fixture = Fixture::new();
+    fixture.add("asker");
+    for input in ["4", "/cancel"] {
+        let asked = ask(&fixture, "asker", &format!("Say {input}?"), &["Which?"]);
         let id = asked["number"].as_str().unwrap().to_owned();
-        let (output, transcript) =
-            fixture.terminal_command(fixture.command().args(["view", "thread", &id]), input, true);
+        let (output, transcript) = fixture.terminal_command(
+            fixture.command().args(["view", "thread", &id]),
+            &format!("{input}\n"),
+            true,
+        );
         assert!(output.status.success(), "{transcript}");
-        assert_eq!(last_post(&fixture, &id), expected);
+        assert_eq!(latest(&fixture, &id)["text"], input);
     }
 }
 
