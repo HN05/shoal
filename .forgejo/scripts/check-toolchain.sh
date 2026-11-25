@@ -7,14 +7,14 @@ set -eu
 rustc --version
 cargo clippy --version
 if ! cargo nextest --version; then
-  echo "::error::cargo-nextest is not installed on this machine: install it here with \`cargo install --locked cargo-nextest\`; Shoal runners install nothing during a run (AGENTS.md, CI)"
+  echo "::error::cargo-nextest is not installed on this machine: install it here with \`cargo install --locked cargo-nextest\`; Shoal runners install nothing during a run (docs/ci.md)"
   exit 1
 fi
 want=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
 case "$(rustc --version)" in
   "rustc $want."*) ;;
   *)
-    echo "::error::this machine's Rust is not $want, the workspace's rust-version: install Rust $want here, or bump rust-version as AGENTS.md (CI) describes"
+    echo "::error::this machine's Rust is not $want, the workspace's rust-version: install Rust $want here, or bump rust-version as docs/ci.md describes"
     exit 1
     ;;
 esac

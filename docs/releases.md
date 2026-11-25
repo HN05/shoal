@@ -50,6 +50,6 @@ jobs in the same workflow run; they reuse the published tag rather than creating
 another release, and a release whose `SHA256SUMS` is attached keeps its assets,
 while a partial upload is replaced whole.
 
-Builds run in the CI image described in AGENTS.md, which carries the pinned
+Builds run in the CI image described in [ci.md](ci.md), which carries the pinned
 Rust toolchain, cargo-nextest, Zig, cargo-zigbuild and rcodesign; rebuild it after
 changing its Containerfile.
