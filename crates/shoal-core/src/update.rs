@@ -77,25 +77,31 @@ impl Installation {
         }
     }
 
-    /// The end of the name of the release archive for `platform` that holds
-    /// this installation's entry. Earlier releases' updates read only the
-    /// bare binary's name, so a bundle's archive ends with another.
-    pub fn archive_suffix(&self, platform: &str) -> String {
+    /// The end of the name of the release asset for `platform` that
+    /// replaces this installation: the bare binary, or the archive holding
+    /// `Shoal.app`.
+    pub fn asset_suffix(&self, platform: &str) -> String {
         match self {
-            Self::Binary(_) => format!("-{platform}.tar.gz"),
+            Self::Binary(_) => format!("-{platform}"),
             Self::Bundle(_) => format!("-{platform}-app.tar.gz"),
         }
     }
 
-    /// The release archive's entry that replaces this installation.
-    fn entry(&self) -> &'static str {
+    /// The replacement for this installation that the downloaded `asset`
+    /// gives, in `directory`: the binary itself, made executable, or the
+    /// bundle unpacked from its archive.
+    async fn unpack(&self, asset: &Path, directory: &Path) -> Result<PathBuf> {
         match self {
-            Self::Binary(_) => "shoal",
-            Self::Bundle(_) => "Shoal.app",
+            Self::Binary(_) => {
+                fs::set_permissions(asset, fs::Permissions::from_mode(0o755))
+                    .with_context(|| format!("make {} executable", asset.display()))?;
+                Ok(asset.to_owned())
+            }
+            Self::Bundle(_) => unpack_bundle(asset, directory).await,
         }
     }
 
-    /// The executable of `unpacked`, the archive's entry.
+    /// The executable of `unpacked`, the replacement `unpack` gives.
     fn executable(&self, unpacked: &Path) -> PathBuf {
         match self {
             Self::Binary(_) => unpacked.to_owned(),
@@ -108,10 +114,7 @@ impl Installation {
     /// command finds it missing, and the old one stays at `unpacked`.
     fn replace_with(&self, unpacked: &Path) -> Result<()> {
         match self {
-            Self::Binary(target) => {
-                fs::set_permissions(unpacked, fs::Permissions::from_mode(0o755))?;
-                fs::rename(unpacked, target)
-            }
+            Self::Binary(target) => fs::rename(unpacked, target),
             Self::Bundle(target) => exchange(unpacked, target),
         }
         .with_context(|| format!("replace {}", self.path().display()))
@@ -143,7 +146,7 @@ fn homebrew_installed(path: &Path) -> bool {
         .any(|component| component.as_os_str() == "Cellar")
 }
 
-/// The release archive suffix for this machine, as in `release-targets.txt`.
+/// The release asset platform for this machine, as in `release-targets.txt`.
 pub fn platform() -> Result<String> {
     let os = match std::env::consts::OS {
         os @ ("macos" | "linux") => os,
@@ -193,17 +196,17 @@ fn version(text: &str) -> Result<(u64, u64, u64)> {
     }
 }
 
-/// One archive in a published release.
+/// One asset in a published release.
 #[derive(Debug, PartialEq)]
 pub struct Release {
     base: String,
     version: String,
-    archive: String,
+    asset: String,
     sha256: String,
 }
 
 impl Release {
-    /// The archive of the `target` release published under `base` whose
+    /// The asset of the `target` release published under `base` whose
     /// name ends with `suffix`, named by the release's checksum list.
     pub async fn find(base: &str, target: &Target, suffix: &str) -> Result<Self> {
         let (checksums, which) = match target {
@@ -236,30 +239,30 @@ impl Release {
         checksums
             .lines()
             .find_map(|line| {
-                let (sha256, archive) = line.split_once("  ")?;
-                let version = archive.strip_prefix("shoal-v")?.strip_suffix(suffix)?;
+                let (sha256, asset) = line.split_once("  ")?;
+                let version = asset.strip_prefix("shoal-v")?.strip_suffix(suffix)?;
                 Some(Self {
                     base: base.to_owned(),
                     version: version.to_owned(),
-                    archive: archive.to_owned(),
+                    asset: asset.to_owned(),
                     sha256: sha256.to_owned(),
                 })
             })
-            .with_context(|| format!("the release has no shoal-v*{suffix} archive"))
+            .with_context(|| format!("the release has no shoal-v*{suffix} asset"))
     }
 
     pub fn version(&self) -> &str {
         &self.version
     }
 
-    /// Download, verify and unpack the archive beside `installation`, then
-    /// replace it with the archive's entry.
+    /// Download, verify and unpack the asset beside `installation`, then
+    /// replace it with what the asset gives.
     pub async fn install(&self, installation: &Installation) -> Result<()> {
         let staging = staging_directory(installation.path())?;
-        let archive = staging.path().join(&self.archive);
-        self.download(&archive).await?;
-        self.verify(&archive)?;
-        let unpacked = unpack(&archive, staging.path(), installation.entry()).await?;
+        let asset = staging.path().join(&self.asset);
+        self.download(&asset).await?;
+        self.verify(&asset)?;
+        let unpacked = installation.unpack(&asset, staging.path()).await?;
         self.check_version(&installation.executable(&unpacked))
             .await?;
         installation.replace_with(&unpacked)
@@ -269,18 +272,18 @@ impl Release {
         let mut curl = curl();
         curl.arg("-o").arg(destination).arg(format!(
             "{}/download/v{}/{}",
-            self.base, self.version, self.archive
+            self.base, self.version, self.asset
         ));
         Run::new(curl)
             .timeout(DOWNLOAD_TIMEOUT)
             .checked()
             .await
-            .with_context(|| format!("download {}", self.archive))?;
+            .with_context(|| format!("download {}", self.asset))?;
         Ok(())
     }
 
-    fn verify(&self, archive: &Path) -> Result<()> {
-        let digest = Sha256::digest(fs::read(archive)?);
+    fn verify(&self, asset: &Path) -> Result<()> {
+        let digest = Sha256::digest(fs::read(asset)?);
         let actual = digest
             .iter()
             .map(|byte| format!("{byte:02x}"))
@@ -288,7 +291,7 @@ impl Release {
         ensure!(
             actual == self.sha256,
             "{} does not match its published checksum",
-            self.archive
+            self.asset
         );
         Ok(())
     }
@@ -321,7 +324,7 @@ pub async fn update(
     installation: &Installation,
     target: &Target,
 ) -> Result<Option<String>> {
-    let release = Release::find(base, target, &installation.archive_suffix(&platform()?)).await?;
+    let release = Release::find(base, target, &installation.asset_suffix(&platform()?)).await?;
     if !target.replaces(release.version(), env!("CARGO_PKG_VERSION"))? {
         return Ok(None);
     }
@@ -354,20 +357,21 @@ fn staging_directory(target: &Path) -> Result<tempfile::TempDir> {
         .with_context(|| format!("create a download directory in {}", directory.display()))
 }
 
-/// Extract the archive's `entry` into `directory`.
-async fn unpack(archive: &Path, directory: &Path, entry: &str) -> Result<PathBuf> {
+/// Extract `Shoal.app` from the release archive into `directory`.
+async fn unpack_bundle(archive: &Path, directory: &Path) -> Result<PathBuf> {
+    const BUNDLE: &str = "Shoal.app";
     let mut tar = Command::new(Tool::Tar.program());
     tar.arg("-xzf")
         .arg(archive)
         .arg("-C")
         .arg(directory)
-        .arg(entry);
+        .arg(BUNDLE);
     Run::new(tar)
         .timeout(DOWNLOAD_TIMEOUT)
         .checked()
         .await
-        .with_context(|| format!("unpack {entry} from the release archive"))?;
-    Ok(directory.join(entry))
+        .context("unpack Shoal.app from the release archive")?;
+    Ok(directory.join(BUNDLE))
 }
 
 #[cfg(test)]

@@ -2,35 +2,35 @@ use super::*;
 use crate::test_support::install_test_script;
 
 const CHECKSUMS: &str = "\
-486f  shoal-v0.9.6-linux-arm64.tar.gz
+486f  shoal-v0.9.6-linux-arm64
 9c1e  shoal-v0.9.6-macos-arm64-app.tar.gz
-3a79  shoal-v0.9.6-macos-arm64.tar.gz
+3a79  shoal-v0.9.6-macos-arm64
 ";
 
 #[test]
-fn checksums_name_the_installation_archive_and_version() -> Result<()> {
+fn checksums_name_the_installation_asset_and_version() -> Result<()> {
     let binary = Installation::of(Path::new("/Users/me/.local/bin/shoal"));
-    let suffix = binary.archive_suffix("macos-arm64");
+    let suffix = binary.asset_suffix("macos-arm64");
     let release = Release::from_checksums("https://host/r", &suffix, CHECKSUMS)?;
     assert_eq!(
         release,
         Release {
             base: "https://host/r".to_owned(),
             version: "0.9.6".to_owned(),
-            archive: "shoal-v0.9.6-macos-arm64.tar.gz".to_owned(),
+            asset: "shoal-v0.9.6-macos-arm64".to_owned(),
             sha256: "3a79".to_owned(),
         }
     );
     let bundle = Installation::of(Path::new(
         "/Users/me/Applications/Shoal.app/Contents/MacOS/shoal",
     ));
-    let suffix = bundle.archive_suffix("macos-arm64");
+    let suffix = bundle.asset_suffix("macos-arm64");
     let release = Release::from_checksums("https://host/r", &suffix, CHECKSUMS)?;
-    assert_eq!(release.archive, "shoal-v0.9.6-macos-arm64-app.tar.gz");
+    assert_eq!(release.asset, "shoal-v0.9.6-macos-arm64-app.tar.gz");
     assert_eq!(release.sha256, "9c1e");
     let missing = Release::from_checksums(
         "https://host/r",
-        &bundle.archive_suffix("linux-arm64"),
+        &bundle.asset_suffix("linux-arm64"),
         CHECKSUMS,
     );
     assert!(missing.is_err());
@@ -73,37 +73,43 @@ fn an_app_bundle_executable_updates_the_whole_bundle() {
         installation,
         Installation::Bundle(PathBuf::from("/Users/me/Applications/Shoal.app"))
     );
-    assert_eq!(installation.entry(), "Shoal.app");
     assert_eq!(
         installation.executable(Path::new("/s/Shoal.app")),
         Path::new("/s/Shoal.app/Contents/MacOS/shoal")
     );
-    let plain = Installation::of(Path::new("/Users/me/.local/bin/shoal"));
-    assert_eq!(plain.entry(), "shoal");
 }
 
-/// A release directory served through `file://` whose archive, named with
-/// `suffix`, holds `entry`, with the executable `program` under it reporting
-/// `version`.
-fn publish(root: &Path, version: &str, suffix: &str, entry: &str, program: &str) -> Result<String> {
+/// A release directory served through `file://` whose asset, named with
+/// `suffix`, is a bare binary reporting `version`, or with `bundle` an
+/// archive holding `Shoal.app` with that binary.
+fn publish(root: &Path, version: &str, suffix: &str, bundle: bool) -> Result<String> {
     let build = root.join("build");
-    let script = build.join(program);
+    let script = match bundle {
+        true => build.join("Shoal.app/Contents/MacOS/shoal"),
+        false => build.join("shoal"),
+    };
     fs::create_dir_all(script.parent().context("parent")?)?;
     install_test_script(&script, format!("#!/bin/sh\necho 'shoal {version}'\n"));
-    let archive = format!("shoal-v{version}{suffix}");
+    let asset = format!("shoal-v{version}{suffix}");
     let assets = root.join(format!("releases/download/v{version}"));
     fs::create_dir_all(&assets)?;
-    let status = std::process::Command::new("tar")
-        .arg("-czf")
-        .arg(assets.join(&archive))
-        .arg("-C")
-        .arg(&build)
-        .arg(entry)
-        .status()?;
-    ensure!(status.success(), "tar failed");
-    let digest = Sha256::digest(fs::read(assets.join(&archive))?);
+    if bundle {
+        let status = std::process::Command::new("tar")
+            .arg("-czf")
+            .arg(assets.join(&asset))
+            .arg("-C")
+            .arg(&build)
+            .arg("Shoal.app")
+            .status()?;
+        ensure!(status.success(), "tar failed");
+    } else {
+        fs::copy(&script, assets.join(&asset))?;
+        // A download carries no mode, so the update makes it executable.
+        fs::set_permissions(assets.join(&asset), fs::Permissions::from_mode(0o644))?;
+    }
+    let digest = Sha256::digest(fs::read(assets.join(&asset))?);
     let sha256: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-    let checksums = format!("{sha256}  {archive}\n");
+    let checksums = format!("{sha256}  {asset}\n");
     fs::write(assets.join("SHA256SUMS"), &checksums)?;
     let latest = root.join("releases/latest/download");
     fs::create_dir_all(&latest)?;
@@ -111,12 +117,12 @@ fn publish(root: &Path, version: &str, suffix: &str, entry: &str, program: &str)
     Ok(format!("file://{}", root.join("releases").display()))
 }
 
-const SUFFIX: &str = "-linux-arm64.tar.gz";
+const SUFFIX: &str = "-linux-arm64";
 
 #[tokio::test]
 async fn install_replaces_the_binary_with_the_verified_release() -> Result<()> {
     let root = tempfile::tempdir()?;
-    let base = publish(root.path(), "9.9.9", SUFFIX, "shoal", "shoal")?;
+    let base = publish(root.path(), "9.9.9", SUFFIX, false)?;
     let target = root.path().join("bin/shoal");
     fs::create_dir_all(target.parent().context("parent")?)?;
     fs::write(&target, "old")?;
@@ -132,9 +138,9 @@ async fn install_replaces_the_binary_with_the_verified_release() -> Result<()> {
 }
 
 #[tokio::test]
-async fn install_refuses_an_archive_that_does_not_match_its_checksum() -> Result<()> {
+async fn install_refuses_an_asset_that_does_not_match_its_checksum() -> Result<()> {
     let root = tempfile::tempdir()?;
-    let base = publish(root.path(), "9.9.9", SUFFIX, "shoal", "shoal")?;
+    let base = publish(root.path(), "9.9.9", SUFFIX, false)?;
     let target = root.path().join("bin/shoal");
     fs::create_dir_all(target.parent().context("parent")?)?;
     fs::write(&target, "old")?;
@@ -158,14 +164,8 @@ async fn install_swaps_in_the_verified_app_bundle() -> Result<()> {
     let apps = root.path().join("apps");
     let bundle = apps.join("Shoal.app");
     let installation = Installation::of(&bundle.join(executable));
-    let suffix = installation.archive_suffix("macos-arm64");
-    let base = publish(
-        root.path(),
-        "9.9.9",
-        &suffix,
-        "Shoal.app",
-        "Shoal.app/Contents/MacOS/shoal",
-    )?;
+    let suffix = installation.asset_suffix("macos-arm64");
+    let base = publish(root.path(), "9.9.9", &suffix, true)?;
     fs::create_dir_all(bundle.join("Contents/MacOS"))?;
     fs::write(bundle.join(executable), "old")?;
     fs::write(bundle.join("Contents/stale"), "old")?;
@@ -184,8 +184,8 @@ async fn install_swaps_in_the_verified_app_bundle() -> Result<()> {
 #[tokio::test]
 async fn an_exact_release_installs_from_its_own_checksums() -> Result<()> {
     let root = tempfile::tempdir()?;
-    publish(root.path(), "0.1.0", SUFFIX, "shoal", "shoal")?;
-    let base = publish(root.path(), "9.9.9", SUFFIX, "shoal", "shoal")?;
+    publish(root.path(), "0.1.0", SUFFIX, false)?;
+    let base = publish(root.path(), "9.9.9", SUFFIX, false)?;
     let target = root.path().join("bin/shoal");
     fs::create_dir_all(target.parent().context("parent")?)?;
     fs::write(&target, "old")?;

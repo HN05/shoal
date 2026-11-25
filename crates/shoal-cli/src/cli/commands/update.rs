@@ -12,7 +12,7 @@ pub(super) async fn run(ctx: &Context, version: Option<String>) -> Result<i32> {
     let target = installation.path().to_owned();
     let current = env!("CARGO_PKG_VERSION");
     let wanted = version.map_or(Target::Latest, Target::Exact);
-    let suffix = installation.archive_suffix(&platform()?);
+    let suffix = installation.asset_suffix(&platform()?);
     let release = ctx
         .progress(
             "Checking for the release",
