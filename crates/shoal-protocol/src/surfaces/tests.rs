@@ -336,3 +336,19 @@ fn control_characters_are_refused_but_newlines_in_text() {
             .is_err()
     );
 }
+
+#[test]
+fn a_surface_that_names_its_components_again_draws_within_a_bound() {
+    let mut components =
+        vec![json!({"id": "root", "component": "Column", "children": ["c0", "c0"]})];
+    for level in 0..40 {
+        let next = format!("c{}", level + 1);
+        components.push(json!({"id": format!("c{level}"), "component": "Column",
+            "children": [next.clone(), next]}));
+    }
+    components.push(json!({"id": "c40", "component": "Text", "text": "leaf"}));
+    let doubling = surface(Value::Array(components), json!({}));
+    let lines = doubling.layout_lines();
+    assert!(lines.len() <= 2 * text::MAX_DRAWN, "{}", lines.len());
+    assert!(lines.last().unwrap().contains("--json"), "{lines:?}");
+}

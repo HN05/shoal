@@ -10,6 +10,11 @@ use super::{Component, Surface, SurfaceAction};
 /// How far a nested block is indented.
 const INDENT: usize = 2;
 
+/// Most components one drawing visits. A component may be named more than
+/// once, and a list repeats its template for each item, so without a bound
+/// a small surface could draw without end.
+pub(super) const MAX_DRAWN: usize = 2000;
+
 impl Surface {
     /// The surface as lines of text, then, with `answer`, the command that
     /// answers it, such as `shoal send 3.2`, its [`action_lines`].
@@ -22,13 +27,20 @@ impl Surface {
     }
 
     /// Its components drawn from the root, layout as indented blocks.
+    /// It stops after [`MAX_DRAWN`] components with a line that says so.
     pub fn layout_lines(&self) -> Vec<String> {
         let mut drawing = Drawing {
             surface: self,
             lines: Vec::new(),
             drawn: BTreeSet::new(),
+            visits: 0,
         };
         drawing.draw("root", 0, "");
+        if drawing.visits > MAX_DRAWN {
+            drawing
+                .lines
+                .push("… (`--json` gives the whole surface)".to_owned());
+        }
         drawing.lines
     }
 
@@ -53,12 +65,18 @@ struct Drawing<'a> {
     surface: &'a Surface,
     lines: Vec<String>,
     drawn: BTreeSet<&'a str>,
+    /// How many components it visited, which [`MAX_DRAWN`] bounds.
+    visits: usize,
 }
 
 impl<'a> Drawing<'a> {
     /// Draw the component `id` at `indent`, its relative data paths read
     /// under `base`, the data of a list's item.
     fn draw(&mut self, id: &'a str, indent: usize, base: &str) {
+        self.visits += 1;
+        if self.visits > MAX_DRAWN {
+            return;
+        }
         let Some(component) = self.surface.component(id) else {
             return;
         };
