@@ -65,36 +65,6 @@ async fn a_contribution_waits_out_the_grace_period() {
 }
 
 #[tokio::test]
-async fn new_work_is_refused_once_a_contribution_removal_begins() {
-    let fixture = fixture().await;
-    let repo = contribution(&fixture).await;
-    let repositories = &fixture.repositories;
-    assert!(
-        repositories
-            .begin_contribution_removal(&repo)
-            .await
-            .unwrap()
-    );
-    repositories.ensure_available(&repo.id).await.unwrap_err();
-    // The interrupted removal finishes on the next sweep.
-    sweep(&fixture).await;
-    assert!(!registered(&fixture, &repo).await);
-}
-
-#[tokio::test]
-async fn a_held_contribution_stays_until_its_hold_ends() {
-    let fixture = fixture().await;
-    let repo = contribution(&fixture).await;
-    let hold = fixture.repositories.hold_contribution(&repo.id).await;
-    // The fixture's grace period is over at once.
-    sweep(&fixture).await;
-    assert!(registered(&fixture, &repo).await);
-    drop(hold.unwrap());
-    sweep(&fixture).await;
-    assert!(!registered(&fixture, &repo).await);
-}
-
-#[tokio::test]
 async fn a_removed_contribution_names_the_fork_it_leaves() {
     let fixture = fixture().await;
     let repo = contribution(&fixture).await;

@@ -111,6 +111,67 @@ async fn a_borrowed_contribution_stays_available() {
 }
 
 #[tokio::test]
+async fn new_work_is_refused_once_a_contribution_removal_begins() {
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    assert!(
+        manager
+            .repositories
+            .begin_contribution_removal(&repo)
+            .await
+            .unwrap()
+    );
+    manager
+        .start_chat((&repo.id).into(), "chat-1".into(), "claude".into(), None)
+        .await
+        .unwrap_err();
+    manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap_err();
+    // The interrupted removal finishes on the next sweep.
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
+    assert!(!registered(&manager, &repo).await);
+}
+
+#[tokio::test]
+async fn a_held_contribution_stays_until_its_connection_closes() {
+    use crate::protocol::{Body, Response};
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    let (mut client, server) = tokio::net::UnixStream::pair().unwrap();
+    let guard = Arc::new(tokio::sync::RwLock::new(())).read_owned().await;
+    let held = tokio::spawn(crate::daemon::requests::repositories::contributions::hold(
+        server,
+        1,
+        manager.clone(),
+        repo.id.clone(),
+        guard,
+    ));
+    let response: Response = crate::protocol::read(&mut client).await.unwrap();
+    assert!(matches!(response.body, Body::Ok), "{:?}", response.body);
+    // The fixture's grace period is over at once.
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
+    assert!(registered(&manager, &repo).await);
+    drop(client);
+    held.await.unwrap().unwrap();
+    manager
+        .repositories
+        .sweep_contributions(&*manager)
+        .await
+        .unwrap();
+    assert!(!registered(&manager, &repo).await);
+}
+
+#[tokio::test]
 async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
