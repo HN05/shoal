@@ -310,7 +310,7 @@ places reports its turn finished with unread alerts or activity, Shoal types
 this prompt into the session and submits it:
 
 ```text
-Shoal: new messages or activity on this workspace's issues and PRs.
+Shoal: new alerts or activity on this workspace's issues and PRs.
 ```
 
 It does so once until Codex starts another turn, and Codex's prompt hook
