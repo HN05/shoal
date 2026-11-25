@@ -412,7 +412,7 @@ that hosts an external session, `agent` for an agent. `status` and
 Scoped processes hold and release the spaces below their own directly. Holding
 their own space is an approval request with the target `hold/<name>`, which
 needs `--reason`. It goes to the nearest space above with an agent, as other
-[approval requests](approvals.md#resource-approvals) do, and else to the user.
+[approval requests](approvals.md#approval-requests) do, and else to the user.
 That space needs no grant to decide it. Approval places the hold, and acquiring
 again returns it.
 

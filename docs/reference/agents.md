@@ -586,7 +586,7 @@ agent starts, may be lost. The first of these that holds decides the report:
 | Space | Report | Message |
 |---|---|---|
 | A [thread](threads.md) of the space waits for the user | `blocked`, `kind=question` | the thread's number and the first line of its latest post |
-| An [approval request](approvals.md#resource-approvals) of the space waits for the user | `blocked`, `kind=permission` | the request's number and what it asks for |
+| An [approval request](approvals.md#approval-requests) of the space waits for the user | `blocked`, `kind=permission` | the request's number and what it asks for |
 | The agent's turn failed and Shoal does not [retry](agents.md) it | `error` | the failure |
 | `shoal done` recorded completion, between the agent's turns | `done` | the summary |
 | A [ready mark](completion.md#ready-for-review) stands, between the agent's turns | `done` | the marked item |

@@ -320,7 +320,7 @@ heard of the thread.
 
 ## Numbers
 
-Threads and [approval requests](approvals.md#resource-approvals) are numbered
+Threads and [approval requests](approvals.md#approval-requests) are numbered
 `S.N`, so `3.2` names one item of either kind:
 
 - `S` is the [number of the space](workspaces.md#space-numbers) the thread

@@ -1,41 +1,168 @@
 # Approvals
 
-This file says what `shoal approvals` does and how agents' issues, PRs, pushes
-and resources wait for approval.
+This file says what `shoal approvals` does and how an agent's issues, PRs,
+pushes, merges and resources wait for approval.
+[Scope, approvals and permissions](../design/permissions.md) gives the reasons.
+
+## Approval requests
+
+An approval request asks for a yes or no before a scoped caller acts. A space's
+[permissions](modes.md#mode-permissions) decide which of its actions need one,
+and the resource settings decide which leases do. Requests cover:
+
+- issues and PRs an agent [proposes](#approval-for-agent-issues-and-prs),
+- an agent's [pushes](#approval-for-agent-pushes),
+- an agent's [merges and unmerges](branches.md#approval-of-an-agents-merge),
+- [actions](modes.md#permitted-actions) whose permission is `"propose"`,
+- [protected resources](#resource-approvals),
+- a [hold](removal.md#holds) an agent asks for on its own space.
+
+Unscoped callers act without a request.
+
+A command that needs approval exits 2 with JSON `code: "approval_pending"` and
+the request. Once the request is denied, the command returns
+`"approval_denied"`. After approval, the same command proceeds. A proposal is
+the exception: `issue open` and `pr open` exit 0 with `proposed`, and the agent
+goes on with its work.
+
+Each request has a [number](threads.md#numbers) `S.N`, as threads have.
+
+### Who decides
+
+A request from a space with an agent of its own goes first to the nearest
+space above it with an agent, a [workspace](create.md) or a
+[chat](chats.md). That space's agent is told. It decides the request with
+`shoal approvals --approve <S.N>` or `--deny <S.N>`, or passes it up with
+`shoal approvals --escalate <S.N>`. A request passed up goes to the next such
+space above, and from the top to you. Without a space to decide it, the
+request comes to you.
+
+A deciding space approves a request that a permission governs only where its
+own effective permission is `"direct"` for every key that governs it:
+
+| Request                          | Keys                       |
+| -------------------------------- | -------------------------- |
+| An issue                         | `issue_open`               |
+| An issue in another repository   | `issue_other_repositories` |
+| A PR                             | `pr_open`                  |
+| A PR that pushes first           | `pr_open` and `push`       |
+| A push                           | `push`                     |
+| A merge or unmerge               | `merge` and `push`         |
+| A [permitted action](modes.md#permitted-actions) | the key that governs it |
+
+It approves any other request only where it holds an approved grant with the
+same target and settings. A request to hold a workspace needs no grant.
+Otherwise `--approve` is refused, citing the permission or the missing grant,
+and the space denies the request or passes it up.
+
+A space whose `decide` [permission](modes.md#permitted-actions) is `"direct"`
+decides any request of a space below it as you would, routed to it or not,
+with or without a grant. It still approves a request that a permission
+governs only where it holds that permission at `"direct"`.
+
+The request records the deciding space as its `decider`. You may still decide
+it yourself. When a chat's agent stops, or a deciding space is removed, the
+requests it had not decided come to you.
+
+### List and decide
+
+`shoal approvals` lists the requests and the retained
+[workspace grants](#resource-approvals). A scoped caller sees the requests of
+its own space and the spaces below it. `--space <space>` lists the requests a
+space made or proposed and those it decides.
+
+On a terminal, `shoal approvals` opens a picker:
+
+- Selecting a pending request shows its recorded settings and prompts for a
+  decision.
+- Ctrl-A approves and Ctrl-D denies the highlighted request without leaving
+  the list. The outcome or error shows above the key hints, and the list
+  updates.
+
+`shoal approvals <S.N>` shows one request the same way. The prompt takes `y`
+to approve or `n` to deny, in either case. Any other input cancels. JSON and
+output that is not a terminal print the records without prompting.
+
+`--approve [S.N]` and `--deny [S.N]` decide a request. Without a number, they
+offer the pending requests to pick from, each with its space, reason and
+settings. A decision applies to the request you were shown: when another
+request took its number meanwhile, the decision is refused.
+
+### Alerts about requests
+
+A pending request that waits for you gives you an alert, collapsed with the
+others until read. A decision queues an [alert](alerts.md) for the requesting
+space that names the request, its target and the decision.
+
+### Outdated requests
+
+A merge, unmerge, PR or push request binds a commit. It becomes `outdated` when
+it no longer applies: a request for a newer commit replaced it, or it was found
+stale when approved. It stays listed until its workspace is removed, so no
+other request takes its number. Deciding it is refused.
+
+### Withdraw a request
+
+`shoal approvals withdraw <S.N>` takes back a pending request that the
+requesting space no longer needs, as releasing a lease does for a lease
+request. The request stays listed as `withdrawn`, as an outdated one does. A
+withdrawn issue proposal is deleted instead, as a decided one is.
+
+While the request's `approval_requested` alert is unread, withdrawing deletes
+it. Otherwise the space deciding the request is told, or you get
+`approval_withdrawn`. A command that retries the request, such as a queued
+`acquire`, requests it again.
+
+### How long requests last
+
+Requests survive a daemon restart and a failed removal. Removing a workspace
+deletes its requests, except proposed issues, which belong to the repository.
+Of all requests, only pending PR proposals and push requests keep a workspace
+from idle cleanup.
 
 ## Approval for agent issues and PRs
 
-A repository whose issues and PRs other people see can require your approval
-before an agent opens one. `"direct"`, the default, opens at once; `"propose"`
-makes `issue open` or `pr open` in a workspace process, and `issue open` in a
-chat's agent, record an [approval request](#resource-approvals) instead. Unscoped callers always open
-directly. Like every key below, these are the space's
-[permissions](modes.md#mode-permissions), which its mode and the space above it may narrow.
+The `issue_open` and `pr_open` [permissions](modes.md#mode-permissions) decide
+whether an agent opens an issue or PR at once:
+
+- `"direct"`, the default, opens it.
+- `"propose"` records a proposal, an approval request for the item, instead.
+
+They apply to `issue open` and `pr open` in a workspace process, and to
+`issue open` from a chat's agent. `issue_other_repositories` governs
+[issues in another repository](issues.md#issue-and-pr-actions) the same way.
+Unscoped callers always open directly.
+
+### Propose an issue
 
 A proposed `issue open` records every option it was given, with the space, a
-workspace's branch and commit, and the agent; running it again unchanged returns
-the same request. The request belongs to the repository, so it stays when the
-space is removed, keeping its number: no new space takes that space's number
-until its last such proposal is decided, and lists show it with the space's
-name marked `(removed)` (`space_removed` in `--json`).
-A proposed `pr open` pushes the branch as usual, unless
-the [`push` permission](#approval-for-agent-pushes) holds the push back, links the branch's open PR if
-there is one, and otherwise records the PR it would open, with its defaults
-filled in, at the branch's current commit. Running it again at the same commit
-returns that request; at a newer commit it replaces it, and the old one stays
-`outdated`. A pending PR request keeps the workspace from automatic cleanup.
-Files given with `--attach` are copied into the `.proposals` directory of the
-repository the proposal is for, since the agent's copies may be gone when you
-decide, and deleted once no pending proposal uses them, by the next decision or
-proposal or by the cleanup sweep, or with the repository's registration. Both commands exit 0 with JSON `proposed`, the request, and the agent
-continues its work. A proposal is routed like other
-[approval requests](#resource-approvals): the nearest space above with an agent,
-a workspace or a chat, decides it before you do. A parent space whose own
-[permission](modes.md#mode-permissions) for it is `direct` approves it as you would,
-with `--title` and `--body`, or denies it; one without may deny it, with
-`--reason`, `--duplicate-of` or `--duplicate-of-approval`, or pass it up.
-Marking a proposal for another repository a duplicate of an issue there
-comments on that issue, so it takes `issue_other_repositories = "direct"`.
+workspace's branch and commit, and the agent. Running it again unchanged
+returns the same request.
+
+The proposal belongs to the repository, so it stays when the space is removed.
+It keeps the space's number: no new space takes that number until the space's
+last such proposal is decided. Lists show the space's name marked `(removed)`,
+and `--json` gives `space_removed`.
+
+### Propose a PR
+
+A proposed `pr open` pushes the branch as usual, unless the
+[`push` permission](#approval-for-agent-pushes) holds the push back. It links
+the branch's open PR if there is one. Otherwise it records the PR it would
+open, with its defaults filled in, at the branch's current commit.
+
+Running it again at the same commit returns that request. At a newer commit it
+replaces the request, and the old one becomes [outdated](#outdated-requests).
+A pending PR proposal keeps the workspace from automatic cleanup.
+
+### Attached files
+
+`--attach` copies its files into the `.proposals` directory of the repository
+the proposal is for. Shoal deletes them once no pending proposal uses them: at
+the next decision or proposal, in the cleanup sweep, or when the repository's
+registration is removed.
+
+### Decide a proposal
 
 ```sh
 shoal approvals                     # proposals show their labels and description
@@ -45,74 +172,121 @@ shoal approvals --deny 3.6 --duplicate-of 120     # an existing issue's number o
 shoal approvals --deny 3.7 --duplicate-of-approval 3.4
 ```
 
-`approve` opens the item as the space's agent account, with `--title`,
-`--body` or `--body-file` replacing what was proposed. An issue is recorded as
-opened by its space and assigned when it was proposed with `--link`; a chat's opens through the repository's checkout, as
-does any after its space is removed. A PR is linked
-like one `pr open` opened. Approving a PR request whose branch was renamed, or has
-another commit locally or where `pr open` pushed it, is refused, the request
-becomes `outdated`, and the agent is told to run `pr open` again. When labeling
-the PR, requesting reviews or attaching its files fails after it opened, the
-request keeps the PR, and approving it again finishes that work. `deny` drops the proposal, with an optional `--reason` for the agent.
-`--duplicate-of` denies an issue proposal and adds its title and description as a
-comment on that issue; `--duplicate-of-approval` keeps them with another pending
-issue proposal, which adds them as comments when it is approved and drops them
-when it is denied. When anything fails after the issue opened, such as adding its
-labels, its files or a duplicate's comment, the request keeps the issue and the
-work left, so approving it again, without edits, finishes that work instead of
-opening another issue. A comment that reached the forge is never posted again:
-when attaching its files or reading the issue afterwards fails, the decision
-finishes and reports the failure in `warnings`. Approving also returns the
-[convention](issues.md#repository-conventions) warnings that opening prints; required
-labels were checked when the item was proposed. A decided proposal is no longer listed, and the decision
-reaches the space's agent as an [alert](alerts.md) naming
-the opened item.
+`--approve` opens the item as the space's agent account. `--title`, `--body`
+or `--body-file` replace what was proposed.
+
+- An issue is recorded as opened by its space, or as assigned to it when it
+  was proposed with `--link`.
+- A chat's issue opens through the repository's checkout, as does an issue
+  whose space is removed.
+- A PR is linked as one that `pr open` opened.
+
+Approving returns the [convention](issues.md#repository-conventions) warnings
+that opening prints. Shoal checked the required labels when the item was
+proposed.
+
+`--deny` drops the proposal. `--reason` gives the agent a reason.
+`--duplicate-of` and `--duplicate-of-approval` deny an issue proposal as a
+duplicate:
+
+- `--duplicate-of` adds the proposal's title and description as a comment on
+  that issue. For an issue in another repository, the deciding space needs
+  `issue_other_repositories` at `"direct"`.
+- `--duplicate-of-approval` keeps them with another pending issue proposal.
+  That proposal adds them as comments when it is approved, and drops them when
+  it is denied.
+
+A decided proposal leaves the list. The decision reaches the space's agent as
+an [alert](alerts.md) that names the opened item.
+
+### Outdated PR proposals
+
+Approving a PR proposal is refused when its branch was renamed, or has another
+commit locally or where `pr open` pushed it. The request becomes outdated, and
+the agent is told to run `pr open` again.
+
+### Approval that fails partway
+
+Labeling a PR, requesting reviews or attaching its files can fail after the PR
+opened. The request then keeps the PR, and approving it again finishes that
+work.
+
+Adding an issue's labels, its files or a duplicate's comment can fail after the
+issue opened. The request then keeps the issue and the work left. Approving it
+again, without edits, finishes that work instead of opening another issue.
+
+Shoal never posts a comment twice. When attaching its files or reading the
+issue fails after the comment reached the forge, the decision finishes and
+reports the failure in `warnings`.
 
 ## Approval for agent pushes
 
-A proposed PR still shows its branch and commits on the forge before you
-decide, and an agent can push with plain `git push` at any time. A `push`
-permission of `"propose"` keeps an agent's pushes to the workspace repository's remotes
-off the forge until you approve them; `"deny"` refuses them; `"direct"`, the
-default, pushes at once. Unscoped callers always push
-directly.
+The `push` [permission](modes.md#mode-permissions) governs an agent's pushes to
+the remotes of the workspace's repository:
+
+- `"direct"`, the default, pushes at once.
+- `"propose"` keeps the push off the forge until it is approved.
+- `"deny"` refuses it.
+
+Unscoped callers always push directly. A proposed PR still pushes its branch
+unless `push` holds it back.
+
+### Refused pushes
 
 With `"deny"`, `shoal pr open` from a workspace process fails while the remote
-lacks the branch's commit and opens or links the PR once you have pushed it,
-and the agent's `git push` reports each ref as rejected with the reason. No
-approval request is recorded. The rest of this section describes `"propose"`.
+lacks the branch's commit. Once you have pushed that commit, `pr open` opens or
+links the PR. The agent's `git push` reports each ref as rejected, with the
+reason. Shoal records no approval request.
 
-`shoal pr open` from a workspace process then pushes nothing while the remote
-lacks the branch's commit. Without an open PR it records the PR it would open as
-a proposal that pushes the branch first, whatever `pr_open` says, so one approval
-pushes the branch and opens the PR. With the branch's PR already open, it links
-that PR and records a push request for the branch at its current commit.
+### Held pushes from `pr open`
 
-A tracked agent's own `git push` is covered too. Shoal adds Git settings to the
-agent's environment that rewrite the push URLs of the repository's remotes to
-Shoal's remote helper, `git-remote-shoal`, which Shoal puts first on the agent's
-`PATH`; fetches keep their URLs. An explicit push URL that a fetch URL starts
-with, such as one also fetched from, cannot be held, since Git would rewrite
-that fetch URL too, so the agent does not start until that push URL changes or
-the setting is `"direct"`. Git runs its usual checks and pre-push hook,
-then hands the push to the helper, which asks the daemon about each ref. A push
-that may go ahead goes to the real URL with Git as the agent; any other is
-recorded as an approval request bound to the remote, the push URL when the
-remote has several, the ref, the commit and, for a forced push or a deletion,
-the remote commit it replaces or that the ref must not exist yet, and Git
-reports it as rejected:
+With `"propose"`, `shoal pr open` from a workspace process pushes nothing while
+the remote lacks the branch's commit:
+
+- Without an open PR, it records the PR as a proposal that pushes the branch
+  first, whatever `pr_open` says. One approval pushes the branch and opens the
+  PR.
+- With the branch's PR open, it links that PR and records a push request for
+  the branch at its current commit.
+
+### Held pushes from `git push`
+
+With `"propose"`, Shoal also holds an agent's own `git push`. It adds Git
+settings to the agent's environment that rewrite the push URLs of the
+repository's remotes to Shoal's remote helper, `git-remote-shoal`, which it
+puts first on the agent's `PATH`. Fetches keep their URLs.
+
+Git runs its usual checks and pre-push hook, then hands the push to the helper.
+The helper asks the daemon about each ref. A push that may go ahead goes to the
+real URL, with Git as the agent. Any other push becomes an approval request,
+and Git reports it as rejected:
 
 ```text
  ! [remote rejected] HEAD -> topic (waits for approval 12)
 ```
 
-`--force-with-lease` works as usual; `--dry-run` and push options are refused.
-Pushing the same again names the same request, and pushing another commit to
-the ref replaces it, keeping the old one `outdated`. A pending push keeps the
-workspace from automatic cleanup. The setting reaches agents started after it
-changed. The helper keeps agents from pushing by accident, not on purpose: an
-agent that clears its Git settings, or pushes to a URL spelled differently,
-reaches the remote.
+The request binds:
+
+- the remote, and the push URL when the remote has several,
+- the ref and the commit,
+- for a forced push or a deletion, the remote commit it replaces, or that the
+  ref must not exist yet.
+
+`--force-with-lease` works as usual. `--dry-run` and push options are refused.
+Pushing the same again names the same request. Pushing another commit to the
+ref replaces the request, and the old one becomes
+[outdated](#outdated-requests). A pending push keeps the workspace from
+automatic cleanup.
+
+Shoal cannot hold an explicit push URL that a fetch URL starts with, such as
+one that is also fetched from: Git would rewrite that fetch URL too. The agent
+does not start until that push URL changes or `push` is `"direct"`.
+
+An agent's rewrite follows the `push` permission it
+[launched with](modes.md#mode-permissions). The rewrite stops pushes by accident, not on purpose: an agent that clears its Git
+settings, or pushes to a URL spelled differently, reaches the remote.
+
+### Approve a push
 
 ```sh
 shoal approvals                     # pushes show the ref, commit and remote
@@ -121,161 +295,181 @@ shoal approvals --deny 12 --reason "Squash the fixups first"
 ```
 
 Approving runs the push in an operation the daemon starts, as a tracked command
-in the workspace with your environment when you approve from a terminal, the
-daemon's otherwise, and the agent's [Git profile](agents.md#agent-accounts), whose
-credentials it pushes with as `pr open` does. It pushes the commit you
-approved, not whatever the branch has by then; a push of the workspace branch
-whose local branch moved since is refused and marked `outdated`, and the agent is
-told to push again. `approvals --approve` follows the push and returns once it
-has decided the request. When it pushed the workspace branch to a configured
-remote, the branch gets that upstream unless it has one. A PR proposal then opens
-its PR as when approving any proposal. A failed push leaves the request pending
-and notifies you; approve it again to retry. While the push runs, denying or
-withdrawing the request, and new push requests and PR proposals from the
-workspace, are refused until it ends. The agent hears the outcome as an
-[alert](alerts.md). Unless `push` is `"direct"`, a scoped
-local `shoal merge` also needs your approval, since it may push the default branch, and
-`shoal pr revert` through the forge is refused, since the forge pushes its
-branch at once.
+in the workspace. It runs in your environment when you approve from a
+terminal, and in the daemon's otherwise, as when a space above approves it.
+It pushes with the agent's [Git profile](agents.md#agent-accounts) and its
+credentials, as `pr open` does.
+
+The push sends the commit you approved, not whatever the branch has by then.
+When the workspace's local branch moved since the request, approving its push
+is refused, the request becomes outdated, and the agent is told to push again.
+
+`--approve` follows the push and returns once the push has decided the request:
+
+- A push of the workspace branch to a configured remote sets that upstream,
+  unless the branch has one.
+- A PR proposal that waited for the push then opens its PR.
+- A failed push leaves the request pending and notifies you. Approve it again
+  to retry.
+
+While the push runs, Shoal refuses to deny or withdraw the request, and refuses
+new push requests and PR proposals from the workspace. The agent hears the
+outcome as an [alert](alerts.md).
+
+### Merges and reverts
+
+Unless `push` is `"direct"`, a scoped local `shoal merge` needs
+[approval](branches.md#approval-of-an-agents-merge). A scoped `shoal pr revert`
+through the forge is refused, since the forge pushes its branch at once.
 
 ## The gate
 
-A permission of `"gate"`, between `"direct"` and `"propose"`, has an agent, the
-gate, decide an agent's issue and PR proposals, pushes, merges and unmerges
-before anyone else sees them. It applies to `issue_open`, `pr_open`,
-`issue_other_repositories`, `merge` and `push`; no built-in mode sets it. A
-request is the gate's when the narrowest of the permissions that govern it is
-`"gate"`, such as both `merge` and `push` for a merge; with one of them
-`"propose"`, it is routed as the sections above describe. A space holding
-`"gate"` or `"direct"` may give a child `"gate"`.
+A permission of `"gate"` lies between `"direct"` and `"propose"`. An agent, the
+gate, decides the request before anyone else sees it.
+[Permissions](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#permissions)
+names the keys that take `"gate"`, and [reviews](../design/reviews.md) gives
+the reasons for the gate.
 
-The command records the request as it would for approval, and the gate decides
-it at once, in the background: it allows it, which approves it as your approval
-would, pushing, opening or merging; denies it with a reason; or passes it on,
-which routes it as a `"propose"` request to the nearest space above with an
-agent, and to you at the top, carrying the gate's reason and the case it
-quoted. It never edits a proposal. It is no code reviewer: it checks that the
-action follows the repository's conventions and is not a mistake, such as a
-push to the wrong ref, a merge with failing checks, a duplicate issue or work
-unrelated to the space's. It decides every request itself, unsure or not, and
-passes one on only for a case the [`[gate]` table](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#gate) lists in
-`escalate`, quoting it word for word; an escalation quoting none is refused
-and the gate asked once more, told why.
+### Requests the gate decides
 
-The gate reads the request in full, the space's name, mode and linked issues
-and PRs with their labels, CI and review state, the commits the request brings
-as `git log --stat`, and what the request leaves out of the repository's
-[conventions](issues.md#repository-conventions). It runs as a one-shot run of
-`[gate] agent`, else `agent.default`, through its `gate` template, read-only
-in the repository's registered checkout, whose `[gate]` rules it reads rather
-than the requesting workspace's, for at most 10 minutes. To look further, such
-as at another PR, CI logs or an earlier proposal, it runs the `shoal` commands
-that only read, such as `shoal view`, `shoal status`, `shoal ci ls` and
-`shoal issue ls`, under a read-only scope of the requesting space that ends
-with the run: the daemon refuses that scope every request that changes
-anything. It holds no heavy slot
-and waits only for memory and disk room. Its runs keep one session per space
-and subject: the space's own branch, with its PR, merges and unmerges; its
-issue proposals for each repository; and its pushes to each other ref. A later
-request of a subject resumes its session through the tool's `gate_resume`
-template and is given only what is new, such as the commits since the last
-verdict; a change of the agent or of its rules, or a session the tool can no
-longer resume, starts a new session, and the
-sessions go with the space.
+A request goes to the gate when the narrowest of the permissions that
+[govern it](#who-decides) is `"gate"`. A merge is governed by both `merge` and
+`push`, for example. When one of them is `"propose"`, the request takes the
+`"propose"` route instead.
 
-A denial reaches the agent as an [alert](alerts.md) with the
-reason; the agent changes what it names and runs the command again, which is a
-new request. After three denials of the same action, the same ref at the same
-commit, a PR proposal with the same title, description and labels at the same
-commit, or an issue by its repository and title, the command is
-refused without asking the gate until the action changes. When the gate times
-out, crashes or returns no verdict, and then `fallback_agent` does too, the
-request is denied with the failure, which does not count toward the three; you
-are not notified, and the agent may tell you with `shoal send` or ask in a
-[thread](threads.md). When the gate cannot be set up at all, as without an
-agent it can run, the request is denied too and you are notified, since only the
-config fixes that. An allowed request that cannot be carried out, as when its
-push cannot start, takes the normal route instead, with the error, and its agent
-is told, and so does an issue proposal whose space is gone, which the gate does
-not judge. Only those and escalations reach you, as approval requests in
-`shoal approvals` and the inbox. Every verdict goes to the space's
-[log](log.md) as `gate_decided`, with the reason, agent and session, to
-the agent as a message, and to its coordinator as one line.
+A space that holds `"gate"` or `"direct"` may give a child `"gate"`.
+
+### Verdicts
+
+The command records the request as it would for approval. The gate decides it
+at once, in the background, with one of these verdicts:
+
+- Allow: the request is approved as your approval would approve it, pushing,
+  opening or merging.
+- Deny, with a reason.
+- Pass on: the request takes the `"propose"` route, to
+  [the space that decides](#who-decides) or to you. It carries the gate's
+  reason and the case it quoted.
+
+The gate never edits a proposal.
+
+### What the gate checks
+
+The gate is no code reviewer. It checks that the action follows the
+repository's conventions and is not a mistake, such as a push to the wrong ref,
+a merge with failing checks, a duplicate issue or work unrelated to the
+space's.
+
+The gate decides every request itself, sure or not. It passes one on only for a
+case that `escalate` in the
+[`[gate]` table](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#gate)
+lists, and quotes that case word for word. Shoal refuses an escalation that
+quotes none and asks the gate once more, telling it why.
+
+### What the gate reads
+
+The gate is given:
+
+- the request in full,
+- the space's name and mode,
+- its linked issues and PRs, with their labels, CI and review state,
+- the commits the request brings, as `git log --stat`,
+- what the request leaves out of the repository's
+  [conventions](issues.md#repository-conventions).
+
+To look further, such as at another PR, CI logs or an earlier proposal, the
+gate runs the `shoal` commands that only read, such as `shoal view`,
+`shoal status`, `shoal ci ls` and `shoal issue ls`. It runs them under a
+read-only scope of the requesting space, which ends with the run. The daemon
+refuses that scope every request that changes anything.
+
+### How the gate runs
+
+The gate is a one-shot run of `[gate] agent`, else `agent.default`, through the
+tool's `gate` [template](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools).
+It runs read-only in the repository's registered checkout, and reads the
+`[gate]` rules there, never the requesting workspace's. A run lasts at most 10
+minutes. It holds no heavy slot and waits only for memory and disk room.
+
+### Gate sessions
+
+The gate keeps one session per space and subject. A space's subjects are:
+
+- its own branch, with its PR, merges and unmerges,
+- its issue proposals for each repository,
+- its pushes to each other ref.
+
+A later request of a subject resumes its session through the tool's
+`gate_resume` template. The gate is then given only what is new, such as the
+commits since its last verdict. A new session starts when the agent or its
+rules change, or when the tool can no longer resume the session. The sessions
+go with the space.
+
+### Denials and failures
+
+A denial reaches the agent as an [alert](alerts.md) with the reason. The agent
+changes what the reason names and runs the command again, which makes a new
+request.
+
+After three denials of the same action, the command is refused without asking
+the gate until the action changes. The same action is:
+
+- a push of the same ref at the same commit,
+- a PR proposal with the same title, description and labels at the same
+  commit,
+- an issue with the same repository and title.
+
+When the gate times out, crashes or returns no verdict, `fallback_agent`
+decides once more. When that fails too, the request is denied with the
+failure. Such a denial does not count toward the three, and you are not told.
+The agent may tell you with `shoal send` or ask in a [thread](threads.md).
+
+When the gate cannot be set up at all, as without an agent it can run, the
+request is denied and you are told.
+
+### What leaves the gate
+
+These requests take the `"propose"` route, to the space that decides or to
+you:
+
+- a request the gate passes on,
+- an allowed request that cannot be carried out, as when its push cannot
+  start, with the error, which its agent is told too,
+- an issue proposal whose space is gone, which the gate does not judge.
+
+Every verdict goes to the space's [log](log.md) as `gate_decided`, with the
+reason, agent and session. It also goes to the agent as a message, and to its
+coordinator as one line.
 
 ## Resource approvals
 
-[`requires_approval`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#approvals) on a resource, named port, simulator
-profile, `[simulators]` or tool-scoped secret gates scoped acquisition, for as
-long as its `approval_lifetime` says. A protected machine profile cannot be
-relaxed by selecting its device/runtime directly; where policies overlap, lease
-lifetime is stricter than workspace lifetime. Unscoped acquisition needs no separate approval. Port approvals bind the preferred
-port, automatic range, environment variable, and conflict policy; an accepted conflict
-suggestion with changed settings requires a new request. Simulator approvals bind
-the installed device/runtime and whether a clean device was requested; clean requests
-still need a reason and the usual audit before mutations.
+[`requires_approval`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#approvals)
+on a resource, port, simulator or secret makes a scoped acquisition an approval
+request. `approval_lifetime` says how long the approval lasts. With
+`"workspace"`, the approved grant stays for later acquisitions, and
+`shoal approvals` lists it.
 
-Agents use the normal acquire command with `--reason`. `shoal approvals` shows
-these requests, merge requests from a scoped `shoal merge`,
-[proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <space>` lists
-the requests a space made or proposed and those it decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
-`shoal approvals` opens a picker; selecting a pending request or naming its
-[number](threads.md#numbers), such as `shoal approvals 3.2`, shows its recorded settings and prompts for `y` to approve or `n` to deny,
-case-insensitively; any other input cancels. In the list, Ctrl-A approves
-and Ctrl-D denies the highlighted request without leaving it: the outcome or
-error shows above the key hints and the list updates. JSON and nonterminal output
-print records without prompting. An unscoped user
-reviews the recorded settings and uses `shoal approvals --approve [S.N]` or
-`shoal approvals --deny [S.N]`; without a number, they pick among pending requests, shown
-with their space, reason and settings, and a request that took the chosen
-number meanwhile is refused. A keep or merge request that no longer applies, because a request
-for a newer commit replaced it, its completion was withdrawn or it was found stale,
-stays listed as `outdated` until the workspace is removed, so its number is not reused and deciding it is refused. Approval reserves no capacity: retry acquisition after
-the decision. Pending requests produce a daemon alert, collapsed until read;
-a decision queues an [alert](alerts.md) for the requesting space
-naming the request, its target and the decision.
+### What an approval binds
 
-`shoal approvals withdraw <S.N>` lets the requesting space
-take back a pending request it no longer needs, as releasing a lease does for a
-lease request. The request stays listed as `withdrawn` on the same terms as
-`outdated`, except a proposed issue, which is deleted as a decided proposal is.
-Withdrawal deletes the request's `approval_requested` alert while it is
-unread; otherwise its deciding coordinator is told, or the user gets
-`approval_withdrawn`. A command that retries the request, such as a queued
-`acquire`, requests it again.
+- A port approval binds the preferred port, the automatic range, the
+  environment variable and the conflict policy. Accepting a conflict
+  suggestion with changed settings needs a new request.
+- A simulator approval binds the installed device and runtime, and whether a
+  clean device was requested. A clean request still needs a reason and the
+  usual audit before the device changes.
+- Selecting a protected profile's device and runtime directly does not relax
+  the profile.
+- Where policies overlap, `"lease"` lifetime wins over `"workspace"`.
 
-A request from a space with an agent of its own goes first to the nearest
-space above it with an agent: a parent [workspace](create.md) or a
-[chat](chats.md), whichever comes first. That space's
-agent is told and decides it instead of the user, by number with
-`shoal approvals --approve <S.N>` or `shoal approvals --deny <S.N>`, or
-passes it up with `shoal approvals --escalate <S.N>`, to the next such
-space above and at the top to the user. A parent space, workspace or chat,
-approves a request a permission governs, an issue or PR proposal, a push, a
-merge or an unmerge, where its own effective [permission](modes.md#mode-permissions)
-for it is `direct`: `issue_open` for an issue, or `issue_other_repositories`
-for one in another repository, `pr_open` for a PR, `push` for a push and for
-a PR that pushes first, `merge` and `push` for a merge or unmerge, and the
-key that governs an [action](modes.md#permitted-actions) for it. It
-approves anything else only where it holds an approved grant for it, with the
-same target and settings, or a request to hold the workspace, which needs
-none. Otherwise `--approve` is refused, citing the permission or the missing
-grant, and it denies or passes the request up. A space whose `decide`
-[permission](modes.md#permitted-actions) is `"direct"` decides any request of a
-space below it as you would, routed to it or not, and with or without a
-grant, but approves one a permission governs only where its own value for
-it is `"direct"`. A push a parent approves runs
-in the daemon's environment. When a chat's agent stops,
-or a space deciding a request is removed, such as below an issue
-proposal that outlives its workspace, the requests it had not decided go to
-the user. Without a deciding
-space, the user is notified as above. The request records its `decider`, the
-deciding space, while one decides it; the user may still decide it.
+Changed effective settings cannot reuse a grant.
 
-An acquisition waiting for a decision returns exit 2 and JSON
-`code: "approval_pending"` with the request; denial returns `"approval_denied"`.
-`--queue` waits for pending approvals and capacity, stopping on denial. Retrying the same
-name preserves the request; changing its settings or reason requires release first.
-Release cancels a pending or denied request even without a lease. Changed effective
-settings cannot reuse a grant. Requests survive restart and failed removal and are
-deleted with the workspace, except proposed issues, which belong to the repository;
-only pending PR proposals and push requests prevent idle cleanup.
+### Acquire with approval
+
+An agent runs the usual acquire command with `--reason`. The command waits for
+the decision as [any request](#approval-requests) does. `--queue` waits for the
+decision and for capacity, and stops on denial.
+
+Approval reserves no capacity: acquire again after the decision. Retrying with
+the same name keeps the request. Changing its settings or reason needs a
+release first. Release cancels a pending or denied request, even without a
+lease.

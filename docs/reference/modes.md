@@ -146,9 +146,8 @@ where a given key's `from` is `given`.
 A key that governs an action lets a scoped process take it at once with
 `"direct"`, as the user would, and refuses it with `"deny"`, citing the
 permission. With `"propose"` the action becomes an
-[approval request](approvals.md) bound to what it does, such as the command
-with its arguments, which the command reports with exit 2 and
-`code: "approval_pending"`, or `"approval_denied"` once denied. Once the
+[approval request](approvals.md#approval-requests) bound to what it does,
+such as the command with its arguments. Once the
 request is approved, the same action proceeds once under every other check,
 and taking it again asks again; an approved command's own requests take
 what the same key governs without asking again. `ci_approve` governs
