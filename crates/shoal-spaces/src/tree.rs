@@ -16,13 +16,14 @@ use crate::{
     protocol::CopySource,
     state::WorkspaceState,
 };
-use shoal_protocol::space_names::SpaceSelector;
-pub use shoal_store::tree::{
-    Receiver, TrackedAgents, agent_runs, below_elsewhere, children, coordinator_of, delegated,
-    delegated_elsewhere, first_absent_above, parent, parent_id, parent_ids, receiver_from,
-    receiving_paths, removal_depth, subtree, subtree_query, with_agents,
+use reads::{TAKEN_FIRST, taken};
+pub use reads::{
+    agent_runs, below_elsewhere, children, delegated, delegated_elsewhere, parent, parent_id,
+    parent_ids, receiver_from, receiving_paths, removal_depth, subtree_query, with_agents,
 };
-use shoal_store::tree::{TAKEN_FIRST, space_ref, taken};
+use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::tree::space_ref;
+pub use shoal_store::tree::{Receiver, TrackedAgents, coordinator_of, first_absent_above, subtree};
 
 impl Spaces {
     /// Create a workspace on a new branch named `name` in the repository of
@@ -290,6 +291,7 @@ pub fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
 
 pub mod move_up;
 mod parents;
+mod reads;
 
 #[cfg(test)]
 mod tests;
