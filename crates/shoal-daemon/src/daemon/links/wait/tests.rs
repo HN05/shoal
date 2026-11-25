@@ -1976,25 +1976,6 @@ async fn the_agent_account_done_takes_off_is_the_spaces_own_change() {
 }
 
 #[tokio::test]
-async fn the_agent_account_an_agents_start_puts_on_is_the_spaces_own_change() {
-    let fixture = assigned_issue().await;
-    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
-    assert!(observe_issue(&fixture, &[], 1).await.is_empty());
-    run_agent(manager, workspace).await;
-    manager.links.settle_requested_agents(&**manager).await;
-    assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
-    assert!(
-        observe_issue(&fixture, &["shoal-agent"], 2)
-            .await
-            .is_empty()
-    );
-    edit_naming(
-        &observe_issue(&fixture, &["shoal-agent", "ann"], 3).await,
-        "ann",
-    );
-}
-
-#[tokio::test]
 async fn a_poll_while_shoal_changes_an_issues_assignees_reports_none_of_it() {
     let fixture = assigned_issue().await;
     assert!(observe_issue(&fixture, &[], 1).await.is_empty());

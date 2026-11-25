@@ -327,3 +327,52 @@ async fn an_agent_starting_puts_the_agent_account_on_and_exiting_takes_it_off() 
     settle().await;
     assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
+
+/// Record a watch's read of issue 7 with `assignees`, `seconds` from now,
+/// returning the updates it reports.
+async fn observe_issue(
+    fixture: &Fixture,
+    assignees: &[&str],
+    seconds: u64,
+) -> Vec<shoal_forge_types::updates::Update> {
+    use shoal_forge_types::items::link::Selection;
+    let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
+    let snapshot = serde_json::from_value(json!({"comments": {}, "checks": {},
+        "conflict": null, "state": "open", "errors": {}, "details": {"title": "Bug",
+        "body": "", "labels": [], "assignees": assignees}}))
+    .unwrap();
+    let at = shoal_protocol::time::UnixTime::now() + std::time::Duration::from_secs(seconds);
+    let (all, report) = (
+        Selection::default(),
+        crate::wait::branch_report::BranchReport::Conflicts,
+    );
+    let start = fixture.links.poll_start_at(at);
+    let id = &fixture.workspace.id;
+    let observations = vec![(url, snapshot)];
+    let recorded =
+        (fixture.links).record_observed(&fixture.daemon, id, observations, &all, report, start);
+    recorded.await.unwrap()
+}
+
+#[tokio::test]
+async fn the_agent_account_an_agents_start_puts_on_is_the_spaces_own_change() {
+    use shoal_forge_types::updates::UpdateKind;
+    let fixture = agents().await;
+    fixture.link().await;
+    assert!(observe_issue(&fixture, &[], 1).await.is_empty());
+    let id = &fixture.workspace.id;
+    fixture.daemon.agents.lock().unwrap().insert(id.clone());
+    fixture
+        .links
+        .settle_agent_assignees(&fixture.daemon, id)
+        .await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
+    let own = observe_issue(&fixture, &["shoal-agent"], 2).await;
+    assert!(own.is_empty(), "{own:?}");
+    let updates = observe_issue(&fixture, &["shoal-agent", "ann"], 3).await;
+    let [edited] = &updates[..] else {
+        panic!("{updates:?}");
+    };
+    assert_eq!(edited.kind, UpdateKind::Edited);
+    assert!(edited.message.contains("ann"), "{}", edited.message);
+}
