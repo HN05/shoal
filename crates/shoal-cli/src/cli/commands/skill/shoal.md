@@ -193,12 +193,12 @@ instructions. `--mode` picks the mode; by default, `worker` for a workspace
 and `chat` for a chat.
 
 `convert agent <tool>` hands the space's work to another agent tool, once the
-running agent's turn ends. `-a <tool>` on `convert workspace` or
+running agent's turn ends, or at once for a stopped or asleep agent. `-a <tool>` on `convert workspace` or
 `convert chat` does the same along with the kind change. Shoal attaches the
 space's sessions to it as `handoff` files. The new tool starts a new session
 that is told where they are, then its mode's instructions and the text after
-`--`. `--mode`, `--model`, `--effort` and `--permission` set what the new
-agent runs with.
+`--`. It keeps the space's mode unless `--mode` names another. `--model`,
+`--effort` and `--permission` set what the new agent runs with.
 
 ## Coordinate spaces below
 
@@ -1181,8 +1181,9 @@ space's `daemon` [permission](#permitted-actions). Stopping the daemon stops
 every agent.
 
 While a stop or restart waits for the daemon's own work, commands that start
-more work, such as `shoal rm`, wait and run on the next daemon. Agents' other
-`shoal` commands fail while it restarts.
+more work, such as `shoal rm`, wait. They run on the next daemon after a
+restart, and fail after a stop. Agents' other `shoal` commands fail while the
+daemon restarts.
 `shoal config reload` applies the config on disk without stopping anything.
 An invalid file leaves the previous settings in place.
 
