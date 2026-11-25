@@ -43,6 +43,30 @@ impl Runner {
             .await
     }
 
+    /// Record that something cut the run of the claimed job `id` short, so
+    /// its estimate leaves it out.
+    pub(super) async fn mark_job_cut_short(&self, id: &QueueEntryId) -> Result<()> {
+        let id = id.clone();
+        self.store
+            .run(move |db| {
+                db.execute("UPDATE ci_jobs SET cut_short=1 WHERE id=?1", [id])?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Record that the kernel's OOM killer killed a process of the claimed
+    /// job `id`, so its estimate counts it above its peak.
+    pub(super) async fn mark_job_oom_killed(&self, id: &QueueEntryId) -> Result<()> {
+        let id = id.clone();
+        self.store
+            .run(move |db| {
+                db.execute("UPDATE ci_jobs SET oom_killed=1 WHERE id=?1", [id])?;
+                Ok(())
+            })
+            .await
+    }
+
     /// Keep what the ended `job` used as the latest run of its job, unless
     /// no sample saw it run or it is kept already, as before a removal that
     /// is tried again.
@@ -104,19 +128,21 @@ impl Runner {
 fn ended_run(tx: &Transaction<'_>, id: &QueueEntryId, now: UnixTime) -> Result<Option<RunUsage>> {
     let run = tx
         .query_row(
-            "SELECT peak_memory, coalesce(launched_at,started_at) FROM ci_jobs
-             WHERE id=?1 AND usage_recorded=0 AND peak_memory IS NOT NULL",
+            "SELECT peak_memory, coalesce(launched_at,started_at), cut_short, oom_killed
+             FROM ci_jobs WHERE id=?1 AND usage_recorded=0 AND peak_memory IS NOT NULL",
             [id],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, UnixTime>(1)?)),
+            |row| {
+                Ok(RunUsage {
+                    ended_at: now,
+                    peak_memory: u64::try_from(row.get::<_, i64>(0)?).unwrap_or_default(),
+                    duration: now.duration_since(row.get(1)?),
+                    whole: !row.get::<_, bool>(2)?,
+                    oom_killed: row.get(3)?,
+                })
+            },
         )
         .optional()?;
-    Ok(run.map(|(peak, started)| RunUsage {
-        ended_at: now,
-        peak_memory: u64::try_from(peak).unwrap_or_default(),
-        duration: now.duration_since(started),
-        whole: true,
-        oom_killed: false,
-    }))
+    Ok(run)
 }
 
 /// The key that tells runs of `job` apart from other jobs' runs: its

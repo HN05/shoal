@@ -69,9 +69,14 @@ above the rest. A short window, such as the latest 5 runs, can fill with runs
 that built nothing, and the next full run then finds no memory reserved; the
 highest peak over a period lets one outlier set the cost for all of it. With
 fewer than about 20 runs the percentile comes out close to the highest peak, so
-a new job starts cautious. A peak counts what the job swapped out at full
-size, since without the pressure that swapped it out it would have stayed in
-memory. A runner that ended without taking its job, however it ended, keeps
+a new job starts cautious. A run cut short, as by load protection or the
+user, used less than a whole one, so the estimate leaves it out, and reads the
+highest peak of such runs only while the job has no whole run, as a lower
+bound: each lower estimate would admit the job where it was stopped again. A
+run whose process the kernel's OOM killer killed needed more than it got, so it
+counts as a whole run at 1.2 times its peak, the bump Kubernetes' vertical pod
+autoscaler uses. A peak counts what the job swapped out at full size, since
+without the pressure that swapped it out it would have stayed in memory. A runner that ended without taking its job, however it ended, keeps
 no run: it measured nothing of the job. One table keeps the runs of every kind
 Shoal measures, by repository, kind and key, a CI job's key being its workflow
 and job name, and forgets a key once it has not run for 30 days.

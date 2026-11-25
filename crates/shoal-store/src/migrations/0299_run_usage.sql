@@ -22,3 +22,11 @@ INSERT INTO run_usage(repository_id,kind,key,ended_at,peak_memory,duration,whole
     FROM ci_job_usage ORDER BY ended_at, rowid;
 
 DROP TABLE ci_job_usage;
+
+-- Whether something cut a claimed job's run short, as load protection or
+-- the user stopping it, and whether the kernel's OOM killer killed a
+-- process of it, which its run keeps.
+ALTER TABLE ci_jobs ADD COLUMN cut_short INTEGER NOT NULL DEFAULT 0
+    CHECK(cut_short IN (0,1));
+ALTER TABLE ci_jobs ADD COLUMN oom_killed INTEGER NOT NULL DEFAULT 0
+    CHECK(oom_killed IN (0,1));

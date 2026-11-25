@@ -283,7 +283,9 @@ CREATE TABLE "ci_jobs" (
     peak_memory INTEGER,
     usage_recorded INTEGER NOT NULL DEFAULT 0 CHECK(usage_recorded IN (0,1)),
     runner_id INTEGER
-);
+, cut_short INTEGER NOT NULL DEFAULT 0
+    CHECK(cut_short IN (0,1)), oom_killed INTEGER NOT NULL DEFAULT 0
+    CHECK(oom_killed IN (0,1)));
 
 CREATE TABLE "owned_places" (
             host TEXT NOT NULL,

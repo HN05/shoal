@@ -132,10 +132,11 @@ impl Runner {
             .find(|job| job.workspace_id == *workspace_id))
     }
 
-    /// Cancel `job`'s run as `cause` stops its runner, recording in Shoal's
-    /// log what stopped it and whether the run was cancelled, returning the
-    /// cancelled run's URL.
+    /// Cancel `job`'s run as `cause` stops its runner, cutting it short,
+    /// recording in Shoal's log what stopped it and whether the run was
+    /// cancelled, returning the cancelled run's URL.
     async fn cancel_for_stop(&self, job: &ClaimedJob, cause: JobStop) -> Result<ItemRef> {
+        self.mark_job_cut_short(&job.id).await?;
         let cancelled = self.cancel_job_run(job).await;
         let outcome = match &cancelled {
             Ok(_) => "cancelled its run".to_owned(),

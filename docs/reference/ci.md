@@ -164,8 +164,8 @@ limits jobs as [`machine.max_heavy_agents`](../../crates/shoal-cli/src/cli/comma
 10 seconds apart, while measured memory and disk leave room below the
 `[machine.overload.warning]` thresholds: a job is expected to use the 95th
 percentile of the resident memory its latest 30 whole runs reached, by
-repository, workflow and job name, or what a starting agent counts at before
-it has run, and until its runner ends, however long its workspace remains, it reserves what it is expected to use beyond what its workspace used
+repository, workflow and job name, leaving out runs that load protection or
+the user cut short, or what a starting agent counts at before it has run, and until its runner ends, however long its workspace remains, it reserves what it is expected to use beyond what its workspace used
 at the latest usage sample, all of it before one. A job's recent start
 counts against an agent's as an agent's counts against a job's. A job
 beside running ones also waits while the machine's CPU, niced time

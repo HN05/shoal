@@ -166,10 +166,11 @@ impl Runner {
 
     /// Have the forge cancel alone the job the runner of `job` took, which
     /// `cause`, a signal ending its wrapper's session, cuts off, recording
-    /// it to rerun; the wrapper then stops the runner. A job the forge does
-    /// not name is left to fail there, as [`Self::stop_job_to_rerun`]
-    /// leaves one.
+    /// its run as cut short and the job to rerun; the wrapper then stops
+    /// the runner. A job the forge does not name is left to fail there, as
+    /// [`Self::stop_job_to_rerun`] leaves one.
     pub(super) async fn cancel_job_to_rerun(&self, job: &ClaimedJob, cause: JobStop) -> Result<()> {
+        self.mark_job_cut_short(&job.id).await?;
         let taken = match self.identified_job(job).await {
             Ok(taken) => taken,
             Err(error) => {
@@ -234,12 +235,12 @@ impl Runner {
     }
 
     /// Stop the processes of `job`'s workspace under its lifecycle,
-    /// recording first that `taken`, when known, is to rerun for `cause`
-    /// and having its forge cancel it, returning the processes stopped and
-    /// whether the forge cancelled it: a stop another lifecycle operation
-    /// refuses records and cancels nothing, and the record outlives a stop
-    /// that fails or a daemon that ends once anything may have been
-    /// signaled.
+    /// recording first that its run is cut short and that `taken`, when
+    /// known, is to rerun for `cause`, and having its forge cancel it,
+    /// returning the processes stopped and whether the forge cancelled it:
+    /// a stop another lifecycle operation refuses records and cancels
+    /// nothing, and the record outlives a stop that fails or a daemon that
+    /// ends once anything may have been signaled.
     async fn interrupt_job(
         &self,
         daemon: &dyn Daemon,
@@ -249,6 +250,7 @@ impl Runner {
     ) -> Result<(Vec<shoal_protocol::events::StoppedProcess>, bool)> {
         let mut cancelled = false;
         let first = async {
+            self.mark_job_cut_short(&job.id).await?;
             if let Some(taken) = taken {
                 self.record_job_rerun(job, taken, cause).await?;
                 cancelled = self.cancel_stopping_job(job, taken).await;

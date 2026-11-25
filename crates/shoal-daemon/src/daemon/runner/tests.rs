@@ -1010,6 +1010,7 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
             .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
     );
     assert_eq!(logged_stops(manager), [JobStop::Stop]);
+    assert_eq!(cut_short(manager).await, [true]);
     // The job runs until the forge's runner stops it.
     finish_ended_jobs(manager).await;
     assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
@@ -1632,6 +1633,7 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_its_run_fin
         logged_stops(manager),
         [JobStop::Overload(Pressure::Memory.reason())]
     );
+    assert_eq!(cut_short(manager).await, [true]);
     let reasons: Vec<_> = manager
         .space_events(None, 1000)
         .await
@@ -2161,6 +2163,18 @@ pub(super) async fn sample_peaks(manager: &Manager) {
         })
         .await
         .unwrap();
+}
+
+/// Whether each claimed job's run is cut short.
+pub(super) async fn cut_short(manager: &Manager) -> Vec<bool> {
+    (manager.store)
+        .run(|db| {
+            let mut statement = db.prepare("SELECT cut_short FROM ci_jobs ORDER BY started_at")?;
+            let rows = statement.query_map([], |row| row.get(0))?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        })
+        .await
+        .unwrap()
 }
 
 /// How many runs of jobs the costs keep.

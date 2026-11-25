@@ -87,3 +87,29 @@ async fn a_job_counts_at_what_its_kept_runs_estimate() {
     // Another job of the workflow has a history of its own.
     assert_eq!(cost(&fixture, &queued("ci.yml", "docs")).await, None);
 }
+
+#[tokio::test]
+async fn a_run_cut_short_leaves_the_cost_and_one_the_oom_killer_hit_raises_it() {
+    let fixture = Fixture::new("").await;
+    let rust = queued("ci.yml", "rust");
+    end_runs(&fixture, 0, &rust, &[10 * GIB]).await;
+
+    let stopped = claimed(&fixture, 1, &rust, 20 * GIB).await;
+    fixture
+        .runner
+        .mark_job_cut_short(&stopped.id)
+        .await
+        .unwrap();
+    fixture.runner.record_job_usage(&stopped).await.unwrap();
+    assert_eq!(cost(&fixture, &rust).await, Some(10 << 30));
+
+    let killed = claimed(&fixture, 2, &rust, 10 * GIB).await;
+    fixture
+        .runner
+        .mark_job_oom_killed(&killed.id)
+        .await
+        .unwrap();
+    fixture.runner.record_job_usage(&killed).await.unwrap();
+    // The percentile of 10 GiB and 12 GiB, interpolated.
+    assert_eq!(cost(&fixture, &rust).await, Some(GIB as u64 * 119 / 10));
+}
