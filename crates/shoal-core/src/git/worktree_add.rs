@@ -15,10 +15,21 @@ const ATTEMPTS: usize = 3;
 /// stdout. Each run must do the same, so it creates no branch: such a
 /// failure leaves the branch it created.
 pub(crate) async fn run(command: impl Fn() -> Command) -> Result<String> {
+    run_then(command(), command).await
+}
+
+/// [`run`] whose first run is the add `first` and each later one the add
+/// `retry` builds, as when the first creates the branch the later ones
+/// check out.
+pub(crate) async fn run_then(first: Command, retry: impl Fn() -> Command) -> Result<String> {
     let mut attempt = 1;
+    let mut result = super::output(first).await;
     loop {
-        match super::output(command()).await {
-            Err(error) if attempt < ATTEMPTS && pruned(&error) => attempt += 1,
+        match result {
+            Err(error) if attempt < ATTEMPTS && pruned(&error) => {
+                attempt += 1;
+                result = super::output(retry()).await;
+            }
             result => return result,
         }
     }

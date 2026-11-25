@@ -128,6 +128,18 @@ async fn a_new_branch_that_exists_is_refused() {
     );
 }
 
+#[tokio::test]
+async fn a_failed_add_on_a_new_branch_keeps_the_branch() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "sha1");
+    let workspace = root.path().join("topic");
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::write(workspace.join("taken"), "").unwrap();
+    let added = add(&repo, &workspace, &"topic".into(), Some("main")).await;
+    assert!(added.is_err());
+    assert!(has_branch(&repo, "topic").await);
+}
+
 /// A repository with a worktree on `topic` at `<root>/topic`.
 async fn with_topic(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
     let repo = repository(root, "sha1");

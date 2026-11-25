@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 use shoal_refs::BranchName;
 
+use tokio::process::Command;
+
 use crate::{fsutil::off_runtime, tools::Tool};
 use shoal_protocol::removal::{BranchOutcome, RemovalResult};
 
@@ -16,26 +18,43 @@ pub mod left;
 /// revision `base` when given, otherwise the existing branch, which Git
 /// refuses when another worktree has it checked out.
 pub async fn add(repo: &Path, path: &Path, branch: &BranchName, base: Option<&str>) -> Result<()> {
-    let context = || format!("create a worktree on {branch} at {}", path.display());
-    if let Some(base) = base {
-        (super::branch::create(repo, branch, base).await).with_context(context)?;
-    }
-    (add_on_branch(repo, path, branch).await).with_context(context)
+    let add_on_branch = || add_on_branch(repo, path, branch);
+    let added = match base {
+        Some(base) => {
+            super::worktree_add::run_then(
+                add_on_new_branch(repo, path, branch, base),
+                add_on_branch,
+            )
+            .await
+        }
+        None => super::worktree_add::run(add_on_branch).await,
+    };
+    added
+        .map(drop)
+        .with_context(|| format!("create a worktree on {branch} at {}", path.display()))
 }
 
-/// Check out the existing `branch` in a new linked worktree of `repo` at
-/// `path`.
-async fn add_on_branch(repo: &Path, path: &Path, branch: &BranchName) -> Result<()> {
-    super::worktree_add::run(|| {
-        let mut command = super::isolated_command_without_submodules(repo);
-        command
-            .args(["worktree", "add", "--"])
-            .arg(path)
-            .arg(branch.as_str());
-        command
-    })
-    .await
-    .map(drop)
+/// The `git worktree add` that creates `branch` at revision `base`, without
+/// an upstream, and checks it out in a new linked worktree of `repo` at
+/// `path`. A failure leaves the branch it created.
+fn add_on_new_branch(repo: &Path, path: &Path, branch: &BranchName, base: &str) -> Command {
+    let mut command = super::isolated_command_without_submodules(repo);
+    command
+        .args(["worktree", "add", "--no-track", "-b", branch.as_str(), "--"])
+        .arg(path)
+        .arg(base);
+    command
+}
+
+/// The `git worktree add` that checks out the existing `branch` in a new
+/// linked worktree of `repo` at `path`.
+fn add_on_branch(repo: &Path, path: &Path, branch: &BranchName) -> Command {
+    let mut command = super::isolated_command_without_submodules(repo);
+    command
+        .args(["worktree", "add", "--"])
+        .arg(path)
+        .arg(branch.as_str());
+    command
 }
 
 /// Whether removal may delete files Git would keep the worktree for.
