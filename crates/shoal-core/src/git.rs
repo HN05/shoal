@@ -45,6 +45,8 @@ pub mod unmerge;
 mod version;
 pub mod worktree;
 mod worktree_add;
+mod worktree_list;
+pub use worktree_list::{Worktree, checkout_of, listed_checkout_of, listed_worktrees, worktrees};
 
 use crate::tools::Tool;
 use std::{
@@ -583,31 +585,6 @@ async fn resolve_named_commit_by_git(
     Ok((commit.into(), name.to_owned()))
 }
 
-/// One entry of `git worktree list --porcelain`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Worktree {
-    pub path: PathBuf,
-    /// Full ref name such as `refs/heads/main`; `None` when HEAD is detached.
-    pub branch: Option<String>,
-    /// Git considers the registration removable because its directory is gone.
-    pub prunable: bool,
-    pub locked: bool,
-}
-
-impl Worktree {
-    pub fn is_branch(&self, name: &BranchName) -> bool {
-        self.branch.as_deref() == Some(&local_ref(name))
-    }
-}
-
-pub async fn worktrees(
-    repo: &Path,
-    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
-) -> Result<Vec<Worktree>> {
-    let listing = run(repo, &["worktree", "list", "--porcelain", "-z"]).await?;
-    Ok(parse_worktrees(&listing))
-}
-
 /// Reconnect the checkout and its linked worktrees after either moved; `moved`
 /// names the new location of each worktree that moved.
 pub async fn repair_worktrees(checkout: &Path, moved: &[PathBuf]) -> Result<()> {
@@ -615,42 +592,6 @@ pub async fn repair_worktrees(checkout: &Path, moved: &[PathBuf]) -> Result<()> 
     command.args(["worktree", "repair", "--"]).args(moved);
     output(command).await?;
     Ok(())
-}
-
-/// The first worktree registered on this literal local branch, including
-/// locked or prunable entries. The caller decides whether it is usable.
-pub async fn checkout_of(
-    repo: &Path,
-    branch: &BranchName,
-    run: impl AsyncFn(&Path, &[&str]) -> Result<String>,
-) -> Result<Option<Worktree>> {
-    Ok(worktrees(repo, run)
-        .await?
-        .into_iter()
-        .find(|tree| tree.is_branch(branch)))
-}
-
-fn parse_worktrees(listing: &str) -> Vec<Worktree> {
-    listing
-        .split("\0\0")
-        .filter_map(|record| {
-            let fields: Vec<&str> = record.split('\0').collect();
-            let path = fields.iter().find_map(|f| f.strip_prefix("worktree "))?;
-            Some(Worktree {
-                path: PathBuf::from(path),
-                branch: fields
-                    .iter()
-                    .find_map(|f| f.strip_prefix("branch "))
-                    .map(str::to_owned),
-                prunable: fields
-                    .iter()
-                    .any(|f| *f == "prunable" || f.starts_with("prunable ")),
-                locked: fields
-                    .iter()
-                    .any(|f| *f == "locked" || f.starts_with("locked ")),
-            })
-        })
-        .collect()
 }
 
 #[cfg(test)]

@@ -485,7 +485,7 @@ impl Spaces {
         let repo = daemon
             .repository(crate::repository::Selector::from(workspace.repository()))
             .await?;
-        let trees = git::worktrees(&repo.path, git::run).await?;
+        let trees = git::listed_worktrees(&repo.path, git::run).await?;
         let recorded = workspace.path.clone();
         off_runtime::run(move || {
             for tree in trees {

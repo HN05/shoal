@@ -445,7 +445,7 @@ async fn check_checkout(repo: &Repository, workspaces: &[Workspace]) -> Result<(
         git::common_dir(&repo.path).await? == git_dir,
         "repository uses external Git metadata; refusing deletion"
     );
-    for tree in git::worktrees(&repo.path, git::run).await? {
+    for tree in git::listed_worktrees(&repo.path, git::run).await? {
         // Removing a directory outside Git leaves its registration behind.
         // Only ignore missing entries Git itself considers prunable; locked
         // worktrees may merely be on an unmounted disk. No global prune is needed

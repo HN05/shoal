@@ -247,20 +247,6 @@ fn shoal_git_works_where_it_is_told_not_where_the_caller_works() {
 }
 
 #[test]
-fn parses_porcelain_worktree_records() {
-    let listing = "worktree /repo\0HEAD abc\0branch refs/heads/main\0\0\
-            worktree /repo/.wt/feature\0HEAD def\0branch refs/heads/feature\0locked reason\0prunable gitdir file points to non-existent location\0\0\
-            worktree /repo/.wt/detached\0HEAD 123\0detached\0\0";
-    let trees = parse_worktrees(listing);
-    assert_eq!(trees.len(), 3);
-    assert!(trees[0].is_branch(&"main".into()) && !trees[0].locked && !trees[0].prunable);
-    assert_eq!(trees[1].path, PathBuf::from("/repo/.wt/feature"));
-    assert!(trees[1].locked && trees[1].prunable);
-    assert_eq!(trees[2].branch, None);
-    assert!(parse_worktrees("").is_empty());
-}
-
-#[test]
 fn an_approved_push_replays_its_url_and_keeps_a_missing_ref_missing() {
     use shoal_protocol::approvals::PushSpecification;
     let push = PushSpecification {

@@ -93,7 +93,7 @@ async fn registered_branch(repo: &Path, path: &Path) -> Result<Option<BranchName
 /// The worktree Git lists at `path`, if any.
 async fn listed(repo: &Path, path: &Path) -> Result<Option<super::Worktree>> {
     let path = resolved(path).await;
-    for worktree in super::worktrees(repo, super::run_isolated).await? {
+    for worktree in super::listed_worktrees(repo, super::run_isolated).await? {
         if resolved(&worktree.path).await == path {
             return Ok(Some(worktree));
         }
@@ -566,7 +566,7 @@ async fn delete_branch(repo: &Path, branch: &BranchName) -> Result<BranchOutcome
     {
         return Ok(BranchOutcome::Deleted);
     }
-    let checked_out = super::checkout_of(repo, branch, super::run_isolated).await?;
+    let checked_out = super::listed_checkout_of(repo, branch, super::run_isolated).await?;
     Ok(match checked_out {
         Some(_) => BranchOutcome::RetainedCheckedOut,
         None => BranchOutcome::RetainedFailed,

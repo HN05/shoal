@@ -375,7 +375,9 @@ async fn kept_status(
     {
         return Ok(Status::Released);
     }
-    if git::checkout_of(repo, &branch, git::run).await?.is_some()
+    if git::listed_checkout_of(repo, &branch, git::run)
+        .await?
+        .is_some()
         || git::branch::in_operation(repo, &branch).await?
     {
         return Ok(Status::CheckedOut);
