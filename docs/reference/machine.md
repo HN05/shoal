@@ -93,7 +93,7 @@ shoal unpause                  # Admit work again and restore what stayed
 shoal pause --machine desktop  # Another machine of the hub, by name or ID
 ```
 
-`shoal pause` frees a machine for its user at once, such as a gaming PC. The
+`shoal pause` frees a machine, such as a gaming PC, for its user at once. The
 pause lasts through daemon restarts and reboots until `shoal unpause`. Only the
 user's own terminal pauses or unpauses a machine, since that acts on every
 space there. `--machine` pauses or unpauses another machine of the hub through
@@ -124,5 +124,5 @@ stopped here. The machine retires its copies of the spaces that went, as after
 any takeover.
 
 An unpause is refused while the pause still stops work and hands spaces over,
-until its `handed_over` alert arrives. A space it sent then would run on two
-machines.
+until its `handed_over` alert arrives, since a space it sends would then run on
+two machines.
