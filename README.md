@@ -29,7 +29,7 @@ the [runtime dependencies](#runtime-dependencies) before running `shoal daemon i
 `shoal daemon install` starts the per-user
 daemon and writes a missing config with its defaults in `~/.config/shoal/`;
 `shoal skill install` installs the `shoal` skill into each
-[AI tool's existing skill directory](docs/reference/install.md#agent-skill-outside-project-repositories);
+[AI tool's existing skill directory](docs/reference/install.md#agent-skill);
 `shoal skill install <tool>` creates one. Later `shoal` commands keep installed
 skills current after upgrades.
 

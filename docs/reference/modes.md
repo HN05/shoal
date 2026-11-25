@@ -65,7 +65,7 @@ warns for each layer whose rule repeats the opening of a space's facts; the
 daemon alerts about it in the global config when it starts or reloads its
 config. Texts are read at launch without a daemon restart.
 
-An agent is told, in order: the [`shoal` skill](install.md#agent-skill-outside-project-repositories),
+An agent is told, in order: the [`shoal` skill](install.md#agent-skill),
 which describes Shoal's commands; the facts of its space; the space rules; its
 mode's rules; and its subject with its mode's instructions. Every agent's system
 text, in any mode, starts with Shoal's guidance: the facts of the kind of space

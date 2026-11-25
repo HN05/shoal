@@ -283,7 +283,7 @@ proxy = "cliproxy"                # A [machine.proxies] entry its agents go thro
 ```
 
 `skill_dir` is absolute or starts with `~/`. See
-[agent skill](../../../../../../docs/reference/install.md#agent-skill-outside-project-repositories).
+[agent skill](../../../../../../docs/reference/install.md#agent-skill).
 `proxy` names a [proxy](#proxies). Only Claude Code, Codex and their launch
 profiles take one, and a launch profile inherits its base's.
 
@@ -454,7 +454,11 @@ git_profile = "agent"    # A Git profile for agents' Git commands; no default
 An `[agents.<name>]` table changes one of the
 [AI tools Shoal includes](../../../../../../docs/reference/agents.md), or adds
 another. A tool is an agent when it is built in or has a `command` or `base`.
-It may share a name with a [command](#commands).
+It may share a name with a [command](#commands). A tool's name, in `[agents]`
+and `[machine.agents]` alike, takes ASCII letters, digits, `-` and `_` and
+starts with a letter or digit. An agent's name takes no uppercase letters and
+starts with a lowercase one. No tool is named `all`, which
+`shoal skill install` takes for every tool.
 
 ```toml
 [agents.claude]
