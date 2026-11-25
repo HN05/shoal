@@ -17,11 +17,11 @@ class Shoal < Formula
       libexec.install "Shoal.app"
       bin.install_symlink libexec/"Shoal.app/Contents/MacOS/shoal"
     else
-      libexec.install "shoal"
+      # Linux downloads the bare binary, staged under its release name.
+      libexec.install Dir["shoal-v*"].fetch(0) => "shoal"
+      (libexec/"shoal").chmod 0755
       bin.install_symlink libexec/"shoal"
     end
-    (share/"shoal").install "skills"
-    (libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"
   end
 
   test do
@@ -33,6 +33,6 @@ class Shoal < Formula
     system bin/"shoal", "skill", "install", "codex"
     installed = testpath/".agents/skills/shoal/SKILL.md"
     refute_predicate installed, :symlink?
-    assert_equal (share/"shoal/skills/shoal/SKILL.md").read, installed.read
+    assert_equal shell_output("#{bin}/shoal skill"), installed.read
   end
 end
