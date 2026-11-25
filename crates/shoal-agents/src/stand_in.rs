@@ -17,6 +17,7 @@ use shoal_core::{
     hooks::HookKind,
     paths::StateFiles,
     process::load::WorkLimit,
+    sessions::Host,
 };
 use shoal_daemon_base::{
     alerts::{About, AlertKind},
@@ -72,6 +73,8 @@ pub(crate) struct Fixture {
     pub(crate) agents: Arc<Agents>,
     pub(crate) daemon: Arc<StandIn>,
     pub(crate) records: Arc<StandInRecords>,
+    /// The hosts the places of agents run in.
+    hosts: Vec<Arc<dyn Host>>,
 }
 
 impl Fixture {
@@ -81,6 +84,15 @@ impl Fixture {
 
     /// The service under the global config `text` adds to the tests' base.
     pub(crate) async fn with_config(text: &str) -> Self {
+        Self::build(text, Vec::new()).await
+    }
+
+    /// The service whose agents' places run in `hosts`.
+    pub(crate) async fn with_session_hosts(hosts: Vec<Arc<dyn Host>>) -> Self {
+        Self::build("", hosts).await
+    }
+
+    async fn build(text: &str, hosts: Vec<Arc<dyn Host>>) -> Self {
         let root = tempfile::tempdir().unwrap();
         let paths = Paths::for_test(std::fs::canonicalize(root.path()).unwrap());
         std::fs::create_dir_all(&paths.state).unwrap();
@@ -89,13 +101,14 @@ impl Fixture {
         )));
         let daemon = StandIn::default();
         let records = Arc::new(StandInRecords::default());
-        let agents = Arc::new(service(paths, config, records.clone()).await);
+        let agents = Arc::new(service(paths, config, records.clone(), hosts.clone()).await);
         daemon.use_service(&agents);
         Self {
             root,
             agents,
             daemon: Arc::new(daemon),
             records,
+            hosts,
         }
     }
 
@@ -105,7 +118,8 @@ impl Fixture {
         let paths = self.agents.paths.clone();
         let config = self.agents.config.clone();
         drop(self.agents);
-        let agents = Arc::new(service(paths, config, self.records.clone()).await);
+        let (records, hosts) = (self.records.clone(), self.hosts.clone());
+        let agents = Arc::new(service(paths, config, records, hosts).await);
         self.daemon.use_service(&agents);
         Self { agents, ..self }
     }
@@ -290,6 +304,34 @@ impl Fixture {
         mode: &str,
         repository: Option<&Repository>,
     ) -> SpaceId {
+        let id = self.stopped_chat(name, mode, repository).await;
+        let (recorded, mode) = (id.clone(), mode.to_owned());
+        (self.agents.store)
+            .write(move |tx| {
+                tx.execute(
+                    "INSERT INTO executions(id,space_id,state,agent,mode)
+                     VALUES (?1,?1,'running','claude',?2)",
+                    rusqlite::params![recorded, mode],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let execution = ExecutionId::from(name);
+        (self.agents)
+            .track_unconnected(&execution, &id, &name.into(), Agent::from("claude"))
+            .await;
+        id
+    }
+
+    /// Record a chat `name` of `repository`, or without one, in `mode`,
+    /// with its scope token and no agent running.
+    pub(crate) async fn stopped_chat(
+        &self,
+        name: &str,
+        mode: &str,
+        repository: Option<&Repository>,
+    ) -> SpaceId {
         let path = repository.map_or_else(|| self.root.path().into(), |found| found.path.clone());
         let repository = repository.map(|repository| repository.id.clone());
         let given = repository.as_ref().map(RepositoryId::as_str);
@@ -303,11 +345,6 @@ impl Fixture {
                      VALUES (?1,'chat',?1,?2,?3)",
                     rusqlite::params![recorded, repository, mode],
                 )?;
-                tx.execute(
-                    "INSERT INTO executions(id,space_id,state,agent,mode)
-                     VALUES (?1,?1,'running','claude',?2)",
-                    rusqlite::params![recorded, mode],
-                )?;
                 Ok(())
             })
             .await
@@ -315,10 +352,6 @@ impl Fixture {
         self.daemon.spaces.lock().unwrap().push(Space::from(chat));
         let token = ScopeToken::from(format!("{name}-token"));
         (self.records.chat_tokens.lock().unwrap()).insert(id.clone(), token);
-        let execution = ExecutionId::from(name);
-        (self.agents)
-            .track_unconnected(&execution, &id, &name.into(), Agent::from("claude"))
-            .await;
         id
     }
 
@@ -394,7 +427,12 @@ impl Fixture {
 }
 
 /// The service over the state directory of `paths`.
-async fn service(paths: Paths, config: Arc<ConfigState>, records: Arc<StandInRecords>) -> Agents {
+async fn service(
+    paths: Paths,
+    config: Arc<ConfigState>,
+    records: Arc<StandInRecords>,
+    hosts: Vec<Arc<dyn Host>>,
+) -> Agents {
     let store = shoal_store::test_support::unsynced_store(paths.database())
         .await
         .unwrap();
@@ -413,7 +451,7 @@ async fn service(paths: Paths, config: Arc<ConfigState>, records: Arc<StandInRec
         paths,
         records,
         Arc::new(StandInRemovals),
-        Vec::new(),
+        hosts,
     )
 }
 
@@ -428,6 +466,8 @@ pub(crate) struct StandIn {
     pub(crate) repositories: Mutex<Vec<Repository>>,
     /// What the alerts told, by kind.
     pub(crate) notified: Mutex<Vec<(AlertKind, String)>>,
+    /// What the alerts told the agents of spaces, by space and kind.
+    pub(crate) told: Mutex<Vec<(SpaceId, AlertKind, String)>>,
     /// The failed state reports, each with the space it named.
     pub(crate) state_failures: Mutex<Vec<(SpaceSelector, String)>>,
     /// The service's store, which the workspaces' lifecycles live in.
@@ -821,8 +861,18 @@ impl Alerts for StandIn {
         Box::pin(async {})
     }
 
-    fn tell_space<'a>(&'a self, _: &'a SpaceId, _: AlertKind, _: String) -> BoxFuture<'a, bool> {
-        Box::pin(async { Default::default() })
+    /// Tell a space the stand-in records, whose agent hears it.
+    fn tell_space<'a>(
+        &'a self,
+        id: &'a SpaceId,
+        kind: AlertKind,
+        message: String,
+    ) -> BoxFuture<'a, bool> {
+        let heard = self.find(id).is_some();
+        if heard {
+            self.told.lock().unwrap().push((id.clone(), kind, message));
+        }
+        Box::pin(async move { heard })
     }
 
     fn notify_approval<'a>(&'a self, _: &'a ApprovalRequest) -> BoxFuture<'a, ()> {

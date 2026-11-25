@@ -13,7 +13,6 @@ mod places;
 mod proxy_retries;
 pub(crate) mod queue;
 mod restart_recovery;
-mod restarts;
 mod resumes;
 mod sessions;
 mod settle;

@@ -1,5 +1,4 @@
 use crate::daemon::manager::Manager;
-use crate::sessions::PlaceOwnership;
 use crate::{
     daemon::test_support::{manager, repository},
     model::Workspace,
@@ -20,7 +19,7 @@ use std::{
 };
 
 #[derive(Default)]
-pub(super) struct FakeHost {
+struct FakeHost {
     name: Option<HostName>,
     remaining: Mutex<Vec<(String, SpaceId)>>,
     demos: Mutex<std::collections::HashMap<String, String>>,
@@ -29,7 +28,7 @@ pub(super) struct FakeHost {
 }
 
 impl FakeHost {
-    pub(super) fn add(&self, name: &str, workspace: &str) -> Result<()> {
+    fn add(&self, name: &str, workspace: &str) -> Result<()> {
         self.remaining
             .lock()
             .map_err(|e| anyhow::anyhow!("{e}"))?
@@ -45,7 +44,7 @@ impl FakeHost {
         Ok(())
     }
 
-    pub(super) fn closed(&self) -> Result<Vec<String>> {
+    fn closed(&self) -> Result<Vec<String>> {
         Ok(self
             .closed
             .lock()
@@ -620,7 +619,7 @@ async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<(
 
 /// A Rex host whose `remaining` blocks are open, with `owned` recorded as
 /// Shoal's for the workspace.
-pub(super) async fn rex_fixture(
+async fn rex_fixture(
     owned: &[&str],
 ) -> Result<(tempfile::TempDir, Arc<Manager>, Workspace, Arc<FakeHost>)> {
     let (root, manager, workspace, host) = fixture_for("rex").await?;
@@ -635,407 +634,6 @@ pub(super) async fn rex_fixture(
             .await?;
     }
     Ok((root, manager, workspace, host))
-}
-
-#[tokio::test]
-async fn removal_closes_only_the_blocks_shoal_recorded_creating() -> Result<()> {
-    let (_root, manager, workspace, host) = rex_fixture(&["created"]).await?;
-    host.add("created", workspace.id.as_str())?;
-    // The user's own block ran an agent, but Shoal never recorded creating it.
-    host.add("users", workspace.id.as_str())?;
-    manager
-        .agents
-        .close_owned_places(&*manager, Some(workspace.id.clone()))
-        .await;
-    assert_eq!(host.closed()?, ["created"]);
-    assert!(manager.agents.owned_places(None).await?.is_empty());
-    Ok(())
-}
-
-#[tokio::test]
-async fn the_sweep_retries_failed_closes_once_the_workspace_is_gone() -> Result<()> {
-    let (_root, manager, workspace, host) = rex_fixture(&["bad", "live"]).await?;
-    host.add("bad", workspace.id.as_str())?;
-    host.add("live", workspace.id.as_str())?;
-    host.fail.store(true, Ordering::Relaxed);
-    manager
-        .agents
-        .close_owned_places(&*manager, Some(workspace.id.clone()))
-        .await;
-    assert_eq!(host.closed()?, ["live"]);
-    let left: Vec<_> = manager.agents.owned_places(None).await?;
-    assert_eq!(left.len(), 1);
-    // A sweep leaves the places of a workspace that still exists.
-    host.fail.store(false, Ordering::Relaxed);
-    manager.agents.cleanup_orphan_sessions(&*manager).await;
-    assert_eq!(host.closed()?, ["live"]);
-    manager
-        .store
-        .run({
-            let id = workspace.id.clone();
-            move |db| {
-                db.execute(
-                    "UPDATE owned_places SET space_id='gone' WHERE space_id=?1",
-                    [id],
-                )?;
-                Ok(())
-            }
-        })
-        .await?;
-    manager.agents.cleanup_orphan_sessions(&*manager).await;
-    assert_eq!(host.closed()?, ["live", "bad"]);
-    assert!(manager.agents.owned_places(None).await?.is_empty());
-    Ok(())
-}
-
-#[tokio::test]
-async fn places_of_hosts_without_cleanup_are_forgotten_with_their_workspace() -> Result<()> {
-    let (_root, manager, workspace, host) = fixture().await?;
-    manager
-        .agents
-        .record_owned_place(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            Origin::created(HostName::Terminal, "w1:p1".into()),
-        )
-        .await?;
-    manager
-        .agents
-        .close_owned_places(&*manager, Some(workspace.id.clone()))
-        .await;
-    assert!(host.closed()?.is_empty());
-    assert!(manager.agents.owned_places(None).await?.is_empty());
-    Ok(())
-}
-
-#[tokio::test]
-async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Result<()> {
-    use crate::{daemon::executions::ExecutionKind, sessions::PlaceClose};
-
-    let (_root, manager, workspace, host) = rex_fixture(&["shared"]).await?;
-    let taker = manager
-        .create_workspace(workspace.repository(), "taker".into(), None, None, None)
-        .await?;
-    host.add("shared", workspace.id.as_str())?;
-    let _started = manager
-        .agents
-        .begin_execution_placed(
-            &*manager,
-            &SpaceSelector::id(&taker.id),
-            None,
-            ExecutionKind::Command,
-            None,
-            crate::daemon::executions::ExecutionRequest {
-                place: Some(crate::daemon::places::ExecutionPlace {
-                    origin: Origin::created(HostName::Rex, "shared".into()),
-                    agent: true,
-                }),
-                ..Default::default()
-            },
-        )
-        .await?;
-    // A creation record that arrives late does not take the block back.
-    manager
-        .agents
-        .record_owned_place(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            Origin::created(HostName::Rex, "shared".into()),
-        )
-        .await?;
-    // The first workspace's removal and its watcher leave the block open.
-    manager
-        .agents
-        .close_owned_places(&*manager, Some(workspace.id.clone()))
-        .await;
-    assert_eq!(
-        manager
-            .agents
-            .close_recorded_place(
-                &workspace.id,
-                &Origin::created(HostName::Rex, "shared".into())
-            )
-            .await?,
-        PlaceClose::OwnedElsewhere
-    );
-    assert!(host.closed()?.is_empty());
-    // It closes with the workspace whose agent took it over.
-    assert_eq!(
-        manager
-            .agents
-            .close_recorded_place(&taker.id, &Origin::created(HostName::Rex, "shared".into()))
-            .await?,
-        PlaceClose::Closed
-    );
-    assert_eq!(host.closed()?, ["shared"]);
-    assert_eq!(
-        manager
-            .agents
-            .close_recorded_place(&taker.id, &Origin::created(HostName::Rex, "shared".into()))
-            .await?,
-        PlaceClose::NotRecorded
-    );
-    Ok(())
-}
-
-#[tokio::test]
-async fn a_recorded_place_the_daemon_cannot_close_is_left_to_its_host() -> Result<()> {
-    use crate::sessions::PlaceClose;
-
-    let (_root, manager, workspace, host) = rex_fixture(&[]).await?;
-    manager
-        .agents
-        .record_owned_place(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            Origin::created(HostName::Terminal, "w1:p9".into()),
-        )
-        .await?;
-    assert_eq!(
-        manager
-            .agents
-            .close_recorded_place(
-                &workspace.id,
-                &Origin::created(HostName::Terminal, "w1:p9".into())
-            )
-            .await?,
-        PlaceClose::HostCloses
-    );
-    assert!(host.closed()?.is_empty());
-    assert!(manager.agents.owned_places(None).await?.is_empty());
-    Ok(())
-}
-
-#[tokio::test]
-async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> {
-    use crate::{daemon::executions::ExecutionKind, sessions::PlaceClose};
-
-    let (_root, manager, workspace, host) = rex_fixture(&["parent", "chatted"]).await?;
-    let child = manager
-        .create_workspace(workspace.repository(), "child".into(), None, None, None)
-        .await?;
-    host.add("parent", workspace.id.as_str())?;
-    host.add("chatted", workspace.id.as_str())?;
-    // A parent agent's `shoal run --workspace child` runs in the parent's block.
-    let _nested = manager
-        .agents
-        .begin_execution_placed(
-            &*manager,
-            &SpaceSelector::id(&child.id),
-            None,
-            ExecutionKind::Command,
-            None,
-            crate::daemon::executions::ExecutionRequest {
-                place: Some(crate::daemon::places::ExecutionPlace {
-                    origin: Origin::created(HostName::Rex, "parent".into()),
-                    agent: false,
-                }),
-                ..Default::default()
-            },
-        )
-        .await?;
-    assert_eq!(
-        manager
-            .agents
-            .close_recorded_place(&child.id, &Origin::created(HostName::Rex, "parent".into()))
-            .await?,
-        PlaceClose::OwnedElsewhere
-    );
-    // A chat that starts in a block takes it from the workspace.
-    let mut chat_place = Origin::created(HostName::Rex, "chatted".into());
-    chat_place.owned = false;
-    manager
-        .start_chat(
-            workspace.repository().clone().into(),
-            "chat".into(),
-            "claude".into(),
-            Some(chat_place),
-        )
-        .await?;
-    manager
-        .agents
-        .close_owned_places(&*manager, Some(workspace.id.clone()))
-        .await;
-    assert_eq!(host.closed()?, ["parent"]);
-    manager.agents.cleanup_orphan_sessions(&*manager).await;
-    assert_eq!(
-        manager
-            .agents
-            .close_recorded_place(
-                &workspace.id,
-                &Origin::created(HostName::Rex, "chatted".into())
-            )
-            .await?,
-        PlaceClose::OwnedElsewhere
-    );
-    assert_eq!(host.closed()?, ["parent"]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<()> {
-    let (_root, manager, workspace, host) = fixture().await?;
-    let other = manager
-        .create_workspace(workspace.repository(), "other".into(), None, None, None)
-        .await?;
-    host.add("labelled", workspace.id.as_str())?;
-    assert!(
-        manager
-            .agents
-            .place_ownership(
-                &*manager,
-                &SpaceSelector::id(&workspace.id),
-                &Origin::created(HostName::Zmx, "labelled".into())
-            )
-            .await?
-            == PlaceOwnership::Space
-    );
-    assert!(
-        manager
-            .agents
-            .place_ownership(
-                &*manager,
-                &SpaceSelector::id(&other.id),
-                &Origin::created(HostName::Zmx, "labelled".into())
-            )
-            .await?
-            != PlaceOwnership::Space
-    );
-    assert!(
-        manager
-            .agents
-            .place_ownership(
-                &*manager,
-                &SpaceSelector::id(&workspace.id),
-                &Origin::created(HostName::Zmx, "unlabelled".into())
-            )
-            .await?
-            != PlaceOwnership::Space
-    );
-    assert!(
-        manager
-            .agents
-            .place_ownership(
-                &*manager,
-                &SpaceSelector::id(&workspace.id),
-                &Origin::created(HostName::Rex, "labelled".into())
-            )
-            .await?
-            != PlaceOwnership::Space
-    );
-    Ok(())
-}
-
-#[tokio::test]
-async fn panes_of_different_servers_under_one_id_are_different_places() -> Result<()> {
-    use crate::daemon::executions::ExecutionKind;
-
-    let (_root, manager, workspace, host) = fixture_for("herdr").await?;
-    let taker = manager
-        .create_workspace(workspace.repository(), "taker".into(), None, None, None)
-        .await?;
-    let on = |server: &str| {
-        let mut pane = Origin::created(HostName::Herdr, "w1:p1".into());
-        pane.data.insert("HERDR_SOCKET_PATH".into(), server.into());
-        pane
-    };
-    manager
-        .agents
-        .record_owned_place(&*manager, &SpaceSelector::id(&workspace.id), on("first"))
-        .await?;
-    host.add("w1:p1", workspace.id.as_str())?;
-    // An agent in the user's pane of the same ID on another server takes
-    // nothing over, and records nothing.
-    let mut users = on("second");
-    users.owned = false;
-    let _started = manager
-        .agents
-        .begin_execution_placed(
-            &*manager,
-            &SpaceSelector::id(&taker.id),
-            None,
-            ExecutionKind::Command,
-            None,
-            crate::daemon::executions::ExecutionRequest {
-                place: Some(crate::daemon::places::ExecutionPlace {
-                    origin: users.clone(),
-                    agent: true,
-                }),
-                ..Default::default()
-            },
-        )
-        .await?;
-    assert!(
-        manager
-            .agents
-            .place_ownership(&*manager, &SpaceSelector::id(&workspace.id), &on("first"))
-            .await?
-            == PlaceOwnership::Space
-    );
-    // A variable of the pane's that names no server leaves it the same place.
-    let mut shell = on("first");
-    shell.data.insert("HERDR_THEME".into(), "dark".into());
-    assert!(
-        manager
-            .agents
-            .place_ownership(&*manager, &SpaceSelector::id(&workspace.id), &shell)
-            .await?
-            == PlaceOwnership::Space
-    );
-    assert!(
-        manager
-            .agents
-            .place_ownership(&*manager, &SpaceSelector::id(&taker.id), &on("first"))
-            .await?
-            != PlaceOwnership::Space
-    );
-    assert!(
-        manager
-            .agents
-            .place_ownership(&*manager, &SpaceSelector::id(&workspace.id), &users)
-            .await?
-            != PlaceOwnership::Space
-    );
-    manager
-        .agents
-        .close_owned_places(&*manager, Some(taker.id.clone()))
-        .await;
-    assert!(host.closed()?.is_empty());
-    manager
-        .agents
-        .close_owned_places(&*manager, Some(workspace.id.clone()))
-        .await;
-    assert_eq!(host.closed()?, ["w1:p1"]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn a_session_its_host_labels_closes_through_the_host_without_a_record() -> Result<()> {
-    use crate::sessions::PlaceClose;
-
-    let (_root, manager, workspace, host) = fixture().await?;
-    let other = manager
-        .create_workspace(workspace.repository(), "other".into(), None, None, None)
-        .await?;
-    host.add("labelled", workspace.id.as_str())?;
-    let session = Origin::created(HostName::Zmx, "labelled".into());
-    assert_eq!(
-        manager
-            .agents
-            .close_recorded_place(&other.id, &session)
-            .await?,
-        PlaceClose::NotRecorded
-    );
-    assert!(host.closed()?.is_empty());
-    assert_eq!(
-        manager
-            .agents
-            .close_recorded_place(&workspace.id, &session)
-            .await?,
-        PlaceClose::Closed
-    );
-    assert_eq!(host.closed()?, ["labelled"]);
-    Ok(())
 }
 
 /// Start the chat `name` of `workspace`'s repository running in `place`,
@@ -1102,68 +700,6 @@ async fn a_chats_removal_closes_the_places_shoal_created_that_it_runs_in() -> Re
 }
 
 #[tokio::test]
-async fn the_sweep_leaves_a_chats_places_while_it_is_recorded() -> Result<()> {
-    let (_root, manager, workspace, host) = fixture_for("rex").await?;
-    host.add("opened", workspace.id.as_str())?;
-    let place = Origin::created(HostName::Rex, "opened".into());
-    let (chat, _process) = chat_in(&manager, &workspace, "kept", place).await?;
-    manager.agents.cleanup_orphan_sessions(&*manager).await;
-    assert!(host.closed()?.is_empty());
-    let owners: Vec<_> = (manager.agents.owned_places(None).await?)
-        .into_iter()
-        .map(|(owner, _)| owner)
-        .collect();
-    assert_eq!(owners, [chat.id]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn a_session_a_chat_recorded_taking_over_stays_open_until_it_relabels_it() -> Result<()> {
-    let (_root, manager, workspace, host) = fixture().await?;
-    // Each chat recorded its session before relabelling it: one still shows
-    // the workspace's label, the other a removed space's.
-    host.add("taken", workspace.id.as_str())?;
-    host.add("orphaned", "gone")?;
-    let mut chats = Vec::new();
-    for (name, session) in [("taker", "taken"), ("adopter", "orphaned")] {
-        let place = Origin::created(HostName::Zmx, session.into());
-        chats.push(chat_in(&manager, &workspace, name, place).await?);
-    }
-    manager
-        .agents
-        .close_space_places(&*manager, &workspace.id, &workspace.name)
-        .await;
-    manager.agents.cleanup_orphan_sessions(&*manager).await;
-    assert!(host.closed()?.is_empty());
-    assert_eq!(manager.agents.owned_places(None).await?.len(), 2);
-    Ok(())
-}
-
-#[tokio::test]
-async fn a_labelled_session_a_chat_runs_in_stays_open_before_it_is_recorded() -> Result<()> {
-    let (_root, manager, workspace, host) = fixture().await?;
-    // Each chat started in place in a session no record names, which still
-    // shows the workspace's label or a removed space's.
-    host.add("labelled", workspace.id.as_str())?;
-    host.add("orphaned", "gone")?;
-    let mut chats = Vec::new();
-    for (name, session) in [("guest", "labelled"), ("stray", "orphaned")] {
-        let place = Origin {
-            owned: false,
-            ..Origin::created(HostName::Zmx, session.into())
-        };
-        chats.push(chat_in(&manager, &workspace, name, place).await?);
-    }
-    manager
-        .agents
-        .close_space_places(&*manager, &workspace.id, &workspace.name)
-        .await;
-    manager.agents.cleanup_orphan_sessions(&*manager).await;
-    assert!(host.closed()?.is_empty());
-    Ok(())
-}
-
-#[tokio::test]
 async fn a_chat_that_fails_to_start_leaves_its_place_as_it_found_it() -> Result<()> {
     let (_root, manager, workspace, host) = rex_fixture(&["taken"]).await?;
     host.add("taken", workspace.id.as_str())?;
@@ -1195,5 +731,3 @@ async fn a_chat_that_fails_to_start_leaves_its_place_as_it_found_it() -> Result<
     assert_eq!(owners, [(workspace.id.clone(), Some("taken".to_owned()))]);
     Ok(())
 }
-
-mod left;

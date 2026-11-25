@@ -812,3 +812,297 @@ async fn a_newer_request_for_another_agent_takes_no_permission_change_of_the_one
     assert_eq!(recorded.execution, next.plan.id);
     assert_eq!(recorded.restart.change, None);
 }
+
+#[tokio::test]
+async fn a_deferred_restart_that_fails_reaches_the_coordinator_that_asked() {
+    let fixture = Arc::new(Fixture::new().await);
+    let (workspace, execution) = working(&fixture).await;
+    let coordinator = fixture.workspace("coordinator").await;
+    let caller = Caller {
+        space_id: coordinator.id.clone(),
+        execution: None,
+        granted: None,
+        access: shoal_daemon_base::callers::Access::Full,
+        vouched: None,
+    };
+    fail_after_the_turn(&fixture, &workspace, &execution, Some(&caller)).await;
+    let told = fixture.daemon.told.lock().unwrap();
+    assert!(
+        (told.iter())
+            .any(|(space, _, message)| *space == coordinator.id && message.contains(FAILURE)),
+        "{told:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_recorded_restart_goes_with_its_agent_rather_than_restart_the_next() {
+    let fixture = Fixture::new().await;
+    let daemon = &*fixture.daemon;
+    let (workspace, first) = working(&fixture).await;
+    let space = SpaceSelector::id(&workspace.id);
+    (fixture
+        .agents
+        .restart_space(daemon, None, &space, waiting()))
+    .await
+    .unwrap();
+    let ended = first.plan.id.clone();
+    (fixture
+        .agents
+        .finish_execution(daemon, ended, ExecutionKind::Command, Some(0)))
+    .await
+    .unwrap();
+    let next = (fixture.agents)
+        .begin_execution(
+            daemon,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    track(&fixture, &workspace, &next.plan.id, "claude", true).await;
+    (fixture
+        .agents
+        .set_agent_state(daemon, &space, AgentState::Idle, None, None))
+    .await
+    .unwrap();
+    assert!(!fixture.agents.act_on_restart(daemon, &workspace.id).await);
+    assert!(!*next.stop.borrow());
+    assert!(recorded(&fixture).await.is_empty());
+}
+
+/// A workspace whose `claude` agent runs as a wrapper of this process and
+/// works, with the reattachment its wrapper asks for after a takeover once
+/// a restart stopped the agent, and what its connection receives its stop
+/// on.
+async fn wrapped_agent(
+    fixture: &Fixture,
+) -> (
+    Workspace,
+    crate::protocol::Reattach,
+    tokio::sync::watch::Receiver<bool>,
+) {
+    use crate::control::ProtectionExt as _;
+    let daemon = &*fixture.daemon;
+    let workspace = fixture.workspace("agents").await;
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let started = (fixture.agents)
+        .begin_execution(
+            daemon,
+            workspace.id.as_str(),
+            Some(wrapper.clone()),
+            ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    let id = started.plan.id.clone();
+    (fixture
+        .agents
+        .record_execution_child(id.clone(), Some(wrapper.clone()), wrapper.pid))
+    .await
+    .unwrap();
+    track(fixture, &workspace, &id, "claude", true).await;
+    let space = SpaceSelector::id(&workspace.id);
+    (fixture
+        .agents
+        .set_agent_state(daemon, &space, AgentState::Working, None, None))
+    .await
+    .unwrap();
+    let request = crate::protocol::Reattach {
+        narrowing: Default::default(),
+        mode: None,
+        model: Default::default(),
+        execution: id,
+        wrapper: wrapper.clone(),
+        child: Some(wrapper.clone()),
+        group_id: wrapper.pid,
+        scope_token: started.plan.scope_token.clone(),
+        agent: Some("claude".into()),
+        recover: true,
+        running_ms: 0,
+        awaiting_restore: Some(crate::model::Protection::restart()),
+        between_runs: false,
+        reports_status: false,
+    };
+    (workspace, request, started.stop)
+}
+
+/// Have the restart that stops the agent on `stop`, which runs as `id`,
+/// wait for the stopped agent's processes.
+async fn wait_for_processes(
+    fixture: &Fixture,
+    id: &ExecutionId,
+    mut stop: tokio::sync::watch::Receiver<bool>,
+) {
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    (fixture
+        .agents
+        .notify_restore_waits(&*fixture.daemon, id, "PID 7 survives"))
+    .await;
+}
+
+/// A workspace whose `claude` agent runs as a wrapper of this process,
+/// with the reattachment its wrapper asks for after a takeover, once the
+/// daemon began `restart`, recorded until the agent's turn ended, and it
+/// waits for the stopped agent's processes.
+async fn waiting_for_processes(
+    fixture: &Arc<Fixture>,
+    restart: AgentRestart,
+) -> (Workspace, crate::protocol::Reattach) {
+    let daemon = &*fixture.daemon;
+    let (workspace, request, stop) = wrapped_agent(fixture).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let restart = AgentRestart {
+        wait: true,
+        ..restart
+    };
+    (fixture.agents.restart_space(daemon, None, &space, restart))
+        .await
+        .unwrap();
+    (fixture
+        .agents
+        .set_agent_state(daemon, &space, AgentState::Idle, None, None))
+    .await
+    .unwrap();
+    let acting = tokio::spawn({
+        let (fixture, space) = (fixture.clone(), workspace.id.clone());
+        async move {
+            fixture
+                .agents
+                .act_on_restart(&*fixture.daemon, &space)
+                .await
+        }
+    });
+    wait_for_processes(fixture, &request.execution, stop).await;
+    assert!(!acting.await.unwrap());
+    (workspace, request)
+}
+
+/// Reattach the wrapper of `request` as to the daemon that took over,
+/// which knows the restart under way only from its record, returning what
+/// the wrapper's connection receives its stop and resume on.
+async fn take_over(
+    fixture: &Fixture,
+    request: &crate::protocol::Reattach,
+) -> tokio::sync::watch::Receiver<bool> {
+    fixture.agents.detach_execution(&request.execution).await;
+    (fixture.agents.reattach_execution(&*fixture.daemon, request))
+        .await
+        .unwrap()
+        .stop
+}
+
+#[tokio::test]
+async fn a_restart_waiting_for_processes_keeps_its_options_through_takeovers() {
+    let fixture = Arc::new(Fixture::new().await);
+    let daemon = &*fixture.daemon;
+    let change = PermissionChange::assigned("push=direct").unwrap();
+    let restart = AgentRestart {
+        in_place: true,
+        change: Some(change.clone()),
+        ..Default::default()
+    };
+    let (workspace, request) = waiting_for_processes(&fixture, restart).await;
+    // It is under way, not kept for later.
+    let space = SpaceSelector::id(&workspace.id);
+    let cancelled = fixture.agents.cancel_restart(daemon, &space).await;
+    assert_eq!(cancelled.unwrap(), None);
+    let id = &request.execution;
+    let mut wrapper = None;
+    for _ in 0..2 {
+        wrapper = Some(take_over(&fixture, &request).await);
+        assert_eq!(
+            fixture.agents.restart_change(id).await,
+            Some(change.clone())
+        );
+        assert!(recorded(&fixture).await[0].begun);
+    }
+    assert!(fixture.agents.settle_restart(id).await);
+    let resumed = fixture
+        .agents
+        .resume_agent_execution(daemon, id, None)
+        .await;
+    assert!(resumed.unwrap());
+    assert!(!*wrapper.unwrap().borrow());
+    assert!(recorded(&fixture).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_restart_begun_at_once_keeps_its_options_through_a_takeover() {
+    let fixture = Arc::new(Fixture::new().await);
+    let (workspace, request, stop) = wrapped_agent(&fixture).await;
+    let space = SpaceSelector::id(&workspace.id);
+    let change = PermissionChange::assigned("push=direct").unwrap();
+    let restart = AgentRestart {
+        in_place: true,
+        change: Some(change.clone()),
+        ..Default::default()
+    };
+    let restarting = tokio::spawn({
+        let (fixture, space) = (fixture.clone(), space.clone());
+        async move {
+            (fixture.agents)
+                .restart_space(&*fixture.daemon, None, &space, restart)
+                .await
+        }
+    });
+    wait_for_processes(&fixture, &request.execution, stop).await;
+    let outcome = restarting.await.unwrap().unwrap();
+    assert!(
+        matches!(outcome, RestartOutcome::Waits { .. }),
+        "{outcome:?}"
+    );
+
+    take_over(&fixture, &request).await;
+    let id = &request.execution;
+    assert_eq!(fixture.agents.restart_change(id).await, Some(change));
+    assert!(fixture.agents.settle_restart(id).await);
+}
+
+#[tokio::test]
+async fn a_restart_under_way_keeps_the_options_of_a_request_it_took_through_a_takeover() {
+    let fixture = Arc::new(Fixture::new().await);
+    let earlier = PermissionChange::assigned("push=direct").unwrap();
+    let restart = AgentRestart {
+        change: Some(earlier.clone()),
+        ..Default::default()
+    };
+    let (workspace, request) = waiting_for_processes(&fixture, restart).await;
+    let newer = PermissionChange::assigned("merge=direct").unwrap();
+    let restart = AgentRestart {
+        in_place: true,
+        change: Some(newer.clone()),
+        ..Default::default()
+    };
+    let space = SpaceSelector::id(&workspace.id);
+    let outcome = (fixture.agents)
+        .restart_space(&*fixture.daemon, None, &space, restart)
+        .await
+        .unwrap();
+    assert!(
+        matches!(outcome, RestartOutcome::Waits { .. }),
+        "{outcome:?}"
+    );
+
+    take_over(&fixture, &request).await;
+    let id = &request.execution;
+    let merged = PermissionChange::then(Some(earlier), Some(newer));
+    assert_eq!(fixture.agents.restart_change(id).await, merged);
+    assert!(fixture.agents.settle_restart(id).await);
+}
+
+#[tokio::test]
+async fn a_wrapper_that_reattaches_without_the_restarts_stop_lets_it_begin_again() {
+    let fixture = Arc::new(Fixture::new().await);
+    let (_workspace, request) = waiting_for_processes(&fixture, AgentRestart::default()).await;
+    let running = crate::protocol::Reattach {
+        awaiting_restore: None,
+        ..request
+    };
+    take_over(&fixture, &running).await;
+    assert!(!recorded(&fixture).await[0].begun);
+}

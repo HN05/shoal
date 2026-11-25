@@ -257,3 +257,6 @@ impl Agents {
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests;

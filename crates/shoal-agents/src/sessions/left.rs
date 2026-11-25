@@ -97,3 +97,6 @@ impl Agents {
 fn same_place(a: &Origin, b: &Origin) -> bool {
     a.host == b.host && a.server() == b.server() && a.id() == b.id()
 }
+
+#[cfg(test)]
+mod tests;
