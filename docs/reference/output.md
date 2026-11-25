@@ -8,8 +8,8 @@ Every command prints text by default and JSON with `--json`. The format
 changes only what a command prints: it does the same work either way.
 
 `SHOAL_OUTPUT` sets the default format, `json` or `text`. An unset or empty
-value means `text`, and any other value makes every command fail. `--json` and
-`--text` override it; a command refuses both together.
+value means `text`. `--json` and `--text` override it; a command refuses both
+together. Any other value fails a command that passes neither flag.
 
 JSON output turns off prompts and pickers. It confirms nothing: a command that
 would ask still needs `--yes`.
