@@ -225,8 +225,8 @@ The restore resumes the space's saved agents and last sessions as
 `shoal resume` resumes a stopped space's, in the same run. They are queued
 unless `--now` or `--focus` is given, and run under `--permission`. An agent it
 cannot resume is reported and stays saved, and the space stays open.
-`--no-resume` keeps them saved for a later `shoal resume`, which keeps a
-workspace from idle cleanup as stopped work does.
+`--no-resume` keeps them saved for a later `shoal resume`, keeping a workspace
+from idle cleanup as stopped work does.
 
 An agent whose session another space here holds, running or stopped, starts
 from a fork of that session, as a [copy](create.md#copies)'s does. A warning
@@ -243,9 +243,9 @@ names that space.
 - linked to its issue, its opened and related items and its PRs,
 - with its checkpoints, log and attached files.
 
-It saves the agents stopped by the removal or before it, with their last
-sessions, and runs setup. A link or save that fails is a warning. Once the
-post-setup hook succeeds, it resumes those agents.
+It saves the agents stopped by the removal or before it and the last sessions,
+and runs setup. A link or save that fails is a warning. Once the post-setup
+hook succeeds, it resumes those agents and last sessions.
 
 A branch that no longer contains the removed HEAD, as after a removal during a
 rebase, leaves the workspace to reopen on a branch named after the short
