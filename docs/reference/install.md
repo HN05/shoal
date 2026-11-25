@@ -42,7 +42,7 @@ installation, which Homebrew updates.
 A managed daemon notices the new binary and restarts on it once no daemon
 operation, setup or merge runs. Until then, commands of the new release wait
 for it, up to ten minutes. `shoal daemon restart` applies the update at once,
-after the [work the daemon runs itself](daemon.md#daemon-restarts).
+after the [work the daemon runs itself](daemon.md#work-the-daemon-runs-itself).
 
 Tracked agents and commands keep running while the daemon restarts, and
 reattach to the next one. Followed event and alert streams and item waits

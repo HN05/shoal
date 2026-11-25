@@ -136,7 +136,7 @@ takes a size in `B`, `KiB`, `MiB`, `GiB` or `TiB`, a percentage of RAM, or
 enforces it, and where the file leaves it out, `load` sets it: 60% of RAM
 under `light`, 75% under `balanced` and 85% under `full`. Elsewhere only
 [memory protection](#overload) enforces it, and it has no default. See
-[the daemon's status](../../../../../../docs/reference/daemon.md) for the
+[the daemon's status](../../../../../../docs/reference/daemon.md#daemon-status) for the
 limit in effect.
 
 `keep_awake` picks what the machine does once you walk away from it:

@@ -87,7 +87,7 @@ Some features need more tools:
 - Containers need Docker or Podman with Compose.
 
 The daemon runs as a launchd service on macOS, or a systemd user service on
-Linux. Without either, [run the daemon in the foreground](docs/reference/daemon.md).
+Linux. Without either, [run the daemon in the foreground](docs/reference/daemon.md#run-in-the-foreground).
 
 ## First steps
 

@@ -219,7 +219,7 @@ it holds, with its permit; after
 a daemon restart, a job whose runner is gone goes the same way and the forge
 times it out. The service manager's stop of the service after the daemon
 exited leaves the job running for the next daemon, as it leaves
-[agents](daemon.md#daemon-restarts).
+[agents](daemon.md#exits-that-keep-work-running).
 Protection never stops a running job; the workflow's
 `timeout-minutes` bounds it. `shoal stop` on the job's workspace, and `shoal ci
 cancel`, cancel the job's run on the forge, which cancels each of its jobs; the
