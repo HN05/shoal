@@ -22,7 +22,7 @@ pub fn find_executable(program: &OsStr, search_path: &OsStr) -> Option<PathBuf> 
 
 /// The app bundle `executable` is the main program of, as in
 /// `Shoal.app/Contents/MacOS/shoal`.
-pub fn app_bundle(executable: &Path) -> Option<&Path> {
+pub(crate) fn app_bundle(executable: &Path) -> Option<&Path> {
     let directory = executable.parent()?;
     let bundle = directory.parent()?.parent()?;
     (directory.ends_with("Contents/MacOS")
