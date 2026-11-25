@@ -266,7 +266,9 @@ Each token takes the [value forms](#values) of a secret:
   `{ same_as = "agent_token" }` suits only PRs agents did not open.
 
 A token's `{ cmd }` runs at most once per operation that needs the token, for
-at most a minute, and Shoal never stores its output. `user_email`,
+at most a minute, and Shoal never stores its output. Shoal drops a token the
+forge refuses, instead of keeping it while the machine `on` names is away.
+`user_email`,
 `agent_email` and `review_email` apply only to Bitbucket. See
 [forges](../../../../../../docs/reference/issues.md#forges).
 
@@ -377,14 +379,28 @@ These options configure the [hub](../../../../../../docs/reference/hub.md).
 - `default_machine`, on the hub, names the machine, by name or ID, that a
   device's start goes to when it names none.
 - `placement`, on the hub, picks where a detached start that names no machine
-  goes. `local` keeps it on the machine it was made on. `balanced` sends it to
-  an `always_on` machine with room that has the start's repository and agent
-  tool, and otherwise keeps it there. `external` asks the app registered as
-  the placer, and falls back to `balanced`. See
-  [placement](../../../../../../docs/reference/hub.md).
+  goes, as described below.
 - `forward` maps path prefixes, each starting and ending with `/`, to local
   addresses, such as an app's own server. See
   [path forwarding](../../../../../../docs/reference/hub.md#path-forwarding).
+
+Only a start that runs its agent detached is placed, such as a background
+chat, a child an agent starts or a trigger's launch. A start that runs in your
+terminal stays on its machine, and `--machine` always picks the machine.
+`placement` takes these values:
+
+- `local` keeps every start on the machine it was made on.
+- `balanced` sends lasting work to an `always_on` machine with room. The
+  machine must have the start's repository registered, matched by origin, and
+  its agent tool. A heavy start goes to the machine whose admission would
+  start a heavy agent now, with the most spare memory. A light start goes
+  first to a machine with `max_heavy_agents = 0`, then to one where no heavy
+  work waits. Without such a machine, the start stays where it was made.
+  Placement never clones a repository; the start reports the machines it
+  skipped and why.
+- `external` asks the app registered as the placer. It falls back to
+  `balanced` when no app is registered, or the app does not answer within two
+  seconds.
 
 ### App store
 
@@ -517,8 +533,11 @@ user arguments stay literal.
 - A tool without `review_resume` or `gate_resume`, or whose runs report no
   session, starts a new session each time.
 - `base` makes a tool a launch profile of another. The profile takes its
-  base's hooks, trust entries and waking, and each launcher and tool option it
-  does not set. A base may itself be a profile.
+  base's hooks, trust entries and waking. It also takes each of these that it
+  does not set: the launcher, `skill_dir`, `instructions`, `resume`,
+  `resume_latest`, `fork`, `add_dir`, `model`, `effort`, `model_args`,
+  `effort_args`, `review`, `review_resume`, `gate`, `gate_resume`, `retry`,
+  `prompt_cache_minutes` and `proxy`. A base may itself be a profile.
 - `env` sets and `env_remove` removes variables for the tool's tracked agents
   and chats, after `[env]`, the agent account and secrets. A
   `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set there is absolute or starts with
@@ -1214,7 +1233,8 @@ area_prefix = "area/"        # Default: unset
   [repository conventions](../../../../../../docs/reference/issues.md#repository-conventions).
 - `assign` says whose accounts join the assignees of an issue a space links
   as assigned. `agent` adds the agent account while an agent works the issue,
-  `user` adds your own login for every assigned link, and `both` does both.
+  `user` adds your own login for every assigned link, `both` does both, and
+  `none` adds no one.
   See [linked items](../../../../../../docs/reference/links.md).
 - `area_prefix` is the prefix of the labels that name an issue's areas. The
   [agent queue](../../../../../../docs/reference/queue.md#queue-order) starts
