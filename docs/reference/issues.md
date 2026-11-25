@@ -233,7 +233,7 @@ withdraws an automatic merge as the agent account,
 as its space's [`merge` permission](modes.md#mode-permissions) allows: the request binds the PR
 at its head commit, which the merge names to the forge, and the method, `-X` or
 `[merge] method`, and a squash's message, so with `"propose"` a later commit,
-another method or another message needs another approval. A merge that its [review gate](reviews.md#local-reviews)
+another method or another message needs another approval. A merge that its [review gate](reviews.md#review-gates)
 refuses goes no further.
 [`shoal branch delete`](branches.md#branches-on-the-forge) deletes a PR's branch on the
 forge once it has merged or closed.

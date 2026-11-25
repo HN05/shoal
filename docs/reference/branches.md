@@ -75,7 +75,7 @@ the workspace onto it (`git rebase main`). Resolve the conflicts there and run
 
 ### Approval of an agent's merge
 
-A merge that its [review gate](reviews.md#local-reviews) refuses goes no
+A merge that its [review gate](reviews.md#review-gates) refuses goes no
 further.
 
 An agent's scoped `shoal merge` needs your approval unless both its

@@ -247,7 +247,7 @@ or the chat itself when nothing is linked.
 `list --chats` shows a marked chat as `ready`. `inbox` lists its marks, and
 `list --json` lists them as the chat's `review`.
 
-The [review gate](reviews.md#local-reviews) does not apply to a chat's marks.
+The [review gate](reviews.md#review-gates) does not apply to a chat's marks.
 
 A chat's `hooks.post_ready` runs where the chat works: its repository's
 checkout or the worktree it runs in. It gets the repository's `[env]`, whose

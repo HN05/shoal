@@ -75,7 +75,8 @@ URL or `--pr`, resolves a same-repository PR through the daemon's forge reads,
 as the agent account for a scoped caller and the user's logins otherwise, and
 reviews its head branch against the PR base, reusing the owning workspace after
 fast-forwarding it to the pushed head; local commits ahead stay, divergence is
-refused. The daemon fast-forwards under a lifecycle reservation and the
+refused. A fork's PR opens its workspace at a commit without setup, since the
+reviewer only reads the checkout. The daemon fast-forwards under a lifecycle reservation and the
 repository's Git gate, after verifying the recorded worktree and its branch, so
 a switched or replaced checkout is never moved. The user, or a parent agent
 within its scope, reviews a space's work the same way, so what the agent
