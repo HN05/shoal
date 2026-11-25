@@ -5,35 +5,41 @@ description: What Shoal's commands do, for agents in a Shoal workspace or chat a
 
 # Shoal
 
-Commands print JSON and never prompt when `SHOAL_OUTPUT=json`, which Shoal sets
-for the agents it launches; otherwise `--json` on each command does the same.
+This skill says what Shoal's commands do, so that an agent can choose and run
+them. `shoal <command> --help` lists every flag.
+
+Commands print JSON and never prompt when `SHOAL_OUTPUT=json`. Shoal sets it
+for the agents it launches. Elsewhere, pass `--json`.
 
 ## Spaces and scope
 
-A space is a workspace, with its own worktree and branch, or a chat, with none.
-Spaces form a tree: each has at most one parent. Agents Shoal launches are
-scoped to their own space and the spaces below it; only the user's own
-terminal is unscoped. A master session, a chat without a repository that
-`shoal start --mode orchestrate` starts in `root_dir`, has a scope that reaches
-every space. Inside a space, commands without a target act on it, or
-on a child workspace when run inside the child's directory; outside one, they
-open a picker on a terminal. A session Shoal did not launch in a managed
-worktree resolves the workspace from its directory, without scope or lifecycle
-tracking; `shoal list` shows the workspaces with their `path`. Leases need a
-managed workspace.
+A space is a workspace or a chat. A workspace has its own worktree and branch;
+a chat has neither. Spaces form a tree, and each has at most one parent.
 
-Every space has a number, which `shoal list` and `shoal status` show. A
-command that takes a space selects it by that number or its ID:
-`shoal attach 3`, `--space 3`. A name never selects a space. A removed
-workspace has no number and is selected by its ID. Approval
-requests and threads are numbered `S.N`: the number of the space they belong to,
-then the item's own, such as `3.2`.
+An agent Shoal launches is scoped to its own space and the spaces below it.
+Only the user's own terminal is unscoped. A master session is a chat without a
+repository, which `shoal start --mode orchestrate` starts in `root_dir`. Its
+scope reaches every space.
 
-A chat in a workspace's worktree (`shoal start --in <workspace> -m chat`) reads that
-workspace and changes nothing there: `shoal diff`, `shoal conflicts`,
-`shoal status` and `shoal branch base` act on the workspace, the commands that
-also act on chats act on the chat, and `--space <workspace>` reads the
-workspace's issue, PRs and CI runs. Removing the workspace removes the chat.
+Inside a space, a command without a target acts on that space. In a child
+workspace's directory, it acts on the child. Outside any space, it opens a
+picker on a terminal. A session that Shoal did not launch, in a worktree Shoal
+manages, acts on the workspace of its directory, without scope or lifecycle
+tracking. `shoal list` shows each workspace's `path`. Leases need a workspace
+Shoal manages.
+
+Every space has a number, which `shoal list` and `shoal status` show. Select a
+space by its number or its ID, as in `shoal attach 3` or `--space 3`. A name
+never selects a space. A removed workspace has no number, so select it by its
+ID. Approval requests and threads are numbered `S.N`: the number of their
+space, then their own, such as `3.2`.
+
+A chat in a workspace's worktree (`shoal start --in <workspace> -m chat`)
+reads that workspace and changes nothing there. `shoal diff`,
+`shoal conflicts`, `shoal status` and `shoal branch base` act on the
+workspace. Commands that also act on chats act on the chat. `--space
+<workspace>` reads the workspace's issue, PRs and CI runs. Removing the
+workspace removes the chat.
 
 ## Start agents
 
@@ -49,75 +55,83 @@ shoal start --in 3 --agent claude
 shoal contribute https://github.com/other/repo/issues/12 --agent claude
 ```
 
-`start` accepts a registered repository and branch, or an issue, PR, CI run
-or branch URL, `--pr` a PR's number or URL and `--ci` a run's; an issue,
-else a run, becomes the agent's first message, followed by its mode's
-instructions, and text after `--` is the task. A run starts in its PR's or
-branch's workspace, or for a run on the default branch or a tag in a chat
-named after it, and the space links it as related. Every start starts an agent:
-`--agent`, else `agent.default`, else one picked on a terminal; without
-either it is refused, and `shoal create` makes a workspace without an agent.
-`--mode` picks the mode, else
-the one whose `label` the PR or issue carries, else `worker`, which starts in
-a workspace; `chat` and `plan` start in a
-chat; the mode alone decides the kind of space. `--name` names
-the new space; without it, it takes the issue's or PR's title, else its
-branch. `--base` naming another workspace's branch stacks the new workspace on
-it. A start that names no branch, issue, PR or copy begins as
-a chat in its mode, `worker` by default, which `shoal convert workspace` makes
-a workspace once the work is known. `--in <workspace>` starts that existing
-workspace's own agent instead of a new space, with the task after `--`, else on
-its issue, or a chat in its worktree in a chat mode such as `-m chat`; a workspace
-has one agent of its own, so starting another is refused while one runs,
-waits in the queue or is stopped there; `--replace` discards a stopped or
-asleep one and starts the new agent in its place. `contribute` takes
-the same URLs for a repository the user does not maintain: it clones it, forks
-it when the user cannot push there, and removes the clone once nothing of it is
-left.
+`shoal start` takes a registered repository and a branch, or the URL of an
+issue, PR, CI run or branch. `--pr` takes a PR's number or URL, and `--ci` a
+run's. The agent's first message is the issue, else the run, followed by its
+mode's instructions. Text after `--` is the task. A run starts in the
+workspace of its PR or branch. A run on the default branch or a tag starts in
+a chat named after it. The space links the run as related.
 
-Run inside a space, `start` creates a child of it, or of a space its scope
-reaches that `--parent` names, in its repository, or for a master session in any registered
-one, on a branch from the default branch;
-a chat-kind mode starts a child chat in a background place, which the agent
-queue opens, and returns once the chat is recorded, with its agent's entry. Outside any space it creates top-level
-spaces. Without a terminal, as from a tool call, and from inside a space, agents
-start detached; `--here` runs one in the calling terminal, once its workspace
-is prepared, until it exits, as the new space's own agent. `--fork` starts the caller's
-own agent from a fork of its session, so it needs only its task after `--`;
-running the same model, the child reads the parent's prompt cache instead of
-writing the conversation again.
-`--machine <name or ID>` starts the space on another machine of the hub, below
-the caller there too, where that machine's queue starts its agent in the
-background; it clones the repository where that machine has none, carries
-a `--base` with commits only this machine has there in a Git bundle, and
-carries the session `--fork` forks and the files `--copy` copies, ignored
-ones excepted.
+Every start starts an agent: the one `--agent` names, else `agent.default`,
+else one picked on a terminal. Without any of these, `start` is refused. To
+make a workspace without an agent, use `shoal create`.
 
-`start` returns once the daemon records a new workspace, with the workspace
-and the agent's queue entry, which waits while the daemon creates the
-worktree and runs setup and the post-setup hook; until the worktree exists,
-commands that read it refuse the workspace. A failed preparation reaches the
-agent of the nearest space above with one, or else the user, naming
-`shoal setup <space>`, which retries it, and `shoal rm <space>`. `--wait`
-returns once that preparation ends. An agent whose start fails, in a
-workspace or a chat, stays on its space as a `failed` entry `shoal queue` and
-`shoal inbox` list with its error, and its failure reaches the same way,
-naming `shoal resume <space>`, which queues it again as it was, and
-`shoal rm <space>`. The daemon starts queued agents of heavy modes as `max_heavy_agents` allows
-(`state: queued`, `position`), work close to finished, work that other work
-waits on and new workspaces whose issues share fewer `[issue] area_prefix`
-labels with existing workspaces first (`rank`), higher priority before all
-else; `shoal queue` lists
-entries and `--now` starts one regardless. `shoal priority <low|normal|urgent|0-100> [space]`
-and `start --priority` set a space's priority, at most your own space's. `--add-blocker <space|queued agent|issue>` (repeatable)
-holds an agent until that work is done, where a bare number is an issue, a
-space is selected by its ID and a queued agent by its entry's ID, and an
-issue's agent is also blocked by the issues its forge records as blocking it;
-the new workspace waits `preparing`, without its worktree, until that work is
-done, then is created on the done workspace's branch, and `blockers` lists
-what still blocks its agent. A Happy agent reports
-its launch (`execution_id`, `pid`, `log`); a `happy-codex` launch fails when
-its first message cannot reach the session, such as without a Happy login.
+The mode decides the kind of space. `--mode` picks the mode, else the mode
+whose `label` the issue or PR carries, else `worker`. `worker` starts in a
+workspace; `chat` and `plan` start in a chat. A start that names no branch,
+issue, PR or copy begins as a chat in its mode. `shoal convert workspace`
+makes it a workspace once the work is known.
+
+`--name` names the new space. Without it, the space takes the title of its
+issue or PR, else its branch. `--base` with another workspace's branch stacks
+the new workspace on that branch.
+
+`--in <workspace>` starts that workspace's own agent instead of a new space.
+Its task is the text after `--`, else its issue. With a chat mode, such as
+`-m chat`, it starts a chat in the worktree instead. A workspace has one agent
+of its own, so starting another is refused while one runs, waits in the queue
+or is stopped there. `--replace` discards a stopped or asleep agent and starts
+the new one in its place.
+
+`shoal contribute` takes the same URLs, for a repository the user does not
+maintain. It clones the repository and forks it when the user cannot push
+there. It removes the clone once nothing uses it.
+
+### Where a new space goes
+
+Inside a space, `start` creates a child of that space. `--parent` names
+another space in your scope as the parent. The child is in the same
+repository, on a new branch from the default branch. A master session creates
+children in any registered repository. Outside any space, `start` creates a
+top-level space.
+
+Agents start detached from inside a space, and wherever there is no terminal,
+such as in a tool call. A chat-mode start returns once the chat is recorded,
+with its agent's queue entry; the agent queue opens the chat in a background
+place. `--here` runs the agent in the calling terminal, once its workspace is
+prepared, until the agent exits.
+
+`--fork` starts the child's agent from a fork of your session, so give it only
+its task after `--`. With the same model, the child reads your prompt cache
+instead of writing the conversation again.
+
+`--machine <name or ID>` starts the space on another machine of the hub,
+below the caller there too. Shoal carries over what the start needs, such as
+a forked session and copied files.
+
+### Preparation and the agent queue
+
+`start` returns once the daemon records the new workspace, with the agent's
+queue entry. The entry waits while the daemon creates the worktree and runs
+setup. Until the worktree exists, commands that read it refuse the workspace.
+`--wait` returns once preparation ends.
+
+When preparation fails, your agent hears of it, or else the user.
+`shoal setup <space>` retries it, and `shoal rm <space>` removes the space.
+When an agent fails to start, `shoal queue` and `shoal inbox` show its entry
+as `failed`, with its error. `shoal resume <space>` queues it again.
+
+The daemon starts queued agents of heavy modes as `max_heavy_agents` allows,
+higher priority first. `shoal queue` lists the entries with their `position`
+and the `rank` that explains it, and `--now` starts one regardless.
+`shoal priority <low|normal|urgent|0-100> [space]` and `start --priority` set a
+space's priority, at most your own space's.
+
+`--add-blocker <space|queued agent|issue>`, repeatable, holds the agent until
+that work is done. A bare number is an issue. Select a space by its ID and a
+queued agent by its entry's ID. The new workspace waits as `preparing`, then
+starts on the done workspace's branch. `blockers` lists what still blocks the
+agent.
 
 ## Child workspaces
 
@@ -129,20 +143,26 @@ shoal create --no-branch [--base <ref>]  # A workspace at a commit, no branch
 shoal create --copy                      # A copy of this workspace's files
 ```
 
-`create` creates a workspace without an agent from what `shoal start` takes
-for one, such as a branch, an issue or a PR, branch or CI run link, as a child of the
-current space, a workspace or a chat, or of the one `--parent` names, with its
-own worktree, branch and setup, and returns its `path`. Shoal commands run in the
-child's directory act on the child. The child's issue and PR activity reaches
-the parent's agent, each update naming the child. `--no-branch` has no branch
-or PR of its own; an agent `shoal start --in` starts there cannot push. `--copy` gives the child the committed, uncommitted,
-untracked and ignored files, and `--checkpoint <number>` one of the
-checkpoints' files instead; an untouched copy goes with cleanup. `shoal start
---copy [--fork] -- "<task>"` starts an agent in such a copy, and
-`shoal start --copy <workspace>` copies another workspace, live or removed.
-`shoal rm <child>` removes a child, including one a create left `preparing`;
-one the user holds, or with such a space below it, as the space's
-`user_holds` permission allows.
+`shoal create` creates a workspace without an agent. It takes what
+`shoal start` takes, such as a branch, an issue, or the URL of a PR, branch or
+CI run. The workspace is a child of the current space, a workspace or a chat,
+or of the space `--parent` names. It has its own worktree, branch and setup,
+and the result gives its `path`. Shoal commands run in its directory act on
+it. Its issue and PR activity reaches your agent, each update naming the
+child.
+
+`--no-branch` makes a workspace at a commit, with no branch or PR. An agent
+started there with `shoal start --in` cannot push.
+
+`--copy` gives the child your committed, uncommitted, untracked and ignored
+files. `--checkpoint <number>` gives it one of your checkpoints' files
+instead. Cleanup removes a copy nobody changed. `shoal start --copy [--fork]
+-- "<task>"` starts an agent in such a copy. `shoal start --copy <workspace>`
+copies another workspace, live or removed.
+
+`shoal rm <child>` removes a child, including one that a create left
+`preparing`. Removing one the user holds, or one with such a space below it,
+follows your `user_holds` permission.
 
 ## Convert a space
 
@@ -153,35 +173,39 @@ shoal convert chat                    # This workspace becomes a chat in the che
 shoal convert agent codex -- "<note>" # Codex takes this space's work over
 ```
 
-`convert` keeps the space, with its number, name, parent, children, links,
-threads, files and progress. `convert workspace` takes a branch, `--issue`
-and `--base`: an existing local or remote branch of that name, or a new one from
-the default branch or `--base`; without a branch, `--issue` or the chat's
-linked issue names it. It returns once the worktree is set up. `convert chat`
-removes the worktree as `shoal rm` does, keeping a checkpoint and the branch,
-and releases its ports, resources, simulators and secrets; the user's holds and
-a workspace building on its branch refuse it. Once the agent's turn ends,
-Shoal restarts it in the new place from a fork of its session, told what the
-space is now and its mode's instructions; `--mode` picks that mode, `worker`
-for a workspace and `chat` for a chat by default. An agent converts its own
-space and the spaces below it.
+`convert` keeps the space with its number, name, parent, children, links,
+threads, files and progress. An agent converts its own space and the spaces
+below it.
 
-`convert agent <tool>` hands a space's work to another agent tool, and
-`-a <tool>` on `convert workspace` and `convert chat` does it with the kind
-change: once the running agent's turn ends, or at once for a stopped or
-asleep one. Shoal copies every session the space's agents reported into its
-attached files as `handoff` copies, and the new tool starts a new session
-told what the space is and where each copy is, the one just stopped to read
-first, then its mode's instructions, then the text after `--`. `--mode`
-keeps the space's mode by default, and `--model`, `--effort` and
-`--permission` set what the agent goes on with.
+`convert workspace` takes a branch, `--issue` and `--base`. It uses an
+existing local or remote branch of that name. Otherwise it creates the branch
+from the default branch, or from `--base`. Without a branch, `--issue` or the
+chat's linked issue names it. The command returns once the worktree is set up.
+
+`convert chat` removes the worktree as `shoal rm` does, keeping a checkpoint
+and the branch. It releases the workspace's ports, resources, simulators and
+secrets. The user's holds refuse it, and so does a workspace that builds on
+its branch.
+
+Once the agent's turn ends, Shoal restarts it in the new place from a fork of
+its session. The agent is told what the space is now and its mode's
+instructions. `--mode` picks the mode; by default, `worker` for a workspace
+and `chat` for a chat.
+
+`convert agent <tool>` hands the space's work to another agent tool, once the
+running agent's turn ends. `-a <tool>` on `convert workspace` or
+`convert chat` does the same along with the kind change. Shoal attaches the
+space's sessions to it as `handoff` files. The new tool starts a new session
+that is told where they are, then its mode's instructions and the text after
+`--`. `--mode`, `--model`, `--effort` and `--permission` set what the new
+agent runs with.
 
 ## Coordinate spaces below
 
-The agent of the nearest space above with an agent coordinates a space: its
-agent's alerts, threads, completion, ready marks and exits arrive there as
-alerts naming it, instead of reaching the user, and the issue and PR
-activity of a space without an agent of its own arrives too. An agent started
+The agent of the nearest space above with an agent coordinates a space. It
+receives the space's agent's alerts, threads, completion, ready marks and
+exits, as alerts that name the space; the user does not. It also receives the
+issue and PR activity of a space without an agent of its own. An agent started
 with `shoal start` receives its own issue and PR activity.
 
 ```sh
@@ -196,45 +220,53 @@ shoal files <child>
 shoal absorb <child> [--into <space>] [-X squash] [--force]
 ```
 
-`absorb` takes a done child's work into your space, or `--into` another your
-scope reaches, and removes the child: its branch merges into that
-workspace's branch, its uncommitted files arrive there as uncommitted changes
-for you to review and commit, and its links, attached files, open threads
-and children move over, the children up one level. It refuses, changing
-nothing, a child that is not done, unless `--force` stops its agent and takes
-its work as it is, and a merge that conflicts or touches your uncommitted
-files. A chat, or a space of another repository, takes no code: a child with
-code it would lose is refused unless `--force` leaves the code behind.
+These commands act on the agent of a workspace or a chat alike:
 
-`stop` stops the child's agent and those below it, a workspace's or a chat's,
-keeping their sessions, and cancels agents queued to start there; `restart` stops the child's agent and
-starts its session again at once, or with `--wait` once its turn ends, which
-`restart --cancel` drops; `stop --interrupt` cancels the current
-turn of the child's agent, a workspace's or a chat's, which stays running;
-`resume` continues a turn an interrupt ended and queues the stopped agents,
-a workspace's or a chat's, whoever stopped them, and a launch that failed to
-start; a workspace whose setup failed is refused, naming `shoal setup`, which
-retries it before the agent waiting for it starts. `restore --discard-agent` discards a stopped agent,
-its last sessions, stopped commands and failed launch, leaving the files. `--all`
-acts on every space below the caller's on this machine, `--machine <name>`
-on those of another joined machine that `--all` would take there, a resume
-skipping those of an offline one, and `stop --yes` confirms that an
-execution Shoal cannot prove ended did. A space outside the caller's scope is
-refused with an error naming it.
+- `stop` stops the child's agent and the agents below it, keeping their
+  sessions. It cancels agents queued to start there.
+- `stop --interrupt` cancels the agent's current turn. The agent keeps
+  running.
+- `restart` stops the agent and starts its session again at once.
+  `--wait` restarts it once its turn ends, and `restart --cancel` drops that.
+- `resume` continues a turn that an interrupt ended. It queues stopped agents,
+  whoever stopped them, and launches that failed. It refuses a workspace whose
+  setup failed and names `shoal setup`, which retries setup first.
+- `restore --discard-agent` discards a stopped agent with its last sessions,
+  stopped commands and failed launch. The files stay.
 
-A child's approval request comes to its coordinator first.
-`shoal approvals --approve <S.N>` works for a request to hold a workspace
-below; for an issue or PR proposal, a push, a merge, an unmerge or another
-[permitted action](#permitted-actions) where the coordinator's own permission
-for it is `direct`, taking `--title` and `--body`
-for a proposal as the user's approval does; and for anything else only where
-the coordinator holds an approved grant for it. Otherwise it is refused,
-unless the coordinator's `decide` permission is `direct`, which decides any
-request of a space below as the user does, routed to it or not, but approves
-one a permission governs only where its own value for it is `direct`.
-`--deny <S.N>` denies it, with `--reason`, or for an issue proposal
-`--duplicate-of` or `--duplicate-of-approval`, and `--escalate <S.N>` passes it
-to the space above or the user.
+`--all` acts on every space below yours on this machine, and `--machine
+<name>` on those of another joined machine. `stop --yes` confirms that an
+execution Shoal cannot prove ended did end. A space outside your scope is
+refused.
+
+`absorb` takes a done child's work into your space, or into the space in your
+scope that `--into` names, then removes the child:
+
+- The child's branch merges into that workspace's branch.
+- Its uncommitted files arrive as uncommitted changes, for you to review and
+  commit.
+- Its links, attached files, open threads and children move over. Its
+  children move up one level.
+
+`absorb` refuses a child that is not done, and changes nothing.
+`--force` stops the child's agent and takes its work as it is. `absorb` also
+refuses a merge that conflicts or touches your uncommitted files. A chat, or a
+space of another repository, takes no code. It refuses a child whose code it
+would lose, unless `--force` leaves that code behind.
+
+### Decide the requests of spaces below
+
+A child's approval request goes to its coordinator first.
+`shoal approvals --approve <S.N>` approves a request to hold a workspace
+below you. It approves a request that a [permission](#permitted-actions)
+governs, such as a proposal, a push or a merge, only where your own value for
+that permission is `direct`. `--title` and `--body` edit a proposal first. It
+approves any other request only where you hold an approved grant for it, or
+your `decide` permission is `direct`.
+
+`--deny <S.N>` denies a request, with `--reason`. For an issue proposal,
+`--duplicate-of` or `--duplicate-of-approval` denies it as a duplicate.
+`--escalate <S.N>` passes a request to the space above or the user.
 
 ## Follow progress
 
@@ -246,31 +278,33 @@ shoal log 3           # Its log; --all for every event, --follow
 shoal alert list      # Your alerts; --unread, --space S, --all
 ```
 
-`status` names a workspace's base, parent and children, its watched PRs in
-`prs` with state, merge conflicts, CI results, review state and lookup errors,
-and in `cleanup_reason` why cleanup keeps it. `list` and `status` show the
-`agent_state` agents' hooks report (`working`, `waiting`, `idle`). `log`
-lists a space's creation, agent starts and exits, links, PR changes, ready
-marks, completion, threads, approvals, alerts, child spaces, parent
-changes, absorbs and its removal, with where a removal failed or stopped, oldest first; a removed
-space is selected by its ID. Outside a space, `status` shows the daemon and
-`log` every space's entries with the daemon's. On a machine joined to a hub,
-`list`, `inbox` and `status` also show the other machines' spaces your scope
-reaches, each with its `machine`. Commands that act on a space work on one
-elsewhere through the hub, under your scope, except those that need the
-machine they run on, such as leases, starting a demo and attaching
-files, which name its machine. While that machine is offline, an alert, answer, approval decision
-or stop prints that it is queued and goes through once it connects; other
-commands fail, naming the machine.
+`status` shows a workspace's base, parent and children. `prs` lists its
+watched PRs, each with its state, merge conflicts, CI results, review state
+and lookup errors. `cleanup_reason` says why cleanup keeps the workspace.
+`list` and `status` show the `agent_state` that agents' hooks report:
+`working`, `waiting` or `idle`. Outside a space, `status` shows the daemon.
+
+`log` lists what happened to a space, oldest first, such as its agent starts
+and exits, links, PR changes, threads, approvals, completion and removal.
+When a removal failed or stopped, the log says where. Select a removed space
+by its ID. Outside a space, `log` lists every space's entries with the
+daemon's.
+
+On a machine joined to a hub, `list`, `inbox` and `status` also show other
+machines' spaces in your scope, each with its `machine`. Commands reach those
+spaces through the hub, except those that need the machine they run on, such
+as leases, which name that machine. While it is offline, an alert, answer,
+approval decision or stop waits until it connects, and other commands fail.
+
 The user's alerts report agent exits, thread posts, busy resources, pending
-approvals and cleanup Shoal did on its own; reading them marks them read, and
-scoped callers read them as their `notifications` permission allows.
+approvals and cleanup Shoal did on its own. Reading them marks them read.
+Scoped callers read them as their `notifications` permission allows.
 
 ## Space name
 
 `shoal rename "<name>"` names the space's work, in free text of at most 40
-characters; lists and the tabs and windows Shoal opens for it show the name.
-Its branch and worktree directory keep theirs.
+characters. Lists, and the tabs and windows Shoal opens for the space, show
+the name. The branch and the worktree directory keep their own names.
 
 ## Progress
 
@@ -282,25 +316,29 @@ shoal progress --add-blocker 1468 --reason "CI runner is down" [--step 3]
 shoal progress --remove-blocker 1468 [--step 3] [--space S]
 ```
 
-`progress` sets the space's status line, one line in the agent's words that
+`progress` sets the space's status line: one line, in the agent's words, that
 `list` and `status` show. Claude Code's and Codex's plan tools set the steps
-through Shoal's hooks; `--steps` sets them for other agents. With
-`[pr] progress` on, each open draft PR the space opened or was assigned ends
-its body with a section showing both until it leaves draft. Changes never
-notify; a coordinator reads its children's progress on demand.
+through Shoal's hooks; other agents use `--steps`. With `[pr] progress` on,
+each open draft PR the space opened or was assigned ends its body with the
+status line and steps, until it leaves draft. Progress changes notify nobody;
+a coordinator reads its children's progress when it needs it.
 
-`--add-blocker` records what blocks the space, or with `--step` one step as
-`shoal progress` numbers them: an issue by number or URL, a PR or CI run by
-URL, or a space by its ID, with a one-line `--reason`. A step's blocker
-goes with the step when the plan drops it. A space is blocked while it has a
-blocker of its own or every step not done has one; lists show it `blocked`,
-and its coordinator, or the user, hears of it once. Once a blocked agent's
-turn ends, Shoal stops it and restores it when nothing blocks the space any
-longer, its first message naming what cleared: an issue closing, a PR merging
-or closing, a space done or removed, or a CI run, or a later run of its
-workflow on the default branch, passing. A coordinator removes a blocker of a
-space below with `--space`; `shoal resume` restores a blocked agent at once,
-and `shoal done` removes the blockers.
+`--add-blocker` records what blocks the space, or with `--step` one step, as
+`shoal progress` numbers them. A blocker is an issue by number or URL, a PR or
+CI run by URL, or a space by its ID. Give it a one-line `--reason`. A step's
+blocker goes away with the step when the plan drops it.
+
+A space is blocked while it has a blocker of its own, or while every step not
+done has one. Lists show it as `blocked`, and its coordinator, or the user,
+hears of it once. Once a blocked agent's turn ends, Shoal stops it. Shoal
+restores it once nothing blocks the space, and its first message names what
+cleared. A blocker clears when its issue closes, its PR merges or closes, its
+space is done or removed, or its CI run passes. A CI run also clears when a
+later run of its workflow passes on the default branch.
+
+A coordinator removes a blocker of a space below with `--space`.
+`shoal resume` restores a blocked agent at once. `shoal done` removes the
+blockers.
 
 ## Sleep
 
@@ -311,24 +349,28 @@ shoal sleep --for 20m -- "Check whether CI finished"   # Or --until 14:30
 shoal sleep --undo [space]  # Awake, timer cancelled; an agent that stopped comes back
 ```
 
-An agent whose mode sets `idle_wake_minutes`, 60 for `worker`, receives a
-message once it has stayed idle that long, and again after each further
-period, until its space is done: "You have been idle for 60 minutes. Continue
-your work if any remains; otherwise run `shoal sleep`." An agent that has
-nothing to do until something arrives runs `shoal sleep`: from the end of its
-turn it gets no idle wakes. Shoal stops an idle agent that is not light,
-keeping its session, slot-free until an update, a message, an answer or the user
-wakes it, seconds after its turn ends unless the user is engaged with it, and
-otherwise once it has waited twice as long as the user usually takes to come
-back to it. `--for` or `--until` also sets the space's timer, which
-replaces the one it had: when it is due, the agent receives the text after
-`--` as a message, or that the timer fired, asleep or not, through restores
-and daemon restarts, until `--undo` or `shoal done` cancels it. A loop sets
-its next timer each turn; Claude Code's own timer tools are refused, since
-Shoal's stops end their timers. A coordinator puts a space below to sleep
-with `shoal sleep <space>`. An agent Shoal stopped on its own is asleep; `list` and
-`status` show it with why and what wakes it. One stopped by `shoal stop`, or
-that quit, stays stopped until `shoal resume`.
+A mode can set `idle_wake_minutes`, which is 60 for `worker`. Its agent then
+receives a message once it has stayed idle that long, and again after each
+further period, until its space is done: "You have been idle for 60 minutes.
+Continue your work if any remains; otherwise run `shoal sleep`." An agent with
+nothing to do until something arrives runs `shoal sleep`. From the end of its
+turn, it gets no idle wakes.
+
+Shoal stops an idle agent that is not light soon after its turn ends, and
+keeps its session. The agent takes no queue slot until an update, a message,
+an answer or the user wakes it.
+
+`--for` or `--until` sets the space's timer, replacing any earlier one. When
+it is due, the agent receives the text after `--` as a message, or a note that
+the timer fired, asleep or not. The timer survives restores and daemon
+restarts until `--undo` or `shoal done` cancels it. A loop sets its next timer
+each turn. Shoal refuses Claude Code's own timer tools, since Shoal's stops
+end their timers.
+
+A coordinator puts a space below to sleep with `shoal sleep <space>`. `list`
+and `status` show an agent that Shoal stopped on its own as asleep, with why
+and what wakes it. An agent that `shoal stop` stopped, or that quit, stays
+stopped until `shoal resume`.
 
 ## Issues and pull requests
 
@@ -345,123 +387,154 @@ shoal issue ls <words> [--match keyword|meaning|both] [--state all] [--label L] 
 shoal repo labels
 ```
 
-`pr open` pushes the branch, then links the branch's open PR or opens one. The
-first assigned issue supplies the default title, and without a body each
-assigned issue gets a `Closes #<number>` line;
-a supplied body is used verbatim. Opening refuses an item without a label
-`required_labels` asks for; `pr open`, `issue open` and `ready` report
-`warnings` for missing labels or template headings. `repo labels` lists each
-label with its meaning. Shoal acts as the agent account and records each
-change it makes. `pr edit` also takes `--body-file`, `--add-reviewer`
-(`shoal pr reviewers` lists who can review), `--add-assignee`, `--milestone`
-and `--draft`; `pr comment --edit <comment-id>` changes a comment the agent
-wrote; `pr close` closes; `issue` has the same commands. `open`, `edit` and
-`comment` take `--attach FILE`, and the body shows images and videos and links
-other files where it references them as `![alt](FILE)`. `shoal view` shows
-each review comment's ID; `reply` answers in its thread, and `resolve` replies
-and then resolves the thread. `view --json` lists reactions. `pr review` adds
-comments on lines of the diff: `--line`, repeated, `--old-line` for a removed
-line, or `--comments-file F` with a JSON array of `{"path", "line", "body"}`
-objects, with `"side": "old"` for a removed line. A comment on a line the diff
-does not show refuses the whole review before anything is posted. These
-commands act on the linked item, or on the number or URL given.
+These commands act on the linked item, or on the number or URL given. Shoal
+acts as the agent account and records each change it makes. `issue` takes the
+same commands as `pr`.
 
-`issue open` records the issue as opened by the space, or with `--link`
-assigns it instead. An issue a space links as assigned has the agent account
-among its assignees on the forge while an agent works it, from the link or the
-agent's start until `shoal done`, a stop that waits for `shoal resume`, an
-unlink or the space's removal, and linking it warns of anyone else assigned;
-`[issue] assign` also or instead adds the user's own login. `--repo OWNER/NAME`, or a repository URL on another forge, opens it
-in another repository, as the space's `issue_other_repositories` permission
-allows;
-`issue ls`, `pr ls`, `view` and the other issue and PR commands take `--repo`
-too, or an item's URL, for any repository, registered or not: an agent reads
-another repository's items, and changing them is the user's. `issue ls` and
-`pr ls` match their words by
-`--match keyword`, `meaning` where the forge searches by meaning, or `both`
-ways by default, which on another forge is its keyword search. `shoal pr revert [<number>]`
-opens a PR that undoes a merged one; where the forge cannot, it opens it from a
-child workspace already marked done, which goes once the revert merges.
-`pr review --approve` and `--request-changes` follow the space's
-`pr_review` [permission](#permitted-actions), as the host's `review_token`,
-which must be set and must not be the account that opened the PR. `merge` of
-a PR, its `--auto` and `--cancel-auto` follow the space's
-`merge` permission, a merge bound to the PR's head commit, its method and a
-squash's message, and `ci approve`
-its `ci_approve` [permission](#permitted-actions).
+`pr open` pushes the branch, then links the branch's open PR or opens one. The
+first assigned issue gives the default title. Without a body, the PR gets a
+`Closes #<number>` line for each assigned issue; a given body is used as it
+is. Opening refuses an item that lacks a label `required_labels` asks for.
+`pr open`, `issue open` and `ready` report `warnings` for missing labels or
+template headings. `repo labels` lists each label with its meaning.
+
+`pr edit` also takes `--body-file`, `--add-reviewer`, `--add-assignee`,
+`--milestone` and `--draft`; `shoal pr reviewers` lists who can review.
+`pr comment --edit <comment-id>` changes a comment the agent wrote, and
+`pr close` closes the PR. `open`, `edit` and `comment` take `--attach FILE`.
+The body shows an image or video where it references the file as
+`![alt](FILE)`, and links any other file there.
+
+`shoal view` shows each review comment's ID. `reply` answers in that
+comment's thread, and `resolve` replies and then resolves the thread.
+`view --json` lists reactions.
+
+`pr review` comments on lines of the diff. Pass `--line`, repeated, or
+`--old-line` for a removed line. Or pass `--comments-file F` with a JSON array
+of `{"path", "line", "body"}` objects, adding `"side": "old"` for a removed
+line. A comment on a line the diff does not show refuses the whole review,
+before anything is posted.
+
+`issue open` records the issue as opened by the space; `--link` assigns it
+instead. While an agent works an assigned issue, Shoal adds the agent account
+to the issue's assignees on the forge, and removes it when the work stops.
+
+`--repo OWNER/NAME`, or a repository URL on another forge, opens the issue in
+another repository, as the `issue_other_repositories` permission allows. The
+other issue and PR commands take `--repo`, or an item's URL, for any
+repository, registered or not. An agent reads other repositories' items;
+changing them is the user's job.
+
+`issue ls` and `pr ls` match their words both by keyword and by meaning by
+default; `--match` picks one way. `shoal pr revert [<number>]` opens a PR that
+undoes a merged one.
+
+Some of these commands follow a [permitted action](#permitted-actions):
+
+- `pr review --approve` and `--request-changes` follow `pr_review`. They act
+  as the host's `review_token`, which must be set and must not be the account
+  that opened the PR.
+- `merge` of a PR, with `--auto` and `--cancel-auto`, follows `merge`. An
+  approval binds the PR's head commit, the merge method and a squash's
+  message.
+- `ci approve` follows `ci_approve`.
+
+### The forge
 
 `shoal forge capabilities` lists what the forge supports, such as resolving
 threads, rerunning jobs or reading job logs, and what to do instead.
+
 `shoal forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the forge's API
-and prints the JSON, `--repo OWNER/NAME` for another repository; other methods
-go to the space's own repository as its `api_writes` permission allows:
-`direct` sends them, `propose` asks for approval bound to the method, path
-and body, and `deny` refuses them.
+and prints the JSON; `--repo OWNER/NAME` names another repository. Other
+methods go only to the space's own repository, as its `api_writes` permission
+allows. `direct` sends them, `propose` asks for an approval bound to the
+method, path and body, and `deny` refuses them.
+
 `shoal forge download <url> --output <file>` saves an image or attached file
-from the forge with the same login.
+from the forge, with the same login.
+
+## Permissions
+
+A space's permissions come from its agent's mode in config. Each is no wider
+than the same permission of the space above. Each key that a `--permission`
+given to the agent sets then takes that value. `shoal status` lists the
+space's permissions, each with where it comes from. A command that acts on a
+space below uses your own permissions.
+
+`shoal start --permission KEY=VALUE`, repeatable, gives a child a permission
+whatever its mode allows, such as `--permission push=propose`. You give only
+values your own space holds; a wider value is refused. `shoal resume` and
+`shoal restart` take `--permission` too. It sets the keys it names and keeps
+the rest, and `KEY=mode` returns a key to its mode's value. Without
+`--permission`, they keep every key.
 
 ### Proposals and pushes
 
-A space's permissions are its agent's mode's under config, each no wider
-than the space above it, then each key a `--permission` given to its agent
-sets; `shoal status` lists them, each with where it comes from. A command acting on a space below uses the
-caller's own. `shoal start --permission KEY=VALUE`, repeatable, gives a child
-a permission whatever its mode allows, such as `--permission push=propose`;
-you give only what your own space holds, and a value above that is refused.
-`shoal resume` and `shoal restart` take `--permission` too, which sets the
-keys it names, `KEY=mode` dropping one, and keeps the rest; without it they
-keep them all.
+When the space's permissions require approval for issues and PRs,
+`issue open` and `pr open` exit 0 with `proposed`, an approval request,
+instead of the item. `pr open` still pushes, unless pushes need approval too.
 
-Where a space's permissions require approval for issues and PRs, `issue open`
-and `pr open` exit 0 with `proposed`, an approval request, instead of the item;
-`pr open` still pushes unless pushes need approval too. The user approves a
-proposal, or a space above whose own permission opens it directly, and may
-edit its title and description first; the decision arrives
-as a message naming the opened item, or giving a reason or the duplicate issue
-for a denial. A proposed issue stays after the space is removed. A pending PR
-proposal keeps the workspace; a new commit outdates it until `pr open` runs
-again. A chat proposes issues, never PRs.
+The user approves a proposal, or a space above whose own permission opens the
+item directly. Either may edit its title and description first. The decision
+arrives as a message. It names the opened item, or for a denial the reason or
+the duplicate issue. A proposed issue stays after the space is removed. A
+pending PR proposal keeps the workspace from cleanup. A new commit outdates it
+until `pr open` runs again. A chat proposes issues, never PRs.
 
-With the space's `push` permission requiring approval, `pr open` pushes
-nothing: it proposes the PR together with the push, or only the push for an
-open PR. Plain `git push` reports the push as rejected and `waits for approval
-<S.N>`; `--force-with-lease` works as usual. On approval Shoal pushes the
+When the `push` permission requires approval, `pr open` pushes nothing. It
+proposes the PR together with the push, or only the push for an open PR. Plain
+`git push` reports the push as rejected and `waits for approval <S.N>`;
+`--force-with-lease` works the same way. On approval, Shoal pushes the
 approved commit and opens the PR that waited for it. A new commit outdates the
 request until the next push or `pr open`. A pending push keeps the workspace.
 With `push = "deny"`, `pr open` and `git push` fail with the reason.
 
-Under a permission of `gate`, the gate, an agent, decides such a request at
-once instead of the user: an allowed one goes ahead as an approved one does,
-and a denial arrives as a message with the reason. Running the command again
-asks again; after three denials of the same action, a push of one commit, a PR
-proposal with the same title, description and labels at one commit, or an
-issue by its title, the command is refused until it changes. A request the gate passes on goes to the space
-above or the user, and a failed gate run denies it without telling the user.
+### The gate
+
+Under a permission of `gate`, an agent called the gate decides the request at
+once, instead of the user. An allowed request goes ahead as an approved one
+does. A denial arrives as a message with the reason. Running the command again
+asks again, until three denials of the same action refuse it. A request the
+gate passes on goes to the space above or the user.
 
 ### Permitted actions
 
-Other keys govern administering Shoal and the actions that reach beyond a
-space, each `deny`, `propose` or `direct`: `admin` administering Shoal, such as `config set`, `repo add`,
-`cleanup`, `setup --skip`, `contribute`, `move`, except to a joined machine but a copy of your own space there, `config setup`, `repo setup`,
-and restoring removed workspaces, which reopen below your space (a
-permission you set in config only to a value your space holds, and
-`config reset` and `install` stay the user's), `limits` starting agents regardless of the limits, with
-`--now`, `--focus` or `queue start`, `ci_approve` approving CI runs that wait
-for approval, `pr_review` approving and requesting changes on PRs, bound to
-the PR's head and the review's text, `triggers` pausing, resuming and running
-[triggers](#triggers), `user_holds` releasing the user's holds
-and removing what the user holds, and `daemon` the daemon's service
-commands, `shoal update` and `shoal hub update` while a daemon of this
-Shoal answers to decide it. `notifications`, `deny` or `direct`, lets a
-space read the user's alerts, Shoal's own log and the inbox's
-daemon-wide problems, and `decide`, `deny` or `direct`, decide the requests
-of the spaces below as the user does.
-With `propose` the command exits 2 with `approval_pending` and the request,
-which goes to the space above whose own value is `direct`, or the user; once
-approved, the same command proceeds once. A master session has every one
-at `direct` but `daemon` and `triggers`, which it proposes, as it proposes
-`api_writes`; other modes propose `admin`, `limits`, `ci_approve`,
-`pr_review`, `triggers` and `user_holds` and are denied the rest.
+Other keys govern administering Shoal and actions that reach beyond a space.
+`shoal config reference` says what each key governs and its default. These
+are the ones agents meet most:
+
+- `admin`: administering Shoal, such as `config set`, `repo add`, `cleanup`,
+  `setup --skip`, `contribute` and restoring removed workspaces. You set a
+  permission in config only to a value your space holds.
+- `limits`: starting agents regardless of the limits, with `--now`,
+  `--focus` or `queue start`.
+- `user_holds`: releasing the user's holds and removing what the user holds.
+- `daemon`: the daemon's service commands, `shoal update` and
+  `shoal hub update`.
+- `notifications` and `decide`, each `deny` or `direct`: reading the user's
+  alerts, and deciding the requests of the spaces below as the user does.
+
+With `propose`, the command exits 2 with `approval_pending` and the request.
+The request goes to the space above whose own value is `direct`, or to the
+user. Once it is approved, the same command proceeds once. A master session
+holds every key at `direct`, except `daemon`, `triggers` and `api_writes`,
+which it proposes. Other modes propose `admin`, `limits`, `ci_approve`,
+`pr_review`, `triggers` and `user_holds`, and are denied the rest.
+
+### Approval requests
+
+```sh
+shoal approvals
+shoal approvals --approve <S.N>
+shoal approvals --deny <S.N>
+shoal approvals withdraw <S.N>
+```
+
+A command that needs approval returns `approval_pending` with the request
+number, and `approval_denied` once it is denied. Run it again after approval
+to proceed. `--reason` states the purpose of protected access. A request goes
+to the nearest space above with an agent, then up to the user. Unscoped
+callers decide any request. Approving a resource reserves no capacity.
 
 ## Links and watches
 
@@ -473,49 +546,54 @@ shoal view [pr <number> | <url>] [--no-comments] [--check '<name>']
 shoal watch pr [--timeout <seconds>]
 ```
 
-A link names its relation last: `assigned` for the space's own work, `opened`
-for an item it created another way, `related` for one the work relates to.
-Each item has one relation: assigning an item replaces its opened or related
-link, and an assigned item is refused another until it is unlinked.
-Assigned issues accumulate per space, the first naming a new branch and
-giving a new PR its title; commands that act on the assigned issue need its
-number once several are. Assigned PRs accumulate per workspace, whatever their
-head branch, such as a stacked PR pushed from the worktree; after `done`,
-cleanup waits until all have merged and contain HEAD, or the default branch
-has their changes, and a closed, unmerged PR keeps it waiting until it is
-unlinked. `unlink` without a number unlinks every assigned item of the kind.
+A link names its relation last:
 
-`shoal view` shows every linked item with its relation, each item's
-description, comments and reviews with inline comments, and the log tails and
-URLs of failed CI jobs where the forge reads job logs; `--check` selects one
-check's log.
+- `assigned`: the space's own work.
+- `opened`: an item the space created another way.
+- `related`: an item the work relates to.
 
-Shoal reports the activity of watched items: comments and reviews; edits to an
-item's title, description, labels, assignees, milestone, draft state or base
-branch; a failed CI check with its failing step when the runner records it;
-the passed checks once none on the PR's head is pending; a merge conflict,
-again after a push or base change that leaves it conflicting; closing and
-merging. Where `[pr] watch_merge_runs` is on, the merge of a PR linked as
-assigned or opened into the default branch, or a local `shoal merge` of the
-space's branch that pushes it, also links the default branch's CI runs for
-that commit as related, whose ends it reports, and keeps a done space until
-they finish. It
-leaves out what the space itself did through Shoal and the
-assignees Shoal adds or removes on its own. For Claude
-Code, and for a workspace's Codex in a place its host types into,
-launched through Shoal, hooks deliver activity as context after tool calls and start the next
-turn with it after a turn ends; a delivery replaces a running watch. Other
-agents run `shoal watch pr`, which returns `updates`. Comments and edits
-made before an item is linked, or before a new agent session starts, are not
-reported; `shoal view` shows them. A wait for an item the space does not follow
-includes its existing activity, and waits share a cursor per workspace. A newer wait
-supersedes a running one, which returns `superseded: true`. Without
-`--timeout` (1–3600 seconds) the wait is unbounded; `timed_out` with empty
-`updates` means no update. A `lookup_failed` entry names a failed lookup,
-once until the lookup succeeds or fails differently, and at most every 10
-minutes per source. A `base_merged` update means the
-base workspace merged; it says whether Shoal retargeted the PR and gives the
-rebase command.
+Each item has one relation. Assigning an item replaces its opened or related
+link. An assigned item refuses another relation until it is unlinked.
+`unlink` without a number unlinks every assigned item of the kind.
+
+A space can have several assigned issues. The first names a new branch and
+gives a new PR its title. Commands that act on the assigned issue need its
+number once there are several.
+
+A workspace can have several assigned PRs, whatever their head branch, such
+as a stacked PR pushed from the worktree. After `done`, cleanup waits until
+all of them have merged and contain HEAD, or the default branch has their
+changes. A PR closed without merging keeps it waiting until it is unlinked.
+
+`shoal view` shows every linked item with its relation, description,
+comments and reviews, inline comments included. For failed CI jobs, it shows
+their URLs and, where the forge reads job logs, their log tails. `--check`
+selects one check's log.
+
+### Activity of watched items
+
+Shoal reports the activity of watched items: comments and reviews, edits,
+CI results, merge conflicts, closing and merging. A failed check comes with
+its failing step, and passed checks once none on the PR's head is pending.
+Shoal leaves out what the space itself did through Shoal. Activity from before
+an item was linked, or before a new agent session started, is not reported;
+`shoal view` shows it.
+
+Where `[pr] watch_merge_runs` is on, a merge into the default branch also
+links that commit's CI runs on the default branch as related. Shoal reports
+their ends, and they keep a done space until they finish.
+
+Hooks deliver activity to Claude Code, and to a workspace's Codex in a place
+its host types into, when Shoal launched them. The activity arrives as context
+after tool calls, and starts the next turn after a turn ends. A delivery
+replaces a running watch.
+
+Other agents run `shoal watch pr`, which returns `updates`. Without
+`--timeout` (1–3600 seconds) the wait has no limit. `timed_out` with empty
+`updates` means no update. A newer wait supersedes a running one, which
+returns `superseded: true`. A `lookup_failed` entry names a lookup that
+failed. A `base_merged` update means the base workspace merged. It says
+whether Shoal retargeted the PR and gives the rebase command.
 
 ## CI
 
@@ -528,24 +606,31 @@ shoal ci cancel [--check '<name>' | <run-url>]
 shoal ci run <workflow> [--input NAME=VALUE] [--branch B]
 ```
 
-`view ci` lists a run's jobs with the log tails of its failed ones; `--job`
-prints one job's whole log, by its name or listed ID, whatever its result. `ci rerun --check` reruns a
-failed check on the linked PR's current head, and without `--check` every
-failed one; `ci cancel` cancels running and waiting ones. With a run URL both act on one run. `ci run` starts
-a workflow, by its file name or its link, on the space's branch, or for a chat
-on the default branch, or on `--branch`. A space's agent acts on the runs of
-the default branch and of the branches of the workspaces below it, and of
-their PRs on any commit. It is a new run, not a rerun: on Forgejo a failed
-check on the PR stays failed. When `ci run` links the run as opened, a watch
-reports when it finishes. `--repo` or a run's URL names another repository,
-whose runs anyone reads and only the user links and acts on. A PR from a fork or first-time contributor can show runs that
-wait for approval instead of checks; `shoal view` lists them in `waiting_runs`.
+`view ci` lists a run's jobs with the log tails of the failed ones. `--job`
+prints one job's whole log, by its name or listed ID, whatever its result.
+
+`ci rerun --check` reruns a failed check on the linked PR's current head.
+Without `--check`, it reruns every failed check. `ci cancel` cancels running
+and waiting checks. With a run URL, both act on that one run.
+
+`ci run` starts a workflow, by its file name or its link. It runs on the
+space's branch, on the default branch for a chat, or on `--branch`. This is a
+new run, not a rerun: on Forgejo, a failed check on the PR stays failed. When
+`ci run` links the run as opened, a watch reports when it finishes.
+
+A space's agent acts on the runs of the default branch, of the branches of the
+workspaces below it, and of their PRs on any commit. `--repo`, or a run's URL,
+names another repository; anyone reads its runs, and only the user links and
+acts on them.
+
+A PR from a fork or a first-time contributor can show runs that wait for
+approval instead of checks. `shoal view` lists them in `waiting_runs`.
 
 ## Local reviews
 
 ```sh
 shoal review run                    # Or a workspace's number or ID, or a PR URL
-shoal review ls                   # Reviews, newest first, with unresolved findings
+shoal review ls                     # Reviews, newest first, with unresolved findings
 shoal view review [<id>]
 shoal watch review [<id>]
 shoal review cancel [<id>]
@@ -558,25 +643,30 @@ shoal thread resolve 3.4 deferred --issue 1240
 shoal thread resolve 3.5 duplicate --of 3.2
 ```
 
-`review run` queues a one-shot, read-only review of the committed HEAD;
-uncommitted edits stay out of it. With a PR URL, or from a chat for its linked
-PR, it reviews the PR in the workspace that owns its branch. The reviewer
-writes its review with `thread open`, `send` and `review submit`, under a
-scope that writes only that review, and a run that does not submit fails it.
-Each finding is a `review` [thread](#threads) Shoal opens, held by the
-workspace and numbered in its space, whose opening post points at the reviewed
-lines; the review's summary and all its threads reach the workspace's agent in
-one message once submitted, and its coordinator as one line. The holder resolves a finding's thread with
-`thread resolve` and an outcome with its data, or posts in it with `send`,
-which the reviewer answers there from the workspace's latest commit. Later reviews of the
-repository receive each `false-positive` finding's title, path and reason and
-skip that claim while the reason holds; the next review checks each `fixed`
-finding against the changes made for its thread and reopens it, with a post
-saying why, when its problem remains. When the repository requires a review,
-`pr open` of a new PR, `ready` and `merge`, of a PR or a branch, are refused until
-a finished review covers the commit they act on with every thread it opened or
-reopened resolved. Without one, the refusal starts a review
-of the workspace's HEAD where that is the commit, and otherwise names
+`review run` queues a one-shot, read-only review of the committed HEAD.
+Uncommitted edits stay out of it. With a PR URL, or from a chat for its
+linked PR, it reviews the PR in the workspace that owns the PR's branch. The
+reviewer writes its review with `thread open`, `send` and `review submit`,
+under a scope that writes only that review. A run that does not submit fails.
+
+Each finding is a `review` [thread](#threads), held by the workspace and
+numbered in its space. Its opening post points at the reviewed lines. Once
+the review is submitted, its summary and all its threads reach the
+workspace's agent in one message, and its coordinator as one line.
+
+The holder resolves a finding's thread with `thread resolve` and an outcome,
+or posts in it with `send`. The reviewer answers there, from the workspace's
+latest commit. Later reviews of the repository receive each `false-positive`
+finding's title, path and reason, and skip that claim while the reason holds.
+The next review checks each `fixed` finding against the changes made for its
+thread. When the problem remains, it reopens the thread with a post saying
+why.
+
+A repository can require a review. Then `pr open` of a new PR, `ready` and
+`merge`, of a PR or a branch, are refused until a finished review covers the
+commit they act on. Every thread that review opened or reopened must also be
+resolved. When no review covers the commit, the refusal starts a review of
+the workspace's HEAD where that is the commit. Otherwise it names
 `shoal review run <pr-url>`.
 
 ### Your own review of a space below
@@ -591,26 +681,28 @@ shoal review cancel [<id>]          # Drop a pending review with its comments
 
 You, or the user, review a workspace's work as the reviewer does. While your
 review of a workspace is pending, a thread you open towards it without
-`--kind` is its comment, a `review` thread that only your side and the user
-read and whose posts reach nobody yet; an
-explicit `--kind` opens a thread outside it. `--severity blocker|should-fix|nit`
-says how much a comment matters, which the review's tallies count.
-`review submit` records the
-workspace's HEAD and delivers the summary and every comment to its agent in one
-message. A comment's opener resolves it, and its holder's posts reach the
-opener. The review gates count a
-submitted review once every comment is resolved, and one without comments only
-with `--approve`.
+`--kind` is a comment of that review. A comment is a `review` thread that only
+your side and the user read, and its posts reach nobody yet. An explicit
+`--kind` opens a thread outside the review. `--severity
+blocker|should-fix|nit` says how much a comment matters, which the review's
+tallies count.
+
+`review submit` records the workspace's HEAD. It delivers the summary and
+every comment to the workspace's agent in one message. A comment's opener
+resolves it, and the holder's posts reach the opener. The review gates count a
+submitted review once every comment is resolved. They count one without
+comments only with `--approve`.
 
 ## Ready marks
 
-A ready mark says that a space's agent needs the user before it can go on:
-its work is ready for review, or it has a decision or answer to ask them for.
+A ready mark says that a space's agent needs the user before it can go on.
+Its work is ready for review, or it has a decision or a question for them.
+
 `shoal ready` marks the linked items, or the space when nothing is linked,
-for the user's integrations, and takes a linked draft PR out of draft unless
-`[pr] undraft_on_ready = false`. It skips a linked PR that is not open or
-whose head on the forge is not HEAD, naming each with its reason on stderr.
-New commits leave a mark as it was; `shoal ready --undo` withdraws the marks,
+for the user's integrations. It takes a linked draft PR out of draft, unless
+`[pr] undraft_on_ready = false`. It skips a linked PR that is not open, or
+whose head on the forge is not HEAD, and names each on stderr with its reason.
+New commits leave a mark as it was. `shoal ready --undo` withdraws the marks,
 and `--draft` also returns the PR to draft.
 
 ## Alerts
@@ -623,23 +715,26 @@ shoal alert list [--unread]           # Your space's alerts
 shoal alert withdraw <number>         # Take back one you sent, until it is read
 ```
 
-An alert is a one-way notice. Without `--space`, `shoal send` goes up to your
-coordinator, or else the user, as one line; it tells them something without
-asking, and affects neither completion nor cleanup. `--space`, `--all` and
-`--repo` send down to the agents below. The user, Shoal and your coordinator
-send your space alerts, such as a request to free memory or disk space. Hooks
-deliver them with PR activity; a new one also ends `shoal watch pr` with an
-`alerts` array, and `shoal alert list` shows them. Each is shown once, and
-lists each file attached to it as an `Attached file:` line with its path, or
-its name and machine for one another machine keeps. `shoal send`
-prints each alert's number, by which its sender withdraws it until it is
-read; `--space` names the space it went to, as for one on another machine.
-`--in-chat` sends your turn's final message as the alert once the turn
-ends, for an agent with Shoal's hooks: it names whom it goes to now, and
-`shoal log` the alert's number once sent. A prompt the user submits during
-the turn drops it and marks read the alerts your chat sent them; Shoal
-tells you when your final message goes unsent, as then or when sending
-fails.
+An alert is a one-way notice. It tells someone something without asking, and
+affects neither completion nor cleanup.
+
+Without `--space`, `shoal send` goes up to your coordinator, or else the
+user, as one line. `--space`, `--all` and `--repo` send it down to the agents
+below. `shoal send` prints each alert's number. Its sender withdraws it by
+that number until it is read. `--space` names the space it went to, which may
+be on another machine.
+
+The user, Shoal and your coordinator send your space alerts, such as a request
+to free memory or disk space. Hooks deliver them with PR activity. A new alert
+also ends `shoal watch pr` with an `alerts` array, and `shoal alert list`
+shows them. Each alert is shown once, with an `Attached file:` line for each
+file attached to it.
+
+`--in-chat` sends your turn's final message as the alert once the turn ends,
+for an agent with Shoal's hooks. It names whom the alert goes to, and
+`shoal log` shows the alert's number once it is sent. A prompt the user
+submits during the turn drops the alert. Shoal tells you when your final
+message goes unsent.
 
 ## Threads
 
@@ -659,51 +754,60 @@ shoal link thread <S.N> related
 shoal unlink thread <S.N>
 ```
 
-A thread is a conversation between its opener and its holder, whoever is
-asked now, with posts from both sides. `thread open` opens an empty thread
-with your coordinator, or else the user, or with `--space` a space below
-you; from the user's terminal it opens one with a space. Nobody hears of an
-empty thread; each post reaches the other side as an alert, waking an idle
-agent, and the user in one line. You post on the side you took part on, as
-its opener, its holder, a space above the holder or an earlier holder, which
-reaches that side's current party too; any other space that reads the
-thread posts as a participant, to both sides, without taking a turn, offering
-or picking choices, and hears the replies from then on. Inside a space, a bare number names a
-thread of that space; others take their full `S.N`. A post states its text,
-and may offer numbered choices with the one it recommends and why, or pick
-one the other side offered with `--choose`; text is never read as a choice
-number. `--wait` waits without a time limit for the next post from another
-side and prints it. `--in-chat` makes your turn's final message the post, for an
-agent with Shoal's hooks; a prompt the user submits in your chat answers it.
-A turn has one such mark, a post's or an alert's: another `--in-chat`
-replaces it and names the one it replaced.
+A thread is a conversation between its opener and its holder, the side asked
+now. Both sides post in it. A `question` asks for an answer. A `request` asks
+the holder to do something, such as implement the code it points at.
 
-`--code`, repeatable, points a post at a file, or its lines, in the worktree
-of a space your scope reaches, or of the workspace your chat runs in;
-`--attach` sends a copy instead. The other
-side receives each as `Code: path:first-last` with the lines' snippet, and
-the space whose worktree it is in when that is not its own. Shoal follows
-the code as it changes: `view thread` shows each reference where its lines
-are now, `changed` once lines inside it were edited and `outdated` once they
-are gone, with the snippet as it was. `thread open` with `--body` or
-`--code` posts at once: its opening post is the body, else the thread's
-name, with the references.
+`thread open` opens a thread with your coordinator, or else the user. With
+`--space`, it opens one with a space below you. From the user's terminal, it
+opens one with a space. With `--body` or `--code`, it posts at once: the
+opening post is the body, else the thread's name, with the references.
+Nobody hears of an empty thread.
 
-A `question` asks for an answer; a `request` asks the holder to do
-something, such as implement the code it points at.
+Each post reaches the other side as an alert, which wakes an idle agent, and
+reaches the user as one line. Inside a space, a bare number names a thread of
+that space; give others their full `S.N`.
 
-The opener or the holder forwards its role in a thread down, to a space it
-reaches, or up, to its coordinator or the user, never to the other side; the
-new party reads what came before and receives the posts from then on, as you
-do too unless `--unlink`. A new opener numbers the thread in its own space. The opener resolves its thread: `answered` a
-question, `done` a request once it accepts the work,
-`duplicate --of <thread>`, or `withdrawn`, which takes back the holder's
-unread alerts of it. A space reads the threads it or a space below it took
-part in, and `link thread` delivers a thread's new posts to it. A thread
-that waits for its holder keeps the space that opened it from cleanup, and
-the user's waiting threads fill the inbox. `shoal done`, and removal, close
-the threads the space opened or holds, telling the other side; `done --undo`
-and a restore reopen them.
+You post on the side you took part on, such as the opener's or an earlier
+holder's, and your post reaches that side's current party too. Any other space
+that reads the thread posts as a participant. A participant's post reaches
+both sides and takes no turn.
+
+A post states its text. It may offer numbered choices, with the one it
+recommends and why. `--choose` picks a choice the other side offered; Shoal
+never reads text as a choice number. `--wait` waits, without a time limit,
+for the next post from another side and prints it. `--in-chat` makes your
+turn's final message the post, for an agent with Shoal's hooks. When the user
+submits a prompt in your chat, that prompt answers it. A turn has one such
+mark, for a post or an alert; another `--in-chat` replaces it and names the
+one it replaced.
+
+`--code`, repeatable, points a post at a file, or some of its lines. The file
+is in the worktree of a space in your scope, or of the workspace your chat
+runs in. `--attach` sends a copy instead. The other side receives each
+reference with the lines' snippet. Shoal follows the code as it changes:
+`view thread` shows each reference where its lines are now, or marks it
+`changed` or `outdated`.
+
+The opener or the holder forwards its role in a thread, down to a space it
+reaches, or up to its coordinator or the user, never to the other side. The
+new party reads what came before and receives the posts from then on. You
+receive them too, unless `--unlink`. A new opener numbers the thread in its
+own space.
+
+The opener resolves its thread:
+
+- `answered` for a question;
+- `done` for a request, once it accepts the work;
+- `duplicate --of <thread>`;
+- `withdrawn`, which takes back the holder's unread alerts of the thread.
+
+A space reads the threads it, or a space below it, took part in.
+`link thread` delivers a thread's new posts to your space. A thread that waits
+for its holder keeps the space that opened it from cleanup. The user's
+waiting threads fill the inbox. `shoal done`, and removal, close the threads
+the space opened or holds, and tell the other side. `done --undo` and a
+restore reopen them.
 
 ## Changes
 
@@ -717,20 +821,24 @@ shoal thread remove <thread> 12
 shoal diff --thread <thread> [--since <post>]
 ```
 
-Shoal records what your tools change in your worktree, each hunk a change
-numbered in your space's own sequence: an edit tool's hunks are yours, and a
-command's are yours unless the user edited the same file while it ran, which
-makes them `mixed`. What changed between your tool calls is someone else's.
-`thread switch` sends your changes, and mixed ones, from then on to an open
-thread your space opened or holds, of any kind, until the next switch or
-until it is resolved, and editors show the thread `working`. After a
-command, Shoal lists the mixed changes it left; `claim` makes changes yours,
-with `--thread` for that thread, and `unclaim` someone else's, for none. A generated, binary or large file
-is one change without hunks. `view thread` shows the changes made for a
-thread between its posts, a post's alert sums up those since the sender's
-last post, and `diff --thread` prints them, with `--since` those since a
-post as `view thread` numbers them. `send --changes` points a post at
-changes, as `--code` points at code.
+Shoal records what your tools change in your worktree. Each hunk is a change,
+numbered in your space's own sequence. An edit tool's hunks are yours. A
+command's hunks are yours, unless the user edited the same file while it ran,
+which makes them `mixed`. What changed between your tool calls is someone
+else's. A generated, binary or large file is one change without hunks.
+
+`thread switch` sends your changes, and mixed ones, to an open thread your
+space opened or holds, of any kind. That lasts until the next switch, or until
+the thread is resolved. Editors show the thread as `working`.
+
+After a command, Shoal lists the mixed changes it left. `claim` makes changes
+yours, with `--thread` for that thread. `unclaim` makes them someone else's,
+for no thread.
+
+`view thread` shows the changes made for a thread between its posts. A post's
+alert sums up the changes since the sender's last post. `diff --thread`
+prints them, and `--since` those since a post, as `view thread` numbers them.
+`send --changes` points a post at changes, as `--code` points at code.
 
 ## Files
 
@@ -741,11 +849,11 @@ shoal files rm [FILE...] [--space S]
 shoal done --attach report.md
 ```
 
-`files add` copies files of at most 100 MiB into the space's attached files
-without telling its agents; `PATH#TITLE` gives a title. `files` lists them, and
-`rm` deletes copies. A removed space's files outlive it for the retention
-period, and `shoal restore` gives them back; the coordinator, or else the user,
-reads them with `shoal files <space>`.
+`files add` copies files of at most 100 MiB into the space's attached files,
+without telling its agents. `PATH#TITLE` gives a file a title. `files` lists
+the attached files, and `rm` deletes copies. A removed space's files outlive
+it for the retention period, and `shoal restore` gives them back. The
+coordinator, or else the user, reads them with `shoal files <space>`.
 
 ## Completion
 
@@ -755,30 +863,34 @@ shoal done --integrated <workspace>
 shoal done --undo [space]
 ```
 
-`shoal done` records that the space's work is finished at its HEAD, notifies
-its coordinator or else the user, closes its open threads and stops its
-demos unless `--keep-demos`. `--summary` ends the notice with one line, of at
-most 512 bytes, saying what the work found, and becomes the status line;
-`--attach` hands back anything longer. Only `done` records completion; issue closure and
-merged PRs do not. With cleanup, the default unless `[cleanup.done] enabled =
-false` (`--cleanup` overrides it), Shoal removes the space and the spaces below
-it after the grace period (`[cleanup] grace_minutes`), stopping their agents:
-a workspace once every assigned PR has merged and contains HEAD, or without a
-PR once its files are clean and every commit is pushed, on the default branch,
-or on the branch it builds on; a chat whatever PRs it watches. Holds,
-threads it opened that wait, and pending proposals or pushes keep a space. Each removed space but
-a disposable one keeps a checkpoint and its branch, and `shoal restore`
-reopens it. `completion.error` and `pr_cleanup.error` report cleanup or lookup
-failures.
+`shoal done` records that the space's work is finished at its HEAD. Only
+`done` records completion; a closed issue or a merged PR does not. `done`
+notifies the coordinator, or else the user. It closes the space's open
+threads, and stops its demos unless `--keep-demos`. `--summary` ends the
+notice with one line, of at most 512 bytes, saying what the work found; it
+becomes the status line. `--attach` hands back anything longer.
+
+With cleanup on, Shoal removes the space and the spaces below it after the
+grace period (`[cleanup] grace_minutes`), stopping their agents. Cleanup is on
+unless `[cleanup.done] enabled = false`, and `--cleanup` overrides it.
+
+- A done workspace goes once every assigned PR has merged and contains HEAD.
+- Without a PR, it goes once its files are clean and every commit is pushed,
+  on the default branch, or on the branch it builds on.
+- A done chat goes whatever PRs it watches.
+
+Holds, threads it opened that wait, and pending proposals or pushes keep a
+space. Shoal keeps a checkpoint and the branch of each removed space, except a
+disposable one, and `shoal restore` reopens it. `completion.error` and
+`pr_cleanup.error` report cleanup or lookup failures.
 
 `--integrated <workspace>` records that another branch has that workspace's
-work under new commits: until its HEAD moves, its unpushed commits no longer
-keep it. `--undo` withdraws a recorded
-completion and reopens the threads it closed; associations and watches stay,
-and cleanup proceeds as if `done` had not run.
+work under new commits. Until its HEAD moves, its unpushed commits no longer
+keep it. `--undo` withdraws a recorded completion and reopens the threads it
+closed. Links and watches stay, and cleanup goes on as if `done` had not run.
 
-Where `[cleanup.merged]` is on, a merged workspace nobody has used for hours
-goes with merged cleanup whether or not `done` ran.
+Where `[cleanup.merged]` is on, merged cleanup removes a merged workspace
+nobody has used for hours, whether or not `done` ran.
 
 ```sh
 shoal acquire hold --name <name> --reason <why> [--space <space>]
@@ -786,10 +898,10 @@ shoal leases hold
 shoal release hold --name <name>
 ```
 
-A hold keeps a space, a workspace or a chat, from cleanup. An agent asking to
-hold its own space makes an approval request to its coordinator, or the user;
-holding a space below it needs none. Scoped callers release the holds
-agents placed, and the user's as their `user_holds` permission allows.
+A hold keeps a space from cleanup. An agent asking to hold its own space
+makes an approval request to its coordinator, or the user. Holding a space
+below it needs no approval. Scoped callers release the holds agents placed,
+and the user's as their `user_holds` permission allows.
 
 ## Remove, restore and move
 
@@ -806,32 +918,37 @@ shoal move <space> --ssh <host> --yes
 shoal move <space> -o - --yes | ssh <host> shoal restore --from -
 ```
 
-Removing a space removes the spaces below it first, held ones included, and
+Removing a space first removes the spaces below it, held ones included. It
 asks what to do with unmerged work. `rm` returns once its checks pass and
-removes the space in the background; a later failure arrives as a message,
-and `--wait` waits for the removal. A checkpoint keeps HEAD and unsaved files;
-Shoal also takes one when an agent exits or is stopped. `restore <id>`
-reopens a removed workspace or chat and resumes its agents, below the space it
-was below, and `--no-resume` leaves them for `shoal resume`; a space that is
-not removed is refused. An agent restores one whose parent its scope reaches.
-`restore <space>` of a space whose `intermittent` machine is offline takes it
-over here under its ID from the package the hub keeps of it, as the space's
-`admin` permission allows, warning of the changes the package lacks; that
-machine removes its copy once it returns.
-`restore --from` opens the spaces `shoal move` wrote to a file. `cleanup`, `move`, except to a
-joined machine but a `--keep` copy of your own space there, and `restore --from` are as the space's `admin` permission allows; `restore --checkpoint` lists a workspace's checkpoints,
-and with a number returns to one after keeping the current state in a new
-checkpoint, refusing while another command runs in the workspace. `cleanup spaces` removes every
-space automatic cleanup would remove without waiting for its idle delay;
-`--dry-run` lists those, kept branches and shared caches, and why each other
-space stays. `move --machine` moves a space to another machine joined to the same hub,
-under its ID and number, leaving the spaces below it here below it unless `--recursive`;
-an agent's move of its own space there starts once its turn ends and it continues there.
-A removed space's record moves there too, for `shoal restore <id>` there.
-`move --ssh` moves it with the spaces below it to a machine `ssh` reaches. Both resume its
-agents there unless `--no-resume`; with `--keep`, they copy the spaces there as new ones
-and leave them running here. The daemon runs a move, so it finishes even
-after the command that started it goes.
+removes the space in the background. A later failure arrives as a message, and
+`--wait` waits for the removal.
+
+A checkpoint keeps HEAD and unsaved files. Shoal also takes one when an agent
+exits or is stopped. `restore --checkpoint` lists a workspace's checkpoints.
+With a number, it returns to that checkpoint, after keeping the current state
+in a new one. It refuses while another command runs in the workspace.
+
+`restore <id>` reopens a removed workspace or chat below the space it was
+below, and resumes its agents; `--no-resume` leaves them for `shoal resume`.
+An agent restores a space whose parent its scope reaches. When a space's
+`intermittent` machine is offline, `restore <space>` takes the space over
+here, from the copy the hub keeps.
+
+`cleanup spaces` removes every space that automatic cleanup would remove,
+without waiting for its idle delay. `--dry-run` lists those, and says why each
+other space stays.
+
+`move --machine` moves a space to another machine joined to the same hub,
+under its ID and number; `--recursive` moves the spaces below it too.
+`move --ssh` moves a space, with the spaces below it, to a machine `ssh`
+reaches. Both resume its agents there unless `--no-resume`. With `--keep`,
+they copy the spaces instead. An agent's move of its own space starts once its
+turn ends, and the agent continues there. `restore --from` opens the spaces
+that `shoal move` wrote to a file.
+
+`cleanup`, `restore --from`, `move --ssh` and `move -o` follow the space's
+`admin` permission. `move --machine` needs none, except for a `--keep` copy of
+your own space.
 
 ## Branches
 
@@ -848,67 +965,60 @@ shoal unmerge [-s <workspace>]
 ```
 
 The daemon keeps the local default branch in sync with its remote, within
-about a minute. `repo sync` syncs it at once: it fetches the remote and
-fast-forwards the local default branch, advancing the registered checkout when
-it has that branch checked out, where `git fetch origin main:main` is refused.
-It never pushes or changes a workspace's branch. Branches of other workspaces
-are shared refs, and pushed ones are current as `origin/<branch>` after a sync.
+about a minute. `repo sync` syncs it at once, also in the registered checkout,
+where `git fetch origin main:main` is refused. It never pushes, and never
+changes a workspace's branch. Other workspaces' branches are shared refs; a
+pushed one is current as `origin/<branch>` after a sync.
+
 `shoal refresh [workspace]` brings a workspace that holds nothing of its own up
-to date with what it was made from: a branch fast-forwards to its upstream or
-the branch it builds on, a workspace at a commit moves to its PR's head or
-branch's tip, and a copy takes its live source's files again; work of its own
-refuses it, named with what deals with it.
-`conflicts` checks committed HEAD against the base workspace's branch,
-otherwise the local default branch, or the branch named, without touching the
-worktree; exit 1 lists the conflicting paths. It also lists a file the
-repository marks as holding a number each change picks, such as a migration,
-under "Changed on both sides" when both branches changed it. Without a watched
-PR, the watch reports a `merge_conflict` when the check newly fails, until the
-space is done.
+to date with what it was made from:
+
+- a branch fast-forwards to its upstream or the branch it builds on;
+- a workspace at a commit moves to its PR's head or its branch's tip;
+- a copy takes its live source's files again.
+
+When the workspace has work of its own, `refresh` refuses and names what deals
+with it.
+
+`conflicts` checks committed HEAD against the base workspace's branch, else
+the local default branch, or the branch named. It never touches the worktree.
+Exit 1 lists the conflicting paths. It also lists, under "Changed on both
+sides", a file both branches changed that the repository marks as holding a
+number each change picks, such as a migration. Without a watched PR, the
+watch reports a `merge_conflict` when the check newly fails, until the space
+is done.
+
 `branch base set` records that a workspace builds on another's branch.
-`branch ls` lists the forge's branches of the space's repository, or the one
-`--repo` names, with each one's head commit and date, whether it is the
-default or protected, whether the default branch has its changes through any
-merge (unknown outside a registered repository), the open PRs whose head it
-is, and the workspace whose branch it is, `active`, `done` or `merged`.
-`branch delete` deletes branches on the forge, never local ones, each only
-while it points to the commit it was read at, as the space's `push`
-permission allows, `propose` asking once per branch. It deletes none while one is the default
-or protected, the head or base of an open PR, or lacks its changes on the
-default branch without `--force`, or is the branch of an active workspace
-outside your scope.
 
-`merge` merges a space's work: its one open PR linked as assigned or opened,
-on the forge, else a workspace's committed branch into the default branch,
-locally; several open PRs, or a chat without one, are refused, and closing the
-PR lets a workspace merge locally. A number, a PR URL or `pr` merges that PR,
-or with `pr` alone the assigned one. A PR merges by `-X`, else by
-`[merge] method`, else by the repository's default, and `--message` sets a
-squash merge's commit message; `--auto` merges it once its checks pass and
-`--cancel-auto` withdraws that. A local merge takes `-X` and `--message` too,
-squashing or rebasing the branch onto the default branch, and `--push` or
-`--no-push`; a flag of the other path is refused. `unmerge` undoes a
-workspace's latest local merge while the default branch is unpushed. A
-workspace process's `merge` or `unmerge` first exits 2 with `approval_pending`
-for the PR's or branch's current head, unless its `merge` permission is
-`direct`; after approval the same command at the same head proceeds, and a new
-commit needs a new request. `-s` acts on a space below. A merge that pushes
-asks for confirmation on a terminal, and `--yes` gives it.
+`branch ls` lists the forge's branches of the space's repository, or of the
+one `--repo` names. Each row says whether the default branch has the branch's
+changes, which open PRs it heads, and which workspace it belongs to.
 
-## Approvals
+`branch delete` deletes branches on the forge, never local ones, as the
+space's `push` permission allows. It deletes none while one of them is the
+default or protected, in an open PR, or an active workspace's branch outside
+your scope. Without `--force`, it also deletes none while one has changes the
+default branch lacks.
 
-```sh
-shoal approvals
-shoal approvals --approve <S.N>
-shoal approvals --deny <S.N>
-shoal approvals withdraw <S.N>
-```
+`merge` merges a space's work. It merges the one open PR linked as assigned or
+opened, on the forge. Without one, it merges a workspace's committed branch
+into the default branch, locally. Several open PRs, or a chat without one,
+refuse it; closing the PR lets a workspace merge locally. A number, a PR URL
+or `pr` merges that PR, and `pr` alone the assigned one.
 
-A command that needs approval returns `approval_pending` with the request
-number, and `approval_denied` once denied; rerunning it after approval
-proceeds. `--reason` states the purpose of protected access. A request goes to
-the nearest space above with an agent, then up to the user. Unscoped callers
-decide any request. Approving a resource reserves no capacity.
+A PR merges by `-X`, else by `[merge] method`, else by the repository's
+default. `--message` sets a squash merge's commit message. `--auto` merges the
+PR once its checks pass, and `--cancel-auto` withdraws that. A local merge
+takes `-X` and `--message` too, squashing or rebasing the branch onto the
+default branch, and `--push` or `--no-push`. A flag of the other path is
+refused. `unmerge` undoes a workspace's latest local merge while the default
+branch is unpushed.
+
+Unless a workspace process's `merge` permission is `direct`, its `merge` or
+`unmerge` first exits 2 with `approval_pending` for the PR's or branch's
+current head. After approval, the same command at the same head proceeds; a
+new commit needs a new request. `-s` acts on a space below. A merge that
+pushes asks for confirmation on a terminal, and `--yes` gives it.
 
 ## Ports
 
@@ -920,14 +1030,15 @@ shoal release port web
 ```
 
 `catalog port` lists the configured names and defaults. Repeating a
-reservation returns the same port. Exit 2 with `reserved: false` is a conflict
-suggestion, not a reservation; repeating the request with
-`--port <suggested_port>` reserves it. The returned `port` is the reserved one.
-New reservations do not change the environment of running commands.
-Reservations and leases outlive the command that made them. The simulator
-leases, containers and resource permits an agent acquires end with the agent,
-when it quits or is stopped, not while it sleeps; the user's stay until
-released.
+reservation returns the same port. The returned `port` is the reserved one.
+Exit 2 with `reserved: false` is a conflict and a suggestion, not a
+reservation; repeat the request with `--port <suggested_port>` to reserve
+that port. New reservations do not change the environment of running
+commands.
+
+Reservations and leases outlive the command that made them. An agent's
+simulator leases, containers and resource permits end with the agent, when it
+quits or is stopped, but not while it sleeps. The user's stay until released.
 
 ## Resource pools
 
@@ -938,15 +1049,18 @@ shoal acquire resource devices [--member M] [--name N] [--mode read|write] [--qu
 shoal release resource devices [--name N]
 ```
 
-The result names the leased `resource`. Each semaphore lease takes one permit;
-the same `--name` returns the same lease, and release without `--name` frees
-every lease in the pool. Busy requests exit 2. `--queue` waits, without a time
-limit, until the lease is granted or its approval denied, taking capacity in
-arrival order; stopping it gives up the place, and while others are queued,
-requests without it are busy. An `rwlock` resource has shared readers and
-exclusive writers (`--mode`, write by default); `read_available` and
-`write_available` give its capacity, and changing mode needs a release first.
-Use is cooperative.
+The result names the leased `resource`. Each semaphore lease takes one
+permit. The same `--name` returns the same lease. Release without `--name`
+frees every lease you hold in the pool. Use is cooperative.
+
+A busy request exits 2. `--queue` waits, without a time limit, until the lease
+is granted or its approval denied. Queued requests take capacity in order of
+arrival, and stopping one gives up its place. While others are queued, a
+request without `--queue` is busy.
+
+An `rwlock` resource has shared readers and one exclusive writer. `--mode`
+picks one, write by default. `read_available` and `write_available` give its
+capacity. To change mode, release first.
 
 ## Simulators
 
@@ -958,14 +1072,14 @@ shoal acquire sim --clean --reason "Verify first-launch permission prompts"
 shoal release sim
 ```
 
-`catalog sim` lists the configured profiles and installed runtimes.
-Acquisition returns an exclusive lease on a device with its `udid`; simctl's
-`booted` selector can name another workspace's device. Shoal creates, boots,
-shuts down, erases and deletes its devices, choosing one that minimizes
-reinstalls, and normal reuse keeps apps, data and settings. Exit 2 means
-capacity is busy. `--clean` erases the device, refuses while a lease is held,
-and records the reason and outcome in an audit trail. Only installed runtimes
-are supported.
+`catalog sim` lists the configured profiles and the installed runtimes.
+`acquire sim` returns an exclusive lease on a device, with its `udid`. Use the
+`udid`: simctl's `booted` selector can name another workspace's device. Exit
+2 means capacity is busy.
+
+Shoal manages its own devices, and normal reuse keeps their apps, data and
+settings. `--clean` erases the device and records the reason in an audit
+trail; it refuses while a lease is held.
 
 ## Containers
 
@@ -976,22 +1090,24 @@ shoal leases containers
 shoal release containers
 ```
 
-Where the repository names a Compose file in `[containers]`, `acquire
-containers` reserves its named ports, starts the workspace's own Compose project
-and returns its services with the ports they published; repeating it returns
-the running project. Exit 2 means a port it reserves waits for approval or its
-preferred port is taken. `release containers` stops them, keeping their volumes
-and ports, and removing the workspace removes them with their volumes. With
-`start = "setup"` they start once setup readies the workspace, before its
-post-setup hook and agent, and an agent starting there starts them when they
-are stopped. Chats have none.
+A repository can name a Compose file in `[containers]`. Then
+`acquire containers` reserves its named ports and starts the workspace's own
+Compose project. It returns the services with the ports they published.
+Repeating it returns the running project. Exit 2 means a port it reserves
+waits for approval, or its preferred port is taken.
+
+`release containers` stops the containers and keeps their volumes and ports.
+Removing the workspace removes them with their volumes. With
+`start = "setup"`, they start once setup readies the workspace, before its
+post-setup hook and agent. An agent that starts there starts them when they
+are stopped. Chats have no containers.
 
 ## Secrets
 
-`shoal catalog secret` lists the configured secrets and which need approval. A
-tool whose secret needs approval fails with the request to make:
+`shoal catalog secret` lists the configured secrets and which need approval.
+A tool whose secret needs approval fails with the request to make:
 `shoal acquire secret NAME --reason "purpose"`. The value never reaches the
-agent's environment; `shoal release secret NAME` gives up the grant.
+agent's environment. `shoal release secret NAME` gives up the grant.
 
 ## Demos
 
@@ -1006,16 +1122,22 @@ shoal demo send tui $'q'           # Type into it; $'\r' is Enter
 shoal demo stop tui
 ```
 
-Shoal keeps a demo's command running, restarts it when it exits, and tells the
-user how to open it; `shoal demo` and the inbox open it for them. The `server`
-preset reserves a port and passes it as `PORT`, and `web` does the same for a
-page opened in a browser; the `simulator` preset leases the workspace's
-simulator and passes its UDID as `SHOAL_SIM_UDID`. `shoal demo NAME
---workspace W` on a `server`, `web` or `simulator` demo another machine of the
-hub runs forwards it to a port of this machine, printing where, until stopped;
-a simulator demo's is its viewer's, a page that shows the device and takes
-touches. A terminal demo there opens in the calling terminal as `shoal attach`
-does, so it needs one. Chats have no demos.
+Shoal keeps a demo's command running and restarts it when it exits. It tells
+the user how to open the demo, and `shoal demo` and the inbox open it for
+them. Chats have no demos.
+
+A preset prepares what the demo needs:
+
+- `server` reserves a port and passes it as `PORT`.
+- `web` does the same, for a page opened in a browser.
+- `simulator` leases the workspace's simulator and passes its UDID as
+  `SHOAL_SIM_UDID`.
+
+`shoal demo NAME --workspace W` reaches a `server`, `web` or `simulator` demo
+that another machine of the hub runs. It forwards the demo to a port of this
+machine and prints where, until stopped. For a simulator demo, that is its
+viewer: a page that shows the device and takes touches. A terminal demo there
+opens in the calling terminal as `shoal attach` does, so it needs one.
 
 ## Triggers
 
@@ -1028,50 +1150,47 @@ shoal trigger run <name> --payload issue.json --header X-Forgejo-Event=issues
 ```
 
 A trigger, `[triggers.NAME]` in a repository's config or the global config,
-starts an agent when its source fires, such as a timer at set times or an
-HTTP request to its webhook route, as the
-user's `shoal start` would: through the agent queue, in a top-level space with
-its mode's permissions. The commands act on the triggers of the repository the
-caller acts in, or `--repo` names, and the global config's, and change a
-trigger's runtime state, never its config. `ls` is open to every space;
-`pause`, `resume` and `run` follow its `triggers`
-[permission](#permitted-actions). A run that a trigger's `overlap` skips or
-queues, whose key repeats a recent run's, or whose launch fails says so; one
-its filter drops is no run, and names the condition that did not hold.
-`--payload` and `--header` give a webhook trigger the request it fires with,
+starts an agent when its source fires. A source is, for example, a timer at
+set times or an HTTP request to the trigger's webhook route. The agent starts
+as the user's `shoal start` would: through the agent queue, in a top-level
+space, with its mode's permissions.
+
+The commands act on the triggers of the repository you act in, or the one
+`--repo` names, and the global config's. They change a trigger's runtime
+state, never its config. `ls` is open to every space. `pause`, `resume` and
+`run` follow the `triggers` [permission](#permitted-actions).
+
+`run` prints the run's outcome, or the filter condition that dropped it.
+`--payload` and `--header` give a webhook trigger the request to fire with,
 without its signature.
 
 ## Processes
 
-After a tool call Shoal names processes the space's commands left running
-after their parent exited, such as a failed test run's servers.
-`shoal stop --leftovers` stops them, and `shoal stop --processes` stops every
-process of the workspace Shoal does not track, never the agent or its shells.
-`shoal setup` reruns the configured setup command and post-setup hook.
+After a tool call, Shoal names the processes your space's commands left
+running after their parent exited, such as a failed test run's servers.
+`shoal stop --leftovers` stops them. `shoal stop --processes` stops every
+process of the workspace that Shoal does not track, never the agent or its
+shells. `shoal setup` reruns the configured setup command and post-setup hook.
 
 ## Daemon
 
-Installing, starting, stopping and restarting the daemon, `shoal update` and
+Installing, starting, stopping and restarting the daemon, `shoal update`, and
 `shoal hub update`, which installs the latest release on the hub, follow the
-space's `daemon` [permission](#permitted-actions).
-Stopping the daemon stops every agent. While a stop or restart waits for the
-work the daemon runs itself, commands that would start more, such as `shoal rm`,
-wait and run on the next daemon, or fail for a stop; while it restarts, every agent's other `shoal`
-commands fail. `shoal config reload` applies the config on disk without
-stopping anything; an invalid file leaves the previous settings in place.
+space's `daemon` [permission](#permitted-actions). Stopping the daemon stops
+every agent.
 
-`shoal pause` stops all work on the machine, or with `--machine` another of
-the hub, until `shoal unpause`, even across restarts: its queue admits
-nothing new and the hub places nothing there, every agent stops with its
-session saved, the spaces with something to do continue on other machines
-of the hub, its CI jobs run again elsewhere, its reviews wait and its demos
-stop, and an alert names where each space went. `shoal unpause` admits work
-again and restores the agents that stayed. Only the user's own terminal
-pauses or unpauses a machine.
+While the daemon restarts, agents' `shoal` commands fail.
+`shoal config reload` applies the config on disk without stopping anything.
+An invalid file leaves the previous settings in place.
+
+`shoal pause` stops all work on the machine until `shoal unpause`, even
+across restarts. Every agent stops with its session saved, and spaces with
+something to do continue on other machines of the hub. An alert names where
+each space went. Only the user's own terminal pauses or unpauses a machine.
 
 ## Skill
 
 `shoal skill` prints this skill. `shoal skill install` installs it into every
-AI tool's existing skill directory, and a tool name selects one and creates
-its directory; it is refused in a scoped execution. Later unscoped commands
+AI tool's existing skill directory. A tool name selects one tool and creates
+its directory. It is refused in a scoped execution. Later unscoped commands
 keep installed copies current.
