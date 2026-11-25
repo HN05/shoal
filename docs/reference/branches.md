@@ -203,8 +203,8 @@ shoal diff --thread 3.4    # The changes agents made for a thread
 Runs native `git diff` (your pager and external diff apply) from the fork point
 of the base branch recorded at creation, using its reflog with merge-base as a
 fallback, so commits added to the base later are excluded even after a rebase.
-Fixed-commit bases use that commit; older workspaces without base metadata use
-`main`. Committed, staged, and unstaged tracked changes appear; untracked files
+A workspace made at a commit compares with its merge base with that commit.
+Committed, staged, and unstaged tracked changes appear; untracked files
 follow Git. A missing or unrelated base is an error. A chat's agent runs it as a
 plain process in the worktree rather than a tracked execution of the
 workspace, which its scope may read but not run in. `--thread` prints a
