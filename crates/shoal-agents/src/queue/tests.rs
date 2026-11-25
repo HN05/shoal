@@ -88,12 +88,17 @@ pub(crate) fn told(fixture: &Fixture, kind: AlertKind) -> Vec<String> {
 }
 
 /// The ID of the queue entry named `name`, as tests name the entries they
-/// queue, since a name never selects one.
+/// queue, since a name never selects one, else the ID of the space of
+/// that name, else `name` itself, which selects nothing.
 pub(crate) async fn queued(fixture: &Fixture, name: &str) -> String {
     let entries = fixture.agents.queue_entries(&*fixture.daemon).await;
     let entries = entries.unwrap();
-    let entry = entries.into_iter().find(|entry| entry.name == name);
-    entry.map_or_else(|| name.to_owned(), |entry| entry.id.to_string())
+    if let Some(entry) = entries.into_iter().find(|entry| entry.name == name) {
+        return entry.id.to_string();
+    }
+    let spaces = fixture.daemon.spaces.lock().unwrap();
+    let space = spaces.iter().find(|space| space.name == name);
+    space.map_or_else(|| name.to_owned(), |space| space.id.to_string())
 }
 
 /// Let every entry's start grace period pass, as for a worker that ended
@@ -1292,3 +1297,12 @@ async fn an_exit_that_waits_keeps_queued_launches_for_the_next_daemon() {
     assert_eq!(state().await, Some(QueueState::Starting));
     assert!(started(&second.id));
 }
+
+mod actions;
+mod blockers;
+mod claims;
+mod failures;
+mod setup_waits;
+mod stopped;
+mod weight;
+mod worker;

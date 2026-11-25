@@ -1,7 +1,7 @@
 use crate::{daemon::manager::Manager, model::Workspace, state::BlockerKind};
 use crate::{
     daemon::{
-        agent_service::tests::queue::{admitted, create, launch_in, register, request, started},
+        agent_service::tests::queue::{admitted, create, register, request, started},
         test_support::{commit, global_config, manager},
         workspace_files::Attacher,
     },
@@ -161,44 +161,6 @@ async fn launches_blocked_by_a_chat_start_once_it_is_done_or_removed() {
 }
 
 #[tokio::test]
-async fn a_launch_blocker_follows_the_workspace_it_opens_until_removal() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config(
-        "[machine]\nmax_heavy_agents = 1\n[machine.overload.disk]\nenabled = false",
-    ));
-    let opened = create(&manager, &repo, "first").await;
-    let first = manager
-        .agents
-        .queue_add(&*manager, launch_in(&opened, false))
-        .await
-        .unwrap()
-        .entry
-        .unwrap();
-    let second = add_blocked(
-        &manager,
-        &repo,
-        "second",
-        vec![space(&manager, "first").await],
-    )
-    .await;
-    assert_eq!(second.blockers, ["first"]);
-
-    manager
-        .agents
-        .queue_attach(&*manager, &first.id, &SpaceSelector::id(&opened.id))
-        .await
-        .unwrap();
-    assert_eq!(entry(&manager, &second.id).await.blockers, ["first"]);
-    // A removed blocker leaves nothing to wait for, so the launch starts
-    // from the default branch in the slot the removal freed.
-    remove(&manager, &opened).await;
-    manager.agents.dispatch_queue(&*manager).await.unwrap();
-    assert!(started(&second.id));
-    assert_eq!(entry(&manager, &second.id).await.base, None);
-}
-
-#[tokio::test]
 async fn issue_blockers_wait_for_closure_or_a_done_workspace_linking_them() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
@@ -341,64 +303,4 @@ async fn done_blockers_build_on_the_one_that_contains_the_others() {
     remove(&manager, &separate).await;
     manager.agents.dispatch_queue(&*manager).await.unwrap();
     assert!(started(&apart.id));
-}
-
-#[tokio::test]
-async fn blockers_name_existing_work_other_than_the_launch() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config(
-        "[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false",
-    ));
-    let blockers = [
-        space(&manager, "missing").await,
-        space(&manager, "self").await,
-    ];
-    let own = create(&manager, &repo, "self").await;
-    for blocker in blockers {
-        manager
-            .agents
-            .queue_add(
-                &*manager,
-                QueueRequest {
-                    blockers: vec![blocker],
-                    ..launch_in(&own, false)
-                },
-            )
-            .await
-            .unwrap_err();
-    }
-    assert!(
-        manager
-            .agents
-            .queue_entries(&*manager,)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    // The CLI checks them before any prompt.
-    let selector = crate::repository::Selector::from(&repo.id);
-    manager
-        .agents
-        .check_blockers(&*manager, &selector, vec![space(&manager, "missing").await])
-        .await
-        .unwrap_err();
-    create(&manager, &repo, "present").await;
-    manager
-        .agents
-        .check_blockers(&*manager, &selector, vec![space(&manager, "present").await])
-        .await
-        .unwrap();
-    // Starting now cannot wait for work that is not done.
-    manager
-        .agents
-        .queue_add(
-            &*manager,
-            QueueRequest {
-                blockers: vec![space(&manager, "present").await],
-                ..request(&manager, &repo, "now", true).await
-            },
-        )
-        .await
-        .unwrap_err();
 }

@@ -70,45 +70,6 @@ async fn a_failed_launch_stays_on_its_space_with_its_error() {
     assert!(told.message.contains(&format!("`shoal rm {number}`")));
 }
 
-/// Restoring a failed launch queues it again as it was, under its own
-/// entry, and the queue then starts it.
-#[tokio::test]
-async fn a_restored_failed_launch_queues_again_as_it_was() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 1);
-    let workspace = create(&manager, &repo, "work").await;
-    let request = crate::model::QueueRequest {
-        plan: r#"{"launch":{"agent":"claude","prompt":"Fix the login"}}"#.into(),
-        mode: Some("plan".into()),
-        ..launch_in(&workspace, false)
-    };
-    let entry = manager
-        .agents
-        .queue_add(&*manager, request)
-        .await
-        .unwrap()
-        .entry
-        .unwrap();
-    (manager
-        .agents
-        .fail_queue_entry(&*manager, &entry.id, "gone"))
-    .await
-    .unwrap();
-
-    let retried = manager
-        .agents
-        .retry_failed_launch(&*manager, &entry.id, RetryStart::Queued)
-        .await
-        .unwrap();
-
-    assert_eq!(retried.id, entry.id);
-    assert_eq!(retried.mode, Some("plan".into()));
-    manager.agents.dispatch_queue(&*manager).await.unwrap();
-    let plan = manager.agents.queued_plan(&entry.id).await.unwrap().plan;
-    assert!(plan.contains("Fix the login"), "{plan}");
-}
-
 /// A new launch in the space replaces its failed one, and removing the
 /// space drops it.
 #[tokio::test]
@@ -198,90 +159,6 @@ async fn a_chats_failed_launch_keeps_the_chat() {
         .await
         .unwrap();
     assert_eq!(retried.space(), Some(&chat.id));
-}
-
-/// A permission change a restore makes reaches a failed launch: the entry
-/// the queue lists and the plan its agent starts under once restored.
-#[tokio::test]
-async fn a_failed_launch_takes_a_permission_change() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 1);
-    let workspace = create(&manager, &repo, "work").await;
-    let request = crate::model::QueueRequest {
-        plan: r#"{"launch":{"agent":"claude"}}"#.into(),
-        ..launch_in(&workspace, false)
-    };
-    let entry = manager
-        .agents
-        .queue_add(&*manager, request)
-        .await
-        .unwrap()
-        .entry
-        .unwrap();
-    (manager
-        .agents
-        .fail_queue_entry(&*manager, &entry.id, "gone"))
-    .await
-    .unwrap();
-    let change = crate::config::permissions::PermissionChange::assigned("merge=direct").unwrap();
-    let launches = [SpaceSelector::id(entry.space().unwrap())];
-    let targets = crate::daemon::stopped_work::PermissionTargets {
-        agents: &[],
-        launches: &launches,
-    };
-
-    (manager
-        .agents
-        .change_stopped_permissions(&*manager, targets, &change, None))
-    .await
-    .unwrap();
-
-    let failed = manager
-        .agents
-        .queue_entries(&*manager)
-        .await
-        .unwrap()
-        .remove(0);
-    assert_eq!(failed.narrowing, change.set);
-    let retried = manager
-        .agents
-        .retry_failed_launch(&*manager, &entry.id, RetryStart::Queued)
-        .await
-        .unwrap();
-    assert_eq!(retried.narrowing, change.set);
-    let id = retried.id.clone();
-    let plan: String = (manager.store)
-        .read(move |tx| {
-            let plan = "SELECT plan FROM agent_queue WHERE id=?1";
-            Ok(tx.query_row(plan, [id], |row| row.get(0))?)
-        })
-        .await
-        .unwrap();
-    let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
-    assert_eq!(start.launch.narrowing, change.set);
-}
-
-/// A failed launch restored now starts in the same request, past a full
-/// machine, so no admission pass takes it between its requeue and start.
-#[tokio::test]
-async fn a_failed_launch_restored_now_starts_at_once() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    limit_globally(&manager, 1);
-    let entry = failed_workspace_launch(&manager, &repo, "work").await;
-    add(&manager, &repo, "busy").await;
-
-    let retried = manager
-        .agents
-        .retry_failed_launch(&*manager, &entry.id, RetryStart::Now)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        (retried.id, retried.state),
-        (entry.id, QueueState::Starting)
-    );
 }
 
 /// The permissions a restore gives its launches change together: a failed

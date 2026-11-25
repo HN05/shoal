@@ -83,21 +83,6 @@ pub(super) fn admitted(admission: &QueueAdmission) -> bool {
     (admission.entry.as_ref()).is_some_and(|entry| entry.state == QueueState::Starting)
 }
 
-/// A new workspace of `repository` whose preparation has yet to set it up.
-pub(super) async fn preparing(manager: &Manager, repository: &Repository, name: &str) -> Workspace {
-    let workspace = manager
-        .create_workspace(&repository.id, name.into(), None, None, None)
-        .await
-        .unwrap();
-    let id = workspace.id.clone();
-    (manager
-        .spaces
-        .set_state(&id, WorkspaceState::Preparing, None))
-    .await
-    .unwrap();
-    manager.spaces.workspace_by_id(&id).await.unwrap()
-}
-
 /// Whether the daemon started `id`, passing the queuing terminal's Herdr variables.
 pub(super) fn started(id: &QueueEntryId) -> bool {
     STARTED.lock().unwrap().iter().any(|(started, env)| {
@@ -242,32 +227,6 @@ pub(crate) async fn create(
         .create_workspace(&repository.id, name.into(), None, None, None)
         .await
         .unwrap()
-}
-
-/// Agents connected in `workspaces`, each stopped by memory protection with
-/// its restore queued in order.
-pub(super) async fn stopped_agents(
-    manager: &Manager,
-    workspaces: &[&crate::model::Workspace],
-) -> Vec<(ExecutionId, tokio::sync::watch::Receiver<bool>)> {
-    let mut agents = Vec::new();
-    for workspace in workspaces {
-        agents.push(connected_agent(manager, workspace).await);
-    }
-    for (id, _) in &agents {
-        assert!(
-            manager
-                .agents
-                .stop_for_overload(manager, crate::daemon::overload::Pressure::Memory)
-                .await
-        );
-        manager
-            .agents
-            .queue_agent_restore(manager, id)
-            .await
-            .unwrap();
-    }
-    agents
 }
 
 /// The restore of `execution` waiting for admission over its wrapper's link,
@@ -1065,10 +1024,7 @@ async fn a_launch_waits_for_a_setup_the_daemon_never_started() {
 mod actions;
 mod blockers;
 mod chats;
-mod claims;
 mod failures;
 mod openings;
 mod setup_waits;
 mod stopped;
-mod weight;
-mod worker;

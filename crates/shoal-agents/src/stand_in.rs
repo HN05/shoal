@@ -174,22 +174,34 @@ impl Fixture {
 
     /// Record a ready workspace `name` of `repository`.
     pub(crate) async fn workspace_in(&self, repository: &Repository, name: &str) -> Workspace {
+        self.workspace_with_id(repository, name, name).await
+    }
+
+    /// Record a ready workspace `name` of `repository` under the ID `id`,
+    /// such as one a selector names, which takes a UUID.
+    pub(crate) async fn workspace_with_id(
+        &self,
+        repository: &Repository,
+        id: &str,
+        name: &str,
+    ) -> Workspace {
         let path = self.root.path().join(name);
         std::fs::create_dir_all(&path).unwrap();
         let workspace =
-            shoal_protocol::test_support::workspace(name, repository.id.as_str(), name, &path);
+            shoal_protocol::test_support::workspace(id, repository.id.as_str(), name, &path);
         let (id, repository) = (workspace.id.clone(), repository.id.clone());
+        let name = name.to_owned();
         (self.agents.store)
             .write(move |tx| {
                 tx.execute(
                     "INSERT INTO spaces(id,kind,repository_id,name)
-                     VALUES (?1,'workspace',?2,?1)",
-                    rusqlite::params![id, repository],
+                     VALUES (?1,'workspace',?2,?3)",
+                    rusqlite::params![id, repository, name],
                 )?;
                 tx.execute(
                     "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES (?1,'/work/'||?1,?1,'ready','abc','/admin')",
-                    [&id],
+                     VALUES (?1,'/work/'||?1,?2,'ready','abc','/admin')",
+                    rusqlite::params![id, name],
                 )?;
                 Ok(())
             })
@@ -200,10 +212,33 @@ impl Fixture {
         workspace
     }
 
+    /// The space `id` as the daemon reads it.
+    pub(crate) fn space(&self, id: &SpaceId) -> Space {
+        self.daemon.find(id).expect("the test recorded the space")
+    }
+
     /// Change the space `id` as `change` does, as the daemon reads it.
     pub(crate) fn update_space(&self, id: &SpaceId, change: impl FnOnce(&mut Space)) {
         let mut spaces = self.daemon.spaces.lock().unwrap();
         change(spaces.iter_mut().find(|space| space.id == *id).unwrap());
+    }
+
+    /// Forget the space `id`, as once its removal ended.
+    pub(crate) async fn remove(&self, id: &SpaceId) {
+        let removed = id.clone();
+        (self.agents.store)
+            .write(move |tx| {
+                tx.execute("DELETE FROM workspaces WHERE id=?1", [&removed])?;
+                tx.execute("DELETE FROM spaces WHERE id=?1", [&removed])?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        self.daemon
+            .spaces
+            .lock()
+            .unwrap()
+            .retain(|space| space.id != *id);
     }
 
     /// Record that the work of the space `id` is done, as `shoal done` does.
@@ -669,8 +704,15 @@ impl Repositories for StandIn {
         Box::pin(async { found })
     }
 
-    fn selected_repository<'a>(&'a self, _: &'a Selector) -> BoxFuture<'a, Result<Repository>> {
-        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: selected_repository")) })
+    /// The registered repository a selector names by its ID.
+    fn selected_repository<'a>(
+        &'a self,
+        selector: &'a Selector,
+    ) -> BoxFuture<'a, Result<Repository>> {
+        let Selector::Id(id) = selector else {
+            return Box::pin(async move { Err(anyhow::anyhow!("{NOT_HERE}: {selector:?}")) });
+        };
+        self.repository(id)
     }
 
     fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
