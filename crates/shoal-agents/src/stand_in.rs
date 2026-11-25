@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, OptionalExtension, Transaction};
 use shoal_core::{
-    config::{Config, Effective, repo::ConfigLayers},
+    config::{Effective, repo::ConfigLayers},
     hooks::HookKind,
     paths::StateFiles,
     process::load::WorkLimit,
@@ -84,16 +84,13 @@ impl Fixture {
         let root = tempfile::tempdir().unwrap();
         let paths = Paths::for_test(std::fs::canonicalize(root.path()).unwrap());
         std::fs::create_dir_all(&paths.state).unwrap();
-        let daemon = StandIn {
-            config: shoal_core::test_support::global_config(text),
-            ..StandIn::default()
-        };
-        let records = Arc::new(StandInRecords::default());
         let config = Arc::new(ConfigState::new(shoal_core::test_support::global_config(
             text,
         )));
+        let daemon = StandIn::default();
+        let records = Arc::new(StandInRecords::default());
         let agents = Arc::new(service(paths, config, records.clone()).await);
-        daemon.use_store(&agents.store);
+        daemon.use_service(&agents);
         Self {
             root,
             agents,
@@ -109,18 +106,40 @@ impl Fixture {
         let config = self.agents.config.clone();
         drop(self.agents);
         let agents = Arc::new(service(paths, config, self.records.clone()).await);
-        self.daemon.use_store(&agents.store);
+        self.daemon.use_service(&agents);
         Self { agents, ..self }
     }
 
-    /// The repository `repo` at the root's `repo`, registered with the
-    /// stand-in and recorded in the store, which the fixture's workspaces
-    /// belong to.
+    /// Replace the global config with `text` after the tests' base, as a
+    /// reload publishes it.
+    pub(crate) fn configure(&self, text: &str) {
+        (self.agents.config).publish(shoal_core::test_support::global_config(text));
+    }
+
+    /// Give the repository `id` the local config `text`, which its settings
+    /// layer over the global config.
+    pub(crate) fn configure_repository(&self, id: &RepositoryId, text: &str) {
+        let layers = ConfigLayers {
+            local_config: shoal_core::config::repo::parse(text).unwrap(),
+            ..ConfigLayers::default()
+        };
+        let mut configured = self.daemon.repository_layers.lock().unwrap();
+        configured.insert(id.clone(), layers);
+    }
+
+    /// The repository `repo`, which the fixture's workspaces belong to
+    /// unless a test names another.
     pub(crate) async fn repository(&self) -> Repository {
-        let path = self.root.path().join("repo");
+        self.repository_named("repo").await
+    }
+
+    /// The repository `name` at the root's `name`, registered with the
+    /// stand-in and recorded in the store.
+    pub(crate) async fn repository_named(&self, name: &str) -> Repository {
+        let path = self.root.path().join(name);
         std::fs::create_dir_all(&path).unwrap();
         let repository = Repository {
-            id: "repo".into(),
+            id: name.into(),
             path: path.clone(),
             source: path.display().to_string(),
             last_used: 1,
@@ -150,17 +169,22 @@ impl Fixture {
 
     /// Record a ready workspace `name`, of the fixture's repository.
     pub(crate) async fn workspace(&self, name: &str) -> Workspace {
-        self.repository().await;
+        self.workspace_in(&self.repository().await, name).await
+    }
+
+    /// Record a ready workspace `name` of `repository`.
+    pub(crate) async fn workspace_in(&self, repository: &Repository, name: &str) -> Workspace {
         let path = self.root.path().join(name);
         std::fs::create_dir_all(&path).unwrap();
-        let workspace = shoal_protocol::test_support::workspace(name, "repo", name, &path);
-        let id = workspace.id.clone();
+        let workspace =
+            shoal_protocol::test_support::workspace(name, repository.id.as_str(), name, &path);
+        let (id, repository) = (workspace.id.clone(), repository.id.clone());
         (self.agents.store)
             .write(move |tx| {
                 tx.execute(
                     "INSERT INTO spaces(id,kind,repository_id,name)
-                     VALUES (?1,'workspace','repo',?1)",
-                    [&id],
+                     VALUES (?1,'workspace',?2,?1)",
+                    rusqlite::params![id, repository],
                 )?;
                 tx.execute(
                     "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
@@ -205,23 +229,60 @@ impl Fixture {
     /// Record a chat `name`, without a repository, whose agent runs in an
     /// execution of the same name.
     pub(crate) async fn chat(&self, name: &str) -> SpaceId {
-        let id = SpaceId::from(name);
+        self.chat_in(name, "chat", None).await
+    }
+
+    /// Record a chat `name` of `repository`, or without one, whose agent
+    /// runs in `mode` in an execution of the same name.
+    pub(crate) async fn chat_in(
+        &self,
+        name: &str,
+        mode: &str,
+        repository: Option<&Repository>,
+    ) -> SpaceId {
+        let path = repository.map_or_else(|| self.root.path().into(), |found| found.path.clone());
+        let repository = repository.map(|repository| repository.id.clone());
+        let given = repository.as_ref().map(RepositoryId::as_str);
+        let chat = shoal_protocol::test_support::chat(name, given, mode, &path);
+        let (id, mode) = (chat.id.clone(), mode.to_owned());
         let recorded = id.clone();
         (self.agents.store)
             .write(move |tx| {
                 tx.execute(
-                    "INSERT INTO spaces(id,kind,name) VALUES (?1,'chat',?1)",
-                    [&recorded],
+                    "INSERT INTO spaces(id,kind,name,repository_id,mode)
+                     VALUES (?1,'chat',?1,?2,?3)",
+                    rusqlite::params![recorded, repository, mode],
                 )?;
                 tx.execute(
-                    "INSERT INTO executions(id,space_id,state) VALUES (?1,?1,'running')",
-                    [&recorded],
+                    "INSERT INTO executions(id,space_id,state,agent,mode)
+                     VALUES (?1,?1,'running','claude',?2)",
+                    rusqlite::params![recorded, mode],
                 )?;
                 Ok(())
             })
             .await
             .unwrap();
+        self.daemon.spaces.lock().unwrap().push(Space::from(chat));
+        let execution = ExecutionId::from(name);
+        (self.agents)
+            .track_unconnected(&execution, &id, &name.into(), Agent::from("claude"))
+            .await;
         id
+    }
+
+    /// Record `state` as the workspace `id`'s, with `error`, as its
+    /// lifecycle and as the daemon reads it.
+    pub(crate) async fn set_state(&self, id: &SpaceId, state: WorkspaceState, error: Option<&str>) {
+        let error = error.map(str::to_owned);
+        (self.daemon.record_state(id, state, error.clone()))
+            .await
+            .unwrap();
+        self.update_space(id, |space| {
+            if let SpacePart::Workspace(workspace) = &mut space.part {
+                workspace.state = state;
+                workspace.error = error;
+            }
+        });
     }
 
     /// Record a running execution `id` in `workspace` whose wrapper
@@ -260,6 +321,8 @@ async fn service(paths: Paths, config: Arc<ConfigState>, records: Arc<StandInRec
         .unwrap();
     let gates = Arc::new(Gates::default());
     let operations = shoal_daemon_base::operations::Operations::new(paths.clone(), gates.clone());
+    // The queue's starts run no worker but note what they started.
+    operations.fake_workers();
     Agents::new(
         store.clone(),
         gates,
@@ -278,8 +341,9 @@ async fn service(paths: Paths, config: Arc<ConfigState>, records: Arc<StandInRec
 /// A daemon with the spaces and agents a test records.
 #[derive(Default)]
 pub(crate) struct StandIn {
-    /// The config every space's settings resolve under.
-    pub(crate) config: Config,
+    /// Each repository's layers over the global config, none for one a
+    /// test gave none.
+    repository_layers: Mutex<HashMap<RepositoryId, ConfigLayers>>,
     pub(crate) spaces: Mutex<Vec<Space>>,
     /// The registered repositories.
     pub(crate) repositories: Mutex<Vec<Repository>>,
@@ -289,6 +353,9 @@ pub(crate) struct StandIn {
     pub(crate) state_failures: Mutex<Vec<(SpaceSelector, String)>>,
     /// The service's store, which the workspaces' lifecycles live in.
     store: Mutex<Option<shoal_store::Store>>,
+    /// The service, whose global config the settings resolve under and
+    /// whose waiting entries the queue's rank reads.
+    agents: Mutex<std::sync::Weak<Agents>>,
     /// Whether this machine hands its spaces over, as one joined to a hub.
     pub(crate) hands_over: std::sync::atomic::AtomicBool,
     /// The spaces each hand-over took.
@@ -316,10 +383,24 @@ impl StandIn {
         spaces.iter().find(|space| space.id == *id).cloned()
     }
 
-    /// Read and write the workspaces' lifecycles through `store`, the
-    /// service's, as the daemon does through its own.
-    fn use_store(&self, store: &shoal_store::Store) {
-        *self.store.lock().unwrap() = Some(store.clone());
+    /// Read and write the workspaces' lifecycles through the store of
+    /// `agents`, as the daemon does through its own, and rank its queue.
+    fn use_service(&self, agents: &Arc<Agents>) {
+        *self.store.lock().unwrap() = Some(agents.store.clone());
+        *self.agents.lock().unwrap() = Arc::downgrade(agents);
+    }
+
+    /// The service the fixture runs.
+    fn service(&self) -> Arc<Agents> {
+        let agents = self.agents.lock().unwrap().upgrade();
+        agents.expect("the fixture gives the stand-in its service")
+    }
+
+    /// The settings of a space of `repository`, or of none.
+    fn settings(&self, repository: Option<&RepositoryId>) -> Result<Effective> {
+        let layers = self.repository_layers.lock().unwrap();
+        let layers = repository.and_then(|id| layers.get(id)).cloned();
+        (self.service().config.current()).resolve(&layers.unwrap_or_default())
     }
 
     /// The service's store.
@@ -404,8 +485,8 @@ impl Spaces for StandIn {
         Box::pin(async { Ok(None) })
     }
 
-    fn space_settings<'a>(&'a self, _: &'a Space) -> BoxFuture<'a, Result<Effective>> {
-        let settings = self.config.resolve(&ConfigLayers::default());
+    fn space_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>> {
+        let settings = self.settings(space.repository_id.as_ref());
         Box::pin(async { settings })
     }
 
@@ -438,23 +519,31 @@ impl Spaces for StandIn {
         Box::pin(async { Ok(()) })
     }
 
+    /// The whole queue, which the user reaches; the stand-in knows no
+    /// scope.
     fn reachable_queue<'a>(
         &'a self,
-        _: Option<&'a Caller>,
+        caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Vec<QueueEntry>>> {
-        Box::pin(async { Ok(Default::default()) })
+        Box::pin(async move {
+            anyhow::ensure!(caller.is_none(), "{NOT_HERE}: a scoped caller's queue");
+            self.service().queue_entries(self).await
+        })
     }
 
-    fn workspace_settings<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
-        let settings = self.config.resolve(&ConfigLayers::default());
+    fn workspace_settings<'a>(
+        &'a self,
+        workspace: &'a Workspace,
+    ) -> BoxFuture<'a, Result<Effective>> {
+        let settings = self.settings(Some(workspace.repository()));
         Box::pin(async { settings })
     }
 
     fn workspace_settings_with_templates<'a>(
         &'a self,
-        _: &'a Workspace,
+        workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>> {
-        let settings = self.config.resolve(&ConfigLayers::default());
+        let settings = self.settings(Some(workspace.repository()));
         Box::pin(async { settings })
     }
 
@@ -584,13 +673,17 @@ impl Repositories for StandIn {
         Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: selected_repository")) })
     }
 
-    fn repository_settings<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
-        let settings = self.config.resolve(&ConfigLayers::default());
+    fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
+        let settings = self.settings(Some(id));
         Box::pin(async { settings })
     }
 
-    fn repository_layers<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<ConfigLayers>> {
-        Box::pin(async { Ok(ConfigLayers::default()) })
+    fn repository_layers<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<ConfigLayers>> {
+        let layers = self.repository_layers.lock().unwrap().get(id).cloned();
+        Box::pin(async { Ok(layers.unwrap_or_default()) })
     }
 }
 
@@ -1022,8 +1115,23 @@ impl Memory for StandIn {
 }
 
 impl Ranking for StandIn {
+    /// The queue's waiting entries, with no space ranked of its own and
+    /// nothing waiting on anything, which the stand-in records none of.
     fn ranking_snapshot(&self) -> BoxFuture<'_, Result<Snapshot>> {
-        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: ranking_snapshot")) })
+        let agents = self.service();
+        Box::pin(async move {
+            let oneshots = agents.agent_queue.waiting_oneshots();
+            let entries = (agents.store)
+                .read(move |tx| {
+                    crate::queue::ranking::entries::waiting(tx, &HashMap::new(), &oneshots)
+                })
+                .await?;
+            Ok(Snapshot {
+                entries,
+                now: shoal_protocol::time::UnixTime::now(),
+                ..Snapshot::default()
+            })
+        })
     }
 }
 
@@ -1087,11 +1195,12 @@ impl Removals for StandInRemovals {
 }
 
 /// Records without the other subsystems' tables: no commands an agent
-/// left, no restores Shoal queued, and the spaces a test makes watch an
-/// open PR.
+/// left, no restores Shoal queued, the spaces a test makes watch an open
+/// PR and the workspaces it records a CI job running in.
 #[derive(Default)]
 pub(crate) struct StandInRecords {
     pub(crate) open_prs: Mutex<HashSet<SpaceId>>,
+    pub(crate) job_workspaces: Mutex<HashSet<SpaceId>>,
 }
 
 impl Records for StandInRecords {
@@ -1247,7 +1356,7 @@ impl Records for StandInRecords {
     }
 
     fn recorded_job_workspaces(&self, _: &Connection) -> Result<HashSet<SpaceId>> {
-        Ok(HashSet::new())
+        Ok(self.job_workspaces.lock().unwrap().clone())
     }
 
     fn runners_registered(&self, _: &Connection) -> Result<bool> {

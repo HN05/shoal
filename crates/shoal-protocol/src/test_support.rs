@@ -33,3 +33,23 @@ pub fn workspace(id: &str, repository: &str, branch: &str, path: &Path) -> Works
 pub fn space(workspace: &Workspace) -> Space {
     Space::from(workspace.clone())
 }
+
+/// The chat `id` in `mode` at `path`, the checkout of the repository
+/// `repository` or else the `root_dir` of a chat without one.
+pub fn chat(id: &str, repository: Option<&str>, mode: &str, path: &Path) -> crate::model::Chat {
+    let workdir = match repository {
+        Some(_) => "checkout",
+        None => "root_dir",
+    };
+    serde_json::from_value(serde_json::json!({
+        "id": id,
+        "workdir": {"kind": workdir, "path": path},
+        "number": 1,
+        "name": id,
+        "repository_id": repository,
+        "mode": mode,
+        "kind": "chat",
+        "started_at": 0,
+    }))
+    .unwrap()
+}

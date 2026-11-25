@@ -32,3 +32,6 @@ pub use state::{AgentQueue, OneShotAdmission, OneShotStop, RestoreLink, Serving}
 pub use store::last_seq;
 pub use wake::Grant;
 pub use worker::HasStoppedAgent;
+
+#[cfg(test)]
+pub(crate) mod tests;
