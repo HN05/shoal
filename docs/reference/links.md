@@ -168,7 +168,7 @@ persists across new ones.
 An unfiltered `shoal watch` without a linked PR also returns when the workspace
 branch newly conflicts with the default target of `shoal conflicts`, naming the
 branch and the conflicted paths, unless that target already has HEAD's changes as
-[removal](removal.md) decides merges; with nothing linked, it waits for that
+[removal](removal.md#branches) decides merges; with nothing linked, it waits for that
 alone. With a linked
 PR, whose forge reports its conflicts, the watch and the agent's deliveries
 report only the files [changed on both sides](branches.md#files-changed-on-both-sides), such as

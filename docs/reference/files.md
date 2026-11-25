@@ -105,7 +105,7 @@ Sending a file again makes a new copy of a deleted one.
 
 A space's files outlive it. They stay for the
 [retention period](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup)
-after its removal, as its [checkpoints](removal.md#checkpoints-and-restore)
+after its removal, as its [checkpoints](removal.md#checkpoints)
 do. Until then, `shoal files <id>` lists them with when they go, and `rm`
 deletes them. Both work on another joined machine too, since the hub knows
 where each removed space's files are. `shoal restore` gives the files back to

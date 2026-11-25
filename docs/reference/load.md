@@ -366,7 +366,7 @@ record or last session keeps after its wrapper exits, or only the
 `--execution <id>` one; the command reports how many it queued, and the
 [agent queue](queue.md) starts them as the agent limits allow, each
 where it stopped or in a background place as `--now` places them. An [asleep](queue.md) agent's restore then waits only
-for its turn in the queue. A space that is [removed](removal.md#checkpoints-and-restore)
+for its turn in the queue. A space that is [removed](removal.md#restore-a-removed-space)
 is `shoal restore`'s. Without a space, resume uses the current
 workspace when its agent can resume, otherwise a picker of the spaces whose
 agent can resume, the workspaces, saying what each would resume, then the chats,
@@ -444,6 +444,6 @@ the current restore configuration; without one, built-in terminal agents continu
 the saved session. Other agents require a configured restore
 command. Restore shows the saved pressure reason. Records
 survive daemon restart and suppress idle cleanup until the replacement process
-is registered; removal keeps them in its [removal record](removal.md#checkpoints-and-restore). A failed launch retains its records;
+is registered; removal keeps them in its [removal record](removal.md#removal-records). A failed launch retains its records;
 a later stop or overload creates a record for the replacement execution. The original
 task prompt is never replayed.

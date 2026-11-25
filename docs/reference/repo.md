@@ -156,7 +156,7 @@ Something is left of it while it has:
 - a running `shoal contribute`;
 - a workspace, a queued agent, a chat or a pending issue proposal;
 - a kept branch, or a resource another repository's workspace borrows;
-- an unexpired [checkpoint](removal.md#checkpoints-and-restore), removal
+- an unexpired [checkpoint](removal.md#checkpoints), removal
   record or removed space's [files](files.md);
 - changed files, a stash or a Git operation under way in its checkout;
 - commits in its checkout that no branch or tag its remotes advertise has.

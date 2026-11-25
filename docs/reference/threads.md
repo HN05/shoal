@@ -381,7 +381,7 @@ side. A waiting thread keeps the space that opened it from
 thread opened with it. The opener gets Shoal's post that the holder finished,
 unless the opener is that space. Removing the space does the same.
 
-`done --undo` and [restoring](removal.md#checkpoints-and-restore) the space
+`done --undo` and [restoring](removal.md#restore-a-removed-space) the space
 reopen the threads closed for that cause, without Shoal's posts. A thread
 something else resolved since stays resolved.
 

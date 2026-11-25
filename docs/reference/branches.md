@@ -266,7 +266,7 @@ A refresh copies a copy again in place, as `--copy` copies. The source must
 pass the same checks, and a removed source is refused. The refresh runs these
 steps:
 
-1. A [checkpoint](removal.md#checkpoints-and-restore) keeps the copy's HEAD and
+1. A [checkpoint](removal.md#checkpoints) keeps the copy's HEAD and
    unsaved files.
 2. The copy's tracked, untracked and ignored files and its index become the
    source's. The copy's own ignored files go, as removal deletes them, since
@@ -367,7 +367,7 @@ identical edits, which Git merges cleanly. A repository lists such files in
 
 `shoal conflicts` lists under "Changed on both sides" each such file that both
 HEAD and the target changed since their merge base. It leaves the file out when
-the target already has HEAD's changes, as [removal](removal.md) decides merges.
+the target already has HEAD's changes, as [removal](removal.md#branches) decides merges.
 To fix one, update the branch from the target and pick a number past the
 target's.
 

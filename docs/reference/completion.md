@@ -83,7 +83,7 @@ A workspace goes once its work is kept:
 
 - With a watched PR, it goes once the PR's merge requirements are met.
 - Without one, its files must be clean and every commit pushed, as
-  [automatic cleanup](removal.md#automatic-cleanup) means it, unless the
+  [automatic cleanup](removal.md#what-keeps-a-workspace) means it, unless the
   completion is integrated.
 
 Shoal checks the files and the done HEAD again after it stops the agent and
@@ -95,7 +95,7 @@ A hold, a thread the space opened after `done` that waits, or a pending
 A failed cleanup keeps the space and its ownership, and `status` shows the
 error with the completion's choice. To review the work in a space,
 [hold](removal.md#holds) it. Removal, except of a disposable workspace, can
-be undone with [`shoal restore`](removal.md#checkpoints-and-restore).
+be undone with [`shoal restore`](removal.md#restore-a-removed-space).
 
 ### Without cleanup
 

@@ -193,7 +193,7 @@ in a workspace's worktree (`shoal start --in`), one without a repository and a
 stopped chat are refused.
 
 `convert chat` removes the worktree as [`shoal rm`](removal.md) does,
-with its removal hooks, once a [checkpoint](removal.md#checkpoints-and-restore) keeps its
+with its removal hooks, once a [checkpoint](removal.md#checkpoints) keeps its
 HEAD and unsaved files, so it asks nothing; one whose unsaved files no
 checkpoint can keep is refused. The branch stays, as a [kept
 branch](removal.md#kept-branches), and `shoal restore` brings the files back in a new
