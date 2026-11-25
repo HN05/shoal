@@ -4,7 +4,7 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 targets_file="$script_dir/release-targets.txt"
-# Columns: Rust target, archive platform, Homebrew OS and architecture selectors.
+# Columns: Rust target, release asset platform, Homebrew OS and architecture selectors.
 
 target=${1:?expected a Rust release target}
 platform=''

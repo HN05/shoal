@@ -50,7 +50,7 @@ def multipart(path):
 def plan(files, existing):
     """Files to upload, manifest last, and ids of stale assets to delete first.
 
-    Every run builds the archives afresh, so files attached by an earlier run
+    Every run builds the assets afresh, so files attached by an earlier run
     cannot be mixed with new ones. The manifest is attached last: when it is
     there the set is complete and nothing is touched; otherwise whatever was
     attached is a partial upload and is replaced."""
