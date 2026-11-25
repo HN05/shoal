@@ -74,8 +74,8 @@ layer that set it, such as `shared config` for the shared file. A named table,
 such as commands or ports, shows one entry per name.
 
 Without a workspace, it shows the current workspace's settings. Outside a
-workspace, it shows those of the registered repository whose directory you are
-in, and otherwise opens the workspace picker. `--repo NAME` shows a
+workspace, it shows those of the registered checkout you are in, and otherwise
+opens the workspace picker. `--repo NAME` shows a
 repository's settings in its registered checkout, from any directory.
 
 `--json` returns `key`, `value` and `layer` for each entry, and `file` for a
