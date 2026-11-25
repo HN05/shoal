@@ -591,7 +591,7 @@ impl Coordination {
                         here.extend(elsewhere);
                         here
                     }
-                    None => shoal_store::tree::deciders(tx, &workspace, &agents, elsewhere)?,
+                    None => crate::coordinators::deciders(tx, &workspace, &agents, elsewhere)?,
                 };
                 let routed = route(tx, &key, &candidates, above.as_ref())?;
                 Ok(routed)

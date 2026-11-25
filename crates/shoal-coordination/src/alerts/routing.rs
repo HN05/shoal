@@ -265,7 +265,7 @@ fn coordinator(
     source: Source,
     agents: &tree::TrackedAgents,
 ) -> Result<Option<Receiver>> {
-    if source == Source::Agent && !tree::has_running_agent(db, id, agents)? {
+    if source == Source::Agent && !crate::coordinators::has_running_agent(db, id, agents)? {
         return Ok(None);
     }
     if let Some(coordinator) = tree::coordinator_of(db, id, agents)? {

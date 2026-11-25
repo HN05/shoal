@@ -15,11 +15,9 @@ use shoal_protocol::{
 };
 
 use super::code::NewCode;
+use super::sent_files::{sent_files, sent_ids};
+use crate::item_numbers::{self, ItemKind, ItemNumber};
 use crate::time::UnixTime;
-use crate::{
-    item_numbers::{self, ItemKind, ItemNumber},
-    store::sent_files::{sent_files, sent_ids},
-};
 use shoal_protocol::files::SentFile;
 
 /// The filter on a `threads` row aliased `t` that keeps open threads.

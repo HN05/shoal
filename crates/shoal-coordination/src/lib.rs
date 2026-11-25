@@ -24,6 +24,7 @@ use crate::model::SpaceRef;
 pub mod alerts;
 pub mod approvals;
 pub mod changes;
+mod coordinators;
 pub mod daemon;
 pub mod permissions;
 pub mod scope;

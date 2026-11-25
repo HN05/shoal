@@ -320,24 +320,6 @@ fn delegation_paths(
     .collect()
 }
 
-/// The spaces that decide the requests of the space `id`, nearest first:
-/// those above it with an agent, then `elsewhere`, those on the machines
-/// above. A space without an agent of its own has none, since its
-/// coordinator or the user acts there.
-pub fn deciders(
-    db: &Connection,
-    id: &SpaceId,
-    agents: &TrackedAgents,
-    elsewhere: Vec<SpaceId>,
-) -> Result<Vec<SpaceId>> {
-    if !has_running_agent(db, id, agents)? {
-        return Ok(Vec::new());
-    }
-    let mut deciders = spaces_above(db, id, agents)?;
-    deciders.extend(elsewhere);
-    Ok(deciders)
-}
-
 /// The length of the longest chain of spaces whose removals take the
 /// space `id` first, each the next one's, as [`TAKEN_FIRST`] links them.
 pub fn removal_depth(db: &Connection, id: &SpaceId) -> Result<u32> {
@@ -362,15 +344,6 @@ pub fn spaces_above(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Re
         ))?
         .query_map(params![id, agents.parameter()], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
-}
-
-/// Whether the space `id` has an agent among `agents`.
-pub fn has_running_agent(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<bool> {
-    crate::exists(
-        db,
-        &format!("SELECT 1 WHERE {}", has_agent("?1")),
-        params![id, agents.parameter()],
-    )
 }
 
 /// Where an event a space passes up goes.

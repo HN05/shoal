@@ -27,7 +27,6 @@ mod event_tests;
 pub mod lifecycle;
 mod migrations;
 pub use migrations::SCHEMA_VERSION;
-pub mod sent_files;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod tree;
