@@ -1,4 +1,4 @@
-//! The reads of the tree only the spaces take, over the store's one walk up
+//! The reads of the space tree the spaces own, over the store's one walk up
 //! and one walk down: a space's parent and children, the spaces whose
 //! activity an agent receives here or on another machine, what receives an
 //! event passed up, and the order removals take spaces in.
