@@ -1,0 +1,257 @@
+# The workspace packages each workspace package may depend on, which
+# scripts/check_crate_dependencies.py checks. `dependencies` covers normal and
+# build dependencies, optional or not; `dev-dependencies` lists what only the
+# package's tests may add. AGENTS.md, under Implementation, gives the
+# principles an entry follows.
+
+[shoal]
+dependencies = ["shoal-cli", "shoal-daemon"]
+dev-dependencies = ["shoal-client", "shoal-core", "shoal-forge", "shoal-protocol", "shoal-schedule"]
+
+[shoal-agents]
+dependencies = [
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-schedule",
+    "shoal-store",
+    "shoal-subprocess",
+]
+
+[shoal-apps]
+dependencies = ["shoal-core", "shoal-daemon-base", "shoal-ids", "shoal-protocol", "shoal-store"]
+
+[shoal-cli]
+dependencies = [
+    "shoal-client",
+    "shoal-core",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-schedule",
+    "shoal-workers",
+]
+
+[shoal-client]
+dependencies = ["shoal-forge-types", "shoal-ids", "shoal-protocol", "shoal-schedule", "shoal-states"]
+dev-dependencies = ["shoal-core", "shoal-daemon", "shoal-refs"]
+
+[shoal-config-derive]
+dependencies = []
+
+[shoal-coordination]
+dependencies = [
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-store",
+]
+
+[shoal-core]
+dependencies = [
+    "shoal-config-derive",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-proxy",
+    "shoal-refs",
+    "shoal-schedule",
+    "shoal-states",
+    "shoal-subprocess",
+]
+
+[shoal-daemon]
+dependencies = [
+    "shoal-agents",
+    "shoal-apps",
+    "shoal-coordination",
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-demos",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-hub",
+    "shoal-ids",
+    "shoal-leases",
+    "shoal-links",
+    "shoal-power",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-repositories",
+    "shoal-reviews",
+    "shoal-runner",
+    "shoal-schedule",
+    "shoal-spaces",
+    "shoal-store",
+]
+
+[shoal-daemon-base]
+dependencies = [
+    "shoal-core",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-store",
+]
+
+[shoal-demos]
+dependencies = ["shoal-core", "shoal-daemon-base", "shoal-ids", "shoal-protocol", "shoal-store"]
+
+[shoal-forge]
+dependencies = [
+    "shoal-forge-derive",
+    "shoal-forge-types",
+    "shoal-refs",
+    "shoal-states",
+    "shoal-subprocess",
+    "shoal-time",
+]
+
+[shoal-forge-derive]
+dependencies = []
+
+[shoal-forge-types]
+dependencies = ["shoal-forge-derive", "shoal-refs", "shoal-states", "shoal-time"]
+
+[shoal-hub]
+dependencies = [
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-schedule",
+    "shoal-store",
+]
+
+[shoal-ids]
+dependencies = []
+
+[shoal-leases]
+dependencies = [
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-store",
+    "shoal-subprocess",
+]
+
+[shoal-links]
+dependencies = [
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-store",
+]
+
+[shoal-power]
+dependencies = ["shoal-daemon-base", "shoal-subprocess"]
+
+[shoal-protocol]
+dependencies = [
+    "shoal-config-derive",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-refs",
+    "shoal-schedule",
+    "shoal-states",
+    "shoal-time",
+]
+
+[shoal-proxy]
+dependencies = ["shoal-time"]
+
+[shoal-refs]
+dependencies = []
+
+[shoal-repositories]
+dependencies = [
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-store",
+]
+
+[shoal-reviews]
+dependencies = [
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-store",
+]
+
+[shoal-runner]
+dependencies = [
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-store",
+]
+
+[shoal-schedule]
+dependencies = ["shoal-ids", "shoal-states", "shoal-time"]
+
+[shoal-spaces]
+dependencies = [
+    "shoal-coordination",
+    "shoal-core",
+    "shoal-daemon-base",
+    "shoal-forge",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-refs",
+    "shoal-schedule",
+    "shoal-store",
+]
+
+[shoal-states]
+dependencies = []
+
+[shoal-store]
+dependencies = ["shoal-core", "shoal-ids", "shoal-protocol", "shoal-refs"]
+
+[shoal-subprocess]
+dependencies = []
+
+[shoal-time]
+dependencies = []
+
+[shoal-workers]
+dependencies = [
+    "shoal-client",
+    "shoal-core",
+    "shoal-forge-types",
+    "shoal-ids",
+    "shoal-protocol",
+    "shoal-proxy",
+    "shoal-refs",
+]
+dev-dependencies = ["shoal-daemon"]

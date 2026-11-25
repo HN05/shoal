@@ -154,6 +154,10 @@ jobs:
       - name: Release script tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
+      # Reads only the manifests, so it runs whatever the change affects.
+      - name: Crates depend only on the crates they may
+        run: python3 scripts/check_crate_dependencies.py
+
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
 
