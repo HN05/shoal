@@ -57,6 +57,7 @@ pub mod space_names;
 pub mod state;
 pub mod status;
 pub mod subscriptions;
+pub mod surfaces;
 #[cfg(feature = "test-support")]
 pub mod test_support;
 pub mod threads;

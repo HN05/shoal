@@ -27,6 +27,7 @@ test-support = ["shoal-ids/test-support"]
 anyhow.workspace = true
 base64.workspace = true
 imara-diff = { version = "0.2", default-features = false }
+jsonschema = { version = "0.63", default-features = false }
 clap = { workspace = true, features = ["derive"], optional = true }
 rusqlite = { workspace = true, optional = true }
 serde.workspace = true
