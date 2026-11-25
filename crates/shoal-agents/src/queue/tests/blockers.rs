@@ -98,3 +98,14 @@ async fn blockers_name_existing_work_other_than_the_launch() {
     };
     fixture.agents.queue_add(daemon, request).await.unwrap_err();
 }
+
+#[tokio::test]
+async fn a_space_blocker_of_a_space_without_a_repository_clears_once_that_space_goes() {
+    let fixture = Fixture::new().await;
+    let space = crate::state::BlockerKind::Space;
+    let cleared = (fixture.agents)
+        .cleared_locally(&*fixture.daemon, None, space, "removed-space-id")
+        .await
+        .unwrap();
+    assert!(cleared.is_some());
+}

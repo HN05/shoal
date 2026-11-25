@@ -167,3 +167,39 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
 async fn an_idle_agent_without_work_outside_its_group_stays_idle() {
     assert_eq!(turn_kept_after_exit(false).await, Some(AgentState::Idle));
 }
+
+#[tokio::test]
+async fn setup_releases_git_gate_after_registration_and_on_preparation_failure() {
+    let fixture = Fixture::new().await;
+    let daemon = &*fixture.daemon;
+    let workspace = fixture.workspace("worker").await;
+    let guard = fixture.agents.gates.lock_git(workspace.repository()).await;
+    let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
+    drop(guard);
+    let begin = || {
+        (fixture.agents).begin_execution(
+            daemon,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Setup,
+            None,
+        )
+    };
+    // Nothing is set up, so its preparation fails.
+    assert!(begin().await.is_err());
+    assert!(gate.try_lock().is_ok());
+    // Copying ignored files is a setup of its own.
+    let configured = "setup.copy_ignored = true\n";
+    fixture.configure_repository(workspace.repository(), configured);
+    let started = begin().await.unwrap();
+    assert!(gate.try_lock().is_ok(), "setup only locks registration");
+    (fixture.agents)
+        .finish_execution(
+            daemon,
+            started.plan.id.clone(),
+            ExecutionKind::Setup,
+            Some(0),
+        )
+        .await
+        .unwrap();
+}

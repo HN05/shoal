@@ -610,57 +610,6 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
 }
 
 #[tokio::test]
-async fn setup_releases_git_gate_after_registration_and_on_preparation_failure() {
-    let f = Fixture::new().await;
-    let workspace = f.add("worker").await;
-    let guard = f.manager.gates.lock_git(workspace.repository()).await;
-    let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
-    drop(guard);
-    assert!(
-        f.manager
-            .agents
-            .begin_execution(
-                &*f.manager,
-                workspace.id.as_str(),
-                None,
-                ExecutionKind::Setup,
-                None
-            )
-            .await
-            .is_err()
-    );
-    assert!(gate.try_lock().is_ok());
-    fs::write(
-        workspace.path.join(".shoal.toml"),
-        "setup.command = 'setup.sh'\n",
-    )
-    .unwrap();
-    let started = f
-        .manager
-        .agents
-        .begin_execution(
-            &*f.manager,
-            workspace.id.as_str(),
-            None,
-            ExecutionKind::Setup,
-            None,
-        )
-        .await
-        .unwrap();
-    assert!(gate.try_lock().is_ok(), "setup only locks registration");
-    f.manager
-        .agents
-        .finish_execution(
-            &*f.manager,
-            started.plan.id.clone(),
-            ExecutionKind::Setup,
-            Some(0),
-        )
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
 async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
