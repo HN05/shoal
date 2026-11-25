@@ -112,8 +112,9 @@ the one-shot agents' processes.
 Without a current sample, or with one that could not read every workspace's
 containers, there is no reading of the work: nothing starts and no stopped
 agent recovers until there is, while protection still acts on the machine's
-own memory. Once the samples begin to miss containers, a `load_warning` alert
-names what could not be read and how to clear it.
+own memory. This holds under the limit `load` sets too. Once the samples
+begin to miss containers, a `load_warning` alert names what could not be read
+and how to clear it, or to lift the limit with `memory_limit = "none"`.
 
 The wrapper reads its command's scope every second while it runs and once as
 it ends: how many processes the kernel's OOM killer killed there, and the
