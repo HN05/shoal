@@ -204,7 +204,7 @@ removal.
 
 Where both are workspaces of one repository, the absorbed space's branch
 merges into the other's branch in its worktree, by `-X` and `--message` as
-[a local merge](branches.md#merge-into-the-default-branch) takes them, else by `[merge]
+[a local merge](branches.md#local-merges) takes them, else by `[merge]
 method`; a merge commit or a squash without `--message` gets a message naming
 the absorbed space and its branch. The absorbed space's uncommitted and
 untracked files then carry over into that worktree as uncommitted changes,

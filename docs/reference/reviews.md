@@ -151,7 +151,7 @@ answer.
 With [`[review] require_for_pr`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews), a `shoal pr open` that would open a new
 PR is checked before it pushes, and before a [proposal](approvals.md#approval-for-agent-issues-and-prs); linking an
 existing PR is not. With `require_for_ready`, `shoal ready` is checked, not
-`ready --undo`. With `require_for_merge`, a local [`shoal merge`](branches.md#merge-into-the-default-branch) is checked for the
+`ready --undo`. With `require_for_merge`, a local [`shoal merge`](branches.md#local-merges) is checked for the
 commit of the branch that merges, and a [PR merge](issues.md#issue-and-pr-actions), with or without
 `--auto`, for the PR's head, which the merge then names to the forge, against the
 reviews of the workspace `shoal review run <url>` reviews it in: the one that

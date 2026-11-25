@@ -221,7 +221,7 @@ takes none. Of the automatic merges, only GitLab's stays bound to that head
 until it merges, dropping the merge when the branch moves; the others merge
 the head the PR has once checks pass, as `shoal forge capabilities` says.
 When the last check of a workspace that links the PR found files
-[changed on both sides](branches.md#conflicts) at the PR's head with its base branch,
+[changed on both sides](branches.md#files-changed-on-both-sides) at the PR's head with its base branch,
 a merge and `--auto` name them and ask before merging, such as
 `Sensitive files changed on both sides by PR #12 and main: src/version.rs`;
 `--yes` merges without asking, and without a terminal they refuse and name it.

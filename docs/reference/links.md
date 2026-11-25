@@ -171,7 +171,7 @@ branch and the conflicted paths, unless that target already has HEAD's changes a
 [removal](removal.md) decides merges; with nothing linked, it waits for that
 alone. With a linked
 PR, whose forge reports its conflicts, the watch and the agent's deliveries
-report only the files [changed on both sides](branches.md#conflicts), such as
+report only the files [changed on both sides](branches.md#files-changed-on-both-sides), such as
 `Changed on both sides with main: src/version.rs`. Once the assignment is done,
 its work is finished and the branch is checked no more.
 A new [alert](alerts.md) ends a watch at once, ahead of item

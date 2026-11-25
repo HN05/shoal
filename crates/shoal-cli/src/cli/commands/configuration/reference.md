@@ -1335,7 +1335,7 @@ method = "squash" # "merge", "rebase" or "squash"; no default
   `-X` says otherwise. Without it, a PR merges by the forge's default, and the
   others fast-forward or create a merge commit.
 
-See [merge into the default branch](../../../../../../docs/reference/branches.md#merge-into-the-default-branch).
+See [local merges](../../../../../../docs/reference/branches.md#local-merges).
 
 ### Conflicts
 
@@ -1347,7 +1347,7 @@ sensitive = ["src/version.rs", "migrations/**"] # Default: []
 `sensitive` lists the files that hold a number each change picks for itself,
 such as a schema migration or a protocol version. It takes paths and globs
 relative to the repository root. See
-[conflicts](../../../../../../docs/reference/branches.md#conflicts).
+[files changed on both sides](../../../../../../docs/reference/branches.md#files-changed-on-both-sides).
 
 ### Runner
 

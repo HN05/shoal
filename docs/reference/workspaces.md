@@ -473,7 +473,7 @@ Status shows:
   why the syncs since then failed, in `sync` (`synced_at`, `failing_since` and
   `error`);
 - the files the last check of HEAD against the default target found
-  [changed on both sides](branches.md#conflicts), from a watch or
+  [changed on both sides](branches.md#files-changed-on-both-sides), from a watch or
   `shoal conflicts`, in `changed_on_both_sides` (`target`, `target_commit`,
   `head` and `files`);
 - the first condition that keeps the space from automatic cleanup, in

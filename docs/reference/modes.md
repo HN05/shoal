@@ -210,7 +210,7 @@ Processes carrying a Shoal scope token are confined to their own worktree:
 effective configuration for their own workspace and their space's repository,
 and make the daemon reread it with `config reload`, but cannot change
 configuration.
-They `merge` only with [approval](branches.md#merge-into-the-default-branch) and cannot
+They `merge` only with [approval](branches.md#approval-of-an-agents-merge) and cannot
 reach spaces outside their scope, create spaces other than below the spaces
 their scope reaches, remove spaces other than those below theirs without holds, read
 alerts, or administer repositories or the daemon service; nested commands
