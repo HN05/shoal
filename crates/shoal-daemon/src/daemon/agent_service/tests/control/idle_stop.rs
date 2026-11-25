@@ -634,36 +634,6 @@ async fn idle_chat(
     (chat, execution)
 }
 
-/// A heavy chat's idle agent sleeps as a workspace's does.
-#[tokio::test]
-async fn a_heavy_chats_idle_agent_sleeps() {
-    let (root, manager) = manager().await;
-    let (_, execution) = idle_chat(&manager, root.path(), "pair").await;
-
-    manager
-        .agents
-        .stop_idle_agents(&*manager, later())
-        .await
-        .unwrap();
-
-    assert!(*execution.stop.borrow());
-}
-
-/// A light chat's idle agent keeps running.
-#[tokio::test]
-async fn a_light_chats_idle_agent_keeps_running() {
-    let (root, manager) = manager().await;
-    let (_, execution) = idle_chat(&manager, root.path(), "chat").await;
-
-    manager
-        .agents
-        .stop_idle_agents(&*manager, later())
-        .await
-        .unwrap();
-
-    assert!(!*execution.stop.borrow());
-}
-
 /// A blocked chat's idle agent stops as a workspace's does, its wrapper
 /// waiting to restore it in place once the space clears.
 #[tokio::test]

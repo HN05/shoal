@@ -136,3 +136,16 @@ async fn workspace_with_agent(fixture: &Arc<Fixture>) -> ExecutionId {
     let other = workspace(fixture, "other").await;
     agent(fixture, &other, "claude").await
 }
+
+#[tokio::test]
+async fn an_interrupt_names_a_chats_agent_as_it_is_listed() {
+    let fixture = Arc::new(Fixture::new().await);
+    let repo = fixture.repository().await;
+    let chat = fixture.chat_in("talk", "chat", Some(&repo)).await;
+    let other = fixture.workspace("other").await;
+    let other = agent(&fixture, &other, "claude").await;
+    (fixture.agents)
+        .interrupt_turn(&*fixture.daemon, &SpaceSelector::id(&chat), other)
+        .await
+        .unwrap_err();
+}

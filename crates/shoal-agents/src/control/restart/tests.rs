@@ -552,3 +552,119 @@ async fn a_newer_request_joins_the_restart_until_it_settles_merging_its_change()
         .unwrap();
     assert!(matches!(later, Requested::Settled));
 }
+
+/// Hand the restart of the agent `id` runs over to a new wrapper, as its
+/// wrapper does once the agent's processes stopped, and end its execution.
+/// Returns the pending restart.
+async fn hand_over(
+    fixture: &Arc<Fixture>,
+    workspace: &Workspace,
+    execution: &crate::executions::StartedExecution,
+) -> tokio::task::JoinHandle<anyhow::Result<Option<Origin>>> {
+    let id = &execution.plan.id;
+    track(fixture, workspace, id, "claude", true).await;
+    let restarting = tokio::spawn({
+        let (agents, id) = (fixture.agents.clone(), id.to_owned());
+        async move { agents.restart_agent(&id, false, None).await }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    fixture.agents.hand_over_restart(id).await.unwrap();
+    // A stop sees the restart before the execution's record goes, so no
+    // moment shows it neither.
+    let renewing = fixture.agents.renewing_workspaces().await;
+    assert!(renewing.contains(&workspace.id));
+    let command = ExecutionKind::Command;
+    let complete = (fixture.agents)
+        .finish_execution(&*fixture.daemon, id.to_owned(), command, Some(0))
+        .await
+        .unwrap();
+    assert!(complete);
+    restarting
+}
+
+/// How the restart `restarting` ended; the limit is a hang guard only.
+async fn answered(
+    restarting: tokio::task::JoinHandle<anyhow::Result<Option<Origin>>>,
+) -> anyhow::Result<Option<Origin>> {
+    tokio::time::timeout(Duration::from_secs(60), restarting)
+        .await
+        .expect("the restart was never answered")
+        .unwrap()
+}
+
+/// The restores waiting in the agent queue for `execution`.
+async fn restores_of(fixture: &Fixture, execution: &str) -> usize {
+    let entries = fixture
+        .agents
+        .queue_entries(&*fixture.daemon)
+        .await
+        .unwrap();
+    entries
+        .iter()
+        .filter(|entry| entry.execution.as_ref().map(ExecutionId::as_str) == Some(execution))
+        .count()
+}
+
+/// A stop cancels a restart between its wrappers, whether it comes before
+/// the restart records the new wrapper's start or after, and leaves the
+/// agent's record for `shoal resume`.
+#[tokio::test]
+async fn a_stop_cancels_a_restart_between_its_wrappers() {
+    let fixture = Arc::new(Fixture::new().await);
+    let daemon = &*fixture.daemon;
+    let workspace = workspace(&fixture).await;
+    let space = fixture.space(&workspace.id);
+    let begin = || {
+        (fixture.agents).begin_execution(
+            daemon,
+            workspace.id.as_str(),
+            None,
+            ExecutionKind::Command,
+            None,
+        )
+    };
+    let first = begin().await.unwrap();
+    let before = first.plan.id.clone();
+
+    let restarting = hand_over(&fixture, &workspace, &first).await;
+    // `shoal stop --all` selects the workspace, though no execution or
+    // queue entry runs or starts the agent now.
+    let cancel = crate::protocol::QueuedLaunches::Cancel;
+    let targets = fixture.agents.stop_targets(daemon, cancel).await.unwrap();
+    assert!(targets.iter().any(|target| target.id == workspace.id));
+    (fixture
+        .agents
+        .cancel_stopped_restores(daemon, &workspace.id))
+    .await
+    .unwrap();
+    let error = answered(restarting).await.unwrap_err();
+    assert!(format!("{error}").contains("cancelled"), "{error}");
+    (fixture
+        .agents
+        .restart_in_new_wrapper(daemon, &space, &before, true))
+    .await;
+    assert_eq!(restores_of(&fixture, before.as_str()).await, 0);
+
+    let second = begin().await.unwrap();
+    let after = second.plan.id.clone();
+    let restarting = hand_over(&fixture, &workspace, &second).await;
+    (fixture
+        .agents
+        .restart_in_new_wrapper(daemon, &space, &after, true))
+    .await;
+    assert_eq!(restores_of(&fixture, after.as_str()).await, 1);
+    (fixture
+        .agents
+        .cancel_stopped_restores(daemon, &workspace.id))
+    .await
+    .unwrap();
+    let error = answered(restarting).await.unwrap_err();
+    assert!(format!("{error}").contains("cancelled"), "{error}");
+    assert_eq!(restores_of(&fixture, after.as_str()).await, 0);
+
+    for id in [&before, &after] {
+        let paths = &fixture.agents.paths;
+        assert!(recovery::record_path(paths, &workspace.id, id).is_file());
+    }
+}

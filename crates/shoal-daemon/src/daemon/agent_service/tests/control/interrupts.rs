@@ -57,11 +57,6 @@ async fn workspace(manager: &Manager, root: &std::path::Path, name: &str) -> Wor
         .unwrap()
 }
 
-async fn workspace_with_agent(manager: &Manager, root: &std::path::Path) -> ExecutionId {
-    let other = workspace(manager, root, "other").await;
-    agent(manager, &other, "claude").await
-}
-
 #[tokio::test]
 async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
     let (temp, manager) = manager().await;
@@ -261,16 +256,4 @@ async fn an_interrupt_leaves_a_chats_agent_idle_until_a_turn_starts() {
     assert!(listed(&manager, &chat.id).await.1);
     report(AgentState::Working).await.unwrap();
     assert!(!listed(&manager, &chat.id).await.1);
-}
-
-#[tokio::test]
-async fn an_interrupt_names_a_chats_agent_as_it_is_listed() {
-    let (temp, manager) = manager().await;
-    let chat = chat(&manager, temp.path()).await;
-    let other = workspace_with_agent(&manager, temp.path()).await;
-    manager
-        .agents
-        .interrupt_turn(&*manager, &SpaceSelector::id(&chat.id), other)
-        .await
-        .unwrap_err();
 }

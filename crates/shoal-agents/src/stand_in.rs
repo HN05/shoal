@@ -223,6 +223,21 @@ impl Fixture {
         change(spaces.iter_mut().find(|space| space.id == *id).unwrap());
     }
 
+    /// Record the space `child` below `parent` in the tree.
+    pub(crate) async fn place_below(&self, child: &SpaceId, parent: &SpaceId) {
+        let (child, parent) = (child.clone(), parent.clone());
+        (self.agents.store)
+            .write(move |tx| {
+                tx.execute(
+                    "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
+                    [&child, &parent],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+
     /// Forget the space `id`, as once its removal ended.
     pub(crate) async fn remove(&self, id: &SpaceId) {
         let removed = id.clone();
@@ -298,11 +313,40 @@ impl Fixture {
             .await
             .unwrap();
         self.daemon.spaces.lock().unwrap().push(Space::from(chat));
+        let token = ScopeToken::from(format!("{name}-token"));
+        (self.records.chat_tokens.lock().unwrap()).insert(id.clone(), token);
         let execution = ExecutionId::from(name);
         (self.agents)
             .track_unconnected(&execution, &id, &name.into(), Agent::from("claude"))
             .await;
         id
+    }
+
+    /// Run the agent of a new chat `name` of `repository` in `mode`, in an
+    /// execution registered as its wrapper registers it, and its chat.
+    pub(crate) async fn chat_agent(
+        &self,
+        name: &str,
+        mode: &str,
+        repository: &Repository,
+    ) -> (SpaceId, crate::executions::StartedExecution) {
+        let chat = self.chat_in(name, "chat", Some(repository)).await;
+        let daemon = &*self.daemon;
+        // Stopped, so the execution registered below is its agent.
+        self.agents.end_executions(daemon, &chat).await;
+        let execution = (self.agents.begin_agent_execution(daemon, chat.as_str()))
+            .await
+            .unwrap();
+        let agent = shoal_protocol::executions::TrackedAgent {
+            mode: mode.into(),
+            ..shoal_protocol::executions::TrackedAgent::named("claude")
+        };
+        let (id, name) = (&execution.plan.id, name.into());
+        let zero = std::time::Duration::ZERO;
+        (self.agents)
+            .track_agent(daemon, id, &agent, &chat, &name, true, zero)
+            .await;
+        (chat, execution)
     }
 
     /// Record `state` as the workspace `id`'s, with `error`, as its
@@ -590,16 +634,27 @@ impl Spaces for StandIn {
         Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: chat_workspace")) })
     }
 
-    fn chat_by_id<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Option<Chat>>> {
-        Box::pin(async { Ok(Default::default()) })
+    fn chat_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Chat>>> {
+        let chat = self.find(id).and_then(|space| match space.by_kind() {
+            ByKind::Chat(chat) => Some(chat),
+            ByKind::Workspace(_) => None,
+        });
+        Box::pin(async { Ok(chat) })
     }
 
-    fn chat_repository<'a>(&'a self, _: &'a Chat) -> BoxFuture<'a, Result<Option<Repository>>> {
-        Box::pin(async { Ok(Default::default()) })
+    fn chat_repository<'a>(&'a self, chat: &'a Chat) -> BoxFuture<'a, Result<Option<Repository>>> {
+        Box::pin(async move {
+            match &chat.repository_id {
+                Some(id) => self.repository(id).await.map(Some),
+                None => Ok(None),
+            }
+        })
     }
 
-    fn chat_checkout_path<'a>(&'a self, _: &'a Chat) -> BoxFuture<'a, Result<PathBuf>> {
-        Box::pin(async { Err(anyhow::anyhow!("{NOT_HERE}: chat_checkout_path")) })
+    /// The directory the chat's record says it runs in.
+    fn chat_checkout_path<'a>(&'a self, chat: &'a Chat) -> BoxFuture<'a, Result<PathBuf>> {
+        let path = chat.workdir.path().to_owned();
+        Box::pin(async { Ok(path) })
     }
 
     fn chat_tmp_dir(&self, _: Option<&Repository>, _: &Chat) -> Result<Option<PathBuf>> {
@@ -1238,11 +1293,13 @@ impl Removals for StandInRemovals {
 
 /// Records without the other subsystems' tables: no commands an agent
 /// left, no restores Shoal queued, the spaces a test makes watch an open
-/// PR and the workspaces it records a CI job running in.
+/// PR, the workspaces it records a CI job running in and the scope tokens
+/// of the chats it records.
 #[derive(Default)]
 pub(crate) struct StandInRecords {
     pub(crate) open_prs: Mutex<HashSet<SpaceId>>,
     pub(crate) job_workspaces: Mutex<HashSet<SpaceId>>,
+    chat_tokens: Mutex<HashMap<SpaceId, ScopeToken>>,
 }
 
 impl Records for StandInRecords {
@@ -1320,8 +1377,8 @@ impl Records for StandInRecords {
             .collect::<rusqlite::Result<_>>()?)
     }
 
-    fn agent_token(&self, _: &Connection, _: &SpaceId) -> Result<Option<ScopeToken>> {
-        Ok(None)
+    fn agent_token(&self, _: &Connection, id: &SpaceId) -> Result<Option<ScopeToken>> {
+        Ok(self.chat_tokens.lock().unwrap().get(id).cloned())
     }
 
     fn preparation_waits(&self, _: &Connection, _: &SpaceId) -> Result<Option<PreparationWait>> {

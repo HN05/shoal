@@ -1,4 +1,3 @@
-use crate::model::Space;
 use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
@@ -8,9 +7,7 @@ use crate::{
         manager::Manager,
         test_support::{manager, repository},
     },
-    execution::recovery,
     model::Workspace,
-    sessions::Origin,
     state::AgentState,
 };
 use shoal_protocol::space_names::SpaceSelector;
@@ -103,121 +100,4 @@ async fn a_shared_workspace_keeps_the_turn_of_the_agent_that_reported_last() {
         status.workspace.agent_state.map(|status| status.state),
         Some(AgentState::Working)
     );
-}
-
-/// Hand the restart of the agent `id` runs over to a new wrapper, as its
-/// wrapper does once the agent's processes stopped, and end its execution.
-/// Returns the pending restart.
-async fn hand_over(
-    manager: &std::sync::Arc<Manager>,
-    workspace: &Workspace,
-    execution: &crate::daemon::executions::StartedExecution,
-) -> tokio::task::JoinHandle<anyhow::Result<Option<Origin>>> {
-    let id = &execution.plan.id;
-    track(manager, workspace, id, "claude", true).await;
-    let restarting = tokio::spawn({
-        let (manager, id) = (manager.clone(), id.to_owned());
-        async move { manager.agents.restart_agent(&id, false, None).await }
-    });
-    let mut stop = execution.stop.clone();
-    stop.wait_for(|stopping| *stopping).await.unwrap();
-    manager.agents.hand_over_restart(id).await.unwrap();
-    // A stop sees the restart before the execution's record goes, so no
-    // moment shows it neither.
-    assert!(
-        manager
-            .agents
-            .renewing_workspaces()
-            .await
-            .contains(&workspace.id)
-    );
-    let complete = manager
-        .agents
-        .finish_execution(&**manager, id.to_owned(), ExecutionKind::Command, Some(0))
-        .await
-        .unwrap();
-    assert!(complete);
-    restarting
-}
-
-/// How the restart `restarting` ended; the limit is a hang guard only.
-async fn answered(
-    restarting: tokio::task::JoinHandle<anyhow::Result<Option<Origin>>>,
-) -> anyhow::Result<Option<Origin>> {
-    tokio::time::timeout(Duration::from_secs(60), restarting)
-        .await
-        .expect("the restart was never answered")
-        .unwrap()
-}
-
-/// The restores waiting in the agent queue for `execution`.
-async fn restores_of(manager: &Manager, execution: &str) -> usize {
-    let entries = manager.agents.queue_entries(manager).await.unwrap();
-    entries
-        .iter()
-        .filter(|entry| entry.execution.as_ref().map(ExecutionId::as_str) == Some(execution))
-        .count()
-}
-
-/// A stop cancels a restart between its wrappers, whether it comes before
-/// the restart records the new wrapper's start or after, and leaves the
-/// agent's record for `shoal resume`.
-#[tokio::test]
-async fn a_stop_cancels_a_restart_between_its_wrappers() {
-    let (root, manager) = manager().await;
-    let workspace = workspace(root.path(), &manager).await;
-    let begin = || {
-        manager.agents.begin_execution(
-            &*manager,
-            workspace.id.as_str(),
-            None,
-            ExecutionKind::Command,
-            None,
-        )
-    };
-    let first = begin().await.unwrap();
-    let before = first.plan.id.clone();
-
-    let restarting = hand_over(&manager, &workspace, &first).await;
-    // `shoal stop --all` selects the workspace, though no execution or
-    // queue entry runs or starts the agent now.
-    let targets = manager
-        .agents
-        .stop_targets(&*manager, crate::protocol::QueuedLaunches::Cancel)
-        .await
-        .unwrap();
-    assert!(targets.iter().any(|target| target.id == workspace.id));
-    manager
-        .agents
-        .cancel_stopped_restores(&*manager, &workspace.id)
-        .await
-        .unwrap();
-    let error = answered(restarting).await.unwrap_err();
-    assert!(format!("{error}").contains("cancelled"), "{error}");
-    manager
-        .agents
-        .restart_in_new_wrapper(&*manager, &Space::from(workspace.clone()), &before, true)
-        .await;
-    assert_eq!(restores_of(&manager, before.as_str()).await, 0);
-
-    let second = begin().await.unwrap();
-    let after = second.plan.id.clone();
-    let restarting = hand_over(&manager, &workspace, &second).await;
-    manager
-        .agents
-        .restart_in_new_wrapper(&*manager, &Space::from(workspace.clone()), &after, true)
-        .await;
-    assert_eq!(restores_of(&manager, after.as_str()).await, 1);
-    manager
-        .agents
-        .cancel_stopped_restores(&*manager, &workspace.id)
-        .await
-        .unwrap();
-    let error = answered(restarting).await.unwrap_err();
-    assert!(format!("{error}").contains("cancelled"), "{error}");
-    assert_eq!(restores_of(&manager, after.as_str()).await, 0);
-
-    for id in [&before, &after] {
-        assert!(recovery::record_path(&manager.paths, &workspace.id, id).is_file());
-    }
 }
