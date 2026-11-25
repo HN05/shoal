@@ -26,8 +26,9 @@ When Shoal cannot read the platform, the user counts as present.
 ## Keeping the machine awake
 
 Under `on`, the daemon keeps the machine from sleeping while an agent has work.
-Under `finish`, it does so only while the user is there. Once no agent has
-work, the machine may sleep again.
+Under `finish`, it does so while the user is there. Once they walk away, only a
+working turn keeps the machine awake. Once no agent has work, the machine may
+sleep again.
 
 An agent has work while its [turn](agents.md#agent-state) is working. An idle
 agent also has work while it receives the activity of a [watched](links.md) PR
@@ -54,8 +55,7 @@ Once the user walks away under `finish`, the machine admits no new work. The
 hub's [placement](hub.md) skips the machine. Queued work waits for the user's
 return.
 
-Running turns go on, and only a working turn keeps the machine awake. Once the
-turns end, the machine sleeps, and its sleep announcement hands what is left to
+Running turns go on. Once they end, the machine sleeps, and its sleep announcement hands what is left to
 the [hub](hub.md).
 
 ## Handing work over
@@ -67,7 +67,9 @@ under `finish`.
 On a machine joined to a hub, other than the hub's own, the spaces with
 something to do go to other machines as a [shutdown's hand-over](hub.md) sends
 them. A space has something to do while its agent works on a turn or waits in
-the queue to be restored. A workspace and the chats in its worktree go
+the queue to be restored. Its agent stops as `shoal stop` stops it, saving its
+session, and its final package goes to the hub, which continues it on another
+machine. A workspace and the chats in its worktree go
 together when one of them has something to do. Spaces with nothing to do stay,
 and the sleep announcement covers them. An alert says where each space went.
 
