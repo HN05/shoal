@@ -124,10 +124,10 @@ impl Repositories {
                         "UPDATE repositories SET path={}, workspaces_dir={},
                             source=CASE WHEN substr(source,1,1)='/' AND {} THEN {} ELSE source END
                             WHERE id=?1",
-                        store::path_rebased("path"),
-                        store::path_rebased("workspaces_dir"),
-                        store::path_inside("path"),
-                        store::path_rebased("path")
+                        super::paths::path_rebased("path"),
+                        super::paths::path_rebased("workspaces_dir"),
+                        super::paths::path_inside("path"),
+                        super::paths::path_rebased("path")
                     ),
                     params![id, from, to],
                 )?;
@@ -332,7 +332,7 @@ fn movable_records(
         "the repository checkout is leased as a resource; release it first"
     );
     ensure!(
-        running == Running::StoppedFirst || !store::repository_has_executions(db, id)?,
+        running == Running::StoppedFirst || !crate::contents::repository_has_executions(db, id)?,
         "a command or agent is running in a workspace of the repository; stop it first"
     );
     ensure!(

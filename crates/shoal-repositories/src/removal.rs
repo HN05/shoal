@@ -287,7 +287,7 @@ impl Repositories {
         let (id, records) = (id.to_owned(), self.records.clone());
         (self.store)
             .read(move |tx| {
-                let mut ordered = store::repository_spaces(tx, &id)?
+                let mut ordered = crate::contents::repository_spaces(tx, &id)?
                     .into_iter()
                     .map(|space| Ok((records.removal_depth(tx, &space)?, space)))
                     .collect::<Result<Vec<_>>>()?;
@@ -339,7 +339,7 @@ impl Repositories {
         self.store
             .write(move |tx| {
                 ensure!(
-                    !store::repository_has_spaces(tx, &id)?,
+                    !crate::contents::repository_has_spaces(tx, &id)?,
                     "repository still has spaces"
                 );
                 records.forget_repository_pools(tx, &id)?;

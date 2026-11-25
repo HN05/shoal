@@ -336,7 +336,7 @@ impl Repositories {
             return Ok(Some(local));
         }
         self.store
-            .run(move |db| shoal_store::checkout_within(db, &local))
+            .run(move |db| crate::contents::checkout_within(db, &local))
             .await
     }
 

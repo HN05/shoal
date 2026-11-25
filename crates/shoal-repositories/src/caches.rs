@@ -5,7 +5,6 @@ use shoal_ids::repository_ids::RepositoryId;
 
 use shoal_core::caches::Layout;
 use shoal_protocol::{cleanup::Emptying, model::Repository};
-use shoal_store as store;
 
 use crate::Repositories;
 
@@ -53,7 +52,7 @@ fn move_unless_running(
     layout: &Layout,
     dry_run: bool,
 ) -> Result<Option<Vec<String>>> {
-    if store::repository_has_executions(tx, repository_id)? {
+    if crate::contents::repository_has_executions(tx, repository_id)? {
         return Ok(None);
     }
     let caches = if dry_run {

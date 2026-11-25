@@ -55,7 +55,9 @@ pub fn check_owner_query(sql: &str, table: &str, owner_column: &str) -> Result<(
     check_query_growth(&db, sql, table, owner_column, "owner-0")
 }
 
-pub(crate) fn check_query_growth(
+/// Check that `sql`, a read of `owner`'s rows of `table`, searches the index
+/// on `owner_column` and takes no more steps as `db` gains other owners.
+pub fn check_query_growth(
     db: &Connection,
     sql: &str,
     table: &str,

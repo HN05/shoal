@@ -108,8 +108,8 @@ impl Records for RepositoryRecords {
             &format!(
                 "UPDATE workspaces SET path={}, git_dir={}
                     WHERE id IN (SELECT id FROM spaces WHERE repository_id=?1)",
-                store::path_rebased("path"),
-                store::path_rebased("git_dir")
+                shoal_repositories::moves::paths::path_rebased("path"),
+                shoal_repositories::moves::paths::path_rebased("git_dir")
             ),
             params![id, from, to],
         )?;

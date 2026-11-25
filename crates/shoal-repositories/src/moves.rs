@@ -25,6 +25,7 @@ use crate::{
 pub mod chats;
 pub use shoal_daemon_base::root_moves::Running;
 mod intent;
+pub mod paths;
 
 impl Repositories {
     /// The repositories [`Self::move_all`] would move into `root`, or the
@@ -311,7 +312,7 @@ impl Repositories {
     async fn repository_executions(&self, repository_id: &RepositoryId) -> Result<Vec<Execution>> {
         let id = repository_id.to_owned();
         self.store
-            .run(move |db| store::repository_executions(db, &id))
+            .run(move |db| crate::contents::repository_executions(db, &id))
             .await
     }
 }

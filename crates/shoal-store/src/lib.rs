@@ -136,21 +136,6 @@ pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
         .query_row(params, |row| row.get(0))?)
 }
 
-/// SQL that holds when the path in `column` is the directory `?2` or lies
-/// inside it.
-pub fn path_inside(column: &str) -> String {
-    format!("({column}=?2 OR substr({column},1,length(?2)+1)=?2||'/')")
-}
-
-/// SQL for the path in `column` with the directory `?2` it is or lies in
-/// replaced by `?3`, and for any other path unchanged.
-pub fn path_rebased(column: &str) -> String {
-    format!(
-        "CASE WHEN {} THEN ?3||substr({column},length(?2)+1) ELSE {column} END",
-        path_inside(column)
-    )
-}
-
 /// Refuse a new workspace path that contains or lies inside a recorded
 /// workspace's path, whether or not that directory still exists.
 pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result<()> {
@@ -166,21 +151,6 @@ pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result
         );
     }
     Ok(())
-}
-
-/// A recorded checkout or workspace that lies in `directory`.
-pub fn checkout_within(
-    db: &Connection,
-    directory: &std::path::Path,
-) -> Result<Option<std::path::PathBuf>> {
-    let recorded = db
-        .prepare("SELECT path FROM repositories UNION ALL SELECT path FROM workspaces")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(recorded
-        .into_iter()
-        .map(std::path::PathBuf::from)
-        .find(|path| path.starts_with(directory)))
 }
 
 /// Fail while a workspace has an unfinished rename; lifecycle operations
@@ -222,20 +192,6 @@ pub fn ensure_repository_not_moving(db: &Connection, repository_id: &RepositoryI
         "repository move is incomplete; run shoal repo move again"
     );
     Ok(())
-}
-
-const REPOSITORY_SPACES_QUERY: &str = "SELECT 1 FROM spaces WHERE repository_id=?1";
-
-pub fn repository_has_spaces(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
-    exists(db, REPOSITORY_SPACES_QUERY, [repository_id])
-}
-
-/// The IDs of the repository's spaces, workspaces and chats, by name.
-pub fn repository_spaces(db: &Connection, repository_id: &RepositoryId) -> Result<Vec<SpaceId>> {
-    Ok(db
-        .prepare("SELECT id FROM spaces WHERE repository_id=?1 ORDER BY name, id")?
-        .query_map([repository_id], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Refuse a change to the records of the space `id`, such as its links or
@@ -304,16 +260,6 @@ pub fn not_ready(
     };
     let message = format!("workspace {number} ({name}) is {state}; {remedy}");
     Refusal::new(Reason::NotReady, message).into()
-}
-
-/// Whether any workspace of the repository has a tracked execution.
-pub fn repository_has_executions(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
-    Ok(db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM executions e JOIN spaces s ON s.id=e.space_id
-            WHERE s.repository_id=?1 AND s.kind='workspace')",
-        [repository_id],
-        |row| row.get(0),
-    )?)
 }
 
 /// Serialize an optional value for a JSON text column.
@@ -472,10 +418,10 @@ pub fn ports(db: &Connection, workspace_id: Option<&SpaceId>) -> Result<Vec<Port
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-const EXECUTION_COLUMNS: &str =
+pub const EXECUTION_COLUMNS: &str =
     "id,space_id,state,wrapper,child,group_id,origin,agent,model,effort,mode,narrowing";
 
-fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
+pub fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
         id: row.get("id")?,
         space_id: row.get("space_id")?,
@@ -585,21 +531,6 @@ pub fn agent_executions(db: &mut Connection) -> Result<HashMap<SpaceId, AgentExe
         }
     }
     Ok(agents)
-}
-
-/// The executions running in the workspaces of repository `repository_id`.
-pub fn repository_executions(
-    db: &Connection,
-    repository_id: &RepositoryId,
-) -> Result<Vec<Execution>> {
-    Ok(db
-        .prepare(&format!(
-            "SELECT {EXECUTION_COLUMNS} FROM executions
-                WHERE space_id IN (SELECT id FROM spaces
-                    WHERE repository_id=?1 AND kind='workspace')"
-        ))?
-        .query_map([repository_id], execution)?
-        .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 pub fn all_executions(db: &Connection) -> Result<Vec<Execution>> {

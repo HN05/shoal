@@ -16,6 +16,7 @@ use shoal_store::Store;
 
 mod caches;
 pub mod configuration;
+mod contents;
 pub mod contributions;
 pub mod daemon;
 pub mod moves;
