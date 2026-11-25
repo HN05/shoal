@@ -154,15 +154,18 @@ new worktree only.
 
 ### Suffixes
 
-A new branch whose name a local branch, a known remote branch, a branch
-namespace or a retained Shoal record takes gets `-2`, `-3` and so on on its
-last component. When a shorter branch blocks it, that component takes the
+Shoal suffixes only the branch names it derives, such as an issue's or a
+copy's; a name you type is refused instead, as [Branches](#branches) says. A
+derived name that a local branch, a known remote branch, a branch namespace or
+a retained Shoal record takes gets `-2`, `-3` and so on on its last
+component. When a shorter branch blocks it, that component takes the
 suffix: `feature` makes `feature/topic` into `feature-2/topic`. Other
 components stay literal. A suffix never changes the space's name.
 
 Names Git reads as a revision are reserved: `HEAD`, `@`, and hexadecimal names
 of exactly 40 or 64 characters, a full object ID in either object format.
-Creating a branch suffixes them, and opening an existing one of them is refused.
+A derived name takes a suffix for them. A typed name, and opening an existing
+branch of such a name, is refused.
 
 ### Worktree directories
 
