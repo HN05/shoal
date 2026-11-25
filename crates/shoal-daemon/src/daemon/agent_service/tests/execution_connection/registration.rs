@@ -7,7 +7,6 @@ use crate::{
     daemon::{executions::ExecutionKind, manager::Manager},
     protocol::{self, Body, Response, timing},
 };
-use anyhow::Result;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{future::Future, sync::Arc};
 use tokio::net::UnixStream;
@@ -144,14 +143,6 @@ fn context(space: &shoal_ids::space_ids::SpaceId, agent: Option<&str>) -> Execut
     }
 }
 
-/// The error a refused registration answers with.
-fn refusal(registered: Result<Registered, Box<Body>>) -> String {
-    match registered.map(drop).unwrap_err().as_ref() {
-        Body::Error { message, .. } => message.clone(),
-        body => panic!("{body:?}"),
-    }
-}
-
 #[tokio::test]
 async fn a_chats_agent_runs_as_an_execution_of_its_chat_with_the_chats_scope() {
     let (_root, manager, chat) = chat_fixture().await;
@@ -262,25 +253,6 @@ async fn a_chat_without_a_repository_runs_with_the_global_env() {
     for unset in ["PROJECT", "SESSION", "BRANCH"] {
         assert!(!environment.contains_key(unset), "{unset}: {environment:?}");
     }
-}
-
-#[tokio::test]
-async fn a_chat_runs_its_one_agent_and_no_commands() {
-    let (_root, manager, chat) = chat_fixture().await;
-
-    let command = refusal(register(&manager.agents, &*manager, context(&chat.id, None)).await);
-    assert!(command.contains("runs only its agent"), "{command}");
-    let _agent = register(
-        &manager.agents,
-        &*manager,
-        context(&chat.id, Some("claude")),
-    )
-    .await
-    .map_err(|refusal| format!("{refusal:?}"))
-    .unwrap();
-    let second =
-        refusal(register(&manager.agents, &*manager, context(&chat.id, Some("codex"))).await);
-    assert!(second.contains("already runs its agent"), "{second}");
 }
 
 #[tokio::test]

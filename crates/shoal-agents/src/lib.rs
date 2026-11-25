@@ -263,4 +263,8 @@ impl Agents {
 }
 
 #[cfg(test)]
+mod helper_tests {
+    shoal_core::helper_tests!();
+}
+#[cfg(test)]
 shoal_core::prepare_test_process!();

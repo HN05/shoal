@@ -1234,3 +1234,6 @@ fn reattaching_identity_matches(execution: &Execution, request: &Reattach) -> bo
         && (request.awaiting_restore.is_some() || request.between_runs);
     execution.wrapper.as_ref() == Some(&request.wrapper) && (child_matches || child_forgotten)
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,20 +1,15 @@
 //! Daemon interruptions of stopped agents: a restart quarantines their
 //! executions, and startup reconciles them from their recovery records.
-use crate::daemon::test_support::overload::{
-    blocked, executions, fixture, record, restart, store_reaches,
-};
+use crate::daemon::test_support::overload::{blocked, executions, fixture, record, restart};
 use crate::daemon::{manager::Manager, store};
-use crate::execution::recovery::LastSessionExt;
-use crate::process::identity::IdentityExt;
 use crate::{
     execution::recovery::{Stage, record_path},
     model::Workspace,
     process::identity::{self as process, Identity},
-    state::{AgentState, ExecutionState},
+    state::ExecutionState,
 };
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::space_names::SpaceSelector;
-use std::{fs, time::Duration};
+use std::fs;
 
 /// A process whose identity stays verifiable until it is killed.
 fn sleeper() -> (tokio::process::Child, Identity) {
@@ -116,211 +111,6 @@ async fn restart_forgets_a_stopped_agent_whose_wrapper_exited_and_keeps_its_reco
     serving.abort();
 }
 
-/// Restarting the machine ended every process of an earlier boot, though
-/// their recorded process group IDs may name processes of this one. An
-/// agent that saved no record leaves its session for `shoal resume`.
-#[tokio::test]
-async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_saved() {
-    use crate::execution::recovery::{LastSession, save_session};
-    let (_root, manager, workspace, serving) = fixture().await;
-    let (_alive, live) = sleeper();
-    let earlier = live.recorded_in("an-earlier-boot");
-    interrupted(
-        &manager,
-        &workspace,
-        "rebooted",
-        &earlier,
-        Some(&earlier),
-        Some(Stage::Stopping),
-    )
-    .await;
-    interrupted(&manager, &workspace, "unrecorded", &earlier, None, None).await;
-    // A pass interrupted after keeping its session, which is gone.
-    interrupted(&manager, &workspace, "kept", &earlier, None, None).await;
-    let kept_session = LastSession {
-        narrowing: Default::default(),
-        mode: "worker".into(),
-        model: Default::default(),
-        turn: None,
-        execution: "kept".into(),
-        agent: "fixture".into(),
-        session: Some("kept-session".into()),
-        moved: false,
-        copied: None,
-        converted: false,
-        handoff: None,
-        origin: None,
-        stop: None,
-    };
-    kept_session.write(&manager.paths, &workspace.id).unwrap();
-    // A recorded child keeps an execution of this boot that saved nothing.
-    let wrapper = exited().await;
-    interrupted(
-        &manager,
-        &workspace,
-        "this-boot",
-        &wrapper,
-        Some(&wrapper),
-        None,
-    )
-    .await;
-    for id in ["unrecorded", "kept", "this-boot"] {
-        fs::remove_file(record_path(&manager.paths, &workspace.id, &id.into())).unwrap();
-    }
-    manager
-        .store
-        .run(|db| {
-            db.execute(
-                "UPDATE executions SET agent='fixture' WHERE id IN ('unrecorded','kept')",
-                [],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    save_session(
-        &manager.paths,
-        &workspace.id,
-        &ExecutionId::from("unrecorded"),
-        &"rebooted-session".into(),
-    )
-    .unwrap();
-    // The reboot ended its agent mid-turn, which its last session keeps.
-    let unrecorded = Some(ExecutionId::from("unrecorded"));
-    let selector = SpaceSelector::id(&workspace.id);
-    let working =
-        manager
-            .agents
-            .set_agent_state(&*manager, &selector, AgentState::Working, unrecorded, None);
-    working.await.unwrap();
-    let reopened = restart(&manager).await;
-    reopened
-        .agents
-        .reconcile_interrupted_agents(&*reopened)
-        .await
-        .unwrap();
-    let kept: Vec<_> = executions(&reopened, &workspace)
-        .await
-        .into_iter()
-        .map(|execution| execution.id)
-        .collect();
-    assert_eq!(kept, ["this-boot"]);
-    assert_eq!(
-        record(&reopened, &workspace, &ExecutionId::from("rebooted"))
-            .unwrap()
-            .stop_reason
-            .as_deref(),
-        Some("test memory pressure")
-    );
-    let last = LastSession::all(&reopened.paths, &workspace.id).unwrap();
-    assert_eq!(
-        last,
-        [
-            kept_session,
-            LastSession {
-                narrowing: Default::default(),
-                mode: "worker".into(),
-                model: Default::default(),
-                turn: Some(AgentState::Working),
-                execution: "unrecorded".into(),
-                agent: "fixture".into(),
-                session: Some("rebooted-session".into()),
-                moved: false,
-                copied: None,
-                converted: false,
-                handoff: None,
-                origin: None,
-                stop: None,
-            }
-        ]
-    );
-    assert!(blocked(&reopened).await.is_empty());
-    reopened.store.shutdown().await;
-    serving.abort();
-}
-
-/// Record an execution whose wrapper never started its command: unknown,
-/// with no child and no recovery record.
-async fn unstarted(manager: &Manager, workspace: &Workspace, id: &str, wrapper: &Identity) {
-    interrupted(manager, workspace, id, wrapper, None, None).await;
-    fs::remove_file(record_path(&manager.paths, &workspace.id, &id.into())).unwrap();
-}
-
-/// `identity` as a process born just before the one now at its PID.
-fn born_earlier(identity: &Identity) -> Identity {
-    let (start, tick) = identity.birth.rsplit_once(':').unwrap();
-    let tick: u64 = tick.parse().unwrap();
-    Identity {
-        birth: format!("{start}:{}", tick - 1),
-        ..identity.clone()
-    }
-}
-
-#[tokio::test]
-async fn reconciliation_forgets_an_unstarted_execution_whose_wrapper_exited() {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let wrapper = exited().await;
-    unstarted(&manager, &workspace, "unstarted", &wrapper).await;
-    // A process group shows that its command started, though its child
-    // exited before its identity was read.
-    unstarted(&manager, &workspace, "started", &wrapper).await;
-    manager
-        .store
-        .run(|db| {
-            db.execute("UPDATE executions SET group_id=1 WHERE id='started'", [])?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let pending = manager
-        .agents
-        .reconcile_interrupted_agents(&*manager)
-        .await
-        .unwrap();
-    assert!(pending.waiting.is_empty() && !pending.unresolved);
-    let kept: Vec<_> = (executions(&manager, &workspace).await.into_iter())
-        .map(|execution| execution.id)
-        .collect();
-    assert_eq!(kept, ["started"]);
-    assert!(blocked(&manager).await.is_empty());
-    manager.store.shutdown().await;
-    serving.abort();
-}
-
-#[tokio::test]
-async fn reconciliation_forgets_an_unstarted_execution_whose_wrapper_pid_was_reused() {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let (_later, live) = sleeper();
-    unstarted(&manager, &workspace, "reused", &born_earlier(&live)).await;
-    let pending = manager
-        .agents
-        .reconcile_interrupted_agents(&*manager)
-        .await
-        .unwrap();
-    assert!(pending.waiting.is_empty() && !pending.unresolved);
-    assert!(executions(&manager, &workspace).await.is_empty());
-    manager.store.shutdown().await;
-    serving.abort();
-}
-
-#[tokio::test]
-async fn reconciliation_keeps_an_unstarted_execution_while_its_wrapper_runs() {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let (_alive, wrapper) = sleeper();
-    unstarted(&manager, &workspace, "alive", &wrapper).await;
-    let pending = manager
-        .agents
-        .reconcile_interrupted_agents(&*manager)
-        .await
-        .unwrap();
-    assert_eq!(pending.waiting.len(), 1);
-    let kept = executions(&manager, &workspace).await;
-    assert_eq!(kept.len(), 1);
-    assert_eq!(kept[0].state, ExecutionState::Unknown);
-    manager.store.shutdown().await;
-    serving.abort();
-}
-
 #[tokio::test]
 async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     let (_root, manager, workspace, serving) = fixture().await;
@@ -402,43 +192,5 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     assert!(survivor.contains(&child.pid.to_string()), "{survivor}");
     assert!(record(&reopened, &workspace, &ExecutionId::from("survivor")).is_some());
     reopened.store.shutdown().await;
-    serving.abort();
-}
-
-#[tokio::test]
-async fn unresolved_stopped_agents_are_reconciled_once_their_survivors_exit() {
-    let (_root, manager, workspace, serving) = fixture().await;
-    let wrapper = exited().await;
-    let (mut survivor, child) = sleeper();
-    interrupted(
-        &manager,
-        &workspace,
-        "survivor",
-        &wrapper,
-        Some(&child),
-        Some(Stage::Stopped),
-    )
-    .await;
-    let reconciling = tokio::spawn({
-        let manager = manager.clone();
-        async move {
-            crate::daemon::restart_recovery::reconcile(
-                &manager.agents,
-                &*manager,
-                Duration::from_millis(50),
-            )
-            .await
-        }
-    });
-    store_reaches(&manager, async || !blocked(&manager).await.is_empty()).await;
-    assert_eq!(executions(&manager, &workspace).await.len(), 1);
-    survivor.kill().await.unwrap();
-    survivor.wait().await.unwrap();
-    store_reaches(&manager, async || {
-        executions(&manager, &workspace).await.is_empty()
-    })
-    .await;
-    assert!(record(&manager, &workspace, &ExecutionId::from("survivor")).is_some());
-    reconciling.abort();
     serving.abort();
 }

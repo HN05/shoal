@@ -1,4 +1,4 @@
-use super::{bounded, fixture};
+use super::fixture;
 use crate::daemon::executions::stopping::*;
 use crate::daemon::executions::{Completing, ExecutionKind};
 use crate::{
@@ -8,64 +8,6 @@ use crate::{
 use anyhow::Result;
 use anyhow::{Context, bail};
 use tokio::time::Instant;
-
-#[tokio::test]
-async fn stopping_allows_the_child_stop_and_completion_budgets() -> Result<()> {
-    let (_root, manager, workspace) = fixture("true").await;
-    let mut running = manager
-        .agents
-        .begin_execution(
-            &*manager,
-            workspace.id.as_str(),
-            None,
-            ExecutionKind::Command,
-            None,
-        )
-        .await?;
-    // Pause only after fixture setup, which uses real subprocesses.
-    tokio::time::pause();
-    let request = StopRequest::manual();
-    let stopping = manager.agents.stop_executions(
-        &*manager,
-        &workspace.id,
-        StopPolicy::RequireCompleteProof,
-        &request,
-    );
-    tokio::pin!(stopping);
-    tokio::select! {
-        biased;
-        result = &mut stopping => bail!("stop ended before notification: {result:?}"),
-        changed = running.stop.wait_for(|stop| *stop) => { changed?; }
-    }
-
-    // A connected wrapper may spend its grace stopping the child, then the
-    // completion budget awaiting the daemon's survivor cleanup and inventories.
-    tokio::time::advance(timing::EXECUTION_STOP_GRACE + timing::COMPLETION_ACK_TIMEOUT).await;
-    tokio::select! {
-        biased;
-        result = &mut stopping => bail!("stop ended during valid completion work: {result:?}"),
-        changed = running.stop.changed() => { changed?; }
-    }
-    let id = running.plan.id.clone();
-    manager
-        .agents
-        .executions()
-        .set_completing(&id, Completing::Verifying);
-    manager
-        .agents
-        .finish_execution_after_scan(
-            &*manager,
-            running.plan.id,
-            ExecutionKind::Command,
-            Some(0),
-            Some(Ok(process::Scan::default())),
-        )
-        .await?;
-    stopping.await?;
-    // The recorded step goes with the connection.
-    assert_eq!(manager.agents.executions().completing(&id), None);
-    Ok(())
-}
 
 #[tokio::test]
 async fn stopping_still_bounds_a_wrapper_that_never_completes() -> Result<()> {
@@ -146,53 +88,6 @@ async fn stopping_still_bounds_a_wrapper_that_never_completes() -> Result<()> {
         3
     );
     Ok(())
-}
-
-#[tokio::test]
-async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
-    let (_root, manager, workspace) = fixture("true").await;
-    let mut running = manager
-        .agents
-        .begin_execution(
-            &*manager,
-            workspace.id.as_str(),
-            None,
-            ExecutionKind::Command,
-            None,
-        )
-        .await
-        .unwrap();
-    let id = running.plan.id.clone();
-    let shutdown = tokio::spawn({
-        let manager = manager.clone();
-        async move { manager.agents.stop_for_shutdown().await }
-    });
-    bounded(running.stop.wait_for(|stop| *stop)).await.unwrap();
-    assert!(
-        manager
-            .agents
-            .executions()
-            .stop_request(&id)
-            .await
-            .is_some_and(|request| request.save == Save::Everything)
-    );
-    manager
-        .agents
-        .begin_execution(
-            &*manager,
-            workspace.id.as_str(),
-            None,
-            ExecutionKind::Command,
-            None,
-        )
-        .await
-        .unwrap_err();
-    manager
-        .agents
-        .finish_execution(&*manager, id, ExecutionKind::Command, Some(0))
-        .await
-        .unwrap();
-    bounded(shutdown).await.unwrap();
 }
 
 /// An agent wrapper that a disconnected execution's process started, as a

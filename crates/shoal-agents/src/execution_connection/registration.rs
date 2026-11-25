@@ -247,3 +247,6 @@ pub async fn cancel(agents: &Agents, execution: Connected) -> Result<()> {
     );
     agents.cancel_execution(&execution.id, execution.kind).await
 }
+
+#[cfg(test)]
+mod tests;

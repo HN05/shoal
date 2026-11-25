@@ -4,7 +4,6 @@ use crate::daemon::executions::stopping::StopPolicy;
 use crate::daemon::executions::*;
 use crate::daemon::test_support::{install_test_script, manager, repository};
 use crate::daemon::{gates::GuardMode, manager::Manager};
-use crate::execution::recovery::RecordExt;
 use crate::{
     daemon::store,
     model::Workspace,
@@ -281,18 +280,6 @@ fn waiting_process(directory: &Path, execution: Option<&str>) -> tokio::process:
         command.env(crate::env::EXECUTION_ID, execution);
     }
     command.spawn().unwrap()
-}
-
-/// A process waiting in a group of its own, marked as `execution`'s when
-/// given. It runs this test binary, whose environment the scan can read where
-/// a system binary's may be hidden.
-fn background_process(execution: Option<&str>) -> tokio::process::Child {
-    let mut command = crate::daemon::test_support::marked_child();
-    command.env_clear().env("SHOAL_TEST_PROCESS", "1");
-    if let Some(execution) = execution {
-        command.env(crate::env::EXECUTION_ID, execution);
-    }
-    crate::daemon::test_support::spawn_marked_child(command.process_group(0))
 }
 
 #[tokio::test]
@@ -711,182 +698,6 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
         .unwrap();
     assert!(*reattached.stop.borrow());
     assert_eq!(manager.agents.agent_overload(&id).await, Some(protection));
-}
-
-/// A demo's wrapper between runs names its exited child, which the daemon
-/// may already have forgotten when it went away before answering.
-#[tokio::test]
-async fn a_wrapper_between_runs_reattaches_after_its_child_was_forgotten() {
-    let (_root, manager, workspace) = fixture("true").await;
-    let wrapper = process::capture(std::process::id()).unwrap().unwrap();
-    let started = manager
-        .agents
-        .begin_execution(
-            &*manager,
-            workspace.id.as_str(),
-            Some(wrapper.clone()),
-            ExecutionKind::Command,
-            None,
-        )
-        .await
-        .unwrap();
-    let id = started.plan.id.clone();
-    let request = Reattach {
-        narrowing: Default::default(),
-        mode: None,
-        model: Default::default(),
-        execution: id.clone(),
-        wrapper: wrapper.clone(),
-        child: Some(wrapper.clone()),
-        group_id: wrapper.pid,
-        scope_token: started.plan.scope_token.clone(),
-        agent: None,
-        recover: false,
-        running_ms: 0,
-        awaiting_restore: None,
-        between_runs: false,
-        reports_status: false,
-    };
-    drop(started);
-    manager.agents.detach_execution(&id).await;
-    // The daemon released the exited child, then went away before answering.
-    let forget = id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE executions SET child=NULL,group_id=NULL WHERE id=?1",
-                [forget],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    manager
-        .agents
-        .reattach_execution(&*manager, &request)
-        .await
-        .unwrap_err();
-    let reattached = manager
-        .agents
-        .reattach_execution(
-            &*manager,
-            &Reattach {
-                between_runs: true,
-                ..request
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(&reattached.space.id, &workspace.id);
-}
-
-#[tokio::test]
-async fn setup_executions_cannot_reattach() {
-    let (_root, manager, workspace) = fixture("exit 0").await;
-    let wrapper = process::capture(std::process::id()).unwrap().unwrap();
-    let started = manager
-        .agents
-        .begin_execution(
-            &*manager,
-            workspace.id.as_str(),
-            Some(wrapper.clone()),
-            ExecutionKind::Setup,
-            None,
-        )
-        .await
-        .unwrap();
-    manager.agents.detach_execution(&started.plan.id).await;
-    manager
-        .agents
-        .reattach_execution(
-            &*manager,
-            &Reattach {
-                narrowing: Default::default(),
-                mode: None,
-                model: Default::default(),
-                execution: started.plan.id.clone(),
-                wrapper: wrapper.clone(),
-                child: None,
-                group_id: wrapper.pid,
-                scope_token: started.plan.scope_token.clone(),
-                agent: None,
-                recover: false,
-                running_ms: 0,
-                awaiting_restore: None,
-                between_runs: false,
-                reports_status: false,
-            },
-        )
-        .await
-        .unwrap_err();
-}
-
-#[tokio::test]
-async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
-    use crate::{
-        execution::recovery::{Record, record_path, save_record},
-        state::AgentState,
-    };
-    for background in [false, true] {
-        let (_root, manager, workspace) = fixture("exit 0").await;
-        fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
-        let started = manager
-            .agents
-            .begin_execution(
-                &*manager,
-                workspace.id.as_str(),
-                process::capture(std::process::id()).unwrap(),
-                ExecutionKind::Command,
-                None,
-            )
-            .await
-            .unwrap();
-        let id = started.plan.id;
-        manager
-            .agents
-            .set_agent_state(
-                &*manager,
-                &SpaceSelector::id(&workspace.id),
-                AgentState::Idle,
-                Some(id.clone()),
-                None,
-            )
-            .await
-            .unwrap();
-        // A signal stop saved the agent, which leaves a background command
-        // it started running in a process group of its own.
-        save_record(
-            &manager.paths,
-            &workspace.id,
-            &id,
-            &shoal_protocol::executions::TrackedAgent::named("claude"),
-            None,
-            None,
-        )
-        .unwrap();
-        let mut command = background_process(background.then_some(id.as_str()));
-
-        // The agent's exit stops that command before the execution ends.
-        manager.agents.stop_exited_processes(&*manager, &id).await;
-        command.kill().await.unwrap();
-        command.wait().await.unwrap();
-        manager
-            .agents
-            .finish_execution(&*manager, id.clone(), ExecutionKind::Command, Some(0))
-            .await
-            .unwrap();
-
-        let record = Record::load(&record_path(&manager.paths, &workspace.id, &id))
-            .unwrap()
-            .unwrap();
-        let expected = if background {
-            AgentState::Working
-        } else {
-            AgentState::Idle
-        };
-        assert_eq!(record.turn, Some(expected), "background work: {background}");
-    }
 }
 
 /// What a command's registration decides for its workspace in `state`.
