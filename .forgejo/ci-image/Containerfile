@@ -7,7 +7,7 @@
 # Build with ./build.sh on the runner host, then bump ARG RUST below and the
 # `image:` tags in every workflow that uses this image, and package.rust-version
 # in Cargo.toml. A change here that keeps
-# the Rust version still needs a rebuild with the same tag. See AGENTS.md "CI".
+# the Rust version still needs a rebuild with the same tag. See docs/ci.md.
 #
 # Jobs on the Docker runner use no JavaScript actions (actions/checkout,
 # actions/cache): the runner would have to inject Node into the job container,

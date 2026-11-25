@@ -469,6 +469,10 @@ current.
   `shoal config reference` prints.
 - README.md shows how to use Shoal.
 - AGENTS.md holds the rules for working in this repository.
+- `docs/ci.md` covers how CI runs, and `docs/profiling.md` the tools that
+  measure where time goes.
+- `.review/review.md` briefs the review bot. Keep it current when a rule in
+  AGENTS.md or `docs/design/` changes.
 - The skill, `crates/shoal-cli/src/cli/commands/skill/shoal.md`, says what
   Shoal's commands do. A practice for using them goes in a user rule. A rule
   about anything else, such as how to write code, goes in AGENTS.md.
@@ -571,119 +575,24 @@ test must not outlast the others by looping over cases that each need their own
 repository, workspace or daemon: split those cases into separate tests that
 share a helper, and let cases that need no isolation share one fixture.
 
+Code that tests run reads paths at run time, never one the build compiled in,
+such as `env!("CARGO_BIN_EXE_shoal")`: CI starts from a seed build made in
+another directory.
+
 ## Profiling
 
-`python3 scripts/profile_shoal.py [--setup ARGS]... -- <shoal args>` times a
-command against a foreground daemon in a temporary home and lists where the time
-went; `--help` shows its options. It builds the `profiling` cargo profile,
-release code with symbols for samplers such as samply. `SHOAL_PROFILE=1` makes a
-Shoal process print a `profile` line to stderr for each daemon call, daemon
-request, daemon startup step and subprocess run. It is a contributor tool, so the user documentation
-leaves it out.
-
-`python3 scripts/profile_tests.py suite` runs each test binary whole, one after
-another, and prints its wall, user and system time; `tests --binary NAME` runs
-every test of a binary alone, as nextest does, and lists the costliest. Both
-count a test's daemons and commands, but not processes that outlive it, and
-`--git` counts their Git processes, production code's apart from the fixtures'.
+[docs/profiling.md](docs/profiling.md) covers the tools that time Shoal's
+commands and its tests.
 
 ## CI
 
-`.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
-required checks are its `rust` job, which runs `cargo fmt --check`, clippy,
-`cargo nextest run` with the `ci` profile, `cargo test --doc` and the Python
-release-script tests, its `musl` job, which checks the build for the
-host's musl target with cargo-zigbuild and runs the identity module's tests
-there when a PR changes them, the dependencies or the workflow, and its
-`crates` job, which checks that each crate builds alone. A PR's jobs
-build, lint and test only when it changes a package or a file every package's
-build reads, and run the tests of the packages `scripts/affected_packages.py`
-names, those it changes and the packages that depend on them. The release
-workflow's PR and version commit skip the checks:
-`scripts/release.py` releases only on a `main` commit whose required checks
-passed, and runs only formatting and Clippy on the version change. A draft PR runs no checks; taking it out of draft
-(removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
-Its `rust` job and `flaky.yml`'s job, which build, run with `runs-on: shoal` on
-Shoal runners; a job that gains nothing from the seed build below, such as one
-that only queries the forge or builds with feature sets the seed lacks, runs
-on Docker, as does the `musl` job, which needs the CI image's Zig and musl
-targets. A Shoal runner
-is any Linux or macOS machine whose Shoal has `runner.enabled` for this
-repository, with Rust at `rust-version`, which the jobs check, with clippy, rustfmt and
-cargo-nextest, which the jobs also check, and the tools the tests spawn installed on
-the host (those `.forgejo/ci-image/Containerfile` installs for them; Shoal
-runners need no Zig, cargo-zigbuild or musl targets). The test
-fixtures' daemons commit SQLite with fsync under `TMPDIR`, which Shoal puts in
-the repository directory; where that disk stalls on fsync, the machine's local
-config sets `TMPDIR` in `[env]` to a tmpfs. Each job runs in a workspace at its
-commit that starts from the `cargo` preset's seed build of `main`, so it has no
-checkout step and rebuilds only what its commit changed; keep settings that
-change Cargo's fingerprints out of the workflows. The runner sets `CI`, under
-which Cargo leaves incremental compilation off, so those jobs set
-`CARGO_INCREMENTAL=1` to build as the seed did.
-Code that tests run must not keep a path the seed build compiled in, such as
-`env!("CARGO_BIN_EXE_shoal")`; read it at run time.
-The other jobs and workflows run on the Docker runner, in the image built from
-`.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
-version>`), so a run installs nothing: new tooling for them goes into the
-Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
-on the runner host, then updates `workspace.package.rust-version` in `Cargo.toml`, the
-Containerfile's `ARG RUST`, and the `image:` tag in every workflow, and the
-Shoal runners' machines install the same Rust. The Docker jobs' cargo
-builds share the runner-mounted `/ci-target` through
-`.forgejo/scripts/lock-target-dir.sh`, as the Containerfile describes; the
-`musl` and `crates` jobs keep their slots' builds warm, touching their
-checkouts instead of cleaning.
-`.forgejo/workflows/deps.yml` runs weekly (and on `shoal ci run deps.yml
---branch main`) and rewrites one evergreen `tracking` issue, found by the marker comment
-in its body, with `cargo audit` and `cargo outdated` findings. It is never a
-required check; findings do not fail it, a tool that could not run does.
-`.forgejo/workflows/cross-build.yml` runs only on `shoal ci run cross-build.yml
---branch <branch>` and cross-builds every release target there.
-`.forgejo/workflows/flaky.yml` runs `cargo nextest run` repeatedly on `main` every
-night (and on `shoal ci run flaky.yml --branch main`) and rewrites the evergreen
-`Flaky test report` issue with every test that failed; a failure fails the run.
-The run log keeps each failed test's output for the issue that fixes it.
-It is never a required check.
-`.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
-opens or leaves draft and whenever `review/default`, `review/claude` or
-`review/codex` is added; `review/none` suppresses it. Pushing commits does not
-request one; Committing below says which heads a review covers. A draft PR
-gets no review; a request label added while it is a draft is answered when it
-leaves draft.
-`.review/review.md` is its project brief;
-keep it current when a rule here or in `docs/design/` changes.
-Opening a ready PR already requests its review; never add reviewer request labels
-with its opening classification labels. Claude and Codex use independent queues,
-so one of each can run concurrently. Review and audit workflows follow review-bot's
-latest `main` commit.
-`.forgejo/workflows/audit.yml` runs a read-only code audit using
-`.review/audit.md` over the entire application. It has no schedule and runs only
-when dispatched manually, with a selected focus (bugs, maintainability, testing,
-performance or docs) and ref.
-It opens one issue per new finding, labelled `audit/<focus>`; findings are
-advisory and never a required check. Close an audit issue when it is fixed, or
-explain in a comment or with `audit/wontfix` why it will not be.
-Issues and PRs carry one or more `area/` labels and one `type/` and one
-`complexity/` label; `shoal repo labels` lists what each means, and
-`.forgejo/scripts/labels.py` creates the scheme. `type/` names what the change
-is for, wherever its code lives: work that makes the tests faster is
-`type/test`. An issue states the problem or goal, what was observed of it,
-such as a command and its output, and what done looks like, and leaves the
-approach to the Plan section the owner settles: a fix written when the issue
-is filed goes stale, and whoever takes it on reads the code as it is then.
-One whose approach is settled is labelled `planned`, and agents implement it
-without asking; one that leaves a choice for
-the owner is labelled `needs-plan` until `shoal start --mode plan` settles a Plan section in
-its body. Issues with neither, such as tracking and meta issues, stay out of that
-flow. Comment on an issue only to add what changes its work, such as a new cause,
-failure mode or fix: another sighting of a failure it already describes, or a
-status its watcher already gets from Shoal, such as a PR opening or CI
-passing, is not posted. To agree with an issue or a comment, react to it with
-`shoal issue react`, which reaches no watcher.
-A PR description follows
-`.forgejo/pull_request_template.md`. Push the branch and let CI verify instead
-of running the full suite locally first.
+[docs/ci.md](docs/ci.md) covers the runners, the CI image and the workflows.
+
+A PR description follows `.forgejo/pull_request_template.md`. Push the branch
+and let CI verify it instead of running the full suite locally first.
+
+### A failed check
+
 A failed check is a defect even when a rerun passes. Read its log, then fix the
 cause in its own commit. When it lies outside the change, first rebase onto the
 current `main`, which often has the fix, and let CI run again. When it still
@@ -711,6 +620,31 @@ jobs on purpose, and Shoal reruns those it cut off once their run has finished.
 Rerun one that is still cancelled after its run finished, and file nothing for
 it. A log that names a command killed with SIGKILL, such as `rustc`, records a
 failure.
+
+## Issues
+
+Issues and PRs carry one or more `area/` labels, one `type/` label and one
+`complexity/` label. `shoal repo labels` lists what each means. `type/` names
+what the change is for, wherever its code lives: work that makes the tests
+faster is `type/test`.
+
+An issue states the problem or goal, what was observed of it, such as a
+command and its output, and what done looks like. It leaves the approach to
+the Plan section the owner settles: a fix written when the issue is filed goes
+stale, and whoever takes it on reads the code as it is then. An issue whose
+approach is settled is labelled `planned`, and agents implement it without
+asking. One that leaves a choice for the owner is labelled `needs-plan` until
+`shoal start --mode plan` settles a Plan section in its body. Issues with
+neither label, such as tracking and meta issues, stay out of that flow.
+
+Comment on an issue only to add what changes its work, such as a new cause,
+failure mode or fix. Post neither another sighting of a failure it already
+describes nor a status its watcher already gets from Shoal, such as a PR
+opening or CI passing. To agree with an issue or a comment, react to it with
+`shoal issue react`, which reaches no watcher.
+
+Close an audit issue when it is fixed, or explain in a comment or with
+`audit/wontfix` why it will not be.
 
 ## Committing
 
@@ -751,6 +685,11 @@ failure.
   callers before fixing them or rejecting them with evidence in the thread.
   Agents cannot merge PRs; leave merging to the user instead of asking for
   permission to merge.
+- The review bot reviews a PR when it opens ready or leaves draft, and
+  whenever `review/default`, `review/claude` or `review/codex` is added;
+  `review/none` suppresses it. A request label added to a draft is answered
+  when the PR leaves draft. Opening a ready PR already requests its review, so
+  open it with its classification labels alone.
 - Every push after the first review that changes what the PR does needs a new
   one: a push does not request it. After each push that fixes findings, adds
   commits or resolves merge conflicts by changing the PR's own code, run
@@ -768,7 +707,7 @@ failure.
   has reported the `ci.yml` run on `main` for its merge: until then, keep
   handling its reviews, CI results and merge conflicts. You are finished once
   the run passes. When it fails, open or join its `main-broken` issue at
-  once, by steps 1 and 2 under CI, link it with `shoal link issue <n>
+  once, by steps 1 and 2 under A failed check, link it with `shoal link issue <n>
   assigned` and open the PR that fixes `main` with `Closes #<n>`; you are
   then finished only once the issue closes, since a done workspace that
   links it clears every agent's blocker on it. When merges cross and the

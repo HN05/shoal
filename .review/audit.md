@@ -101,7 +101,7 @@ deterministic synchronization. Report tests that depend on runner speed, assert
 wall-clock durations or race short real timeouts, and tests that cannot catch
 a behavior regression, such as assertions on prose the code spells out as a
 literal, as `AGENTS.md` forbids. Check
-that CI runs the checks `AGENTS.md` describes, reuses the prebuilt CI image and
+that CI runs the checks `docs/ci.md` describes, reuses the prebuilt CI image and
 shared target directory, and skips a PR's code checks only for the packages it
 cannot affect.
 
