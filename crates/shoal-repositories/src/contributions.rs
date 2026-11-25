@@ -209,3 +209,6 @@ async fn advertised_refs(checkout: &Path) -> Result<Vec<git::RemoteHead>> {
     }
     Ok(advertised)
 }
+
+#[cfg(test)]
+mod tests;

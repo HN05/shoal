@@ -297,27 +297,6 @@ async fn a_checkpoint_waits_for_the_move_and_refuses_while_it_is_pending() -> Re
 }
 
 #[tokio::test]
-async fn the_destination_avoids_a_deleted_workspace_recorded_there() -> Result<()> {
-    let (_temp, manager, repo, _workspace, root) = cloned().await?;
-    // Where the moved workspace `feature` would otherwise land.
-    let placed = root.join("origin/feature");
-    manager
-        .create_workspace(&repo.id, "placed".into(), None, None, Some(placed.clone()))
-        .await?;
-    fs::remove_dir_all(root.join("origin"))?;
-
-    let moved = manager
-        .repositories
-        .move_all(&*manager, Layout::Regular)
-        .await?;
-    let [moved] = moved.as_slice() else {
-        anyhow::bail!("expected one move: {moved:?}");
-    };
-    assert_eq!(moved.repository.workspaces_dir, root.join("origin-2"));
-    Ok(())
-}
-
-#[tokio::test]
 async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<()> {
     let (temp, manager, repo, _workspace, root) = cloned().await?;
     let source = repo.workspaces_dir.clone();
@@ -401,46 +380,6 @@ async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
 }
 
 #[tokio::test]
-async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()> {
-    let (temp, manager) = test_support::manager().await;
-    let directory = temp.path().join("shoal/project");
-    fs::create_dir_all(&directory)?;
-    let checkout = test_support::repository(&directory, "checkout");
-    let repo = manager
-        .repositories
-        .register(checkout.to_str().context("path")?.into(), None, None)
-        .await?;
-    assert_eq!(repo.workspaces_dir, fs::canonicalize(&directory)?);
-    let root = fs::canonicalize(temp.path())?.join("new");
-    test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", root)).await;
-
-    // Another checkout registered inside the directory keeps it in place.
-    let other = test_support::repository(&directory, "other");
-    let other = manager
-        .repositories
-        .register(other.to_str().context("path")?.into(), None, None)
-        .await?;
-    assert!(
-        manager
-            .repositories
-            .move_all(&*manager, Layout::Regular)
-            .await
-            .is_err()
-    );
-    manager.repositories.remove(&*manager, &other.id).await?;
-
-    manager
-        .repositories
-        .move_all(&*manager, Layout::Regular)
-        .await?;
-    let moved = manager.repositories.repository(&repo.id).await?;
-    let expected = root.join("project/checkout");
-    assert_eq!(moved.path, expected);
-    assert_eq!(Path::new(&moved.source), expected);
-    Ok(())
-}
-
-#[tokio::test]
 async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> {
     let (temp, manager) = test_support::indexed_manager().await;
     let origin = test_support::repository(temp.path(), "origin");
@@ -499,31 +438,6 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
     };
     assert_eq!(moved.repository.workspaces_dir, root.join("origin"));
     assert!(fs::symlink_metadata(&root)?.is_dir());
-    Ok(())
-}
-
-#[tokio::test]
-async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<()> {
-    let (temp, manager) = test_support::indexed_manager().await;
-    let origin = test_support::repository(temp.path(), "origin");
-    let repo = manager
-        .repositories
-        .register(format!("file://{}", origin.display()).into(), None, None)
-        .await?;
-    let placed = fs::canonicalize(temp.path())?.join("placed");
-    manager
-        .create_workspace(&repo.id, "placed".into(), None, None, Some(placed.clone()))
-        .await?;
-    fs::remove_dir_all(&placed)?;
-    test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", placed)).await;
-    assert!(
-        manager
-            .repositories
-            .move_all(&*manager, Layout::Excluded)
-            .await
-            .is_err()
-    );
-    assert!(fs::symlink_metadata(&placed).is_err());
     Ok(())
 }
 

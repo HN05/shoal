@@ -1,32 +1,35 @@
 //! A stand-in for the rest of the daemon, which the repositories' tests
 //! build the service over: a home with its state directory under a
-//! temporary directory, the default global config, no spaces, coordinators,
+//! temporary directory, the global config a test publishes, the workspaces
+//! and chats a test records, no coordinators,
 //! reviews, runner or agents, no files other subsystems keep, and no forge a
 //! contribution could fork on.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_core::shoal_dirs::ShoalDir;
 use shoal_daemon_base::{
     alerts::{NewAlert, Sent},
     config_state::ConfigState,
+    file_access::FileAccess,
     gates::Gates,
     notifications::{Coordinators, Notifications, Source},
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Repository, RepositoryRemoval, Space, SyncedRepository, Workspace},
+    model::{Chat, Repository, RepositoryRemoval, Space, SyncedRepository, Workspace},
     paths::Paths,
     space_names::SpaceSelector,
     state::WorkspaceState,
 };
 use shoal_refs::BranchName;
+use shoal_store::Store;
 
 use crate::{
     Repositories,
@@ -39,11 +42,28 @@ pub(crate) struct Fixture {
     pub(crate) root: tempfile::TempDir,
     pub(crate) repositories: Repositories,
     pub(crate) daemon: StandIn,
+    pub(crate) file_access: Arc<FileAccess>,
+    store: Store,
+    config: Arc<ConfigState>,
 }
 
 impl Fixture {
     pub(crate) async fn new() -> Self {
-        let root = tempfile::tempdir().unwrap();
+        Self::in_root(tempfile::tempdir().unwrap()).await
+    }
+
+    /// [`Self::new`] in a home whose name Spotlight indexes, unlike
+    /// `tempfile`'s `.tmp` directories, so the excluded root layout has
+    /// something to change.
+    pub(crate) async fn indexed() -> Self {
+        let root = tempfile::Builder::new()
+            .prefix("indexed")
+            .tempdir_in("/tmp");
+        Self::in_root(root.unwrap()).await
+    }
+
+    /// The service in a home under `root`.
+    async fn in_root(root: tempfile::TempDir) -> Self {
         let paths = Paths::for_test(std::fs::canonicalize(root.path()).unwrap());
         std::fs::create_dir_all(&paths.state).unwrap();
         let store = shoal_store::test_support::unsynced_store(paths.state.join("state.sqlite3"))
@@ -53,20 +73,25 @@ impl Fixture {
         let gates = Arc::new(Gates::default());
         let config = Arc::new(ConfigState::new(config));
         let forges = ForgeAccess::new(store.clone(), gates.clone(), config.clone());
+        let daemon = StandIn::default();
+        let file_access = Arc::new(FileAccess::default());
         let repositories = Repositories::new(
             store.clone(),
             gates,
-            config,
-            Arc::new(Notifications::new(store)),
-            Arc::default(),
+            config.clone(),
+            Arc::new(Notifications::new(store.clone())),
+            file_access.clone(),
             Arc::new(forges),
             paths,
-            Arc::new(StandIn),
+            Arc::new(daemon.clone()),
         );
         Self {
             root,
             repositories,
-            daemon: StandIn,
+            daemon,
+            file_access,
+            store,
+            config,
         }
     }
 
@@ -75,18 +100,150 @@ impl Fixture {
         let repositories = &self.repositories;
         repositories.config().root_dir(&repositories.paths).unwrap()
     }
+
+    /// Make `text` the global config.
+    pub(crate) fn configure(&self, text: &str) {
+        (self.config).publish(shoal_core::test_support::global_config(text));
+    }
+
+    /// Register the checkout or clone URL `source`.
+    pub(crate) async fn register(&self, source: impl std::fmt::Display) -> Repository {
+        let source = source.to_string().into();
+        self.repositories
+            .register(source, None, None)
+            .await
+            .unwrap()
+    }
+
+    /// Write the local config of the repository `id`.
+    pub(crate) async fn write_local_config(&self, id: &RepositoryId, text: &str) {
+        let path = self.repositories.local_config_path(id).await.unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    /// Record a ready workspace `name` of `repo` in a new worktree on the
+    /// branch `name` at `path`, or in its workspaces directory.
+    pub(crate) async fn record_workspace(
+        &self,
+        repo: &Repository,
+        name: &str,
+        path: Option<PathBuf>,
+    ) -> Workspace {
+        let path = path.unwrap_or_else(|| repo.workspaces_dir.join(name));
+        let worktree = Worktree::add(repo, name, &path);
+        let workspace = self.insert_workspace(repo, name, worktree).await;
+        let space = Space::from(workspace.clone());
+        self.daemon.spaces.lock().unwrap().push(space);
+        workspace
+    }
+
+    /// Insert the row of the ready workspace `name` of `repo` in
+    /// `worktree`, and read it back as the spaces would.
+    async fn insert_workspace(
+        &self,
+        repo: &Repository,
+        name: &str,
+        worktree: Worktree,
+    ) -> Workspace {
+        let (id, repository, name) = (SpaceId::generate(), repo.id.clone(), name.to_owned());
+        let recorded = self.store.write(move |tx| {
+            tx.execute(
+                "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?2,?3)",
+                rusqlite::params![id, repository, name],
+            )?;
+            tx.execute(
+                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+                 VALUES (?1,?2,?3,'ready',?4,?5)",
+                rusqlite::params![id, worktree.path, name, worktree.base, worktree.git_dir],
+            )?;
+            let query = format!(
+                "SELECT {} FROM spaces JOIN workspaces USING(id) WHERE id=?1",
+                shoal_store::WORKSPACE_COLUMNS
+            );
+            Ok(tx.query_row(&query, [&id], shoal_store::workspace)?)
+        });
+        recorded.await.unwrap()
+    }
+
+    /// Record a chat running in the worktree of `workspace`.
+    pub(crate) fn record_chat_in(&self, workspace: &Workspace) -> Chat {
+        let chat: Chat = serde_json::from_value(serde_json::json!({
+            "id": SpaceId::generate(),
+            "workdir": {
+                "kind": "worktree",
+                "workspace": {
+                    "id": workspace.id,
+                    "name": workspace.name,
+                    "branch": workspace.branch(),
+                },
+                "path": workspace.path,
+            },
+            "number": 2,
+            "name": "chat",
+            "repository_id": workspace.repository_id,
+            "mode": "chat",
+            "kind": "chat",
+            "started_at": 0,
+        }))
+        .unwrap();
+        self.daemon.spaces.lock().unwrap().push(chat.clone().into());
+        chat
+    }
 }
 
-/// A daemon without spaces or forges.
-pub(crate) struct StandIn;
+/// A worktree Git added for a recorded workspace.
+struct Worktree {
+    path: String,
+    git_dir: String,
+    base: String,
+}
+
+impl Worktree {
+    /// Add a worktree of `repo` at `path` on the new branch `branch`.
+    fn add(repo: &Repository, branch: &str, path: &Path) -> Self {
+        use shoal_core::test_support::git;
+        let path = path.to_str().unwrap().to_owned();
+        git(&repo.path, &["worktree", "add", "-q", "-b", branch, &path]);
+        let read = |revision| {
+            git(Path::new(&path), &["rev-parse", revision])
+                .trim()
+                .to_owned()
+        };
+        let (git_dir, base) = (read("--absolute-git-dir"), read("HEAD"));
+        Self {
+            path,
+            git_dir,
+            base,
+        }
+    }
+}
+
+/// A daemon whose spaces are those a test records.
+#[derive(Clone, Default)]
+pub(crate) struct StandIn {
+    spaces: Arc<Mutex<Vec<Space>>>,
+}
+
+impl StandIn {
+    /// The recorded space `selector` names.
+    fn recorded(&self, selector: &SpaceSelector) -> Option<Space> {
+        let spaces = self.spaces.lock().unwrap();
+        (spaces.iter())
+            .find(|space| *selector == SpaceSelector::id(&space.id))
+            .cloned()
+    }
+}
 
 impl Spaces for StandIn {
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>> {
-        Box::pin(async move { bail!("no space {selector}") })
+        let space = self.recorded(selector);
+        Box::pin(async move { space.with_context(|| format!("no space {selector}")) })
     }
 
-    fn find_space<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
-        Box::pin(async { Ok(None) })
+    fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>> {
+        let space = self.recorded(&SpaceSelector::id(id));
+        Box::pin(async { Ok(space) })
     }
 
     fn ensure_removable_workspace<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<()>> {
@@ -214,8 +371,14 @@ impl Host for StandIn {
 }
 
 impl Records for StandIn {
-    fn workspaces(&self, _: &Connection) -> Result<Vec<Workspace>> {
-        Ok(Vec::new())
+    fn workspaces(&self, db: &Connection) -> Result<Vec<Workspace>> {
+        let query = format!(
+            "SELECT {} FROM spaces JOIN workspaces USING(id) ORDER BY name",
+            shoal_store::WORKSPACE_COLUMNS
+        );
+        let mut statement = db.prepare(&query)?;
+        let rows = statement.query_map([], shoal_store::workspace)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     fn removal_depth(&self, _: &Connection, _: &SpaceId) -> Result<u32> {

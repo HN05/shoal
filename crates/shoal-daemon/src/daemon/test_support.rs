@@ -3,7 +3,7 @@
 use crate::daemon::scope::Access;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::threads::ThreadOpening;
-use std::{fs, path::Path, sync::Arc};
+use std::{fs, sync::Arc};
 
 pub(crate) use crate::test_support::*;
 use crate::{daemon::manager::Manager, paths::Paths};
@@ -330,23 +330,6 @@ impl Manager {
             Some(entry) => entry.id.to_string(),
             None => self.named(name).await.to_string(),
         }
-    }
-
-    /// Move the repository's checkout to `path` and record it there, as an
-    /// earlier version may have registered it.
-    pub async fn move_checkout(&self, id: &RepositoryId, path: &Path) -> anyhow::Result<()> {
-        let repo = self.repositories.repository(id).await?;
-        fs::rename(&repo.path, path)?;
-        let (id, path) = (repo.id, path.to_path_buf());
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE repositories SET path=?2 WHERE id=?1",
-                    rusqlite::params![id, path.to_str()],
-                )?;
-                Ok(())
-            })
-            .await
     }
 
     /// Write the repository's local config file, or remove it for `None`.

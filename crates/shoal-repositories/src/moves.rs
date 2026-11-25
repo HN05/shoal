@@ -350,3 +350,6 @@ async fn execution_processes(
     }
     Ok(pids)
 }
+
+#[cfg(test)]
+mod tests;

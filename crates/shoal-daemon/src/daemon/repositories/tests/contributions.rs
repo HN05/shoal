@@ -50,40 +50,6 @@ async fn registered(manager: &Manager, repo: &Repository) -> bool {
 }
 
 #[tokio::test]
-async fn a_contribution_waits_out_the_grace_period() {
-    let (root, manager) = manager().await;
-    let repo = contribution(&manager, root.path()).await;
-    manager
-        .write_local_config(&repo.id, Some("[cleanup]\ngrace_minutes = 10\n".into()))
-        .await
-        .unwrap();
-    manager
-        .repositories
-        .sweep_contributions(&*manager)
-        .await
-        .unwrap();
-    assert!(registered(&manager, &repo).await);
-    let id = repo.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE contribution_grace SET cleanup_at=0 WHERE repository_id=?1",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    manager
-        .repositories
-        .sweep_contributions(&*manager)
-        .await
-        .unwrap();
-    assert!(!registered(&manager, &repo).await);
-}
-
-#[tokio::test]
 async fn a_borrowed_contribution_stays_available() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
@@ -136,34 +102,6 @@ async fn a_borrowed_contribution_stays_available() {
         })
         .await
         .unwrap();
-    manager
-        .repositories
-        .sweep_contributions(&*manager)
-        .await
-        .unwrap();
-    assert!(!registered(&manager, &repo).await);
-}
-
-#[tokio::test]
-async fn new_work_is_refused_once_a_contribution_removal_begins() {
-    let (root, manager) = manager().await;
-    let repo = contribution(&manager, root.path()).await;
-    assert!(
-        manager
-            .repositories
-            .begin_contribution_removal(&repo)
-            .await
-            .unwrap()
-    );
-    manager
-        .start_chat((&repo.id).into(), "chat-1".into(), "claude".into(), None)
-        .await
-        .unwrap_err();
-    manager
-        .create_workspace(&repo.id, "topic".into(), None, None, None)
-        .await
-        .unwrap_err();
-    // The interrupted removal finishes on the next sweep.
     manager
         .repositories
         .sweep_contributions(&*manager)
@@ -313,82 +251,6 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         })
         .await
         .unwrap();
-    manager
-        .repositories
-        .sweep_contributions(&*manager)
-        .await
-        .unwrap();
-    assert!(!registered(&manager, &repo).await);
-}
-
-#[tokio::test]
-async fn a_held_contribution_stays_until_its_connection_closes() {
-    use crate::protocol::{Body, Response};
-    let (root, manager) = manager().await;
-    let repo = contribution(&manager, root.path()).await;
-    let (mut client, server) = tokio::net::UnixStream::pair().unwrap();
-    let guard = Arc::new(tokio::sync::RwLock::new(())).read_owned().await;
-    let held = tokio::spawn(crate::daemon::requests::repositories::contributions::hold(
-        server,
-        1,
-        manager.clone(),
-        repo.id.clone(),
-        guard,
-    ));
-    let response: Response = crate::protocol::read(&mut client).await.unwrap();
-    assert!(matches!(response.body, Body::Ok), "{:?}", response.body);
-    // The fixture's grace period is over at once.
-    manager
-        .repositories
-        .sweep_contributions(&*manager)
-        .await
-        .unwrap();
-    assert!(registered(&manager, &repo).await);
-    drop(client);
-    held.await.unwrap().unwrap();
-    manager
-        .repositories
-        .sweep_contributions(&*manager)
-        .await
-        .unwrap();
-    assert!(!registered(&manager, &repo).await);
-}
-
-#[tokio::test]
-async fn a_removed_contribution_names_the_fork_it_leaves() {
-    let (root, manager) = manager().await;
-    let repo = contribution(&manager, root.path()).await;
-    let fork = repository(root.path(), "fork");
-    let fork = fork.to_str().unwrap();
-    git(&repo.path, &["remote", "add", "fork", fork]);
-    manager
-        .repositories
-        .sweep_contributions(&*manager)
-        .await
-        .unwrap();
-    assert!(!registered(&manager, &repo).await);
-    let notifications = manager.notifications.list(false, 10).await.unwrap();
-    let removed = notifications
-        .iter()
-        .find(|notification| notification.kind == AlertKind::RepositoryRemoved)
-        .unwrap();
-    assert!(removed.message.contains(fork), "{}", removed.message);
-}
-
-#[tokio::test]
-async fn a_restarted_daemon_keeps_contributions_while_their_holds_resume() {
-    let (root, manager) = manager().await;
-    let repo = contribution(&manager, root.path()).await;
-    let started = tokio::time::Instant::now();
-    let holds = manager.repositories.contribution_holds();
-    holds.await_resumes(started + std::time::Duration::from_secs(3600));
-    manager
-        .repositories
-        .sweep_contributions(&*manager)
-        .await
-        .unwrap();
-    assert!(registered(&manager, &repo).await);
-    holds.await_resumes(started);
     manager
         .repositories
         .sweep_contributions(&*manager)

@@ -91,3 +91,35 @@ async fn removal_refuses_a_checkout_holding_another_repositorys_directory() {
     );
     assert!(reserved.join(".shoal").exists());
 }
+
+#[tokio::test]
+async fn removal_refuses_a_repository_inside_its_local_config_directory() {
+    let fixture = Fixture::new().await;
+    let root = fixture.root.path();
+    let parent = fixture.register(repository(root, "parent").display()).await;
+    let repositories = &fixture.repositories;
+    let local = repositories.local_config_path(&parent.id).await.unwrap();
+    let directory = local.parent().unwrap();
+    fs::create_dir_all(directory).unwrap();
+    // Registration refuses this place; an earlier version recorded it.
+    let registered = fixture.register(repository(root, "nested").display()).await;
+    let nested = directory.join("nested");
+    fs::rename(&registered.path, &nested).unwrap();
+    let (id, path) = (registered.id, nested.to_str().unwrap().to_owned());
+    let moved = repositories.store.run(move |db| {
+        db.execute(
+            "UPDATE repositories SET path=?2 WHERE id=?1",
+            rusqlite::params![id, path],
+        )?;
+        Ok(())
+    });
+    moved.await.unwrap();
+
+    assert!(
+        repositories
+            .remove(&fixture.daemon, &parent.id)
+            .await
+            .is_err()
+    );
+    assert!(nested.exists());
+}
