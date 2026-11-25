@@ -441,7 +441,8 @@ These keep a workspace from idle cleanup:
 - a chat running in the worktree or saved there,
 - directory users, shells included,
 - dirty or unpushed work,
-- simulator leases and permits,
+- simulator leases,
+- permits,
 - holds,
 - open [threads](threads.md),
 - pending PR proposals and push requests,
@@ -476,9 +477,14 @@ once its agent has stopped. These keep it:
 
 - a restore that waits to run it,
 - a hold,
-- a waiting thread it opened,
-- for idle cleanup also a session Shoal saved, as saved agents keep a
-  workspace, a completion, a linked issue or a watched PR.
+- a waiting thread it opened.
+
+These also keep it from idle cleanup:
+
+- a session Shoal saved, as saved agents keep a workspace,
+- a completion,
+- a linked issue,
+- a watched PR.
 
 Merged cleanup removes a chat whose agent has been stopped for its
 `idle_minutes` and that has no space below it. Cleanup after `shoal done`
@@ -597,8 +603,8 @@ the default branch has.
 `shoal cleanup branches` deletes them, with those commits, after
 `Are you sure? [y/N]`, or with `--yes`. It checks every branch first. It
 deletes none when one has moved since it was listed, is checked out or is no
-longer kept, or when its repository's default branch is unknown. `--repo`
-names a branch kept in several repositories. The removal's checkpoint still
+longer kept, or when its repository's default branch is unknown. When a
+branch is kept in several repositories, `--repo` picks one. The removal's checkpoint still
 holds the commits until it expires.
 
 Scoped processes list and delete kept branches as their space's
