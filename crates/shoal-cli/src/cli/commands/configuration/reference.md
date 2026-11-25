@@ -856,6 +856,11 @@ global file's triggers never reach a repository's. Names follow port names.
 - `webhook` fires for each request to its route on the
   [webhook listener](#webhooks).
 
+A timer's last firing outlives restarts. A time a daylight-saving change skips
+fires at the next minute that exists, and a time it repeats fires once. Shoal
+starts counting a trigger's times when it first reads the trigger, so a new
+trigger never catches up on earlier times.
+
 A webhook trigger's `secret` names a [secret](#secrets). A request must then
 carry the HMAC-SHA256 of its body under that secret's value, in hex, where
 `signature` says:
@@ -867,12 +872,17 @@ carry the HMAC-SHA256 of its body under that secret's value, in hex, where
 A repository's trigger takes its secret from that repository's local config,
 and a global trigger from the global config. The secret reaches no agent.
 Without `secret`, any process that reaches the listener fires the trigger,
-this machine's agents included.
+this machine's agents included. Such a firing starts a space as you, whatever
+that agent's own `triggers` permission.
 
 Lengths of time, such as `every`, `catch_up` and `key_window`, are whole
 numbers each followed by `s`, `m`, `h`, `d` or `w`, largest first, as in
-`1h30m`. A firing missed while the daemon was stopped or the machine slept
-runs once on its return, when it is at most `catch_up` old.
+`1h30m`.
+
+`catch_up` covers the times a timer missed while the daemon was stopped or the
+machine slept. On its return, the newest missed time fires once when it is at
+most `catch_up` old. The times before it, or every missed time when the newest
+is older, are recorded as one skipped run.
 
 #### The launch
 
@@ -903,14 +913,26 @@ A webhook's input has:
 
 #### Runs
 
-- `overlap` decides a firing that would start a new space while the space of
-  the trigger's last run still has its agent running or queued.
-- `filter` lists conditions on the input. Each is a `path` with one of
-  `equals`, `not_equals`, `in`, `starts_with` or `exists`. `[]` after a key,
-  as in `payload.labels[].name`, matches when any element does.
-- `key` names what a firing is about. A firing whose key repeats within
-  `key_window` does not run. A webhook without `key` takes its
-  `X-Forgejo-Delivery`, `X-Gitea-Delivery` or `X-GitHub-Delivery` header.
+`overlap` decides a firing that would start a new space while the trigger is
+busy. A trigger is busy while the agent of its last started run runs or is
+queued, including a new space's launch that still waits in the agent queue,
+and while a queued run of the trigger waits. A launch with `in` starts no new
+space and never meets `overlap`:
+
+- `skip` records the run as skipped.
+- `queue` records the run as queued and launches it once that agent stops. It
+  skips every further firing while one run waits.
+- `parallel` launches at once.
+
+`filter` lists conditions on the input. Each is a `path` with one of `equals`,
+`not_equals`, `in`, `starts_with` or `exists`. `[]` after a key, as in
+`payload.labels[].name`, matches when any element does.
+
+`key` names what a firing is about. A run whose key matches that of a run the
+trigger started within `key_window` is recorded as a duplicate. The keys
+outlive restarts until their window ends. A webhook trigger without `key` takes
+the request's `X-Forgejo-Delivery`, `X-Gitea-Delivery` or `X-GitHub-Delivery`
+header. Any other trigger without one never drops a firing as a duplicate.
 
 ## Terminal
 
