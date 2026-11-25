@@ -122,8 +122,8 @@ async fn reply(ctx: &Context, thread: Thread) -> Result<i32> {
 }
 
 /// The post the user answers in `thread`, the other side's latest surface,
-/// when it offers actions: its ID, what it asks, its text and surface, and
-/// its actions.
+/// when it offers actions: its ID, its author, text and surface as the
+/// picker's header, and its actions.
 fn answerable(thread: &Thread) -> Option<(i64, String, Vec<SurfaceAction>)> {
     let other = thread.last_turn()?.side?;
     let post = thread.surface_from(other)?;
