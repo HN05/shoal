@@ -192,8 +192,8 @@ agent, and that agent's wrapper may still restart it in place. A
 [`base`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) makes a tool a launch profile of another, such as
 Claude on its own claude.ai login while `claude` keeps going through a proxy.
 
-`--model` and `--effort` on `shoal start`, `contribute`, `review run` and
-`repo setup` override the [configured model and effort](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) for
+`--model` and `--effort` on `shoal start`, `contribute`, `review run`,
+`repo setup` and `config setup` override the [configured model and effort](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) for
 that launch. The tool receives the values through `model_args` and
 `effort_args`: Claude Code
 gets `--model` and `--effort`, with `CLAUDE_CODE_EFFORT_LEVEL` set to the same
