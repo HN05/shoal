@@ -82,10 +82,18 @@ fn probe_errors_propagate_during_scans_and_bitmap_search() {
     }
 }
 
-/// A free port to prefer, which a listener held while it was picked.
+/// A port free to prefer, as the reservation probes it. It lies below every
+/// platform's ephemeral range, where a parallel test's outgoing connection could
+/// take it before the reservation probes it, and starts at an offset per process
+/// so parallel tests pick different ports.
 fn free_port() -> u16 {
-    let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
-    listener.local_addr().unwrap().port()
+    const PORTS: std::ops::Range<u16> = 20_000..30_000;
+    let offset = (std::process::id() % u32::from(PORTS.end - PORTS.start)) as u16;
+    let start = PORTS.start + offset;
+    (start..PORTS.end)
+        .chain(PORTS.start..start)
+        .find(|&port| available(port).unwrap())
+        .expect("a free port below the ephemeral range")
 }
 
 /// The fixture's workspace with a port `web` that prefers `port`.
