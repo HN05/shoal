@@ -66,8 +66,8 @@ The source says how the file came:
 
 `--json` gives each file as a record:
 
-- `space` names the space it is attached to: its `id`, its `name`, the last
-  one for a removed space, and its `kind`.
+- `space` names the space it is attached to: its `id`, its `kind`, and its
+  `name` when the file was attached, or its last once removed.
 - `source`, `bytes`, and `title` when the file has one.
 - `path`, or `machine` for a copy another machine keeps.
 - `expires_at` for a removed space's file.
