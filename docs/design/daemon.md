@@ -4,6 +4,13 @@ This file covers the daemon process, held in `shoal-daemon`, `shoal-daemon-base`
 and `shoal-store`: its connections and limits, operations, store, journal,
 startup, service and updates.
 
+The state directory holds only what Shoal keeps to run and to record its runs.
+Only Shoal writes, changes or deletes anything there. Shoal never gives the user
+or an agent a file there to work with, though it may name its own logs there for
+reading. A file the user, an agent or a reviewer works with lives in the
+directory of the repository it belongs to, or in `root_dir` when it belongs to
+none, in a directory marked as Shoal's.
+
 Creating a workspace, opening a PR and merging start operations, below, whose ID
 a client follows for typed progress, then a result or a typed failure. A
 subscription sends a snapshot of the records of its topics, then each record

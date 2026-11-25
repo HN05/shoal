@@ -3,22 +3,16 @@
 This file covers what scoped callers may do, how they ask for approval, the
 permissions of spaces, proposals and push requests.
 
-Tracked executions and processes started with exported workspace environments
-inherit a daemon-validated scope token that
-confines them to their own workspace and the spaces below it:
-status, inspect, execute, setup, and resources.
-Creation other than of a child of the caller's space, removal other than of a descendant the user holds nothing below,
-reconciliation, other workspaces, repository administration, and service control
-need an unscoped caller; `config reload`, which applies the config on disk and
-stops nothing, does not. A scoped `merge` is an
-approval request bound to the branch and its HEAD unless the caller's `merge`
-and `push` permissions are `"direct"`, and a scoped `unmerge` one bound to the merge it undoes;
-approval lets the agent's retry merge that commit, or undo that merge, through the normal checks,
-so it replaces only the user typing the command. PR registration,
-manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
-caller's own repository are own-workspace exceptions.
-Effective configuration may be read for the caller's own workspace; changing it
-needs an unscoped caller.
+## Scope
+
+Workspace commands and every chat's agent inherit a daemon-validated scope
+token. A chat's token lasts as long as the chat. Only the user's own terminal is
+unscoped. A scope covers its space and the spaces below it, recursively; a chat
+without a repository's covers every space. One operation decides what a scope
+reaches, and every check takes it. A target names one of those spaces, and an
+agent's hooks report for its own space. Scope is cooperative: it is no
+boundary against a hostile process of the same user.
+
 Nested executions keep scope, and the CLI refuses scoped operations to a process
 whose ancestor carries scope for the same state directory, so removing the token
 from a descendant's environment does not lift them. A tracked execution's wrapper
@@ -32,6 +26,96 @@ with a fresh token, for any space the caller's scope reaches.
 Exported tokens persist across restarts until explicitly revoked or the space
 is removed; they register no execution and do not prevent cleanup.
 
+### Creating and removing spaces
+
+Inside a space, `shoal start` and `shoal create` create a child of that space,
+or of a space its scope reaches that `--parent` names, in its repository. The
+user's terminal creates top-level spaces. A scoped caller creates only
+children, runs chats only in worktrees of its tree and never takes over a
+workspace outside its scope. It starts a chat in a background place the agent
+queue opens, unless `start --here` runs the chat in the caller's terminal.
+
+The daemon confines a scoped caller's resource access to its own worktree. It
+refuses the caller every workspace allocation, removal and recovery except
+three: creating a child of its own space, removing a space below it, and
+restoring a removed space below its recorded parent where its scope reaches
+that parent. Administering Shoal, and the other actions a permission key
+governs, follow that key. `config reload`, which applies the config on disk and
+stops nothing, needs no key. A scoped caller reads the effective configuration
+of its own workspace.
+
+### The spaces below
+
+For each space its scope reaches but its own, a scoped caller may:
+
+- hold it,
+- queue its agent and restore its stopped agent, a workspace's or a chat's,
+  whoever stopped it,
+- restart and stop its agent, confirming a stop Shoal cannot prove,
+- convert and rename it,
+- cancel and prioritize its queue entries, a CI job's through the spaces its
+  run is for and a new space's launch through its parent,
+- send it alerts, open threads with it and post in the threads it holds,
+- stop its executions and discard its stopped agent.
+
+The daemon starts the agents such a caller queues or restores detached, a
+chat's in the place it ran in. `start --here` instead runs an agent in the
+caller's terminal, under the scope of its own space. A scoped caller also stops
+the untracked processes and leftovers of its own workspace and those below it.
+The agent of the nearest space above a child with an agent receives the child's
+agent-caused and agent-lifecycle events instead of the user.
+
+### Its own space
+
+A scoped caller may, in its own space:
+
+- run setup, rename it and set its base workspace,
+- link and watch issues, PRs and CI runs of its own repository, and
+  acknowledge merges,
+- run its demos,
+- read its alerts, mark it ready for review, and take and restore checkpoints,
+- complete its assignment and withdraw the completion,
+- sync its own repository.
+
+It sends alerts up to its coordinator or the user and opens threads with them.
+It posts in and waits on the threads it takes part in, resolves those it
+opened and forwards those it holds. It reads and links the threads any space
+its scope reaches took part in.
+
+### The forge
+
+A scoped caller may:
+
+- list and read the issues, PRs and runs of any repository,
+- open and change issues and PRs of its own repository; a chat without a
+  repository may in every registered one, under its permissions there,
+- open issues in other repositories as its `issue_other_repositories`
+  permission allows,
+- rerun or cancel its CI jobs,
+- start, rerun or cancel the CI runs of the default branch and of the branches
+  of the workspaces its scope reaches, in the repository it acts in,
+- send GET requests to any repository's forge API, and other methods to its
+  own repository's as its `api_writes` permission allows,
+- approve or request changes on a PR as its `pr_review` permission allows, as
+  the host's `review_token`.
+
+A scoped `merge` is an approval request bound to the branch and its HEAD
+unless the caller's `merge` and `push` permissions are `"direct"`, and a scoped
+`unmerge` one bound to the merge it undoes. Approval lets the agent's retry
+merge that commit, or undo that merge, through the normal checks, so it
+replaces only the user typing the command.
+
+### Reviews
+
+A scoped caller may run, view, cancel and answer the reviews of its own
+workspace and those below it, and write its own reviews of those below it.
+Where `[review] require_for_pr`, `require_for_ready` or `require_for_merge`
+holds the caller, a `pr open` that opens a new PR, a ready mark and a merge are
+refused until a finished review covers the commit they act on and no review of
+it has unresolved threads.
+
+## Approvals
+
 Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
 `shoal approvals` opens a request picker on a terminal, and a numbered request
 shows its details and prompts for a decision. Ctrl-A approves and Ctrl-D denies
@@ -39,6 +123,16 @@ the highlighted request inside the list, which fzf updates in place rather than
 closing and reopening. Decisions bind to the displayed or
 authorized record through mutation, including when a coordinating agent decides. Explicit `--approve` and `--deny` flags decide every kind: merging
 a branch (see scope), resource access, and issues and PRs an agent proposed.
+
+A scoped caller requests approvals and inspects its own. A request goes to the
+nearest space above the requester with an agent, of either kind. That space
+decides it or passes it up, to the next such space above and to the user at
+the top. Unscoped callers decide any request. A chat whose agent stops, or a
+deciding space that is removed, passes its undecided requests to the user.
+What a deciding space may approve depends on the request: the permissions below
+govern some requests, and resource grants govern the rest.
+
+## Permissions
 
 Permissions belong to spaces, not repositories, because a top-level chat the
 user talks with may be trusted with more than a worker several levels down. A
@@ -112,6 +206,8 @@ takes that key's actions without asking again for an hour at most and dies
 with the daemon. Forge writes these keys allow go out as the agent account,
 so the forge shows who made them.
 
+## Proposals and pushes
+
 In a shared repository everything an agent opens is seen by other people, so
 the `issue_open` and `pr_open` permissions can make a scoped `issue open` or `pr open`
 propose instead of open (`"direct"` is the default; unscoped callers always open).
@@ -170,6 +266,8 @@ request keeps the workspace from unattended removal.
 
 Approving a merge request whose branch moved since it was requested is refused
 as stale and marks it outdated.
+
+## Resource approvals
 
 Configured resources may require human approval for scoped acquisition. The
 daemon persists a request with a caller-supplied reason and the effective

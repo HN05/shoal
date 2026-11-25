@@ -11,8 +11,6 @@ for delivering a PR, under Committing near the end, decide when work is done.
 
 - Shoal is a Rust CLI and local daemon. Keep Superlogical, Macraft, and other
   caller-specific integration logic outside its core.
-- Implement incrementally: CLI/daemon, workspaces, ports, simulators, lifecycle
-  polish, then filesystem restrictions.
 - The daemon owns shared state. Keep terminal I/O in the execution wrapper.
 - A store operation that needs a transaction runs in `Store::write`, or in
   `Store::read` when it only reads; one that opens its own on `Store::run`
@@ -51,34 +49,18 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - Integrations such as agent tools, terminal hosts and apps implement callbacks
   for what they do differently; state, decisions and daemon calls stay in
   Shoal's generic code, which passes each callback only what it reads.
-- A chat gets every feature that coordinates or communicates, including
-  requests to the forge such as starting CI runs, but nothing that runs code on
-  this machine, such as leases, `shoal run` and demos, or needs its own
-  worktree or branch. A change that adds or extends such a feature implements
-  it for chats too, through the same code path, or its PR says why it cannot
-  apply to them. A workspace has one editing agent, its own: a chat in its
-  worktree reads it as a chat, never as the workspace's agent or child, and
-  goes with it.
+- A change that adds or extends a feature that coordinates or communicates
+  implements it for chats too, through the same code path, or its PR says why
+  it cannot apply to them. `docs/design/chats.md` says which features chats get.
 - A space is a workspace or a chat. Flags, arguments, user-facing text and
   code call what applies to both a space (`--space`), and say workspace only
   for what needs a worktree. A command's flag becomes `--space` in the change
   that lets it act on a chat. Command names stay short: `shoal start` starts
   every agent, in a workspace or a chat, and a command that maintains a space
   is top-level, such as `shoal status` and `shoal rename`.
-- Spaces form one tree in `space_parents`: every space has at most one parent,
-  a ready workspace or a chat of its own repository, or a chat without a
-  repository, which takes children in any, never one below it; any other
-  child in another repository is refused. Scope, approvals, coordinator and
-  delegated alerts, removal and cleanup take one walk up or down that link
-  and one check for an agent, with no branch on kind; alerts to a space go
-  through one operation.
-- Shoal refuses a request only for a very good reason: it would act outside
-  the caller's scope or permissions, lose or damage work, or cannot be done at
-  all. A limit of how Shoal is built, such as a code path one kind of caller
-  does not take, is no such reason: support the request instead, or file an
-  issue for it when that lies outside the change. Nor is a view of where a
-  setting or action belongs, or of what the user ought to want: a config file
-  takes every option its schema has, except where its value cannot apply.
+- Refuse a request only for a reason `docs/design/overview.md` accepts. Support
+  any other request instead, or file an issue for it when that lies outside the
+  change.
 - Invoke external tools with argument arrays. Worktrees are created and
   removed with plain Git through the `git` module; preserve Shoal's ownership
   records and cleanup policy.
@@ -180,14 +162,6 @@ for delivering a PR, under Committing near the end, decide when work is done.
   crate depends on no other, except that `shoal-spaces` calls coordination's
   service directly, which its interface gives with the daemon coordination
   takes.
-- `crates/shoal-power` reads the machine's power and the user's presence
-  from the platform: the announcements of a sleep or shutdown, with the
-  delay locks that hold them off, and whether the user walked away. What
-  the daemon does on each stays in the daemon.
-- `crates/shoal-time` holds the wall-clock timestamp type,
-  `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
-  the record IDs and numbers, and `crates/shoal-states` the macros that
-  define typed names, that every crate shares.
 - The CLI lives in `crates/shoal-cli` and the daemon in `crates/shoal-daemon`,
   neither of which depends on the other, so an edit in one rebuilds neither
   the other nor its tests. Nor does the daemon depend on a crate that calls
@@ -208,247 +182,16 @@ for delivering a PR, under Committing near the end, decide when work is done.
   it. Where core logic needs a value the daemon records, its
   caller reads it and passes core the value, never a callback that calls the
   daemon.
-- Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
-  together. `setup.command` is tracked and gates
-  readiness; hooks are untracked user processes with workspace identity and no
-  scope token. `hooks.pre_setup` runs in the daemon before tracked setup and gates
-  readiness, excluding lifecycle and permit changes; `hooks.post_setup` runs in
-  setup's daemon-started operation after ready, and `hooks.pre_remove` inside the shared daemon removal path.
-  `hooks.post_remove` runs from the repository checkout after successful removal;
-  failure reports a warning and alert without restoring ownership.
-  `hooks.post_done` runs in the daemon after completion persists and before cleanup,
-  excluding lifecycle and permit changes; failure notifies without undoing completion
-  or blocking cleanup. Explicit completion reruns it; restart does not replay it.
-  `hooks.post_agent_exit` exposes a space's tracked-agent exits, a workspace's
-  while ready, where `hooks.post_done` runs and under the same daemon hook rules,
-  without marking completion; removal uses its own hooks.
-  `hooks.post_ready` follows the same rules after ready-for-review marks persist;
-  failure notifies without removing them, and each explicit mark reruns it.
-  Missing-worktree cleanup skips hooks. Optional local repository config is
-  `.shoal/config.toml` in the repository's own directory, read in place, layers
-  per option over the worktree config, and is deleted with its registration.
-  Settings that describe the machine live under the global `[machine]` table;
-  every other option follows the repository schema in both files and resolves
-  local config, worktree file, global config, shared config (`shared.toml`
-  beside it), then default; the CLI reads the global files at launch and asks the
-  daemon for the repository layer. Named ports are lazy, with CLI overrides and
-  explicit conflicts.
-- Workspace commands and every chat's agent inherit a scope token, a chat's
-  lasting as long as the chat; only the user's own terminal is unscoped. CLI
-  refusals also follow process ancestry for the same state directory, so a
-  cleared token does not unscope. A scope covers its space and the spaces below
-  it, recursively, and a chat without a repository's every space, through one
-  operation every check takes; targets name one of them, and the agent's hooks report for
-  its own. A chat's agent follows the workspace-agent rules below, without what
-  needs a worktree; it renames its own chat. A chat in a workspace's worktree
-  also reads that workspace, with requests that only read state, and changes
-  nothing there. `shoal start` and `shoal create` run inside a space create a
-  child of that space, or of a space its scope reaches that `--parent`
-  names, in its repository; scoped callers create only
-  children, run chats only in worktrees of their tree, never take over a workspace outside their scope, and start chats in
-  a background place the agent queue opens, unless `start --here` runs it in the caller's terminal, and the user's terminal creates top-level spaces. Enforce own-worktree resource access
-  in the daemon and deny workspace allocation/removal/recovery other than creating a child of their own space, removing a space below it and restoring a removed space below its recorded parent where their scope reaches that parent, and administering Shoal and the other actions a permission key governs only as that key allows. For the spaces their scope reaches but their own, scoped callers may hold them, queue
-  agents and the restores of stopped agents, a workspace's or a chat's, whoever stopped them, which the daemon starts detached, a chat's in the place it ran in, unless `start --here` runs an agent in the caller's terminal under its own space's scope, restart and stop their agents, confirming a stop Shoal cannot prove, convert and rename them, cancel and prioritize their queue
-  entries, a CI job's through the spaces its run is for and a new space's launch through its parent, send them alerts, open threads with them and post in the threads they hold, stop their executions, and discard their stopped agents; they may also stop the untracked processes and leftovers of their own workspace and those below it; the agent
-  of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
-  instead of the user. Own-workspace setup, rename, base workspace, issue, PR and own-repository CI run links and watches, merge
-  acknowledgements, their demos, alerts up to their coordinator or the user, opening threads with their coordinator or the user, posting in and waiting on the threads they take part in, resolving the ones they opened, forwarding the ones they hold, reading and linking the threads a space their scope reaches took part in, reading their own space's alerts, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
-  sync, listing issues and PRs of any repository, opening and changing those of the own repository (for a chat without a repository, every registered one, under its permissions there), opening issues
-  in other repositories as their `issue_other_repositories` permission allows, rerunning
-  or cancelling their CI jobs, starting, rerunning or cancelling CI runs of the default branch and of the branches of the workspaces their scope reaches in the repository they act in, and reading any repository's issues, PRs and runs, and GET requests to any repository's forge API, or
-  other methods to the own repository's where their `api_writes` permission allows them, are allowed, and approving or requesting changes on a PR
-  as their `pr_review` permission allows, as the host's `review_token`.
-  Scoped callers may run, view, cancel and answer the reviews of their own workspace and those below it,
-  and write their own reviews of those below it;
-  with `[review] require_for_pr`, `require_for_ready` or `require_for_merge` holding the caller, a
-  new-PR `pr open`, a ready mark and a merge are refused until a finished review covers the commit
-  they act on and no review of it has unresolved threads.
-  Scope is cooperative, not a boundary against hostile same-user processes.
-  A scope token is a `ScopeToken`, whose `Debug` redacts it, never a bare
-  string; code reads its text with `expose` only where it sends it. The
-  daemon decides what a caller may do, and which account it acts as, from its
-  `Option<&Caller>`, `None` for the user, never from a `bool` saying whether
-  it is scoped.
-- An alert is one daemon record of a one-way notice, with its typed kind, its
-  sender (the user, a space or Shoal) and its recipient (the user or a
-  space); one daemon operation decides whom it reaches, up to the
-  coordinator or the user, or down to spaces the sender's scope reaches.
-  Record Shoal's own where the daemon decides (busy resources, port
-  conflicts, agent exits, its own removals), never fail the operation for
-  one, collapse repeated polled events until read, and let scoped callers
-  read the user's only as their `notifications` permission allows. Only the
-  sender withdraws an alert, while it is unread, and an alert stays separate
-  from completion.
-- A thread is one daemon record of a conversation between its opener (the
-  user, a space or Shoal) and its holder (the user or a space), numbered in
-  its opener's space, or the space the user or Shoal opened it with, among
-  that space's approval requests. A space posts on the side it took part
-  on, or as a participant on neither, which takes no turn; its posts reach
-  the current parties and the spaces that linked it but the poster, as
-  alerts the transaction that records them queues; either side's current
-  party forwards its role, a new opener numbering it in its space, and the
-  opener resolves it with an outcome its kind takes, or the holder one
-  Shoal opened. `done` and removal close the threads a space is numbered
-  in, opened or holds, on any machine, and their undo and a restore reopen
-  those closed for that cause.
-- The daemon keeps each registered checkout's default branch in sync with its
-  remote in the background, and `shoal repo sync` syncs it at once; commands that
-  only read the default branch use what the checkout has. Syncing never pushes or
-  moves workspace branches: only an explicit `shoal refresh`, or the start of
-  an agent the queue admits there, fast-forwards one that holds nothing of its
-  own, and agents otherwise update it with plain Git.
-- Cleanup is space cleanup: chats follow the workspace rules below, with their
-  repository's config, or the global config for a chat without one, meeting every condition on a worktree; a running agent
-  is use, a restore that waits to run its agent keeps a chat as a queued
-  launch keeps a workspace, and a session Shoal saved keeps it from idle
-  cleanup as saved stopped work does. Idle cleanup also counts a
-  coordinator's running agent as use of a workspace below it in which no
-  agent of its own has started, since its subagents work there, and of a
-  chat below it whose agent stopped, whose work is left to it. A chat's
-  agent exiting stops the chat, which ends only by removal.
-- `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
-  10), resolved per workspace on each sweep. `[cleanup.merged]` (default false,
-  240 idle minutes, persisted across restarts) removes merged, unused workspaces
-  whatever their assignment state, archiving unsaved files left over on a branch
-  with commits; only holds, threads they opened that wait, pending PR proposals and push
-  requests and a space below them keep them. Automatic removal is only for idle,
-  clean worktrees with all commits pushed, merged into the default branch (including
-  squash and rebase merges) or with their changes on the branch the workspace builds
-  on, or deleted worktrees. Unattended removals except for disk
-  space first wait `[cleanup] grace_minutes` (default 10) of continuous eligibility,
-  persisted across restarts except where idle timers start over. Keep one removal path for manual and automatic
-  cleanup, deleting a branch only when a remote or the default branch has all its
-  commits and never the default branch, and deleting a kept branch once they do; every removal of
-  an existing worktree, except a disposable workspace's, keeps an expiring checkpoint of HEAD and unsaved files, and
-  restoring a checkpoint first keeps the state it replaces in another. Only explicit
-  `done` records completion. PR cleanup is on by default: all watched PRs must merge and
-  contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
-  agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
-  preserves associations and watches but never defers cleanup; only holds,
-  threads it opened that wait and queued agent launches keep a workspace. Children keep
-  their parent only from merged cleanup: every removal of a space first removes the spaces below it
-  through the same path, whatever keeps them, and a child that cannot go retains
-  the parent. A standing completion with cleanup also removes the workspaces and chats below
-  that nothing of their own keeps, whatever their work.
-  Completion cleanup without a PR registration requires every commit kept that way,
-  retaining dirty or newer work through the same
-  removal path; completion without cleanup suppresses idle and PR cleanup.
-  Associated issues suppress idle cleanup, not merged cleanup; holds, waiting
-  threads and queued agent launches suppress every unattended removal. Holds
-  record who placed them; scoped callers release the user's holds, and remove
-  the spaces the user holds, only as their `user_holds` permission allows, and
-  holding their own space is an approval request.
-- TCP port reservations are cooperative and owned by the worktree. Keep them
-  across command exits and failed removal; successful removal releases them with
-  the workspace record. `[ports]` `start`/`end` set the automatic range.
-- Simulator leases are exclusive and worktree-owned. Persist claims before
-  simctl mutations; retain claims after failure/restart. Only mutate recorded
-  Shoal devices and preserve state on normal handoff. Clean devices require an
-  explicit `--clean --reason`; minimize erased apps and persist an audit trail
-  before mutations. Retain audit history after removal. Delete devices on
-  workspace removal/idle expiry. Use installed runtimes only. Tests use an
-  isolated xcrun fixture; never touch personal simulator devices.
-- Generic semaphore permits consume capacity in both the named pool and member.
-  `kind = "rwlock"` allows unlimited readers or one exclusive writer. Readers of
-  one member share a pool slot; its final release frees the slot. New rwlock
-  leases default to write; mode changes require release. Allocation must be atomic. Global pools span repositories; repo pools span
-  that repo's worktrees. Preserve leases on failed removal/restart; release them
-  with successful removal. Active permits prevent automatic removal. Resource
-  hooks run after a claim is
-  persisted and before release, including workspace removal; failure retains
-  leases. Retries rerun hooks, and permit/lifecycle changes cannot overlap them
-  in the same workspace. User scripts own underlying resource integrations.
-- Approvals are daemon-owned: scoped callers request and inspect their own;
-  only unscoped callers approve or deny, except that a request from a space
-  with an agent goes to the nearest space above it with an agent, of either
-  kind, and a space whose `decide` permission is `direct` decides any request
-  of a space below it as the user would, but approves one a permission
-  governs only where its own value for it is `direct`. The space a request goes to decides
-  it or passes it up, the next such space above and the user at the top. For a
-  request a permission governs, a parent space whose own effective
-  permission for it is `direct` decides it as the user would, editing a
-  proposal or marking it a duplicate; one without may deny it, with a reason
-  or as a duplicate, or pass it up. For any other request, a parent space
-  without an approved grant for the same target and settings may only deny or
-  pass it up, a chat as a workspace. A chat whose agent
-  stops, or a deciding space that is removed, passes its undecided requests to
-  the user. Resource grants bind effective
-  allocation settings, consume no capacity, and last until release or workspace
-  removal according to configuration. Never bypass existing allocation rules.
-  A scoped merge
-  is a request bound to the branch HEAD unless the caller's `merge` permission is
-  `"direct"`, and a scoped unmerge one bound to the merge it undoes; approval
-  lets the retry proceed under every check.
-  `issue_open`/`pr_open = "propose"` make a scoped `issue open` or
-  `pr open` an approval request the user may edit, deny or mark as a duplicate;
-  approval opens it through the normal open path, a PR only at its recorded
-  commit. A chat proposes issues, without a branch or commit, but never PRs.
-  Issue proposals belong to the repository and outlive the space that made them.
-  `issue_other_repositories` (`"propose"` by default, `"direct"` or `"deny"`)
-  does the same for a scoped issue in another repository, which is never linked.
-  A `"gate"` value, between `"direct"` and `"propose"`, sends a request whose
-  narrowest governing key is `"gate"` to the gate agent first, which allows it
-  through the approval path, denies it, or passes it on only for an
-  `[gate] escalate` case it quotes, which then takes the `"propose"` route.
-- Permissions belong to spaces. A space's are its agent's mode's
-  (`[modes.NAME.permissions]` over `[permissions]` over the built-in mode's
-  defaults over the key's), each narrowed to its parent's effective value,
-  then each key the `--permission` given to its agent sets takes that value as
-  given; it is recorded beside each `mode` column, kept by restores and
-  restarts, and changed per key by their own `--permission`. A scoped process
-  gives only values its own space holds, including the value a key it drops
-  with `KEY=mode` falls back to and a permission it sets in config, which the
-  daemon checks wherever such a process brings one in; it never removes a
-  permission from config or replaces a config file. One daemon
-  operation computes them at each check from current config, the recorded
-  modes and given values and the tree; a scoped check reads the acting caller's space's
-  through it, never a repository's settings, and a chat without a repository
-  resolves its mode in the config of the repository the action is in.
-  A key that governs an action lets a scoped caller take it with `direct`,
-  refuses it with `deny`, and with `propose` makes it an approval request
-  bound to what it does, which lets the same action proceed once; the user
-  holds every key at `direct`. The daemon checks each request it receives,
-  and the CLI asks it before what a command does itself, never deciding a
-  permission alone; an approved command's own requests take the actions of
-  its key without asking again.
+- A scope token is a `ScopeToken`, whose `Debug` redacts it, never a bare
+  string; code reads its text with `expose` only where it sends it. The daemon
+  decides what a caller may do, and which account it acts as, from its
+  `Option<&Caller>`, `None` for the user, never from a `bool` saying whether it
+  is scoped.
+- The daemon checks the permission of each request it receives. The CLI asks
+  the daemon before what a command does itself, and never decides a permission
+  alone.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed and reject unknown values.
-- Problems show where the user looks (`inbox`, `alert list`, `status`, the failing
-  command's error) and name the command that fixes them; repair preserves work
-  and resource leases. Startup audits ownership and never deletes work, and the cleanup sweep readies a
-  workspace the audit failed once its ownership verifies; the daemon clears an unknown
-  execution only when a saved agent stop and a process scan prove it ended,
-  its processes ran in an earlier boot, or it recorded no child or process group
-  and its wrapper and every process of it are gone.
-  Verify native PID birth identity before signaling survivors; unknown ownership
-  must not authorize a kill. Explicit acknowledgement cannot bypass visible live
-  processes. Verify recorded Git metadata identity before exec/removal; moved or
-  replaced worktrees are not adopted automatically, only reclaimed at their
-  recorded path when a human adopts that path again. Use the shared removal path
-  for deleted-worktree cleanup and retain its branch; never forget a moved one.
-- Repositories own `<root_dir>/<name>/` (default `~/shoal`): workspaces there by default,
-  explicit workspace paths must not overlap state, checkouts, or other ownership.
-  URL clones live as `.checkout` and move only with their repository directory into
-  a new root; refuse roots inside state, checkouts or repository directories.
-- The state directory holds only what Shoal keeps to run and to record its runs:
-  only Shoal writes, changes or deletes anything there, and it never gives the
-  user or an agent a file there to work with, though it may name its own logs
-  there for reading. A file the user, an agent or a reviewer works with lives in
-  the directory of the repository it belongs to, or in `root_dir` when it
-  belongs to none, in a directory marked as Shoal's.
-- A space's name is a free-text label that may repeat; it never selects a space
-  and nothing is built from it. Accept literal Git branch names and derive a
-  portable worktree directory name separately, suffixed while another workspace
-  has it. Suffix conflicting branch components with `-2`, `-3`, etc.; keep the
-  name and directory unchanged; serialize allocation per repo. Existing branches,
-  including an issue's derived local branch, get unsuffixed worktrees or reopen
-  owned ones; other checkouts require explicit adoption.
-  Adopt only linked, unlocked worktree roots on local branches, preserving files and
-  settings without setup; record identity and readiness atomically under normal cleanup.
-  Reject ownership collisions and never use adoption to repair moved worktrees.
-- `shoal diff` uses Git fork-point/merge-base against the recorded base branch;
-  do not compare directly to today's main tip or a frozen commit after a rebase.
-  Preserve native Git pager/external-diff configuration.
 
 ## Documentation
 
@@ -538,6 +281,8 @@ repository above the temporary directory, which a test binary that starts Git
 leaves behind with `prepare_test_process!` at its root;
 never install persistent OS services or modify real user workspaces as a side
 effect of tests.
+Simulator tests use an isolated xcrun fixture and never touch the user's own
+simulator devices.
 Run development builds only with a temporary `--state-dir`: the user's daemon
 serves every running agent, so never stop, restart or reinstall it, and a debug
 build refuses the user's state directory, and writes to the user's config

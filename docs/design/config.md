@@ -18,7 +18,8 @@ file as a backup; the daemon reads it at startup and on reload, which global CLI
 writes request of a running daemon, replacing its snapshot only with a valid
 file so agents and leases are untouched; an operation that combines global
 definitions with resolved settings reads both from one snapshot. The CLI reads
-agent settings per command. Repository TOML comes from the worktree
+the global files at launch, and agent settings per command; it asks the daemon
+for the repository layers. Repository TOML comes from the worktree
 (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with a local
 config layered over it per option, a named table replacing the one below it
 whole. The local config is a file, `.shoal/config.toml` in the repository's own

@@ -191,6 +191,14 @@ through its `test-support` feature. Commands print only the library's types with
 promise: its version and exact-match rule refuse a client of another release
 with `protocol_mismatch` naming both versions, and an app updates with Shoal.
 
+Shoal refuses a request only for a very good reason: the request would act
+outside the caller's scope or permissions, would lose or damage work, or cannot
+be done at all. A limit of how Shoal is built is no such reason, such as a code
+path one kind of caller does not take: Shoal supports the request instead.
+Nor is a view of where a setting or action belongs, or of what the user ought
+to want. A config file takes every option its schema has, except where the
+option's value cannot apply there.
+
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked
 dependencies.

@@ -3,6 +3,12 @@
 This file covers chats, the spaces without a worktree of their own, including
 the chat without a repository.
 
+A chat gets every feature that coordinates or communicates, including
+requests to the forge such as starting CI runs. It gets nothing that runs code
+on this machine, such as leases, `shoal run` and demos, and nothing that needs
+a worktree or branch of its own. Features of the first kind take the same code
+path for both kinds of space.
+
 A chat is a conversation with an agent about a repository, not an assignment,
 so it runs in the registered checkout instead of in a workspace: coordinating
 work is one thing a chat may do. Every chat is scoped, as a workspace's
@@ -13,7 +19,8 @@ without what needs a worktree: it opens workspaces and chats only below its
 chat and in its repository, never takes over one outside it, and renames only
 its own chat. It proposes issues where its permissions say so, as a workspace's agent
 does, recording no branch or commit, since it has none; approval opens the
-issue from the chat's checkout and records it as the chat's. It starts at once from the default branch the
+issue from the chat's checkout and records it as the chat's. It never proposes
+a PR, since it has no branch. It starts at once from the default branch the
 background sync keeps current, so an offline or diverged checkout still gets its
 chat. Its
 instructions describe the discussion only, from the `chat` rule that
