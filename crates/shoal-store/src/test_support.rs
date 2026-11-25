@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use crate::Store;
 
 pub mod queries;
+pub mod rows;
 
 /// Skip the syncs to disk that carry `db`'s commits through a power loss,
 /// which no test outlives: where `TMPDIR`'s disk syncs slowly, they take
@@ -32,5 +33,5 @@ pub fn migrated() -> Result<Connection> {
 /// The store at `path`, as [`Store::open`] opens it but with
 /// [`skip_syncs`] on its connection.
 pub async fn unsynced_store(path: PathBuf) -> Result<Store> {
-    Store::open_with(path, crate::Syncs::Skipped).await
+    Store::open_with(path, crate::store::Syncs::Skipped).await
 }

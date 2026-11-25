@@ -7,8 +7,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
-
-use crate::model::{RefPart, SpaceKind, SpaceRef};
+use shoal_protocol::model::{RefPart, SpaceKind, SpaceRef};
 
 /// The workspaces whose agent the daemon tracks. An agent counts whether it
 /// reports turn states from hooks or not, as custom and Happy agents do not.
@@ -66,7 +65,7 @@ pub fn has_agent(column: &str) -> String {
             OR EXISTS (SELECT 1 FROM agent_queue
                 WHERE agent_queue.space_id={column} AND agent_queue.kind='{}'))",
         runs_agent(column),
-        crate::state::QueueKind::Restore,
+        shoal_protocol::state::QueueKind::Restore,
     )
 }
 

@@ -209,3 +209,5 @@ fn reviews_keep_their_ids_and_reopens_once_they_can_fail_unsubmitted() -> Result
     assert_eq!(db.last_insert_rowid(), 3);
     Ok(())
 }
+
+mod schema;

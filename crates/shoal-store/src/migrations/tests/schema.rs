@@ -1,5 +1,86 @@
-//! Lifecycle events must share the mutation's transaction and survive removal.
+//! What the schema's triggers do: number spaces, and journal their events in
+//! the transaction that changes them, which removal keeps.
 use super::*;
+
+/// A database with the current schema that holds the repository `repo`,
+/// its workspace `workspace` and that workspace's running execution
+/// `execution`.
+fn seeded() -> Result<Connection> {
+    let db = crate::test_support::migrated()?;
+    db.execute_batch(
+        "PRAGMA foreign_keys=ON;
+        INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+        BEGIN;
+        INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+            VALUES ('workspace','/work','worker','ready','abc','/admin');
+        INSERT INTO spaces(id,kind,repository_id,name)
+            VALUES ('workspace','workspace','repo','worker');
+        COMMIT;
+        INSERT INTO executions(id,space_id,state) VALUES ('execution','workspace','running');",
+    )?;
+    Ok(db)
+}
+
+#[test]
+fn new_spaces_take_the_smallest_number_no_space_holds() -> Result<()> {
+    let db = seeded()?;
+    db.execute_batch(
+        "INSERT INTO spaces(id,kind,repository_id,name)
+             VALUES ('second','workspace','repo','second');
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('second','/second','second','ready','abc','/admin');
+         INSERT INTO spaces(id,kind,repository_id,name,mode)
+             VALUES ('chat','chat','repo','chat','chat');
+         INSERT INTO chats(id) VALUES ('chat');
+         DELETE FROM spaces WHERE id='second';
+         INSERT INTO spaces(id,kind,repository_id,name,mode)
+             VALUES ('reused','chat','repo','reused','chat'),('next','chat','repo','next','chat');
+         INSERT INTO chats(id) VALUES ('reused'),('next');
+         UPDATE spaces SET name='renamed' WHERE id='workspace';",
+    )?;
+    assert_eq!(
+        space_numbers(&db)?,
+        [
+            ("chat".into(), 3),
+            ("next".into(), 4),
+            ("renamed".into(), 1),
+            ("reused".into(), 2)
+        ]
+    );
+    Ok(())
+}
+
+/// Every space's name and number, by name.
+fn space_numbers(db: &Connection) -> Result<Vec<(String, i64)>> {
+    Ok(db
+        .prepare("SELECT name,number FROM spaces ORDER BY name")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+#[test]
+fn a_held_thread_records_its_events_only_once_released() -> Result<()> {
+    let db = seeded()?;
+    let events = || -> Result<Vec<String>> {
+        Ok(db
+            .prepare(
+                "SELECT json_extract(record,'$.kind') FROM space_events
+                    WHERE json_extract(record,'$.kind') LIKE 'thread_%' ORDER BY id",
+            )?
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    db.execute_batch(
+        "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
+                holder_id,review_id,held)
+            VALUES (1,'workspace',1,1,'review','Unclear name',1,'user','workspace',1,1);
+        INSERT INTO thread_posts(thread_id,created_at,side,sender,text)
+            VALUES (1,2,'opener','user','Call it retries');",
+    )?;
+    assert!(events()?.is_empty());
+    db.execute("UPDATE threads SET held=0 WHERE id=1", [])?;
+    assert_eq!(events()?, ["thread_opened", "thread_posted"]);
+    Ok(())
+}
 
 #[test]
 fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {

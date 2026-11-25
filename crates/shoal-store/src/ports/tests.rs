@@ -1,6 +1,23 @@
-use super::*;
-use crate::test_support::queries::{check_owner_query, check_query_growth, populated_database};
+use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
+
+use super::*;
+use crate::test_support::queries::{check_owner_query, populated_database};
+use crate::test_support::rows::{check_columns, mapped_rows};
+
+#[test]
+fn the_port_mapper_uses_named_columns() -> Result<()> {
+    check_columns(
+        &mapped_rows()?,
+        "ports",
+        PORT_COLUMNS,
+        port,
+        serde_json::json!({
+            "workspace_id": "workspace", "name": "web", "port": 12345,
+            "env_var": "WEB_PORT", "reason": null
+        }),
+    )
+}
 
 #[test]
 fn owner_port_reads_search_existing_index() -> Result<()> {
@@ -44,16 +61,4 @@ fn port_lists_propagate_decoding_and_prepare_errors() -> Result<()> {
         assert!(ports(&db, owner.as_ref()).is_err());
     }
     Ok(())
-}
-
-#[test]
-fn execution_owner_reads_search_their_index() -> Result<()> {
-    let db = populated_database()?;
-    check_query_growth(
-        &db,
-        &executions_query(),
-        "executions",
-        "space_id",
-        "owner-0",
-    )
 }

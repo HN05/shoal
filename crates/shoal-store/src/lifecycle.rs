@@ -4,8 +4,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
-
-use crate::state::WorkspaceState;
+use shoal_protocol::state::WorkspaceState;
 
 /// How many times a workspace's lifecycle state has changed, which the
 /// store counts on each change.
