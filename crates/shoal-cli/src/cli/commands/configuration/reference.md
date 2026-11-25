@@ -135,9 +135,9 @@ takes a size in `B`, `KiB`, `MiB`, `GiB` or `TiB`, a percentage of RAM, or
 `"none"`, under which work may use the whole machine. On Linux the kernel
 enforces it, and where the file leaves it out, `load` sets it: 60% of RAM
 under `light`, 75% under `balanced` and 85% under `full`. Elsewhere only
-[memory protection](#overload) enforces it, and it has no default. `shoal
-status` outside a space shows the limit in effect and whether `load` or
-`memory_limit` sets it.
+[memory protection](#overload) enforces it, and it has no default. See
+[the daemon's status](../../../../../../docs/reference/daemon.md) for the
+limit in effect.
 
 `keep_awake` picks what the machine does once you walk away from it:
 
