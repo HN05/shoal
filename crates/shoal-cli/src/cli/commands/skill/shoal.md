@@ -148,8 +148,8 @@ shoal create --copy                      # A copy of this workspace's files
 CI run. The workspace is a child of the current space, a workspace or a chat,
 or of the space `--parent` names. It has its own worktree, branch and setup,
 and the result gives its `path`. Shoal commands run in its directory act on
-it. Its issue and PR activity reaches your agent, each update naming the
-child.
+it. Its issue and PR activity reaches its parent's agent, each update naming
+the child.
 
 `--no-branch` makes a workspace at a commit, with no branch or PR. An agent
 started there with `shoal start --in` cannot push.
@@ -388,8 +388,8 @@ shoal repo labels
 ```
 
 These commands act on the linked item, or on the number or URL given. Shoal
-acts as the agent account and records each change it makes. `issue` takes the
-same commands as `pr`.
+acts as the agent account and records each change it makes. `issue` has the
+same `edit`, `comment` and `close` commands as `pr`.
 
 `pr open` pushes the branch, then links the branch's open PR or opens one. The
 first assigned issue gives the default title. Without a body, the PR gets a
@@ -772,7 +772,8 @@ that space; give others their full `S.N`.
 You post on the side you took part on, such as the opener's or an earlier
 holder's, and your post reaches that side's current party too. Any other space
 that reads the thread posts as a participant. A participant's post reaches
-both sides and takes no turn.
+both sides and takes no turn. A participant neither offers nor picks choices,
+and hears the replies from then on.
 
 A post states its text. It may offer numbered choices, with the one it
 recommends and why. `--choose` picks a choice the other side offered; Shoal
