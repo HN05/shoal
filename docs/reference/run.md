@@ -22,38 +22,12 @@ agent's start makes, waits for that to end and then runs, or is refused as not
 ready when it leaves the workspace failed; a workspace being set up or removed
 refuses it at once.
 
-Agents' launchers are the [`command`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) of their AI tool.
-Overriding the `command` of Claude or Codex changes the executable or flags;
-prompt templates, trust setup, and agent exit alerts still apply. Agents
-are not commands: `shoal run <name>` runs only `[commands]` entries, which may
-take any name, an agent's included, and for an agent's name that no entry
-defines the error says to start it with `shoal start --in [workspace] -a
-<name>`. Both run with their own sandbox and approval settings.
-Every Codex launch, chats included, adds
-`-c sandbox_workspace_write.network_access=true`, since Codex's workspace-write
-sandbox otherwise blocks the daemon's socket and allows a single socket only
-along with the network.
-Claude and Codex launches, including Happy's, trust the repository's checkout and
-shared Shoal workspaces directory before launch, or for a chat without a repository
-`root_dir`, whose entry stays, creating the agent's user config if needed and
-preserving other settings. Claude Code looks up a worktree's trust under
-the checkout, not under parent directories above the worktree. An explicitly placed
-workspace outside the workspaces directory gets its own trust entry, and so, for
-Claude, which asks about each, does every other directory the launch passes with
-`--add-dir` that none of those covers, such as an `agent.dirs` entry; one outside
-the repository stays when the repository is removed.
-Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
-and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). For tracked
-agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the space's `[env]` takes
-precedence over Shoal's environment; desktop apps use Shoal's. One set
-in the tool's [`[agents.<name>]` `env`](agents.md) takes precedence over both. A trust
-update failure warns and still launches the agent. Removing a repository, by any
-client or as a [contribution](repo.md#contributions), removes its trust entries from the
-default files and from those its agents, chats and app handoffs ran with, including
-a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` they inherited, while preserving other project
-settings; moving it carries each entry to the new path. An entry Shoal cannot
-change is left in place with a `trust_left` alert, and the removal or move still
-completes.
+Agents are not commands: `shoal run <name>` runs only `[commands]` entries,
+which may take any name, an agent's included, as a plain command without agent
+prompts or exit alerts, expanding `{prompt}` to an empty string. For an agent's
+name that no entry defines the error says to start it with `shoal start --in
+[workspace] -a <name>`. [Agents](agents.md#launchers-and-trust) says how Shoal
+launches them.
 
 `shoal edit [workspace] -- <args>` runs the `edit` command, such as
 `edit = ["zed", "{path}"]`. Without one it runs `$VISUAL`, otherwise `$EDITOR`, split on whitespace,

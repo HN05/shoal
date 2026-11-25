@@ -207,10 +207,6 @@ and its recovery records show; a `resume_command` gets them before its `--`.
 One whose tool no longer has the templates for them is not restored until it
 does. A desktop app takes
 neither.
-Trust entries and skills follow a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` that a
-tool's [`env`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) sets. Unsetting a variable does not undo one
-the agent's own settings file sets, such as the `env` of Claude's
-`settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoids.
 
 With a tool's [`retry`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools), on by default for Claude Code,
 Shoal retries a turn an API error ended, for agents whose failed turns Shoal
@@ -348,9 +344,7 @@ so auto mode lets it push the rebased branch with `git push --force-with-lease`.
 Auto mode still judges every command, including other pushes. A workspace at a
 commit has no branch and gets no entry, and neither does a chat. A branch
 renamed while the agent runs keeps its old name in the entry until the agent's
-next launch. `shoal run <name>` for a `[commands]`
-shortcut remains a plain command invocation without agent prompts or exit
-alerts, expanding `{prompt}` to an empty string.
+next launch.
 
 `shoal open` hands a space to a desktop app in the directory its agent works
 in: a workspace's worktree, the worktree or checkout a chat runs in, or
@@ -395,6 +389,47 @@ Happy, fails before `happy codex` starts; one whose session does not receive the
 prompt is stopped, its session on Happy's server deleted, and the launch fails.
 Either way a workspace, queue entry or chat stays as any other failed launch
 leaves it.
+
+## Launchers and trust
+
+An agent's launcher is the [`command`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) of its AI tool.
+Overriding the `command` of Claude or Codex changes only the executable or
+flags: prompt templates, trust setup and exit alerts still apply. Claude and
+Codex run with their own sandbox and approval settings. Every Codex launch,
+chats included, adds `-c sandbox_workspace_write.network_access=true`, so its
+commands reach the daemon's socket.
+
+Before a Claude or Codex launch, Happy's included, Shoal trusts the agent's
+directories in the tool's user config:
+
+- the repository's checkout, under which Claude Code looks up each worktree's
+  trust;
+- the repository's shared workspaces directory;
+- a workspace placed outside that directory;
+- for Claude, which asks about each, every other directory the launch passes
+  with `--add-dir` that none of those covers, such as an `agent.dirs` entry;
+- for a chat without a repository, `root_dir`.
+
+Shoal creates the user config when it is missing and keeps its other settings.
+When the update fails, Shoal warns and still launches the agent.
+
+Claude's user config is `~/.claude.json`, or `$CLAUDE_CONFIG_DIR/.claude.json`.
+Codex CLI and app read `~/.codex/config.toml`, or `$CODEX_HOME/config.toml`.
+For a tracked agent, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` in the space's
+`[env]` takes precedence over Shoal's environment, and one in the tool's
+[`env`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools) over both. A desktop app uses Shoal's environment. Trust entries
+and skills follow these variables. Unsetting a variable does not undo one that
+the agent's own settings file sets, such as the `env` of Claude's
+`settings.json`; a separate `CLAUDE_CONFIG_DIR` avoids it.
+
+Removing a repository, by any client or as a [contribution](repo.md#contributions),
+removes its trust entries. It removes them from the default files and from each
+file its agents, chats and app handoffs ran with, including one a
+`CLAUDE_CONFIG_DIR` or `CODEX_HOME` they inherited names. Other project settings
+stay. So do the entries for `root_dir` and for directories outside the
+repository. An entry Shoal cannot change, on removal or a
+[move](repo.md#move-repositories-to-a-new-root), stays in place with a
+`trust_left` alert, and the removal or move still completes.
 
 ## Agent accounts
 
