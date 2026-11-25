@@ -206,8 +206,11 @@ async fn inspect_worktree(
         tree,
         branch,
     } = git::head_state(path).await?;
-    let changed = !git::status::porcelain(path).await?.is_empty();
-    check.starting_files = changed && holds_starting_files(&check.workspace).await?;
+    let status = git::status::porcelain(path).await?;
+    let changed = !status.is_empty();
+    let unmerged = git::status::lists_unmerged(&status);
+    check.starting_files =
+        changed && holds_starting_files_with(&check.workspace, Some(unmerged)).await?;
     check.dirty = changed && !check.starting_files;
     check.branch = branch;
     check.head = Some(commit);
@@ -276,11 +279,18 @@ pub async fn read_left(workspace: &Workspace, repo: &Path) -> Result<LeftFiles> 
 /// are not its own work. A Git operation under way is the copy's own, and
 /// leaves an index that cannot have been its starting one.
 pub async fn holds_starting_files(workspace: &Workspace) -> Result<bool> {
+    holds_starting_files_with(workspace, None).await
+}
+
+/// [`holds_starting_files`], where `unmerged` says whether the index has
+/// conflicts, as a status the caller read listed them, or `None` to read
+/// them.
+async fn holds_starting_files_with(workspace: &Workspace, unmerged: Option<bool>) -> Result<bool> {
     let Some(copied) = &workspace.copied_from else {
         return Ok(false);
     };
     let path = &workspace.path;
-    if git::status::operation_in_progress(path).await? {
+    if git::status::operation_in_progress_with(path, unmerged).await? {
         return Ok(false);
     }
     Ok(

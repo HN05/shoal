@@ -15,13 +15,23 @@ pub async fn porcelain(repo: &Path) -> Result<String> {
     run(repo, &["status", "--porcelain", "--untracked-files=normal"]).await
 }
 
+/// The status codes with which [`porcelain`] lists an unmerged path.
+const UNMERGED: [&str; 7] = ["DD", "AU", "UD", "UA", "DU", "AA", "UU"];
+
+/// Whether the [`porcelain`] status `status` lists an unmerged path: the
+/// index has conflicts.
+pub(crate) fn lists_unmerged(status: &str) -> bool {
+    (status.lines()).any(|line| line.get(..2).is_some_and(|code| UNMERGED.contains(&code)))
+}
+
 /// Whether the checkout holds work no remote keeps: changed or untracked
 /// files, a stash, a Git operation under way, or commits on a local branch,
 /// tag or detached HEAD that none of `kept`, the branches and tags the
 /// remotes advertise, has.
 pub async fn unretained_work(repo: &Path, kept: &[super::RemoteHead]) -> Result<bool> {
-    if !porcelain(repo).await?.is_empty()
-        || operation_in_progress(repo).await?
+    let status = porcelain(repo).await?;
+    if !status.is_empty()
+        || operation_in_progress_with(repo, Some(lists_unmerged(&status))).await?
         || super::ref_exists(repo, "refs/stash").await?
     {
         return Ok(true);
@@ -119,12 +129,33 @@ pub(crate) async fn head_tree(repo: &Path) -> Result<String> {
 /// Whether a merge, rebase, cherry-pick, revert or bisect is under way, or the
 /// index has conflicts: state a snapshot of the files would not capture.
 pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
-    operation_in_progress_at(repo, &super::git_dir(repo).await?).await
+    operation_in_progress_with(repo, None).await
+}
+
+/// [`operation_in_progress`], where `unmerged` says whether the index has
+/// conflicts, as a status the caller read listed them, or `None` to read
+/// them.
+pub(crate) async fn operation_in_progress_with(
+    repo: &Path,
+    unmerged: Option<bool>,
+) -> Result<bool> {
+    let git_dir = super::git_dir(repo).await?;
+    Ok(operation_marked(&git_dir).await?
+        || match unmerged {
+            Some(unmerged) => unmerged,
+            None => has_unmerged(repo).await?,
+        })
 }
 
 /// [`operation_in_progress`] in the checkout at `repo`, whose own Git
 /// directory the caller read as `git_dir`.
 pub async fn operation_in_progress_at(repo: &Path, git_dir: &Path) -> Result<bool> {
+    Ok(operation_marked(git_dir).await? || has_unmerged(repo).await?)
+}
+
+/// Whether the Git directory `git_dir` marks a merge, rebase, cherry-pick,
+/// revert or bisect under way.
+async fn operation_marked(git_dir: &Path) -> Result<bool> {
     pub(crate) const MARKERS: &[&str] = &[
         "MERGE_HEAD",
         "CHERRY_PICK_HEAD",
@@ -138,6 +169,11 @@ pub async fn operation_in_progress_at(repo: &Path, git_dir: &Path) -> Result<boo
             return Ok(true);
         }
     }
+    Ok(false)
+}
+
+/// Whether the index of the checkout at `repo` has conflicts.
+async fn has_unmerged(repo: &Path) -> Result<bool> {
     Ok(!run(repo, &["ls-files", "--unmerged"]).await?.is_empty())
 }
 

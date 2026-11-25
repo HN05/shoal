@@ -209,3 +209,29 @@ async fn default_refs_list_the_existing_local_upstream_and_remote_branch() {
         .await
         .unwrap_err();
 }
+
+#[tokio::test]
+async fn a_status_read_finds_the_conflicts_of_the_index() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    git(&repo, &["checkout", "-q", "-b", "other"]);
+    fs::write(repo.join("tracked"), "other\n").unwrap();
+    commit(&repo, "tracked");
+    git(&repo, &["checkout", "-q", "main"]);
+    fs::write(repo.join("tracked"), "main\n").unwrap();
+    commit(&repo, "tracked");
+    let status = super::porcelain(&repo).await.unwrap();
+    assert!(!super::lists_unmerged(&status), "{status}");
+    let program = crate::test_support::developer_tools()
+        .map_or_else(|| "git".into(), |tools| tools.join("git"));
+    let merge = crate::test_support::isolate(&mut std::process::Command::new(program), &repo)
+        .args(["merge", "-q", "other"])
+        .output()
+        .unwrap();
+    assert!(!merge.status.success(), "the merge conflicts");
+    // Without its marker, only the index tells the merge is under way.
+    fs::remove_file(repo.join(".git/MERGE_HEAD")).unwrap();
+    let status = super::porcelain(&repo).await.unwrap();
+    assert!(super::lists_unmerged(&status), "{status}");
+    assert!(super::operation_in_progress(&repo).await.unwrap());
+}
