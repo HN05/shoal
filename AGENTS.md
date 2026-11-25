@@ -1,197 +1,194 @@
 # Shoal
 
-Read the files of `docs/design/` that cover your change for product decisions, and
-`docs/design/overview.md` for the implementation order. Update them when behavior
-changes, distinguishing decisions from proposals.
+This file holds the rules for writing, testing and delivering code in this
+repository. Read all of it before you start, in as many reads as it takes: the
+rules under Committing decide when work is done.
 
-Read this whole file before you start, in as many reads as it takes: the rules
-for delivering a PR, under Committing near the end, decide when work is done.
+`docs/design/` states Shoal's product decisions, one file per subsystem, and
+`docs/design/overview.md` its purpose, architecture and implementation order.
+Read the files that cover your change. When behavior changes, update them, and
+tell decisions apart from proposals.
 
 ## Implementation
 
-- Shoal is a Rust CLI and local daemon. Keep Superlogical, Macraft, and other
-  caller-specific integration logic outside its core.
-- The daemon owns shared state. Keep terminal I/O in the execution wrapper.
-- A store operation that needs a transaction runs in `Store::write`, or in
-  `Store::read` when it only reads; one that opens its own on `Store::run`
-  says why.
-- Shoal makes no compatibility promise yet, to its earlier versions or to
-  what they wrote: when a type, record, protocol message, output or file
-  format should take another shape, change it now, while that is cheap. A
-  store migration rewrites what the store holds into the new shape in the
-  same change, so code reads one shape and keeps no alias, fallback or
-  second reader for an old one; what another version sends, such as a
-  `shoal move` package, is refused, not converted. A process an upgrade
-  leaves running, such as an agent's wrapper, runs its version's code, which
-  no migration can rewrite: keep it usable where that is easy, and accept
-  what it then does oddly, such as a report the daemon no longer takes. A
-  change that keeps code for such a process files an issue to remove it,
-  naming the release after which it can go.
-- Treat function abstraction as a correctness requirement and a review gate.
-  Every function must stay at one abstraction level: orchestration calls named
-  domain operations, and helpers own lower-level implementation details. If a
-  function mixes those levels, extract a named operation before adding behavior;
-  bots and reviewers must flag the violation even when tests pass. Judge the
-  responsibility boundary, not the function's length or helper count.
+### Code
+
+- Keep every function at one abstraction level: orchestration calls named
+  domain operations, and helpers own the lower-level details. Before you add
+  behavior to a function that mixes levels, extract a named operation. This is
+  a correctness requirement and a review gate: reviewers flag a violation even
+  when tests pass. Judge the responsibility boundary, not the length or the
+  number of helpers.
 - Give each module one responsibility a reader can name. When a file comes to
-  cover several, or a match dispatches every command of a group, split it by
-  responsibility into a directory of modules before adding to it; judge the
+  cover several, or a match dispatches every command of a group, split it into
+  a directory of modules by responsibility before you add to it. Judge the
   responsibility, not the line count.
-- When you see a problem with the code's structure or code that should be
-  refactored, refactor it in your change when it lies within your work, and
-  otherwise file an issue for it instead of only mentioning it.
-- Tests live in a sibling `tests.rs` (`#[cfg(test)] mod tests;`), not inline in
+- When code you see needs refactoring, refactor it in your change if it lies
+  within your work. Otherwise file an issue for it instead of only mentioning
+  it.
+- Put tests in a sibling `tests.rs` (`#[cfg(test)] mod tests;`), never inline in
   the implementation file.
-- A file a package compiles, or its tests read, lives in that package's
-  directory (for the root package, `src/` or `tests/`) or in that of a package
-  it depends on: CI tests a PR's packages by the directories it changes, and
-  `scripts/check_package_sources.py` fails a build that reads any other.
-- Integrations such as agent tools, terminal hosts and apps implement callbacks
-  for what they do differently; state, decisions and daemon calls stay in
-  Shoal's generic code, which passes each callback only what it reads.
-- A change that adds or extends a feature that coordinates or communicates
-  implements it for chats too, through the same code path, or its PR says why
-  it cannot apply to them. `docs/design/chats.md` says which features chats get.
-- A space is a workspace or a chat. Flags, arguments, user-facing text and
-  code call what applies to both a space (`--space`), and say workspace only
-  for what needs a worktree. A command's flag becomes `--space` in the change
-  that lets it act on a chat. Command names stay short: `shoal start` starts
-  every agent, in a workspace or a chat, and a command that maintains a space
-  is top-level, such as `shoal status` and `shoal rename`.
+- Give each closed set of values, such as lifecycle states, resource scopes and
+  approval targets, a type that rejects unknown values.
+- Invoke external tools with argument arrays.
+- Keep integration logic for a particular caller, such as Superlogical or
+  Macraft, outside Shoal's core. Integrations such as agent tools, terminal
+  hosts and apps implement callbacks for what they do differently. State,
+  decisions and daemon calls stay in Shoal's generic code, which passes each
+  callback only what it reads.
+- The daemon owns shared state. Keep terminal I/O in the execution wrapper.
+
+### Compatibility
+
+Shoal makes no compatibility promise yet, to its earlier versions or to what
+they wrote. When a type, record, protocol message, output or file format
+should take another shape, change it now, while that is cheap.
+
+- A store migration rewrites what the store holds into the new shape in the
+  same change. Code reads one shape and keeps no alias, fallback or second
+  reader for an old one.
+- Refuse what another version sends, such as a `shoal move` package, instead
+  of converting it.
+- A process an upgrade leaves running, such as an agent's wrapper, runs its
+  own version's code. Keep it usable where that is easy, and accept what it
+  then does oddly. A change that keeps code for such a process files an issue
+  to remove it, naming the release after which it can go.
+- The store migrates from the schema of the release its floor names. Raising
+  the floor deletes the migrations at or below it, with their tests.
+
+### Daemon code
+
+- A store operation that needs a transaction runs in `Store::write`, or in
+  `Store::read` when it only reads. One that opens its own on `Store::run`
+  says why.
 - Refuse a request only for a reason `docs/design/overview.md` accepts. Support
   any other request instead, or file an issue for it when that lies outside the
   change.
-- Invoke external tools with argument arrays. Worktrees are created and
-  removed with plain Git through the `git` module; preserve Shoal's ownership
-  records and cleanup policy.
-- Keep production Git access in the `git` module, both Git command arguments
-  and the reads it makes in process with `gix`; callers use named operations
-  and retain lifecycle and execution policy. `gix` reads a repository's
-  location, HEAD, refs, remotes and config, opening it afresh for each read on
-  the blocking pool, and reads through Git where it would not read the
-  repository as Git does. Writes, network access, `status`, `ls-files` and
-  `diff`, revision syntax Git interprets, such as a caller's `--base HEAD~2`,
-  and the checks behind removal and cleanup decisions run Git; HEAD, a full
-  ref name or a full object ID, peeled at most once, means the same to both.
-- Interactive input lives in `cli::ui`, whose module doc lists what it offers:
-  commands prompt and pick through its operations, never through fzf or the
-  terminal directly, and a new kind of prompt or picker goes there, built on
-  the existing ones, so every command looks and behaves the same.
-- Give each command, flag and value one name: no clap aliases, and a rename
-  drops the old name. A short form is not an alias: a flag people type often
-  gets a letter, which stands for that long flag in every command that defines
-  it and for no other.
-- A verb that acts the same way on every kind a workspace links (issues, PRs
-  and CI runs) is a top-level command, `shoal <verb> [kind] [item]`, that acts
-  on everything linked when both are omitted: `view`, `view ci 2765`,
-  `watch pr 12`. Leases follow the same grammar: `acquire port`, `release sim`.
-  Every other action goes subject first under its kind's group, even when
-  another group has one of the same name: `pr close`, `issue comment`,
-  `ci rerun`. Listing is one, since each kind filters its own way: `ci ls`.
-  `merge` is top-level because it merges a space's work, through its PR or
-  locally, and reads a PR it is given as the cross-kind verbs read items.
-  A command that prints a list and exits is named `ls`; `list` names a picker.
-  A new kind joins the cross-kind verbs that apply to it instead of growing its
-  own `view` or `watch`.
+- A scope token is a `ScopeToken`, whose `Debug` redacts it, never a bare
+  string. Code reads its text with `expose` only where it sends it.
+- The daemon decides what a caller may do, and which account it acts as, from
+  its `Option<&Caller>`, `None` for the user, never from a `bool` that says
+  whether it is scoped.
+- The daemon checks the permission of each request it receives. The CLI asks
+  the daemon before what a command does itself, and never decides a
+  permission alone.
+- A change that adds or extends a feature that coordinates or communicates
+  implements it for chats too, through the same code path, or its PR says why
+  it cannot apply to them. `docs/design/chats.md` says which features chats
+  get.
+
+### Git
+
+- Keep production Git access in the `git` module: Git command arguments and
+  the reads it makes in process with `gix` alike. Callers use its named
+  operations and keep lifecycle and execution policy.
+- Create and remove worktrees with plain Git through that module, keeping
+  Shoal's ownership records and cleanup policy.
+- `docs/design/git.md` says which reads use `gix` and which run Git.
+
+### Crates
+
+`docs/design/overview.md` describes the architecture, and each crate's `//!`
+names its responsibility.
+
 - `scripts/crate_dependencies.toml` lists the Shoal crates each crate may
   depend on, and CI's `scripts/check_crate_dependencies.py` refuses any other.
   A new crate or dependency gets an entry that follows the rules below.
-- Forge requests live in `crates/shoal-forge`, and the forge data the
-  protocol carries, with the logic that reads it without a request or the
-  daemon's state, such as repositories, item URLs, check states, item
-  snapshots and run IDs, in `crates/shoal-forge-types`, at the module path
-  the type has in `shoal-forge`, which re-exports none of them and adds its
-  requests on them as each module's extension trait. `shoal-forge` takes the
-  account to act as, while scope, approvals, identity choice and workspace
-  records stay in the daemon. What one forge does its own way belongs in its
-  implementation of `Routes` in `shoal-forge-types`, where reading a URL
-  needs it, or else of the trait of the `shoal-forge` module that covers it,
-  such as `transport`'s `Backend` or `ci`'s `Runs`, which each forge
-  implements in its module under `backends`, never in a match on the forge
-  kind; no other module names `backends`, and reading an issue, PR or run
-  by its kind goes through `ForgeRepo`'s one operation for it.
-- Apps use Shoal's protocol through the `shoal-client` crate, with no
-  compatibility promise: the protocol changes freely and only the exact
-  version match protects a client. `crates/shoal-protocol` holds the types
-  the daemon or core build or read, with the logic over them that needs no
-  connection, and `shoal-client` the connection, one operation per request in
-  the module of the same name, the handles that read from a connection and
-  what only callers print, re-exporting none of `shoal-protocol`. The CLI and
-  apps share `shoal-client`: the CLI sends each daemon request through a
-  named operation of the client module for its subject and never builds one
-  itself. What the CLI alone needs, such as parsing, prompting and printing,
-  stays in `shoal-cli`, and parsing and resolving config, which the protocol
-  carries without reading, lives in `shoal-core`.
-- `crates/shoal-schedule` holds the agent queue's order: priorities, the
-  rank types that explain an entry's place, the snapshot a policy reads, the
-  `Scheduler` trait and the built-in policies. A policy reads only that
-  snapshot, which the daemon builds from its state, and never the state
-  itself; admission stays in the daemon.
-- `crates/shoal-store` holds the daemon's `Store`, its schema, its
-  migrations and the row mappers and guards every subsystem shares; a
-  subsystem's own record functions stay with it. The store migrates from the
-  schema of the release its floor names, and raising the floor deletes the
-  migrations at or below it with their tests.
-- `crates/shoal-daemon-base` holds what more than one subsystem of the
-  daemon uses. What it needs of a subsystem is an interface it declares, a trait whose methods
-  return a `Send` `BoxFuture`, which the daemon implements; its code is no
-  method of `Manager`.
-- A subsystem moved out of the daemon is a crate of its own, such as
-  `crates/shoal-leases` for ports, resource permits, simulators, containers
-  and secrets, `crates/shoal-reviews` for local reviews, the gate agent
-  and the one-shot agent runs they start, `crates/shoal-hub` for the hub
-  role and membership of a hub, `crates/shoal-runner` for triggers and
-  the CI jobs this machine runs, `crates/shoal-links` for the issues,
-  PRs and CI runs spaces link, `crates/shoal-repositories` for the
-  registered repositories, their config layers, seeds and caches,
-  `crates/shoal-agents` for the agents the daemon runs,
-  `crates/shoal-apps` for the settings and the store of apps built on Shoal,
-  `crates/shoal-demos` for demos and their viewers,
-  `crates/shoal-coordination` for alerts, threads and the changes made for
-  them, approval requests, permissions and the scope of scope tokens, and
-  `crates/shoal-spaces` for the workspaces and chats themselves: their
-  records and tree, worktrees, lifecycle, removal and cleanup, restores,
-  conversions, moves and launches.
-  Its service, a field of `Manager`, holds what the subsystem
-  keeps in memory and offers its operations; what it needs of other
-  subsystems is an interface it declares, as the base does, which the daemon
-  implements and passes each operation, except what runs in the subsystem's
-  own transaction, a synchronous method over it that the service keeps. Its
-  tests build the service over a temporary store and stand-ins for those
-  interfaces; a test across subsystems stays in `shoal-daemon`. A subsystem
-  crate depends on no other, except that `shoal-spaces` calls coordination's
-  service directly, which its interface gives with the daemon coordination
-  takes.
-- The CLI lives in `crates/shoal-cli` and the daemon in `crates/shoal-daemon`,
-  neither of which depends on the other, so an edit in one rebuilds neither
-  the other nor its tests. Nor does the daemon depend on a crate that calls
-  the daemon, even as a dev-dependency: a test that drives a daemon through
-  such a crate lives in that crate's tests and starts the daemon through its
-  `test-support` feature. The `shoal` package is only `main`,
-  which runs the CLI and passes it the daemon for `shoal daemon run`. Code both use, directly
-  or through code they call, lives in `crates/shoal-core`, in a top-level
-  module named for what it does; it names neither the CLI nor the daemon
-  and makes no daemon calls. Its items are `pub` only where another Shoal
-  crate uses them, and fixtures the other crates' tests share sit behind its `test-support` feature.
-- `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution
-  wrapper, the proxy or the workers use lives outside it, in `shoal-workers`
-  where it calls the daemon.
-- `crates/shoal-workers` holds the execution wrapper and the workers: the
-  code that runs in the processes Shoal starts and calls the daemon, which the
-  CLI reaches there too. Neither core nor the daemon's own code depends on
-  it. Where core logic needs a value the daemon records, its
-  caller reads it and passes core the value, never a callback that calls the
+- A file a package compiles, or its tests read, lives in that package's
+  directory (`src/` or `tests/` for the root package) or in that of a package
+  it depends on. CI tests a PR's packages by the directories it changes, and
+  `scripts/check_package_sources.py` fails a build that reads any other.
+- The CLI (`shoal-cli`) and the daemon (`shoal-daemon`) never depend on each
+  other, so an edit in one rebuilds neither the other nor its tests. The
+  `shoal` package is only `main`: it runs the CLI and passes it the daemon for
+  `shoal daemon run`.
+- The daemon depends on no crate that calls the daemon, even as a
+  dev-dependency. A test that drives a daemon through such a crate lives in
+  that crate's tests and starts the daemon through its `test-support` feature.
+- Code the CLI and the daemon both use, directly or through code they call,
+  lives in `shoal-core`, in a top-level module named for what it does. Core
+  names neither the CLI nor the daemon and makes no daemon calls. Its items
+  are `pub` only where another Shoal crate uses them. Fixtures the other
+  crates' tests share sit behind its `test-support` feature.
+- `shoal-cli` serves only the CLI. Code that runs in the processes Shoal starts
+  and calls the daemon, such as the execution wrapper and the workers, lives in
+  `shoal-workers`, which neither core nor the daemon depends on. Where core
+  logic needs a value the daemon records, its caller reads the value and
+  passes it to core, never a callback that calls the daemon.
+- `shoal-protocol` holds the types the daemon or core build or read, with the
+  logic over them that needs no connection. `shoal-client` holds the
+  connection, one operation per request in the module of the same name, the
+  handles that read from a connection and what only callers print. It
+  re-exports nothing of `shoal-protocol`.
+- The CLI sends each daemon request through a named operation of the client
+  module for its subject and never builds one itself. What only the CLI needs,
+  such as parsing, prompting and printing, stays in `shoal-cli`. Parsing and
+  resolving config, which the protocol carries without reading, lives in
+  `shoal-core`.
+- A subsystem of the daemon is a crate of its own. Its service, a field of
+  `Manager`, holds what the subsystem keeps in memory and offers its
+  operations. What it needs of other subsystems is an interface it declares,
+  which the daemon implements and passes each operation. What it needs inside
+  its own transaction is instead a synchronous method over that transaction,
+  on an interface the service keeps.
+- A subsystem's tests build its service over a temporary store, with
+  stand-ins for its interfaces. A test across subsystems stays in
+  `shoal-daemon`.
+- A subsystem crate depends on no other subsystem crate. The one exception:
+  `shoal-spaces` calls coordination's service directly, which its interface
+  gives with the daemon coordination takes.
+- `shoal-daemon-base` holds what more than one subsystem uses. What it needs of
+  a subsystem is an interface it declares: a trait whose methods return a
+  `Send` `BoxFuture`, which the daemon implements. Its code is no method of
+  `Manager`.
+- `shoal-store` holds the `Store`, its schema and migrations, and the row
+  mappers and guards every subsystem shares. A subsystem's own record
+  functions stay with the subsystem.
+- A policy of the agent queue in `shoal-schedule` reads only the snapshot the
+  daemon builds from its state, never the state itself. Admission stays in the
   daemon.
-- A scope token is a `ScopeToken`, whose `Debug` redacts it, never a bare
-  string; code reads its text with `expose` only where it sends it. The daemon
-  decides what a caller may do, and which account it acts as, from its
-  `Option<&Caller>`, `None` for the user, never from a `bool` saying whether it
-  is scoped.
-- The daemon checks the permission of each request it receives. The CLI asks
-  the daemon before what a command does itself, and never decides a permission
-  alone.
-- Lifecycle states, resource scopes, approval targets and approval
-  specifications are typed and reject unknown values.
+- Forge requests live in `shoal-forge`. The forge data the protocol carries,
+  with the logic that reads it without a request or the daemon's state, lives
+  in `shoal-forge-types`, at the module path the type has in `shoal-forge`.
+  `shoal-forge` re-exports none of it and adds its requests as each module's
+  extension trait.
+- `shoal-forge` takes the account to act as. Scope, approvals, identity choice
+  and workspace records stay in the daemon.
+- What one forge does its own way belongs in its implementation of a trait,
+  never in a match on the forge kind: `Routes` in `shoal-forge-types` where
+  reading a URL needs it, or else the trait of the `shoal-forge` module that
+  covers it, such as `transport`'s `Backend`. Each forge implements those in
+  its module under `backends`, which no other module names. Reading an issue,
+  PR or run by its kind goes through `ForgeRepo`'s one operation for it.
+
+### Command line
+
+- Interactive input lives in `cli::ui`, whose module doc lists what it offers.
+  Commands prompt and pick through its operations, never through fzf or the
+  terminal directly. A new kind of prompt or picker goes there, built on the
+  existing ones, so every command looks and behaves the same.
+- Give each command, flag and value one name: no clap aliases, and a rename
+  drops the old name. A flag people type often gets a short form, a letter
+  that stands for that long flag in every command that defines it and for no
+  other.
+- Call what applies to both kinds of space a space, in flags, arguments,
+  user-facing text and code, and say workspace only for what needs a worktree.
+  A command's flag becomes `--space` in the change that lets it act on a chat.
+- Keep command names short: `shoal start` starts every agent, in a workspace or
+  a chat. A command that maintains a space is top-level, such as `shoal status`
+  and `shoal rename`.
+- A verb that acts the same way on every kind a workspace links (issues, PRs
+  and CI runs) is a top-level command, `shoal <verb> [kind] [item]`, which acts
+  on everything linked when both are omitted: `view`, `view ci 2765`,
+  `watch pr 12`. Leases follow the same grammar: `acquire port`,
+  `release sim`. A new kind joins the cross-kind verbs that apply to it
+  instead of growing its own `view` or `watch`.
+- Every other action goes subject first under its kind's group, even when
+  another group has one of the same name: `pr close`, `issue comment`,
+  `ci rerun`. Listing is such an action, since each kind filters its own way:
+  `ci ls`. `merge` is top-level because it merges a space's work, through its
+  PR or locally.
+- A command that prints a list and exits is named `ls`; `list` names a picker.
 
 ## Documentation
 
@@ -266,63 +263,86 @@ current.
 
 ## Validation
 
+### Checks
+
 Run `cargo fmt --all --check`, `CARGO_BUILD_WARNINGS=deny cargo clippy
---all-targets`, and `cargo nextest run` for Rust changes, with `cargo test --doc` when a change touches
-doc tests. `python3 scripts/affected_packages.py origin/main` names the packages
-a branch's commits can affect; `cargo nextest run -E 'package(=NAME) | …'` runs
-only their tests and, unlike `-p`, builds with the workspace's features, which
-keeps the build's dependencies from rebuilding. Nextest runs every test in a process of its own, so a lock in a test
-binary's memory keeps no tests apart: tests that must not overlap take a lock
-other processes see, such as a file lock, and join a test group with
-`max-threads = 1` in `.config/nextest.toml`. Test in temporary state
-directories and repositories, without the launching environment's Shoal
-variables, configuration locations or Git repository variables, or a
-repository above the temporary directory, which a test binary that starts Git
-leaves behind with `prepare_test_process!` at its root;
-never install persistent OS services or modify real user workspaces as a side
-effect of tests.
-Simulator tests use an isolated xcrun fixture and never touch the user's own
-simulator devices.
-Run development builds only with a temporary `--state-dir`: the user's daemon
-serves every running agent, so never stop, restart or reinstall it, and a debug
-build refuses the user's state directory, and writes to the user's config
-directory, unless `SHOAL_DEV_USER_FILES=1`. Code writes the global config and
-the files beside it through `config_file`, and tests through
-`test_support`, which refuse that directory in unit tests whatever
-they inherit. Code that
-changes user-level files outside the state directory checks
-`build::changes_user_files`, so debug builds leave them to the installed Shoal.
+--all-targets` and `cargo nextest run` for Rust changes. Add `cargo test --doc`
+when a change touches doc tests.
+
+`python3 scripts/affected_packages.py origin/main` names the packages a
+branch's commits can affect. `cargo nextest run -E 'package(=NAME) | …'` runs
+only their tests. Unlike `-p`, it builds with the workspace's features, so the
+build's dependencies do not rebuild.
+
+### Isolation
+
+- Test in temporary state directories and repositories. Leave out the
+  launching environment's Shoal variables, configuration locations and Git
+  repository variables, and any repository above the temporary directory. A
+  test binary that starts Git does this with `prepare_test_process!` at its
+  root.
+- Never install persistent OS services or change real user workspaces as a
+  side effect of tests. Simulator tests use an isolated xcrun fixture and never
+  touch the user's own simulator devices.
+- Nextest runs every test in a process of its own, so a lock in a test
+  binary's memory keeps no tests apart. Tests that must not overlap take a lock
+  other processes see, such as a file lock, and join a test group with
+  `max-threads = 1` in `.config/nextest.toml`.
+- Code that tests run reads paths at run time, never one the build compiled
+  in, such as `env!("CARGO_BIN_EXE_shoal")`: CI starts from a seed build made
+  in another directory.
+
+### The user's Shoal
+
+The user's daemon serves every running agent: never stop, restart or reinstall
+it. Run development builds only with a temporary `--state-dir`. A debug build
+refuses the user's state directory, and writes to the user's config directory,
+unless `SHOAL_DEV_USER_FILES=1`.
+
+- Code writes the global config and the files beside it through `config_file`,
+  and tests through `test_support`. Both refuse that directory in unit tests,
+  whatever they inherit.
+- Code that changes user-level files outside the state directory checks
+  `build::changes_user_files`, so debug builds leave those files to the
+  installed Shoal.
+
+### What a test asserts
 
 A test exists to catch a behavior regression. Assert what the code computes or
-decides: the values it puts into text, which outcome or refusal it chooses, the
-state it leaves. Never assert prose the code spells out as a literal, such as a
-prompt's, help text's or message's wording, beyond the fragment that tells one
-outcome from another; never restate a constant, default or lookup table, test
-what a derive, the language or a dependency guarantees, or repeat a path
-another test covers. Persisted and protocol representations are behavior and
-keep their tests.
+decides: the values it puts into text, which outcome or refusal it chooses, and
+the state it leaves. Persisted and protocol representations are behavior and
+keep their tests. Leave out:
+
+- prose the code spells out as a literal, such as a prompt's, help text's or
+  message's wording, beyond the fragment that tells one outcome from another,
+- a restated constant, default or lookup table,
+- what a derive, the language or a dependency guarantees,
+- a path another test covers.
 
 A failing assertion shows a command's output through `test_support::printed`,
-as text a reader of the log can follow, never with `{:?}`, which lists its bytes.
+as text a reader of the log can follow, never with `{:?}`, which lists its
+bytes.
+
+### Time
 
 A test must not depend on runner speed. Never assert that work finishes within
-a wall-clock duration or race it against a short real timeout. Assert the outcome
-and the applied limit, drive time with a paused Tokio clock, or wait on an explicit
-signal. Give limits that should not trigger generous values; test limits that
-should trigger with work that cannot finish. Real timeouts are generous hang
-guards only, never the behavior being asserted. A wait observes the state the
-next step depends on, where that step reads it, and only a condition that
-cannot hold before the awaited event: a file a child writes does not prove the
-daemon recorded its start.
+a wall-clock duration, or race it against a short real timeout. Assert the
+outcome and the applied limit, drive time with a paused Tokio clock, or wait on
+an explicit signal.
 
-The harness runs tests in parallel but a test's cases one after another, so a
-test must not outlast the others by looping over cases that each need their own
-repository, workspace or daemon: split those cases into separate tests that
-share a helper, and let cases that need no isolation share one fixture.
+- Give limits that should not trigger generous values. Test a limit that
+  should trigger with work that cannot finish.
+- Real timeouts are generous hang guards, never the behavior under test.
+- A wait observes the state the next step depends on, where that step reads
+  it, and only a condition that cannot hold before the awaited event: a file a
+  child writes does not prove the daemon recorded its start.
 
-Code that tests run reads paths at run time, never one the build compiled in,
-such as `env!("CARGO_BIN_EXE_shoal")`: CI starts from a seed build made in
-another directory.
+### Test size
+
+The harness runs tests in parallel, but a test's cases one after another. A
+test that loops over cases that each need their own repository, workspace or
+daemon outlasts the others: split those cases into separate tests that share a
+helper. Let cases that need no isolation share one fixture.
 
 ## Profiling
 
@@ -393,71 +413,85 @@ Close an audit issue when it is fixed, or explain in a comment or with
 
 ## Committing
 
-- Keep commits small enough to review on their own. An issue is a PR-sized unit,
-  not a commit-sized one: before editing a change that spans several concerns,
-  decide the commit boundaries, then commit each coherent step as it is completed
-  instead of collecting the whole implementation into one final commit.
+### Commits
+
+- Keep commits small enough to review on their own. An issue is a PR-sized
+  unit, not a commit-sized one: before you edit a change that spans several
+  concerns, decide the commit boundaries, then commit each coherent step as you
+  complete it.
 - Separate preparatory refactors, daemon behavior, CLI behavior and unrelated
-  cleanups where each stands on its own; keep tests, generated files and
-  documentation with the change that requires them. Every commit builds and passes
-  its tests; do not split tightly coupled changes just to shrink a diff.
-- Aim for roughly 200 changed lines of handwritten code per commit. Above 300,
-  inspect the staged diff for another coherent split; generated files, lockfiles
-  and mechanical moves do not count, and the body says why an indivisible larger
-  change stays together.
-- Stage by file or hunk and read `git diff --cached` before every commit; a
-  summary that has to describe separate outcomes means two commits. Before
-  opening the PR, inspect the branch against its base and split any accumulated
+  cleanups where each stands on its own. Keep tests, generated files and
+  documentation with the change that requires them. Every commit builds and
+  passes its tests; keep tightly coupled changes together.
+- Aim for about 200 changed lines of handwritten code per commit. Above 300,
+  look in the staged diff for another coherent split. Generated files,
+  lockfiles and mechanical moves do not count, and the body says why an
+  indivisible larger change stays together.
+- Stage by file or hunk and read `git diff --cached` before every commit. A
+  summary that has to describe separate outcomes means two commits. Before you
+  open the PR, inspect the branch against its base and split any accumulated
   feature-sized commit that has independent parts.
-- Messages: an imperative subject under 72 characters without a type prefix (the
-  release workflow's `chore:` excepted), a blank line, then a body saying why when
-  the diff does not make it obvious. `Closes #n` goes in the PR description.
-- A PR closes every issue it fixes, one `Closes #n` line each. Before opening
+- Write an imperative subject under 72 characters without a type prefix (the
+  release workflow's `chore:` excepted), a blank line, then a body that says
+  why when the diff does not make it obvious. `Closes #n` goes in the PR
+  description, not the commit.
+
+### Pull requests
+
+- Deliver completed work as a PR on a topic branch: commit, push, open or
+  update the PR with its `area/`, `type/` and `complexity/` labels, then watch
+  CI and the review bot. Agents cannot merge PRs: leave merging to the user,
+  without asking for permission to merge.
+- A PR closes every issue it fixes, one `Closes #n` line each. Before you open
   it, and again when work beyond the assigned issue lands in it, such as a
   failing test or a bug found along the way, search the open issues with
-  `shoal issue ls <words>` for each such fix and add the reference for every
+  `shoal issue ls <words>` for each such fix. Add the reference for every
   issue it completes.
-- An assigned issue that is already fixed needs no PR: verify the fix on the
+- An assigned issue that is already fixed needs no PR. Verify the fix on the
   default branch, comment on the issue with the PR or commit that fixed it
-  (`shoal issue comment --body-file`), then close it with `shoal issue close`
-  and finish with `shoal done`.
-- Before opening a PR, and before each later push, review your own diff against
-  this file, function abstraction first. A review-bot finding that cites a rule
-  stated here is one your own review missed.
-- Deliver completed work as a PR on a topic branch: commit, push, open or update the
-  PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
-  review bot. Review findings are claims to verify against the code and its
-  callers before fixing them or rejecting them with evidence in the thread.
-  Agents cannot merge PRs; leave merging to the user instead of asking for
-  permission to merge.
+  (`shoal issue comment --body-file`), close it with `shoal issue close` and
+  finish with `shoal done`.
+- Before you open a PR, and before each later push, review your own diff
+  against this file, function abstraction first. A review-bot finding that
+  cites a rule stated here is one your own review missed.
+
+### Reviews
+
 - The review bot reviews a PR when it opens ready or leaves draft, and
   whenever `review/default`, `review/claude` or `review/codex` is added;
   `review/none` suppresses it. A request label added to a draft is answered
   when the PR leaves draft. Opening a ready PR already requests its review, so
   open it with its classification labels alone.
+- Review findings are claims. Verify each against the code and its callers,
+  then fix it, or reject it with evidence in its thread.
 - Every push after the first review that changes what the PR does needs a new
-  one: a push does not request it. After each push that fixes findings, adds
-  commits or resolves merge conflicts by changing the PR's own code, run
-  `shoal pr edit --add-label review/default`, wait for that review, and handle
-  its findings. A rebase that only replays the PR's changes onto a newer base
-  needs none: `git range-diff origin/main <reviewed> HEAD` shows its commits
+  review, and a push does not request one. After each push that fixes
+  findings, adds commits or resolves merge conflicts by changing the PR's own
+  code, run `shoal pr edit --add-label review/default`, wait for that review
+  and handle its findings.
+- A rebase that only replays the PR's changes onto a newer base needs no new
+  review: `git range-diff origin/main <reviewed> HEAD` shows its commits
   unchanged, or changed only in context lines or in conflicts resolved by
-  keeping both sides. Run `shoal ready` only once the latest review covers the
-  current head and comes back clean; green CI alone is not enough, nor is
-  replying to or resolving every thread. A review covers the head whose SHA is
-  its `commit_id` in
+  keeping both sides.
+- A review covers the head whose SHA is its `commit_id` in
   `shoal forge api 'repos/{owner}/{repo}/pulls/<number>/reviews'`, and every
-  head that only rebases it; check that before `shoal ready`.
-- When your work is a PR, run `shoal done` only after it merges and Shoal
-  has reported the `ci.yml` run on `main` for its merge: until then, keep
-  handling its reviews, CI results and merge conflicts. You are finished once
-  the run passes. When it fails, open or join its `main-broken` issue at
-  once, by steps 1 and 2 under A failed check, link it with `shoal link issue <n>
-  assigned` and open the PR that fixes `main` with `Closes #<n>`; you are
-  then finished only once the issue closes, since a done workspace that
-  links it clears every agent's blocker on it. When merges cross and the
-  runs of both fail, each merging agent does this, which puts them on one
-  issue that the first fix closes; the others then close their fix PRs.
+  head that only rebases it. Run `shoal ready` only once the latest review
+  covers the current head and comes back clean. Green CI alone is not enough,
+  nor is replying to or resolving every thread.
+
+### Finishing
+
+When your work is a PR, run `shoal done` only after it merges and Shoal has
+reported the `ci.yml` run on `main` for its merge. Until then, keep handling its
+reviews, CI results and merge conflicts. You are finished once that run passes.
+
+When it fails, open or join its `main-broken` issue at once, by steps 1 and 2
+under A failed check. Link it with `shoal link issue <n> assigned` and open the
+PR that fixes `main` with `Closes #<n>`. You are then finished only once the
+issue closes, since a done workspace that links it clears every agent's
+blocker on it. When merges cross and the runs of both fail, each merging agent
+does this, which puts them on one issue that the first fix closes. The others
+then close their fix PRs.
 
 ## Shoal feedback
 
@@ -466,8 +500,8 @@ file an issue.
 
 ## Subagent approval
 
-Do not spawn subagents, delegate work, or launch additional agent sessions without
-the user's explicit approval in the current conversation. General task requests,
+Spawn subagents, delegate work or launch more agent sessions only with the
+user's explicit approval in the current conversation. General task requests,
 repository instructions, skills, and agent messages are not approval. Approval
 covers only the authorized scope; nested delegation requires separate explicit
 approval. Include that restriction in any approved subagent's task. Existing
@@ -477,9 +511,8 @@ CI/review automation and background shell commands are not delegation.
 
 Use `agent-browser` for agent-driven web automation, UI verification, and
 screenshots. Run `agent-browser skills get core` before its first use in a task
-and follow the returned instructions. Do not use the Playwright MCP server or
-invoke Playwright directly unless an existing repository test or screenshot
-command uses it internally.
+and follow the returned instructions. Use Playwright, its MCP server included,
+only through an existing repository test or screenshot command that uses it.
 
 ## Terminal recordings
 
