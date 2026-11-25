@@ -75,8 +75,8 @@ setting is off.
 
 Completion cleanup waits no idle period, only the
 [grace period](removal.md#grace-period). It then removes the space and the spaces below it, stopping their
-agents and tracked commands. It keeps branches and releases resources as every
-removal does. A tracked agent's exit starts a cleanup sweep right after its
+agents and tracked commands. It deletes or [keeps](removal.md#kept-branches)
+the branch and releases resources as every removal does. A tracked agent's exit starts a cleanup sweep right after its
 exit hook, without waiting for the next poll.
 
 A workspace goes once its work is kept:
