@@ -1,207 +1,228 @@
 # Terminal hosts
 
-This file says how Shoal works in each terminal host it supports.
+This file says how Shoal works in each terminal host it supports besides zmx,
+the default host, which [Agents](agents.md) covers.
+
+## Places
+
+Inside a pane or block a host serves, `shoal start`, chats, background resumes
+and demos open a new place beside yours, such as a Herdr tab or a tmux window.
+The host's `tab_name` or `window_name` sets each place's label, as the
+[configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#herdr)
+describes.
+
+With the host's `placement = "split"`, a start from your own place, other than
+a demo, splits that place instead. The new pane or block opens to its right and
+takes the label. Shoal renames a window or tab only while the place it opened
+is alone there, so a split leaves your window's name as it was. A queued
+start, or a start from outside the host, opens a new tab or window.
+
+Once the worker exits, the place keeps your login shell. With
+[shell integration](install.md#shell-integration), the shell enters the
+workspace at its next prompt.
+
+`--here` keeps a launch in your current place. A call without a terminal, such
+as an agent's tool call, opens no place: its agent starts detached, as
+[Agents](agents.md) describes.
+
+[`terminal.focus`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#terminal)
+decides whether a new place takes the terminal. `shoal start -f`/`--focus`
+focuses one launch and starts it at once, as `--now` does. With `--json`, a
+start beside the terminal prints the planned `workspace` and its `agent` once
+the host opens the launch's place.
+
+With `nested_zmx`, agents, chats and demos run in zmx sessions attached in
+their places, as [Agents](agents.md) describes.
+
+## Launches from other terminals
+
+[`[terminal] default_host`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#terminal)
+names the host for launches from a terminal no host serves. Each host's section
+says where its places open. A focused start, a chat or an agent launch then
+shows its place in your terminal, as `shoal attach` does, until you
+detach. Rex shows it in its app instead.
+
+## Queued starts
+
+A start queued from a host's place opens a background place in the group it
+was queued from, such as the Herdr workspace or the tmux session. It falls back
+to the group the host's config names on the same server, then to
+`terminal.default_host`. Zellij keeps no configured group, and its section says
+where its queued starts go.
+
+## Closing places
+
+Shoal closes only the places it created. A place you opened stays open, even
+after an agent ran there. A place Shoal opened passes to another space once
+that space's agent starts in it, and closes with that space.
+
+A close ends only that pane or block, never the panes, blocks, tabs, windows or
+sessions beside it. A pane that takes a recorded pane's ID after its tmux or
+Zellij server restarts is never Shoal's.
+
+A failure before the agent starts leaves its place open. So does the agent's
+exit, so work can continue in the place's shell.
+
+When `done` keeps a workspace, Shoal closes the place it opened for it once
+tracked executions resolve or the agent finishes its turn, as
+`close_when_done` sets. The place stays open while stopped work waits for
+`shoal resume`. It also stays open once the daemon has been stopped for more
+than two minutes while the place was open.
+
+An agent's turn comes from its hooks. For an agent without them, Herdr reports
+the turn. Under a host that reports none, such as tmux, such an agent's place
+closes once its execution ends.
+
+Removing a space closes its places at once, whatever `close_when_done` says.
+Daemon startup and `shoal cleanup` close the places whose space is gone.
+
+A place `shoal resume` opens in the background closes the same way. A resume
+in an existing place keeps that place's behavior.
+
+The place `shoal create` opens holds a shell in the ready workspace. It stays
+open until the workspace is done or removed.
 
 ## Herdr
 
-Inside Herdr (`HERDR_ENV=1`), interactive `shoal start` looks up
-the issue and resolves repository, branch, and agent choices in the caller's pane,
-then opens a tab in `HERDR_WORKSPACE_ID` and returns once the command is submitted
-there. Setup and agent execution run in that tab, which reads the issue again and
-is labeled `<repo>#<number>` for an issue (such as `shoal#375`) and with the
-allocated workspace branch otherwise, unless `tab_name` supplies a template;
-a [space's name](workspaces.md) replaces either.
-`--here` keeps the command in the current pane; help and calls without a
-terminal run in place, except that their agent starts detached as
-[Agents](agents.md) describes.
+Shoal serves a Herdr pane when `HERDR_ENV` is `1`.
+[`[terminal.herdr]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#herdr)
+configures it.
 
-[`[terminal.herdr]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#herdr) configures it. New tabs stay in the
-background by default when launching an agent with an issue prompt or forwarded
-arguments, and focus otherwise, so a workspace
-shell or an agent waiting for its first prompt is ready to type into;
-`terminal.focus` overrides this for every host's places alike, the
-[mode's](modes.md) `focus` overrides that for its launches, and
-`shoal start -f`/`--focus` focuses one launch and starts it at once, as `--now` does.
-With `--json`, a start beside the terminal prints the planned `workspace` and
-its `agent` once the host opens the launch's place. With `enabled = false` Shoal
-treats a Herdr pane as a plain terminal. A `tab_name`'s `{branch}` is the
-requested branch when the tab opens and the allocated branch after creation.
-With `nested_zmx`, agents, chats and demos run in zmx sessions attached in
-their panes, as [Agents](agents.md) describes, and Herdr reads no turn from an
-agent without turn hooks there, as in a zmx session.
+Inside Herdr, interactive `shoal start` looks up the issue and makes the
+repository, branch and agent choices in your pane. It then opens a tab in the
+Herdr workspace `HERDR_WORKSPACE_ID` names, and returns once it has submitted
+the command there. Setup and the agent run in that tab, which reads the issue
+again.
 
-Failures before agent execution leave the tab open. Agent exits leave the tab
-open so work can continue, and with shell integration its shell enters the
-workspace at its next prompt; completion closes it once tracked executions resolve
-or the agent finishes its turn, as its hooks report it or, for an agent without
-them, as Herdr does, unless stopped work waits for `shoal resume` or the daemon
-stayed stopped for more than two minutes while the tab was open. Removing its
-workspace or chat closes it immediately, regardless of `terminal.close_when_done`, and daemon
-startup and `shoal cleanup` close those whose workspace or chat is gone. Shoal closes
-only the pane it opened the tab with, so a pane you split off keeps the tab
-open, and a tab you opened stays open. A background tab `shoal resume` opens
-closes the same way; a pane it reuses keeps its tab's behavior. `shoal create`
-opens an interactive shell in the ready workspace and leaves the tab open until
-that workspace is completed or removed.
+Herdr closes a tab with its last pane. Shoal closes only the pane it opened the
+tab with, so a pane you split off keeps the tab open.
 
-With `[terminal] default_host = "herdr"`, launches from a terminal no host serves
-open their tabs in the `workspace_name` workspace of the Herdr server the
-terminal's `herdr` reaches, which must be running; Shoal reuses the first workspace with that label or creates
-it. A focused start, a chat or an agent launch then attaches the terminal to
-the Herdr session holding its tab, as `shoal attach` does, until you detach; a
-background start says where it went. With `terminal.herdr.enabled = false` these
-launches run in place, and `new_tab = false` keeps queued ones out of Herdr. A start queued from Herdr opens a background
-tab in the workspace it was queued from, then falls back to the
-`workspace_name` workspace on the same server, then to `terminal.default_host`.
+With `default_host = "herdr"`, launches from other terminals open their tabs
+in the `workspace_name` Herdr workspace. That workspace is on the Herdr server
+your `herdr` reaches, which must be running. Shoal reuses the first Herdr
+workspace with that label, or creates one. Showing a tab attaches the terminal
+to the Herdr session that holds it. A background start says where it went.
 
 ## Rex
 
-Inside a [Rex](https://www.superlogical.com/rex) terminal (`REX_BLOCK` is set),
-`shoal start`, chats, background resumes and demos open a new window in the
-Rex session that holds the block, placed and labelled as a Herdr tab would
-be, and agents run in place in their block. With `placement = "split"`, a start
-from your block other than a demo splits that block instead, opening to its
-right in the same window; the new block takes the label and the window keeps
-its name. Starts queued from Rex and starts from outside Rex still open
-windows. Rex keeps sessions running without a connected app, so an agent keeps
-running when the Mac app or the phone disconnects. Rex cannot set a new
-terminal's environment: the new block starts with one short command, which
-loads the worker and its variables from a private file and deletes it, so
-nothing shows on screen or in shell history. Your login shell starts in the
-block once the worker exits, as in a Herdr tab.
+Shoal serves a [Rex](https://www.superlogical.com/rex) block when `REX_BLOCK`
+is set.
+[`[terminal.rex]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#rex)
+configures it.
 
-[`[terminal.rex]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#rex) configures it; with `enabled = false` Shoal
-treats a Rex terminal as a plain terminal. With `nested_zmx`, agents, chats
-and demos run in zmx sessions attached in their blocks, as [Agents](agents.md)
-describes, so a terminal outside Rex, such as over ssh, attaches to them.
+Places open as windows in the Rex session that holds your block. Rex keeps
+sessions running without a connected app, so an agent keeps running when the
+Mac app or the phone disconnects.
 
-With `[terminal] default_host = "rex"`, launches from a terminal no host serves
-open their windows in the `session_name` session on the local Rex server; Shoal reuses the oldest session with that label or creates it;
-with `terminal.rex.enabled = false` these launches run in place, and `new_window = false`
-keeps queued ones out of Rex.
-Rex has no terminal client, so a focused start there selects the window in the
-connected Mac Rex app and gives the terminal its shell back; without a
-connected app it says to open Rex. A start queued from Rex opens a background
-window in the session it was queued from, then falls back to the
-`session_name` session on the same server, then to `terminal.default_host`.
-Shoal finds `rex` in Rex's bin directory, on PATH, then in the Rex app, and
-needs Rex API revision 7 or later.
+A new block runs one short command. It loads the worker and its variables from
+a private file and deletes the file, so neither shows on screen or in shell
+history.
 
-`shoal attach` and `shoal status` find a workspace's or chat's Rex block by the
-place its agent was recorded in: attach makes the block's window active inside
-Rex and selects it in the Mac app from another terminal; a block that is gone
-leaves nothing to attach. Shoal closes only the blocks it created, and never
-their window's other blocks: completion and removal close them as they close a
-Herdr tab, and daemon startup and `shoal cleanup` close those whose workspace
-or chat is gone. A block you opened stays open, even after an agent ran there,
-and one Shoal opened belongs to another workspace or chat once its agent
-starts in it, and closes with that one instead. Rex reports
-no agent turn state, so an agent without turn hooks closes its block once its
-execution ends. Rex sends no push notifications to the phone, and a demo's
-screen of a full-screen program shows only its current screen. A Rex app on
-another device opens the `localhost` link a serving demo prints in its block
-through a forward to the Rex server's machine.
+With `default_host = "rex"`, launches from other terminals open their windows
+in the `session_name` session on the local Rex server. Shoal reuses the oldest
+session with that label, or creates one. A focused start selects its window in
+the connected Mac Rex app and gives the terminal its shell back. Without a
+connected app, it says to open Rex.
+
+Shoal looks for `rex` in Rex's bin directory, then on `PATH`, then in the Rex
+app. It needs Rex API revision 7 or later.
+
+`shoal attach` makes a block's window active in Rex. From another terminal, it
+also selects the window in the Mac app. A block that is gone leaves nothing to
+attach.
+
+Rex sends no push notifications to the phone. A demo's screen of a full-screen
+program shows only its current screen. A Rex app on another device opens the
+`localhost` link a serving demo prints through a forward to the Rex server's
+machine.
 
 ## tmux
 
-[tmux](https://github.com/tmux/tmux) is opt-in. With `terminal.tmux.enabled`,
-inside a tmux pane (`TMUX` and `TMUX_PANE` are set) `shoal start`, chats,
-background resumes and demos open a new window in the session the pane started
-in, placed and labelled as a Herdr tab would be, and agents run in place in
-their pane; `placement = "split"` splits your pane instead, as in Rex. The tmux
-server keeps panes running without a client, so detaching (`prefix d`) or
-closing the terminal leaves the agent running. The new window runs the agent
-directly, with nothing typed on screen, then your login shell, which stays
-after the worker exits and enters the workspace as a Herdr tab's shell does. A place of a host
-that claims a terminal before tmux, such as a zmx session, keeps its own
-behavior inside tmux. [`[terminal.tmux]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#tmux) configures it;
-with `nested_zmx`, agents, chats and demos run in zmx sessions attached in
-their panes, as [Agents](agents.md) describes.
+[tmux](https://github.com/tmux/tmux) is opt-in.
+[`[terminal.tmux]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#tmux)
+turns it on and configures it. Shoal then serves a tmux pane when `TMUX` and
+`TMUX_PANE` are set. A place of a host that claims the terminal before tmux,
+such as a zmx session, keeps its own behavior inside tmux.
 
-With `[terminal] default_host = "tmux"`, which also turns `enabled` on, launches
-from a terminal no host serves open their windows in the `session_name` session
-on the default tmux server (`TMUX_TMPDIR` chooses its socket directory), which
-Shoal starts when needed; Shoal reuses
-the first session with that name, `.` and `:` replaced by `_`, or creates it
-with a first window in your home directory. A
-focused start, a chat or an agent launch then attaches the terminal to that
-session until you detach. A start queued from tmux opens a background window
-in the session it was queued from, then falls back to the `session_name`
-session on the same server, then to `terminal.default_host`. Shoal needs tmux
-3.3 or later.
+Places open as windows in the session your pane started in. A new window runs
+the agent directly, with nothing typed on screen. The tmux server keeps panes
+running without a client, so detaching (`prefix d`) or closing the terminal
+leaves the agent running.
 
-`shoal attach` and `shoal status` find a workspace's or chat's pane by the place
-its agent was recorded in, named after its window: attach selects the pane and
-switches your tmux client to it, or attaches a client from outside tmux; a
-pane on another tmux server is refused inside tmux. A window is renamed only
-while the pane Shoal opened is alone in it. Shoal closes only the panes it
-created, as it closes Rex blocks, and never their window's other panes, other
-windows or sessions; a pane is recorded with its server's process and start
-time, so a pane under the same ID after the server restarts is never Shoal's.
-tmux reports no agent turn state, so an agent without turn hooks closes its
-pane once its execution ends. Prompts and `shoal demo send` leave copy mode
-first.
+With `default_host = "tmux"`, launches from other terminals open their windows
+in the `session_name` session on the default tmux server. `TMUX_TMPDIR`
+chooses that server's socket directory. Shoal starts the server when needed.
+It reuses the first session of that name, with `.` and `:` replaced by `_`, or
+creates one with a first window in your home directory.
 
-tmux draws panes through its own terminal emulator rather than passing output
-through as zmx does, so terminal protocols work only as far as tmux supports
-them: inline images (Kitty graphics, iTerm2 images) and OSC 9 and 777
-notifications reach your terminal only with `set -g allow-passthrough on` and
-a program that wraps them for tmux, and an image does not survive a redraw or a
-reattach; OSC 52 clipboard writes from agents need `set -s set-clipboard on`,
-since the default `external` forwards only tmux's own copies. Attaching redraws tmux's
-own screen rather than replaying the output.
+Shoal needs tmux 3.3 or later.
+
+A tmux pane counts as a session named after its window. `shoal attach` selects
+the pane and switches your tmux client to it. From outside tmux, it attaches a
+new client. Inside tmux, it refuses a pane on another tmux server.
+
+Prompts and `shoal demo send` leave copy mode first.
+
+tmux draws panes with its own terminal emulator, so terminal protocols work
+only as far as tmux supports them:
+
+- Inline images, such as Kitty graphics and iTerm2 images, and OSC 9 and 777
+  notifications reach your terminal only with `set -g allow-passthrough on`
+  and a program that wraps them for tmux. An image does not survive a redraw
+  or a reattach.
+- OSC 52 clipboard writes from agents need `set -s set-clipboard on`. The
+  default, `external`, forwards only tmux's own copies.
+- Attaching redraws tmux's screen instead of replaying the output.
 
 ## Zellij
 
-[Zellij](https://zellij.dev) is opt-in. With `terminal.zellij.enabled`, inside a
-Zellij pane (`ZELLIJ_SESSION_NAME` and `ZELLIJ_PANE_ID` are set) `shoal start`,
-chats, background resumes and demos open a new tab in your session, placed and
-labelled as a Herdr tab would be, and agents run in place in their pane;
-`placement = "split"` splits your pane instead. Each session's server keeps its
-panes running without a client, so detaching (`Ctrl o d`) or closing the
-terminal leaves the agent running. The new tab runs the agent directly, with
-nothing typed on screen, then your login shell, which stays after the worker
-exits and enters the workspace as a Herdr tab's shell does. A place of a host
-that claims a terminal before Zellij, such as a tmux pane, keeps its own
-behavior inside Zellij. [`[terminal.zellij]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#zellij) configures it;
-with `nested_zmx`, agents, chats and demos run in zmx sessions attached in
-their panes, as [Agents](agents.md) describes.
+[Zellij](https://zellij.dev) is opt-in.
+[`[terminal.zellij]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#zellij)
+turns it on and configures it. Shoal then serves a Zellij pane when
+`ZELLIJ_SESSION_NAME` and `ZELLIJ_PANE_ID` are set. A place of a host that
+claims the terminal before Zellij, such as a tmux pane, keeps its own behavior
+inside Zellij.
 
-Zellij 0.45 drops a tab opened in a session no client shows, so a place for
-such a session opens as the first pane of a background session of its own,
-named after the place, up to 20 characters and suffixed with `-2`, `-3` while
-another session, exited ones included, has the name, and its tab shows the
-whole name. With `[terminal] default_host = "zellij"`, which also turns
-`enabled` on, launches from a terminal no host serves open such sessions; a
-focused start, a chat or an agent launch then attaches the terminal to its
-session until you detach. A start queued from Zellij opens a background tab in
-the session it was queued from while a client shows it, otherwise a session of
-its own. `ZELLIJ_SOCKET_DIR` chooses the sessions Shoal reaches, as it does
-for `zellij`, and from Zellij 0.46 so does the cache directory where Zellij
-records session names, which `HOME`, or `XDG_CACHE_HOME` on Linux, sets: the
-daemon reaches sessions started with its own. Shoal needs Zellij 0.45 or later.
+Places open as tabs in your session. A new tab runs the agent directly, with
+nothing typed on screen. Each session's server keeps its panes running without
+a client, so detaching (`Ctrl o d`) or closing the terminal leaves the agent
+running.
 
-`shoal attach` and `shoal status` find a workspace's or chat's pane by the place
-its agent was recorded in, named after its tab: attach selects the tab and pane
-and switches your Zellij client to its session, or attaches a client from
-outside Zellij; a pane in another socket directory is refused inside Zellij. A tab is renamed only while the pane Shoal opened is alone in
-it. Shoal closes only the panes it created, as it closes Rex blocks, and never
-their tab's other panes or plugins, other tabs or sessions; it closes a tab
-with the last pane there, and ends a session with the last pane there, as
-Zellij does while a client shows the session. A pane is recorded with its
-session and its server's process and start time, so a pane under the same ID
-after the session restarts is never Shoal's. Zellij takes no condition with a
-command, so Shoal checks the server just before each command on a recorded
-pane. Zellij reports neither agent turn state nor the process in a pane's
-foreground, so an agent without turn hooks closes its pane once its execution
-ends, and a resume runs in a pane only while Zellij names your login shell
-(`SHELL`), running no script or command, as what runs there.
+A place for a session no client shows opens as the first pane of a background
+session of its own. That session is named after the place, cut to 20
+characters. While another session, exited ones included, has the name, Shoal
+adds `-2`, `-3` and so on. The session's tab shows the whole name.
 
-Zellij draws panes through its own terminal emulator rather than passing output
-through as zmx does, and handles terminal protocols itself: it forwards Kitty
-graphics and Sixel images where your terminal supports them, OSC 9, 99 and 777
-notifications as `host_notification_protocol` sets, and OSC 52 clipboard
-writes; programs read no clipboard unless
-`dangerously_enable_paste_buffer_read` is set. Other image protocols do not
-reach your terminal, and attaching redraws Zellij's own screen rather than
-replaying the output.
+With `default_host = "zellij"`, every launch from another terminal opens such a
+session. A start queued from Zellij opens a background tab in the session it
+was queued from while a client shows that session. Otherwise it opens a session
+of its own.
+
+`ZELLIJ_SOCKET_DIR` chooses the sessions Shoal reaches, as it does for
+`zellij`. From Zellij 0.46, so does the cache directory where Zellij records
+session names, which `HOME`, or `XDG_CACHE_HOME` on Linux, sets. The daemon
+reaches the sessions started with its own. Shoal needs Zellij 0.45 or later.
+
+A Zellij pane counts as a session named after its tab. `shoal attach` selects
+the tab and pane and switches your Zellij client to its session. From outside
+Zellij, it attaches a new client. Inside Zellij, it refuses a pane in another
+socket directory.
+
+Like its other panes, a close leaves a tab's plugins alone. Closing the last
+pane of a tab closes the tab, and closing the last pane of a session ends the
+session, as Zellij does while a client shows the session.
+
+Zellij does not report the process in a pane's foreground. A resume runs in an
+existing pane only while Zellij names your login shell (`SHELL`) as what runs
+there, with no script or command.
+
+Zellij draws panes with its own terminal emulator and handles terminal
+protocols itself:
+
+- It forwards Kitty graphics and Sixel images where your terminal supports
+  them. Other image protocols do not reach your terminal.
+- It forwards OSC 9, 99 and 777 notifications as its
+  `host_notification_protocol` sets.
+- It forwards OSC 52 clipboard writes. Programs read no clipboard unless
+  `dangerously_enable_paste_buffer_read` is set.
+- Attaching redraws Zellij's screen instead of replaying the output.

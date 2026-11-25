@@ -960,7 +960,9 @@ default_host = "zmx"     # "zmx", "herdr", "rex", "tmux" or "zellij"
   Rex, tmux or Zellij server. Turning that host off runs them in place.
 
 Each host's table below overrides `close_when_done` and `nested_zmx` for its
-own places. See [terminals](../../../../../../docs/reference/terminals.md).
+own places. A host's `new_tab` or `new_window` set to `false` also keeps
+queued starts out of it. See
+[terminals](../../../../../../docs/reference/terminals.md).
 
 ### Herdr
 
@@ -977,8 +979,9 @@ nested_zmx = true          # Optional; over terminal.nested_zmx
 `tab_name` names the tabs Shoal opens. It takes a literal name or these
 placeholders: `{repo}`, `{branch}`, `{issue_number}`, `{issue_title}`, and
 `{name}` or `{title}`, the space's name. Issue fields are empty without an
-issue. Unknown placeholders stay literal, and inserted values are never
-expanded again. Without `tab_name`, a tab is labelled with the space's name,
+issue. `{branch}` is the requested branch when the tab opens and the
+allocated branch once the workspace exists. Unknown placeholders stay literal,
+and inserted values are never expanded again. Without `tab_name`, a tab is labelled with the space's name,
 else `<repo>#<number>` for an issue, else its branch.
 
 `workspace_name` takes only `{repo}`. See
