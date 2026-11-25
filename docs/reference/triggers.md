@@ -20,9 +20,10 @@ the trigger's source, whether it is paused, its next firing and its last run.
 
 `pause`, `resume` and `run` name one trigger. When the repository and the
 global config both define the name, they act on the repository's. A paused
-trigger does not fire and does not launch its queued run. A resumed trigger
-counts its times from the resume, so it never catches up on the times it
-missed. `run` fires the trigger at once and prints the run's outcome.
+trigger's source does not fire it, and its queued run does not launch. A
+resumed trigger counts its times from the resume, so it never catches up on
+the times it missed. `run` fires the trigger at once, paused or not, and prints
+the run's outcome.
 
 Every space may list triggers. A space's `pause`, `resume` and `run` follow
 its `triggers` [permission](modes.md#permitted-actions).
