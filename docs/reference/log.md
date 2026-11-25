@@ -1,6 +1,13 @@
 # Space log
 
-This file says what `shoal log` shows and which events a space records.
+This file says what `shoal log` shows and how integrations read the events
+behind it.
+
+Shoal records the events of every space in a journal. A space's log shows the
+important ones, and the [event stream](#space-events) gives integrations all
+of them.
+
+## Read a log
 
 ```sh
 shoal log                 # This space, or Shoal's log outside one
@@ -11,154 +18,127 @@ shoal log --follow        # Keep printing new entries
 shoal log --json          # One JSON line per entry
 ```
 
-`shoal log [space]` shows the important events in a workspace's or
-chat's life, oldest first, each with its local time, a label and its
-details, under a heading for each date:
+`shoal log [space]` prints a workspace's or chat's entries, oldest first. Each
+line gives the entry's local time, a label and its details. A heading names
+each date.
 
-- the space's creation, with its base and parent, its renames, the start
-  of its removal and the removal with the cause, a removal that failed or
-  stopped before it finished with the reason, and a workspace's restore;
-- its agent's starts, with what made the launch a start carries out,
-  `manual` for `shoal start`'s, its stops and exits, with the exit code;
-- its ready marks and their withdrawal, and `done` and its withdrawal;
-- the issues, PRs and CI runs it links and unlinks, the changes Shoal made to
-  them, and their closing, merging and reopening on the forge;
-- the threads numbered in it, their posts, forwards and resolutions, the approvals it requested and
-  their decisions, and the alerts it sent, each with its number;
-- the spaces created and removed below it, its parent changes, and an absorb,
-  into which space and by what merge, or what it took over;
-- a CI job Shoal ended after its run finished, with the processes it stopped.
+`--json` prints each entry as one line, in the shape the
+[event stream](#lines) gives it.
 
-`--all` adds every other event of the space, dimmed: setup results, branch
-and base changes, its agent's turn states and progress changes, other
-forge activity such as comments and checks, demos, simulator leases and
-attached files. With `--json` each line is the entry as
-[`shoal internal events`](#space-events) prints it.
+## Entries
 
-A removed space's log stays for `cleanup.restore.retention_days` after its
-removal and is selected by the space's ID, as `shoal files` selects it; a
-restored workspace's log goes on from the removed one's. A space keeps its
-newest 500 agent turn states, progress changes and forge activity other than
-an item's closing, merging and reopening, so a busy space cannot push out another's
-log. A workspace process reads the logs of its own space and the spaces
-below it, removed ones included.
+A space's log shows these events of the space:
 
-Outside a space, `shoal log` shows Shoal's log: the entries of every space,
-removed ones while their log lasts, each line naming its space after the
-time, with Shoal's own events, named `Shoal`: the daemon's starts, stops and
-restarts, each config reload, with the error when the file was refused, and
-each automatic cleanup pass that removed spaces, naming them, or failed in a
-new way. `--all`, `--limit`, `--follow` and `--json` work there too. Shoal's
-own events stay for the global `cleanup.restore.retention_days`. The daemon's
-diagnostic log is not part of it. Workspace processes read Shoal's log as
-their space's [`notifications` permission](modes.md#permitted-actions) allows.
+- its creation, with its base and parent, and its renames;
+- the start of its removal, the removal with its cause, a removal that failed
+  or stopped with the reason, and a workspace's restore;
+- its agent's starts, stops and exits. A start names its launch's source, such
+  as `manual` for `shoal start`'s. An exit gives the exit code;
+- its ready marks, its completion, and the withdrawal of each;
+- the issues, PRs and CI runs it links and unlinks, and the changes Shoal makes
+  to them;
+- the closing, merging and reopening of those items on the forge;
+- the threads numbered in it, with their posts, forwards and resolutions;
+- the approvals it requested and their decisions;
+- the alerts it sent, each with its number;
+- the blockers added to it, removed or cleared;
+- the spaces created and removed below it, and its changes of parent;
+- an absorb: into which space and by what merge, or what the space took over;
+- a [CI job](ci.md#runner) Shoal ended, with the processes it stopped;
+- a merge it watched for which no CI run of the default branch started.
+
+## Every event
+
+`--all` adds every other event of the space, dimmed. These include setup
+results, branch and base changes, its agent's turn states and progress
+changes, other forge activity such as comments and checks, demos, simulator
+leases and attached files.
+
+## Retention
+
+A space keeps its events while it exists. A removed space keeps them for
+[`cleanup.restore.retention_days`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup)
+after its removal, and `shoal log` selects it by its ID, as `shoal files`
+does. A restored workspace's log continues the removed one's.
+
+A space keeps only its newest 500 agent turn states, progress changes and
+forge activity events. This cap leaves out an item's closing, merging and
+reopening. The [daemon design](../design/daemon.md) says why each space keeps
+its own events.
+
+## Scope
+
+A scoped caller, such as an agent Shoal launched, reads the logs of its own
+space and the spaces below it, removed ones included. It reads Shoal's log as
+its space's [`notifications` permission](modes.md#permitted-actions) allows.
+
+## Shoal's log
+
+Outside a space, `shoal log` shows Shoal's log. It holds the entries of every
+space, those of removed spaces while their log lasts, and Shoal's own events.
+Each line names its space after the time, and Shoal's own events name `Shoal`.
+`--all`, `--limit`, `--follow` and `--json` work as they do for a space.
+
+Shoal's own events are:
+
+- the daemon's starts, stops and restarts;
+- each config reload, with the error when the daemon refused the file;
+- each automatic cleanup pass that removed spaces, naming them, or that failed
+  in a new way.
+
+Shoal's own events stay for the global `cleanup.restore.retention_days`. The
+daemon's diagnostic log is not part of Shoal's log.
 
 ## Space events
 
 ```sh
-shoal internal events --follow --json             # stream lifecycle changes
-shoal internal events --follow --json --since 123  # replay after an event ID
+shoal internal events --json                       # Replay the journal and exit
+shoal internal events --follow --json              # Also stream new events
+shoal internal events --follow --json --since 123  # Replay after an event ID
 ```
 
-The daemon keeps a space's events while the space exists and, once it is
-removed, for `cleanup.restore.retention_days` or while its removal record
-lasts, independently of alerts; of its agent's turn states, its
-progress changes and its forge activity other than an item's closing, merging and reopening, it keeps
-the newest 500 per space. Reading events never marks alerts read. Without `--since`, events replay
-all retained history; without `--follow`, the command exits after that backlog.
-Scoped callers cannot read events.
+`shoal internal events` gives an integration the journal's events. Without
+`--since`, it replays every event the journal keeps. Without `--follow`, it
+exits after that backlog. Reading events never marks alerts read. Scoped
+callers cannot read events.
 
-Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at`,
-the UUID of the space it records as `space_id`, `space_kind` (`workspace` or
-`chat`, as the space was then), `repository_id` (null for a chat without a
-repository), `name`, a workspace's `path` and `branch` (null for a detached
-HEAD), which a chat's events leave out, `kind`, `cause`, and `error`. A
-`converted` event names the kind the space became, with that kind's fields,
-or with `handoff` the agent tool that took the space's work over: `from`
-and `to` each give an `agent`, the `session` it reported and its
-`integration`, journaled once the new tool reports its session. Kinds are `created`, `ready`, `setup_failed`,
-`completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired`, `simulator_released`, `renamed`, `restored`, `agent_started`, `agent_stopped`, `agent_exited`, `thread_opened`, `thread_posted`, `thread_forwarded`, `thread_resolved`, `approval_requested`, `approval_decided`, `gate_decided`, `alert_sent`, `progress_changed`, `child_created`, `child_removed` and `job_ended`. Review events add a `review` object with the mark's `kind` and
-`url`, both null for a workspace mark. Link events add a `link`
-object with the linked issue or PR's `kind` and canonical `url`. Agent state
-events add `agent_state` with the reported `state`, null when its execution ended.
-`item_changed` events add an `item` object with the `kind`, `url` and `action`
-of a change Shoal made to an issue or PR. `item_activity` events add an
-`item_activity` object with the item's `kind` and `url`, and an `update` object
-with the observed update's `kind` and `message`. `created` and `base_changed`
-events add `base_workspace` with the base's `id`, `name` and `branch`, or null,
-and `created` events add `base_ref`, the ref the workspace started from, both
-null for a chat.
-`created` and `parent_changed` events add `parent`, the space above the
-workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
-a [chat](chats.md) that opened it returned it to you.
-`renamed` events record a space's new `name` and a workspace's `branch`, as
-`shoal rename` or a branch rename gives them. `restored` events record a workspace
-`shoal restore` reopened, which takes the removed workspace's events
-under its own ID. `agent_started`, `agent_stopped` (Shoal or a stop request
-stopped it) and `agent_exited` (it exited on its own) events add `agent`
-with its `name`, `execution_id` and `exit_code`, null for a start or stop
-and when the wrapper reported none, and for a stop or exit `oom_kills`, how
-many of its processes the kernel's OOM killer killed, when any; a start that
-carries out a launch adds its `source`, `{"kind": "manual"}` for `shoal
-start`'s. Thread events add `thread` with its `number` and `name`, a post's
-`sender` and `text`, a forward's `to`, and a resolution's `outcome`, none
-when the thread was reopened.
-`approval_requested` and `approval_decided` events add `approval` with its
-`number`, `target`, `subject` and `status`. `gate_decided` events add `gate`
-with its `number`, `subject`, `verdict` (`allow`, `deny`, `escalate` or
-`failed`), `reason`, and the `rule` an escalation quoted, the `agent` and its
-`session`. `alert_sent` events add `alert`
-with its `message`. `progress_changed` events add `progress` as
-`shoal progress --json` shows it, with empty `steps` and a null `status` once
-both are cleared. `child_created` and `child_removed` events, in the log of
-the space above, add `child` with its `id`, `name`, `kind` and a workspace's
-`branch`.
-`job_ended` events, when Shoal ended a [CI job](ci.md#runner), stopped what one's
-steps left running, or the kernel's OOM killer killed processes of one, add
-`job` with the job's `name`, its `run`'s URL, the `reason`, and the processes
-Shoal `stopped`, each with its `pid` and `command`, the first 20
-of them, and `omitted`, how many more, when there were more.
-`demo_started` events, when a [demo](demos.md)'s command first runs, and
-`demo_stopped` events, when a demo that ran ends, add `demo` with its `name`,
-`preset` and, for a simulator demo, the device's `udid`.
-`simulator_acquired` events, once a [simulator](resources.md#simulators-macos) lease's device
-has booted, and `simulator_released` events, when that lease is released or
-its device deleted, add `simulator` with the lease's `name` and the device's
-`udid`, `device` and `runtime`.
-Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
-PRs), `completion`, `missing_directory`, `disk_space`, `merged` for
-[merged cleanup](removal.md#merged-workspaces), `removed` for a base workspace's removal,
-`parent` for the removal of the space above, `repository` for its
-repository's removal, `parent_completion` for an
-ancestor's `done` with cleanup, `start_failed` for a chat that could not
-start, or `blocker` for a new workspace that builds on the done work its agent
-waited for, and null when inapplicable; `error` describes
-setup or cleanup failures. Branch changes are observed during daemon sweeps;
-detached HEAD has a null branch, and the recorded workspace branch remains
-unchanged.
+The journal keeps events as [space logs](#retention) do.
 
-A `type: "file"` line records a file [attached](files.md) to a workspace
-or chat by any route (`kind: "file_added"`) or deleted by any route, including
-`shoal files rm`, workspace removal, the retention sweep and disk space cleanup
-(`kind: "file_removed"`): its `id`, `created_at`,
-`repository_id` (null for a chat without a repository),
-and `file`, the record as
-`shoal files --json` lists it, with its own `id`. Attaching a file that is
-already attached adds nothing.
+### Lines
 
-A `type: "shoal"` line records an event of Shoal itself, which belongs to no
-space: its `id`, `created_at` and `kind`: `daemon_started` with the daemon's
-`version`; `daemon_stopped`, with `error` when the daemon failed;
-`daemon_restarted` when it stopped for the next daemon to take over running
-work, as `shoal daemon restart` and an update do; `config_reloaded`, with
-`error` when the daemon kept its settings; and `cleanup_ran` with `removed`,
-the names of the spaces automatic cleanup removed since the last such line,
-or `error` when a pass failed in a new way.
+Each line has a `type`:
 
-A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
-falls outside retained history or retention deleted events after it, then
-replay continues with the retained events from `oldest_id`; a stream reports
-deletions after its cursor while it runs the same way.
-Resync with `shoal list --json` after a gap or on first connection: the journal
-starts when the daemon upgrades and does not reconstruct older changes.
+- `event` records an event of a space.
+- `file` records a file [attached](files.md) to a space, `kind: "file_added"`,
+  or deleted from it, `kind: "file_removed"`, by any route. Attaching a file
+  that is already attached records nothing.
+- `shoal` records an event of Shoal itself, which belongs to no space.
+- `gap` reports events that are [gone](#gaps).
+
+Every line but a gap has an increasing `id` and a Unix-seconds `created_at`.
+
+A space event names its space by `space_id` and `name`. Its `space_kind` is
+`workspace` or `chat`, as the space was then. A workspace's events add its
+`path` and `branch`. `kind` names the event. `cause` says why Shoal made the
+change, such as `merged` for [merged cleanup](removal.md#merged-workspaces),
+and `error` says what failed. Each is null where it does not apply. An object
+named for the event's subject, such as `thread`, `approval` or `job`, gives
+its details.
+
+The [`events`](../../crates/shoal-protocol/src/events.rs) module of
+`shoal-protocol` defines each line, event kind and field. A Rust program reads
+them with its types, as the [`shoal-client`](apps.md) library does.
+
+Shoal records a `branch_changed` event when a sweep finds a workspace on
+another branch. A detached HEAD gives the event a null `branch`, and the
+workspace's recorded branch stays as it was.
+
+### Gaps
+
+A `gap` line gives `since`, `oldest_id` and `latest_id`. Shoal sends one when
+the cursor falls outside the events the journal keeps, or when retention
+deleted events after it. The replay then continues from `oldest_id`. A running
+stream reports deletions after its cursor the same way.
+
+The journal records changes, not state. Read `shoal list --json` on first
+connection and after a gap.
