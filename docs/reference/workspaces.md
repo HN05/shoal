@@ -239,7 +239,8 @@ removed, and naming the repository when removing the repository took it.
 ## Select a space
 
 Every argument that takes a space selects it by its number or ID, such as
-`shoal attach 3` or `--space 3`. Other text is refused with "a space is
+`shoal attach 3` or `--space 3`, or by `-` for
+[the last space](#the-last-space). Other text is refused with "a space is
 selected by its number or ID". `--add-blocker` is the one exception, where a
 bare number names an issue.
 
