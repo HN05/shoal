@@ -28,11 +28,11 @@ esac
 
 bin=$HOME/.local/bin
 if [ "$os" = macos ]; then
-	archive=shoal-v$version-$os-$arch-app.tar.gz
+	asset=shoal-v$version-$os-$arch-app.tar.gz
 	entry=Shoal.app
 	place=$HOME/Applications
 else
-	archive=shoal-v$version-$os-$arch.tar.gz
+	asset=shoal-v$version-$os-$arch
 	entry=shoal
 	place=$bin
 fi
@@ -58,16 +58,18 @@ checksum() {
 staging=$(mktemp -d)
 trap 'rm -rf "$staging"' EXIT
 download SHA256SUMS "$staging/SHA256SUMS" || fail "could not download the checksums of Shoal $version"
-download "$archive" "$staging/$archive" || fail "could not download $archive"
-expected=$(awk -v archive="$archive" '$2 == archive { print $1 }' "$staging/SHA256SUMS")
-[ -n "$expected" ] || fail "Shoal $version has no $archive"
-[ "$(checksum "$staging/$archive")" = "$expected" ] || fail "$archive does not match its published checksum"
-tar -xzf "$staging/$archive" -C "$staging" "$entry"
+download "$asset" "$staging/$asset" || fail "could not download $asset"
+expected=$(awk -v asset="$asset" '$2 == asset { print $1 }' "$staging/SHA256SUMS")
+[ -n "$expected" ] || fail "Shoal $version has no $asset"
+[ "$(checksum "$staging/$asset")" = "$expected" ] || fail "$asset does not match its published checksum"
 
 if [ "$os" = macos ]; then
+	tar -xzf "$staging/$asset" -C "$staging" Shoal.app
 	executable=$place/Shoal.app/Contents/MacOS/shoal
 	unpacked=$staging/Shoal.app/Contents/MacOS/shoal
 else
+	mv "$staging/$asset" "$staging/shoal"
+	chmod 755 "$staging/shoal"
 	executable=$place/shoal
 	unpacked=$staging/shoal
 fi

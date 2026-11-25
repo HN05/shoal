@@ -1,5 +1,6 @@
 use std::{
     fs,
+    os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -14,14 +15,16 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// A release of this version for this platform under `root`, served
 /// through `file://`, whose `shoal` reports the version and records every
 /// other run's arguments in `calls`; `checksum` is what `SHA256SUMS` says
-/// of its archive, the archive's own when none.
+/// of its asset, the asset's own when none. macOS's asset is the archive
+/// holding `Shoal.app`, every other platform's the bare binary.
 fn publish(root: &Path, calls: &Path, checksum: Option<&str>) -> String {
     let platform = shoal_core::update::platform().unwrap();
-    let (archive, entry, program) = match cfg!(target_os = "macos") {
-        true => ("-app.tar.gz", "Shoal.app", "Shoal.app/Contents/MacOS/shoal"),
-        false => (".tar.gz", "shoal", "shoal"),
+    let bundle = cfg!(target_os = "macos");
+    let (suffix, program) = match bundle {
+        true => ("-app.tar.gz", "Shoal.app/Contents/MacOS/shoal"),
+        false => ("", "shoal"),
     };
-    let archive = format!("shoal-v{VERSION}-{platform}{archive}");
+    let asset = format!("shoal-v{VERSION}-{platform}{suffix}");
     let build = root.join("build");
     install_test_script(
         build.join(program),
@@ -32,18 +35,24 @@ fn publish(root: &Path, calls: &Path, checksum: Option<&str>) -> String {
     );
     let assets = root.join(format!("releases/download/v{VERSION}"));
     fs::create_dir_all(&assets).unwrap();
-    let packed = Command::new("tar")
-        .arg("-czf")
-        .arg(assets.join(&archive))
-        .arg("-C")
-        .arg(&build)
-        .arg(entry)
-        .status()
-        .unwrap();
-    assert!(packed.success());
-    let digest = Sha256::digest(fs::read(assets.join(&archive)).unwrap());
+    if bundle {
+        let packed = Command::new("tar")
+            .arg("-czf")
+            .arg(assets.join(&asset))
+            .arg("-C")
+            .arg(&build)
+            .arg("Shoal.app")
+            .status()
+            .unwrap();
+        assert!(packed.success());
+    } else {
+        fs::copy(build.join(program), assets.join(&asset)).unwrap();
+        // A download carries no mode, so the installer makes it executable.
+        fs::set_permissions(assets.join(&asset), fs::Permissions::from_mode(0o644)).unwrap();
+    }
+    let digest = Sha256::digest(fs::read(assets.join(&asset)).unwrap());
     let actual: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
-    let sums = format!("{}  {archive}\n", checksum.unwrap_or(&actual));
+    let sums = format!("{}  {asset}\n", checksum.unwrap_or(&actual));
     fs::write(assets.join("SHA256SUMS"), sums).unwrap();
     format!("file://{}", root.join("releases").display())
 }
@@ -108,7 +117,7 @@ fn the_installer_keeps_an_installation_it_finds() {
 }
 
 #[test]
-fn the_installer_refuses_an_archive_that_does_not_match_its_checksum() {
+fn the_installer_refuses_an_asset_that_does_not_match_its_checksum() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");
     let calls = root.path().join("calls");
