@@ -8322,7 +8322,7 @@ tool without `skill_dir`; create a directory, or name the tool, to install for
 it. [`[machine.agents.<name>] skill_dir`](../crates/shoal-cli/src/cli/commands/configuration/reference.md#agent-tools-on-this-machine)
 sets or overrides a tool's directory. Names are portable identifiers; `all` is
 reserved. Each `SKILL.md` is a regular copy
-of the packaged or embedded skill, since Codex skips a linked one; a linked
+of the skill built into the binary, since Codex skips a linked one; a linked
 skill directory is left to the user. Other files in the skill directory are
 preserved. Run it outside scoped executions. `shoal skill` prints the skill (`--json`
 returns a `skill` field).
