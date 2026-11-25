@@ -210,7 +210,7 @@ named after its tab. `shoal attach` selects the tab and pane and switches your
 Zellij client to its session. From outside Zellij, it attaches a new client.
 Inside Zellij, it refuses a pane in another socket directory.
 
-Like its other panes, a close leaves a tab's plugins alone. Closing the last
+A close leaves the tab's other panes and plugins alone. Closing the last
 pane of a tab closes the tab, and closing the last pane of a session ends the
 session, as Zellij does while a client shows the session.
 
