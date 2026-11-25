@@ -14,8 +14,10 @@ keeps every row.
 
 --git also counts the Git processes the tests start, through a `git` first on
 `PATH` that logs each one, and splits them into production code's, whose
-commands carry `--no-optional-locks`, and the fixtures'. The logging adds a
-shell to every Git process, so CPU times are higher than without it.
+commands carry `--no-optional-locks`, and the fixtures'. Both modes then list
+production code's most frequent commands, by subcommand and options, without
+paths, object IDs or branch names. The logging adds a shell to every Git
+process, so CPU times are higher than without it.
 
   python3 scripts/profile_tests.py suite
   python3 scripts/profile_tests.py tests --binary workspaces --csv target/tests.csv
@@ -43,6 +45,9 @@ PRODUCTION_GIT = "--no-optional-locks"
 ARGUMENT_END = "\x1f"
 # Git's global options that take a value as the next argument.
 GIT_VALUE_OPTIONS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"}
+# Git commands whose first argument names a subcommand of their own.
+GIT_GROUPS = {"worktree", "remote", "stash", "submodule", "notes", "bundle", "reflog",
+              "sparse-checkout"}
 
 
 def cargo_env():
@@ -212,27 +217,48 @@ def git_counts(log):
 
 
 def git_command(args):
-    """The Git command `args` runs, such as `rev-parse`, after Git's own
-    options and their values."""
+    """The Git command `args` runs, such as `status --porcelain -z`: its
+    subcommand after Git's own options and their values, then its options,
+    with `HEAD` kept and other arguments, such as paths, object IDs and
+    branch names, left out."""
     remaining = iter(args)
     for arg in remaining:
         if arg in GIT_VALUE_OPTIONS:
             next(remaining, None)
         elif not arg.startswith("-"):
-            return arg
+            return " ".join([arg, *command_arguments(arg, list(remaining))])
     return ""
+
+
+def command_arguments(command, args):
+    """The arguments of a Git `command` that tell its kinds of run apart."""
+    kept = args[:1] if command in GIT_GROUPS and args[:1] and not args[0].startswith("-") else []
+    for arg in args[len(kept):]:
+        if arg == "--":
+            break
+        if arg == "HEAD" or arg.startswith("-"):
+            kept.append(option_without_path(arg))
+    return kept
+
+
+def option_without_path(option):
+    """`option`, with a value that names a path, such as `--file=/a/b`, left out."""
+    name, equals, value = option.partition("=")
+    return f"{name}=<path>" if equals and os.sep in value else option
 
 
 def tests(found, jobs, csv_path, wrapper):
     """Run every test alone, `jobs` at a time, and report the costliest."""
     work = listed_tests(found)
     print(f"{len(work)} tests, {jobs} at a time", file=sys.stderr)
-    rows = measure_tests(work, jobs, wrapper)
+    rows, commands = measure_tests(work, jobs, wrapper)
     if csv_path:
         write_csv(rows, csv_path)
     print_binary_totals(rows, wrapper)
     print_failures(rows)
     print_costliest(rows, wrapper)
+    if wrapper:
+        print_git_commands(commands)
 
 
 def listed_tests(found):
@@ -252,17 +278,19 @@ def names_in_listing(listing):
 
 
 def measure_tests(work, jobs, wrapper):
-    """(binary name, test, exit status, wall s, user s, system s, production
-    Git processes, fixture Git processes) of each test in `work`, in its
-    order; the counts are zero unless `wrapper` counts them."""
-    rows = []
+    """(rows, a Counter of production Git commands): a row is (binary name,
+    test, exit status, wall s, user s, system s, production Git processes,
+    fixture Git processes) of each test in `work`, in its order; the counts
+    are zero unless `wrapper` counts them."""
+    rows, commands = [], collections.Counter()
     with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
         measured = pool.map(lambda item: measure_test(item, wrapper), work)
-        for done, row in enumerate(measured, 1):
+        for done, (row, test_commands) in enumerate(measured, 1):
             rows.append(row)
+            commands += test_commands
             if done % 100 == 0:
                 print(f"{done}/{len(work)}", file=sys.stderr, flush=True)
-    return rows
+    return rows, commands
 
 
 def measure_test(item, wrapper):
@@ -272,8 +300,8 @@ def measure_test(item, wrapper):
         status, wall, user, system = run(
             [executable, "--exact", test, "--test-threads=1", "-q"], cwd, log,
             wrapper and (wrapper, git_log))
-        production, fixture, _ = git_counts(git_log)
-    return name, test, status, wall, user, system, production, fixture
+        production, fixture, commands = git_counts(git_log)
+    return (name, test, status, wall, user, system, production, fixture), commands
 
 
 def write_csv(rows, path):

@@ -61,7 +61,24 @@ class GitCountTests(unittest.TestCase):
                                    for args in records))
             production, fixture, commands = profile_tests.git_counts(log)
         self.assertEqual((production, fixture), (3, 1))
-        self.assertEqual(commands, {"rev-parse": 2, "config": 1})
+        self.assertEqual(commands, {"rev-parse --git-dir": 1, "rev-parse HEAD": 1,
+                                    "config --get": 1})
+
+    def test_names_a_command_by_its_options_without_paths_or_names(self):
+        commands = [
+            (["-C", "/r", "status", "--porcelain=v2", "-z", "--untracked-files=no"],
+             "status --porcelain=v2 -z --untracked-files=no"),
+            (["-C", "/r", "worktree", "add", "--no-track", "-b", "fix-login", "--", "/w", "main"],
+             "worktree add --no-track -b"),
+            (["-C", "/r", "worktree", "list", "--porcelain", "-z"], "worktree list --porcelain -z"),
+            (["-C", "/r", "rev-parse", "a" * 40 + "^{tree}"], "rev-parse"),
+            (["-C", "/r", "diff", "-z", "--name-only", "HEAD", "--", "HEAD"],
+             "diff -z --name-only HEAD"),
+            (["-C", "/r", "read-tree", "--index-output=/r/.git/index.tmp"],
+             "read-tree --index-output=<path>"),
+        ]
+        for args, command in commands:
+            self.assertEqual(profile_tests.git_command(["--no-optional-locks", *args]), command)
 
     def test_counts_nothing_without_a_log(self):
         self.assertEqual(profile_tests.git_counts("/nonexistent/git")[:2], (0, 0))
