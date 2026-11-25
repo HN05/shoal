@@ -218,3 +218,6 @@ fn no_own_repository(name: &shoal_protocol::space_names::SpaceName) -> String {
          or PR URL"
     )
 }
+
+#[cfg(test)]
+mod tests;

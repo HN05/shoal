@@ -13,7 +13,7 @@ use shoal_forge_types::{
 use shoal_protocol::{
     events::EventKind,
     links::pr::{Registration, RegistrationKind},
-    model::{Relation, Repository, Workspace},
+    model::{Relation, Workspace},
     space_names::SpaceSelector,
     time::UnixTime,
 };
@@ -22,7 +22,7 @@ use shoal_store::Store;
 use crate::{
     Links,
     space::LinkSpace,
-    stand_in::{StandIn, record, service},
+    stand_in::{StandIn, record, registered, service},
     wait::{
         branch_report::BranchReport,
         merge_lookups::{LOOKUP_WINDOW, PushedMerge, UNFOLLOWED_MERGE},
@@ -78,7 +78,7 @@ async fn following(watch: bool, runs: Value) -> Following {
     let links = service(root.path(), store.clone(), &config);
     let daemon = StandIn {
         workspaces: vec![workspace.clone()],
-        repositories: vec![checkout(&path)],
+        repositories: vec![registered("repo", &path)],
         config: Some(global_config(&config)),
         ..StandIn::default()
     };
@@ -94,18 +94,6 @@ async fn following(watch: bool, runs: Value) -> Following {
     };
     following.watch().await;
     following
-}
-
-/// The repository `repo` registered at its checkout `path`.
-fn checkout(path: &std::path::Path) -> Repository {
-    serde_json::from_value(json!({
-        "id": "repo",
-        "path": path,
-        "source": path,
-        "last_used": 0,
-        "workspaces_dir": path.parent().unwrap(),
-    }))
-    .unwrap()
 }
 
 /// A run of the merge commit on `main` in `status`, as Forgejo lists it.
