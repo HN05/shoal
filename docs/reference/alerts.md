@@ -36,8 +36,8 @@ workspace the current directory is in, or one picked. `--space`, `--all` and
 `--repo` send it down: a down alert is at most 8 KiB, without control
 characters other than newlines and tabs, and a scoped process sends one only
 to the spaces below its own. `--attach FILE`, repeated for up to 20, sends
-files of at most 100 MiB with it, which Shoal copies into the repository
-directory's `.attachments` as [attached files](files.md): those of the
+files of at most 100 MiB with it, which Shoal copies as
+[attached files](files.md): those of the
 recipient for an alert sent down, of the sender for one sent up, which a
 coordinating agent receives with the alert. An alert may be its files alone.
 The command prints each alert's number, and whether it went to the user or the
