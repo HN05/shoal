@@ -498,8 +498,8 @@ from the first sweep that would remove the workspace. That covers idle, merged
 and PR cleanup, and cleanup after `shoal done`. Its agent keeps running
 meanwhile.
 
-A workspace that would not pass removal's checks starts no grace period, such
-as one with unsaved work after `done`. `shoal status` shows when the period
+A workspace that would not pass removal's checks, such as one with unsaved
+work after `done`, starts no grace period. `shoal status` shows when the period
 ends. A sweep that no longer removes the workspace ends it, as after
 `done --undo`, a new commit or new activity. A later attempt starts a new one.
 
