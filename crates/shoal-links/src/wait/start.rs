@@ -194,3 +194,6 @@ fn start_followed(
     }
     Ok(started)
 }
+
+#[cfg(test)]
+mod tests;

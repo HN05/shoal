@@ -6,7 +6,7 @@
 //! every link change.
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
 use anyhow::{Context, Result, bail};
@@ -16,8 +16,13 @@ use shoal_core::config::{Config, Effective, repo::ConfigLayers};
 use shoal_daemon_base::{
     alerts::{About, Alert, AlertKind, NewAlert, Sent, Unread},
     callers::Caller,
+    config_state::ConfigState,
+    file_access::FileAccess,
+    forge_access::ForgeAccess,
+    gates::Gates,
     item_numbers::ItemNumber,
-    notifications::{Coordinators, Source},
+    notifications::{Coordinators, Notifications, Source},
+    operations::Operations,
     permitted_actions::Action,
 };
 use shoal_forge_types::{
@@ -36,20 +41,69 @@ use shoal_protocol::{
         ChangedOnBothSides, ConflictCheck, EventCause, Repository, Selected, Space, SpaceRef,
         Workspace,
     },
+    paths::Paths,
     processes::Leftover,
     protocol::operations::OperationSpec,
     space_names::SpaceSelector,
 };
 use shoal_refs::{BranchName, CommitId};
+use shoal_store::Store;
 use tokio::sync::watch;
 
 use crate::{
+    Links,
     daemon::{
         Approvals, Elsewhere, Messages, Permissions, ProposalKind, Records, Reviews, SpaceAgent,
         Spaces, Watches,
     },
     space::LinkSpace,
 };
+
+/// The links' service over `store` and the global config `text`, its
+/// operations' files under `root`, with records that take every link
+/// change.
+pub fn service(root: &std::path::Path, store: Store, text: &str) -> Arc<Links> {
+    let gates = Arc::new(Gates::default());
+    let config = Arc::new(ConfigState::new(shoal_core::test_support::global_config(
+        text,
+    )));
+    let forges = ForgeAccess::new(store.clone(), gates.clone(), config.clone());
+    Arc::new(Links::new(
+        store.clone(),
+        gates.clone(),
+        config,
+        Arc::new(Notifications::new(store)),
+        Arc::new(FileAccess::default()),
+        Arc::new(forges),
+        Arc::new(Operations::new(Paths::for_test(root), gates)),
+        Arc::new(StandInRecords),
+    ))
+}
+
+/// Record `workspace` and its repository in `store`.
+pub async fn record(store: &Store, workspace: &Workspace) {
+    let path = workspace.path.to_str().unwrap().to_owned();
+    store
+        .write(move |tx| {
+            tx.execute(
+                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo',?1,?1,1)",
+                [&path],
+            )?;
+            tx.execute(
+                "INSERT INTO spaces(id,kind,repository_id,name)
+                    VALUES ('workspace','workspace','repo','fix')",
+                [],
+            )?;
+            tx.execute(
+                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+                    VALUES ('workspace',?1,'fix','ready','abc','/admin')",
+                [&path],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
 
 /// The daemon as the links' tests see it.
 #[derive(Default)]

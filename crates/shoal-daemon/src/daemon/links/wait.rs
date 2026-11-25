@@ -3,7 +3,6 @@
 
 mod elsewhere;
 mod merge_runs;
-mod start;
 mod wake;
 
 #[cfg(test)]

@@ -2,14 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 use shoal_core::test_support::{git, global_config, repository};
-use shoal_daemon_base::forge_access::ForgeAccess;
-use shoal_daemon_base::operations::Operations;
-use shoal_daemon_base::{
-    config_state::ConfigState, file_access::FileAccess, gates::Gates, notifications::Notifications,
-};
 use shoal_forge::test_support::Server;
 use shoal_forge_types::backends::ForgeKind;
-use shoal_protocol::paths::Paths;
 use shoal_protocol::{
     model::{Assigner, Workspace},
     space_names::SpaceSelector,
@@ -17,7 +11,7 @@ use shoal_protocol::{
 
 use crate::{
     Links,
-    stand_in::{StandIn, StandInRecords},
+    stand_in::{StandIn, record, service},
 };
 
 /// The config that assigns the user's own login.
@@ -73,19 +67,7 @@ impl Fixture {
         );
         let origin = format!("http://{host}/team/repo");
         git(&path, &["remote", "add", "origin", &origin]);
-        let gates = Arc::new(Gates::default());
-        let config = Arc::new(ConfigState::new(global_config(&text)));
-        let forges = ForgeAccess::new(store.clone(), gates.clone(), config.clone());
-        let links = Arc::new(Links::new(
-            store.clone(),
-            gates.clone(),
-            config,
-            Arc::new(Notifications::new(store)),
-            Arc::new(FileAccess::default()),
-            Arc::new(forges),
-            Arc::new(Operations::new(Paths::for_test(root.path()), gates.clone())),
-            Arc::new(StandInRecords),
-        ));
+        let links = service(root.path(), store, &text);
         let daemon = StandIn {
             workspaces: vec![workspace.clone()],
             config: Some(global_config(&text)),
@@ -188,31 +170,6 @@ fn logins(names: &[&str]) -> Vec<Value> {
     (names.iter())
         .map(|login| json!({"login": login}))
         .collect()
-}
-
-/// Record `workspace` and its repository in `store`.
-async fn record(store: &shoal_store::Store, workspace: &Workspace) {
-    let path = workspace.path.to_str().unwrap().to_owned();
-    store
-        .write(move |tx| {
-            tx.execute(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo',?1,?1,1)",
-                [&path],
-            )?;
-            tx.execute(
-                "INSERT INTO spaces(id,kind,repository_id,name)
-                    VALUES ('workspace','workspace','repo','fix')",
-                [],
-            )?;
-            tx.execute(
-                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                    VALUES ('workspace',?1,'fix','ready','abc','/admin')",
-                [&path],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
