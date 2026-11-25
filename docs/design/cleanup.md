@@ -225,11 +225,9 @@ grace_minutes`, because removal stops the agent the user may still want to
 continue: the first attempt that passes removal's initial checks persists an end
 time, each sweep pass claims it again while some rule still removes the
 workspace, and the pass ends periods no attempt claimed, so they restart instead
-of carrying over to a later eligibility. Idle cleanup also counts the coordinator's running agent as use of two
-kinds of space below it. One is a workspace in which no agent of its own has
-started, since the coordinator's subagents work there. The other is a chat
-whose agent stopped, whose work is left to the coordinator. An assigned issue
-keeps a workspace from idle cleanup, but not from merged cleanup. Idle cleanup keeps its timers in
+of carrying over to a later eligibility. Idle cleanup also counts a coordinator's running agent as use of the spaces
+below it that are its work, as [spaces.md](spaces.md) describes. An assigned
+issue keeps a workspace from idle cleanup, but not from merged cleanup. Idle cleanup keeps its timers in
 memory, so a restart starts its grace period over too: resuming would need the
 pre-restart snapshot to prove nothing changed. User requests and disk pressure
 remove at once. Merged cleanup (`[cleanup.merged]`, off by default, 240 idle

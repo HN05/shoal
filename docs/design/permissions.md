@@ -7,10 +7,8 @@ permissions of spaces, proposals and push requests.
 
 Workspace commands and every chat's agent inherit a daemon-validated scope
 token. A chat's token lasts as long as the chat. Only the user's own terminal is
-unscoped. A scope covers its space and the spaces below it, recursively; a chat
-without a repository's covers every space. One operation decides what a scope
-reaches, and every check takes it. A target names one of those spaces, and an
-agent's hooks report for its own space. Scope is cooperative: it is no
+unscoped. [spaces.md](spaces.md) says which spaces a scope reaches through the
+tree. Scope is cooperative: it is no
 boundary against a hostile process of the same user.
 
 Nested executions keep scope, and the CLI refuses scoped operations to a process
@@ -39,7 +37,8 @@ The daemon confines a scoped caller's resource access to its own worktree. It
 refuses the caller every workspace allocation, removal and recovery except
 three: creating a child of its own space, removing a space below it, and
 restoring a removed space below its recorded parent where its scope reaches
-that parent. Administering Shoal, and the other actions a permission key
+that parent. It removes a space the user holds, or one with such a space below
+it, only as its `user_holds` permission allows. Administering Shoal, and the other actions a permission key
 governs, follow that key. `config reload`, which applies the config on disk and
 stops nothing, needs no key. A scoped caller reads the effective configuration
 of its own workspace.
@@ -124,13 +123,9 @@ closing and reopening. Decisions bind to the displayed or
 authorized record through mutation, including when a coordinating agent decides. Explicit `--approve` and `--deny` flags decide every kind: merging
 a branch (see scope), resource access, and issues and PRs an agent proposed.
 
-A scoped caller requests approvals and inspects its own. A request goes to the
-nearest space above the requester with an agent, of either kind. That space
-decides it or passes it up, to the next such space above and to the user at
-the top. Unscoped callers decide any request. A chat whose agent stops, or a
-deciding space that is removed, passes its undecided requests to the user.
-What a deciding space may approve depends on the request: the permissions below
-govern some requests, and resource grants govern the rest.
+A scoped caller requests approvals and inspects its own; unscoped callers
+decide any request. [spaces.md](spaces.md) says how a request goes up the tree
+of spaces to the space that decides it.
 
 ## Permissions
 
