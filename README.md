@@ -22,7 +22,7 @@ macOS keeps the bare binary's privacy grants only while it stays at the same
 path.
 Homebrew installs the additional tools for workspace management and interactive
 menus, but not zmx 1.0.1 or later, the default terminal host: install it with
-`brew install neurosnap/tap/zmx`, or use [another terminal host](docs/reference/agents.md)
+`brew install neurosnap/tap/zmx`, or use [another terminal host](docs/reference/terminals.md)
 instead. Upgrading zmx from 0.8 leaves the agents already running in its
 sessions out of Shoal's reach: [stop them first](docs/reference/agents.md). For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
@@ -116,7 +116,7 @@ the new place, or the host's `enabled = false` to treat it as a plain terminal.
 `[terminal] default_host` names the host that launches from other terminals go
 to. With the default, zmx, an agent that starts with an issue or arguments runs
 in a detached zmx session that `shoal attach` reaches. See
-[Agents](docs/reference/agents.md) for each host's settings.
+[Terminal hosts](docs/reference/terminals.md) for each host's settings.
 
 Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
 tools, or `--agent happy-claude`/`happy-codex` for

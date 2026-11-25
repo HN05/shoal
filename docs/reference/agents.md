@@ -69,7 +69,7 @@ unreachable; Shoal reports them where it reads them, in `shoal status` and its
 cleanup alerts, until their processes end, which `shoal stop` does for
 an agent's.
 `terminal.default_host` (`"zmx"` by default) sends these launches to another host
-instead, as each host's section below describes. With that host turned off they run in place, and a queued
+instead, as each host's section in [Terminal hosts](terminals.md) describes. With that host turned off they run in place, and a queued
 start or a demo that no other host takes fails.
 `-H`/`--here` on `shoal start`, `contribute`, `repo setup` and `config setup`
 runs the launch in this terminal instead of a new tab or detached session,

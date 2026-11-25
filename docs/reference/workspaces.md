@@ -266,7 +266,7 @@ exits with status 141 and no message. Bare `shoal cd` always opens a picker;
 all-workspace listings and `--all` retain their scope. A command that accepts
 `-A`/`--all` lists it as the last picker entry, "All workspaces", and as the first
 completion of its workspace argument. `config show` checks the
-registered checkout before the picker, as described below.
+registered checkout before the picker, as [Inspect effective configuration](config.md#inspect-effective-configuration) describes.
 `shoal start` offers repositories in most-recently-used order, then
 a new-branch prompt or a picker of existing branches, open issues or open PRs; a
 chosen issue or PR opens as its link would. Noninteractive and JSON calls never prompt;
