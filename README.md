@@ -1,8 +1,15 @@
 # Shoal
 
-Shoal gives each coding task its own Git worktree and coordinates shared ports,
-Xcode simulators, and other resources. Run agents or commands in a workspace,
-switch between tasks, and clean up when finished.
+Shoal runs coding agents side by side. Each task gets its own Git worktree and
+branch, and Shoal shares ports, Xcode simulators and other resources between
+them. You start agents, follow their work, review it and clean up when it is
+done.
+
+This guide covers installing Shoal, the first steps and the main workflows.
+The [command reference](docs/reference/) says what each command does, and the
+[configuration reference](crates/shoal-cli/src/cli/commands/configuration/reference.md)
+describes each option. `shoal <command> --help` lists a command's flags.
+
 ## Install
 
 ```sh
@@ -11,46 +18,57 @@ shoal daemon install
 shoal skill install
 ```
 
-Or download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases).
-Each platform's `shoal-vX.Y.Z-<os>-<arch>` is the bare binary: save it as
-`shoal` on your `PATH` and make it executable with `chmod +x shoal`.
-On macOS the archive ending in `-app.tar.gz` holds the same binary in
-`Shoal.app`, both signed with Shoal's own certificate but not notarized: clear
-the quarantine with `xattr -dr com.apple.quarantine shoal`, or `Shoal.app`, and
-for the app put a link to `Shoal.app/Contents/MacOS/shoal` on your `PATH`.
-macOS keeps the bare binary's privacy grants only while it stays at the same
-path.
-Homebrew installs the additional tools for workspace management and interactive
-menus, but not zmx 1.0.1 or later, the default terminal host: install it with
-`brew install neurosnap/tap/zmx`, or use [another terminal host](docs/reference/terminals.md)
-instead. Upgrading zmx from 0.8 leaves the agents already running in its
-sessions out of Shoal's reach: [stop them first](docs/reference/agents.md). For a downloaded binary, install
-the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
-`shoal daemon install` starts the per-user
-daemon and writes a missing config with its defaults in `~/.config/shoal/`;
-`shoal skill install` installs the `shoal` skill into each
+`shoal daemon install` starts the per-user daemon. It writes a config with the
+defaults to `~/.config/shoal/` when there is none. `shoal skill install`
+installs the `shoal` skill into each
 [AI tool's existing skill directory](docs/reference/install.md#agent-skill);
-`shoal skill install <tool>` creates one. Later `shoal` commands keep installed
-skills current after upgrades.
+`shoal skill install <tool>` creates the directory for one tool. Later `shoal`
+commands keep installed skills current.
 
-On macOS, when workspaces or `root_dir` are on an external volume, allow Shoal
-access to removable volumes when macOS asks, or grant Shoal Full Disk Access or
-Removable Volumes under System Settings > Privacy & Security, then run
-`shoal daemon restart`. The grant survives upgrades and covers the agents Shoal
-starts through its terminal hosts or in the background, with the commands they
-run.
+Homebrew also installs the tools for workspaces and interactive menus. It does
+not install zmx 1.0.1 or later, the default terminal host. Install it with
+`brew install neurosnap/tap/zmx`, or use
+[another terminal host](docs/reference/terminals.md). When you upgrade zmx from
+0.8, [stop the agents](docs/reference/agents.md) running in its sessions
+first; otherwise Shoal loses them.
 
-For directory navigation and tab completion, add this to your `.zshrc` or
-`.bashrc`, then run it in your current shell:
+For directory navigation and tab completion, add this line to your `.zshrc`
+or `.bashrc`, and run it in your current shell:
 
 ```sh
 source <(shoal shell init)
 ```
 
+### Prebuilt binaries
+
+Instead of Homebrew, you can download a macOS or Linux binary from a
+[release](https://github.com/HN05/shoal/releases).
+
+- `shoal-vX.Y.Z-<os>-<arch>` is the bare binary. Save it as `shoal` on your
+  `PATH`, and make it executable with `chmod +x shoal`.
+- On macOS, the archive ending in `-app.tar.gz` holds the same binary in
+  `Shoal.app`. Put a link to `Shoal.app/Contents/MacOS/shoal` on your `PATH`.
+
+Both are signed with Shoal's own certificate but not notarized. On macOS,
+clear the quarantine with `xattr -dr com.apple.quarantine shoal`, or with
+`Shoal.app`. macOS keeps the bare binary's privacy grants only while it stays
+at the same path.
+
+Install the [runtime dependencies](#runtime-dependencies) before you run
+`shoal daemon install`.
+
+### External volumes on macOS
+
+When workspaces or `root_dir` are on an external volume, Shoal needs access to
+it. Allow access to removable volumes when macOS asks, or grant Shoal Full Disk
+Access or Removable Volumes under System Settings > Privacy & Security. Then
+run `shoal daemon restart`. The grant survives upgrades. It covers the agents
+Shoal starts and the commands they run.
+
 ### Runtime dependencies
 
-Put these tools on `PATH` before running `shoal daemon install`, which captures it for
-the daemon. Prebuilt binaries do not require Rust.
+Put these tools on `PATH` before you run `shoal daemon install`, which
+captures `PATH` for the daemon. Prebuilt binaries need no Rust.
 
 | Tool | Needed for |
 | --- | --- |
@@ -58,317 +76,189 @@ the daemon. Prebuilt binaries do not require Rust.
 | [zmx](https://github.com/neurosnap/zmx) 1.0.1+, unless `terminal.default_host` names another host | Agent sessions that keep running after you detach |
 | [fzf](https://github.com/junegunn/fzf) 0.63+ | Interactive menus and pickers |
 
-Feature-specific tools are installed separately: `curl` for issues and PR
-watches, with a [token](crates/shoal-cli/src/cli/commands/configuration/reference.md#forges) for private repositories; the agent or
-command you want to run;
-and `happy` plus `curl` for Happy sessions. Simulator use requires macOS with
-Xcode, `xcrun simctl`, and an installed simulator runtime; containers require
-Docker or Podman with Compose.
-Service installation uses launchd on macOS or a systemd user session on Linux;
-without one, [run the daemon in the foreground](docs/reference/daemon.md).
+Some features need more tools:
 
-## Create a workspace
+- Issues and PR watches need `curl`, and a
+  [token](crates/shoal-cli/src/cli/commands/configuration/reference.md#forges)
+  for private repositories.
+- Agents need the AI tool you run, and Happy sessions need `happy` and `curl`.
+- Simulators need macOS with Xcode, `xcrun simctl` and an installed simulator
+  runtime.
+- Containers need Docker or Podman with Compose.
 
-Register a local repository or Git clone URL once, then create a task. Each
-repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`;
-`shoal repo move <dir>` moves them all to a new root:
+The daemon runs as a launchd service on macOS, or a systemd user service on
+Linux. Without either, [run the daemon in the foreground](docs/reference/daemon.md).
+
+## First steps
+
+Register a repository once, by its local path or a Git clone URL:
 
 ```sh
 shoal repo add /path/to/project --name my-project
-shoal repo setup my-project   # Have an agent write its config, committed or local
+shoal repo setup my-project   # Have an agent write the repository's config
 shoal config setup            # Have an agent write the global config for this machine
-shoal start my-project --branch fix-login
-shoal start --in 3 -a codex
 ```
 
-Use `shoal start my-project` to pick a new or existing branch, an open issue or an open PR, or pass it explicitly:
+A repository's workspaces, and its clone for a URL, live under
+`~/shoal/<name>/`. `shoal repo move <dir>` moves them all to a new root.
+
+Start an agent on a new branch:
 
 ```sh
-shoal start my-project --branch fix-api --base feature/api  # Branch from feature/api
-shoal start my-project --branch fix-api --base origin/feature/api  # Fetch the pushed branch first
-shoal branch base set feature-api --workspace 4        # Record that workspace 4 builds on feature-api
-shoal create --branch fix-typo --parent 4    # A child workspace for work in its own PR, without an agent
-shoal create my-project --branch scratch     # A top-level workspace to work in yourself
-shoal start --copy 4 --fork                  # Try another approach from workspace 4's current files
-shoal start --copy 4 --checkpoint 3          # Start from workspace 4's checkpoint 3, live or removed
-shoal refresh 4                              # Bring workspace 4 up to date with what it was made from
-shoal start my-project --branch origin/feature/api --agent codex  # An existing branch opens
-shoal start my-project --branch quick-fix --path ../quick-fix
-shoal start my-project --branch fix-login --name "Login retries"  # Name it apart from its branch
-shoal adopt ../existing-worktree        # Take ownership, including automatic cleanup
-shoal adopt --copy ../existing-worktree # Copy work into Shoal's default directory
-shoal branch rename 3 fix/login              # Rename its branch; its name stays
-shoal rename 3 "Login retries"          # Name the space in lists and tabs
-shoal rename --request 3                # Ask its agent to choose the name
-shoal rename                            # Pick a workspace or chat, then type its name
-shoal start https://github.com/owner/repo/issues/68 # Create from an issue
-shoal start https://github.com/owner/repo/issues/34  # Start on an issue, PR, CI run or branch link
-shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards
-shoal link https://github.com/owner/repo/issues/34 assigned  # Assign an issue to the current workspace or chat
-shoal unlink issue assigned                # Remove the assigned issue
-shoal watch pr 505                         # Watch an explicit PR
+shoal start my-project --branch fix-login --agent claude
 ```
 
-Inside a terminal host that config enables, such as Herdr or
-[Rex](https://www.superlogical.com/rex), `start` opens a new tab or window after
-your choices; use `--here` to run in the current pane, `--focus` to switch to
-the new place, or the host's `enabled = false` to treat it as a plain terminal.
-`[terminal] default_host` names the host that launches from other terminals go
-to. With the default, zmx, an agent that starts with an issue or arguments runs
-in a detached zmx session that `shoal attach` reaches. See
-[Terminal hosts](docs/reference/terminals.md) for each host's settings.
-
-Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
-tools, or `--agent happy-claude`/`happy-codex` for
-a detached [Happy](https://github.com/slopus/happy) session that appears in the
-Happy app. `shoal start` starts `--agent`, else `agent.default = "codex"` from
-the repository or global config, else an installed agent picked on a terminal;
-`shoal create` makes a workspace without one. Edit `~/.config/shoal/rules/worker.md` to add instructions for every
-workspace agent, `rules/chat.md` for every chat and `rules/work.md` to replace
-the practices every built-in mode lists. Agents read a
-repository's own rules from its `AGENTS.md` or `CLAUDE.md`; the same rule
-files in a repository's `.shoal/` directory add instructions only Shoal's agents
-need.
-New workspaces branch from the repository's default branch unless `--base REF`
-is supplied to `start`. With shell integration, `shoal start` enters the
-workspace unless its agent runs in a zmx session.
-
-Agent admission defaults to starting agents and CI jobs one at a time while
-measured memory and disk leave room; `machine.load = "light"`, `"balanced"`
-or `"full"` says how hard to push the machine. `shoal queue` shows what holds
-each waiting entry. Set a fixed machine-wide limit on heavy slots, the agents
-of `heavy` modes (`shoal config set machine.max_heavy_agents 3`), or 0 for a machine that runs none, and
-limit one repository's with `agent.max_heavy_running` (`--repo my-project`). `shoal start` queues agents past the effective
-limit and starts them as heavy slots free; `--now` starts one anyway, and `shoal rm
-<name>` drops a queued one. `--add-blocker <space|issue>` holds an agent
-until that work is done and starts it on the finished branch; an issue's agent
-is also blocked by the issues blocking that issue. See the [agent queue](docs/reference/queue.md).
-
-Shoal can also run a registered repository's CI jobs on this machine:
-`shoal config set runner.enabled true --repo my-project` registers a runner on
-its Forgejo, and jobs with `runs-on: shoal` wait in the same queue, run in a
-workspace at their commit that starts from the seed build, and go once they
-end. See the [runner](docs/reference/ci.md#runner).
-
-## Everyday commands
-
-After [adding an AI tool](docs/reference/agents.md), run
-`shoal start my-project --branch fix-api --agent droid` or `shoal start <issue-url>`.
-
-An agent starts in a mode, which decides what it is told and whether it gets a
-workspace or a chat: `worker`, the default, implements its subject in a
-workspace; `chat` discusses the repository; `plan` settles an issue's plan
-with you; `orchestrate` starts a master session, a chat without a repository
-that starts and steers the work of every repository for you. Without `--mode`,
-`shoal start` asks which on a terminal. Configure your own under
-`[modes.<name>]` and `[rules.<name>]`; see
-[modes and rules](docs/reference/modes.md). A trigger,
-`[triggers.<name>]`, starts an agent on its own, such as every weekday at
-09:00 or when a forge's webhook says an issue was labelled; see
-[triggers](docs/reference/triggers.md).
+The agent works in its own worktree. Shoal opens it in a new tab or window of
+your terminal host, or in a detached zmx session. Follow it from anywhere:
 
 ```sh
-shoal                         # Inbox when something needs you, else workspaces; Tab switches
-shoal repo                    # Interactive repository menu
-shoal inbox                   # Threads, approvals, agents needing input, failures, ready work, demos; --print to list
-shoal list                    # Workspaces, chats and queued agents; --print to list
-shoal queue                   # Agents waiting for a heavy slot under the agent limits; start or cancel one
-shoal pause                   # Stop all work on this machine, send it to others of the hub, admit nothing new
-shoal unpause                 # Admit work again and restore what stayed
-shoal trigger ls              # Triggers of this repository and the global config: next firing, last run
-shoal trigger run triage      # Fire the trigger triage now; pause and resume stop and restart it
-shoal list --chats            # Running chats
-shoal list --repo my-project  # Only one repository's workspaces, chats and queued agents
-shoal list --status needs-input,failed  # Only rows with these statuses
-shoal status 3                # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
-shoal status pr 12            # Workspaces and chats that link PR 12; also issue, ci or resource
-shoal status                  # Outside a space: the daemon, unread alerts and cleanup failures
-shoal config show 3           # Effective settings and the source of each value
-shoal config reference        # This release's configuration reference
-shoal config set agent.default codex
-shoal config set cleanup.auto.enabled true cleanup.auto.idle_minutes 30  # Saved together
-shoal config set agent.default claude --repo my-project
-shoal config unset agent.default  # Restore the default
-shoal cd 3                     # Enter a workspace; omit it for a picker
-shoal run --workspace 3 -- cargo test
-shoal edit 3                   # Open in $VISUAL/$EDITOR, or [commands] edit = ["zed", "{path}"]
-shoal run check --workspace 3              # With [commands] check = ["cargo", "test"] in config
-shoal run                     # List configured commands, arguments, and source layers
-shoal open 3 --app claude          # Open in the Claude desktop app (macOS)
-shoal open 3 --app codex           # Open in the Codex desktop app
-shoal attach 3                 # Reattach to the workspace's agent session; Ctrl-\ detaches zmx
-shoal demo                     # Pick a running demo an agent started and open it
-shoal demo start web           # Start the configured demo `web` for the user to try
-shoal demo web -w 7            # Forward a web demo another machine of the hub runs here
-shoal demo tui -w 7            # Show a terminal demo another machine runs in this terminal
-shoal start --in 3 -a happy-claude  # Detached Happy session, visible in the Happy app
-shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
-shoal start --in 3 -m chat     # Review a workspace's live work in a chat in its worktree, beside its agent
-shoal start --in 3 -a claude   # Start Claude Code as workspace 3's own agent, on its issue
-shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat
-shoal start --mode orchestrate   # Manage the spaces of every repository from one chat
-shoal rename 5 "Login design"  # Rename a running chat
-shoal rename --request 5        # Ask its agent to choose the name
-shoal diff 3                   # Changes since the branch's fork point
-shoal conflicts --workspace 3  # Whether the branch merges cleanly into main
-shoal alert list              # Conflicts, finished agents, and removals you missed
-shoal send "PR #12 is ready to merge"  # From a workspace: to its coordinator, else the user
-shoal send "New layout" --attach shot.png  # Send a file with it
-shoal progress "Reproduced; the cause is the query limit"  # Set the agent's status line
-shoal progress --space 3  # Its status line and plan steps
-shoal send "Stop the dev server" --space 3  # Alert the agent of a workspace or chat
-shoal send "Crash on launch" --space 3 --attach shot.png  # Attach a file the agent can read
-shoal send --all "Network is back"  # Alert every agent, running or stopped
-shoal log 3              # The space's log: creation, agent, PRs, ready, done; --follow keeps printing
-shoal log                # Outside a space: every space's entries, daemon starts and stops, reloads, cleanup
-shoal files 3                 # The files attached to the workspace
-shoal files 5                 # The files a chat's agent attached
-shoal thread list             # Pick a thread, read it and reply
-shoal thread open "Which port?" --space 3  # Ask a workspace's agent; prints the thread's number
-shoal send 3.2 "Use 8080"     # Post in thread 3.2; --choose 2 picks its second choice
-shoal thread resolve 3.2 answered  # Settle a thread you opened; --undo reopens it
-shoal stop 3                  # Stop agents and commands here and below; they stay down until shoal resume
-shoal stop 3 5                # Stop several; the picker selects them with Tab or Ctrl-A
-shoal stop --all              # Stop every workspace and chat; a reboot saves agents too
-shoal stop --machine desk     # Stop what --all would there, on a machine joined to the same hub
-shoal stop --interrupt 3          # Cancel its agent's turn; the agent keeps running
-shoal stop --leftovers        # Stop what this workspace's commands left running
-shoal stop --processes 3          # Stop its processes Shoal does not track; agents keep running
-shoal restart --all --agent claude  # Restart Claude agents in new terminals, such as after an update
-shoal restart --all --sequential    # Restart one at a time
-shoal restart --all --wait          # Restart each once its turn ends; --cancel drops that
-shoal resume                  # Pick the workspaces and chats whose agent can resume
-shoal resume --all            # Queue the restore of every stopped agent; report stopped commands
-shoal resume --machine desk   # Resume what --all would there; an offline machine is skipped
-shoal resume 3                # Continue its stopped agent, or the turn shoal stop --interrupt ended
-shoal resume 3 --now          # Resume its stopped agent at once in the background
-shoal resume 3 --focus        # Resume its stopped agent in this terminal
-shoal resume 5                # Resume a chat's agent, continuing its session
-shoal restore --discard-agent 3  # Discard its stopped agent; its files, branch and worktree stay
-shoal done 3                  # Mark finished and request safe cleanup
-shoal done --cleanup 3 # Request cleanup despite [cleanup.done] enabled = false
-shoal done --attach report.md  # Hand back files, such as an investigation's report
-shoal done --summary "No leak; the cache is freed on drop" # State the finding in the completion notice
-shoal done --integrated 3 # Another branch has its work under new commits
-shoal done 3 --undo                # Withdraw a recorded done
-shoal rm 3                    # Remove the workspace
-shoal rm 3 6                  # Remove several; the picker selects them with Tab or Ctrl-A
-shoal absorb 4                # Fold a space's work, links and children into its parent, then remove it
-shoal cleanup                 # Pick leftover workspaces, kept branches and caches to remove
-shoal checkpoint 3            # Keep HEAD and unsaved files to return to later
-shoal restore                 # Pick a removed workspace or chat to open again
-shoal restore <id>            # Open a removed workspace or chat again, resuming its agents
-shoal restore 3 --checkpoint  # Pick one of the workspace's checkpoints
-shoal restore 3 --checkpoint 3 # Return the workspace to checkpoint 3
-shoal move 3 --machine desk   # Move the workspace or chat to a machine joined to the same hub
-shoal move 3 --ssh other      # Move the workspace or chat to another machine; its agents continue there
-shoal move 3 -o - | ssh other shoal restore --from - # The same through any pipe
-shoal move --repo app --all -o moving # Write every workspace and chat of app to a directory, a file each
-shoal move 3 --keep -o copy.shoal # Write a copy and keep fix-login running here
-shoal move 3 --ssh other --keep # Copy fix-login to another machine and keep it running here
-shoal restore --from moving   # Open every space exported to a directory
+shoal                 # The inbox when something needs you, else your spaces
+shoal list            # Workspaces, chats and queued agents
+shoal attach 3        # Back to the session of space 3; Ctrl-\ detaches zmx
+```
+
+When the agent has finished, it runs `shoal done`. Shoal removes the
+workspace once its work is merged or pushed, as [Clean up](#clean-up)
+describes.
+
+Every space has a number, which `shoal list` shows. Commands take that number,
+or act on the space you are in. Outside a space, they open a picker on a
+terminal. Commands that open, show or run something in a space take `-` for
+the space they last acted on, as in `shoal attach -`.
+
+## Start agents
+
+```sh
+shoal start my-project                     # Pick a branch, an issue or a PR
+shoal start my-project --branch fix-api --base feature/api  # Stacked on feature/api
+shoal start https://github.com/owner/repo/issues/34  # An issue, PR, CI run or branch link
+shoal start --in 3 -a codex                # Workspace 3's own agent, on its issue
+shoal start my-project --mode chat         # Discuss the repository in its checkout
+shoal start --in 3 -m chat                 # A chat in workspace 3's worktree, beside its agent
+shoal start --mode plan --issue            # Settle the plan of an issue that needs one
+shoal start --mode orchestrate             # A master session that steers every repository
+shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push
+shoal create my-project --branch scratch   # A workspace to work in yourself, without an agent
+```
+
+New workspaces branch from the repository's default branch, unless `--base`
+names another. See [workspaces](docs/reference/workspaces.md) for adopting an
+existing worktree, copying a workspace and renaming.
+
+### Agents
+
+`--agent` picks the AI tool: `claude` for Claude Code, `codex`, `opencode`,
+`pi` or `grok`, or `happy-claude` and `happy-codex` for a detached
+[Happy](https://github.com/slopus/happy) session in the Happy app. Without
+`--agent`, `shoal start` uses `agent.default`, or else asks on a terminal. See
+[agents](docs/reference/agents.md) to add another tool.
+
+Claude Code and Codex run with their own sandbox and approval settings. Shoal
+turns on network access in Codex's sandbox, so that its commands reach the
+daemon. Shoal's scope is cooperative, not a filesystem sandbox.
+
+### Modes
+
+A mode decides what an agent is told, and whether it gets a workspace or a
+chat:
+
+- `worker`, the default, implements its subject in a workspace.
+- `chat` discusses the repository.
+- `plan` settles an issue's plan with you.
+- `orchestrate` starts a master session: a chat without a repository that
+  starts and steers work in every repository for you.
+
+Configure your own modes under `[modes.<name>]` and `[rules.<name>]`. Add
+instructions for every workspace agent in `~/.config/shoal/rules/worker.md`,
+and for every chat in `rules/chat.md`. Agents read a repository's own rules
+from its `AGENTS.md` or `CLAUDE.md`. The same rule files in a repository's
+`.shoal/` directory add instructions that only Shoal's agents need. See
+[modes and rules](docs/reference/modes.md).
+
+### Terminal hosts
+
+Inside a terminal host that your config enables, such as Herdr or
+[Rex](https://www.superlogical.com/rex), `start` opens a new tab or window.
+`--here` runs the agent in the current pane instead, and `--focus` switches
+to the new place. From other terminals, launches go to `[terminal]
+default_host`. With the default, zmx, an agent with a task runs in a detached
+zmx session that `shoal attach` reaches. See
+[terminal hosts](docs/reference/terminals.md).
+
+Sessions keep running when you detach or close the terminal. Detach with
+Ctrl-\ in zmx, or the host's own control elsewhere.
+
+### The agent queue
+
+Shoal starts agents and CI jobs one at a time while memory and disk leave
+room. `machine.load` says how hard to push the machine: `"light"`,
+`"balanced"` or `"full"`. `machine.max_heavy_agents` sets a fixed limit on
+the agents of heavy modes, and `agent.max_heavy_running` a limit per
+repository.
+
+```sh
+shoal queue                       # What waits, and what holds each entry
+shoal queue start                 # Start a waiting entry now, regardless of the limits
+shoal start --issue 43 --add-blocker 42   # Start on issue 43 once issue 42 is done
+```
+
+See the [agent queue](docs/reference/queue.md).
+
+### Triggers
+
+A trigger, `[triggers.<name>]`, starts an agent on its own, such as every
+weekday at 09:00, or when a forge webhook says an issue was labelled.
+`shoal trigger ls` lists them, and `shoal trigger run <name>` fires one now.
+See [triggers](docs/reference/triggers.md).
+
+## Follow and talk to agents
+
+```sh
+shoal inbox                   # Threads, approvals, agents needing input, failures, ready work
+shoal status 3                # A space's activity, issue and PR state, changes and resources
+shoal log 3                   # Its log; --follow keeps printing
+shoal progress --space 3      # Its agent's status line and plan steps
+shoal alert list              # Conflicts, finished agents and removals you missed
+shoal send "Stop the dev server" --space 3      # Alert space 3's agent
+shoal thread open "Which port?" --space 3       # Ask it a question; prints the thread's number
+shoal send 3.2 "Use 8080"     # Post in thread 3.2
+shoal thread resolve 3.2 answered
+shoal files 3                 # The files its agent handed back
+shoal demo                    # Open a demo an agent started for you to try
+```
+
+An agent runs `shoal ready` when it needs you: its work is ready for review,
+or it has a question. The inbox lists it. An agent that asks for approval,
+such as to merge or to use a protected resource, waits in the inbox too:
+
+```sh
+shoal approvals                     # Pending requests
+shoal approvals --approve 3.2       # Space 3's request 2
+shoal approvals --deny 3.2 --reason "Use the staging server"
+```
+
+See [alerts](docs/reference/alerts.md), [threads](docs/reference/threads.md)
+and [approvals](docs/reference/approvals.md).
+
+## Issues, PRs and CI
+
+Agents open and follow their own issues and PRs. You can run the same commands
+yourself, in a space or with a number:
+
+```sh
 shoal pr open                 # Push, then link the branch's open PR or open one
-shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
-shoal pr reviewers            # Users and teams who can review the linked PR
-shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
-shoal pr comment --attach demo.mp4 # Upload a file and show or link it in a comment
-shoal pr comment --edit 812 --body-file fix.md # Replace the body of a comment you wrote
-shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve it
-shoal pr react +1 --comment 812 # React to a comment; --remove takes it back, issue react too
-shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comments; --approve is yours
-shoal pr update --method rebase # Update the linked PR's branch from its base on the forge
-shoal merge 42 -X rebase      # Merge a PR yourself; without -X, by the repository's default
-shoal merge 42 --auto         # Merge it once checks pass; --cancel-auto withdraws it
-shoal branch ls --unmerged    # The forge's branches the default branch lacks the changes of
-shoal branch delete old-fix   # Delete a branch on the forge whose changes are on the default branch
-shoal pr revert 42            # Open a PR that reverts merged PR 42
-shoal issue ls --label bug flaky # Search issues by text, label, author and state; pr ls too
-shoal issue ls --repo team/tool crash # Search another repository's issues
-shoal issue close             # Close the linked issue; edit, comment, reopen too
-shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
-shoal issue open --repo team/tool --title Bug # Open it in another repository
-shoal repo labels                  # The repository's labels and what each one means
-shoal forge capabilities            # What the repository's forge supports, such as resolving threads
-shoal forge reactions               # The reactions the repository's forge allows
-shoal forge api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; agents only read
-shoal forge download URL -o shot.png # An image or attached file on the forge, with its login
-shoal ci run deps.yml --input level=full  # Start a workflow run on the workspace's branch
-shoal ci run https://github.com/team/tool/actions/workflows/ci.yml  # Or paste a workflow's link
-shoal ci ls --pr 44               # The runs on a PR's head; --branch and --workflow filter too
-shoal view ci 2765                  # A run's jobs and failed jobs' logs, or paste any run's URL
-shoal view ci 2765 --job rust       # The whole log of one job, passed or failed
-shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
-shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
-shoal link 50 related         # Record an issue or PR the work relates to
-shoal link ci 2765 related    # Follow a CI run; watch reports when it finishes
-shoal watch                   # Wake on all linked item comments, checks, or closure
-shoal view                    # Linked items with state, failed CI logs, comments, and reviews
-shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion
-shoal view pr 44 --check rust   # Show only this failed CI check's log
-shoal ci rerun --check rust   # Rerun a failed check on the linked PR; cancel stops running ones
-shoal ci rerun 2765 --failed  # Rerun one run's failed jobs
-shoal ci approve --pr 44      # Approve a fork PR's runs waiting for approval; agents cannot
-shoal ready                   # Mark that you need the user: work to review, or a decision
-shoal unlink pr 43 assigned   # Cancel one assigned PR
-shoal unlink pr assigned      # Cancel assigned PRs
+shoal view                    # Linked items with their state, comments, reviews and failed CI logs
+shoal view pr 44 --check rust # One failed check's log
+shoal ci rerun --check rust   # Rerun a failed check on the linked PR
+shoal link 42 assigned        # Assign an issue or PR to this space
+shoal issue ls --label bug flaky   # Search issues; pr ls too
+shoal merge 42 -X rebase      # Merge a PR; --auto merges it once checks pass
 ```
 
-For workspace actions, omit the space to use your scoped or current workspace;
-outside one, choose from the interactive picker or pass a target for `--json`
-and noninteractive calls. Bare `shoal cd` always opens a picker. `shoal cd -`,
-`shoal attach -` and other commands that open, show or run something in a
-space take `-` for the space they last acted on; for `attach`, the space
-whose session you last detached from, whichever command attached it.
-Use `shoal <command> --help` for options.
-
-To move changes between your workspace and the default branch:
-
-```sh
-shoal repo sync                    # Fetch and fast-forward the default branch
-git rebase main               # Or git merge; use your repo's branch name
-shoal merge                   # Merge the workspace's open PR, or without one its branch, locally
-shoal merge --push            # Then push the default branch, after asking, instead of opening a PR
-shoal merge -s 3              # Merge another space's work
-shoal unmerge                 # Undo your branch's latest local merge while it is unpushed
-```
-
-To have an agent review a workspace's committed changes or a PR:
-
-```sh
-shoal review run 3            # Queue a one-shot, read-only review; each finding is a thread
-shoal review run <pr-url>     # Review a PR in the workspace that owns its branch
-shoal review ls             # Reviews, newest first, with unresolved findings
-shoal view review             # The latest review in full
-shoal thread resolve 3.2 false-positive --reason 'The caller checks it'
-```
-
-With `[commands] review = ["tuicr", "-r", "{diff_base}..HEAD"]` configured,
-`review run` asks whether to run it or an agent. See
-[local reviews](docs/reference/reviews.md#local-reviews) for reviewers, outcomes and the
-[review command](docs/reference/run.md#review-commands) for uncommitted review.
-
-CLI agents and chats run in sessions of a terminal host, by default
-[zmx](https://github.com/neurosnap/zmx), that keep running when you detach, with
-Ctrl-\ in zmx or the host's own control elsewhere, or close the terminal;
-`shoal attach` returns to one, such as a zmx
-session or a Herdr tab, by its workspace's or chat's number or ID. Happy sessions run detached, log
-to a file Shoal names, and stop with `shoal stop`. Codex and Claude run with
-their own sandbox and approval settings; Shoal turns on network access in Codex's
-sandbox so its commands reach the daemon. Use `shoal run --workspace 3 -- codex`
-for a custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
-Apps that launch their own processes can request `shoal internal env 3 --json`
-and add the returned variables to each child's environment. Revoke its scope
-with `shoal internal env 3 --revoke <token>`. See
-[workspace scope](docs/reference/modes.md#scoped-workspace-commands) for token lifetime
-and cleanup behavior.
-The agents Shoal starts get JSON from `shoal` without `--json`; give an agent
-you start yourself `SHOAL_OUTPUT=json` for the same. See
-[output](docs/reference/output.md#agents) for how commands choose their format.
-
-Agents' issue and PR changes need an `agent_token` for the forge host: a
+Agents' issue and PR changes need an `agent_token` for the forge host. Use a
 separate agent account's token, or `{ same_as = "user_token" }` to make them
 with your login. A [Git profile](docs/reference/repo.md#git-profiles) sets the
-agent's commits:
+author of the agent's commits:
 
 ```toml
 [agent]
@@ -379,53 +269,69 @@ user_token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"
 agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }  # Or { same_as = "user_token" }
 ```
 
-See [agent accounts](docs/reference/agents.md#agent-accounts).
+See [agent accounts](docs/reference/agents.md#agent-accounts),
+[issues and PRs](docs/reference/issues.md), [links](docs/reference/links.md)
+and [CI](docs/reference/ci.md). Shoal can also run a repository's CI jobs on
+this machine; see the [runner](docs/reference/ci.md#runner).
 
-Memory overload protection stops tracked agents by default while retaining their
-workspaces and leases; before that, Shoal tells running agents that memory pressure is high. To opt out, run `shoal config set machine.overload.memory.enabled
-false`. See [overload protection](docs/reference/load.md)
-for thresholds and timing. When disk space runs low, the daemon removes
-workspaces idle cleanup would remove; if space stays critical, it stops tracked
-executions. Agents restore once space returns; `shoal resume` brings back the rest. Stop agents manually with `shoal stop`:
-they stay down, holding no heavy slot and no workspace from cleanup, until
-`shoal resume` continues them, as it continues an agent that exited on its own,
-such as one you quit. To take agents down briefly, use `shoal restart`. `shoal
-resume --all` queues the restores to start as the agent limits allow; `--now`
-starts them at once in the background, and `--focus` resumes one agent in this
-terminal. Agents whose terminal closed, or that a logout or reboot
-stopped, come back through the same queue on their own. Codex and Claude automatically continue
-the workspace session after load recovers; an agent's `resume_command` overrides
-its restore command or enables recovery for other agents.
+### Merge locally
+
+To move a workspace's work into the default branch without a PR:
+
+```sh
+shoal repo sync               # Fetch and fast-forward the default branch
+git rebase main               # Or git merge; use your repository's branch name
+shoal merge                   # Merge the workspace's branch locally
+shoal merge --push            # Then push the default branch, after asking
+shoal unmerge                 # Undo the latest local merge while it is unpushed
+```
+
+See [branches](docs/reference/branches.md).
+
+### Reviews
+
+An agent can review a workspace's committed changes or a PR:
+
+```sh
+shoal review run 3            # A one-shot, read-only review; each finding is a thread
+shoal review run <pr-url>     # Review a PR in the workspace that owns its branch
+shoal view review             # The latest review in full
+```
+
+With a `[commands] review` command configured, `review run` asks whether to
+run it or an agent; see the
+[review command](docs/reference/run.md#review-commands). See
+[local reviews](docs/reference/reviews.md#local-reviews) for the rest.
 
 ## Share resources
 
-From a managed workspace:
+From a workspace:
 
 ```sh
 shoal acquire port web --reason "Development server"
-shoal catalog                 # What each kind offers: configuration, devices, runtimes
-shoal leases                  # Every kind's leases and usage
-shoal release port web
-
-shoal acquire sim --queue     # macOS; requires configured simulator profiles
-shoal release sim
-
-shoal acquire containers      # Requires a Compose file in [containers]
-shoal release containers
-
+shoal acquire sim --queue          # macOS; needs configured simulator profiles
+shoal acquire containers           # Needs a Compose file in [containers]
 shoal acquire resource signing --queue
-shoal release resource signing
+shoal leases                       # What you hold
+shoal release port web
 ```
 
-Use the returned port or simulator UDID. Reservations and leases belong to the
-workspace and survive command exit; release them when finished.
+Use the port or simulator UDID that `acquire` returns. Reservations and leases
+belong to the workspace and outlive the command that made them. Release them
+when you are done. `shoal catalog` shows what each kind offers. See
+[resources](docs/reference/resources.md).
 
-Install a packaged global config with `shoal config install <name>`;
-`shoal config install --help` lists the available names.
+## Configure a repository
 
-Put project defaults in `.shoal.toml` or `.shoal/config.toml`. For example:
+Put a repository's settings in `.shoal.toml` or `.shoal/config.toml`, or for
+settings only you want, in its [local config](docs/reference/config.md). For
+example:
 
 ```toml
+[setup]
+command = "scripts/setup.sh"   # Prepares each new worktree
+presets = ["cargo"]            # Sets up the build tools the repository uses
+
 [ports.web]
 port = 3000
 env = "PORT"
@@ -433,124 +339,87 @@ env = "PORT"
 [resources.signing]
 capacity = 1
 requires_approval = true
-approval_lifetime = "lease"    # Or "workspace"
 
-[resources.server]
-kind = "repo"
-repo = "saldoir-server"       # Registered repository name or remote URL
-```
-
-Acquire a related repository with `shoal acquire repo server`. Use its
-checkout path in a project override, for example:
-
-```sh
-server=$(shoal --json acquire repo server | jq -r '.repository.path')
-SALDOIR_SERVER_REPO="$server" Scripts/sync-contract.sh
-shoal release repo server
-```
-
-Agents request protected resources with `acquire --reason "purpose"`. Review
-requests with `shoal approvals`, then use `shoal approvals --approve <S.N>` or
-`shoal approvals --deny <S.N>` from an unscoped terminal, where `S.N` is the
-requesting space's number and the request's, such as `3.2`.
-
-Select a named Git identity with `git_profile = "work"` in that file, or use
-`shoal start my-project --branch feature --git-profile work`. Define the profile
-in global config; see [Git profiles](docs/reference/repo.md#git-profiles).
-
-New workspaces get the repository checkout's ignored local files, such as `.env`;
-set `[setup] copy_ignored = false` in that file to turn this off. The same file can name a
-`setup.command`, run automatically on workspace creation or explicitly with
-`shoal setup [workspace]`, and hooks around setup, assignment completion,
-agent exits, removal, and resource acquisition/release, for example to open a tmux session or prepare an
-external device. See [setup and hooks](docs/reference/setup.md)
-and [resource hooks](docs/reference/resources.md#resource-hooks) for configuration and failure behavior.
-A `[setup.seed]` table keeps a build of the default branch that new workspaces clone, so
-they rebuild only what their branch changed; see [seed builds](docs/reference/setup.md#seed-builds).
-`[setup] presets = ["cargo", "bun"]` sets that up for the tools a repository uses; see
-[build tool presets](docs/reference/setup.md#build-tool-presets).
-
-Use `[env]` to give a space's tracked executions and hooks their own variables.
-Values substitute `{workspace}`, `{workspace_path}`, `{path}`, `{repo}`, `{branch}`,
-reserved `{port.NAME}` values and [shared cache](docs/reference/setup.md#shared-caches)
-directories `{cache.NAME}` once; inserted text is not evaluated, and a chat, which
-has no worktree, leaves unset a variable that names one of its fields. For example:
-
-```toml
 [env]
-AGENT_BROWSER_SESSION = "{workspace}"
-AGENT_BROWSER_PROFILE = "{workspace_path}/.agent-browser"
 GOCACHE = "{cache.go}"
 
 [caches.go]
 scope = "shared"
 ```
 
-Use `[secrets]` in global or local config to give agents, or only
-tools such as `agent-browser`, values fetched from your secret store; see
-[agent secrets](docs/reference/agents.md#agent-secrets).
+- New workspaces get the checkout's ignored files, such as `.env`.
+  `[setup] copy_ignored = false` turns that off.
+- `[setup.seed]` keeps a build of the default branch that new workspaces
+  start from, so they rebuild only what their branch changed.
+- Hooks run around setup, completion, agent exits, removal and resource
+  leases.
+- `[secrets]` gives agents, or only some tools, values from your secret store.
+- `git_profile = "work"` selects a named Git identity for new worktrees.
 
-## Cleanup
-
-`shoal rm` removes workspaces and chats with their resources and the spaces
-below them, prompting once, and only before it deletes uncommitted work, takes
-the spaces below them or releases holds. It returns once its checks pass and
-removes them in the background, notifying you if that fails; `--wait` waits for
-it. It deletes the branch too unless the branch has commits that are
-on no remote and not on the default branch; Shoal deletes such a kept branch once
-they are, and `shoal cleanup branches` deletes kept branches, several at a time, with
-their commits. `shoal stop` keeps the workspace.
-
-Automatic cleanup removes idle, clean, pushed or merged workspaces after 10 minutes,
-merged workspaces after 4 idle hours whether or not their agent ran `shoal done`,
-and forgets workspaces whose directory you deleted yourself, keeping the branch.
-A chat whose agent stopped goes by the same rules.
-`shoal cleanup` lists what Shoal left behind: those spaces, kept branches, and
-shared caches nothing is using, with why it keeps the other spaces. On a terminal
-it opens a picker, where Tab selects several, and removes what you pick.
-`shoal cleanup spaces`, `branches` or `caches` acts on one kind, and `shoal status`
-shows why it keeps one workspace.
-Removal keeps the workspace's HEAD and unsaved files in a checkpoint, except a
-disposable workspace's, as `shoal checkpoint` does and Shoal does when an
-agent exits or is stopped. Until the checkpoint expires, after 30 days by default,
-`shoal restore` picks a removed workspace or chat, and
-`shoal restore <id>` opens one again with its links and the unsaved files the
-checkpoint kept, and resumes the agents the removal stopped in the same run; a removed chat
-comes back the same way, with its agent's session; `--no-resume` keeps them
-saved for a later `shoal resume`. A checkpoint keeps
-HEAD only when the unsaved files include a nested repository or changed
-submodule, or, for an agent's exit or stop, exceed `archive_max_mb`; see [Checkpoints and restore](docs/reference/removal.md#checkpoints-and-restore).
-`shoal restore <workspace> --checkpoint <number>` returns an existing workspace
-to one of its checkpoints. `shoal move <workspace> -o <file>`
-removes a workspace and writes its removal checkpoint and record to a file, and `shoal
-restore --from <file>` opens it on another machine or the same one and
-continues its agents' sessions from the transcripts the file carries;
-`--new-sessions` starts them over. A chat moves the same way, with the chats
-below it: the move ends it, and the import opens it again under its ID.
-An app hosting an external session can hold its space, a workspace or a chat, while the session is open:
+See [setup and hooks](docs/reference/setup.md),
+[agent secrets](docs/reference/agents.md#agent-secrets) and the
+[configuration reference](crates/shoal-cli/src/cli/commands/configuration/reference.md).
 
 ```sh
-shoal acquire hold --space 3 --name quay-thread-42 --reason "Quay thread"
-shoal leases hold --space 3
-shoal release hold --space 3 --name quay-thread-42
+shoal config show 3           # Effective settings and where each comes from
+shoal config set agent.default codex
+shoal config set agent.default claude --repo my-project
+shoal config install <name>   # Install a packaged global config
 ```
 
-Configure idle cleanup in a repository's `.shoal.toml`, or for every repository in
-`~/.config/shoal/config.toml` followed by `shoal config reload`:
+## Stop and resume
 
-```toml
-[cleanup.auto]
-enabled = false
+```sh
+shoal stop 3                  # Stop the agents and commands of space 3 and below
+shoal stop --interrupt 3      # Cancel its agent's turn; the agent keeps running
+shoal resume 3                # Continue its stopped agent
+shoal resume --all            # Queue the restore of every stopped agent
+shoal restart --all --wait    # Restart each agent once its turn ends
 ```
 
-When something looks wrong, `shoal inbox` and `shoal alert list` show what Shoal
-found and the command that fixes it, and `shoal status <name>` shows one
-workspace or chat; see [cleanup](docs/reference/removal.md#automatic-cleanup) and
-[recovery](docs/reference/daemon.md#recovery) for details.
+An agent you stop stays down until `shoal resume`, and holds no queue slot.
+Agents that a closed terminal, a logout or a reboot stopped come back through
+the queue on their own.
+
+When memory runs short, Shoal first warns running agents, then stops them and
+keeps their workspaces and leases. When disk space runs low, it removes
+workspaces that idle cleanup would remove, and then stops agents. Claude Code
+and Codex agents come back once the machine recovers, and `shoal resume`
+brings back the rest. See
+[overload protection](docs/reference/load.md).
+
+## Clean up
+
+```sh
+shoal done 3                  # Mark the work finished; Shoal cleans up once it is safe
+shoal rm 3                    # Remove a space now, with the spaces below it
+shoal cleanup                 # Pick leftover spaces, kept branches and caches to remove
+shoal restore                 # Pick a removed space to open again
+shoal restore 3 --checkpoint  # Return a workspace to one of its checkpoints
+```
+
+Automatic cleanup removes a workspace once it is idle, clean, and pushed or
+merged. After `shoal done`, Shoal removes a workspace once its PRs have
+merged. `shoal rm` asks
+before it deletes uncommitted work. It deletes the branch too, unless the
+branch has commits that are on no remote and not on the default branch.
+
+Each removal keeps the workspace's HEAD and unsaved files in a checkpoint.
+`shoal restore` opens a removed space again with its agents, for 30 days by
+default. `shoal status` shows why Shoal keeps a space. See
+[removal and cleanup](docs/reference/removal.md).
+
+`shoal move 3 --ssh other` moves a space to another machine, where its agents
+continue. See [moving spaces](docs/reference/move.md).
+
+When something looks wrong, `shoal inbox` and `shoal alert list` show what
+Shoal found and the command that fixes it. See
+[recovery](docs/reference/daemon.md#recovery).
 
 ## Join your machines to a hub
 
-One machine's daemon can be the hub your other machines join. On it:
+One machine's daemon can be the hub that your other machines join. On that
+machine:
 
 ```toml
 # ~/.config/shoal/config.toml, then shoal config reload
@@ -566,8 +435,8 @@ shoal hub join --connect "ssh desk shoal daemon connect"   # Or over SSH, withou
 shoal hub ls                         # Every machine and device, and whether it is connected
 ```
 
-The listener stays on loopback until something with TLS is in front of it; see
-[hub](docs/reference/hub.md).
+The listener stays on loopback until something with TLS is in front of it.
+See [hub](docs/reference/hub.md).
 
 ## Update
 
@@ -576,28 +445,30 @@ brew update
 brew upgrade hn05/tap/shoal
 ```
 
-Update a downloaded binary or `Shoal.app` with `shoal update`. Managed daemons apply the upgrade once their operations are idle; run
-`shoal daemon restart` to apply an upgrade immediately; running agents and
-commands reattach to the new daemon. Wrappers from releases before reattachment
-are stopped instead, and the restart names the `shoal resume` that brings them
-back. The next `shoal`
-command updates installed skills; reload `source <(shoal shell init)` in open
-terminals.
+Update a downloaded binary or `Shoal.app` with `shoal update`. The daemon
+applies an upgrade once it is idle; `shoal daemon restart` applies it at once.
+Running agents and commands reattach to the new daemon. Reload
+`source <(shoal shell init)` in open terminals. See
+[installation](docs/reference/install.md).
 
 ## Development
 
-See [the design docs](docs/design/) for decisions, the [command reference](docs/reference/) for behavior and the [configuration reference](crates/shoal-cli/src/cli/commands/configuration/reference.md) for every option.
-Create releases through **Actions → release** ([setup](docs/releases.md)).
+[The design docs](docs/design/) explain decisions, the
+[command reference](docs/reference/) behavior, and the
+[configuration reference](crates/shoal-cli/src/cli/commands/configuration/reference.md)
+every option. Create releases through **Actions → release**
+([setup](docs/releases.md)).
 
-Requires Rust at least as new as `package.rust-version` in [Cargo.toml](Cargo.toml)
-and the [runtime dependencies](#runtime-dependencies).
-The tests run with [cargo-nextest](https://nexte.st), and integration tests also
-use Bash, Zsh, and Python 3. Debug builds leave the
-user's state directory, config directory and user-level files outside their own,
-such as installed skills, to the installed Shoal: run them with a temporary
-`--state-dir`, and with a temporary `HOME`, holding `XDG_CONFIG_HOME` if it is
-set, to change the config. Tests in a
-temporary `HOME` set `SHOAL_DEV_USER_FILES=1` to change user-level files.
+Building needs Rust at least as new as `package.rust-version` in
+[Cargo.toml](Cargo.toml), and the [runtime dependencies](#runtime-dependencies).
+The tests run with [cargo-nextest](https://nexte.st). Integration tests also
+use Bash, Zsh and Python 3.
+
+Debug builds leave the user's state directory, config directory and
+user-level files, such as installed skills, to the installed Shoal. Run them
+with a temporary `--state-dir`. To change the config, also use a temporary
+`HOME`, with `XDG_CONFIG_HOME` inside it if that is set. Tests in a temporary
+`HOME` set `SHOAL_DEV_USER_FILES=1` to change user-level files.
 
 ```sh
 cargo build
