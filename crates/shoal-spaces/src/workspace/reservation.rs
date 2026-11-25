@@ -152,7 +152,7 @@ impl Spaces {
                     // Setup registers its execution as it reserves the
                     // workspace, so none recorded means none started.
                     Some(current @ WorkspaceState::Preparing)
-                        if rules.awaiting_setup && store::execution_count(tx, &id, None)? == 0 =>
+                        if rules.awaiting_setup && crate::executions::execution_count(tx, &id, None)? == 0 =>
                     {
                         current
                     }

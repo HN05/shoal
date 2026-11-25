@@ -2,6 +2,8 @@ use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::Space;
 use anyhow::{Context, Result};
+use rusqlite::Connection;
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::status::{DiffSummary, Inspection, WorktreeStatus};
 
 use crate::{
@@ -11,7 +13,7 @@ use crate::{
     },
     git,
     model::{Selected, SelectedItem, Workspace},
-    repository, store,
+    repository,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -45,7 +47,7 @@ impl Spaces {
         let workspace_id = workspace.id.clone();
         let setup_finished = self
             .store
-            .run(move |db| store::setup_finished(db, &workspace_id))
+            .run(move |db| setup_finished(db, &workspace_id))
             .await?;
         workspace.usage = self.workspace_usage(&workspace.id);
         workspace.job = daemon.workspace_job(&workspace.id).await?;
@@ -194,6 +196,15 @@ pub fn parse_numstat(output: &str) -> Result<DiffSummary> {
         }
     }
     Ok(summary)
+}
+
+/// Whether the workspace's setup command finished.
+pub fn setup_finished(db: &Connection, workspace_id: &SpaceId) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT setup_finished FROM workspaces WHERE id=?1",
+        [workspace_id],
+        |row| row.get(0),
+    )?)
 }
 
 #[cfg(test)]

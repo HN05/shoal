@@ -74,7 +74,7 @@ impl Spaces {
     async fn free_directory(&self, from: &str) -> Result<String> {
         let base = shoal_protocol::space_names::directory_name(from);
         self.store
-            .run(move |db| store::free_directory(db, &base))
+            .run(move |db| super::availability::free_directory(db, &base))
             .await
     }
 

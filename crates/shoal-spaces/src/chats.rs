@@ -379,7 +379,7 @@ impl Spaces {
                     .query_map([id], |row| row.get(0))?
                     .collect::<rusqlite::Result<_>>()?;
                 for chat in chats {
-                    if store::execution_count(db, &chat, None)? > 0 {
+                    if crate::executions::execution_count(db, &chat, None)? > 0 {
                         return Ok(true);
                     }
                 }
@@ -685,7 +685,7 @@ fn recorded(
     .into_iter()
     .filter(|chat| (reached.as_ref()).is_none_or(|reached| reached.contains(&chat.id)))
     .map(|mut chat| {
-        chat.running = store::execution_count(db, &chat.id, None)? > 0;
+        chat.running = crate::executions::execution_count(db, &chat.id, None)? > 0;
         chat.review = crate::ready_marks::list(db, &chat.id)?;
         chat.holds = crate::holds::list(db, &chat.id)?;
         chat.parent = super::tree::parent(db, &chat.id)?;
@@ -731,7 +731,7 @@ fn workdir(
 /// space's.
 fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -> Result<()> {
     let unstarted = store::exists(tx, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])?
-        && store::execution_count(tx, id, None)? == 0;
+        && crate::executions::execution_count(tx, id, None)? == 0;
     if unstarted {
         let cause = crate::model::EventCause::StartFailed;
         events::record(tx, id, events::EventKind::Removed, cause, Some(error))?;

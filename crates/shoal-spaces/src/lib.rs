@@ -34,6 +34,7 @@ pub mod completion_cleanup;
 pub mod conversions;
 pub mod coordinated;
 pub mod daemon;
+mod executions;
 pub mod holds;
 pub mod hook_settings;
 pub mod hub_moves;

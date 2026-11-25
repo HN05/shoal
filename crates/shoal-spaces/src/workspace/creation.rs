@@ -3,7 +3,7 @@
 
 use super::super::{
     restore, tree,
-    workspace::{NewWorktreeOptions, branches, ownership::claims_git_dir, stack},
+    workspace::{NewWorktreeOptions, availability, branches, ownership::claims_git_dir, stack},
 };
 use crate::Spaces;
 use crate::daemon::Daemon;
@@ -387,7 +387,7 @@ impl Spaces {
                     Placement::Replacing(_) => Some(&record.id),
                     Placement::Below(_) => None,
                 };
-                store::ensure_branch_available(
+                availability::ensure_branch_available(
                     tx,
                     record.repository(),
                     record.branch().map(BranchName::as_str),
@@ -395,9 +395,9 @@ impl Spaces {
                 )?;
                 store::ensure_path_unrecorded(tx, &record.path)?;
                 if chosen {
-                    store::ensure_directory_free(tx, &record.path)?;
+                    availability::ensure_directory_free(tx, &record.path)?;
                 }
-                store::ensure_path_outside_moves(tx, &record.path)?;
+                availability::ensure_path_outside_moves(tx, &record.path)?;
                 let workspaces = tx.prepare(&format!("SELECT {} FROM spaces JOIN workspaces USING(id)", store::WORKSPACE_COLUMNS))?
                     .query_map([], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -420,8 +420,8 @@ impl Spaces {
                     );
                     tree::place_below(tx, record.repository_id.as_ref(), &record.id, parent)?;
                 }
-                let (branch, start_commit, made_for) = store::head_columns(&record.head)?;
-                let (base_commit, base_ref, git_dir) = store::checkout_columns(&record.checkout);
+                let (branch, start_commit, made_for) = columns::head_columns(&record.head)?;
+                let (base_commit, base_ref, git_dir) = columns::checkout_columns(&record.checkout);
                 tx.execute(
                     "INSERT INTO workspaces (id,path,branch,state,git_dir,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable,pending_plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?3,?9,?10,?11,?12,?13,?14)",
                     params![
@@ -786,6 +786,7 @@ pub async fn existing_base(repo: &crate::model::Repository, branch: &BranchName)
     )
 }
 
+mod columns;
 mod pending;
 
 #[cfg(test)]

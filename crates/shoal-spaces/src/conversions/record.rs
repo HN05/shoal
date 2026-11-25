@@ -272,7 +272,7 @@ pub fn record_chat_conversion(
         "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
         params![id, crate::state::WorkspaceState::Ready],
     )?;
-    let running = crate::store::execution_state(tx, &chat.execution)?
+    let running = crate::executions::execution_state(tx, &chat.execution)?
         == Some((id.to_owned(), crate::state::ExecutionState::Running));
     anyhow::ensure!(
         ready && (running || carrying.taking.is_some()),
@@ -294,7 +294,7 @@ pub fn record_agent_switch(
     execution: ExecutionId,
     taking: Taking,
 ) -> Result<()> {
-    let running = crate::store::execution_state(tx, &execution)?
+    let running = crate::executions::execution_state(tx, &execution)?
         == Some((id.to_owned(), crate::state::ExecutionState::Running));
     ensure!(running, "the agent was stopped meanwhile; convert it again");
     let pending = Pending::Agent {
@@ -339,7 +339,7 @@ pub fn replace_chat(
 ) -> Result<(ChatRow, ExecutionId)> {
     // A chat's executions run its agent and nothing else.
     let chat = crate::store::exists(tx, "SELECT 1 FROM chats WHERE id=?1", [id])?;
-    let execution = (crate::store::newest_execution(tx, id)?)
+    let execution = (crate::executions::newest_execution(tx, id)?)
         .filter(|_| chat)
         .or_else(|| (chat && switches).then(ExecutionId::generate))
         .context("the chat was stopped meanwhile; it stays a chat")?;

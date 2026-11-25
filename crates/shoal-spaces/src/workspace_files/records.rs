@@ -190,7 +190,7 @@ pub fn count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
 /// The files `home` keeps whose workspace has no recorded execution, running
 /// or unresolved, and that no running chat owns, oldest first.
 pub(super) fn idle(db: &Connection, home: &HomeKey) -> Result<Vec<AttachedFile>> {
-    let running = crate::store::spaces_with_executions(db)?;
+    let running = crate::executions::spaces_with_executions(db)?;
     let files: Vec<AttachedFile> = db
         .prepare(&format!(
             "SELECT {COLUMNS} FROM space_files WHERE {IN_HOME}

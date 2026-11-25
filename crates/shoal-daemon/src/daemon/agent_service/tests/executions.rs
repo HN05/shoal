@@ -53,7 +53,7 @@ async fn setup_finished(manager: &Manager, workspace: &Workspace) -> bool {
     let id = workspace.id.clone();
     manager
         .store
-        .run(move |db| store::setup_finished(db, &id))
+        .run(move |db| crate::daemon::workspace::status::setup_finished(db, &id))
         .await
         .unwrap()
 }

@@ -1,5 +1,4 @@
 use super::*;
-use shoal_ids::space_ids::SpaceId;
 
 /// A database with the current schema that holds the repository `repo`,
 /// its workspace `workspace` and that workspace's running execution
@@ -125,7 +124,6 @@ fn mappers_use_named_columns() -> Result<()> {
             "agent": "claude"
         }),
     )?;
-    assert!(setup_finished(&db, &SpaceId::from("workspace"))?);
     Ok(())
 }
 

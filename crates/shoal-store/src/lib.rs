@@ -10,7 +10,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_refs::{BranchName, CommitId};
+use shoal_refs::CommitId;
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
@@ -32,8 +32,6 @@ pub mod sent_files;
 pub mod test_support;
 pub mod tree;
 mod worker;
-#[cfg(test)]
-mod workspace_availability_tests;
 
 /// Whether the store's commits sync to disk, which tests skip.
 #[derive(Clone, Copy)]
@@ -170,42 +168,6 @@ pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result
     Ok(())
 }
 
-/// The first of `base`, `base-2`, `base-3`, ... that no workspace of any
-/// repository has as its directory's name, each cut to the longest name
-/// allowed.
-pub fn free_directory(db: &Connection, base: &str) -> Result<String> {
-    let recorded = db
-        .prepare("SELECT path FROM workspaces")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let taken: std::collections::HashSet<&std::ffi::OsStr> = (recorded.iter())
-        .filter_map(|path| std::path::Path::new(path).file_name())
-        .collect();
-    let free = (1_u64..)
-        .map(|suffix| shoal_protocol::space_names::suffixed_directory(base, suffix))
-        .find(|candidate| !taken.contains(std::ffi::OsStr::new(candidate)));
-    Ok(free.expect("an unused suffix exists"))
-}
-
-/// Refuse `path`, a directory Shoal named for a new workspace, when another
-/// workspace's directory took its name since it was chosen, which a start in
-/// another repository may have done meanwhile.
-pub fn ensure_directory_free(db: &Connection, path: &std::path::Path) -> Result<()> {
-    let name = path.file_name().unwrap_or_default();
-    let taken = db
-        .prepare("SELECT path FROM workspaces")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?
-        .iter()
-        .any(|recorded| std::path::Path::new(recorded).file_name() == Some(name));
-    anyhow::ensure!(
-        !taken,
-        "another workspace took the directory name {} meanwhile; run the command again",
-        name.to_string_lossy()
-    );
-    Ok(())
-}
-
 /// A recorded checkout or workspace that lies in `directory`.
 pub fn checkout_within(
     db: &Connection,
@@ -219,54 +181,6 @@ pub fn checkout_within(
         .into_iter()
         .map(std::path::PathBuf::from)
         .find(|path| path.starts_with(directory)))
-}
-
-/// Refuse a workspace path that overlaps where a repository directory is
-/// moving: a failed move deletes its destination.
-pub fn ensure_path_outside_moves(db: &Connection, path: &std::path::Path) -> Result<()> {
-    let destinations = db
-        .prepare("SELECT destination FROM repository_moves")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    for destination in destinations.iter().map(std::path::Path::new) {
-        ensure!(
-            !path.starts_with(destination) && !destination.starts_with(path),
-            "workspace path overlaps {}, where a repository directory is moving",
-            destination.display()
-        );
-    }
-    Ok(())
-}
-
-/// Refuse `branch` of the repository when another workspace than
-/// `except_id` owns it, before inserting a workspace or reserving a rename
-/// in a transaction.
-pub fn ensure_branch_available(
-    db: &Connection,
-    repository_id: &RepositoryId,
-    branch: Option<&str>,
-    except_id: Option<&SpaceId>,
-) -> Result<()> {
-    let Some(branch) = branch else {
-        return Ok(());
-    };
-    let owner: Option<(shoal_ids::space_ids::SpaceNumber, SpaceName)> = db
-        .query_row(
-            "SELECT number,name FROM spaces JOIN workspaces USING(id)
-                WHERE repository_id=?1 AND branch=?2 AND (?3 IS NULL OR id!=?3)",
-            rusqlite::params![repository_id, branch, except_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    if let Some((number, name)) = owner {
-        let owner = shoal_protocol::space_names::label(number, &name);
-        return Err(Refusal::new(
-            Reason::NameTaken,
-            format!("branch is already owned by workspace {owner}"),
-        )
-        .into());
-    }
-    Ok(())
 }
 
 /// Fail while a workspace has an unfinished rename; lifecycle operations
@@ -530,34 +444,6 @@ fn checkout(row: &Row<'_>) -> rusqlite::Result<Checkout> {
     }
 }
 
-/// The `base_commit`, `base_ref` and `git_dir` columns that hold what
-/// `checkout` records.
-pub fn checkout_columns(checkout: &Checkout) -> (Option<&CommitId>, Option<&str>, Option<String>) {
-    let base = checkout.base();
-    (
-        base.map(|base| &base.commit),
-        base.and_then(|base| base.reference.as_deref()),
-        (checkout.git_dir()).and_then(|path| path.to_str().map(str::to_owned)),
-    )
-}
-
-/// The `branch`, `start_commit` and `made_for` columns that hold `head`.
-pub fn head_columns(
-    head: &Head,
-) -> Result<(Option<&BranchName>, Option<&CommitId>, Option<String>)> {
-    Ok(match head {
-        Head::Branch(branch) => (Some(branch), None, None),
-        Head::Commit(at) => (
-            None,
-            Some(&at.commit),
-            at.made_for
-                .as_ref()
-                .map(serde_json::to_string)
-                .transpose()?,
-        ),
-    })
-}
-
 const PORT_COLUMNS: &str = "workspace_id,name,port,env_var,reason";
 
 fn port(row: &Row<'_>) -> rusqlite::Result<PortReservation> {
@@ -629,67 +515,6 @@ pub fn executions(db: &Connection, space_id: &SpaceId) -> Result<Vec<Execution>>
         .prepare(&executions_query())?
         .query_map([space_id], execution)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
-}
-
-/// How many executions the space `space_id` records, in `state` or in any,
-/// read without decoding them, so a damaged record still counts.
-pub fn execution_count(
-    db: &Connection,
-    space_id: &SpaceId,
-    state: Option<ExecutionState>,
-) -> Result<usize> {
-    let count: i64 = db
-        .prepare_cached(
-            "SELECT COUNT(*) FROM executions WHERE space_id=?1 AND (?2 IS NULL OR state=?2)",
-        )?
-        .query_row(rusqlite::params![space_id, state], |row| row.get(0))?;
-    Ok(usize::try_from(count)?)
-}
-
-/// The space the execution `id` runs in and its state.
-pub fn execution_state(
-    db: &Connection,
-    id: &ExecutionId,
-) -> Result<Option<(SpaceId, ExecutionState)>> {
-    Ok(db
-        .query_row(
-            "SELECT space_id,state FROM executions WHERE id=?1",
-            [id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?)
-}
-
-/// The newest execution of the space `space_id`.
-pub fn newest_execution(db: &Connection, space_id: &SpaceId) -> Result<Option<ExecutionId>> {
-    Ok(db
-        .query_row(
-            "SELECT id FROM executions WHERE space_id=?1 ORDER BY rowid DESC LIMIT 1",
-            [space_id],
-            |row| row.get(0),
-        )
-        .optional()?)
-}
-
-/// The agent the newest execution of the space `space_id` that runs one
-/// runs.
-pub fn newest_agent(db: &Connection, space_id: &SpaceId) -> Result<Option<crate::agent::Agent>> {
-    Ok(db
-        .query_row(
-            "SELECT agent FROM executions WHERE space_id=?1 AND agent IS NOT NULL
-             ORDER BY rowid DESC LIMIT 1",
-            [space_id],
-            |row| row.get(0),
-        )
-        .optional()?)
-}
-
-/// The spaces that record an execution.
-pub fn spaces_with_executions(db: &Connection) -> Result<std::collections::HashSet<SpaceId>> {
-    Ok(db
-        .prepare("SELECT DISTINCT space_id FROM executions")?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// The agent execution `id` runs, when it runs one.
@@ -782,14 +607,6 @@ pub fn all_executions(db: &Connection) -> Result<Vec<Execution>> {
         .prepare(&format!("SELECT {EXECUTION_COLUMNS} FROM executions"))?
         .query_map([], execution)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
-}
-
-pub fn setup_finished(db: &Connection, workspace_id: &SpaceId) -> Result<bool> {
-    Ok(db.query_row(
-        "SELECT setup_finished FROM workspaces WHERE id=?1",
-        [workspace_id],
-        |row| row.get(0),
-    )?)
 }
 
 #[cfg(test)]

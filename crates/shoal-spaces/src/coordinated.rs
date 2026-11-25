@@ -15,8 +15,8 @@ use shoal_ids::space_ids::SpaceId;
 use super::tree::{self, TrackedAgents};
 use crate::{
     model::{Space, SpaceKind},
+    spaces::worktrees_mut,
     state::AgentState,
-    {spaces::worktrees_mut, store},
 };
 
 impl Spaces {
@@ -110,7 +110,7 @@ fn working_coordinator(db: &Connection, id: &SpaceId, agents: &TrackedAgents) ->
     let agentless = match kind {
         None => false,
         Some((SpaceKind::Workspace, modeless)) => modeless,
-        Some((SpaceKind::Chat, _)) => store::execution_count(db, id, None)? == 0,
+        Some((SpaceKind::Chat, _)) => crate::executions::execution_count(db, id, None)? == 0,
     };
     if !agentless {
         return Ok(Working::Own);

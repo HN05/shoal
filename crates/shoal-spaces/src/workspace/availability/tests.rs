@@ -1,9 +1,8 @@
 use super::*;
-use shoal_ids::space_ids::SpaceId;
+use std::path::Path;
 
 fn database() -> Result<Connection> {
-    let mut db = Connection::open_in_memory()?;
-    migrate(&mut db)?;
+    let db = shoal_store::test_support::migrated()?;
     db.execute_batch(
         "INSERT INTO repositories(id,path,source,last_used) VALUES
             ('repo','/repo','/repo',0), ('other','/other','/other',0);
@@ -34,11 +33,11 @@ fn a_branch_belongs_to_one_workspace_of_its_repository() -> Result<()> {
 fn a_chosen_directory_name_belongs_to_one_workspace_of_any_repository() -> Result<()> {
     let db = database()?;
     // The owner's directory, `/worker`, has the name in another repository's directory too.
-    let error = ensure_directory_free(&db, std::path::Path::new("/other/worker")).unwrap_err();
+    let error = ensure_directory_free(&db, Path::new("/other/worker")).unwrap_err();
     assert!(
         error.to_string().contains("run the command again"),
         "{error:#}"
     );
-    ensure_directory_free(&db, std::path::Path::new("/other/worker-2"))?;
+    ensure_directory_free(&db, Path::new("/other/worker-2"))?;
     Ok(())
 }

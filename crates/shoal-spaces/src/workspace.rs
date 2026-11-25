@@ -1,5 +1,6 @@
 //! The workspace records the daemon reads.
 mod adoption;
+mod availability;
 mod branch_rename;
 pub mod branches;
 pub mod checkpoints;
@@ -65,7 +66,7 @@ impl Spaces {
     pub async fn workspace_has_executions(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
-            .run(move |db| Ok(store::execution_count(db, &id, None)? > 0))
+            .run(move |db| Ok(crate::executions::execution_count(db, &id, None)? > 0))
             .await
     }
 
@@ -79,7 +80,7 @@ impl Spaces {
     pub async fn workspace_execution_count(&self, id: &SpaceId) -> Result<usize> {
         let id = id.to_owned();
         self.store
-            .run(move |db| store::execution_count(db, &id, None))
+            .run(move |db| crate::executions::execution_count(db, &id, None))
             .await
     }
 
@@ -234,7 +235,7 @@ fn load_details(
     copies::load(db, workspace)?;
     super::tree::load(db, workspace)?;
     let running = Some(crate::state::ExecutionState::Running);
-    workspace.running = store::execution_count(db, &workspace.id, running)? > 0;
+    workspace.running = crate::executions::execution_count(db, &workspace.id, running)? > 0;
     workspace.done = store::exists(
         db,
         "SELECT 1 FROM space_completion WHERE space_id=?1",

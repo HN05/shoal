@@ -145,7 +145,7 @@ impl Spaces {
                     .is_empty(),
                     "workspace has other active or unknown executions; stop them before renaming"
                 );
-                store::ensure_branch_available(
+                super::availability::ensure_branch_available(
                     tx,
                     workspace.repository(),
                     Some(intent.branch.as_str()),

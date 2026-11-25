@@ -127,7 +127,7 @@ pub struct StoredAgents {
 /// What the store records of the agent of the space `id`.
 pub fn stored_agents(db: &Connection, records: &dyn Records, id: &SpaceId) -> Result<StoredAgents> {
     Ok(StoredAgents {
-        running: crate::store::newest_agent(db, id)?,
+        running: crate::executions::newest_agent(db, id)?,
         queued: records.queued_agent(db, id)?,
     })
 }
