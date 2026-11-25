@@ -115,9 +115,12 @@ builds on, as `shoal refresh` does with what the checkout has of the default
 branch, before the agent starts. The daemon starts waiting entries
 in [rank order](#queue-order) as slots free, passing over an entry whose
 repository is full or that does not fit in memory, and records a
-`queue_started` alert. Once an entry has been held 15 minutes for its
-memory, nothing it outranks that needs measured memory starts until it fits;
-each such entry waits with `memory_kept`. While the [proxy](agents.md) of a running
+`queue_started` alert. While an entry waits for its memory, nothing of
+another priority or tier that it outranks and that needs measured memory
+starts: so a new agent waits for the CI job of an open PR, and an `urgent`
+launch goes ahead of finishing work of a lower priority. Work of the same
+priority and tier that fits starts ahead of it until it has waited 15
+minutes. Each entry it holds back waits with `memory_kept`, naming it. While the [proxy](agents.md) of a running
 agent finds its tool's upstream rate-limited or out of quota, queued agents of
 that tool wait with `upstream_limit` and others start ahead: until the reset
 the upstream names, or, without one, 15 minutes after the proxy last met the
@@ -227,7 +230,7 @@ machine-wide, or of one with `--repo`, as `queued, position N` or `starting`,
 followed by `blocked by` and what blocks a waiting launch, or `after an update` for a
 restore of an idle agent, then what held a waiting entry back at the last
 admission pass, as `held by` memory with what the entry needs and what is
-left, low disk space, `machine.max_heavy_agents`, `machine.max_jobs`,
+left, memory kept for a higher-ranked entry it names, low disk space, `machine.max_heavy_agents`, `machine.max_jobs`,
 `agent.max_heavy_running`, a full `runner.permit` pool, a critical or missing
 reading, or a busy CPU with its percentage and the level a job waits at; the
 stagger between starts is too brief to show. A restore shows its
@@ -236,7 +239,8 @@ agent; `shoal list` shows the entries after the workspaces. `queue --json` gives
 with its run, `blockers` while any remain, the setup of the workspace it opens
 among them,
 `waits_for_update` for a restore of an idle agent, `held_by` with its `reason`
-(`memory` with `needed` and `left` bytes, `memory_kept`, `disk`, `max_heavy_agents`, `max_jobs`,
+(`memory` with `needed` and `left` bytes, `memory_kept` with the
+higher-ranked entry's name `behind`, `disk`, `max_heavy_agents`, `max_jobs`,
 `repository_limit`, `permits`, `reading`, `cpu` with the `busy` and `level`
 percentages, or `upstream_limit` with the `limit`,
 `rate_limited` or `exhausted`, and the Unix-seconds `until`), a waiting entry's `rank` with its

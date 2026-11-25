@@ -1,5 +1,6 @@
 use super::*;
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_schedule::{priority::Priority, rank::Tier};
 
 const GIB: u64 = 1 << 30;
 
@@ -23,7 +24,18 @@ fn job(id: &str, memory: u64) -> Waiting {
         },
         light: false,
         waited_for_memory: Duration::ZERO,
+        place: place(id),
     }
+}
+
+/// The place of an entry called `name` at the default priority, in the
+/// `New` tier.
+fn place(name: &str) -> Option<Place> {
+    Some(Place {
+        name: name.into(),
+        priority: Priority::default(),
+        tier: Tier::New,
+    })
 }
 
 /// The entries a pass admits beside the slots of `occupied` repositories.
@@ -79,6 +91,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
             },
             light: id.starts_with('l'),
             waited_for_memory: Duration::ZERO,
+            place: place(id),
         })
         .collect()
 }
@@ -145,8 +158,8 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
     assert_eq!(admit(&["a".into()], &queue, &fixed, false), ["j1"]);
     // Measured memory starts one entry a pass, a job or an agent, where it
     // fits.
-    let dynamic = |room| Limits {
-        room,
+    let dynamic = |room: Option<capacity::Room>| Limits {
+        room: room.clone(),
         jobs: JobLimits {
             room,
             ..JobLimits::default()
@@ -347,7 +360,7 @@ fn each_entry_passed_over_names_what_holds_it() {
     let held_by = |entries: &[(&str, HeldBy)]| -> Vec<(String, HeldBy)> {
         entries
             .iter()
-            .map(|(id, held)| (id.to_string(), *held))
+            .map(|(id, held)| (id.to_string(), held.clone()))
             .collect()
     };
     // Fixed limits: the repository's, then the machine's once it fills.
@@ -399,8 +412,8 @@ fn each_entry_passed_over_names_what_holds_it() {
     // Measured memory names what each needs and what is left.
     let mut queue = waiting(&[("a1", "a")]);
     queue.insert(0, job("j1", 4 * GIB));
-    let dynamic = |room| Limits {
-        room,
+    let dynamic = |room: Option<capacity::Room>| Limits {
+        room: room.clone(),
         jobs: JobLimits {
             room,
             ..JobLimits::default()
@@ -468,7 +481,10 @@ fn a_light_agent_needs_no_memory_room_but_waits_out_critical_readings_and_low_di
     })));
     assert!(admitted(&room(capacity::Room::Staggered)));
     for held in [HeldBy::Reading, HeldBy::Disk] {
-        assert!(!admitted(&room(capacity::Room::Held(held))), "{held:?}");
+        assert!(
+            !admitted(&room(capacity::Room::Held(held.clone()))),
+            "{held:?}"
+        );
     }
     // Under a fixed limit, low disk lets a start through only beside no slot.
     let low_disk = |disk| Limits {
@@ -487,6 +503,7 @@ fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
         work: Work::OneShot { after_stop: false },
         light: false,
         waited_for_memory: Duration::ZERO,
+        place: place("review"),
     }];
     let admitted = |limits: &Limits| !admit(&["a".into()], &review, limits, false).is_empty();
     // The machine's and the repository's one slot is taken.
@@ -519,18 +536,23 @@ fn a_oneshot_run_holds_no_slot_but_waits_for_memory_room_and_low_disk() {
     assert!(admit(&[], &reviews, &beside, false).is_empty());
 }
 
-#[test]
-fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_limit() {
-    // An agent needs 2 GiB where 1 GiB is left, and a small job fits.
-    let room = free(GIB);
-    let limits = Limits {
-        room,
+/// Limits where measured memory leaves 1 GiB for agents and jobs alike.
+fn one_gib_left() -> Limits {
+    Limits {
+        room: free(GIB),
         jobs: JobLimits {
-            room,
+            room: free(GIB),
             ..JobLimits::default()
         },
         ..Limits::default()
-    };
+    }
+}
+
+#[test]
+fn work_that_fits_starts_ahead_of_its_band_until_the_entry_waiting_for_memory_waited_its_limit() {
+    // An agent needs 2 GiB where 1 GiB is left, and a small job of its
+    // priority and tier fits.
+    let limits = one_gib_left();
     let queue = |waited| {
         let mut queue = waiting(&[("agent", "a")]);
         queue[0].waited_for_memory = waited;
@@ -554,7 +576,12 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
                     left: GIB
                 }
             ),
-            ("job".into(), HeldBy::MemoryKept),
+            (
+                "job".into(),
+                HeldBy::MemoryKept {
+                    behind: "agent".into()
+                }
+            ),
         ]
     );
     // Jobs under a fixed limit do not measure memory, so none is kept from them.
@@ -563,7 +590,7 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
             fixed: Some(1),
             ..JobLimits::default()
         },
-        ..limits
+        ..one_gib_left()
     };
     assert_eq!(
         admit(&[], &queue(BACKFILL_FOR), &fixed_jobs, false),
@@ -572,12 +599,57 @@ fn work_that_fits_starts_ahead_until_the_entry_waiting_for_memory_waited_its_lim
     // An agent its repository's full limit holds anyway keeps nothing back.
     let full_repository = Limits {
         repositories: [("a".into(), Some(1))].into(),
-        ..limits
+        ..one_gib_left()
     };
     let occupied = ["a".into()];
     assert_eq!(
         admit(&occupied, &queue(BACKFILL_FOR), &full_repository, false),
         ["job"]
+    );
+}
+
+#[test]
+fn nothing_starts_ahead_of_a_higher_ranked_band_waiting_for_memory() {
+    let limits = one_gib_left();
+    let ranked = |mut entry: Waiting, priority, tier| {
+        entry.place = Some(Place {
+            priority,
+            tier,
+            ..entry.place.unwrap()
+        });
+        entry
+    };
+    let agent = || waiting(&[("agent", "a")]).remove(0);
+    let memory = |needed| HeldBy::Memory { needed, left: GIB };
+    let behind = |name: &str| HeldBy::MemoryKept {
+        behind: name.into(),
+    };
+    // A PR's job needs 4 GiB, which a small new job would take.
+    let queue = [
+        ranked(job("pr-job", 4 * GIB), Priority::NORMAL, Tier::Finishing),
+        ranked(agent(), Priority::NORMAL, Tier::New),
+        ranked(job("new-job", GIB / 2), Priority::NORMAL, Tier::New),
+    ];
+    assert_eq!(
+        held(&[], &queue, &limits),
+        [
+            ("agent".into(), behind("pr-job")),
+            ("new-job".into(), behind("pr-job")),
+            ("pr-job".into(), memory(4 * GIB)),
+        ]
+    );
+    // An urgent launch waiting for memory holds back finishing work of a
+    // lower priority.
+    let queue = [
+        ranked(agent(), Priority::URGENT, Tier::New),
+        ranked(job("pr-job", GIB / 2), Priority::NORMAL, Tier::Finishing),
+    ];
+    assert_eq!(
+        held(&[], &queue, &limits),
+        [
+            ("agent".into(), memory(2 * GIB)),
+            ("pr-job".into(), behind("agent")),
+        ]
     );
 }
 
@@ -589,6 +661,7 @@ fn a_chat_without_a_repository_meets_the_machines_limits_alone() {
         work: Work::Launch,
         light,
         waited_for_memory: Duration::ZERO,
+        place: place("chat"),
     };
     // Repository a's one slot is taken, and the machine has another.
     let limits = limits(Some(2), &[("a", Some(1))]);

@@ -1004,7 +1004,7 @@ async fn no_agent_sleeps_for_a_slot_the_machine_does_not_have() {
     manager.agents.dispatch_queue(&*manager).await.unwrap();
     let entries = manager.agents.queue_entries(&*manager).await.unwrap();
     assert_eq!(
-        (entries.iter().map(|entry| entry.held_by)).collect::<Vec<_>>(),
+        (entries.iter().map(|entry| entry.held_by.clone())).collect::<Vec<_>>(),
         [Some(crate::model::HeldBy::MaxHeavyAgents)]
     );
     manager

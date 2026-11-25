@@ -148,15 +148,15 @@ async fn workspace_processes_see_the_whole_queue_and_act_only_below_theirs() {
     let visible = manager.coordination.visible_queue(&*manager).await.unwrap();
     let names: Vec<_> = visible
         .iter()
-        .map(|entry| (entry.name.as_str(), entry.held_by))
+        .map(|entry| (entry.name.as_str(), entry.held_by.clone()))
         .collect();
     let max_heavy_agents = Some(crate::model::HeldBy::MaxHeavyAgents);
     assert_eq!(
         names,
         [
             ("first", None),
-            ("one", max_heavy_agents),
-            ("two", max_heavy_agents),
+            ("one", max_heavy_agents.clone()),
+            ("two", max_heavy_agents.clone()),
             ("other", max_heavy_agents)
         ]
     );

@@ -113,7 +113,7 @@ impl Agents {
                         repository: Some(entry.repository_id?),
                     },
                     HeldBy::MaxHeavyAgents if slots => Room::Slot { repository: None },
-                    HeldBy::Memory { .. } | HeldBy::MemoryKept => Room::Memory,
+                    HeldBy::Memory { .. } | HeldBy::MemoryKept { .. } => Room::Memory,
                     _ => return None,
                 };
                 let priority = entry.rank.map(|rank| rank.priority).unwrap_or_default();

@@ -16,7 +16,7 @@ use super::{
     Grant, blockers,
     carrier::Carrier,
     expiry,
-    limits::{Admission, Waiting, Wake, Work, admit},
+    limits::{Admission, Place, Waiting, Wake, Work, admit},
     store::{QueuedRow, queued_rows},
     weight::Light,
 };
@@ -85,8 +85,12 @@ impl WaitingWork {
     /// What holds back the entries of `entries` that an upstream limit
     /// holds, leaving out those blockers took away.
     fn upstream_holds(&self) -> impl Iterator<Item = (QueueEntryId, HeldBy)> + '_ {
-        (self.entries.iter())
-            .filter_map(|entry| Some((entry.id.clone(), *self.upstream_limited.get(&entry.id)?)))
+        (self.entries.iter()).filter_map(|entry| {
+            Some((
+                entry.id.clone(),
+                self.upstream_limited.get(&entry.id)?.clone(),
+            ))
+        })
     }
 
     /// The entries that still wait once `admitted` start.
@@ -363,6 +367,7 @@ impl Agents {
                 repository,
                 work,
                 light: is_light,
+                place: None,
             });
         }
         let oneshots = oneshots.into_iter().map(|oneshot| Waiting {
@@ -373,6 +378,7 @@ impl Agents {
                 after_stop: oneshot.after_stop,
             },
             light: false,
+            place: None,
         });
         waiting.extend(oneshots);
         self.in_rank_order(daemon, &mut waiting).await?;
@@ -404,14 +410,26 @@ impl Agents {
             .collect())
     }
 
-    /// Sort `waiting` in rank order; an entry that arrived since the rank
-    /// was read goes last.
+    /// Sort `waiting` in rank order, each entry with its place; an entry
+    /// that arrived since the rank was read goes last, without one.
     async fn in_rank_order(&self, daemon: &dyn Daemon, waiting: &mut [Waiting]) -> Result<()> {
-        let order: HashMap<QueueEntryId, usize> = (self.ranked_queue(daemon).await?.into_iter())
-            .enumerate()
-            .map(|(place, ranked)| (ranked.id, place))
-            .collect();
-        waiting.sort_by_key(|entry| order.get(&entry.id).copied().unwrap_or(usize::MAX));
+        let order: HashMap<QueueEntryId, (usize, Place)> =
+            (self.ranked_queue(daemon).await?.into_iter())
+                .enumerate()
+                .map(|(index, ranked)| {
+                    let place = Place {
+                        name: ranked.name,
+                        priority: ranked.rank.priority,
+                        tier: ranked.rank.tier,
+                    };
+                    (ranked.id, (index, place))
+                })
+                .collect();
+        let ranked = |entry: &Waiting| order.get(&entry.id);
+        for entry in waiting.iter_mut() {
+            entry.place = ranked(entry).map(|(_, place)| place.clone());
+        }
+        waiting.sort_by_key(|entry| ranked(entry).map_or(usize::MAX, |(index, _)| *index));
         Ok(())
     }
 

@@ -37,7 +37,7 @@ impl Agents {
         let (sample, room) = self.measure(daemon, overload, &activities).await?;
         // The heavy slot and the memory free go by one reading.
         if limits.room.is_some() {
-            limits.room = Some(room);
+            limits.room = Some(room.clone());
         }
         let occupied: Vec<_> = slots.into_iter().map(|slot| slot.repository).collect();
         Ok(Capacity {
@@ -101,6 +101,7 @@ fn probe(index: u32, light: bool) -> Waiting {
         work: Work::Launch,
         light,
         waited_for_memory: Duration::ZERO,
+        place: None,
     }
 }
 

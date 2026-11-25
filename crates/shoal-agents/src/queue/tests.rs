@@ -1051,8 +1051,8 @@ async fn an_entrys_wait_for_memory_lasts_while_passes_hold_it_for_memory() {
     let hold = |held, seconds| {
         queue.record_held_back([(id.clone(), held)].into(), &unstarted, at(seconds));
     };
-    hold(memory, 0);
-    hold(memory, 60);
+    hold(memory.clone(), 0);
+    hold(memory.clone(), 60);
     // A pass that started another entry first did not measure it.
     queue.record_held_back(Default::default(), &unstarted, at(70));
     assert_eq!(

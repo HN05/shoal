@@ -365,7 +365,7 @@ fn waiting_reasons(entry: &QueueEntry) -> String {
     if entry.waits_for_update && entry.state == QueueState::Queued {
         text += ", after an update";
     }
-    if let Some(held) = entry.held_by.filter(|_| entry.state == QueueState::Queued) {
+    if let Some(held) = (entry.held_by.as_ref()).filter(|_| entry.state == QueueState::Queued) {
         text += &format!(", held by {}", held_by_label(held));
     }
     text
@@ -421,16 +421,16 @@ fn inherited_label(inherited: Option<&InheritedRank>) -> String {
 }
 
 /// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,
-/// a limit's setting, low disk space, a failed reading, `CPU: 97% busy, 95%
-/// level` or its tool's upstream limit.
-pub fn held_by_label(held: HeldBy) -> String {
-    match held {
+/// `memory kept for api-tests`, a limit's setting, low disk space, a failed
+/// reading, `CPU: 97% busy, 95% level` or its tool's upstream limit.
+pub fn held_by_label(held: &HeldBy) -> String {
+    match *held {
         HeldBy::Memory { needed, left } => format!(
             "memory: needs {}, {} left",
             size_label(needed),
             size_label(left)
         ),
-        HeldBy::MemoryKept => "memory kept for a higher-ranked entry".into(),
+        HeldBy::MemoryKept { ref behind } => format!("memory kept for {behind}"),
         HeldBy::Disk => "low disk space".into(),
         HeldBy::MaxHeavyAgents => "machine.max_heavy_agents".into(),
         HeldBy::MaxJobs => "machine.max_jobs".into(),

@@ -77,15 +77,16 @@ pub struct QueueEntry {
 }
 
 /// What keeps a waiting entry from starting, besides the work it waits for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "snake_case")]
 pub enum HeldBy {
     /// Memory below the warning threshold has `left` bytes, no more than the
     /// `needed` bytes the entry is expected to use.
     Memory { needed: u64, left: u64 },
-    /// Memory is kept for a higher-ranked entry that has waited for it as
-    /// long as work may start ahead of it.
-    MemoryKept,
+    /// Memory is kept for `behind`, the name of a higher-ranked entry that
+    /// waits for it: of another priority or tier, or of the same one once it
+    /// has waited as long as work may start ahead of it.
+    MemoryKept { behind: String },
     /// Free disk space is below the warning threshold.
     Disk,
     /// `machine.max_heavy_agents` is reached.

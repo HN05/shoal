@@ -40,11 +40,19 @@ average with a floor, until its own is measured. The target is the warning
 thresholds that `load` sets, so the user picks how hard to push the machine
 rather than the mechanism's windows and intervals, and memory protection
 stays the safety net when settled agents grow later. An idle machine always
-admits one agent; critical readings admit none. When memory is short, work
-that fits, such as a small CI job, starts ahead of higher-ranked work that
-does not, so the machine stays busy; once that work has waited 15 minutes, a
-fixed value, nothing it outranks starts until it fits, so a large start is
-not passed over for good. An AI tool whose upstream a proxied agent finds
+admits one agent; critical readings admit none. Admission follows the rank:
+while an entry waits for memory, nothing of another priority or tier that
+it outranks and that would take memory starts, so work close to finished,
+such as the CI job of an open PR, is not passed over by new work, which
+would then hold the memory for hours. This holds machine-wide, since memory
+is the machine's, and for every entry, launches a coordinator queues
+included, since it decides who takes the machine's resources, not what work
+would conflict. Slots and permits keep the rank without help: a later start
+that would take one finds none free either. Within one
+priority and tier, work that fits starts ahead of work that does not, so the
+machine stays busy; once that work has waited 15 minutes, a fixed value,
+nothing it outranks starts until it fits, so a large start is not passed
+over for good. `shoal queue` names the entry an entry waits behind. An AI tool whose upstream a proxied agent finds
 rate-limited or out of quota holds that tool's queued agents, which would only
 fail, while other tools' start; a limit without a named end lifts after 15
 minutes, a fixed value, so a new agent finds out whether it still stands, and

@@ -89,7 +89,7 @@ pub enum Activity {
 }
 
 /// What measured memory and disk leave for one more start.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Room {
     /// Nothing starts until the last start is [`STAGGER`] old.
     Staggered,
@@ -138,20 +138,20 @@ pub type Unfit = Option<HeldBy>;
 
 impl Room {
     /// Whether an agent fits.
-    pub fn fits_agent(self) -> Result<(), Unfit> {
+    pub fn fits_agent(&self) -> Result<(), Unfit> {
         self.fits(None)
     }
 
     /// Whether a job expected to use `cost` fits.
-    pub fn fits_job(self, cost: JobCost) -> Result<(), Unfit> {
+    pub fn fits_job(&self, cost: JobCost) -> Result<(), Unfit> {
         self.fits(cost.memory)
     }
 
     /// Whether a start using `memory`, or an agent's without it, fits.
-    fn fits(self, memory: Option<u64>) -> Result<(), Unfit> {
-        match self {
+    fn fits(&self, memory: Option<u64>) -> Result<(), Unfit> {
+        match *self {
             Self::Staggered => Err(None),
-            Self::Held(held) => Err(Some(held)),
+            Self::Held(ref held) => Err(Some(held.clone())),
             Self::Idle => Ok(()),
             Self::Free {
                 memory: left,

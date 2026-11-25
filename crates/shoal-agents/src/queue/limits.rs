@@ -21,6 +21,7 @@ use crate::config::overload::Overload;
 use crate::daemon::Daemon;
 use crate::model::HeldBy;
 use shoal_ids::queue_entry_ids::QueueEntryId;
+use shoal_schedule::{priority::Priority, rank::Tier};
 
 /// The machine's agent limits and each repository's.
 #[derive(Debug, Default)]
@@ -134,12 +135,62 @@ pub struct Waiting {
     pub light: bool,
     /// How long admission has held it back for its memory, pass after pass.
     pub waited_for_memory: Duration,
+    /// Where it ranks; none for an entry that arrived since the rank was
+    /// read.
+    pub place: Option<Place>,
+}
+
+/// Where a waiting entry ranks, as admission compares it with the entries
+/// ranked above it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Place {
+    /// What `shoal queue` calls the entry.
+    pub name: String,
+    pub priority: Priority,
+    pub tier: Tier,
 }
 
 /// How long work that fits in memory may start ahead of a higher-ranked
-/// entry that does not: from then on nothing it outranks starts until it
-/// fits, so a large start cannot be passed over for good.
+/// entry of its priority and tier that does not: from then on nothing it
+/// outranks starts until it fits, so a large start cannot be passed over for
+/// good.
 pub const BACKFILL_FOR: Duration = Duration::from_secs(15 * 60);
+
+/// The entries a pass held back for their memory, which keep it from the
+/// starts they outrank: every start of another priority or tier, and those
+/// of their own once they have waited `BACKFILL_FOR`.
+#[derive(Default)]
+struct MemoryKept {
+    /// Each such entry's place, and whether it has waited its limit.
+    keepers: Vec<(Place, bool)>,
+}
+
+impl MemoryKept {
+    /// Keep memory for `entry`, which did not fit for `held`. One that
+    /// arrived since the rank was read keeps none, since nothing names its
+    /// place.
+    fn keep(&mut self, entry: &Waiting, held: &Unfit) {
+        let Some(place) = entry.place.clone() else {
+            return;
+        };
+        if let Some(HeldBy::Memory { .. }) = held {
+            self.keepers
+                .push((place, entry.waited_for_memory >= BACKFILL_FOR));
+        }
+    }
+
+    /// The hold that memory kept for a higher-ranked entry puts on `entry`'s
+    /// start, naming the first such entry.
+    fn hold(&self, entry: &Waiting) -> Option<HeldBy> {
+        let band = |place: &Place| (place.priority, place.tier);
+        let own = entry.place.as_ref().map(band);
+        let (keeper, _) = (self.keepers.iter())
+            .find(|(keeper, overdue)| *overdue || Some(band(keeper)) != own)?;
+        Some(HeldBy::MemoryKept {
+            behind: keeper.name.clone(),
+        })
+    }
+}
 
 /// What one admission pass decided.
 #[derive(Debug, Default)]
@@ -171,7 +222,8 @@ impl Admission {
 /// start, as an agent does, and beside running jobs a CPU below its level. A light agent's entry needs no slot and no room,
 /// so it takes none of the pass's starts and, restored, none of the healthy
 /// interval's: only critical or missing readings and low disk hold it. An
-/// entry that waits or does not fit keeps its place and is passed over.
+/// entry that waits or does not fit keeps its place and is passed over, and
+/// one held back for its memory keeps it as `MemoryKept` says.
 pub fn admit(
     occupied: &[Option<RepositoryId>],
     waiting: &[Waiting],
@@ -190,9 +242,7 @@ pub fn admit(
         *used.entry(repository.as_str()).or_default() += 1;
     }
     let mut jobs = limits.jobs.running;
-    // Whether an entry has waited for memory past `BACKFILL_FOR`, which
-    // then keeps it from every start it outranks that needs memory.
-    let mut starved = false;
+    let mut kept = MemoryKept::default();
     let mut admission = Admission::default();
     for entry in waiting {
         if let Work::Job { cost } = entry.work {
@@ -200,12 +250,13 @@ pub fn admit(
                 admission.hold(entry, Some(held));
                 continue;
             }
-            if starved && limits.jobs.room.is_some() {
-                admission.hold(entry, Some(HeldBy::MemoryKept));
+            if let Some(held) = kept.hold(entry).filter(|_| limits.jobs.room.is_some()) {
+                admission.hold(entry, Some(held));
                 continue;
             }
-            if let Err(held) = measured_fit(limits.jobs.room, started, |room| room.fits_job(cost)) {
-                starved |= overdue_for_memory(entry, held);
+            let room = limits.jobs.room.as_ref();
+            if let Err(held) = measured_fit(room, started, |room| room.fits_job(cost)) {
+                kept.keep(entry, &held);
                 admission.hold(entry, held);
                 continue;
             }
@@ -244,8 +295,8 @@ pub fn admit(
             }
             continue;
         }
-        if starved && limits.room.is_some() {
-            admission.hold(entry, Some(HeldBy::MemoryKept));
+        if let Some(held) = kept.hold(entry).filter(|_| limits.room.is_some()) {
+            admission.hold(entry, Some(held));
             continue;
         }
         let repository = entry.repository.as_ref();
@@ -256,10 +307,12 @@ pub fn admit(
             Work::OneShot { .. } => full_disk(limits, writing),
             _ => full_limit(limits, repository, [total, writing, in_repository], own),
         };
-        if let Err(held) = measured_fit(limits.room, started, capacity::Room::fits_agent) {
+        if let Err(held) = measured_fit(limits.room.as_ref(), started, capacity::Room::fits_agent) {
             // An entry a fixed limit holds anyway gains nothing from memory
             // kept for it.
-            starved |= full.is_none() && overdue_for_memory(entry, held);
+            if full.is_none() {
+                kept.keep(entry, &held);
+            }
             admission.hold(entry, held);
             continue;
         }
@@ -282,18 +335,12 @@ pub fn admit(
     admission
 }
 
-/// Whether `entry`, which did not fit for `held`, has waited for its memory
-/// past `BACKFILL_FOR`.
-fn overdue_for_memory(entry: &Waiting, held: Unfit) -> bool {
-    matches!(held, Some(HeldBy::Memory { .. })) && entry.waited_for_memory >= BACKFILL_FOR
-}
-
 /// What holds back a light agent, which needs no slot and no memory room:
 /// only a critical or missing reading, or disk past the limit it sets beside
 /// the `writing` slots and one-shot runs.
 fn light_hold(limits: &Limits, writing: usize) -> Option<HeldBy> {
-    if let Some(capacity::Room::Held(held)) = limits.room {
-        return Some(held);
+    if let Some(capacity::Room::Held(held)) = &limits.room {
+        return Some(held.clone());
     }
     full_disk(limits, writing)
 }
@@ -309,9 +356,9 @@ fn full_disk(limits: &Limits, writing: usize) -> Option<HeldBy> {
 /// says so under dynamic admission: none does beside one this pass
 /// `started` already.
 fn measured_fit(
-    room: Option<capacity::Room>,
+    room: Option<&capacity::Room>,
     started: bool,
-    fits: impl FnOnce(capacity::Room) -> Result<(), Unfit>,
+    fits: impl FnOnce(&capacity::Room) -> Result<(), Unfit>,
 ) -> Result<(), Unfit> {
     match room {
         None => Ok(()),
@@ -368,6 +415,7 @@ pub fn room_for_a_job(occupied: &[Option<RepositoryId>], limits: &Limits) -> boo
         },
         light: false,
         waited_for_memory: Duration::ZERO,
+        place: None,
     }];
     !admit(occupied, &probe, limits, false).admitted.is_empty()
 }
@@ -404,7 +452,7 @@ impl Agents {
         };
         let mut limits = Limits {
             global: global.fixed(),
-            room: measured.filter(|_| global == MachineLimit::Dynamic),
+            room: measured.clone().filter(|_| global == MachineLimit::Dynamic),
             repositories: HashMap::new(),
             disk: None,
             oneshots,

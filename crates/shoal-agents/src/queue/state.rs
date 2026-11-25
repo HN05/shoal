@@ -197,7 +197,7 @@ impl AgentQueue {
 
     /// What held back the entry `id` at the last admission pass.
     pub fn held_back(&self, id: &QueueEntryId) -> Option<HeldBy> {
-        self.held_back.lock().unwrap().get(id).copied()
+        self.held_back.lock().unwrap().get(id).cloned()
     }
 
     /// Mark the wrapper of `execution`, every process of whose stopped agent
