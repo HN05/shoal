@@ -345,7 +345,7 @@ shoal thread resolve 3.2 false-positive --reason 'The caller checks it'
 With `[commands] review = ["tuicr", "-r", "{diff_base}..HEAD"]` configured,
 `review run` asks whether to run it or an agent. See
 [local reviews](docs/reference/reviews.md#local-reviews) for reviewers, outcomes and the
-[review command](docs/reference/run.md) for uncommitted review.
+[review command](docs/reference/run.md#review-commands) for uncommitted review.
 
 CLI agents and chats run in sessions of a terminal host, by default
 [zmx](https://github.com/neurosnap/zmx), that keep running when you detach, with
