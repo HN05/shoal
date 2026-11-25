@@ -33,6 +33,12 @@ fn form() -> Surface {
     )
 }
 
+fn values(pairs: &[(&str, Value)]) -> serde_json::Map<String, Value> {
+    (pairs.iter())
+        .map(|(key, value)| ((*key).to_owned(), value.clone()))
+        .collect()
+}
+
 fn refusal(surface: Surface, attached: &[&str]) -> String {
     surface.checked(attached).unwrap_err().to_string()
 }
@@ -125,4 +131,166 @@ fn a_surface_over_its_size_is_refused() {
         json!({}),
     );
     assert!(refusal(large, &[]).contains("at most"));
+}
+
+#[test]
+fn the_shorthand_numbers_its_actions_and_marks_the_recommended_one() {
+    let choices = ["Postgres".to_owned(), "SQLite".to_owned()];
+    let by_text = Surface::choices(&choices, Some("SQLite"), None);
+    let actions: Vec<(String, String, bool)> = (by_text.actions().into_iter())
+        .map(|action| (action.id, action.label, action.recommended))
+        .collect();
+    assert_eq!(
+        actions,
+        [
+            ("1".into(), "Postgres".into(), false),
+            ("2".into(), "SQLite".into(), true)
+        ]
+    );
+    assert_eq!(by_text.recommendation().as_deref(), Some("SQLite"));
+    let by_number = Surface::choices(&choices, Some("1"), None);
+    assert_eq!(by_number.recommendation().as_deref(), Some("Postgres"));
+    let elsewhere = Surface::choices(&choices, Some("Neither"), None);
+    assert_eq!(elsewhere.recommendation(), None);
+    assert!(
+        elsewhere
+            .text_lines("x")
+            .contains(&"Recommended: Neither".to_owned())
+    );
+}
+
+#[test]
+fn an_action_takes_the_inputs_its_context_binds() {
+    let submit = form().action("submit").unwrap();
+    let inputs: Vec<(&str, &InputKind)> = (submit.inputs.iter())
+        .map(|input| (input.key.as_str(), &input.kind))
+        .collect();
+    assert_eq!(
+        inputs,
+        [
+            ("name", &InputKind::Text),
+            (
+                "size",
+                &InputKind::Options {
+                    options: vec![("s".into(), "Small".into()), ("l".into(), "Large".into())],
+                    multiple: false
+                }
+            ),
+        ]
+    );
+    assert_eq!(submit.label, "Order");
+}
+
+#[test]
+fn an_answer_resolves_the_context_with_the_values_given() {
+    let given = values(&[("name", json!("Ada")), ("size", json!("l"))]);
+    let resolved = form().resolve("submit", given).unwrap();
+    assert_eq!(
+        Value::Object(resolved),
+        json!({"name": "Ada", "size": ["l"], "kind": "order"})
+    );
+    let defaults = form().resolve("submit", serde_json::Map::new()).unwrap();
+    assert_eq!(
+        Value::Object(defaults),
+        json!({"name": "", "size": ["s"], "kind": "order"})
+    );
+}
+
+#[test]
+fn an_answer_is_refused_for_what_the_surface_does_not_take() {
+    let refused = |id: &str, given: &[(&str, Value)]| {
+        form().resolve(id, values(given)).unwrap_err().to_string()
+    };
+    assert!(refused("delete", &[]).contains("it has submit, cancel"));
+    assert!(refused("cancel", &[("name", json!("Ada"))]).contains("takes no values"));
+    assert!(refused("submit", &[("colour", json!("red"))]).contains("it takes name, size"));
+    assert!(refused("submit", &[("size", json!("xl"))]).contains("not \"xl\""));
+    assert!(refused("submit", &[("size", json!(["s", "l"]))]).contains("takes one of"));
+}
+
+#[test]
+fn values_given_as_text_take_their_input_type() {
+    let settings = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["notify", "volume", "save"]},
+            {"id": "notify", "component": "CheckBox", "label": "Notify", "value": {"@path": "/notify"}},
+            {"id": "volume", "component": "Slider", "max": 10, "value": {"@path": "/volume"}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save",
+                 "context": {"notify": {"@path": "/notify"}, "volume": {"@path": "/volume"}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"notify": false, "volume": 3}),
+    );
+    let given = values(&[("notify", json!("true")), ("volume", json!("7"))]);
+    let resolved = settings.resolve("save", given).unwrap();
+    assert_eq!(
+        Value::Object(resolved),
+        json!({"notify": true, "volume": 7.0})
+    );
+    let loud = settings.resolve("save", values(&[("volume", json!("11"))]));
+    assert!(loud.unwrap_err().to_string().contains("from 0 to 10"));
+}
+
+#[test]
+fn the_text_shows_the_inputs_and_how_to_answer_each_action() {
+    let lines = form().text_lines("shoal send 3.2");
+    assert_eq!(
+        lines,
+        [
+            "# Order",
+            "Name: …",
+            "Size:",
+            "  (•) Small",
+            "  ( ) Large",
+            "[Order]",
+            "[Cancel]",
+            "Actions:",
+            "  submit Order (recommended), takes name (text), size (one of s|l): \
+             shoal send 3.2 --action submit --value name=… --value size=…",
+            "  cancel Cancel: shoal send 3.2 --action cancel",
+        ]
+    );
+}
+
+#[test]
+fn the_text_repeats_a_lists_template_for_each_item_and_shows_images() {
+    let list = surface(
+        json!([
+            {"id": "root", "component": "Card", "child": "items"},
+            {"id": "items", "component": "List",
+             "children": {"componentId": "item", "path": "/items"}},
+            {"id": "item", "component": "Text", "text": {"@path": "name"}},
+            {"id": "chart", "component": "Text", "text": "![Latency](latency.svg)"},
+        ]),
+        json!({"items": [{"name": "First"}, {"name": "Second"}]}),
+    );
+    assert_eq!(list.text_lines("x"), ["    First", "    Second"]);
+    let pictured = surface(
+        json!([{"id": "root", "component": "Text", "text": "See ![Latency](latency.svg)"}]),
+        json!({}),
+    );
+    assert_eq!(
+        pictured.text_lines("x"),
+        ["See [image: Latency, attached file latency.svg]"]
+    );
+}
+
+#[test]
+fn an_action_s_inputs_come_in_the_order_they_render() {
+    let ordered = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["size", "note", "go"]},
+            {"id": "size", "component": "TextField", "label": "Size", "value": {"@path": "/size"}},
+            {"id": "note", "component": "TextField", "label": "Note", "value": {"@path": "/note"}},
+            {"id": "go", "component": "Button", "child": "go-label",
+             "action": {"event": {"name": "go",
+                 "context": {"a-note": {"@path": "/note"}, "b-size": {"@path": "/size"}}}}},
+            {"id": "go-label", "component": "Text", "text": "Go"},
+        ]),
+        json!({}),
+    );
+    let go = ordered.action("go").unwrap();
+    let keys: Vec<&str> = go.inputs.iter().map(|input| input.key.as_str()).collect();
+    assert_eq!(keys, ["b-size", "a-note"]);
 }

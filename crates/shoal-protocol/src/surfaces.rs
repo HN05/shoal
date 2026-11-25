@@ -2,13 +2,19 @@
 //! static A2UI surface of the spec version Shoal pins, built from the
 //! components of that version's basic catalog. `docs/design/coordination.md`
 //! says how posts carry and answer them.
+use std::collections::BTreeSet;
+
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+mod actions;
 mod checks;
 mod schema;
 mod shorthand;
+mod text;
+
+pub use actions::{Input, InputKind, SurfaceAction};
 
 /// The A2UI spec version every surface is written in, which it records.
 pub const VERSION: &str = "1.0";
@@ -58,6 +64,58 @@ impl Surface {
         .flatten()
         .filter_map(Component::of)
     }
+
+    /// The component `id`.
+    fn component(&self, id: &str) -> Option<Component<'_>> {
+        self.components().find(|component| component.id == id)
+    }
+
+    /// Its components in the order they render: from the root, depth
+    /// first, each once, a list's template once.
+    fn rendered(&self) -> Vec<Component<'_>> {
+        let mut order = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut next = vec!["root"];
+        while let Some(id) = next.pop() {
+            let Some(component) = self.component(id).filter(|_| seen.insert(id)) else {
+                continue;
+            };
+            next.extend(component.references().into_iter().rev());
+            order.push(component);
+        }
+        order
+    }
+
+    /// The data `value` binds, its path read under `base` when relative,
+    /// as inside a list's item; else `value` itself.
+    fn value<'a>(&'a self, value: &'a Value, base: &str) -> Option<&'a Value> {
+        match binding(value) {
+            Some(path) => self.data(&scoped(base, path)),
+            None => Some(value),
+        }
+    }
+
+    /// The text `value` shows: itself, or the data it binds under `base`;
+    /// a function call, which only a renderer runs, shows as an ellipsis.
+    fn text(&self, value: &Value, base: &str) -> Option<String> {
+        if value.get("@call").is_some() {
+            return Some("…".into());
+        }
+        match self.value(value, base)? {
+            Value::String(text) => Some(text.clone()),
+            Value::Null => None,
+            other => Some(other.to_string()),
+        }
+    }
+
+    /// The value at the JSON pointer `path` of its initial data model.
+    fn data(&self, path: &str) -> Option<&Value> {
+        let model = self.body()?.get("dataModel")?;
+        match path {
+            "" | "/" => Some(model),
+            path => model.pointer(path),
+        }
+    }
 }
 
 /// A component of a surface: its id, its type and its other properties.
@@ -88,6 +146,11 @@ impl<'a> Component<'a> {
         self.get(field)?.as_str()
     }
 
+    /// The data model path the property `field` binds to.
+    fn binding(&self, field: &str) -> Option<&'a str> {
+        binding(self.get(field)?)
+    }
+
     /// The ids of the components it names directly, as its children, its
     /// child, its tabs' children, a modal's trigger and content, or the
     /// template of a list it repeats over data.
@@ -113,6 +176,19 @@ impl<'a> Component<'a> {
     /// one rather than a function the renderer runs.
     fn event(&self) -> Option<&'a Map<String, Value>> {
         self.get("action")?.get("event")?.as_object()
+    }
+}
+
+/// The data model path `value` binds to, as `{"@path": "/name"}` does.
+fn binding(value: &Value) -> Option<&str> {
+    value.get("@path")?.as_str()
+}
+
+/// `path` read under `base`: as it is when absolute, else below `base`.
+fn scoped(base: &str, path: &str) -> String {
+    match path.starts_with('/') {
+        true => path.to_owned(),
+        false => format!("{base}/{path}"),
     }
 }
 
