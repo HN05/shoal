@@ -90,7 +90,7 @@ Shoal checks the files and the done HEAD again after it stops the agent and
 runs the removal hooks. When HEAD changed, cleanup waits for a new `done`.
 A chat goes whatever PRs it watches.
 
-A hold, a thread the space opened afterwards that waits, or a pending
+A hold, a thread the space opened after `done` that waits, or a pending
 [PR proposal](approvals.md#approval-for-agent-issues-and-prs) keeps the space.
 A failed cleanup keeps the space and its ownership, and `status` shows the
 error with the completion's choice. To review the work in a space,
