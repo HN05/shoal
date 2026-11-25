@@ -67,7 +67,7 @@ an agent (see [local reviews](reviews.md#local-reviews)); `--manual` or `--agent
 the question, which is required without a terminal. Manual review runs the `review`
 command (`shoal run review` also does) with the arguments after `--`; without one,
 the agent reviews.
-`shoal review-worktree [workspace]` reviews uncommitted changes. The committed
+`shoal run review-worktree [--workspace W]` reviews uncommitted changes. The committed
 range excludes working-tree changes that `shoal diff` includes. Export feedback
 from tuicr and hand it to your agent explicitly; see
 [tuicr's export documentation](https://github.com/agavra/tuicr/blob/main/docs/CLI.md#output-for-scripts-and-agents).
