@@ -70,8 +70,9 @@ tracked executions resolve or the agent finishes its turn, as
 than two minutes while the place was open.
 
 An agent's turn comes from its hooks. For an agent without them, Herdr reports
-the turn. Under a host that reports none, such as tmux, such an agent's place
-closes once its execution ends.
+the turn, except under `nested_zmx`, where it sees only zmx in the pane. Under
+a host that reports none, such as tmux, such an agent's place closes once its
+execution ends.
 
 Removing a space closes its places at once, whatever `close_when_done` says.
 Daemon startup and `shoal cleanup` close the places whose space is gone.
@@ -157,9 +158,10 @@ creates one with a first window in your home directory.
 
 Shoal needs tmux 3.3 or later.
 
-A tmux pane counts as a session named after its window. `shoal attach` selects
-the pane and switches your tmux client to it. From outside tmux, it attaches a
-new client. Inside tmux, it refuses a pane on another tmux server.
+`shoal attach`'s picker and `shoal status` list a tmux pane as a session named
+after its window. `shoal attach` selects the pane and switches your tmux client
+to it. From outside tmux, it attaches a new client. Inside tmux, it refuses a
+pane on another tmux server.
 
 Prompts and `shoal demo send` leave copy mode first.
 
@@ -203,10 +205,10 @@ of its own.
 session names, which `HOME`, or `XDG_CACHE_HOME` on Linux, sets. The daemon
 reaches the sessions started with its own. Shoal needs Zellij 0.45 or later.
 
-A Zellij pane counts as a session named after its tab. `shoal attach` selects
-the tab and pane and switches your Zellij client to its session. From outside
-Zellij, it attaches a new client. Inside Zellij, it refuses a pane in another
-socket directory.
+`shoal attach`'s picker and `shoal status` list a Zellij pane as a session
+named after its tab. `shoal attach` selects the tab and pane and switches your
+Zellij client to its session. From outside Zellij, it attaches a new client.
+Inside Zellij, it refuses a pane in another socket directory.
 
 Like its other panes, a close leaves a tab's plugins alone. Closing the last
 pane of a tab closes the tab, and closing the last pane of a session ends the
