@@ -46,13 +46,12 @@ the agent of the nearest space above with an agent, the
 An alert sent up is one line of at most 512 bytes, without control
 characters.
 
-From the user's terminal, `shoal send` without `--space` sends the alert to the
-workspace the current directory is in, or else to one you pick.
-
 ## Send down
 
-`--space`, `--all` and `--repo` send the alert down. A scoped process sends
-alerts down only to the spaces below its own.
+`--space`, `--all` and `--repo` send the alert down. From the user's terminal,
+`shoal send` without them also sends it down: to the workspace the current
+directory is in, or else to one you pick. A scoped process sends alerts down
+only to the spaces below its own.
 
 An alert sent down is at most 8 KiB. It may hold newlines and tabs, but no
 other control characters.
