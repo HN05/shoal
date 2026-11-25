@@ -225,6 +225,11 @@ async fn typed_requests_extract_payloads_and_acknowledgements() {
         cleanup_error: None,
         hub: None,
         paused: None,
+        work_memory: shoal_protocol::protocol::WorkMemoryLimit {
+            bytes: None,
+            percent: None,
+            source: shoal_protocol::protocol::MemoryLimitSource::Load,
+        },
     };
     let status: DaemonStatus = reply(Response::new(1, Body::Status(status))).await.unwrap();
     assert_eq!(status.pid, 42);

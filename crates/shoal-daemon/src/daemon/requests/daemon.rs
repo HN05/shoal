@@ -94,6 +94,7 @@ async fn status(server: &Server) -> Result<DaemonStatus> {
         cleanup_error: server.manager.spaces.cleanup_problem(),
         hub: server.manager.hub.hub_role(&*server.manager).await?,
         paused: server.manager.agents.paused_since(),
+        work_memory: crate::daemon::work_memory::limit_status(&server.manager.config()),
     })
 }
 

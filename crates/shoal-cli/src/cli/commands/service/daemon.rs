@@ -11,7 +11,7 @@ use crate::{
     cli::{client, context::Context, output::Style, progress::Spinner, ui},
     client::connection::CommandPaths,
     paths::Paths,
-    protocol::{Exit, ExitRequest, ExitWhen, Work},
+    protocol::{Exit, ExitRequest, ExitWhen, MemoryLimitSource, Work, WorkMemoryLimit},
     service::{self, Platform},
 };
 
@@ -44,8 +44,8 @@ pub(in crate::cli::commands) async fn status(ctx: &Context) -> Result<i32> {
 }
 
 /// The running daemon, since when the machine is paused, each directory
-/// whose file access stalls, and why automatic cleanup fails other than in
-/// a workspace.
+/// whose file access stalls, why automatic cleanup fails other than in a
+/// workspace, and the limit on Shoal's work memory.
 fn status_message(status: &crate::protocol::DaemonStatus) -> String {
     let mut message = format!(
         "Daemon running (PID {}, version {}{})",
@@ -73,7 +73,24 @@ fn status_message(status: &crate::protocol::DaemonStatus) -> String {
     if let Some(role) = &status.hub {
         message.push_str(&format!("\n{}", crate::cli::commands::hub::role_line(role)));
     }
+    message.push_str(&format!("\n{}", work_memory_line(&status.work_memory)));
     message
+}
+
+/// The limit on Shoal's work memory and what sets it, such as
+/// `Work memory limit: 22.5 GiB, 75% of RAM, from load`.
+fn work_memory_line(limit: &WorkMemoryLimit) -> String {
+    let mut parts: Vec<String> = limit.bytes.map(ui::size_label).into_iter().collect();
+    parts.extend(limit.percent.map(|percent| format!("{percent}% of RAM")));
+    let source = match limit.source {
+        MemoryLimitSource::Load if parts.is_empty() => return "Work memory limit: none".into(),
+        MemoryLimitSource::Load => "load",
+        MemoryLimitSource::Config => "memory_limit",
+    };
+    if parts.is_empty() {
+        parts.push("none".into());
+    }
+    format!("Work memory limit: {}, from {source}", parts.join(", "))
 }
 
 pub(super) async fn start(ctx: &Context) -> Result<i32> {

@@ -3,7 +3,7 @@
 //! it, at startup and whenever the config changes it, and what the scope of
 //! an ended command in the slice recorded.
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_protocol::protocol::ScopeMemory;
+use shoal_protocol::protocol::{ScopeMemory, WorkMemoryLimit};
 
 use super::{log, manager::Manager};
 use crate::{
@@ -81,6 +81,19 @@ impl UnreadContainers {
 /// a limit, or for a share of RAM that cannot be read, which is logged.
 pub(crate) fn limit(config: &Config) -> Option<u64> {
     in_bytes(config.machine.work_memory_limit().limit?)
+}
+
+/// The limit in effect under `config`, as `shoal status` shows it.
+pub(crate) fn limit_status(config: &Config) -> WorkMemoryLimit {
+    let effect = config.machine.work_memory_limit();
+    WorkMemoryLimit {
+        bytes: effect.limit.and_then(in_bytes),
+        percent: match effect.limit {
+            Some(MemoryLimit::Percent(percent)) => Some(percent),
+            _ => None,
+        },
+        source: effect.source,
+    }
 }
 
 /// `limit` in bytes on this machine; none for a share of RAM that cannot be

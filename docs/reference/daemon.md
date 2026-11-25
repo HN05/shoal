@@ -8,7 +8,7 @@ cargo install --path .
 shoal daemon install --dry-run     # Preview the OS service definition
 shoal daemon install               # Register and start the per-user service
 shoal daemon stop|start|restart
-shoal status                       # Outside a space: the daemon, alerts, stalls, cleanup
+shoal status                       # Outside a space: the daemon, alerts, stalls, cleanup, memory limit
 ```
 
 macOS uses a launchd LaunchAgent in `~/Library/LaunchAgents` (requires a GUI
@@ -31,7 +31,9 @@ for: a worktree check that runs 30 seconds or is interrupted reports the
 directory holding the worktree once as an `access_stalled` alert, which on
 macOS names a privacy prompt as a possible cause, and it stays listed until a check there
 finishes. It also says, in `cleanup_error`, when a step of automatic cleanup
-fails other than in a workspace or no pass has finished for 10 minutes. While the daemon starts, its answer names the step, a stalled
+fails other than in a workspace or no pass has finished for 10 minutes, and
+names the limit on work memory in effect, in `work_memory`, with whether
+`load` or `memory_limit` sets it. While the daemon starts, its answer names the step, a stalled
 directory, or a path whose check has waited five seconds, under the
 `starting` error code; the commands that wait for a daemon to start, such as
 `daemon install`, keep waiting while it answers so and give up once it has
