@@ -203,3 +203,38 @@ async fn a_rebased_branchs_log_leaves_out_its_base_and_what_was_seen() {
     assert!(log.contains("More topic work"), "{log}");
     assert!(!log.contains("Main work"), "{log}");
 }
+
+#[tokio::test]
+async fn a_bare_flag_on_a_checkout_reads_as_git_reads_it() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let settings: [&[(&str, &str)]; 4] = [
+        &[],
+        &[("core.bare", "false")],
+        &[("core.bare", "true")],
+        &[("core.bare", "true"), ("core.worktree", "..")],
+    ];
+    for settings in settings {
+        let config = repo.join(".git/config");
+        let mut args = vec!["config", "--file", config.to_str().unwrap()];
+        for (key, value) in settings {
+            args.splice(3.., [*key, *value]);
+            git(root.path(), &args);
+        }
+        let git_says = git(
+            root.path(),
+            &[
+                "-C",
+                repo.to_str().unwrap(),
+                "rev-parse",
+                "--is-bare-repository",
+            ],
+        );
+        let read = is_bare_with_work_tree(&repo).await.unwrap();
+        assert_eq!(read, git_says.trim() == "true", "{settings:?}");
+        for (key, _) in settings {
+            args.splice(3.., ["--unset", *key]);
+            git(root.path(), &args);
+        }
+    }
+}

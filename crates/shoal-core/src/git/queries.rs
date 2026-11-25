@@ -172,10 +172,15 @@ pub(crate) async fn is_bare_with_work_tree(path: &Path) -> Result<bool> {
     if !off_runtime::is_dir(&path.join(".git")).await? {
         return Ok(false);
     }
-    Ok(run(path, &["rev-parse", "--is-bare-repository"])
-        .await?
-        .trim()
-        == "true")
+    // Git takes the repository as bare where `core.bare` is set, even where
+    // `core.worktree` names a working tree.
+    let in_process =
+        |repo: &gix::Repository| Ok(repo.config_snapshot().boolean("core.bare") == Some(true));
+    let git = async |path: &Path| {
+        let bare = run(path, &["rev-parse", "--is-bare-repository"]).await?;
+        Ok(bare.trim() == "true")
+    };
+    reader::read(path, in_process, git).await
 }
 
 /// The canonical Git directory of the checkout Git finds from `repo`: the
