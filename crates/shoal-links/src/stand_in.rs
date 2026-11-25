@@ -83,21 +83,22 @@ pub fn service(root: &std::path::Path, store: Store, text: &str) -> Arc<Links> {
 /// Record `workspace` and its repository in `store`.
 pub async fn record(store: &Store, workspace: &Workspace) {
     let path = workspace.path.to_str().unwrap().to_owned();
+    let (id, repository) = (workspace.id.clone(), workspace.repository_id.clone());
+    let (name, branch) = (workspace.name.clone(), workspace.branch().cloned());
     store
         .write(move |tx| {
             tx.execute(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo',?1,?1,1)",
-                [&path],
+                "INSERT INTO repositories(id,path,source,last_used) VALUES (?1,?2,?2,1)",
+                rusqlite::params![repository, path],
             )?;
             tx.execute(
-                "INSERT INTO spaces(id,kind,repository_id,name)
-                    VALUES ('workspace','workspace','repo','fix')",
-                [],
+                "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?2,?3)",
+                rusqlite::params![id, repository, name],
             )?;
             tx.execute(
                 "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                    VALUES ('workspace',?1,'fix','ready','abc','/admin')",
-                [&path],
+                    VALUES (?1,?2,?3,'ready','abc','/admin')",
+                rusqlite::params![id, path, branch],
             )?;
             Ok(())
         })
