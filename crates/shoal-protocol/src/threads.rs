@@ -639,20 +639,44 @@ impl Thread {
     }
 
     /// What `post` offers and answers, as lines of text: its surface, with
-    /// the command that answers each of its actions while it is its side's
-    /// latest, and the action it answers with its values.
+    /// its [`action_lines`], and the action it answers with its values.
+    ///
+    /// [`action_lines`]: Thread::action_lines
     pub fn interaction_lines(&self, post: &Post) -> Vec<String> {
-        let mut lines = Vec::new();
-        if let Some(ui) = &post.post.ui {
-            let current = (post.side.and_then(|side| self.surface_from(side)))
-                .is_some_and(|latest| latest.id == post.id);
-            let answer = current.then(|| format!("shoal send {}", self.number));
-            lines.extend(ui.text_lines(answer.as_deref()));
+        let layout = post.post.ui.iter().flat_map(Surface::layout_lines);
+        let answer = post
+            .post
+            .answer
+            .iter()
+            .map(|answer| self.answer_line(answer));
+        layout
+            .chain(self.action_lines(post))
+            .chain(answer)
+            .collect()
+    }
+
+    /// What `post` shows of what it offers and answers, without the
+    /// commands that answer its surface: its surface's layout and the
+    /// action it answers with its values.
+    pub fn shown_lines(&self, post: &Post) -> Vec<String> {
+        let layout = post.post.ui.iter().flat_map(Surface::layout_lines);
+        let answer = post
+            .post
+            .answer
+            .iter()
+            .map(|answer| self.answer_line(answer));
+        layout.chain(answer).collect()
+    }
+
+    /// The commands that answer the actions of `post`'s surface, while it
+    /// is the latest its side posted; none for any other post.
+    pub fn action_lines(&self, post: &Post) -> Vec<String> {
+        let current = (post.side.and_then(|side| self.surface_from(side)))
+            .is_some_and(|latest| latest.id == post.id);
+        match (&post.post.ui, current) {
+            (Some(ui), true) => ui.action_lines(&format!("shoal send {}", self.number)),
+            _ => Vec::new(),
         }
-        if let Some(answer) = &post.post.answer {
-            lines.push(self.answer_line(answer));
-        }
-        lines
     }
 
     /// An answer as a line: the action it takes on which post, and the

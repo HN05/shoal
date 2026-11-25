@@ -12,25 +12,38 @@ const INDENT: usize = 2;
 
 impl Surface {
     /// The surface as lines of text, then, with `answer`, the command that
-    /// answers it, such as `shoal send 3.2`, a line for each action naming
-    /// the values it takes and that command.
+    /// answers it, such as `shoal send 3.2`, its [`action_lines`].
+    ///
+    /// [`action_lines`]: Surface::action_lines
     pub fn text_lines(&self, answer: Option<&str>) -> Vec<String> {
+        let mut lines = self.layout_lines();
+        lines.extend(answer.map_or_else(Vec::new, |answer| self.action_lines(answer)));
+        lines
+    }
+
+    /// Its components drawn from the root, layout as indented blocks.
+    pub fn layout_lines(&self) -> Vec<String> {
         let mut drawing = Drawing {
             surface: self,
             lines: Vec::new(),
             drawn: BTreeSet::new(),
         };
         drawing.draw("root", 0, "");
-        let actions = answer.map_or_else(Vec::new, |_| self.actions());
-        if !actions.is_empty() {
-            drawing.lines.push("Actions:".to_owned());
-        }
-        let answer = answer.unwrap_or_default();
-        let commands = actions.iter().map(|action| action_line(action, answer));
-        drawing
-            .lines
-            .extend(commands.map(|line| format!("{:INDENT$}{line}", "")));
         drawing.lines
+    }
+
+    /// A line for each action, under a heading, naming the values it takes
+    /// and the command that answers it, which starts with `answer`; none
+    /// without actions.
+    pub fn action_lines(&self, answer: &str) -> Vec<String> {
+        let actions = self.actions();
+        if actions.is_empty() {
+            return Vec::new();
+        }
+        let commands = actions.iter().map(|action| action_line(action, answer));
+        std::iter::once("Actions:".to_owned())
+            .chain(commands.map(|line| format!("{:INDENT$}{line}", "")))
+            .collect()
     }
 }
 

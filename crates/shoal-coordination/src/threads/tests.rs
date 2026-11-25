@@ -639,6 +639,23 @@ fn answering(action: &str, on: Option<i64>) -> NewPost {
 }
 
 #[tokio::test]
+async fn a_long_post_keeps_the_commands_that_answer_its_surface() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let child = caller(&tree.child);
+    let thread = open(fixture, Some(&child), None).await;
+    let long = "word ".repeat(shoal_protocol::threads::MAX_POST_LEN / 5 - 1);
+    let asked = asking(&long, &["Postgres", "SQLite"], None);
+    post_as(fixture, &thread, &child, asked).await.unwrap();
+    let delivered = alerts(fixture, &tree.parent).await;
+    let alert = delivered.last().unwrap();
+    assert!(alert.len() <= crate::validate::MAX_AGENT_MESSAGE_LEN);
+    assert!(alert.contains("shows the rest"), "{alert}");
+    assert!(alert.contains("--action 2"), "{alert}");
+    assert!(alert.contains("thread forward"), "{alert}");
+}
+
+#[tokio::test]
 async fn an_answer_takes_an_action_of_the_other_side_s_latest_surface() {
     let tree = tree().await;
     let fixture = &tree.fixture;

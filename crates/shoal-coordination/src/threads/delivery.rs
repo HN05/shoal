@@ -207,22 +207,21 @@ impl Texts {
             agent.push(' ');
         }
         agent.push_str(&post.post.text);
-        for line in thread.interaction_lines(post) {
-            agent.push_str(&format!("\n  {line}"));
-        }
+        agent.push_str(&indented(thread.shown_lines(post)));
         let reader = Party::of(thread, to);
         agent.push_str(&code_lines(post, reader.as_ref()));
+        let mut tail = indented(thread.action_lines(post));
         let changed = changes_since(thread, post);
         if let Some((size, command)) = &changed {
-            agent.push_str(&format!(
+            tail.push_str(&format!(
                 "\nChanges for it since then: {size} (`{command}`)"
             ));
         }
-        agent.push_str(&format!("\n{}", hint(thread, to)));
-        agent.push_str(&switch_reminder(thread, reader.as_ref()));
+        tail.push_str(&format!("\n{}", hint(thread, to)));
+        tail.push_str(&switch_reminder(thread, reader.as_ref()));
         Self {
             kind: AlertKind::ThreadPosted,
-            agent: crate::validate::shorten(agent, crate::validate::MAX_AGENT_MESSAGE_LEN),
+            agent: fitted(thread, agent, &tail),
             user: match changed {
                 Some((size, _)) => crate::validate::shorten(
                     format!("{} [{size}]", thread.notice()),
@@ -270,12 +269,12 @@ impl Texts {
         let reader = Party::of(thread, side);
         for post in thread.posts.iter().filter(|post| post.speaks()) {
             agent.push_str(&format!("\n{}: {}", post.author(), post.post.text));
-            for line in thread.interaction_lines(post) {
-                agent.push_str(&format!("\n  {line}"));
-            }
+            agent.push_str(&indented(thread.shown_lines(post)));
             agent.push_str(&code_lines(post, reader.as_ref()));
         }
-        agent.push_str(&format!("\n{}", hint(thread, side)));
+        let answered = thread.surface_from(side.other());
+        let mut tail = indented(answered.map_or_else(Vec::new, |post| thread.action_lines(post)));
+        tail.push_str(&format!("\n{}", hint(thread, side)));
         Self {
             kind: AlertKind::ThreadForwarded,
             user: crate::validate::shorten(
@@ -285,7 +284,7 @@ impl Texts {
                 ),
                 crate::validate::MAX_MESSAGE_LEN,
             ),
-            agent: crate::validate::shorten(agent, crate::validate::MAX_AGENT_MESSAGE_LEN),
+            agent: fitted(thread, agent, &tail),
         }
     }
 
@@ -364,6 +363,32 @@ fn changes_since(thread: &Thread, post: &Post) -> Option<(ChangeSize, String)> {
     };
     Some((size, command))
 }
+
+/// `lines` each on a line of its own, indented under a post.
+fn indented(lines: Vec<String>) -> String {
+    lines
+        .into_iter()
+        .map(|line| format!("\n  {line}"))
+        .collect()
+}
+
+/// An agent's message of `body`, then `tail`, which says how to answer and
+/// so always fits: `body` is cut short, naming where to read the rest,
+/// where both would pass the length of an agent's message.
+fn fitted(thread: &Thread, body: String, tail: &str) -> String {
+    let max = crate::validate::MAX_AGENT_MESSAGE_LEN;
+    if body.len() + tail.len() <= max {
+        return body + tail;
+    }
+    let rest = format!("\n(`shoal view thread {}` shows the rest)", thread.number);
+    let room = max.saturating_sub(tail.len() + rest.len()).max(MIN_BODY);
+    let body = crate::validate::shorten(body, room);
+    crate::validate::shorten(format!("{body}{rest}{tail}"), max)
+}
+
+/// The least of a post's body an agent's message keeps, however long what
+/// follows it.
+const MIN_BODY: usize = 256;
 
 /// The reminder a space's agent reads with a post in `thread` to switch to
 /// it before working on it, which sends a workspace's changes to it and
