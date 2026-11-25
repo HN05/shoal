@@ -27,7 +27,7 @@ use crate::{
 };
 use record::{Entry, Record};
 
-/// Bundled skills by name; a packaged directory holds `<name>/SKILL.md` for each.
+/// Bundled skills by name.
 const SKILLS: [(&str, &str); 1] = [("shoal", include_str!("skill/shoal.md"))];
 
 /// Each bundled skill's name and the contents this version installs.
@@ -79,7 +79,7 @@ pub(super) fn run(
         })?;
         vec![(agent.clone(), directory)]
     };
-    let skills = packaged()?;
+    let skills = skill_contents();
     let changed = if *force {
         Changed::Replace
     } else if context::Context::is_interactive(json_output) {
@@ -143,11 +143,11 @@ pub(super) fn refresh_installed(state: &Path, json_output: bool) {
             eprintln!("warning: cannot update Shoal skills: {error:#}");
         }
     };
-    let found = installed_directories().and_then(|directories| Ok((directories, packaged()?)));
-    let (directories, skills) = match found {
-        Ok(found) => found,
+    let directories = match installed_directories() {
+        Ok(directories) => directories,
         Err(error) => return warn(error),
     };
+    let skills = skill_contents();
     for directory in directories {
         match refresh(&directory, &skills, Mode::Refresh) {
             Ok(outcome) if !json_output => {
@@ -172,7 +172,7 @@ pub(super) fn installed_anywhere() -> Result<bool> {
 
 /// Whether one of `directories` holds a Shoal skill, as `refresh` finds them.
 fn any_holds_shoal_skills(directories: impl IntoIterator<Item = PathBuf>) -> Result<bool> {
-    let bundled = skill_contents(None)?;
+    let bundled = skill_contents();
     for directory in directories {
         let record = Record::load(&directory)?.unwrap_or_default();
         if holds_shoal_skills(&directory, &bundled, &record)? {
@@ -190,27 +190,11 @@ fn installed_directories() -> Result<BTreeSet<PathBuf>> {
     Ok(directories.into_values().flatten().collect())
 }
 
-fn packaged() -> Result<Contents> {
-    let configured = std::env::var_os(crate::env::SKILLS_DIR).map(PathBuf::from);
-    let source = packaged_source(configured, &std::env::current_exe()?)?;
-    skill_contents(source.as_deref())
-}
-
-/// The packaged skills when `source` names them, otherwise the embedded ones.
-fn skill_contents(source: Option<&Path>) -> Result<Contents> {
+/// The bundled skills, as this version installs them.
+fn skill_contents() -> Contents {
     SKILLS
         .iter()
-        .map(|(name, embedded)| {
-            let contents = match source {
-                Some(source) => {
-                    let file = skill_file(source, name);
-                    fs::read_to_string(&file)
-                        .with_context(|| format!("read packaged skill {}", file.display()))?
-                }
-                None => (*embedded).to_owned(),
-            };
-            Ok((*name, contents))
-        })
+        .map(|(name, contents)| (*name, (*contents).to_owned()))
         .collect()
 }
 
@@ -450,70 +434,8 @@ fn exists(path: &Path) -> Result<bool> {
     }
 }
 
-fn packaged_source(configured: Option<PathBuf>, executable: &Path) -> Result<Option<PathBuf>> {
-    let source = match configured {
-        Some(source) => Some(source),
-        None => packaged_link_source(executable)?,
-    };
-    if let Some(source) = &source {
-        ensure!(
-            source.is_absolute(),
-            "packaged skills directory must be absolute"
-        );
-        for (name, _) in SKILLS {
-            let file = skill_file(source, name);
-            ensure!(
-                file.is_file(),
-                "packaged skill is missing: {}",
-                file.display()
-            );
-        }
-    }
-    Ok(source)
-}
-
 fn skill_file(directory: &Path, name: &str) -> PathBuf {
     directory.join(name).join("SKILL.md")
-}
-
-fn packaged_link_source(executable: &Path) -> Result<Option<PathBuf>> {
-    let executable = fs::canonicalize(executable).context("resolve packaged executable")?;
-    let link = package_directory(&executable)
-        .context("missing packaged executable directory")?
-        .join("shoal-skills");
-    let target = match fs::read_link(&link) {
-        Ok(target) => target,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error).context("read packaged shoal-skills link"),
-    };
-    if target.is_absolute() {
-        return Ok(Some(target));
-    }
-    let absolute = link
-        .parent()
-        .context("missing packaged skills link directory")?
-        .join(target);
-    // Homebrew relativizes this link. Resolve it lexically so the installed
-    // skills are read through the stable opt prefix rather than a Cellar path.
-    let mut source = PathBuf::new();
-    for component in absolute.components() {
-        if component == std::path::Component::ParentDir {
-            source.pop();
-        } else {
-            source.push(component.as_os_str());
-        }
-    }
-    Ok(Some(source))
-}
-
-/// The directory a package keeps its files in: the executable's, or the one
-/// holding its app bundle, since a file added inside a signed bundle breaks
-/// the bundle's signature.
-fn package_directory(executable: &Path) -> Option<&Path> {
-    match crate::fsutil::executables::app_bundle(executable) {
-        Some(bundle) => bundle.parent(),
-        None => executable.parent(),
-    }
 }
 
 fn install(path: &Path, contents: &str) -> Result<()> {

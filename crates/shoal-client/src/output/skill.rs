@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::output::outputs;
 
-/// A packaged skill's instructions.
+/// A bundled skill's instructions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skill {
     pub name: String,

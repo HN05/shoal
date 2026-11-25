@@ -5,7 +5,7 @@ use std::os::unix::fs::symlink;
 const OTHER: &str = "shoal-other";
 
 fn embedded() -> Contents {
-    skill_contents(None).unwrap()
+    skill_contents()
 }
 
 /// The embedded skills and [`OTHER`], holding `other`.
@@ -40,80 +40,6 @@ fn embedded_skill_replaces_symlinks_with_a_readable_file() {
     fs::write(path.join("keep"), "keep").unwrap();
     assert!(install(&path, "embedded").is_err());
     assert_eq!(fs::read_to_string(path.join("keep")).unwrap(), "keep");
-}
-
-#[test]
-fn packaged_skills_link_is_optional_and_explicit_paths_take_precedence() {
-    let root = tempfile::tempdir().unwrap();
-    let executable = root.path().join("shoal");
-    let link = root.path().join("shoal-skills");
-    let source = root.path().join("skills");
-    let incomplete = root.path().join("incomplete");
-    fs::write(&executable, "binary").unwrap();
-    for (name, _) in SKILLS {
-        fs::create_dir_all(source.join(name)).unwrap();
-        fs::write(skill_file(&source, name), "packaged").unwrap();
-    }
-    fs::create_dir_all(&incomplete).unwrap();
-    assert_eq!(packaged_source(None, &executable).unwrap(), None);
-    symlink(&source, &link).unwrap();
-    assert_eq!(
-        packaged_source(None, &executable).unwrap(),
-        Some(source.clone())
-    );
-    let bin = root.path().join("bin");
-    fs::create_dir(&bin).unwrap();
-    let launcher = bin.join("shoal");
-    symlink(&executable, &launcher).unwrap();
-    assert_eq!(
-        packaged_source(None, &launcher).unwrap(),
-        Some(source.clone())
-    );
-    // Preserve the stable symlink target instead of canonicalizing it to a
-    // versioned package path that disappears on upgrade.
-    let stable = root.path().join("stable");
-    symlink(&source, &stable).unwrap();
-    assert_eq!(
-        packaged_source(Some(stable.clone()), &executable).unwrap(),
-        Some(stable)
-    );
-    for invalid in [
-        PathBuf::from("relative"),
-        root.path().join("missing"),
-        incomplete,
-        executable.clone(),
-    ] {
-        assert!(packaged_source(Some(invalid.clone()), &executable).is_err());
-        fs::remove_file(&link).unwrap();
-        symlink(&invalid, &link).unwrap();
-        assert!(packaged_source(None, &executable).is_err());
-        assert_eq!(
-            packaged_source(Some(source.clone()), &executable).unwrap(),
-            Some(source.clone())
-        );
-    }
-}
-
-#[test]
-fn packaged_skills_link_sits_beside_an_app_bundle() {
-    let root = tempfile::tempdir().unwrap();
-    let macos = root.path().join("Shoal.app/Contents/MacOS");
-    let source = root.path().join("skills");
-    fs::create_dir_all(&macos).unwrap();
-    fs::write(macos.join("shoal"), "binary").unwrap();
-    for (name, _) in SKILLS {
-        fs::create_dir_all(source.join(name)).unwrap();
-        fs::write(skill_file(&source, name), "packaged").unwrap();
-    }
-    symlink(&source, root.path().join("shoal-skills")).unwrap();
-    let launcher = root.path().join("shoal");
-    symlink(macos.join("shoal"), &launcher).unwrap();
-    assert_eq!(packaged_source(None, &launcher).unwrap(), Some(source));
-    // Only an app bundle's executable looks outside its own directory.
-    let plain = root.path().join("Plain/Contents/MacOS");
-    fs::create_dir_all(&plain).unwrap();
-    fs::write(plain.join("shoal"), "binary").unwrap();
-    assert_eq!(packaged_source(None, &plain.join("shoal")).unwrap(), None);
 }
 
 fn record(directory: &Path, entries: &[(&str, Entry)]) {
@@ -192,13 +118,7 @@ fn an_unrecorded_skill_in_a_recorded_directory_is_the_users() {
 fn install_removes_retired_skills_only_while_unchanged() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("skills");
-    let source = root.path().join("package");
-    for (name, _) in SKILLS {
-        fs::create_dir_all(source.join(name)).unwrap();
-        fs::write(skill_file(&source, name), "packaged").unwrap();
-    }
-    let packaged = skill_contents(Some(&source)).unwrap();
-    refresh(&directory, &packaged, Mode::Install(Changed::Keep)).unwrap();
+    refresh(&directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
     for name in ["copied", "edited", "kept"] {
         fs::create_dir_all(directory.join(name)).unwrap();
     }
@@ -220,7 +140,7 @@ fn install_removes_retired_skills_only_while_unchanged() {
             ("kept", Entry::Kept),
         ],
     );
-    let outcome = refresh(&directory, &packaged, Mode::Install(Changed::Keep)).unwrap();
+    let outcome = refresh(&directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
     assert_eq!(outcome.kept, ["edited", "redirected"]);
     assert!(elsewhere.join("SKILL.md").exists());
     assert_eq!(fs::read_dir(directory.join("copied")).unwrap().count(), 1);
@@ -235,7 +155,7 @@ fn install_removes_retired_skills_only_while_unchanged() {
         .collect();
     assert_eq!(names, [SKILLS[0].0]);
     // A retired skill is reported once, then belongs to the user.
-    let outcome = refresh(&directory, &packaged, Mode::Install(Changed::Keep)).unwrap();
+    let outcome = refresh(&directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
     assert!(outcome.kept.is_empty());
 }
 

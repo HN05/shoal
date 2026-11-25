@@ -63,7 +63,7 @@ shoal daemon install
 Upgrade with `brew update && brew upgrade hn05/tap/shoal`. An installation from
 the former `--HEAD` channel moves to releases with `brew reinstall
 hn05/tap/shoal`. `shoal update` refuses Homebrew installations; for a downloaded binary,
-it installs the latest GitHub release's archive for this platform when that
+it installs the latest GitHub release's binary for this platform when that
 release is newer, or with `--version` exactly that release, older or newer,
 after checking it against the release's `SHA256SUMS` and its
 reported version, by replacing the resolved executable file, or on macOS the
@@ -76,14 +76,10 @@ when its protocol differs; use `shoal daemon restart` to apply an
 upgrade immediately. Tracked agents and commands keep running while the daemon
 is away and reattach to the next one; see [Daemon restarts](#daemon-restarts). State and installed skills live
 outside the package and survive; the next `shoal` command
-[updates installed skills](#agent-skill-outside-project-repositories) from
-Homebrew's stable `opt` path. An upgrade from before v0.21.0 starts v0.21.0
+[updates installed skills](#agent-skill-outside-project-repositories) to the
+ones built into the new binary. An upgrade from before v0.21.0 starts v0.21.0
 once on the way: later daemons refuse, unchanged, a state database an older
 version wrote, naming that release.
-Packagers can set `SHOAL_SKILLS_DIR` to an absolute directory holding every
-bundled `<skill>/SKILL.md` at runtime. Without it, an adjacent `shoal-skills` symlink can point through
-a stable installation prefix; relative targets resolve lexically against its
-directory. Without that link, installation uses the embedded skills.
 
 ## Daemon
 

@@ -4194,12 +4194,9 @@ database names the user's home, so a temporary `HOME` does not. A changed or rem
 explicit install, which restores removed skills, asks about changed ones in a
 terminal like a package manager's modified configuration files, and with
 `--force` replaces them. `[machine.agents.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
-the machine and cannot be set per repository. Packaged skills resolve the runtime
-`SHOAL_SKILLS_DIR`, then an adjacent `shoal-skills` symlink
-to a directory holding every bundled skill. Explicit paths must be absolute;
-relative link targets resolve lexically against the link's directory. Preserve
-stable installation prefixes so upgrades apply; unpackaged binaries install the
-embedded skills. Installed `SKILL.md` files are regular copies, because Codex
+the machine and cannot be set per repository. Shoal installs only the skills
+built into its binary, so every installation, a package manager's included,
+installs the version it runs. Installed `SKILL.md` files are regular copies, because Codex
 skips linked ones. Homebrew launches the binary directly, without a shell.
 
 ## Resource ownership
