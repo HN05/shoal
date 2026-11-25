@@ -362,8 +362,8 @@ with `shoal internal env 3 --revoke <token>`. See
 [workspace scope](docs/reference/modes.md#scoped-workspace-commands) for token lifetime
 and cleanup behavior.
 The agents Shoal starts get JSON from `shoal` without `--json`; give an agent
-you start yourself `SHOAL_OUTPUT=json` for the same, and pass `--text` for
-human output.
+you start yourself `SHOAL_OUTPUT=json` for the same. See
+[output](docs/reference/output.md#agents) for how commands choose their format.
 
 Agents' issue and PR changes need an `agent_token` for the forge host: a
 separate agent account's token, or `{ same_as = "user_token" }` to make them
