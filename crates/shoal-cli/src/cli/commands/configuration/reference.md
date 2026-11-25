@@ -14,14 +14,19 @@ its own, from the first file that sets it:
    own directory, beside its workspaces and `.checkout`, such as
    `~/shoal/my-project/.shoal/config.toml`. It lies outside every Git tree.
    Use it for a repository that won't accept a committed file, or for
-   settings only you want. A
+   settings only you want. Shoal reads it in place on every request, so an
+   edit applies to every workspace at once. An invalid file fails each request
+   until it is fixed. A
    [shared repository](../../../../../../docs/reference/hub.md) has the same
    local config on every machine of its hub.
 2. The **repository file** in a workspace's worktree: `.shoal.toml` or
    `.shoal/config.toml`, never both. Where no workspace applies, such as for
    the seed build, the registered checkout's file applies. Shoal ignores a
-   worktree file the current format rejects, with a warning in
-   `shoal config show` and an alert.
+   worktree file the current format rejects: `shoal config show` warns about
+   it, and the daemon logs it and alerts you once per error while it runs.
+   Resource leases are the exception, since the file may name their hooks.
+   Acquiring or releasing one, and removing a workspace that holds one, fail
+   until the file is fixed.
 3. The **global config**: `~/.config/shoal/config.toml`, or
    `$XDG_CONFIG_HOME/shoal/config.toml`. `shoal daemon install` creates it
    from [default.toml](../../../../../shoal-core/configs/default.toml).
@@ -49,13 +54,10 @@ which turns inherited entries off.
 In the local config, a relative hook path or `setup.command` names a script in
 its `.shoal` directory. `setup.seed` stays relative to the worktree.
 
-`shoal config show` prints every effective option with the layer that set it.
-`shoal config set` and `unset` edit the global file, `--shared` the shared
-config, and `--repo` a repository's local config.
-`shoal config reference` prints this document. These edits apply to a
-running daemon at once. After editing the global or shared file by hand, run
-`shoal config reload`; see the [daemon](../../../../../../docs/reference/daemon.md).
-Repository files apply on the next request.
+The [`config` commands](../../../../../../docs/reference/config.md) show every
+effective option with the layer that set it, edit each file and print this
+document. The CLI reads agent settings on each command, and repository files
+apply on the next request.
 
 ### Values
 
