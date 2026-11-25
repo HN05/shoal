@@ -358,8 +358,9 @@ Continue your work if any remains; otherwise run `shoal sleep`." An agent with
 nothing to do until something arrives runs `shoal sleep`. From the end of its
 turn, it gets no idle wakes.
 
-Shoal stops an idle agent that is not light soon after its turn ends, and
-keeps its session. The agent takes no queue slot until an update, a message,
+Shoal stops an idle agent that is not light seconds after its turn ends, and
+keeps its session. When the user is engaged with the agent, Shoal waits
+instead twice as long as the user usually takes to come back to it. The agent takes no queue slot until an update, a message,
 an answer or the user wakes it.
 
 `--for` or `--until` sets the space's timer, replacing any earlier one. When
@@ -429,8 +430,11 @@ changing them is the user's job.
 
 `issue ls` and `pr ls` match their words both by keyword and by meaning by
 default, or by keyword alone on a forge that cannot search by meaning.
-`--match` picks one way. `shoal pr revert [<number>]` opens a PR that
-undoes a merged one.
+`--match` picks one way.
+
+`shoal pr revert [<number>]` opens a PR that undoes a merged one. Where the
+forge cannot, Shoal opens it from a child workspace already marked done,
+which goes once the revert merges.
 
 Some of these commands follow a [permitted action](#permitted-actions):
 
@@ -578,7 +582,8 @@ selects one check's log.
 Shoal reports the activity of watched items: comments and reviews, edits,
 CI results, merge conflicts, closing and merging. A failed check comes with
 its failing step, and passed checks once none on the PR's head is pending.
-Shoal leaves out what the space itself did through Shoal. Activity from before
+Shoal leaves out what the space itself did through Shoal, and the assignees
+it adds or removes on its own. Activity from before
 an item was linked, or before a new agent session started, is not reported;
 `shoal view` shows it.
 
@@ -596,7 +601,9 @@ replaces a running watch.
 Other agents run `shoal watch pr`, which returns `updates`. Without
 `--timeout` (1–3600 seconds) the wait has no limit. `timed_out` with empty
 `updates` means no update. A newer wait supersedes a running one, which
-returns `superseded: true`. A `lookup_failed` entry names a lookup that
+returns `superseded: true`. A wait for an item the space does not follow
+includes the item's existing activity, and waits share a cursor per
+workspace. A `lookup_failed` entry names a lookup that
 failed. A `base_merged` update means the base workspace merged. It says
 whether Shoal retargeted the PR and gives the rebase command.
 
