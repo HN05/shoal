@@ -83,7 +83,7 @@ naming the command that installs serve-sim.
 
 ### A demo on another machine
 
-`shoal demo NAME --workspace W` opens a demo that another
+`shoal demo [NAME] --workspace W` opens a demo that another
 [machine of the hub](hub.md) runs.
 
 For a `server`, `web` or `simulator` demo, Shoal listens on this machine's
