@@ -21,7 +21,7 @@ use simctl::Inventory;
 
 use crate::{
     Leases, acquired_leases::Acquired, allocation::Allocation, callers::Caller, daemon::Daemon,
-    model::Workspace, queue, state::WorkspaceState, store, time::UnixTime, validate,
+    model::Workspace, queue, state::WorkspaceState, time::UnixTime, validate,
 };
 use shoal_daemon_base::approval_requests::ApprovalRequestExt;
 use shoal_protocol::approvals;
@@ -357,7 +357,7 @@ impl Leases {
             !request.clean || request.reason.is_some(),
             "--clean requires --reason explaining why a clean device is necessary"
         );
-        store::ensure_ready(&workspace)?;
+        crate::ensure_ready(&workspace)?;
         daemon.touch(&workspace.id).await;
         let config = self.config.current();
         let limits = &config.machine.simulators;
@@ -718,7 +718,7 @@ impl Leases {
         holder: Option<&Acquirer>,
     ) -> Result<SimRelease> {
         let workspace = daemon.workspace(selector).await?;
-        store::ensure_ready(&workspace)?;
+        crate::ensure_ready(&workspace)?;
         if holder.is_none() {
             daemon.touch(&workspace.id).await;
         }

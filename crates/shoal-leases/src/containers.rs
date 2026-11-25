@@ -26,7 +26,6 @@ use crate::{
     model::{PortSuggestion, Workspace},
     ports::{self, PortRequest},
     protocol::Body,
-    store,
 };
 use shoal_protocol::approvals::ApprovalRequest;
 use shoal_protocol::{
@@ -165,7 +164,7 @@ impl Leases {
             .into_settings()
             .containers;
         let compose = configured_compose(workspace, settings.compose)?;
-        store::ensure_ready(workspace)?;
+        crate::ensure_ready(workspace)?;
         if let Err(pending) = self
             .reserve_ports(daemon, workspace, settings.ports, caller)
             .await?
@@ -289,7 +288,7 @@ impl Leases {
         let id = daemon.workspace(selector).await?.id;
         let _gate = self.gates.lock_containers(&id).await;
         let workspace = daemon.workspace_by_id(&id).await?;
-        store::ensure_ready(&workspace)?;
+        crate::ensure_ready(&workspace)?;
         if holder.is_none() {
             daemon.touch(&workspace.id).await;
         }

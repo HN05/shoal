@@ -132,3 +132,16 @@ impl Leases {
         self.notifications.notify(daemon, alert).await;
     }
 }
+
+/// Fail unless `workspace`, as read before a lease changes, is ready.
+fn ensure_ready(workspace: &Workspace) -> Result<()> {
+    match workspace.state {
+        state::WorkspaceState::Ready => Ok(()),
+        state => Err(store::not_ready(
+            workspace.number,
+            &workspace.id,
+            &workspace.name,
+            state,
+        )),
+    }
+}

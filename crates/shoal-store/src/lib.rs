@@ -219,19 +219,6 @@ pub fn require_ready(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     }
 }
 
-/// Fail unless `workspace`, as read before a change, is ready.
-pub fn ensure_ready(workspace: &model::Workspace) -> Result<()> {
-    match workspace.state {
-        WorkspaceState::Ready => Ok(()),
-        state => Err(not_ready(
-            workspace.number,
-            &workspace.id,
-            &workspace.name,
-            state,
-        )),
-    }
-}
-
 /// The refusal of the workspace numbered `number`, `id`, named `name`, in
 /// `state`, by a request that needs it ready, naming what to do about it.
 /// The daemon's check of a request's workspace and each recheck in a
