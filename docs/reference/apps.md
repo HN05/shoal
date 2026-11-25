@@ -73,7 +73,7 @@ follow then follows again from where it read each file to. A follow under a
 scope token ends once the token is revoked.
 
 Following an agent's session and messaging it count as your
-[interaction](sleep.md) with the agent. An agent you watch and talk to from an
+[interaction](sleep.md#interaction) with the agent. An agent you watch and talk to from an
 app stays awake as one in your terminal does. A follow that follows again on
 its own is no interaction.
 

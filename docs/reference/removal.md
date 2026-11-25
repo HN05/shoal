@@ -287,7 +287,7 @@ default branch as removal decides, or with its changes on the branch the
 workspace builds on: its base workspace's branch, otherwise the local branch
 it was created from; no fetch.
 A restore of an idle agent waiting for an update, without a
-[timer](sleep.md#idle-wakes) or a [turn retry](agents.md) that will wake it, blocks nothing: removal cancels
+[timer](sleep.md#sleep-timer) or a [turn retry](agents.md) that will wake it, blocks nothing: removal cancels
 it and keeps the agent stopped, so `shoal restore` brings it back with its
 space.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and

@@ -62,7 +62,7 @@ failed lookup keeps the blocker and shows why as its `lookup_failed` until a
 lookup succeeds.
 
 Once a blocked space's agent ends a turn, with no work of its own still
-running, Shoal stops it as an [idle stop](sleep.md) does, without waiting for
+running, Shoal stops it as an [idle stop](sleep.md#idle-sleep) does, without waiting for
 you, keeps its session and queues its restore, which waits until
 nothing blocks the space and lists what blocks it in `shoal queue`; updates
 for the agent wait with it. The restored agent's first message is the one

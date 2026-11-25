@@ -14,7 +14,7 @@ a stop of it loses least, first first:
    Among the agents free to go, one of a mode that is not
    [light](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules)
    goes before a light one, then, in the [agent queue's](queue.md#queue-order) order
-   reversed, the one you [interacted](sleep.md) with longest ago, or never, then
+   reversed, the one you [interacted](sleep.md#interaction) with longest ago, or never, then
    an idle one before a working one, then the one whose space ranks last,
    lowest priority first; within a space the one idle longest, otherwise the
    newest.
@@ -205,7 +205,7 @@ positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
 a fresh healthy interval, which a reload changing `[machine.overload]` restarts. Missing
 readings, manual stop/removal, an exited wrapper, changed workspace ownership
-or a done assignment prevent recovery, except from an [idle stop](sleep.md). A
+or a done assignment prevent recovery, except from an [idle stop](sleep.md#idle-sleep). A
 failure that comes from what the restore waits out, such as a store that cannot
 write while the disk is full, delays it, and it tries again until it runs or the
 agent is resumed, stopped or removed. Surviving processes Shoal cannot stop, or cannot prove stopped,

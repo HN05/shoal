@@ -533,7 +533,7 @@ resumes or clears ends the subagents of the one before. A tracked agent that
 is idle while one of its subagents runs, such as a background agent or a
 workflow's, counts as working wherever Shoal decides whether to stop an idle
 agent, as for [overload protection](load.md) and
-[sleep](sleep.md), since stopping it ends the subagent. A subagent whose stop
+[sleep](sleep.md#idle-sleep), since stopping it ends the subagent. A subagent whose stop
 never arrives counts until the agent's session starts again or the agent
 exits, or, once the agent's [proxy](agents.md) has passed a request of its
 subagents in the current session, until none has passed for an hour; its status still shows `waiting`.
