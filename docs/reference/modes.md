@@ -97,7 +97,7 @@ subject). Desktop handoffs receive neither. User prompt arguments are preserved.
 [`[permissions]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#permissions) and `[modes.<name>.permissions]` set
 what a mode's agents may do, under the keys the sections on
 [issues and PRs](approvals.md#approval-for-agent-issues-and-prs),
-[pushes](approvals.md#approval-for-agent-pushes), [merges](branches.md#merge-into-the-default-branch),
+[pushes](approvals.md#approval-for-agent-pushes), [merges](branches.md#approval-of-an-agents-merge),
 [forge API requests](issues.md#forge-api-requests) and [actions](#permitted-actions)
 describe.
 

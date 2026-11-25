@@ -250,10 +250,10 @@ up to date when its source still has the HEAD, index and unsaved files the copy
 was made with.
 
 Otherwise, work of the workspace's own refuses the refresh. The refusal names
-that work:
+that work, naming commits by their subjects:
 
-- commits its target lacks, with their subjects, and for a branch the
-  `git rebase` that moves them,
+- commits its target lacks, and for a branch the `git rebase` that moves
+  them,
 - for a workspace at a commit, commits after its starting commit,
 - uncommitted changes, by path, to commit, stash or discard,
 - for a [copy](create.md#copies), commits since it was copied and files that
