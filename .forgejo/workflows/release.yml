@@ -201,47 +201,30 @@ jobs:
           # The signing key stays outside the published files, readable only by
           # this job, and leaves with the step.
           pem=$(mktemp)
-          staged=$(mktemp -d)
-          trap 'rm -rf "$pem" "$staged"' EXIT
+          trap 'rm -f "$pem"' EXIT
           printf '%s\n' "$MACOS_SIGNING_PEM" > "$pem"
           unset MACOS_SIGNING_PEM
           cd source
-          # Archives hold the skill as skills/shoal/SKILL.md, which Homebrew
-          # and `shoal skill install` read. Tags from before the skill moved
-          # into shoal-cli keep that directory at their root.
-          if [ -d skills ]; then
-            cp -R skills "$staged/"
-          else
-            mkdir -p "$staged/skills/shoal"
-            cp crates/shoal-cli/src/cli/commands/skill/shoal.md "$staged/skills/shoal/SKILL.md"
-          fi
           . .forgejo/scripts/lock-target-dir.sh
           mkdir -p dist
-          # Archives are reproducible for a tag (fixed mtime, owner and order, no
-          # gzip timestamp). The macOS signature records its signing time, so
-          # only a rerun's Linux archives carry the same bytes as before.
+          # The app archive is reproducible for a tag (fixed mtime, owner and
+          # order, no gzip timestamp), though the macOS signature records its
+          # signing time.
           epoch=$(git log -1 --format=%ct)
-          # Pack the entries that follow the archive's name, with the skills.
-          archive() {
-            local name=$1
-            shift
-            tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
-              -cf - "$@" -C "$staged" skills \
-              | gzip -n -9 > "dist/$name"
-          }
           while read -r target platform _selectors <&3; do
             ../cross-build.sh "$target" 3<&-
             release="$CARGO_TARGET_DIR/$target/release"
-            # Shoal.app, which Homebrew installs, has an archive of its own,
-            # named so that earlier releases' `shoal update` skips it.
+            # Shoal.app is a directory, so it alone travels as an archive.
             case "$target" in
               *-apple-darwin)
                 ../sign-macos.sh "$pem" "$release/shoal" "${RELEASE_TAG#v}" "$release/app/Shoal.app" 3<&-
-                archive "shoal-$RELEASE_TAG-$platform-app.tar.gz" -C "$release/app" Shoal.app ;;
+                tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
+                  -cf - -C "$release/app" Shoal.app \
+                  | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform-app.tar.gz" ;;
             esac
-            archive "shoal-$RELEASE_TAG-$platform.tar.gz" -C "$release" shoal
+            cp "$release/shoal" "dist/shoal-$RELEASE_TAG-$platform"
           done 3< ../release-targets.txt
-          (cd dist && sha256sum shoal-*.tar.gz > SHA256SUMS && cat SHA256SUMS)
+          (cd dist && sha256sum shoal-* > SHA256SUMS && cat SHA256SUMS)
       - name: Attach to the Forgejo release
         env:
           RELEASE_AUTOMATION_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}

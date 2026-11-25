@@ -64,7 +64,7 @@ class PublishAssetsTests(unittest.TestCase):
                 patch.object(publish, "mirrored") as mirrored, \
                 patch.object(publish, "request", side_effect=[{"body": source_body}, missing,
                                                                     created, None, None]) as request:
-            publish.github("v0.2.0", self.files(root, "shoal.tar.gz", "SHA256SUMS"), SHA)
+            publish.github("v0.2.0", self.files(root, "shoal-v0.2.0-linux-x86_64", "SHA256SUMS"), SHA)
             mirrored.assert_called_once_with("HN05/shoal", "v0.2.0", SHA)
             source = request.call_args_list[0]
             self.assertEqual(source.args, ("https://forge/api/v1/repos/HN05/shoal/releases/tags/v0.2.0",
@@ -77,8 +77,10 @@ class PublishAssetsTests(unittest.TestCase):
             self.assertEqual(create.args[3]["body"], "## Changes\n- Fix workspace cleanup")
             upload = request.call_args_list[3]
             self.assertEqual(upload.args[0],
-                             "https://uploads.github.com/repos/HN05/shoal/releases/9/assets?name=shoal.tar.gz")
-            self.assertEqual(upload.args[3], b"binary shoal.tar.gz")
+                             "https://uploads.github.com/repos/HN05/shoal/releases/9/assets?name=shoal-v0.2.0-linux-x86_64")
+            self.assertEqual(upload.args[3], b"binary shoal-v0.2.0-linux-x86_64")
+            # A bare binary's name has no extension a media type follows.
+            self.assertEqual(upload.args[4], "application/octet-stream")
             self.assertTrue(request.call_args_list[4].args[0].endswith("name=SHA256SUMS"))
 
     def test_github_replaces_partial_uploads_reuses_complete_releases_and_rejects_drafts(self):

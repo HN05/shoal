@@ -12,12 +12,14 @@ shoal skill install
 ```
 
 Or download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases).
-On macOS the platform's archive holds the `shoal` binary, and the one ending in
-`-app` the same in `Shoal.app`, both signed with Shoal's own certificate but not
-notarized: clear its quarantine with `xattr -dr com.apple.quarantine shoal`, or
-`Shoal.app`, then put `shoal`, or a link to `Shoal.app/Contents/MacOS/shoal`, on
-your `PATH`. macOS keeps the bare
-binary's privacy grants only while it stays at the same path.
+Each platform's `shoal-vX.Y.Z-<os>-<arch>` is the bare binary: save it as
+`shoal` on your `PATH` and make it executable with `chmod +x shoal`.
+On macOS the archive ending in `-app.tar.gz` holds the same binary in
+`Shoal.app`, both signed with Shoal's own certificate but not notarized: clear
+the quarantine with `xattr -dr com.apple.quarantine shoal`, or `Shoal.app`, and
+for the app put a link to `Shoal.app/Contents/MacOS/shoal` on your `PATH`.
+macOS keeps the bare binary's privacy grants only while it stays at the same
+path.
 Homebrew installs the additional tools for workspace management and interactive
 menus, but not zmx 1.0.1 or later, the default terminal host: install it with
 `brew install neurosnap/tap/zmx`, or use [another terminal host](docs/reference.md#agents)

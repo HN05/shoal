@@ -1321,7 +1321,7 @@ has no head channel, so every Homebrew installation runs a CI-signed release.
 `shoal update` replaces a downloaded binary or app bundle with the latest GitHub release and
 leaves Homebrew installations to Homebrew, so one package manager owns each
 installation. A shared release-target table drives cross-builds,
-archive names and Homebrew platform selectors.
+asset names and Homebrew platform selectors.
 Named configuration templates in `crates/shoal-core/configs/` are embedded at build time, so
 installation needs no source checkout or network access.
 The installed global config sets nothing: it shows every setting commented
@@ -1357,13 +1357,14 @@ installed. For a bare executable it keeps them by path, and Homebrew installs
 each version at its own path, so each upgrade would ask again; an ad-hoc
 signature's requirement is its hash, so each release would need a new grant.
 The formula links `bin/shoal` to the bundle's executable, so the daemon, the
-execution wrappers and every command share the bundle's grant. The bundle and
-the bare binary carry different signatures, so each has an archive of its own:
-the bare binary's keeps the name earlier releases' `shoal update` reads, for
-downloaded installations, which stay at one path, and Homebrew and `shoal update`
-of a bundle read the bundle's, named so that earlier releases skip it. Packaged files
-such as the skills link sit beside the bundle, since a file added inside it
-breaks its signature. Only a stable
+execution wrappers and every command share the bundle's grant. A release
+publishes each platform's binary bare, which downloaded installations and
+Homebrew on Linux install, since a single file needs no archive. A bundle is a
+directory, so macOS's `Shoal.app` alone travels as a `-app.tar.gz` archive,
+which Homebrew, the hub installer and `shoal update` of a bundle install on
+macOS. Nothing is added beside or inside the bundle, since a file added inside
+it breaks its signature, and the skills Shoal installs come from its binary.
+Only a stable
 requirement is needed, not Gatekeeper trust, so there is no Developer ID or
 notarization. The certificate came from `rcodesign
 generate-self-signed-certificate --person-name "Shoal" --validity-days 7300`;
