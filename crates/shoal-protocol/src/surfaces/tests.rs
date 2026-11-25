@@ -124,6 +124,24 @@ fn images_name_files_attached_to_the_post() {
 }
 
 #[test]
+fn images_from_data_name_attached_files_too() {
+    let bound = surface(
+        json!([{"id": "root", "component": "Image", "url": {"@path": "/image"}}]),
+        json!({"image": "https://example.com/a.png"}),
+    );
+    assert!(refusal(bound, &[]).contains("binds its url"));
+    let listed = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "item", "path": "/items"}},
+            {"id": "item", "component": "Text", "text": {"@path": "note"}},
+        ]),
+        json!({"items": [{"note": "See ![chart](https://example.com/b.png)"}]}),
+    );
+    assert!(refusal(listed.clone(), &[]).contains("image https://example.com/b.png"));
+    listed.checked(&["https://example.com/b.png"]).unwrap();
+}
+
+#[test]
 fn a_surface_over_its_size_is_refused() {
     let long = "x".repeat(MAX_SURFACE_BYTES);
     let large = surface(

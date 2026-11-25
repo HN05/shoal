@@ -142,18 +142,36 @@ impl Surface {
         Ok(())
     }
 
-    /// Refuse an image, an `Image` or one in a `Text`'s Markdown, that
-    /// names no file in `attached`.
+    /// Refuse an image that names no file in `attached`: an `Image`'s, whose
+    /// URL is literal so Shoal can tell, or one in Markdown, in a `Text` or
+    /// in data a `Text` may bind.
     fn check_images(&self, attached: &[&str]) -> Result<()> {
+        let unattached = |image: &&str| !attached.contains(image);
         for component in self.components() {
-            for image in images(component) {
-                ensure!(
-                    attached.contains(&image),
+            ensure!(
+                component.kind != "Image" || component.literal("url").is_some(),
+                "image {} binds its url to data; an image names a file attached to the post, \
+                 by its file name",
+                component.id
+            );
+            if let Some(image) = images(component).into_iter().find(unattached) {
+                bail!(
                     "component {} shows the image {image}, which names no file attached to the \
                      post; attach it with --attach and name it by its file name",
                     component.id
                 );
             }
+        }
+        let data = self.body().and_then(|body| body.get("dataModel"));
+        if let Some(image) = data
+            .map_or_else(Vec::new, data_images)
+            .into_iter()
+            .find(unattached)
+        {
+            bail!(
+                "the surface's data shows the image {image}, which names no file attached to \
+                 the post; attach it with --attach and name it by its file name"
+            );
         }
         Ok(())
     }
@@ -173,6 +191,20 @@ fn other_catalog(value: &Value) -> Option<&str> {
         }
         Value::Array(values) => values.iter().find_map(other_catalog),
         _ => None,
+    }
+}
+
+/// The targets of the Markdown images in every text of `data`, which a
+/// `Text` may bind.
+fn data_images(data: &Value) -> Vec<&str> {
+    match data {
+        Value::String(text) => super::markdown_images(text)
+            .into_iter()
+            .map(|(_, target)| target)
+            .collect(),
+        Value::Array(values) => values.iter().flat_map(data_images).collect(),
+        Value::Object(fields) => fields.values().flat_map(data_images).collect(),
+        _ => Vec::new(),
     }
 }
 
