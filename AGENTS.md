@@ -483,27 +483,70 @@ for delivering a PR, under Committing near the end, decide when work is done.
 
 ## Documentation
 
-Keep documentation short and current. Say each thing once, where a reader looks for
-it: usage in README.md, behavior in docs/reference.md, configuration options in
-`crates/shoal-cli/src/cli/commands/configuration/reference.md`, which
-`shoal config reference` prints, decisions in docs/design.md, contributor rules
-here; a new document needs a subject none of those covers. The skill,
-`crates/shoal-cli/src/cli/commands/skill/shoal.md`, says only what Shoal's
-commands do; a practice goes in a user rule, and a rule about anything else,
-such as how to write or structure code, goes here. This repository's own practices, such as how its agents
-deliver and follow up a PR, go here and never into the rules and mode
-instructions Shoal ships under `crates/shoal-core/src/config/`, which every
-user's agents receive. Edit
-the sentence that describes the changed behavior instead of appending a paragraph,
-and cut text that restates code, tests, history, or another section. State a rule
-as its condition, never as the list of things that satisfy it: the condition
-survives a rename, while a list or a count goes stale silently, and an overstated
-rule is narrowed, not annotated with its exceptions. Name something only when a
-reader cannot find it from the rule. No milestone reports, inventories of files,
-tests or flags, or investigation notes. Length is judged by these rules, not by a
-line count. Documentation states what Shoal does and what it does not support,
-never what has or has not been tested, run or verified; say what you could not
-test in the PR.
+Documentation and comments say what the code cannot. Keep them short and
+current.
+
+### Where things go
+
+- `docs/design/` explains the big picture: the architecture, how the
+  subsystems fit together, and each decision with its reason. It has one file
+  per subsystem. Where a crate holds a subsystem, its file covers that crate.
+  `docs/design/overview.md` states Shoal's purpose and boundaries, the
+  principles of its architecture and the core terms.
+- `docs/reference/` says what each command does. It has one file per command
+  group.
+- The configuration reference describes each option. It lives in
+  `crates/shoal-cli/src/cli/commands/configuration/reference.md`, which
+  `shoal config reference` prints.
+- README.md shows how to use Shoal.
+- AGENTS.md holds the rules for working in this repository.
+- The skill, `crates/shoal-cli/src/cli/commands/skill/shoal.md`, says what
+  Shoal's commands do. A practice for using them goes in a user rule. A rule
+  about anything else, such as how to write code, goes in AGENTS.md.
+- Shoal ships rules and mode instructions under `crates/shoal-core/src/config/`,
+  and every user's agents receive them. Put this repository's own practices,
+  such as how its agents deliver a PR, in AGENTS.md instead.
+- State each fact in one place. Other places link to it.
+- Open each file with a sentence that says what it covers. There is no index
+  file.
+- Start a new document only for a subject that none of these covers.
+
+### Comments
+
+- A comment explains a detail of the code beside it that the code cannot show:
+  why it takes a non-obvious approach, an invariant, a contract a caller must
+  keep, or a workaround and its cause. When there is no such detail, write no
+  comment.
+- Architecture, how modules relate and product behavior belong in
+  `docs/design/`. A comment links to the design file instead of describing
+  them.
+- A comment adds what the code and its signature do not say. For example,
+  write `// Record the claim before simctl runs: a crash must leave the device
+  owned.` rather than `// Record the claim.`
+- A module's `//!` names its responsibility in one or two sentences. It adds a
+  contract only when that contract applies to the whole module.
+
+### Writing
+
+- Write short sentences with one idea each. Put the subject first and use the
+  active voice.
+- Use plain, common words. Use the same term for the same concept everywhere.
+  `docs/design/overview.md` defines the core terms.
+- State a rule as what to do. Use "never" only for a hard limit.
+- State the rule or principle, not an inventory: no file trees, no lists of
+  crates, flags or tests, and no counts. A sentence must stay true after a
+  rename or an addition. When something must be listed, such as each crate's
+  allowed dependencies, put the list in a file that CI checks.
+- Name something only when a reader cannot find it from the rule. Narrow a
+  rule that says too much instead of listing its exceptions.
+- When behavior changes, edit the sentence that states it. When that sentence
+  would then carry a second idea, split it instead of adding a clause.
+- Give an example where it makes a rule concrete.
+- Give each section one topic. Split a section when it gains another.
+- State what Shoal does and what it does not support. Leave out history,
+  investigation notes and what was tested, run or verified; the PR says what
+  you could not test.
+- Judge length by these rules, not by a line count.
 
 ## Validation
 

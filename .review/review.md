@@ -888,21 +888,19 @@ configured command for another agent, plus proven child
   CI tests a PR's packages by the directories it changes, so flag a file a
   package compiles or its tests read outside its directory (for the root
   package, `src/` or `tests/`) and those of the packages it depends on.
-- Documentation: usage lives in README.md, behavior in docs/reference.md,
-  configuration options in
-  `crates/shoal-cli/src/cli/commands/configuration/reference.md`, decisions in
-  docs/design.md, contributor rules in AGENTS.md. The skill,
-  `crates/shoal-cli/src/cli/commands/skill/shoal.md`, says only what Shoal's
-  commands do; flag any practice there,
-  which belongs in a user rule, and any rule about something else, such as
-  how to write or structure code. Flag a practice of this repository in the
-  rules or mode instructions Shoal ships, which belongs in AGENTS.md. Flag behavior
-  changes without the matching sentence edit, text that restates code or
-  history, and sentences that list or count what a rule covers instead of
-  stating the rule; an overstated rule is narrowed, not annotated with its
-  exceptions. Flag documentation that says what has or has not been tested,
-  run or verified; that belongs in the PR. Never ask for a comment on clear
-  code, a reworded correct one, or a longer document.
+- Documentation: check changed documents and comments against the rules in
+  AGENTS.md's Documentation section. Flag a fact stated a second time instead
+  of linked, or in a document other than the one those rules give it. Flag a
+  comment that describes architecture, how modules relate or product
+  behavior, or that repeats what the code or its signature says, and a `//!`
+  that does more than name the module's responsibility and a contract for the
+  whole module. Flag a practice in the skill, and a practice of this
+  repository in the rules or mode instructions Shoal ships. Flag a behavior
+  change without the matching sentence edit, a clause that gives a sentence a
+  second idea, and an inventory or count where a rule belongs. Flag history,
+  investigation notes and statements of what was tested, run or verified.
+  Never ask for a comment on clear code, a reworded correct one, or a longer
+  document.
 
 ## Delivery
 
