@@ -1,8 +1,7 @@
 use crate::daemon::links::issue::test_support::{Fixture, Refuse, USER};
 use crate::daemon::scope::Access;
 use crate::{
-    forge::items::reference::ItemRef,
-    model::{Assigner, IssueAssignee, Workspace},
+    model::Workspace,
     removal::{InspectionPolicy, UnsavedWork},
 };
 use serde_json::json;
@@ -116,51 +115,6 @@ async fn a_restored_space_takes_back_the_assignee_shoal_added_before() {
         fixture.changes(),
         [json!(["shoal-user"]), json!([]), json!([])]
     );
-}
-
-/// The links of a space whose issue 7 has the user's login, which Shoal
-/// added.
-fn carried(fixture: &Fixture) -> crate::model::SpaceLinks {
-    let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
-    let url: ItemRef = url.parse().unwrap();
-    crate::model::SpaceLinks {
-        issues: vec![crate::model::LinkedItem {
-            url: url.clone(),
-            title: None,
-        }],
-        assignees: vec![IssueAssignee {
-            url,
-            account: Assigner::User,
-            added: true,
-        }],
-        ..Default::default()
-    }
-}
-
-#[tokio::test]
-async fn a_scoped_relink_takes_on_no_assignment() {
-    let fixture = Fixture::new(&["fix"], &["shoal-user"], USER).await;
-    let workspace = &fixture.workspaces[0];
-    let links = carried(&fixture);
-    let caller = crate::daemon::scope::Caller {
-        space_id: workspace.id.clone(),
-        execution: None,
-        granted: None,
-        access: Access::Full,
-        vouched: None,
-    };
-    let warnings = (fixture.manager.links.relink_space(
-        &*fixture.manager,
-        &workspace.id,
-        &links,
-        Some(&caller),
-    ))
-    .await;
-    assert!(warnings.is_empty(), "{warnings:?}");
-    // The login was there already and the claim was ignored, so nothing
-    // takes it back.
-    fixture.unlink(workspace).await;
-    assert!(fixture.changes().is_empty());
 }
 
 #[tokio::test]

@@ -44,6 +44,7 @@ struct Fixture {
     daemon: StandIn,
     server: Server,
     workspace: Workspace,
+    assignees: Arc<Mutex<Vec<Value>>>,
     refuse: Arc<Mutex<Refuse>>,
 }
 
@@ -63,7 +64,8 @@ impl Fixture {
         let workspace = shoal_protocol::test_support::workspace("workspace", "repo", "fix", &path);
         record(&store, &workspace).await;
         let refuse = Arc::new(Mutex::new(Refuse::Nothing));
-        let server = issue_forge(assignees, refuse.clone());
+        let assignees = Arc::new(Mutex::new(logins(assignees)));
+        let server = issue_forge(assignees.clone(), refuse.clone());
         let host = &server.host;
         shoal_forge_types::hosts::learn(host, ForgeKind::Forgejo);
         let text = format!(
@@ -95,8 +97,14 @@ impl Fixture {
             daemon,
             server,
             workspace,
+            assignees,
             refuse,
         }
+    }
+
+    /// Make `logins` the issue's assignees, as another Shoal or person does.
+    fn assign_elsewhere(&self, logins: &[&str]) {
+        *self.assignees.lock().unwrap() = self::logins(logins);
     }
 
     /// Refuse the assignee edits of `change` from now on.
@@ -146,10 +154,9 @@ impl Fixture {
     }
 }
 
-/// The scripted forge whose issue 7 starts with `assignees`, refusing the
-/// edits `refuse` names.
-fn issue_forge(assignees: &[&str], refuse: Arc<Mutex<Refuse>>) -> Server {
-    let assigned = Arc::new(Mutex::new(logins(assignees)));
+/// The scripted forge whose issue 7 has `assigned`, refusing the edits
+/// `refuse` names.
+fn issue_forge(assigned: Arc<Mutex<Vec<Value>>>, refuse: Arc<Mutex<Refuse>>) -> Server {
     Server::start(move |request| {
         let body = match request.line.as_str() {
             "GET /api/v1/user" => match request.header("Authorization") {
@@ -262,4 +269,104 @@ async fn assigning_off_leaves_assignees_alone() {
         lines.iter().all(|line| line.starts_with("GET ")),
         "{lines:?}"
     );
+}
+
+#[tokio::test]
+async fn a_scoped_relink_takes_on_no_assignment() {
+    use shoal_forge_types::items::reference::ItemRef;
+    use shoal_protocol::model::{IssueAssignee, LinkedItem, SpaceLinks};
+    let fixture = Fixture::new(&["shoal-user"], USER).await;
+    // The links of a space whose issue 7 has the user's login, which Shoal
+    // added.
+    let url: ItemRef = format!("http://{}/team/repo/issues/7", fixture.server.host)
+        .parse()
+        .unwrap();
+    let carried = SpaceLinks {
+        issues: vec![LinkedItem {
+            url: url.clone(),
+            title: None,
+        }],
+        assignees: vec![IssueAssignee {
+            url,
+            account: Assigner::User,
+            added: true,
+        }],
+        ..Default::default()
+    };
+    let caller = shoal_daemon_base::callers::Caller::of_space(fixture.workspace.id.clone());
+    let warnings = (fixture.links).relink_space(
+        &fixture.daemon,
+        &fixture.workspace.id,
+        &carried,
+        Some(&caller),
+    );
+    let warnings = warnings.await;
+    assert!(warnings.is_empty(), "{warnings:?}");
+    // The login was there already and the claim was ignored, so nothing
+    // takes it back.
+    fixture.unlink().await;
+    assert!(fixture.changes().is_empty());
+}
+
+/// A fixture whose agent account has a token, assigning it by default.
+async fn agents() -> Fixture {
+    Fixture::start(&[], "", AGENT_TOKEN).await
+}
+
+#[tokio::test]
+async fn the_agent_account_another_shoal_took_off_goes_back_on() {
+    let fixture = agents().await;
+    fixture.link_as(Assigner::Agent).await;
+    let poll = || fixture.links.poll_linked_item_activity(&fixture.daemon);
+    poll().await.unwrap();
+    fixture.assign_elsewhere(&[]);
+    poll().await.unwrap();
+    fixture.links.settle_requested_agents(&fixture.daemon).await;
+    assert_eq!(
+        fixture.changes(),
+        [json!(["shoal-agent"]), json!(["shoal-agent"])]
+    );
+}
+
+#[tokio::test]
+async fn a_relinked_agents_assignment_puts_the_agent_account_on_again() {
+    use shoal_forge_types::items::reference::ItemRef;
+    use shoal_protocol::model::{IssueAssignee, LinkedItem, SpaceLinks};
+    let fixture = agents().await;
+    let url: ItemRef = format!("http://{}/team/repo/issues/7", fixture.server.host)
+        .parse()
+        .unwrap();
+    let carried = SpaceLinks {
+        issues: vec![LinkedItem {
+            url: url.clone(),
+            title: None,
+        }],
+        assignees: vec![IssueAssignee {
+            url,
+            account: Assigner::Agent,
+            added: false,
+        }],
+        ..Default::default()
+    };
+    let id = &fixture.workspace.id;
+    let warnings = fixture
+        .links
+        .relink_space(&fixture.daemon, id, &carried, None);
+    let warnings = warnings.await;
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(fixture.change_tokens(), ["token agent"]);
+}
+
+#[tokio::test]
+async fn an_agent_starting_puts_the_agent_account_on_and_exiting_takes_it_off() {
+    let fixture = agents().await;
+    fixture.link().await;
+    let (agents, id) = (&fixture.daemon.agents, &fixture.workspace.id);
+    let settle = || fixture.links.settle_agent_assignees(&fixture.daemon, id);
+    agents.lock().unwrap().insert(id.clone());
+    settle().await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
+    agents.lock().unwrap().remove(id);
+    settle().await;
+    assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }

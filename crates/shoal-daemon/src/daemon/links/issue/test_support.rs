@@ -31,7 +31,6 @@ pub(crate) struct Fixture {
     pub(crate) server: Server,
     pub(crate) repository: crate::model::Repository,
     pub(crate) workspaces: Vec<Workspace>,
-    assignees: Arc<Mutex<Vec<Value>>>,
     refuse: Arc<Mutex<Refuse>>,
 }
 
@@ -67,10 +66,9 @@ impl Fixture {
                 manager.create_workspace(&repository.id, (*name).into(), None, None, None);
             workspaces.push(created.await.unwrap());
         }
-        let assignees = Arc::new(Mutex::new(logins(assignees)));
+        let assigned = Arc::new(Mutex::new(logins(assignees)));
         let refuse = Arc::new(Mutex::new(Refuse::Nothing));
         let refusing = refuse.clone();
-        let assigned = assignees.clone();
         let server = Server::start(move |request| {
             let body = match request.line.as_str() {
                 "GET /api/v1/user" => match request.header("Authorization") {
@@ -120,15 +118,8 @@ impl Fixture {
             server,
             repository,
             workspaces,
-            assignees,
             refuse,
         }
-    }
-
-    /// Change issue 7's assignees to `logins` behind Shoal's back, as
-    /// someone else editing it on the forge does.
-    pub(crate) fn assign_elsewhere(&self, logins: &[&str]) {
-        *self.assignees.lock().unwrap() = self::logins(logins);
     }
 
     /// Refuse the assignee edits of `change` from now on.

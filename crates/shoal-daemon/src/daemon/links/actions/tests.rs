@@ -1,15 +1,11 @@
 use shoal_links::actions::head_repository;
 use shoal_protocol::{model::Assigner, space_names::SpaceSelector};
 
-use crate::forge::items::{
-    action::Action,
-    item::{Item, ItemState},
-};
+use crate::forge::items::item::{Item, ItemState};
 use crate::forge::{
     ForgeRepo,
     items::{create::PullOptions, link::ItemKind},
 };
-use shoal_links::place::Place;
 
 #[tokio::test]
 async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head() {
@@ -181,48 +177,4 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         })
         .count();
     assert_eq!(created, 2);
-}
-
-#[tokio::test]
-async fn a_merge_naming_no_method_takes_the_configured_one() {
-    use crate::{
-        daemon::test_support::{commit, configure, manager, repository},
-        forge::items::action::MergeMethod,
-    };
-    let (root, manager) = manager().await;
-    let path = repository(root.path(), "repo");
-    std::fs::write(path.join(".shoal.toml"), "[merge]\nmethod = \"rebase\"\n").unwrap();
-    commit(&path, ".shoal.toml");
-    let repo = manager
-        .repositories
-        .register(path.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    configure(&manager, "[merge]\nmethod = \"squash\"\n").await;
-    let merge = |method| Action::Merge {
-        method,
-        message: None,
-        delete_branch: false,
-        head: None,
-    };
-    let method = async |place: Option<&Place>, mut action| {
-        shoal_links::actions::configure_merge(&*manager, place, &mut action)
-            .await
-            .unwrap();
-        match action {
-            Action::Merge { method, .. } => method,
-            other => panic!("not a merge: {other:?}"),
-        }
-    };
-    let checkout = Place::Checkout(repo);
-    assert_eq!(
-        method(Some(&checkout), merge(None)).await,
-        Some(MergeMethod::Rebase)
-    );
-    // Another repository than the request's own takes the global config's.
-    assert_eq!(method(None, merge(None)).await, Some(MergeMethod::Squash));
-    assert_eq!(
-        method(Some(&checkout), merge(Some(MergeMethod::Merge))).await,
-        Some(MergeMethod::Merge)
-    );
 }

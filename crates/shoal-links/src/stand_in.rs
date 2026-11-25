@@ -1,9 +1,13 @@
 //! A stand-in for the rest of the daemon, which the links' tests build
 //! their operations over: the workspaces and repositories a test gives,
-//! the settings they act with, the issues and PRs a test assigns to each
-//! space, forges on hosts whose kind a test learned, and records that take
+//! the settings they act with, over each repository's tracked config file a
+//! test gives, the issues and PRs a test assigns to each space, the spaces
+//! whose agent runs, forges on hosts whose kind a test learned, and records that take
 //! every link change.
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    sync::Mutex,
+};
 
 use anyhow::{Context, Result, bail};
 use futures_util::future::BoxFuture;
@@ -58,6 +62,11 @@ pub struct StandIn {
     pub repositories: Vec<Repository>,
     /// The config every space's settings resolve under.
     pub config: Option<Config>,
+    /// The config file each repository tracks, which its settings take over
+    /// `config`.
+    pub repository_files: HashMap<RepositoryId, String>,
+    /// The spaces whose agent runs.
+    pub agents: Mutex<HashSet<SpaceId>>,
 }
 
 impl StandIn {
@@ -75,6 +84,19 @@ impl StandIn {
     /// The settings under the config the test gave.
     fn given_settings(&self) -> Result<Effective> {
         (self.config.as_ref().context(NOT_HERE)?).resolve(&ConfigLayers::default())
+    }
+
+    /// The settings of the repository `id`, under its tracked file where
+    /// the test gave one.
+    fn settings_of(&self, id: &RepositoryId) -> Result<Effective> {
+        let Some(file) = self.repository_files.get(id) else {
+            return self.given_settings();
+        };
+        let layers = ConfigLayers {
+            worktree_file: shoal_core::config::repo::parse(file)?,
+            ..ConfigLayers::default()
+        };
+        (self.config.as_ref().context(NOT_HERE)?).resolve(&layers)
     }
 }
 
@@ -133,13 +155,17 @@ impl Spaces for StandIn {
         Box::pin(async { settings })
     }
 
-    fn repository_settings<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
-        let settings = self.given_settings();
+    fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>> {
+        let settings = self.settings_of(id);
         Box::pin(async { settings })
     }
 
-    fn settings_in<'a>(&'a self, _: Option<&'a RepositoryId>) -> BoxFuture<'a, Result<Effective>> {
-        Box::pin(async { bail!(NOT_HERE) })
+    fn settings_in<'a>(&'a self, id: Option<&'a RepositoryId>) -> BoxFuture<'a, Result<Effective>> {
+        let settings = match id {
+            Some(id) => self.settings_of(id),
+            None => self.given_settings(),
+        };
+        Box::pin(async { settings })
     }
 
     fn workspace_settings<'a>(&'a self, _: &'a Workspace) -> BoxFuture<'a, Result<Effective>> {
@@ -147,11 +173,12 @@ impl Spaces for StandIn {
         Box::pin(async { settings })
     }
 
-    fn space_agent<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>> {
-        Box::pin(async {
+    fn space_agent<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<SpaceAgent>> {
+        let present = self.agents.lock().unwrap().contains(id);
+        Box::pin(async move {
             Ok(SpaceAgent {
                 done: false,
-                present: false,
+                present,
             })
         })
     }
@@ -166,7 +193,8 @@ impl Spaces for StandIn {
     }
 
     fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>> {
-        Box::pin(async { Vec::new() })
+        let agents = self.agents.lock().unwrap().iter().cloned().collect();
+        Box::pin(async { agents })
     }
 
     fn repository_workspaces<'a>(
@@ -229,7 +257,8 @@ impl Spaces for StandIn {
     }
 
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>> {
-        Box::pin(async { Ok(Vec::new()) })
+        let spaces = self.workspaces.iter().cloned().map(Space::from).collect();
+        Box::pin(async { Ok(spaces) })
     }
 
     fn watched_conflicts<'a>(

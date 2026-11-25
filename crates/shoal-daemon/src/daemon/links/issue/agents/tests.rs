@@ -2,7 +2,6 @@ use super::*;
 use crate::daemon::links::issue::test_support::{AGENT_TOKEN, Fixture, run_agent};
 use crate::daemon::{executions::ExecutionKind, workspace_files::Attacher};
 use crate::execution::recovery::RecordExt;
-use crate::forge::items::reference::ItemRef;
 use crate::model::{Assigner, Workspace};
 use crate::paths::StateFiles;
 use crate::removal::{InspectionPolicy, UnsavedWork};
@@ -95,29 +94,6 @@ async fn the_agent_account_another_shoal_put_on_stays_once_no_agent_here_works_t
 }
 
 #[tokio::test]
-async fn the_agent_account_another_shoal_took_off_goes_back_on() {
-    let fixture = agents(&["fix"], &[], "").await;
-    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
-    fixture.link_as(workspace, Assigner::Agent).await;
-    manager
-        .links
-        .poll_linked_item_activity(&**manager)
-        .await
-        .unwrap();
-    fixture.assign_elsewhere(&[]);
-    manager
-        .links
-        .poll_linked_item_activity(&**manager)
-        .await
-        .unwrap();
-    manager.links.settle_requested_agents(&**manager).await;
-    assert_eq!(
-        fixture.changes(),
-        [json!(["shoal-agent"]), json!(["shoal-agent"])]
-    );
-}
-
-#[tokio::test]
 async fn both_assigns_the_user_and_the_agent_and_takes_both_back() {
     let fixture = agents(&["fix"], &[], "[issue]\nassign = \"both\"\n").await;
     let workspace = &fixture.workspaces[0];
@@ -158,34 +134,6 @@ async fn a_moved_space_leaves_the_agent_account_to_the_other_machine() {
     assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
 }
 
-#[tokio::test]
-async fn a_relinked_agents_assignment_puts_the_agent_account_on_again() {
-    let fixture = agents(&["fix"], &[], "").await;
-    let workspace = &fixture.workspaces[0];
-    let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
-    let url: ItemRef = url.parse().unwrap();
-    let links = crate::model::SpaceLinks {
-        issues: vec![crate::model::LinkedItem {
-            url: url.clone(),
-            title: None,
-        }],
-        assignees: vec![crate::model::IssueAssignee {
-            url,
-            account: Assigner::Agent,
-            added: false,
-        }],
-        ..Default::default()
-    };
-    let warnings =
-        (fixture
-            .manager
-            .links
-            .relink_space(&*fixture.manager, &workspace.id, &links, None))
-        .await;
-    assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(fixture.change_tokens(), ["token agent"]);
-}
-
 /// Save the stop of the agent `execution` ran in `workspace`, with a
 /// restore request when Shoal stopped it to restore it on its own.
 fn save_stop(manager: &Manager, workspace: &Workspace, execution: &ExecutionId, asleep: bool) {
@@ -201,18 +149,6 @@ async fn finish(manager: &Manager, execution: ExecutionId) {
     .await
     .unwrap();
     manager.links.settle_requested_agents(manager).await;
-}
-
-#[tokio::test]
-async fn an_agent_starting_puts_the_agent_account_on_and_exiting_takes_it_off() {
-    let fixture = agents(&["fix"], &[], "").await;
-    let (manager, workspace) = (&fixture.manager, &fixture.workspaces[0]);
-    fixture.link(workspace).await;
-    let execution = run_agent(manager, workspace).await;
-    manager.links.settle_requested_agents(&**manager).await;
-    assert_eq!(fixture.changes(), [json!(["shoal-agent"])]);
-    finish(manager, execution).await;
-    assert_eq!(fixture.changes(), [json!(["shoal-agent"]), json!([])]);
 }
 
 #[tokio::test]
