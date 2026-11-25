@@ -1,82 +1,89 @@
 # Shoal configuration
 
-This document describes every configuration option. The
-[command reference](../../../../../../docs/reference/) describes what Shoal does with them, and the
-[usage guide](../../../../../../README.md) how to start.
+This document describes each configuration option, its values and its
+default. The [command reference](../../../../../../docs/reference/) says what
+Shoal does with them, and the [usage guide](../../../../../../README.md) how to
+start.
 
 ## Files and layers
 
-Shoal reads TOML from these files, highest first, and resolves each option on
-its own from the first file that sets it:
+Shoal reads TOML from these files, highest first. It resolves each option on
+its own, from the first file that sets it:
 
-1. A repository's **local config**, `.shoal/config.toml` in the repository's own
-   directory, beside its workspaces and `.checkout`
-   (`~/shoal/my-project/.shoal/config.toml`). It is outside every Git tree, for
-   a repository that won't accept a committed file or for settings only you
-   want, and Shoal reads it in place on every request. A
-   [shared repository](../../../../../../docs/reference/hub.md)'s is the same
-   on every machine of its hub.
-2. The **repository file** in a workspace's worktree, `.shoal.toml` or
-   `.shoal/config.toml`; both together is an error. Where no workspace applies,
-   such as for the seed build or a repository's agent limit, the registered
-   checkout's file applies. A worktree file the current format rejects is
-   ignored, with a warning in `shoal config show` and an alert.
-3. The **global config**, `~/.config/shoal/config.toml` (or
-   `$XDG_CONFIG_HOME/shoal/config.toml`), which `shoal daemon install` creates
+1. A repository's **local config**: `.shoal/config.toml` in the repository's
+   own directory, beside its workspaces and `.checkout`, such as
+   `~/shoal/my-project/.shoal/config.toml`. It lies outside every Git tree.
+   Use it for a repository that won't accept a committed file, or for
+   settings only you want. A
+   [shared repository](../../../../../../docs/reference/hub.md) has the same
+   local config on every machine of its hub.
+2. The **repository file** in a workspace's worktree: `.shoal.toml` or
+   `.shoal/config.toml`, never both. Where no workspace applies, such as for
+   the seed build, the registered checkout's file applies. Shoal ignores a
+   worktree file the current format rejects, with a warning in
+   `shoal config show` and an alert.
+3. The **global config**: `~/.config/shoal/config.toml`, or
+   `$XDG_CONFIG_HOME/shoal/config.toml`. `shoal daemon install` creates it
    from [default.toml](../../../../../shoal-core/configs/default.toml).
-4. The **shared config**, `shared.toml` beside the global config, for the
+4. The **shared config**: `shared.toml` beside the global config, for the
    settings you want on every machine. It takes every key the global config
-   takes, but not the `[machine.hub]` settings a machine reaches the hub with:
-   `enabled`, `listen`, `url` and `connect`. It must be valid on its own, since
-   a machine whose global config sets nothing reads it alone. Paths, `~`, hooks
-   and `{ cmd }` values in it resolve on each machine as in the global config,
-   except a `{ cmd }` whose `on` names the machine that runs it.
-   Machines joined to a [hub](../../../../../../docs/reference/hub.md) keep it,
-   and its mode and rule files in `shared/`, the same on each.
+   takes, except `enabled`, `listen`, `url` and `connect` under
+   `[machine.hub]`. It must be valid on its own. Paths, hooks and `{ cmd }`
+   values in it resolve on each machine, except a `{ cmd }` whose `on` names
+   the machine that runs it. Machines joined to a
+   [hub](../../../../../../docs/reference/hub.md) keep it, and its mode and
+   rule files in `shared/`, the same on each.
 5. The **built-in default**.
 
-The `[machine]` table holds the settings that describe this machine, and only
-the global and shared configs may set it; a table there merges key by key with
-the shared config's. Everything outside it follows the repository schema in
-every file, so a setting copies between them. An unknown or misplaced key fails
-with its line and column, and an unknown value of a typed option is an error.
+The `[machine]` table holds the settings that describe this machine. Only the
+global and shared configs set it, and their tables merge key by key. Every
+other option follows the repository schema in every file, so a setting copies
+between files. An unknown or misplaced key fails with its line and column. An
+unknown value of a typed option is an error.
 
-A named entry, such as `[ports.web]`, `[resources.signing]`,
-`[resource_pools.devices]`, `[demos.tui]` or `[secrets.TOKEN]`, replaces the one
-below it as a unit, while each option of `[agents.<name>]` merges on its own.
-An empty list in a higher layer replaces a lower one's, which turns inherited
-entries off. In the local config, a relative hook path or `setup.command` names
-a script in its `.shoal` directory; `setup.seed` stays relative to the worktree.
+A named entry, such as `[ports.web]` or `[secrets.TOKEN]`, replaces the entry
+of the same name below it as a whole. Each option of `[agents.<name>]` merges
+on its own. An empty list in a higher layer replaces a lower layer's list,
+which turns inherited entries off.
 
-Mode instructions and rule text may also live in Markdown files; see
-[modes and rules](#modes-and-rules).
+In the local config, a relative hook path or `setup.command` names a script in
+its `.shoal` directory. `setup.seed` stays relative to the worktree.
 
-`shoal config show` prints every effective option with the layer that set it,
-`shoal config set` and `unset` edit the global file, with `--shared` the shared
-config, or with `--repo` a repository's local config, and `shoal config reference` prints this document;
-see [inspect effective configuration](../../../../../../docs/reference/config.md#inspect-effective-configuration).
-`shoal config` edits apply to a running daemon at once. After editing the global
-or shared file by hand, run `shoal config reload`; an invalid file leaves the daemon's
-previous settings in place. The CLI reads agent settings on each command, and
-repository files apply on the next request.
+`shoal config show` prints every effective option with the layer that set it.
+`shoal config set` and `unset` edit the global file, `--shared` the shared
+config, and `--repo` a repository's local config.
+`shoal config reference` prints this document. These edits apply to a
+running daemon at once. After editing the global or shared file by hand, run
+`shoal config reload`; see the [daemon](../../../../../../docs/reference/daemon.md).
+Repository files apply on the next request.
 
-Where an option takes a secret, such as a token or key, its value is the secret
-as written, `{ env = "<variable>" }`, read from the environment of the process
-that uses it, or `{ cmd = [...] }`, an argument array run without input whose
-output is the value. `{ cmd = [...], on = "<machine>" }` runs it on the machine
-of the [hub](../../../../../../docs/reference/hub.md) that `on` names, by name
-or ID as `--machine` does, so a secret set up there serves every machine: this
-machine's daemon asks for it each time, keeps the last value only in memory,
-and uses that while the named machine cannot be reached. A value written in
-`shared.toml` reaches every machine too, and then sits in that file on each.
-Paths that start with `~/` name a path under the home directory.
+### Values
 
-Any option's value may instead be `{ same_as = "<key>" }`, naming another key
+An option that takes a secret, such as a token or key, takes one of these
+values:
+
+- the secret as written;
+- `{ env = "<variable>" }`, read from the environment of the process that uses
+  it;
+- `{ cmd = [...] }`, an argument array run without input, whose output is the
+  value;
+- `{ cmd = [...], on = "<machine>" }`, run on the machine of the
+  [hub](../../../../../../docs/reference/hub.md) that `on` names, by name or
+  ID. A secret set up there then serves every machine. This machine's daemon
+  asks for the value each time, and keeps the last one only in memory, for
+  while the named machine cannot be reached.
+
+A secret written in `shared.toml` reaches every machine too, and sits in that
+file on each.
+
+A path that starts with `~/` names a path under the home directory.
+
+Any option may instead take `{ same_as = "<key>" }`, which names another key
 of the same table, such as `end = { same_as = "start" }` under `[ports]`. The
-option takes that key's value after every layer, unless a higher layer sets the
-option itself. Both keys take the same type, and the other key must have a
-value; a cycle, a key without a value or a value of another type is an error
-naming both keys. A key in another table cannot be named.
+option takes that key's value after every layer, unless a higher layer sets
+the option itself. Both keys take the same type, and the other key must have a
+value. A cycle, a key without a value or a value of another type is an error
+that names both keys.
 
 ## Machine
 
@@ -94,52 +101,55 @@ keep_awake = "off"       # "off", "handover", "finish" or "on"
 availability = "auto"    # "auto", "always_on" or "intermittent"
 ```
 
-`root_dir` is absolute or starts with `~/`, outside Shoal's state directory,
-every checkout and every repository directory; it applies to new registrations
-after `shoal config reload`, and [`repo move`](../../../../../../docs/reference/repo.md#move-repositories-to-a-new-root)
+`root_dir` is the directory that holds every repository's directory. It is
+absolute or starts with `~/`. It lies outside Shoal's state directory, every
+checkout and every repository directory. A change applies to new
+registrations; [`repo move`](../../../../../../docs/reference/repo.md#move-repositories-to-a-new-root)
 moves existing ones.
 
-`max_heavy_agents` limits the heavy slots, the agents of [`heavy` modes](#modes-and-rules)
-that run at once on the machine, and `max_jobs` the [CI jobs](../../../../../../docs/reference/ci.md#runner): `dynamic` starts them one at a time while
-measured memory and disk leave room below the [warning thresholds](#overload),
-and a number is a fixed limit; 0 starts none, as on a machine that runs
-only light agents, or no CI jobs, while `shoal queue start` still starts an
-entry. See the
-[agent queue](../../../../../../docs/reference/queue.md). `schedule` decides what the queue
-starts first within a priority: `balanced` work closest to finished,
-`speed` the work with the longest chain of work waiting on it, and `cache`
-restores of agents whose prompt cache has not expired; see
-[queue order](../../../../../../docs/reference/queue.md#queue-order).
+`max_heavy_agents` limits how many agents of
+[`heavy` modes](#modes-and-rules) run at once on the machine. `max_jobs`
+limits the [CI jobs](../../../../../../docs/reference/ci.md#runner). For both,
+`dynamic` starts one at a time while memory and disk stay below the
+[warning thresholds](#overload). A number is a fixed limit, and 0 starts none.
+See the [agent queue](../../../../../../docs/reference/queue.md).
+
+`schedule` picks what the queue starts first within a priority:
+
+- `balanced`: the work closest to finished.
+- `speed`: the work with the longest chain of work waiting on it.
+- `cache`: restores of agents whose prompt cache has not expired.
+
+See [queue order](../../../../../../docs/reference/queue.md#queue-order).
 
 `load` says how hard Shoal may load the machine: `light` for a computer you
 work on, `full` for one that only runs agents. It sets each CPU and memory
-percentage under [`[machine.overload]`](#overload) that the file leaves out,
-and so dynamic admission.
+percentage under [`[machine.overload]`](#overload) that the file leaves out.
 
-`memory_limit` caps the memory Shoal's work holds together on the machine:
-every command Shoal starts as [work](../../../../../../docs/reference/load.md#work-slice),
-which leaves out the daemon and Shoal's own pushes and merges. It takes a size in
-`B`, `KiB`, `MiB`, `GiB` or `TiB`, or a percentage of RAM; without it, work may
-use the whole machine. On Linux the kernel enforces it on the work slice;
-elsewhere only memory protection does, so with `[machine.overload.memory]`
-disabled it does nothing there. It applies after `shoal config reload`.
+`memory_limit` caps the memory that Shoal's
+[work](../../../../../../docs/reference/load.md#work-slice) holds together. It
+takes a size in `B`, `KiB`, `MiB`, `GiB` or `TiB`, or a percentage of RAM.
+Without it, work may use the whole machine. On Linux the kernel enforces it;
+elsewhere only [memory protection](#overload) does.
 
-`keep_awake` chooses what the machine does once the user walks away from it,
-closing its lid or leaving it idle: `off` sleeps as usual; `handover` admits
-nothing new and hands the spaces with something to do over to other machines
-of the hub, then sleeps; `finish` admits nothing new and lets running turns
-end, then sleeps; `on` carries on, keeping the machine from sleeping while an
-agent works or waits on a watched PR. While the user is there, `finish` and
-`on` keep the machine from sleeping while agents work, and `off` and
-`handover` do not; see [keeping the machine awake](../../../../../../docs/reference/machine.md#keeping-the-machine-awake).
+`keep_awake` picks what the machine does once you walk away from it:
 
-`availability` tells the [hub](../../../../../../docs/reference/hub.md) this
-machine joined, or takes, whether it stays reachable: `always_on`,
-`intermittent`, or `auto` for the hub's guess from how reachable it was. It
-does nothing without a hub.
+- `off`: it sleeps as usual.
+- `handover`: it admits nothing new, hands work over to other machines of the
+  hub, then sleeps.
+- `finish`: it admits nothing new, lets running turns end, then sleeps.
+- `on`: it carries on, and stays awake while an agent works or waits on a
+  watched PR.
 
-`git_profile`, at the top level of any file, names the [Git profile](#git-profiles)
-new worktrees get; `shoal start --git-profile` overrides it for one creation.
+See [keeping the machine awake](../../../../../../docs/reference/machine.md#keeping-the-machine-awake).
+
+`availability` tells the [hub](../../../../../../docs/reference/hub.md)
+whether this machine stays reachable: `always_on`, `intermittent`, or `auto`
+for the hub's guess. It does nothing without a hub.
+
+`git_profile`, at the top level of any file, names the
+[Git profile](#git-profiles) new worktrees get. `shoal start --git-profile`
+overrides it for one creation.
 
 ### Overload
 
@@ -181,10 +191,8 @@ cpu_used_percent = 75
 sustained_seconds = 60
 ```
 
-The percentages above are those of `load = "balanced"`. Each `load` sets
-these; the memory warning levels are also where dynamic admission stops
-starting agents and CI jobs, and the CPU warning level, over its sustained
-seconds, where a CI job beside running ones waits:
+The percentages above are those of `load = "balanced"`. Each `load` sets these
+levels:
 
 | `load` | CPU warning / stop / recovery | Memory used warning / stop / recovery | Memory stall warning / stop / recovery |
 |---|---|---|---|
@@ -192,21 +200,24 @@ seconds, where a CI job beside running ones waits:
 | `balanced` | 80 / 90 / 75 | 85 / 95 / 80 | 10 / 10 / 2 |
 | `full` | 95 / 100 / 90 | 95 / 98 / 90 | 20 / 20 / 5 |
 
+The memory warning levels are also where dynamic admission stops starting
+agents and CI jobs.
+
 Memory percentages apply on Linux; macOS uses its native pressure levels.
-Memory used is the share of RAM and swap together in use, counting
-reclaimable cache as free; past its stop level it stops work at once.
-Memory stall is the share of time tasks wait for memory, from the kernel's
-pressure stall information (`/proc/pressure/memory`): some tasks over ten
-seconds warns, every task over ten seconds stops once it has held for
-`sustained_seconds`, and recovery waits for some tasks over a minute. A
-kernel without it is measured by memory used alone. CPU usage is aggregate busy time across all cores, excluding I/O wait
-and niced time, except that job admission counts niced time, in which jobs
-run, as busy. Durations are seconds, bounded to one day; polling, cooldown
-and sustained CPU and recovery durations must be positive. Recovery thresholds
-must be positive and below their stop thresholds; the memory stall warning
-must be at most its stop, and other warning thresholds are not checked against
-stop thresholds. What each threshold does is in
-[overload protection](../../../../../../docs/reference/load.md).
+
+- Memory used is the share of RAM and swap together in use, counting
+  reclaimable cache as free.
+- Memory stall is the share of time tasks wait for memory, from the kernel's
+  pressure stall information (`/proc/pressure/memory`). A kernel without it
+  is measured by memory used alone.
+- CPU usage is busy time across all cores, without I/O wait and niced time.
+  Job admission counts niced time, in which jobs run, as busy.
+
+Durations are seconds, at most one day. Polling, cooldown, and the sustained
+CPU and recovery durations must be positive. Each recovery threshold must be
+positive and below its stop threshold. The memory stall warning must be at
+most its stop. [Overload protection](../../../../../../docs/reference/load.md)
+says what each threshold measures and does.
 
 ### Git profiles
 
@@ -218,10 +229,10 @@ user.signingKey = "your-key"
 commit.gpgsign = true
 ```
 
-Each profile names Git settings, strings, booleans or integers; omitted keys
-keep Git's normal inheritance. Profiles cannot set repository layout or
-extensions. The top-level `git_profile` selects one for new worktrees and
-`agent.git_profile` one for agents' Git commands; see
+A profile names Git settings: strings, booleans or integers. Omitted keys keep
+Git's normal inheritance. A profile cannot set repository layout or
+extensions. The top-level `git_profile` selects one for new worktrees, and
+`agent.git_profile` one for agents' Git commands. See
 [Git profiles](../../../../../../docs/reference/repo.md#git-profiles).
 
 ### Forges
@@ -238,20 +249,25 @@ user_token = { cmd = ["security", "find-generic-password", "-s", "bitbucket", "-
 user_email = "you@example.com"   # An Atlassian API token's account; omit for an access token
 ```
 
-`type` sets the API a host serves, which Shoal otherwise asks any host other
-than `github.com`, `gitlab.com` and `bitbucket.org` once. `user_token` is your
-login on the host, and `agent_token` the [agent account](../../../../../../docs/reference/agents.md#agent-accounts)'s,
-which agents' changes need: `agent_token = { same_as = "user_token" }` makes
-them with your login. `review_token` is the login agents approve and request
-changes on PRs with, as their [`pr_review` permission](#permissions) allows,
-and nothing else; it must not be the account that opened the PR, which forges
-refuse, so `{ same_as = "agent_token" }` suits only PRs agents did not open;
-`user_email`, `agent_email` and `review_email` apply only to Bitbucket. A `{ cmd }` runs at most once
-per operation that needs the token and for at most a minute, here or on the
-machine `on` names, and its output is never stored; a token the forge refuses
-is no longer kept for while that machine is away. An `{ env }` reads the
-daemon's environment for its own requests.
-Without a token only public repositories are readable. See
+`type` sets the API a host serves. Without it, Shoal asks each host once,
+except `github.com`, `gitlab.com` and `bitbucket.org`.
+
+Each token takes the [value forms](#values) of a secret:
+
+- `user_token` is your login on the host. Without a token, only public
+  repositories are readable.
+- `agent_token` is the
+  [agent account](../../../../../../docs/reference/agents.md#agent-accounts)'s
+  login, which agents' changes need. `{ same_as = "user_token" }` makes them
+  with your login.
+- `review_token` is the login agents approve and request changes on PRs
+  with, as their [`pr_review` permission](#permissions) allows. It must not be
+  the account that opened the PR, which forges refuse, so
+  `{ same_as = "agent_token" }` suits only PRs agents did not open.
+
+A token's `{ cmd }` runs at most once per operation that needs the token, for
+at most a minute, and Shoal never stores its output. `user_email`,
+`agent_email` and `review_email` apply only to Bitbucket. See
 [forges](../../../../../../docs/reference/issues.md#forges).
 
 ### Agent tools on this machine
@@ -264,10 +280,10 @@ skill_dir = "~/.factory/skills"   # Where `shoal skill install` puts the skill
 proxy = "cliproxy"                # A [machine.proxies] entry its agents go through
 ```
 
-`skill_dir` is absolute or starts with `~/`; see
-[agent skill](../../../../../../docs/reference/install.md#agent-skill-outside-project-repositories). A launch
-profile inherits its base's `proxy`, and only Claude Code, Codex and their
-launch profiles can take one.
+`skill_dir` is absolute or starts with `~/`. See
+[agent skill](../../../../../../docs/reference/install.md#agent-skill-outside-project-repositories).
+`proxy` names a [proxy](#proxies). Only Claude Code, Codex and their launch
+profiles take one, and a launch profile inherits its base's.
 
 ### Proxies
 
@@ -279,16 +295,17 @@ key = { env = "CLIPROXY_API_KEY" }   # Optional; needs an upstream
 [machine.proxies.retry]              # No upstream: only adds the retries
 ```
 
-`upstream` is where Shoal's retrying proxy forwards an agent's API requests: a
-gateway's server root, which Claude Code and Codex share. Without it, requests
-go where they would without the proxy. A proxy that a Codex tool, or a launch
-profile of one, names fails validation when its `upstream` ends in `/v1` or is
-on `chatgpt.com`. With `key`, the proxy sends that key to the upstream as
-`Authorization: Bearer` in place of the agent's own credentials; an `{ env }`
-reads the environment the agent runs with, `[env]`, secrets and the tool's `env`
-included. A `key` needs an `upstream`, since without one it would reach
-Anthropic or OpenAI in place of the agent's login. See the
-[proxy](../../../../../../docs/reference/agents.md).
+A proxy is Shoal's retrying proxy for an agent's API requests.
+
+- `upstream` is where it forwards them: a gateway's server root, which Claude
+  Code and Codex share. Without it, requests go where they would without the
+  proxy. For a Codex tool, `upstream` must not end in `/v1` or be on
+  `chatgpt.com`.
+- `key` is sent to the upstream as `Authorization: Bearer`, in place of the
+  agent's own credentials. An `{ env }` reads the environment the agent runs
+  with. A `key` needs an `upstream`.
+
+See the [proxy](../../../../../../docs/reference/agents.md).
 
 ### Simulators
 
@@ -307,8 +324,8 @@ requires_approval = false
 approval_lifetime = "lease"
 ```
 
-See [simulators](../../../../../../docs/reference/resources.md#simulators-macos) and
-[simulator preferences](#simulator-preferences).
+See [simulators](../../../../../../docs/reference/resources.md#simulators-macos),
+[simulator preferences](#simulator-preferences) and [approvals](#approvals).
 
 ### Webhooks
 
@@ -318,10 +335,9 @@ listen = "127.0.0.1:7473"   # No listener without it
 ```
 
 `listen` is the address on which the daemon serves the routes of
-[webhook triggers](#triggers), and nothing else. Shoal does not expose it to
-the internet: put a tunnel or reverse proxy, such as Tailscale Funnel,
-cloudflared or Caddy, in front of it. See
-[webhooks](../../../../../../docs/reference/triggers.md#webhooks).
+[webhook triggers](#triggers). Shoal does not expose it to the internet: put a
+tunnel or reverse proxy in front of it, such as Tailscale Funnel, cloudflared
+or Caddy. See [webhooks](../../../../../../docs/reference/triggers.md#webhooks).
 
 ### Hub
 
@@ -340,59 +356,35 @@ placement = "balanced"                   # The default; or "local" or "external"
 "/quay/" = "127.0.0.1:8080"              # A path prefix and the local server it reaches
 ```
 
-With `enabled`, the daemon is the [hub](../../../../../../docs/reference/hub.md)
-that your other machines and devices join, and stays the machine of its own
-spaces. `listen` is the address its listener serves HTTP and WebSocket on.
-Shoal handles no TLS: on loopback, the default, nothing is reachable until a
-tunnel or reverse proxy, such as Tailscale Serve, cloudflared or Caddy, is in
-front of it, and `url` is the address members reach it at there. `shoal hub
-pair` warns when `url` is `http://` to another machine.
+These options configure the [hub](../../../../../../docs/reference/hub.md).
 
-`connect` is for a machine that joined the hub: its daemon runs the command and
-uses its standard input and output as its link to the hub, restarting it when
-it exits, in place of the URL it paired at or the command it joined through.
-The command ends in `shoal daemon connect` on the hub, with an absolute path to
-`shoal` when it is not on the `PATH` there, such as over `ssh` or
-`docker exec`.
-
-`auto_update`, read on a joined machine, has a downloaded Shoal follow the
-hub's version: once the hub refuses this machine for running another one, it
-installs exactly the hub's release, as `shoal update --version` would, and the
-daemon restarts on it once idle. Off, or for a Homebrew installation, the
-machine stays off the hub, and you hear what to run, until its version
-matches.
-
-`escalate_after_minutes` is how long a thread or approval request of a space
-on this machine waits for a coordinator whose machine is offline before it
-passes to the next space above with an agent on a connected machine, or to
-you.
-
-`default_machine`, read on the hub, names the joined machine, by name or the ID
-`shoal hub ls` shows, that a start from a device goes to when it names none
-with `machine`; without it, the start goes to the machine the device sent it
-to.
-
-`placement`, read on the hub, picks where a start that names no machine goes.
-Only a start that runs its agent detached, such as a background chat, a child
-an agent starts or a trigger's launch, is placed; one that runs in your
-terminal stays on its machine, and `--machine` always picks the machine.
-
-- `local` keeps every start on the machine it was made on.
-- `balanced` sends lasting work to an `always_on` machine with room, among
-  those that have the start's repository registered, matched by origin, and
-  its agent tool: a heavy start to the one whose admission starts a heavy
-  agent now with the most spare memory, a light one first to a machine with
-  `max_heavy_agents = 0`, then to one where no heavy work waits. Without such a
-  machine the start stays on the machine it was made on. Placement never
-  clones a repository; the start reports the machines it skipped and why.
-- `external` asks the app registered as the placer, and places by `balanced`
-  when none is registered or it does not answer within two seconds.
-
-`forward` maps path prefixes, each starting and ending with `/`, to local
-addresses, such as an app's own server: the hub's listener forwards each
-request under a prefix, the longest that covers it, to its address with its
-path unchanged, but only once a paired machine or device signed it. See
-[path forwarding](../../../../../../docs/reference/hub.md#path-forwarding).
+- `enabled` makes this daemon the hub that your other machines and devices
+  join.
+- `listen` is the address the hub serves HTTP and WebSocket on. Shoal handles
+  no TLS. On loopback, the default, nothing reaches the hub until a tunnel or
+  reverse proxy is in front of it, such as Tailscale Serve, cloudflared or
+  Caddy.
+- `url` is the address members reach the hub at.
+- `connect`, on a joined machine, is a command whose standard input and
+  output link the daemon to the hub. It replaces the URL the machine paired
+  at. The command ends in `shoal daemon connect` on the hub, such as over
+  `ssh` or `docker exec`.
+- `auto_update`, on a joined machine, installs the hub's release when the hub
+  refuses this machine for running another version.
+- `escalate_after_minutes` is how long a thread or approval request waits for
+  a coordinator whose machine is offline. Then it passes to the next space
+  above with an agent on a connected machine, or to you.
+- `default_machine`, on the hub, names the machine, by name or ID, that a
+  device's start goes to when it names none.
+- `placement`, on the hub, picks where a detached start that names no machine
+  goes. `local` keeps it on the machine it was made on. `balanced` sends it to
+  an `always_on` machine with room that has the start's repository and agent
+  tool, and otherwise keeps it there. `external` asks the app registered as
+  the placer, and falls back to `balanced`. See
+  [placement](../../../../../../docs/reference/hub.md).
+- `forward` maps path prefixes, each starting and ending with `/`, to local
+  addresses, such as an app's own server. See
+  [path forwarding](../../../../../../docs/reference/hub.md#path-forwarding).
 
 ### App store
 
@@ -402,12 +394,11 @@ max_entry_mib = 16    # The default; at most 128
 max_app_mib = 256     # The default
 ```
 
-The limits of the [app store](../../../../../../docs/reference/apps.md) this
-daemon keeps: how many MiB one entry holds, and how many all of one app's
-entries hold together, shared ones and every machine's or device's own. A write
-past either is refused before its bytes are sent. A machine that joined a hub
-keeps only its own entries; the hub's limits govern the shared ones and its
-devices'.
+These are the limits of the [app store](../../../../../../docs/reference/apps.md)
+this daemon keeps. `max_entry_mib` limits one entry, and `max_app_mib` all of
+one app's entries together. Shoal refuses a write past either. On a joined
+machine, the limits cover only its own entries; the hub's limits cover the
+shared ones.
 
 ### Container runtime
 
@@ -416,7 +407,8 @@ devices'.
 runtime = "docker"      # Or "podman"; default: the first of them on PATH
 ```
 
-The engine whose `compose` runs every workspace's [containers](#containers).
+`runtime` is the engine whose `compose` runs every workspace's
+[containers](#containers).
 
 ## Agents
 
@@ -432,19 +424,21 @@ max_heavy_running = "dynamic" # Or a positive number, or "none"
 git_profile = "agent"    # A Git profile for agents' Git commands; no default
 ```
 
-`default` names a built-in AI tool or one under `[agents]`. `dirs` entries are
-absolute or start with `~/`, and an empty list gives none. `max_heavy_running` limits
-one repository's heavy slots within `machine.max_heavy_agents`; set globally, it applies to
-each repository that sets none, and `dynamic` adds no repository limit.
-`git_profile` names a [Git profile](#git-profiles) that reaches tracked agents
-over every Git config file; see [agent accounts](../../../../../../docs/reference/agents.md#agent-accounts).
+- `default` names a built-in AI tool or one under `[agents]`.
+- `dirs` entries are absolute or start with `~/`. An empty list gives none.
+- `max_heavy_running` limits one repository's heavy agents, within
+  `machine.max_heavy_agents`. Set globally, it applies to each repository that
+  sets none. `dynamic` adds no repository limit.
+- `git_profile` names a [Git profile](#git-profiles) for tracked agents' Git
+  commands, over every Git config file. See
+  [agent accounts](../../../../../../docs/reference/agents.md#agent-accounts).
 
 ### AI tools
 
 An `[agents.<name>]` table changes one of the
-[AI tools Shoal includes](../../../../../../docs/reference/agents.md) or adds another; a tool is an
-agent when it is built in or has a `command` or `base`, and may take a built-in
-or configured command's name, since agents are not commands.
+[AI tools Shoal includes](../../../../../../docs/reference/agents.md), or adds
+another. A tool is an agent when it is built in or has a `command` or `base`.
+It may share a name with a [command](#commands).
 
 ```toml
 [agents.claude]
@@ -480,71 +474,67 @@ enabled = false         # Offer happy-claude and happy-codex
 ```
 
 Each option merges on its own across layers, so a repository can replace
-`command` and keep the global `resume`.
+`command` and keep the global `resume`. Placeholders are substituted once, and
+user arguments stay literal.
 
-- `command` is the launcher, an argument array resolved through `PATH`, with
-  the substitutions of [`[commands]`](#commands). `{prompt}` takes the rendered
-  system text and the first message, separated by a blank line; without it,
-  nonempty context becomes the first forwarded argument. Substitutions happen
-  once and user arguments stay literal.
+- `command` is the launcher: an argument array resolved through `PATH`, with
+  the placeholders of [`[commands]`](#commands). `{prompt}` takes the system
+  text and the first message, separated by a blank line. Without `{prompt}`,
+  nonempty text becomes the first forwarded argument.
 - `resume_command` restores a stopped agent's session without repeating its
-  first prompt, with the same substitutions; `{prompt}` gives it what the
-  restored agent is told, and an argument that is exactly `{prompt}` is left
-  out when it is told nothing, as an agent stopped between turns is. Without one, `resume` restores session `{session}` and
-  `resume_latest` the latest session in the workspace, built in for Claude and
-  Codex; a tool with neither a `resume_command` nor these cannot be resumed.
-- `instructions` passes the rendered system text apart from the first message,
-  as `{instructions}`, or `{instructions_toml}` for a TOML string literal.
-- `fork` starts a new session from a copy of session `{session}`, leaving that
-  session unchanged; `{directory}` names the workspace it works in.
+  first prompt. `{prompt}` gives it what the restored agent is told. An
+  argument that is exactly `{prompt}` is left out when the agent is told
+  nothing.
+- `resume` restores session `{session}`, and `resume_latest` the latest
+  session in the workspace, when there is no `resume_command`. Both are built
+  in for Claude Code and Codex. A tool without any of the three cannot be
+  resumed.
+- `instructions` passes the system text apart from the first message, as
+  `{instructions}`, or `{instructions_toml}` for a TOML string literal.
+- `fork` starts a new session from a copy of session `{session}`.
+  `{directory}` names the workspace it works in.
 - `add_dir` gives an agent another working directory, `{directory}`, for each
-  `agent.dirs` entry and the directories Shoal adds; an empty list gives none.
-- `model` and `effort` choose the model and reasoning effort, passed unchanged
-  through `model_args` and `effort_args`, which name `{model}` and `{effort}`;
-  without them the tool uses its own defaults. The `[agent]` ones apply over
-  these to the default agent, and `--model` and `--effort` over both.
-- `review` runs a [local review](../../../../../../docs/reference/reviews.md#local-reviews), or the
-  reviewer's answer in one of its findings' threads, once: the
-  launcher's words before `{args}`, or all of them, then these arguments,
-  which name the prompt `{prompt}`; `{output}` names a file the result goes to
-  instead of standard output. The run is read-only but able to run `shoal`,
-  which writes its review or answer: the built-in ones open Unix sockets in the tool's
-  sandbox, the daemon's among them, and no network host. A tool without one
-  cannot review. `review_resume` runs a review or answer again in session `{session}`,
-  which an earlier run reported, to keep one session per workspace or PR.
-- `gate` runs the [gate](../../../../../../docs/reference/approvals.md#the-gate) once, with `review`'s
-  placeholders and the output schema its result follows, as a file,
-  `{schema}`, or its text, `{schema_json}`. A tool without one cannot be the
+  `agent.dirs` entry and each directory Shoal adds. An empty list gives none.
+- `model` and `effort` choose the model and reasoning effort. `model_args` and
+  `effort_args` pass them, naming `{model}` and `{effort}`. Without them, the
+  tool uses its own defaults. The `[agent]` values apply over these to the
+  default agent, and `--model` and `--effort` over both.
+- `review` runs a
+  [local review](../../../../../../docs/reference/reviews.md#local-reviews), or
+  the reviewer's answer in a finding's thread. Its arguments follow the
+  launcher's words before `{args}`, or all of them, and name the prompt
+  `{prompt}`. `{output}` names a file for the result instead of standard
+  output. The run is read-only but can run `shoal`. A tool without `review`
+  cannot review.
+- `review_resume` runs a review or answer again in session `{session}`, which
+  an earlier run reported.
+- `gate` runs the [gate](../../../../../../docs/reference/approvals.md#the-gate)
+  once, with `review`'s placeholders and the schema of its result, as a file,
+  `{schema}`, or as text, `{schema_json}`. A tool without `gate` cannot be the
   gate.
-  `gate_resume` runs it again in session `{session}`, which an earlier run
-  reported, to keep a session per subject.
-- A tool without `review_resume` or `gate_resume` starts a new session each
-  time, as does one whose runs report no session: Claude Code reports it in
-  its result and Codex in its header.
-- `base` makes a tool a launch profile of another, which gives it its base's
-  hooks, trust entries and waking, and each of its launcher, `skill_dir`,
-  `instructions`, `resume`, `resume_latest`, `fork`, `add_dir`, `model`,
-  `effort`, `model_args`, `effort_args`, `review`, `review_resume`, `gate`,
-  `gate_resume`, `retry`, `prompt_cache_minutes` and `proxy` it does not set;
-  a base may itself be a profile.
+- `gate_resume` runs the gate again in session `{session}`, which an earlier
+  run reported.
+- A tool without `review_resume` or `gate_resume`, or whose runs report no
+  session, starts a new session each time.
+- `base` makes a tool a launch profile of another. The profile takes its
+  base's hooks, trust entries and waking, and each launcher and tool option it
+  does not set. A base may itself be a profile.
 - `env` sets and `env_remove` removes variables for the tool's tracked agents
-  and chats, after `[env]`, the agent account and secrets. A `CLAUDE_CONFIG_DIR`
-  or `CODEX_HOME` set there must be absolute or start with `~/`, and cannot be
-  removed.
-- `enabled = false` turns a tool's agents off: pickers and completion leave them
-  out, and launches, reviews and restores are refused until it is on again.
-  Happy is off until `agents.happy.enabled = true`.
-- `retry` resends a turn an API error ended; it defaults to `true` for Claude
-  Code and its launch profiles and `false` for other tools. See
-  [agents](../../../../../../docs/reference/agents.md).
+  and chats, after `[env]`, the agent account and secrets. A
+  `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set there is absolute or starts with
+  `~/`, and cannot be removed.
+- `enabled = false` turns a tool's agents off. Pickers leave them out, and
+  launches, reviews and restores are refused. Happy is off until
+  `agents.happy.enabled = true`.
+- `retry` resends a turn that an API error ended. It defaults to `true` for
+  Claude Code and its launch profiles, and `false` for other tools.
 - `prompt_cache_minutes` sets how long the tool's prompt cache lives after its
-  last request; without it, Claude Code's is what its environment and settings
-  give, Codex's is 45 minutes, the least any OpenAI model it runs keeps a
-  session's cache, a resumed one's included, and every other tool's is 30
-  minutes.
+  last request. Without it, Claude Code's comes from its environment and
+  settings, Codex's is 45 minutes, and every other tool's is 30 minutes.
 
 What a tool needs of the machine goes under
-[`[machine.agents.<name>]`](#agent-tools-on-this-machine).
+[`[machine.agents.<name>]`](#agent-tools-on-this-machine). See
+[agents](../../../../../../docs/reference/agents.md).
 
 ### Desktop apps
 
@@ -575,51 +565,68 @@ push = "propose"
 text = "Follow repository instructions in {workspace} at {path}."
 ```
 
-A mode decides what an agent is told and the kind of space it starts in. `kind`
-is `workspace` or `chat`, and `repository = false`, only in the global config
-and with `kind = "chat"`, starts a chat without a repository. `rules` names the
-rules the agent's system text carries, in order; `instructions` follow the
-agent's subject in its first message. `focus` decides whether its launches take
-the terminal; set it for a mode whose agent needs your input to start, such as
-one without instructions. `idle_wake_minutes` is how long its agent may stay
-idle before Shoal wakes it. `weight` alone decides how a mode's agent takes
-the machine's capacity, in a workspace or a chat: a `light` mode's agents
-start at once, hold no [heavy slot](../../../../../../docs/reference/queue.md) and are never
-stopped for load or on idle, and a `heavy` one's wait for a heavy slot and are; the
-built-in modes that start chats are light, so one set to `kind = "workspace"`
-stays so. A chat without a repository takes its mode's weight from the global
-config and counts toward `machine.max_heavy_agents` alone.
-`label` is a forge label that starts an issue or PR carrying it in this mode
-when its launch names none, such as `shoal start` without `--mode` or a
-trigger without `mode`, as [modes and rules](../../../../../../docs/reference/modes.md)
-describes; no two modes may have the same label, and the built-in modes have
-none. `permissions` takes the keys of
-[`[permissions]`](#permissions). `[rules.<name>]` sets a rule's `text`, which
-any mode can list; a mode naming a rule no layer defines is refused.
+A mode decides what an agent is told and the kind of space it starts in.
+[Modes and rules](../../../../../../docs/reference/modes.md) lists the modes
+and rules Shoal ships. `worker` always starts in a workspace, and the built-in
+`setup` mode cannot be configured.
 
-[Modes and rules](../../../../../../docs/reference/modes.md) lists the modes and rules Shoal
-ships. `worker` always starts in a workspace, and the built-in `setup` mode
-cannot be configured.
+- `kind` is `workspace` or `chat`.
+- `repository = false` starts a chat without a repository. Only the global
+  config sets it, with `kind = "chat"`.
+- `rules` names the rules the agent's system text carries, in order. A mode
+  that names a rule no layer defines is refused.
+- `instructions` follow the agent's subject in its first message.
+- `focus` decides whether the mode's launches take the terminal. Set it for a
+  mode whose agent needs your input to start, such as one without
+  instructions.
+- `idle_wake_minutes` is how long the agent may stay idle before Shoal wakes
+  it.
+- `weight` decides how the mode's agents take the machine's capacity, in a
+  workspace or a chat. A `light` agent starts at once, holds no
+  [heavy slot](../../../../../../docs/reference/queue.md), and is never
+  stopped for load or on idle. A `heavy` agent waits for a heavy slot. The
+  built-in chat modes are light, also when set to `kind = "workspace"`. A chat
+  without a repository takes its mode's weight from the global config.
+- `label` is a forge label. An issue or PR that carries it starts in this mode
+  when its launch names none. No two modes may have the same label, and the
+  built-in modes have none.
+- `permissions` takes the keys of [`[permissions]`](#permissions).
 
-A mode's instructions may also be written as `modes/<name>.md` and a rule's text
-as `rules/<name>.md`, beside the global `config.toml`, in `shared/` beside the
-shared config, beside the local config, or in the repository root or its
-`.shoal/` directory; a file names its mode or
-rule, which it adds when no table declares it. A file in more than one of a
-layer's directories is an error naming both, inline TOML wins over Markdown
-in each file's layer, and the global config's text, inline or in a file, wins
-over the shared config's. A repository's text is appended after the global text with a
-blank line between nonempty texts, and the local config's wins over the
-worktree's; an empty repository value suppresses the repository's additions,
-and an empty global value suppresses the built-in text. Texts are read at
-launch. Rules and instructions may use `{workspace}`, `{branch}` and `{path}` of
-the space, `{head}`, what a workspace has checked out (`on branch fix` or `at
-commit 3f2a9c1 (PR #8)`), `{repo}` for a chat, `{workspace_number}` for a chat
-in a workspace's worktree, `{updates}`, how the agent receives issue and PR
-activity, `{issue.number}`, `{issue.title}` and `{issue.url}` of the subject's
-issue, and `{relabel}`, the sentence that has the agent swap its own mode's
-`label` for that of the mode that should carry out its plan, naming each mode
-with a label; unknown placeholders stay literal.
+`[rules.<name>]` sets a rule's `text`, which any mode can list.
+
+#### Text in Markdown files
+
+A mode's instructions may also live in `modes/<name>.md`, and a rule's text in
+`rules/<name>.md`. These directories go beside the global `config.toml`, in
+`shared/` beside the shared config, beside the local config, or in the
+repository root or its `.shoal/` directory. A file adds its mode or rule when
+no table declares it.
+
+- A file in more than one of a layer's directories is an error that names
+  both.
+- Inline TOML wins over Markdown in each file's layer.
+- The global config's text wins over the shared config's.
+- A repository's text follows the global text, after a blank line. The local
+  config's text wins over the worktree's.
+- An empty repository value suppresses the repository's text, and an empty
+  global value the built-in text.
+
+Shoal reads the texts at launch.
+
+#### Placeholders
+
+Rules and instructions may use these placeholders. Unknown ones stay literal.
+
+- `{workspace}`, `{branch}` and `{path}` of the space.
+- `{head}`: what a workspace has checked out, such as `on branch fix` or
+  `at commit 3f2a9c1 (PR #8)`.
+- `{repo}`, for a chat.
+- `{workspace_number}`, for a chat in a workspace's worktree.
+- `{updates}`: how the agent receives issue and PR activity.
+- `{issue.number}`, `{issue.title}` and `{issue.url}` of the subject's issue.
+- `{relabel}`: a sentence that has the agent swap its own mode's `label` for
+  that of the mode that should carry out its plan, naming each mode with a
+  label.
 
 ### Permissions
 
@@ -642,38 +649,62 @@ pr_review = "propose"                 # "deny", "propose" or "direct"
 triggers = "propose"                  # "deny", "propose" or "direct"
 ```
 
-Permissions say what agents may do: `"direct"` at once, `"gate"` after the
-[gate](#gate) allows it, `"propose"` after an approval, and `"deny"` never, in
-that order from widest to narrowest; no built-in mode sets `"gate"`.
-`issue_open` and `pr_open` cover issues and PRs in the space's repository,
-`issue_other_repositories` issues in other repositories, `merge` `shoal merge`
-of a PR or a branch, its automatic merge and `unmerge`, `push` pushes to the repository's remotes by `shoal pr open` or
-`git push` and deleting branches on the forge with `shoal branch delete`, `api_writes` `shoal forge api` requests other than reads,
-`daemon` installing, starting, stopping and restarting the daemon and
-`shoal update` while a daemon of the same Shoal answers to decide it, `limits` starting agents regardless of `max_heavy_agents` and
-memory, `user_holds` releasing the user's holds and removing the spaces the
-user holds, `notifications` reading your alerts, Shoal's own log and
-the inbox's daemon-wide problems, `decide` deciding the approval requests of
-the spaces below as you would, `ci_approve` approving CI runs that wait for
-approval, `pr_review` approving and requesting changes on PRs, as the host's
-[`review_token`](#forges), `triggers` pausing, resuming and running
-[triggers](#triggers), and `admin` the rest of administering Shoal: changing its
-config, registering, renaming and removing repositories and their local
-config and kept branches, `shoal cleanup`, `shoal setup --skip`,
-`shoal contribute`, adopting worktrees, and restoring, copying and moving
-workspaces, and `shoal config setup` and `shoal repo setup`. An agent sets a
-permission in config only to a value its space holds, changes a trigger only
-where its `triggers` is `"direct"`, and leaves replacing the config to you.
+Permissions say what agents may do. From widest to narrowest:
+
+- `"direct"`: at once.
+- `"gate"`: after the [gate](#gate) allows it. No built-in mode sets it.
+- `"propose"`: after an approval.
+- `"deny"`: never.
+
+Each key governs these actions:
+
+- `issue_open` and `pr_open`: opening issues and PRs in the space's
+  repository.
+- `issue_other_repositories`: opening issues in other repositories.
+- `merge`: `shoal merge` of a PR or a branch, its automatic merge, and
+  `unmerge`.
+- `push`: pushes to the repository's remotes, by `shoal pr open` or
+  `git push`, and deleting branches on the forge with `shoal branch delete`.
+- `api_writes`: `shoal forge api` requests other than reads.
+- `daemon`: installing, starting, stopping and restarting the daemon, and
+  `shoal update`.
+- `limits`: starting agents regardless of `max_heavy_agents` and memory.
+- `user_holds`: releasing your holds, and removing the spaces you hold.
+- `notifications`: reading your alerts, Shoal's own log and the inbox's
+  daemon-wide problems.
+- `decide`: deciding the approval requests of the spaces below, as you would.
+- `ci_approve`: approving CI runs that wait for approval.
+- `pr_review`: approving and requesting changes on PRs, as the host's
+  [`review_token`](#forges).
+- `triggers`: pausing, resuming and running [triggers](#triggers).
+- `admin`: the rest of administering Shoal. That covers changing its config;
+  registering, renaming and removing repositories, their local config and
+  kept branches; `shoal cleanup`, `shoal setup --skip` and
+  `shoal contribute`; adopting worktrees; restoring, copying and moving
+  workspaces; and `shoal config setup` and `shoal repo setup`.
+
+An agent sets a permission in config only to a value its space holds. It
+changes a trigger only where its `triggers` is `"direct"`. Replacing the
+config is yours.
 
 `[permissions]` and `[modes.<name>.permissions]` take the same keys. A mode's
-key resolves, highest first, from its `permissions` in any layer, then
-`[permissions]` in any layer, then the built-in mode's default, then the key's
-default above; `chat`, `plan` and `orchestrate` default
-`issue_other_repositories` to `"direct"`, and `orchestrate` defaults `merge`,
-`admin`, `limits`, `user_holds`, `notifications`, `decide`, `ci_approve` and
-`pr_review` to `"direct"` and `api_writes` and `daemon` to `"propose"`. A space's own permissions
-are then narrowed to its parent's and set by `--permission`; see
-[mode permissions](../../../../../../docs/reference/modes.md#mode-permissions).
+key resolves from the first of these that sets it:
+
+1. the mode's `permissions`, in any layer;
+2. `[permissions]`, in any layer;
+3. the built-in mode's default;
+4. the key's default above.
+
+The built-in modes change these defaults:
+
+- `chat`, `plan` and `orchestrate` set `issue_other_repositories` to
+  `"direct"`.
+- `orchestrate` sets `merge`, `admin`, `limits`, `user_holds`,
+  `notifications`, `decide`, `ci_approve` and `pr_review` to `"direct"`, and
+  `api_writes` and `daemon` to `"propose"`.
+
+See [mode permissions](../../../../../../docs/reference/modes.md#mode-permissions)
+for how a space's permissions follow from its mode's.
 
 ### Gate
 
@@ -689,16 +720,20 @@ instructions = "Tags are pushed only by the release workflow."
 escalate = ["a push to a tag"]
 ```
 
-The gate is the agent that decides a request under a permission of `"gate"`;
-see [the gate](../../../../../../docs/reference/approvals.md#the-gate). Shoal reads this table from the
-repository's checkout and the layers beside it, never from the requesting
-workspace's worktree. `fallback_agent` decides once more when the first agent
-fails. `instructions` follow the
-gate's built-in instructions, and `escalate` lists the cases it passes to the
-user, each quoted word for word in the verdict; with none, it decides every
-request itself. `[gate.issue_open]`, `[gate.pr_open]`,
-`[gate.issue_other_repositories]`, `[gate.merge]` and `[gate.push]` add their
-`instructions` and `escalate` for the requests that key governs.
+The gate is the agent that decides a request under a permission of
+`"gate"`. See [the gate](../../../../../../docs/reference/approvals.md#the-gate).
+Shoal reads this table from the repository's checkout and the layers beside
+it, never from the requesting workspace's worktree.
+
+- `agent` is the AI tool that runs the gate.
+- `fallback_agent` decides once more when the first agent fails.
+- `instructions` follow the gate's built-in instructions.
+- `escalate` lists the cases the gate passes to you, each quoted word for word
+  in its verdict. With none, the gate decides every request itself.
+
+`[gate.<key>]` adds `instructions` and `escalate` for the requests one key
+governs. It takes the keys that allow `"gate"`: `issue_open`, `pr_open`,
+`issue_other_repositories`, `merge` and `push`.
 
 ### Secrets
 
@@ -713,14 +748,18 @@ requires_approval = false
 approval_lifetime = "lease"   # Or "workspace"
 ```
 
-Each entry is named after the variable that carries the value, and its `value`
-takes the [value form](#files-and-layers) of a secret: written out,
-`{ env }` from the environment of the process that reads it, or `{ cmd }`,
-whose standard output, less one trailing line break, is the value. Without `tools`, the value joins every tracked agent's environment;
-with `tools`, only runs of those programs receive it. Only a tool-scoped secret
-takes `requires_approval` and `approval_lifetime`, as a
-[protected resource](#approvals) does. Shoal's state records where a value
-comes from, a written one as its digest, never the value. See [agent secrets](../../../../../../docs/reference/agents.md#agent-secrets).
+Each entry is named after the variable that carries the value.
+
+- `value` takes the [value forms](#values) of a secret. A `{ cmd }` value is
+  its standard output, less one trailing line break.
+- `tools` limits the secret to runs of those programs. Without it, the value
+  joins every tracked agent's environment.
+- `requires_approval` and `approval_lifetime` apply only to a secret with
+  `tools`, as for a [protected resource](#approvals).
+
+Shoal's state records where a value comes from, and a written value as its
+digest, never the value itself. See
+[agent secrets](../../../../../../docs/reference/agents.md#agent-secrets).
 
 ### Sleep
 
@@ -742,8 +781,7 @@ settle_seconds = 5   # At most 60; 0 delivers each alert at once
 ```
 
 `settle_seconds` holds an agent's unread alerts until none has arrived for
-that long, and at most six times as long after the first; see
-[alerts](../../../../../../docs/reference/alerts.md).
+that long. See [alerts](../../../../../../docs/reference/alerts.md).
 
 ### Triggers
 
@@ -774,53 +812,82 @@ filter = [
 ]
 ```
 
-A trigger starts an agent when its source fires, as `shoal start` would. A
-repository's triggers start in that repository, and a
-[contribution](../../../../../../docs/reference/repo.md#contributions)'s come from
-its local config alone; a global trigger starts in the
-registered repository its `repository` names, or without one in a chat without
-a repository, which only the global file may set. A trigger is config like
-every other setting: a higher layer replaces a lower one's of the same name,
-and the global file's never reach a repository's. Names follow port names.
+A trigger starts an agent when its source fires, as `shoal start` would. See
+[triggers](../../../../../../docs/reference/triggers.md).
 
-`on` names the source. The `timer` source fires `every` interval after its last
-firing, or `at` each time of day, as `HH:MM`, on `days`, from `mon` to `sun`.
-The `webhook` source fires for each request to its route on the
-[webhook listener](#webhooks). With `secret`, a request must carry the
-HMAC-SHA256 of its body under that [secret](#secrets)'s value, in hex, where
-`signature` says: `forgejo` in `X-Forgejo-Signature`, `github` in
-`X-Hub-Signature-256` after `sha256=`, or `hmac-sha256` in the header
-`signature_header` names. A repository's trigger takes its secret from that
-repository's local config, a global trigger from the global config, and the
-secret reaches no agent, as its environment or through a tool, so that no
-agent can sign a request. Without `secret`, any process that reaches the
-listener fires the trigger, this machine's agents included.
+A repository's trigger starts in that repository. A
+[contribution](../../../../../../docs/reference/repo.md#contributions)'s
+triggers come from its local config alone. A global trigger starts in the
+registered repository its `repository` names. Without `repository`, it starts
+in a chat without a repository. Only the global file sets `repository`.
+
+A higher layer's trigger replaces a lower layer's of the same name. The
+global file's triggers never reach a repository's. Names follow port names.
+
+#### Sources
+
+`on` names the source.
+
+- `timer` fires `every` interval after its last firing, or `at` each time of
+  day, as `HH:MM`. `days` takes `mon` to `sun`.
+- `webhook` fires for each request to its route on the
+  [webhook listener](#webhooks).
+
+A webhook trigger's `secret` names a [secret](#secrets). A request must then
+carry the HMAC-SHA256 of its body under that secret's value, in hex, where
+`signature` says:
+
+- `forgejo`: in `X-Forgejo-Signature`.
+- `github`: in `X-Hub-Signature-256`, after `sha256=`.
+- `hmac-sha256`: in the header `signature_header` names.
+
+A repository's trigger takes its secret from that repository's local config,
+and a global trigger from the global config. The secret reaches no agent.
+Without `secret`, any process that reaches the listener fires the trigger,
+this machine's agents included.
+
 Lengths of time, such as `every`, `catch_up` and `key_window`, are whole
 numbers each followed by `s`, `m`, `h`, `d` or `w`, largest first, as in
-`1h30m`. A firing missed while the daemon was stopped or the machine slept runs
-once on its return when it is at most `catch_up` old.
+`1h30m`. A firing missed while the daemon was stopped or the machine slept
+runs once on its return, when it is at most `catch_up` old.
 
-The launch takes the keys of `shoal start`'s flags, `agent`, `mode`, `model`,
+#### The launch
+
+The launch takes the keys of `shoal start`'s flags: `agent`, `mode`, `model`,
 `effort`, `branch`, `base`, `issue`, `pr` (a PR URL), `name`, `priority`,
 `permission` (a table of `KEY = VALUE`, as `--permission` gives them) and `in`
-(a workspace's ID), and `task`, the text after `--`. Every one of them, and
-`key`, is a template: `{{ path }}` looks up a value of the firing's input
-document, such as `{{ payload.labels.0.name }}`, a string or number as text and
-an object or array as JSON. A timer's input has `scheduled_at`, `fired_at` and
-`previous_at`, the last firing or, before the first, when Shoal first read the
-trigger, as RFC 3339 times in its time zone, and `trigger`, its name. A
-webhook's has `payload`, the JSON body or a form-encoded body's fields,
-`body`, its text, `headers`, with names lowercased, `query`, `received_at` and
-`trigger`.
+(a workspace's ID). `task` is the text after `--`.
 
-`overlap` decides a firing that would start a new space while the space of the
-trigger's last run still has its agent running or queued. `filter` lists
-conditions on the input, each a `path` with one of `equals`, `not_equals`,
-`in`, `starts_with` or `exists`; `[]` after a key, as in `payload.labels[].name`,
-matches when any element does. `key` names what a firing is about, whose repeat
-within `key_window` does not run; a webhook without one takes its
-`X-Forgejo-Delivery`, `X-Gitea-Delivery` or `X-GitHub-Delivery` header. See
-[triggers](../../../../../../docs/reference/triggers.md).
+Each of these keys, and `key`, is a template. `{{ path }}` looks up a value of
+the firing's input document, such as `{{ payload.labels.0.name }}`. A string
+or number becomes text, and an object or array JSON.
+
+A timer's input has:
+
+- `scheduled_at` and `fired_at`;
+- `previous_at`: the last firing, or before the first, when Shoal first read
+  the trigger;
+- `trigger`: its name.
+
+Times are RFC 3339, in the trigger's time zone.
+
+A webhook's input has:
+
+- `payload`: the JSON body, or a form-encoded body's fields;
+- `body`: the body's text;
+- `headers`, with lowercase names;
+- `query`, `received_at` and `trigger`.
+
+#### Runs
+
+- `overlap` decides a firing that would start a new space while the space of
+  the trigger's last run still has its agent running or queued.
+- `filter` lists conditions on the input. Each is a `path` with one of
+  `equals`, `not_equals`, `in`, `starts_with` or `exists`. `[]` after a key,
+  as in `payload.labels[].name`, matches when any element does.
+- `key` names what a firing is about. A firing whose key repeats within
+  `key_window` does not run. A webhook without `key` takes its
+  `X-Forgejo-Delivery`, `X-Gitea-Delivery` or `X-GitHub-Delivery` header.
 
 ## Terminal
 
@@ -832,19 +899,21 @@ nested_zmx = false       # true runs agents and demos in zmx inside host places
 default_host = "zmx"     # "zmx", "herdr", "rex", "tmux" or "zellij"
 ```
 
-`focus` decides whether the places `shoal start` opens take the terminal:
-unset, a workspace shell or an agent waiting for its first prompt takes it and
-an agent with input starts in the background; a [mode's](#modes-and-rules)
-`focus` overrides it for its launches. `close_when_done` closes the place Shoal
-opened for a workspace once `done` keeps the workspace and the agent finishes
-its turn. `nested_zmx` runs the agents and demos Shoal runs in a Herdr pane,
-Rex block, tmux pane or Zellij pane in a zmx session attached there, which
-`shoal attach` also reaches from any other terminal; it needs zmx 1.0.1 or
-later. `default_host` is where launches from a terminal no host serves run:
-detached zmx sessions, tabs on the local Herdr server, windows on the local Rex
-server, windows on the default tmux server, or Zellij sessions of their own;
-turning that host off runs them in place. Each host's table below overrides
-`close_when_done` and `nested_zmx` for its own places; see [agents](../../../../../../docs/reference/agents.md).
+- `focus` decides whether the places `shoal start` opens take the terminal.
+  Unset, a workspace shell or an agent waiting for its first prompt takes it,
+  and an agent with input starts in the background. A
+  [mode's](#modes-and-rules) `focus` overrides it for its launches.
+- `close_when_done` closes the place Shoal opened for a workspace once `done`
+  keeps the workspace and the agent finishes its turn.
+- `nested_zmx` runs agents and demos in a zmx session inside the host's pane,
+  block or tab. `shoal attach` then reaches them from any other terminal. It
+  needs zmx 1.0.1 or later.
+- `default_host` is where launches run from a terminal no host serves: in
+  detached zmx sessions, or as tabs, windows or sessions of the local Herdr,
+  Rex, tmux or Zellij server. Turning that host off runs them in place.
+
+Each host's table below overrides `close_when_done` and `nested_zmx` for its
+own places. See [terminals](../../../../../../docs/reference/terminals.md).
 
 ### Herdr
 
@@ -858,12 +927,14 @@ close_when_done = true     # Optional; over terminal.close_when_done
 nested_zmx = true          # Optional; over terminal.nested_zmx
 ```
 
-`tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, `{issue_title}` and
-`{name}`, the space's name, which `{title}` also gives, or a literal name; issue
-fields are empty without an issue, unknown placeholders stay literal and
-inserted values are never expanded again. Without it a tab is labelled
-`<repo>#<number>` for an issue, otherwise with its branch, and a space's name
-replaces either. `workspace_name` takes only `{repo}`. See
+`tab_name` names the tabs Shoal opens. It takes a literal name or these
+placeholders: `{repo}`, `{branch}`, `{issue_number}`, `{issue_title}`, and
+`{name}` or `{title}`, the space's name. Issue fields are empty without an
+issue. Unknown placeholders stay literal, and inserted values are never
+expanded again. Without `tab_name`, a tab is labelled with the space's name,
+else `<repo>#<number>` for an issue, else its branch.
+
+`workspace_name` takes only `{repo}`. See
 [Herdr](../../../../../../docs/reference/terminals.md#herdr).
 
 ### Rex
@@ -879,7 +950,8 @@ close_when_done = true     # Optional
 nested_zmx = true          # Optional
 ```
 
-`session_name` takes only `{repo}`. See [Rex](../../../../../../docs/reference/terminals.md#rex).
+`session_name` takes only `{repo}`. See
+[Rex](../../../../../../docs/reference/terminals.md#rex).
 
 ### tmux
 
@@ -894,7 +966,8 @@ close_when_done = true     # Optional
 nested_zmx = true          # Optional
 ```
 
-`session_name` takes only `{repo}`. See [tmux](../../../../../../docs/reference/terminals.md#tmux).
+`session_name` takes only `{repo}`. See
+[tmux](../../../../../../docs/reference/terminals.md#tmux).
 
 ### Zellij
 
@@ -922,18 +995,22 @@ copy_ignored_exclude = ["node_modules/"] # Gitignore-style patterns not to copy;
 presets = ["cargo", "bun"]               # Build tools to set up; default []
 ```
 
-`command` is one executable path, run without shell parsing or `PATH` lookup,
-relative to the worktree's root; it gates readiness. `copy_ignored` copies the checkout's ignored files
-into a new worktree before it, limited by a `.worktreeinclude` in the checkout,
-and `copy_ignored_exclude` leaves out what its patterns match.
+- `command` is one executable path, relative to the worktree's root. Shoal
+  runs it without shell parsing or `PATH` lookup. The workspace is ready only
+  once it exits 0.
+- `copy_ignored` copies the checkout's ignored files into a new worktree
+  before `command` runs. A `.worktreeinclude` in the checkout limits what it
+  copies.
+- `copy_ignored_exclude` leaves out what its patterns match.
+- `presets` names the build tools a repository uses: `cargo`, `npm`, `pnpm`,
+  `yarn`, `bun`, `go`, `xcode`, `zig` and `ccache`. The global list applies
+  to every repository that names none, and `presets = []` turns it off.
+  Presets that keep the same seed output cannot be combined. A variable
+  `[env]` sets wins over a preset's, and an [`[mcp]`](#mcp-servers) table
+  over a preset's server.
 
-`presets` names the build tools a repository uses: `cargo`, `npm`, `pnpm`,
-`yarn`, `bun`, `go`, `xcode`, `zig` and `ccache`. The global list applies to
-every repository that names none, and `presets = []` turns it off. Presets that
-keep the same seed output cannot be combined, and a variable `[env]` sets takes
-precedence over a preset's, as an [`[mcp]`](#mcp-servers) table over a preset's
-server. See [build tool presets](../../../../../../docs/reference/setup.md#build-tool-presets)
-and [setup and hooks](../../../../../../docs/reference/setup.md).
+See [setup and hooks](../../../../../../docs/reference/setup.md) and
+[build tool presets](../../../../../../docs/reference/setup.md#build-tool-presets).
 
 ### Seed builds
 
@@ -943,9 +1020,9 @@ command = "scripts/seed.sh"  # In the seed worktree; builds the default branch
 paths = ["target"]           # Build outputs, relative to the worktree
 ```
 
-`command` is an executable inside the seed worktree, given as a relative path;
-it replaces the presets' commands, and `paths` their outputs. See
-[seed builds](../../../../../../docs/reference/setup.md#seed-builds).
+`command` is an executable inside the seed worktree, given as a relative
+path. It replaces the presets' commands, and `paths` replaces their outputs.
+See [seed builds](../../../../../../docs/reference/setup.md#seed-builds).
 
 ### Hooks
 
@@ -962,12 +1039,12 @@ post_resource_acquire = "scripts/acquired.sh"  # After a permit is recorded
 pre_resource_release = "scripts/release.sh"    # Before a permit is freed
 ```
 
-Each value is one executable path, run directly without shell parsing or `PATH`
-lookup; give scripts a shebang and put arguments and shell logic inside them.
-Hooks that run while the worktree exists resolve relative paths against its
-root, `post_remove` against the repository checkout. A repository value
-replaces the global one. See [setup and hooks](../../../../../../docs/reference/setup.md)
-and [resource hooks](../../../../../../docs/reference/resources.md#resource-hooks).
+Each value is one executable path, run without shell parsing or `PATH`
+lookup. Give scripts a shebang, and put arguments and shell logic inside them.
+A relative path resolves against the worktree's root, or for `post_remove`
+against the repository checkout. A repository value replaces the global one.
+See [setup and hooks](../../../../../../docs/reference/setup.md) and
+[resource hooks](../../../../../../docs/reference/resources.md#resource-hooks).
 
 ### Environment
 
@@ -979,17 +1056,27 @@ GOCACHE = "{cache.go}"
 ```
 
 `[env]` adds variables to tracked executions, lifecycle hooks and exported
-environments, a chat's as a workspace's; a chat without a repository takes the
-global config's. Values substitute `{workspace}`, the name of the workspace's
-directory, `{workspace_path}`, `{path}`, the directory the space works in,
-`{repo}`, `{branch}`, reserved `{port.NAME}` and
-[`{cache.NAME}`](#shared-caches) once; unknown fields stay literal, inserted
-values are not expanded, and neither are inherited variables or shell
-expressions. A chat leaves unset a variable that names `{workspace}`,
-`{workspace_path}`, `{branch}` or a port, which only a workspace has, and a chat
-without a repository one that names `{repo}` or a cache too. Names are ASCII identifiers, and `SHOAL_*` names are
-reserved; values are strings without NUL, and an empty string sets an empty
-value. Reserved port exports take precedence. See
+environments, of a chat as of a workspace. A chat without a repository takes
+the global config's.
+
+Values may use these placeholders, substituted once:
+
+- `{workspace}`: the name of the workspace's directory;
+- `{workspace_path}`;
+- `{path}`: the directory the space works in;
+- `{repo}` and `{branch}`;
+- `{port.NAME}`: a reserved port;
+- [`{cache.NAME}`](#shared-caches).
+
+Unknown placeholders stay literal. Shoal never expands inserted values,
+inherited variables or shell expressions. A chat leaves a variable unset when
+its value uses a placeholder only a workspace has: `{workspace}`,
+`{workspace_path}`, `{branch}` or a port. A chat without a repository also
+leaves one unset that uses `{repo}` or a cache.
+
+Names are ASCII identifiers, and `SHOAL_*` names are reserved. Values are
+strings without NUL; an empty string sets an empty value. Reserved port
+variables take precedence. See
 [scoped workspace commands](../../../../../../docs/reference/modes.md#scoped-workspace-commands).
 
 ### Shared caches
@@ -999,10 +1086,11 @@ value. Reserved port exports take precedence. See
 scope = "shared"  # Required; the only scope
 ```
 
-Each `[caches.NAME]` is a directory every workspace of the repository shares,
-which `{cache.NAME}` names in `[env]`; names are lowercase like port names. Use
-it only for tools that lock or address their entries by content, never for
-build output directories. See [shared caches](../../../../../../docs/reference/setup.md#shared-caches).
+Each `[caches.NAME]` is a directory that every workspace of the repository
+shares, and `{cache.NAME}` names it in `[env]`. Names are lowercase, like port
+names. Use a cache only for tools that lock their entries or address them by
+content, never for build output. See
+[shared caches](../../../../../../docs/reference/setup.md#shared-caches).
 
 ### MCP servers
 
@@ -1017,14 +1105,18 @@ enabled = true               # Whether agents start it; default true
 enabled = false              # Keeps the xcode preset's caches without its server
 ```
 
-Each `[mcp.NAME]` is a stdio MCP server the agents of the repository's
-workspaces and chats start, added to their own; a chat without a repository
-reads the global config. [Presets](#setup) bring servers of their own: `xcode`
-brings `xcode`, which runs `xcrun mcpbridge`. A table with `command` defines its
-server whole, replacing a preset's of the same name; one without changes the
-preset's `args`, `env` or `enabled`, and is refused when no preset brings a
-server of that name. Layers merge each server field by field, and `env` per
-variable. Names are lowercase like port names. See
+Each `[mcp.NAME]` is a stdio MCP server that the agents of the repository's
+workspaces and chats start, beside their own. A chat without a repository
+reads the global config.
+
+[Presets](#setup) bring servers of their own; `xcode` brings `xcode`, which
+runs `xcrun mcpbridge`. A table with `command` defines its server whole and
+replaces a preset's server of the same name. A table without `command` changes
+the preset's `args`, `env` or `enabled`, and is refused when no preset brings
+a server of that name.
+
+Layers merge each server field by field, and `env` per variable. Names are
+lowercase, like port names. See
 [build tool presets](../../../../../../docs/reference/setup.md#build-tool-presets).
 
 ### Commands
@@ -1037,14 +1129,17 @@ review = ["tuicr", "-r", "{diff_base}..HEAD"]
 review-worktree = ["tuicr", "-w"]
 ```
 
-Each entry is a shortcut `shoal run <name>` runs, an argument array whose
-executable resolves through `PATH`, with the workspace as working directory and
-without shell expansion. A higher layer replaces the whole array. `{workspace}`,
-`{branch}`, `{path}` and `{diff_base}`, the fork point `shoal diff` compares
-against, expand once; a standalone `{args}` inserts the forwarded arguments
-there, otherwise they are appended. An entry may take an agent's name.
+Each entry is a shortcut that `shoal run <name>` runs. It is an argument
+array whose executable resolves through `PATH`. It runs in the workspace,
+without shell expansion. A higher layer replaces the whole array.
+
+These placeholders expand once: `{workspace}`, `{branch}`, `{path}`, and
+`{diff_base}`, the fork point `shoal diff` compares against. A standalone
+`{args}` inserts the forwarded arguments there; otherwise they are appended.
+
 `edit` is what `shoal edit` runs, and `review` the manual review of
-`shoal review run`. See [configured commands](../../../../../../docs/reference/run.md).
+`shoal review run`. An entry may share a name with an agent. See
+[configured commands](../../../../../../docs/reference/run.md).
 
 ### Demos
 
@@ -1065,12 +1160,15 @@ cmd = ["scripts/run-app.sh"]
 viewer = ["serve-sim", "--port", "{port}", "{udid}"]  # Optional: the default; false turns it off
 ```
 
-Names follow port names, except the `shoal demo` subcommands. `preset` says how
-the demo reaches you, and `ports` and `open` replace its parts. A simulator
-demo's `viewer` shows its device on another machine, started when someone opens
-it there, with the device's UDID as `{udid}` and the port it serves on as
-`{port}`. See
-[demos](../../../../../../docs/reference/demos.md).
+Names follow port names, except the names of `shoal demo` subcommands.
+
+- `preset` says how the demo reaches you. `ports` and `open` replace the
+  preset's parts.
+- `viewer`, for a simulator demo, shows its device on another machine. It
+  starts when someone opens the demo there. `{udid}` is the device's UDID and
+  `{port}` the port the viewer serves on.
+
+See [demos](../../../../../../docs/reference/demos.md).
 
 ### Ports
 
@@ -1090,10 +1188,15 @@ approval_lifetime = "lease"
 ```
 
 `start`, `end` and `on_conflict` are keys of the table itself, so no port can
-take those names. A named port's `port` is preferred, `env` names the variable
-that carries it instead of `SHOAL_PORT_<NAME>`, and `on_conflict = "auto"`
-takes a free port instead of suggesting one. See
-[port reservations](../../../../../../docs/reference/resources.md#port-reservations).
+take those names.
+
+- `port` is the named port's preferred port.
+- `env` names the variable that carries the port, in place of
+  `SHOAL_PORT_<NAME>`.
+- `on_conflict = "auto"` takes a free port instead of suggesting one.
+
+See [port reservations](../../../../../../docs/reference/resources.md#port-reservations)
+and [approvals](#approvals).
 
 ## Issues, PRs and merges
 
@@ -1106,17 +1209,17 @@ assign = "agent"             # "agent", "user", "both" or "none"
 area_prefix = "area/"        # Default: unset
 ```
 
-`required_labels` names entries that every new issue's labels must each start
-with, so `area/` takes any area label; see
-[repository conventions](../../../../../../docs/reference/issues.md#repository-conventions); a mode's
-`label` says which issues it starts. `assign` says whose
-accounts join the forge assignees of an issue a space links as assigned: the
-agent account while an agent works the issue, the user's own login for every
-assigned link, both, or none; see
-[linked items](../../../../../../docs/reference/links.md). `area_prefix` is the
-prefix of the labels that name an issue's areas, so the
-[agent queue](../../../../../../docs/reference/queue.md#queue-order) starts new workspaces whose issues share
-fewer areas with existing workspaces first; unset, areas order nothing.
+- `required_labels` lists prefixes. Every new issue needs a label that starts
+  with each of them, so `area/` takes any area label. See
+  [repository conventions](../../../../../../docs/reference/issues.md#repository-conventions).
+- `assign` says whose accounts join the assignees of an issue a space links
+  as assigned. `agent` adds the agent account while an agent works the issue,
+  `user` adds your own login for every assigned link, and `both` does both.
+  See [linked items](../../../../../../docs/reference/links.md).
+- `area_prefix` is the prefix of the labels that name an issue's areas. The
+  [agent queue](../../../../../../docs/reference/queue.md#queue-order) starts
+  new workspaces whose issues share fewer areas with existing workspaces
+  first. Unset, areas order nothing.
 
 ```toml
 [priority.labels]   # Default: none
@@ -1124,9 +1227,9 @@ urgent = 75
 "low-priority" = 25
 ```
 
-`[priority.labels]` gives forge labels a priority from 0 to 100: a space or
-launch given none ranks in the [agent queue](../../../../../../docs/reference/queue.md#queue-order) with the
-highest its issues' labels map to.
+`[priority.labels]` gives forge labels a priority from 0 to 100. A space or
+launch given no priority takes the highest that its issues' labels map to.
+See [queue order](../../../../../../docs/reference/queue.md#queue-order).
 
 ### PRs
 
@@ -1140,14 +1243,17 @@ progress = false                    # Show the space's progress in its draft PR 
 watch_merge_runs = false            # After a PR merges or `shoal merge` pushes, watch the default branch's CI runs for its commit
 ```
 
-`required_labels` works as for issues. `progress = true` with `draft = true`
-shows each agent's progress on its draft PRs until they leave draft.
-`watch_merge_runs = true` links to a space the default branch's runs for the
-merge commit of each PR it watches or links as opened that merges into the
-default branch, and for the commit each local `shoal merge` of its branch pushes,
-and reports how they end.
+- `required_labels` works as for issues.
+- `progress` shows each agent's progress on its draft PRs, until they leave
+  draft.
+- `watch_merge_runs` links to a space the default branch's CI runs for each
+  merge of its work, and reports how they end. That covers a PR it watches or
+  opened that merges into the default branch, and a local `shoal merge` that
+  pushes its branch.
+
 See [issue and PR actions](../../../../../../docs/reference/issues.md#issue-and-pr-actions),
-[ready for review](../../../../../../docs/reference/completion.md#ready-for-review) and [progress](../../../../../../docs/reference/progress.md).
+[ready for review](../../../../../../docs/reference/completion.md#ready-for-review)
+and [progress](../../../../../../docs/reference/progress.md).
 
 ### Reviews
 
@@ -1161,10 +1267,9 @@ require_for_ready = "off"  # `shoal ready` needs one too
 require_for_merge = "off"  # `shoal merge` needs one of what merges, a PR or a branch
 ```
 
-Each `require_for_` key takes `"off"`, `"agents"`, which holds agents and the
-commands they run, or `"all"`, which also holds your own.
-
-See [local reviews](../../../../../../docs/reference/reviews.md#local-reviews).
+Each `require_for_` key takes `"off"`; `"agents"`, which holds agents and the
+commands they run; or `"all"`, which also holds your own. See
+[local reviews](../../../../../../docs/reference/reviews.md#local-reviews).
 
 ### Merges
 
@@ -1176,9 +1281,11 @@ push = false      # Push the default branch after a local merge
 method = "squash" # "merge", "rebase" or "squash"; no default
 ```
 
-`method` sets how a local merge, a PR merge and `shoal absorb` merge, unless
-`-X` says; without it, a PR merges by the forge's default and the others
-fast-forward or create a merge commit. `enabled` leaves `shoal absorb` alone.
+- `enabled = false` turns local merges off. It leaves PR merges and
+  `shoal absorb` alone.
+- `method` sets how a local merge, a PR merge and `shoal absorb` merge, unless
+  `-X` says otherwise. Without it, a PR merges by the forge's default, and the
+  others fast-forward or create a merge commit.
 
 See [merge into the default branch](../../../../../../docs/reference/branches.md#merge-into-the-default-branch).
 
@@ -1189,9 +1296,10 @@ See [merge into the default branch](../../../../../../docs/reference/branches.md
 sensitive = ["src/version.rs", "migrations/**"] # Default: []
 ```
 
-`sensitive` lists, as paths and globs relative to the repository root, the files
-that hold a number each change picks for itself, such as a schema migration or
-protocol version; see [conflicts](../../../../../../docs/reference/branches.md#conflicts).
+`sensitive` lists the files that hold a number each change picks for itself,
+such as a schema migration or a protocol version. It takes paths and globs
+relative to the repository root. See
+[conflicts](../../../../../../docs/reference/branches.md#conflicts).
 
 ### Runner
 
@@ -1229,17 +1337,18 @@ retention_days = 30  # How long restores, checkpoints and alerts stay
 archive_max_mb = 50  # Unsaved files an agent's exit or stop checkpoint keeps
 ```
 
-`retention_days` is how long a removed space stays restorable and keeps its
-log and files, how long a checkpoint stays, how long a copy `shoal files`
-fetched from another machine stays, and how long an alert for the user
-stays, read or not, by the setting of the repository of the space it is about.
-An alert about no space or a chat without a repository takes the global setting.
+- `grace_minutes` is how long every unattended removal waits, except one for
+  low disk space.
+- `retention_days` is how long Shoal keeps a removed space restorable, with
+  its log and files. It is also how long Shoal keeps checkpoints, copies that
+  `shoal files` fetched from another machine, and your alerts, read or not.
+  The repository of the space each is about sets it; an alert about no space,
+  or about a chat without a repository, takes the global setting.
 
-`grace_minutes` is how long every unattended removal except for low disk space
-waits. Global changes apply on reload, repository ones on the next sweep. See
+Global changes apply on reload, and repository ones on the next sweep. See
 [automatic cleanup](../../../../../../docs/reference/removal.md#automatic-cleanup),
-[assignment completion](../../../../../../docs/reference/completion.md#assignment-completion) and
-[checkpoints and restore](../../../../../../docs/reference/removal.md#checkpoints-and-restore).
+[assignment completion](../../../../../../docs/reference/completion.md#assignment-completion)
+and [checkpoints and restore](../../../../../../docs/reference/removal.md#checkpoints-and-restore).
 
 ## Resources
 
@@ -1263,12 +1372,17 @@ capacity = 1
 capacity = 2                   # Within the pool limit
 ```
 
-Global resources are shared across repositories, a repository's across its
-workspaces; a repository cannot redefine a global name. Capacities are 1–65535
-and default to 1, a pool's to its members' total, and every pool needs members.
-Names are lowercase letters, digits, `_` or `-`, starting with a letter, at most
-64 characters. `kind = "rwlock"` allows shared readers or one writer and needs
-capacity 1. See [cooperative resource pools](../../../../../../docs/reference/resources.md#cooperative-resource-pools).
+Global resources are shared across repositories, and a repository's across
+its workspaces. A repository cannot redefine a global name.
+
+- `capacity` is 1–65535 and defaults to 1. A pool's defaults to its members'
+  total. Every pool needs members.
+- `kind = "rwlock"` allows shared readers or one writer, and needs capacity 1.
+
+Names are lowercase letters, digits, `_` or `-`, start with a letter, and have
+at most 64 characters. See
+[cooperative resource pools](../../../../../../docs/reference/resources.md#cooperative-resource-pools)
+and [approvals](#approvals).
 
 ### Related repositories
 
@@ -1278,8 +1392,9 @@ kind = "repo"
 repo = "saldoir-server"        # Registered name or ID, or a remote URL
 ```
 
-A resource of kind `repo` is a registered repository a workspace may read; its
-capacity must be 1. See [related repository paths](../../../../../../docs/reference/resources.md#related-repository-paths).
+A resource of kind `repo` is a registered repository that a workspace may
+read. Its capacity must be 1. See
+[related repository paths](../../../../../../docs/reference/resources.md#related-repository-paths).
 
 ### Simulator preferences
 
@@ -1290,8 +1405,8 @@ requires_approval = false
 approval_lifetime = "lease"
 ```
 
-`preferred` orders the [simulator profiles](#simulators) `shoal acquire sim`
-tries, globally or per repository; flags override it.
+`preferred` orders the [simulator profiles](#simulators) that
+`shoal acquire sim` tries, globally or per repository. Flags override it.
 
 ### Containers
 
@@ -1302,22 +1417,31 @@ ports = ["db", "cache"]        # Named ports reserved before the project starts
 start = "acquire"              # Or "setup"
 ```
 
-`compose` gives each workspace its own Compose project from that file; without
-it the repository's workspaces have none. Each port in `ports` is reserved as
-`shoal acquire port` reserves it, so its `[ports.<name>]` table applies, and
-the project reads it from the port's variable, such as `${SHOAL_PORT_DB}`.
-`start = "setup"` starts the project once setup readies the workspace, before
-its post-setup hook and agent, instead of on `shoal acquire containers`. See
-[containers](../../../../../../docs/reference/resources.md#containers).
+- `compose` gives each workspace its own Compose project from that file.
+  Without it, the repository's workspaces have no containers.
+- `ports` lists named ports to reserve, as `shoal acquire port` does, so their
+  `[ports.<name>]` tables apply. The project reads each from its variable,
+  such as `${SHOAL_PORT_DB}`.
+- `start = "setup"` starts the project once setup readies the workspace,
+  before its post-setup hook and agent. With `"acquire"`, it starts on
+  `shoal acquire containers`.
+
+See [containers](../../../../../../docs/reference/resources.md#containers).
 
 ### Approvals
 
-`requires_approval = true` on a resource, named port, simulator profile,
-`[simulators]` or tool-scoped secret makes a scoped acquisition an approval
-request. `approval_lifetime = "lease"`, the default, ends the approval on
-release; `"workspace"` permits later acquisitions of the same member and
-settings until the workspace is removed. A protected machine profile cannot be
-relaxed by repository defaults. See [resource approvals](../../../../../../docs/reference/approvals.md#resource-approvals).
+`requires_approval = true` makes a scoped acquisition an approval request. It
+applies to a resource, a named port, a simulator profile, `[simulators]` or a
+secret with `tools`.
+
+`approval_lifetime` says how long an approval lasts:
+
+- `"lease"`, the default: until release.
+- `"workspace"`: later acquisitions of the same member and settings need no
+  new approval until the workspace is removed.
+
+Repository defaults cannot relax a protected machine profile. See
+[resource approvals](../../../../../../docs/reference/approvals.md#resource-approvals).
 
 ## Apps
 
@@ -1328,11 +1452,10 @@ board = "main"
 todo = "grey"
 ```
 
-`[apps.<name>]` holds the settings of an app built on Shoal, such as Quay, in
-any file: per repository in its tracked file or local config, or for every
-repository in the global config. Shoal checks only that it is a TOML table: it
-layers each one as it layers its own options, a table merging key by key with
-the one below it and any other value replacing what is below, and hands the
-result to the app, which reads it for a space, a repository or the global
-config alone. It is configuration you edit, apart from the app store, which
-the app writes. See [apps](../../../../../../docs/reference/apps.md).
+`[apps.<name>]` holds the settings of an app built on Shoal, such as Quay. Any
+file takes it: a repository's tracked file or local config for that
+repository, or the global config for every repository. Shoal checks only that
+it is a TOML table. It layers each one as it layers its own options: a table
+merges key by key with the one below it, and any other value replaces what is
+below. The app reads the result for a space, a repository or the global
+config alone. See [apps](../../../../../../docs/reference/apps.md).
