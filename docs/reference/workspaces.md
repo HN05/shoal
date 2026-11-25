@@ -142,7 +142,7 @@ ambiguous. When the remote has no symbolic HEAD, Shoal asks it with
 it. Without remotes, the registered checkout's current branch is the default,
 and a detached checkout needs `--base`.
 
-A new branch starts from the local default branch as the [sync](repo.md) left
+A new branch starts from the local default branch as the [sync](repo.md#default-branch-sync) left
 it; creating it never fetches. `--base REF` starts it from any commit that
 resolves locally, first fetching a remote branch it names. Shoal records the
 resolved base for `shoal diff`.
@@ -413,7 +413,7 @@ The inbox lists what needs you, each item with its workspace:
 - running [demos](demos.md);
 - Git worktrees under a repository's Shoal directory that no workspace owns;
 - automatic cleanup that fails other than in a workspace;
-- repositories whose default branch has failed to [sync](repo.md) for 30
+- repositories whose default branch has failed to [sync](repo.md#default-branch-sync) for 30
   minutes.
 
 Enter acts on the item:
@@ -469,7 +469,7 @@ Status shows:
 - its [attached files](files.md) in `attached_files`, and its unread alerts in
   `unread_notifications`;
 - a failed step of automatic cleanup in the workspace, in `cleanup_error`;
-- `Last sync`: when the repository's default branch last [synced](repo.md), and
+- `Last sync`: when the repository's default branch last [synced](repo.md#default-branch-sync), and
   why the syncs since then failed, in `sync` (`synced_at`, `failing_since` and
   `error`);
 - the files the last check of HEAD against the default target found

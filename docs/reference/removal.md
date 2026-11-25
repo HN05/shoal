@@ -319,7 +319,7 @@ turns it on, a workspace whose branch merged into the default branch is removed 
 has used it for [`[cleanup.merged] idle_minutes`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup), whether or not its agent ran `shoal done` or it
 has linked issues and PRs. Merged has the meaning [removal](removal.md)
 gives it, against the default branch's remote-tracking branch as the
-[sync](repo.md) last fetched it, fetching it again when no sync has for ten
+[sync](repo.md#default-branch-sync) last fetched it, fetching it again when no sync has for ten
 minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitted and untracked files go into the
 [removal's checkpoint](#checkpoints-and-restore); they keep the workspace when the checkpoint cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
