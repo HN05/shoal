@@ -156,8 +156,6 @@ says where it lives and how it layers over each workspace's file.
 returns `path` and `toml`, which is unset while the file does not exist.
 
 `config set --repo NAME` and `config unset --repo NAME` edit the local config
-as they edit the global file. They keep comments and the previous file as
-`config.toml.backup`, and save only a valid result. Every workspace of the
-repository applies the edit at once. Scoped processes read and change the
+as they edit the global file. Scoped processes read and change the
 local config as their space's [`admin` permission](modes.md#permitted-actions)
 allows.
