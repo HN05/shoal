@@ -617,33 +617,3 @@ fn merge_request(workspace: &crate::model::Workspace) -> ApprovalRequest {
         Some("Merges the branch"),
     )
 }
-
-#[tokio::test]
-async fn a_chat_owns_its_requests_until_it_goes() -> Result<()> {
-    let (_root, manager) = crate::daemon::test_support::manager().await;
-    let chat = crate::daemon::test_support::chat(&manager, "master", "chat", None, None).await;
-    let target = Target::Resource {
-        scope: Scope::Global,
-        pool: "lock".into(),
-    };
-    let pending = manager
-        .coordination
-        .request_approval(sample(&chat.id, target.clone()))
-        .await?
-        .unwrap();
-    assert_eq!(pending.number.space, chat.number);
-    let id = chat.id.clone();
-    manager
-        .store
-        .write(move |tx| {
-            assert_eq!(
-                current(tx, &id, &target, "default")?.unwrap().key,
-                pending.key
-            );
-            assert_eq!(list(tx, Some(&id))?.len(), 1);
-            tx.execute("DELETE FROM spaces WHERE id=?1", [&id])?;
-            assert!(current(tx, &id, &target, "default")?.is_none());
-            Ok(())
-        })
-        .await
-}

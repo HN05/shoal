@@ -2,9 +2,9 @@ use shoal_protocol::threads::ThreadOpening;
 use std::{fs, sync::Arc};
 
 use shoal_protocol::{
-    changes::{Change, ChangeAuthor, ChangeKind, ChangeNumber, Hunk, ToolChange},
+    changes::{Change, ChangeAuthor, ChangeKind, Hunk, ToolChange},
     space_names::SpaceSelector,
-    threads::{NewPost, OutcomeKind, Resolving, Thread, ThreadKind, ThreadNumber, ThreadStatus},
+    threads::{NewPost, Thread, ThreadKind, ThreadNumber, ThreadStatus},
 };
 
 use crate::{
@@ -261,18 +261,6 @@ async fn a_file_without_hunks_is_recorded_with_its_kind_and_size() {
 }
 
 impl Fixture {
-    /// A thread the workspace's agent opens with the user.
-    pub(crate) async fn thread(&self, name: &str) -> Thread {
-        let opened = (self.manager).coordination.open_thread(
-            &*self.manager,
-            Some(&self.agent),
-            ThreadOpening::named(name),
-            Some(ThreadKind::Request),
-            None,
-        );
-        opened.await.unwrap()
-    }
-
     pub(crate) async fn switch(&self, thread: Option<&Thread>) {
         let number = thread.map(|thread| ThreadNumber::Full(thread.number));
         let own = SpaceSelector::id(&self.workspace.id);
@@ -284,103 +272,6 @@ impl Fixture {
         );
         switched.await.unwrap();
     }
-
-    /// The numbers of the changes of `thread`.
-    pub(crate) async fn of_thread(&self, thread: &Thread) -> Vec<u32> {
-        let filter = ChangeFilter {
-            thread: Some(ThreadNumber::Full(thread.number)),
-            ..ChangeFilter::default()
-        };
-        let changes = self
-            .manager
-            .coordination
-            .changes(&*self.manager, Some(&self.agent), filter)
-            .await
-            .unwrap();
-        changes.iter().map(|change| change.number).collect()
-    }
-}
-
-fn own(numbers: &[u32]) -> Vec<ChangeNumber> {
-    numbers.iter().copied().map(ChangeNumber::Own).collect()
-}
-
-#[tokio::test]
-async fn changes_go_to_the_thread_switched_to_and_move_as_the_agent_says() {
-    let fixture = fixture().await;
-    let (agent, manager) = (Some(&fixture.agent), &fixture.manager);
-    let first = fixture.thread("Parse it").await;
-    let second = fixture.thread("Lex it").await;
-    fixture.switch(Some(&first)).await;
-    fixture.write("lib.rs", "a\n");
-    fixture.command("1", "lib.rs", "a\nb\n").await;
-    // Someone else's change between tool calls goes to no thread.
-    fixture.write("notes.md", "notes\n");
-    fixture.command("2", "lib.rs", "a\nb\nc\n").await;
-    assert_eq!(fixture.of_thread(&first).await, [1, 3]);
-
-    let (first_number, second_number) = (
-        ThreadNumber::Full(first.number),
-        ThreadNumber::Full(second.number),
-    );
-    let (two, three) = (own(&[2]), own(&[3]));
-    let claimed =
-        manager
-            .coordination
-            .claim_changes(&**manager, agent, None, &two, Some(second_number));
-    assert_eq!(claimed.await.unwrap()[0].author, ChangeAuthor::Agent);
-    let added = manager
-        .coordination
-        .add_changes(&**manager, agent, second_number, None, &three);
-    added.await.unwrap();
-    assert_eq!(fixture.of_thread(&first).await, [1]);
-    assert_eq!(fixture.of_thread(&second).await, [2, 3]);
-    let removed =
-        manager
-            .coordination
-            .remove_changes(&**manager, agent, first_number, None, &three);
-    assert!(
-        removed.await.is_err(),
-        "change 3 is not in the first thread"
-    );
-    let unclaimed = manager
-        .coordination
-        .unclaim_changes(&**manager, agent, None, &three)
-        .await
-        .unwrap();
-    assert_eq!(
-        (unclaimed[0].author, unclaimed[0].thread),
-        (ChangeAuthor::Others, None)
-    );
-
-    // Resolving the thread switched to leaves the agent in none.
-    let resolved = manager.coordination.resolve_thread(
-        &**manager,
-        agent,
-        first_number,
-        Resolving {
-            outcome: Some(OutcomeKind::Withdrawn),
-            ..Resolving::default()
-        },
-    );
-    resolved.await.unwrap();
-    let own_space = SpaceSelector::id(&fixture.workspace.id);
-    assert_eq!(
-        manager
-            .coordination
-            .current_thread(&**manager, &own_space)
-            .await
-            .unwrap(),
-        None
-    );
-    let switched =
-        manager
-            .coordination
-            .switch_thread(&**manager, agent, &own_space, Some(first_number));
-    assert!(
-        switched.await.is_err(),
-        "a resolved thread takes no changes"
-    );
 }
 
 #[tokio::test]
@@ -539,29 +430,4 @@ async fn a_change_s_lines_follow_its_code_and_its_version_stays_kept() {
         2,
         "the version it made and the one it was followed to"
     );
-}
-
-#[tokio::test]
-async fn a_command_s_change_of_a_file_the_user_edited_meanwhile_is_mixed() {
-    let fixture = fixture().await;
-    fixture.write("lib.rs", "a\n");
-    fixture.write("main.rs", "fn main() {}\n");
-    fixture
-        .report(ToolChange::Starts { call: "1".into() })
-        .await;
-    let edited = vec![fixture.workspace.path.join("lib.rs")];
-    fixture
-        .manager
-        .coordination
-        .report_edits(&*fixture.manager, None, edited)
-        .await
-        .unwrap();
-    fixture.write("lib.rs", "a\nb\n");
-    fixture.write("main.rs", "fn main() { run() }\n");
-    let mixed = fixture.report(ToolChange::Ends { call: "1".into() }).await;
-    let paths: Vec<&str> = mixed
-        .iter()
-        .map(|change| change.latest.path.as_str())
-        .collect();
-    assert_eq!(paths, ["lib.rs"]);
 }

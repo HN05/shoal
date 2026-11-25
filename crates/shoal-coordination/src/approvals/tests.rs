@@ -610,3 +610,30 @@ fn unrelated_history(db: &Connection, count: i64) -> Result<()> {
     )?;
     Ok(())
 }
+
+#[tokio::test]
+async fn a_chat_owns_its_requests_until_it_goes() -> Result<()> {
+    let fixture = &Fixture::new().await;
+    let chat = fixture.chat("master", "chat", None, None).await;
+    let target = Target::Resource {
+        scope: Scope::Global,
+        pool: "lock".into(),
+    };
+    let requested = fixture
+        .coordination
+        .request_approval(sample(&chat.id, target.clone()));
+    let pending = requested.await?.unwrap();
+    assert_eq!(pending.number.space, chat.number);
+    let id = chat.id.clone();
+    fixture
+        .store()
+        .write(move |tx| {
+            let current = || super::store::current(tx, &id, &target, "default");
+            assert_eq!(current()?.unwrap().key, pending.key);
+            assert_eq!(list(tx, Some(&id))?.len(), 1);
+            tx.execute("DELETE FROM spaces WHERE id=?1", [&id])?;
+            assert!(current()?.is_none());
+            Ok(())
+        })
+        .await
+}

@@ -128,3 +128,6 @@ fn new_changes(
     }
     changes
 }
+
+#[cfg(test)]
+mod tests;
