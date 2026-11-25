@@ -5,12 +5,13 @@ use std::path::Path;
 use anyhow::{Result, ensure};
 use shoal_refs::{BranchName, CommitId};
 
-use crate::fsutil::off_runtime;
-
 use super::{
     isolated_command_without_submodules, run_isolated, run_without_submodules,
     temporary_index::TemporaryIndex,
 };
+
+mod unsaved;
+pub use unsaved::unsaved_bytes;
 
 const REFS: &str = "refs/shoal/checkpoints/";
 
@@ -31,69 +32,6 @@ async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, CommitId)>> {
         .into_iter()
         .map(|reference| (reference.name, reference.object.into()))
         .collect())
-}
-
-/// The size of the files a snapshot would add to HEAD: tracked changes and
-/// untracked files, excluding ignored ones. `None` when an untracked directory
-/// is a nested repository or a submodule changed, since a snapshot records
-/// only the commit of either, not its files.
-pub async fn unsaved_bytes(worktree: &Path) -> Result<Option<u64>> {
-    let changed = run_isolated(worktree, &["diff", "-z", "--name-only", "HEAD", "--"]).await?;
-    let untracked = run_isolated(
-        worktree,
-        &["ls-files", "-z", "--others", "--exclude-standard"],
-    )
-    .await?;
-    // Git lists a nested repository as its directory, without descending.
-    if untracked.split('\0').any(|file| file.ends_with('/')) || changed_submodule(worktree).await? {
-        return Ok(None);
-    }
-    let worktree = worktree.to_owned();
-    off_runtime::run(move || {
-        let mut bytes = 0;
-        for file in [changed, untracked]
-            .iter()
-            .flat_map(|files| files.split('\0'))
-            .filter(|file| !file.is_empty())
-        {
-            // A deleted tracked file is listed as changed and adds nothing.
-            if let Ok(metadata) = std::fs::symlink_metadata(worktree.join(file)) {
-                bytes += metadata.len();
-            }
-        }
-        Ok(Some(bytes))
-    })
-    .await
-}
-
-/// Whether a submodule has a new commit, tracked changes or untracked files.
-async fn changed_submodule(worktree: &Path) -> Result<bool> {
-    let status = run_isolated(
-        worktree,
-        &[
-            "status",
-            "--porcelain=v2",
-            "-z",
-            "--untracked-files=no",
-            "--ignore-submodules=none",
-        ],
-    )
-    .await?;
-    let mut entries = status.split('\0');
-    while let Some(entry) = entries.next() {
-        let mut fields = entry.split(' ');
-        let kind = fields.next();
-        // Changed entries name their submodule state third: `S` and flags.
-        if matches!(kind, Some("1" | "2")) && fields.nth(1).is_some_and(|sub| sub.starts_with('S'))
-        {
-            return Ok(true);
-        }
-        // A rename's original path follows as its own entry.
-        if kind == Some("2") {
-            entries.next();
-        }
-    }
-    Ok(false)
 }
 
 /// The branch and HEAD a snapshot was taken at, and its commit.
