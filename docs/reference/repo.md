@@ -31,9 +31,10 @@ asks for the new name when you omit it.
 
 ### Repository directories
 
-Each repository gets a directory `<name>/` in
+Registering gives each repository a directory `<name>/` in
 [`machine.root_dir`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine),
-which is `~/shoal` by default. Its
+which is `~/shoal` by default. That link says what a later change of
+`root_dir` does to it. Its
 [workspaces](workspaces.md#worktree-directories) go there by default, and a
 URL clone lives there as `.checkout`.
 
