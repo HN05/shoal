@@ -215,3 +215,6 @@ async fn lookup_forge(
         Err(error) => Err(error),
     }
 }
+
+#[cfg(test)]
+mod tests;
