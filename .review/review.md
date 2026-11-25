@@ -18,6 +18,10 @@ instead of the PR delivery guidance below.
   backlog and ownership lock across exec; read-only streams reconnect after the
   handoff, preserving event cursors, and continue in the installed release when
   the protocol changes. Only requests a daemon refused unrun are sent again.
+- `scripts/crate_dependencies.toml` lists the Shoal crates each crate may
+  depend on, which CI checks. Flag an entry a change adds or widens against
+  the rules below, such as a dependency between the CLI and the daemon, of
+  the daemon on a crate that calls it, or of one subsystem crate on another.
 - Apps use the protocol through the `shoal-client` crate, which keeps no
   compatibility promise beyond the exact version match. `shoal-protocol`
   holds the types the daemon or core build or read, with the logic over them
@@ -29,72 +33,41 @@ instead of the PR delivery guidance below.
   share `shoal-client`; the CLI sends each daemon request through a named
   client operation and never builds one itself. Parsing and resolving config
   live in `shoal-core`; the protocol carries a target's repository layers
-  without reading them. `shoal-protocol` depends on no Shoal crate but
-  `shoal-config-derive`, `shoal-forge-types`, `shoal-ids`, `shoal-refs`,
-  `shoal-schedule`, `shoal-states` and `shoal-time`; `shoal-client`'s code on none
-  but `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-schedule`
-  and `shoal-states`.
+  without reading them.
 - `crates/shoal-schedule` holds the agent queue's order: priorities, the rank
   types, the snapshot a policy reads, the `Scheduler` trait and the built-in
-  policies, and depends on no Shoal crate but `shoal-ids`, `shoal-time` and
-  `shoal-states`. Flag a policy that reads the daemon's state rather than its
+  policies. Flag a policy that reads the daemon's state rather than its
   snapshot, a `match` on `machine.schedule` inside the ranking, and admission
   outside the daemon.
 - `crates/shoal-store` holds the daemon's `Store`, schema, migrations and the
-  row mappers and guards every subsystem shares, and depends on no Shoal crate
-  but `shoal-core`, `shoal-ids`, `shoal-protocol` and `shoal-refs`. It
-  migrates from the schema of the release its floor names; flag a migration
+  row mappers and guards every subsystem shares. It migrates from the schema of the release its floor names; flag a migration
   at or below the floor, or a test of one, that a raise of the floor keeps.
 - `crates/shoal-daemon-base` holds what more than one subsystem of the
-  daemon uses, and depends on no Shoal crate but `shoal-core`, `shoal-forge`, `shoal-forge-types`,
-  `shoal-ids`, `shoal-protocol` and `shoal-store`. Flag code there that is a method of `Manager`, or that calls
-  a subsystem other than through an interface it declares.
+  daemon uses. Flag code there that is a method of `Manager`, or that calls a
+  subsystem other than through an interface it declares.
 - A subsystem crate of the daemon, such as `crates/shoal-leases`, offers its
   operations through a service `Manager` holds and reaches other subsystems
-  only through interfaces it declares; `shoal-leases` depends on no Shoal
-  crate but `shoal-core`, `shoal-daemon-base`, `shoal-ids`, `shoal-protocol`,
-  `shoal-store` and `shoal-subprocess`, and `shoal-reviews` on none but
-  `shoal-core`, `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`,
-  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`, and
-  `shoal-hub` on none but `shoal-core`, `shoal-daemon-base`, `shoal-ids`,
-  `shoal-protocol`, `shoal-schedule` and `shoal-store`, and `shoal-runner`,
-  `shoal-links` and `shoal-repositories` on none but `shoal-core`,
-  `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`, `shoal-ids`,
-  `shoal-protocol`, `shoal-refs` and `shoal-store`, and `shoal-agents` on
-  none but `shoal-core`, `shoal-daemon-base`, `shoal-forge-types`,
-  `shoal-ids`, `shoal-protocol`, `shoal-refs`, `shoal-schedule`,
-  `shoal-store` and `shoal-subprocess`, and `shoal-apps` and `shoal-demos`
-  on none but `shoal-core`, `shoal-daemon-base`, `shoal-ids`,
-  `shoal-protocol` and `shoal-store`, and `shoal-coordination` on none but
-  `shoal-core`, `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`,
-  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`, and
-  `shoal-spaces` on none but those, `shoal-coordination` and
-  `shoal-schedule`. Flag a `Manager` method that does a
+  only through interfaces it declares, except that `shoal-spaces` calls
+  `shoal-coordination`'s service directly. Flag a `Manager` method that does a
   subsystem's work, a subsystem crate that reads another's tables or calls it
   other than through such an interface, and a test of one subsystem that
   builds a `Manager` instead of the service over stand-ins.
 - `crates/shoal-power` reads the machine's power and the user's presence
-  from the platform and depends on no Shoal crate but `shoal-daemon-base`
-  and `shoal-subprocess`; flag daemon state or decisions there.
+  from the platform; flag daemon state or decisions there.
 - The CLI (`crates/shoal-cli`) and the daemon (`crates/shoal-daemon`) depend
   on neither each other; the `shoal` package's `main` joins them. Flag a
   dependency of the daemon, even a dev-dependency, on a crate that calls the
   daemon, and a daemon test that calls it through one, which belongs in that
   crate's tests, starting the daemon through its `test-support` feature. Code they
-  share lives in `crates/shoal-core`, which names neither, makes no daemon
-  calls and depends on no Shoal crate but `shoal-config-derive`,
-  `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
-  `shoal-proxy`, `shoal-refs`, `shoal-schedule`, `shoal-states` and
-  `shoal-subprocess`. Flag an item there made `pub` that no other Shoal crate
+  share lives in `crates/shoal-core`, which names neither and makes no daemon
+  calls. Flag an item there made `pub` that no other Shoal crate
   uses, and test fixtures outside its `test-support` feature that other
   crates' tests need.
 - `crates/shoal-cli` serves only the CLI: flag code there that the daemon, the
   execution wrapper, the proxy or the workers need.
 - `crates/shoal-workers` holds the execution wrapper and the workers, the
-  code that runs in the processes Shoal starts and calls the daemon, whose
-  code depends on no Shoal crate but `shoal-client`, `shoal-core`,
-  `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-proxy` and
-  `shoal-refs`. Flag a daemon call in core, a callback core takes that calls
+  code that runs in the processes Shoal starts and calls the daemon. Flag a
+  daemon call in core, a callback core takes that calls
   the daemon, and a dependency of core on
   `shoal-workers`.
 - Forge requests live in `crates/shoal-forge`, and the forge data the

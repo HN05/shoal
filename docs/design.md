@@ -3217,8 +3217,8 @@ failure no retry fixes, notifies once per execution until the agent ends a turn
 normally, so an idle agent whose turns fail is never silent and a run of failures
 is one alert.
 The retrying proxy lives in `crates/shoal-proxy`, which knows the wire protocols
-and depends on no Shoal crate but `shoal-time`, as `shoal-forge` depends only on
-`shoal-forge-types` and leaf crates such as `shoal-subprocess` and `shoal-time`. Each tracked agent that names one gets its
+and, as `shoal-forge` does, depends only on crates that know nothing of the daemon
+or the CLI. Each tracked agent that names one gets its
 own, run by its wrapper, so a daemon restart never cuts a stream and the proxy
 ends with the agent; Shoal points the agent at it through the integration, which
 knows how that agent takes a base URL. An upstream is a server root that every

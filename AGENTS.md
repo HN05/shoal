@@ -110,23 +110,23 @@ for delivering a PR, under Committing near the end, decide when work is done.
   A command that prints a list and exits is named `ls`; `list` names a picker.
   A new kind joins the cross-kind verbs that apply to it instead of growing its
   own `view` or `watch`.
+- `scripts/crate_dependencies.toml` lists the Shoal crates each crate may
+  depend on, and CI's `scripts/check_crate_dependencies.py` refuses any other.
+  A new crate or dependency gets an entry that follows the rules below.
 - Forge requests live in `crates/shoal-forge`, and the forge data the
   protocol carries, with the logic that reads it without a request or the
   daemon's state, such as repositories, item URLs, check states, item
   snapshots and run IDs, in `crates/shoal-forge-types`, at the module path
   the type has in `shoal-forge`, which re-exports none of them and adds its
-  requests on them as each module's extension trait.
-  `shoal-forge-types` depends on no Shoal crate but `shoal-forge-derive`,
-  `shoal-refs`, `shoal-states` and `shoal-time`; `shoal-forge` on those,
-  `shoal-forge-types` and `shoal-subprocess`. It takes the account to act
-  as, while scope, approvals, identity choice and workspace records stay in
-  the daemon. What one forge does its own way belongs in its implementation
-  of `Routes` in `shoal-forge-types`, where reading a URL needs it, or else
-  of the trait of the `shoal-forge` module that covers it, such as
-  `transport`'s `Backend` or `ci`'s `Runs`, which each forge implements in
-  its module under `backends`, never in a match on the forge kind; no other
-  module names `backends`, and reading an issue, PR or run by its kind
-  goes through `ForgeRepo`'s one operation for it.
+  requests on them as each module's extension trait. `shoal-forge` takes the
+  account to act as, while scope, approvals, identity choice and workspace
+  records stay in the daemon. What one forge does its own way belongs in its
+  implementation of `Routes` in `shoal-forge-types`, where reading a URL
+  needs it, or else of the trait of the `shoal-forge` module that covers it,
+  such as `transport`'s `Backend` or `ci`'s `Runs`, which each forge
+  implements in its module under `backends`, never in a match on the forge
+  kind; no other module names `backends`, and reading an issue, PR or run
+  by its kind goes through `ForgeRepo`'s one operation for it.
 - Apps use Shoal's protocol through the `shoal-client` crate, with no
   compatibility promise: the protocol changes freely and only the exact
   version match protects a client. `crates/shoal-protocol` holds the types
@@ -138,29 +138,21 @@ for delivering a PR, under Committing near the end, decide when work is done.
   named operation of the client module for its subject and never builds one
   itself. What the CLI alone needs, such as parsing, prompting and printing,
   stays in `shoal-cli`, and parsing and resolving config, which the protocol
-  carries without reading, lives in `shoal-core`. `shoal-protocol` depends on
-  no Shoal crate but `shoal-config-derive`, `shoal-forge-types`, `shoal-ids`,
-  `shoal-refs`, `shoal-schedule`, `shoal-states` and `shoal-time`;
-  `shoal-client`'s code on none but `shoal-forge-types`, `shoal-ids`,
-  `shoal-protocol`, `shoal-schedule` and `shoal-states`.
+  carries without reading, lives in `shoal-core`.
 - `crates/shoal-schedule` holds the agent queue's order: priorities, the
   rank types that explain an entry's place, the snapshot a policy reads, the
   `Scheduler` trait and the built-in policies. A policy reads only that
   snapshot, which the daemon builds from its state, and never the state
-  itself; admission stays in the daemon. It depends on no Shoal crate but
-  `shoal-ids`, `shoal-time` and `shoal-states`.
+  itself; admission stays in the daemon.
 - `crates/shoal-store` holds the daemon's `Store`, its schema, its
   migrations and the row mappers and guards every subsystem shares; a
   subsystem's own record functions stay with it. The store migrates from the
   schema of the release its floor names, and raising the floor deletes the
-  migrations at or below it with their tests. It depends on no Shoal crate
-  but `shoal-core`, `shoal-ids`, `shoal-protocol` and `shoal-refs`.
+  migrations at or below it with their tests.
 - `crates/shoal-daemon-base` holds what more than one subsystem of the
   daemon uses. What it needs of a subsystem is an interface it declares, a trait whose methods
   return a `Send` `BoxFuture`, which the daemon implements; its code is no
-  method of `Manager`. It depends on no Shoal crate but `shoal-core`,
-  `shoal-forge`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol` and
-  `shoal-store`.
+  method of `Manager`.
 - A subsystem moved out of the daemon is a crate of its own, such as
   `crates/shoal-leases` for ports, resource permits, simulators, containers
   and secrets, `crates/shoal-reviews` for local reviews, the gate agent
@@ -183,36 +175,18 @@ for delivering a PR, under Committing near the end, decide when work is done.
   implements and passes each operation, except what runs in the subsystem's
   own transaction, a synchronous method over it that the service keeps. Its
   tests build the service over a temporary store and stand-ins for those
-  interfaces; a test across subsystems stays in `shoal-daemon`. `shoal-leases` depends on no
-  Shoal crate but `shoal-core`, `shoal-daemon-base`, `shoal-ids`,
-  `shoal-protocol`, `shoal-store` and `shoal-subprocess`; `shoal-reviews` on
-  none but `shoal-core`, `shoal-daemon-base`, `shoal-forge`,
-  `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs` and
-  `shoal-store`; `shoal-hub` on none but `shoal-core`, `shoal-daemon-base`,
-  `shoal-ids`, `shoal-protocol`, `shoal-schedule` and `shoal-store`;
-  `shoal-runner`, `shoal-links` and `shoal-repositories` on none but
-  `shoal-core`, `shoal-daemon-base`, `shoal-forge`, `shoal-forge-types`,
-  `shoal-ids`, `shoal-protocol`, `shoal-refs` and `shoal-store`;
-  `shoal-agents` on none but `shoal-core`, `shoal-daemon-base`,
-  `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs`,
-  `shoal-schedule`, `shoal-store` and `shoal-subprocess`; and `shoal-apps`
-  and `shoal-demos` on none but `shoal-core`, `shoal-daemon-base`,
-  `shoal-ids`, `shoal-protocol` and `shoal-store`; `shoal-coordination`
-  on none but `shoal-core`, `shoal-daemon-base`, `shoal-forge`,
-  `shoal-forge-types`, `shoal-ids`, `shoal-protocol`, `shoal-refs` and
-  `shoal-store`; and `shoal-spaces` on none but those of
-  `shoal-coordination`, `shoal-coordination` itself and `shoal-schedule`.
-  `shoal-spaces` calls coordination's service directly, which its interface
-  gives with the daemon coordination takes.
+  interfaces; a test across subsystems stays in `shoal-daemon`. A subsystem
+  crate depends on no other, except that `shoal-spaces` calls coordination's
+  service directly, which its interface gives with the daemon coordination
+  takes.
 - `crates/shoal-power` reads the machine's power and the user's presence
   from the platform: the announcements of a sleep or shutdown, with the
   delay locks that hold them off, and whether the user walked away. What
-  the daemon does on each stays in the daemon. It depends on no Shoal
-  crate but `shoal-daemon-base` and `shoal-subprocess`.
+  the daemon does on each stays in the daemon.
 - `crates/shoal-time` holds the wall-clock timestamp type,
   `crates/shoal-refs` the commit and branch name types, `crates/shoal-ids`
   the record IDs and numbers, and `crates/shoal-states` the macros that
-  define typed names, that every crate shares; none depends on a Shoal crate.
+  define typed names, that every crate shares.
 - The CLI lives in `crates/shoal-cli` and the daemon in `crates/shoal-daemon`,
   neither of which depends on the other, so an edit in one rebuilds neither
   the other nor its tests. Nor does the daemon depend on a crate that calls
@@ -221,22 +195,16 @@ for delivering a PR, under Committing near the end, decide when work is done.
   `test-support` feature. The `shoal` package is only `main`,
   which runs the CLI and passes it the daemon for `shoal daemon run`. Code both use, directly
   or through code they call, lives in `crates/shoal-core`, in a top-level
-  module named for what it does; it names neither the CLI nor the daemon,
-  makes no daemon calls and depends on no Shoal crate but
-  `shoal-config-derive`, `shoal-forge`, `shoal-forge-types`, `shoal-ids`,
-  `shoal-protocol`, `shoal-proxy`, `shoal-refs`, `shoal-schedule`,
-  `shoal-states` and `shoal-subprocess`. Its
-  items are `pub` only where another Shoal crate uses them, and fixtures the
-  other crates' tests share sit behind its `test-support` feature.
+  module named for what it does; it names neither the CLI nor the daemon
+  and makes no daemon calls. Its items are `pub` only where another Shoal
+  crate uses them, and fixtures the other crates' tests share sit behind its `test-support` feature.
 - `crates/shoal-cli` serves only the CLI. Code that the daemon, the execution
   wrapper, the proxy or the workers use lives outside it, in `shoal-workers`
   where it calls the daemon.
 - `crates/shoal-workers` holds the execution wrapper and the workers: the
   code that runs in the processes Shoal starts and calls the daemon, which the
-  CLI reaches there too. Its code depends on no Shoal crate but `shoal-client`,
-  `shoal-core`, `shoal-forge-types`, `shoal-ids`, `shoal-protocol`,
-  `shoal-proxy` and `shoal-refs`; neither core nor the daemon's own code
-  depends on it. Where core logic needs a value the daemon records, its
+  CLI reaches there too. Neither core nor the daemon's own code depends on
+  it. Where core logic needs a value the daemon records, its
   caller reads it and passes core the value, never a callback that calls the
   daemon.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
