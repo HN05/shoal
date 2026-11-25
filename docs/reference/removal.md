@@ -3,7 +3,8 @@
 This file says what `shoal rm`, `checkpoint`, `restore`, `absorb` and `cleanup`
 do, and how holds and automatic cleanup keep or remove spaces.
 
-`shoal rm` removes a workspace or a chat the same way. It returns once Shoal has
+`shoal rm` removes a workspace or a chat the same way. It takes several
+spaces and asks for confirmation once for all of them. It returns once Shoal has
 reserved the space and checked that it can go: a refusal, such as unsaved work it
 was not told to delete, a hold or another operation under way, fails the command
 and leaves the space as it was. Stopping its agent and commands, removing the

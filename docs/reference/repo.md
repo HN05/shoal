@@ -32,6 +32,14 @@ and source URLs; inferred names work when unambiguous. IDs and sources take
 precedence over paths. A name still resolves when
 an unrelated path has the same spelling in the caller's directory; if that path
 is another registered checkout, the selector is ambiguous and lists both matches.
+A command that takes a registered repository and omits it uses the repository
+of the current registered checkout or workspace, else one a terminal picks.
+`repo rename` asks for an omitted name.
+
+Bare `shoal repo` on a terminal opens a list of the registered repositories,
+built as [`shoal list`](workspaces.md#list) is. Enter adds a workspace, Ctrl-A
+registers a path or URL, Ctrl-R renames, Ctrl-O shows the local config and
+Ctrl-D deletes. Without a terminal it prints the `repo` help.
 
 The daemon keeps each registered checkout's default branch in sync with its
 remote: when it starts, every minute, and right after `shoal merge` merges a PR or a
@@ -56,7 +64,7 @@ maintain. The URL names the repository, or an issue, PR or branch in it, which
 opens as `shoal start <link>` does; `--agent`, `--here`, `--focus` and `--now` work
 as for `start`, `--branch` opens or creates its branch as `start`'s does, and
 without a branch or link the contribution begins as a chat,
-as a [start without one](workspaces.md#branch-and-workspace-names) does. A repository that is already registered is used as it is.
+as a [start without one](workspaces.md#branches) does. A repository that is already registered is used as it is.
 Otherwise Shoal clones it as a contribution, first checking whether your forge
 login can push to it. When it cannot, Shoal forks it into your account, reusing
 an existing fork, and the clone gets the fork as its `fork` remote with

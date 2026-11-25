@@ -132,14 +132,9 @@ Shoal, which nothing keeps, removes its chats first and stops their agents;
 `shoal rm` lists them before asking. A chat
 never moves to another directory: one about another workspace is a new chat.
 
-`shoal rename [chat] NAME` gives a running chat a new name. Without a space it
-renames the current workspace, else the chat it runs in, else the current
-checkout's only running chat, else offers a picker. The zmx session keeps the name it started with,
-since `shoal attach` finds the chat's session where the chat runs. The tab,
-window or block the chat runs in takes the new name while it still shows the
-old one; one the user named keeps its label. `shoal rename --request [chat]`
-asks the chat's agent to choose the name and set it instead. Workspace processes
-cannot rename chats.
+[`shoal rename`](workspaces.md#rename-a-space) renames a chat as it renames a
+workspace. The chat's zmx session keeps the name it started with, since
+`shoal attach` finds the session where the chat runs.
 
 `shoal list` shows the chat by name with the spaces below it, and
 [space events](log.md#space-events) report its start, renames, stops,
