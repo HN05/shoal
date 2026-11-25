@@ -28,7 +28,8 @@ fn start(root: Home, hub: bool, repository: &str) -> Base {
 }
 
 /// Join `machine` to `hub` as `name` through the command transport, and
-/// return its ID at the hub once its link is open.
+/// return its ID at the hub once its link is open and it numbers new
+/// spaces from the hub's sequence.
 pub(super) fn join(machine: &Base, hub: &Base, name: &str) -> String {
     let connect = format!(
         "{} --state-dir {} daemon connect",
@@ -39,7 +40,23 @@ pub(super) fn join(machine: &Base, hub: &Base, name: &str) -> String {
     wait_for("the link to the hub", || {
         (machine.ok(&["status"])["daemon"]["hub"]["connected"] == true).then_some(())
     });
+    // Until the answer to its first report brings the hub's spares, a new
+    // space takes the smallest number free on the machine, which the hub
+    // may renumber after the hub lists it.
+    wait_for("the hub's spare numbers", || {
+        numbers_from_hub(machine).then_some(())
+    });
     membership["member"].as_str().unwrap().to_owned()
+}
+
+/// Whether `machine` keeps spare numbers the hub gave it.
+fn numbers_from_hub(machine: &Base) -> bool {
+    let database = rusqlite::Connection::open(machine.root.path().join("state/state.db")).unwrap();
+    database
+        .query_row("SELECT EXISTS(SELECT 1 FROM hub_numbering)", [], |row| {
+            row.get(0)
+        })
+        .unwrap()
 }
 
 /// The hub's own machine's ID.
