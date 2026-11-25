@@ -26,5 +26,7 @@ pub trait Scheduler {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ranked {
     pub id: QueueEntryId,
+    /// What `shoal queue` calls the entry.
+    pub name: String,
     pub rank: QueueRank,
 }

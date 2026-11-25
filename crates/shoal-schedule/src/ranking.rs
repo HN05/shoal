@@ -73,6 +73,7 @@ impl<L: Lead> Scheduler for Ranking<L> {
             .into_iter()
             .map(|placed| Ranked {
                 id: placed.id,
+                name: placed.name,
                 rank: placed.rank,
             })
             .collect()
@@ -299,6 +300,7 @@ fn aged(tier: Tier, entry: &Entry, now: UnixTime) -> Tier {
 /// An entry with what orders it, leading with a `K`.
 struct Placed<K> {
     id: QueueEntryId,
+    name: String,
     rank: QueueRank,
     /// What the schedule puts first within a priority, higher first.
     lead: K,
@@ -345,6 +347,7 @@ fn place<K>(entry: &Entry, lead: K, standing: &Standing, snapshot: &Snapshot) ->
     rank.shared_areas = shared_areas(entry, snapshot);
     Placed {
         id: entry.id.clone(),
+        name: entry.name.clone(),
         lead,
         overdue: snapshot.now.duration_since(entry.queued_at) >= RISE_AFTER,
         shared: rank.shared_areas.len(),
