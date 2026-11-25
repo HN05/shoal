@@ -59,7 +59,8 @@ leases and attached files.
 A space keeps its events while it exists. A removed space keeps them for
 [`cleanup.restore.retention_days`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup)
 after its removal, and `shoal log` selects it by its ID, as `shoal files`
-does. A restored workspace's log continues the removed one's.
+does. Its removal record, or attached files that have not expired, keep its
+events longer. A restored workspace's log continues the removed one's.
 
 A space keeps only its newest 500 agent turn states, progress changes and
 forge activity events. This cap leaves out an item's closing, merging and
