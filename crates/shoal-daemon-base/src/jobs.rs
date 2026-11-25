@@ -1,8 +1,8 @@
 //! The cost the agent queue weighs for a CI job and what stopped a job's
 //! runner, which the runner, the agents and the daemon share.
 
-/// What a CI job is expected to use: the resident memory its earlier runs
-/// reached, `None` before it has run, when it counts as an agent's start.
+/// What a CI job is expected to use, as its earlier runs estimate it,
+/// `None` before it has run, when it counts as an agent's start.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct JobCost {
     pub memory: Option<u64>,

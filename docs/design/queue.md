@@ -60,16 +60,21 @@ which still keeps the disk rule below. Fixed limits keep dynamic admission's dis
 started on a nearly full disk is soon stopped by disk protection. Per-agent
 memory profiles remain a proposal. CI jobs go through the same admission and
 order: `machine.max_jobs` limits them apart from agents, and under `dynamic` a
-job is expected to use the most memory its runs reached, among those that
-ended in the last 3 days and its latest 5 whatever their age, which a job
-repeats far more closely than an agent, or an agent's before it has run, and
-takes the one staggered start an agent would. A run cut short, as by load
-protection, used less than a whole one, so it may raise that estimate but
-never lowers it while a whole run's peak is within the window; only the latest
-5 runs would have let a few stopped runs push every whole one out, and each
-lower estimate admitted the job where it was stopped again. A runner that
-ended without taking its job, however it ended, keeps no run: its few
-megabytes would otherwise push the whole runs out once those are 3 days old.
+job is expected to use the 95th percentile of the peaks of its latest 30 whole
+runs, whatever their age, interpolated between the two nearest, or an agent's
+before it has run, and takes the one staggered start an agent would. A job
+repeats far more closely than an agent, but not always: a run that builds
+nothing peaks far below one that builds everything, and one run can peak far
+above the rest. A short window, such as the latest 5 runs, can fill with runs
+that built nothing, and the next full run then finds no memory reserved; the
+highest peak over a period lets one outlier set the cost for all of it. With
+fewer than about 20 runs the percentile comes out close to the highest peak, so
+a new job starts cautious. A peak counts what the job swapped out at full
+size, since without the pressure that swapped it out it would have stayed in
+memory. A runner that ended without taking its job, however it ended, keeps
+no run: it measured nothing of the job. One table keeps the runs of every kind
+Shoal measures, by repository, kind and key, a CI job's key being its workflow
+and job name, and forgets a key once it has not run for 30 days.
 A job reaches its peak late,
 while it builds and runs tests, so until it ends it reserves what it has yet
 to use, its expected memory less what its workspace uses now: counting it

@@ -285,14 +285,6 @@ CREATE TABLE "ci_jobs" (
     runner_id INTEGER
 );
 
-CREATE TABLE "ci_job_usage" (
-    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    workflow TEXT NOT NULL,
-    name TEXT NOT NULL,
-    ended_at INTEGER NOT NULL,
-    peak_memory INTEGER NOT NULL
-);
-
 CREATE TABLE "owned_places" (
             host TEXT NOT NULL,
             server TEXT NOT NULL,
@@ -1144,6 +1136,17 @@ CREATE TABLE agent_handoffs (
     record TEXT NOT NULL
 );
 
+CREATE TABLE run_usage (
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK(kind IN ('ci_job','command')),
+    key TEXT NOT NULL,
+    ended_at INTEGER NOT NULL,
+    peak_memory INTEGER NOT NULL,
+    duration INTEGER,
+    whole INTEGER NOT NULL CHECK(whole IN (0,1)),
+    oom_killed INTEGER NOT NULL CHECK(oom_killed IN (0,1))
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1167,8 +1170,6 @@ CREATE UNIQUE INDEX agent_queue_job_handles ON agent_queue(repository_id, json_e
 CREATE INDEX merges_by_branch ON merges(repository_id, branch);
 
 CREATE INDEX space_agent_state_execution ON space_agent_state(execution_id);
-
-CREATE INDEX ci_job_usage_jobs ON ci_job_usage(repository_id, workflow, name, ended_at);
 
 CREATE INDEX agent_queue_scopes ON agent_queue(scope_space_id);
 
@@ -1261,6 +1262,8 @@ CREATE UNIQUE INDEX reviews_pending ON reviews(workspace_id, opener, COALESCE(op
     WHERE state='pending';
 
 CREATE INDEX agent_handoffs_space ON agent_handoffs(space_id, session);
+
+CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
 
 CREATE VIEW space_refs AS
     SELECT spaces.id, CASE spaces.kind

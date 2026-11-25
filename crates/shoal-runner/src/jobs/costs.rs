@@ -1,29 +1,19 @@
 //! What each repository's CI jobs use: the peak resident memory of every
-//! run, read from its workspace's usage samples and kept per repository,
-//! workflow and job name, the cost a waiting or starting run of a job counts
-//! at in admission: the highest peak among its runs that ended within
-//! [`RECENT_FOR`] and its latest [`RECENT_RUNS`] runs, none before it has
-//! run. A run cut short, as by load protection, uses less than a whole one,
-//! so it can raise a job's cost but never lower it below a whole run's
-//! still in the window; a peak lowers it only once it ages out.
-use std::time::Duration;
-
+//! run, read from its workspace's usage samples and kept as a run of its
+//! job, and the cost a waiting or starting run of a job counts at in
+//! admission, which the runs it keeps estimate, none before it has run.
 use anyhow::Result;
-use rusqlite::{OptionalExtension, params};
-use shoal_daemon_base::jobs::JobCost;
+use rusqlite::{OptionalExtension, Transaction, params};
+use shoal_daemon_base::{
+    jobs::JobCost,
+    run_usage::{RunKey, RunUsage, expected_memory, record_run},
+};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
 use shoal_protocol::model::QueuedJob;
 use shoal_store::exists;
 
 use super::ClaimedJob;
 use crate::{Runner, daemon::Daemon, time::UnixTime};
-
-/// How many of a job's latest runs its cost reads, whatever their age, so
-/// a job that has not run for a while keeps one.
-const RECENT_RUNS: i64 = 5;
-/// How long after it ended a run counts towards its job's cost, however
-/// many runs ended since.
-const RECENT_FOR: Duration = Duration::from_secs(3 * 24 * 60 * 60);
 
 impl Runner {
     /// Raise each claimed job's peak memory to what its workspace's latest
@@ -53,40 +43,19 @@ impl Runner {
             .await
     }
 
-    /// Keep the peak memory of the ended `job` as its latest run, unless no
-    /// sample saw it run or it is kept already, as before a removal that is
-    /// tried again, forgetting the runs its cost no longer reads.
+    /// Keep what the ended `job` used as the latest run of its job, unless
+    /// no sample saw it run or it is kept already, as before a removal that
+    /// is tried again.
     pub async fn record_job_usage(&self, job: &ClaimedJob) -> Result<()> {
-        let (id, repository) = (job.id.clone(), job.repository_id.clone());
-        let (workflow, name) = key(&job.job);
+        let (id, repository, key) = (job.id.clone(), job.repository_id.clone(), key(&job.job));
         let now = UnixTime::now();
         self.store
             .write(move |tx| {
-                let peak: Option<Option<i64>> = tx
-                    .query_row(
-                        "SELECT peak_memory FROM ci_jobs WHERE id=?1 AND usage_recorded=0",
-                        [&id],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                let Some(Some(memory)) = peak else {
+                let Some(run) = ended_run(tx, &id, now)? else {
                     return Ok(());
                 };
                 tx.execute("UPDATE ci_jobs SET usage_recorded=1 WHERE id=?1", [&id])?;
-                tx.execute(
-                    "INSERT INTO ci_job_usage(repository_id,workflow,name,ended_at,peak_memory)
-                     VALUES (?1,?2,?3,?4,?5)",
-                    params![repository, workflow, name, now, memory],
-                )?;
-                tx.execute(
-                    &format!(
-                        "DELETE FROM ci_job_usage WHERE {JOB}
-                         AND rowid NOT IN (SELECT rowid FROM ci_job_usage WHERE {})",
-                        recent_runs()
-                    ),
-                    params![repository, workflow, name, RECENT_RUNS, now - RECENT_FOR],
-                )?;
-                Ok(())
+                record_run(tx, &repository, &key, &run)
             })
             .await
     }
@@ -119,50 +88,44 @@ impl Runner {
             .await
     }
 
-    /// What a run of `job` in `repository_id` is expected to use: the most
-    /// memory its recent runs reached, none before it has run.
+    /// What a run of `job` in `repository_id` is expected to use, none
+    /// before it has run.
     pub async fn job_cost(&self, repository_id: &RepositoryId, job: &QueuedJob) -> Result<JobCost> {
-        let repository = repository_id.to_owned();
-        let (workflow, name) = key(job);
-        let since = UnixTime::now() - RECENT_FOR;
-        let peak: Option<i64> = self
-            .store
-            .run(move |db| {
-                Ok(db.query_row(
-                    &format!(
-                        "SELECT max(peak_memory) FROM ci_job_usage WHERE {}",
-                        recent_runs()
-                    ),
-                    params![repository, workflow, name, RECENT_RUNS, since],
-                    |row| row.get(0),
-                )?)
-            })
+        let (repository, key) = (repository_id.to_owned(), key(job));
+        let memory = (self.store)
+            .read(move |tx| expected_memory(tx, &repository, &key))
             .await?;
-        Ok(JobCost {
-            memory: peak.and_then(|peak| u64::try_from(peak).ok()),
-        })
+        Ok(JobCost { memory })
     }
 }
 
-/// The condition that selects the runs of the job of repository `?1`,
-/// workflow `?2` and name `?3`.
-const JOB: &str = "repository_id=?1 AND workflow=?2 AND name=?3";
-
-/// The condition that selects the runs of that job its cost reads: its
-/// latest `?4` and those that ended at `?5` or later.
-fn recent_runs() -> String {
-    format!(
-        "{JOB} AND (ended_at>=?5 OR rowid IN (SELECT rowid FROM ci_job_usage WHERE {JOB}
-         ORDER BY ended_at DESC, rowid DESC LIMIT ?4))"
-    )
+/// What the claimed job `id`, which ended at `now`, used, unless no sample
+/// saw it run or it is kept already.
+fn ended_run(tx: &Transaction<'_>, id: &QueueEntryId, now: UnixTime) -> Result<Option<RunUsage>> {
+    let run = tx
+        .query_row(
+            "SELECT peak_memory, coalesce(launched_at,started_at) FROM ci_jobs
+             WHERE id=?1 AND usage_recorded=0 AND peak_memory IS NOT NULL",
+            [id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, UnixTime>(1)?)),
+        )
+        .optional()?;
+    Ok(run.map(|(peak, started)| RunUsage {
+        ended_at: now,
+        peak_memory: u64::try_from(peak).unwrap_or_default(),
+        duration: now.duration_since(started),
+        whole: true,
+        oom_killed: false,
+    }))
 }
 
-/// The workflow and name that tell runs of one job apart from others.
-fn key(job: &QueuedJob) -> (String, String) {
-    (
-        job.run.workflow.clone().unwrap_or_default(),
-        job.job.name.clone(),
-    )
+/// The key that tells runs of `job` apart from other jobs' runs: its
+/// workflow and name.
+fn key(job: &QueuedJob) -> RunKey {
+    RunKey::CiJob {
+        workflow: job.run.workflow.clone().unwrap_or_default(),
+        name: job.job.name.clone(),
+    }
 }
 
 #[cfg(test)]

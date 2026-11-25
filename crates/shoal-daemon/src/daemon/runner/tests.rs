@@ -2167,7 +2167,7 @@ pub(super) async fn sample_peaks(manager: &Manager) {
 pub(super) async fn usage_runs(manager: &Manager) -> i64 {
     manager
         .store
-        .run(|db| Ok(db.query_row("SELECT count(*) FROM ci_job_usage", [], |row| row.get(0))?))
+        .run(|db| Ok(db.query_row("SELECT count(*) FROM run_usage", [], |row| row.get(0))?))
         .await
         .unwrap()
 }

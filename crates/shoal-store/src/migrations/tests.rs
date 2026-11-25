@@ -168,7 +168,7 @@ fn a_database_newer_than_this_version_is_refused_without_changes() -> Result<()>
 fn a_failed_migration_rolls_back_every_step_of_its_batch() -> Result<()> {
     let mut db = at_floor()?;
     // The last migration creates this table.
-    db.execute_batch("CREATE TABLE agent_handoffs (id INTEGER PRIMARY KEY);")?;
+    db.execute_batch("CREATE TABLE run_usage (id INTEGER PRIMARY KEY);")?;
     let before = contents(&db)?;
     assert!(migrate(&mut db).is_err());
     assert!(contents(&db)? == before);
@@ -207,6 +207,35 @@ fn reviews_keep_their_ids_and_reopens_once_they_can_fail_unsubmitted() -> Result
         [],
     )?;
     assert_eq!(db.last_insert_rowid(), 3);
+    Ok(())
+}
+
+#[test]
+fn ci_job_runs_move_to_the_runs_as_whole_runs_of_their_job() -> Result<()> {
+    let mut db = at_floor()?;
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+        INSERT INTO ci_job_usage(repository_id,workflow,name,ended_at,peak_memory)
+            VALUES ('repo','ci.yml','rust (fmt, test)',5,900);",
+    )?;
+    migrate(&mut db)?;
+    let run: (String, String, i64, i64, Option<i64>, bool, bool) = db.query_row(
+        "SELECT kind,key,ended_at,peak_memory,duration,whole,oom_killed FROM run_usage",
+        [],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            ))
+        },
+    )?;
+    let key = r#"["ci.yml","rust (fmt, test)"]"#.to_owned();
+    assert_eq!(run, ("ci_job".into(), key, 5, 900, None, true, false));
     Ok(())
 }
 

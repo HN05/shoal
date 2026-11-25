@@ -1,0 +1,177 @@
+//! What the runs Shoal measures used, kept by repository, kind and key, and
+//! the memory a run of a key is expected to use, which admission counts it
+//! at. docs/design/queue.md says why the estimate reads what it does.
+use std::time::Duration;
+
+use anyhow::Result;
+use rusqlite::{Connection, params};
+use shoal_ids::repository_ids::RepositoryId;
+
+use crate::time::UnixTime;
+
+/// How many of a key's latest whole runs its estimate reads, whatever
+/// their age.
+const WHOLE_RUNS: i64 = 30;
+
+/// The share of a key's whole runs whose peaks its estimate covers.
+const PERCENTILE: f64 = 0.95;
+
+/// How much more than its peak a run the kernel's OOM killer hit counts
+/// at, since it needed more than it got.
+const OOM_KILLED_FACTOR: f64 = 1.2;
+
+/// How long a key's runs are kept after its latest one ended.
+const KEPT_FOR: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
+/// What tells runs apart whose peaks one estimate reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunKey {
+    /// A CI job, by its workflow and job name.
+    CiJob { workflow: String, name: String },
+}
+
+impl RunKey {
+    /// The kind the runs table records it as.
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::CiJob { .. } => "ci_job",
+        }
+    }
+
+    /// The text the runs table records it as, within its kind.
+    fn text(&self) -> String {
+        match self {
+            Self::CiJob { workflow, name } => serde_json::json!([workflow, name]).to_string(),
+        }
+    }
+}
+
+/// What a run used.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RunUsage {
+    pub ended_at: UnixTime,
+    /// The most memory it held, what it had swapped out included.
+    pub peak_memory: u64,
+    pub duration: Duration,
+    /// Whether it ran to its end, rather than being cut short, as when load
+    /// protection or the user stopped it.
+    pub whole: bool,
+    /// Whether the kernel's OOM killer killed a process of it.
+    pub oom_killed: bool,
+}
+
+/// Keep `run` as the latest run of `key` in `repository`, forgetting the
+/// runs no estimate reads any more.
+pub fn record_run(
+    db: &Connection,
+    repository: &RepositoryId,
+    key: &RunKey,
+    run: &RunUsage,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO run_usage(repository_id,kind,key,ended_at,peak_memory,duration,whole,oom_killed)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        params![
+            repository,
+            key.kind(),
+            key.text(),
+            run.ended_at,
+            i64::try_from(run.peak_memory).unwrap_or(i64::MAX),
+            i64::try_from(run.duration.as_secs()).unwrap_or(i64::MAX),
+            run.whole,
+            run.oom_killed,
+        ],
+    )?;
+    forget_unread_runs(db, repository, key)?;
+    forget_idle_keys(db, run.ended_at - KEPT_FOR)
+}
+
+/// What a run of `key` in `repository` is expected to use: the
+/// [`PERCENTILE`] of the peaks of its latest [`WHOLE_RUNS`] whole runs, or
+/// while it has none the highest peak of a run cut short, none before it
+/// has run.
+pub fn expected_memory(
+    db: &Connection,
+    repository: &RepositoryId,
+    key: &RunKey,
+) -> Result<Option<u64>> {
+    let peaks = whole_peaks(db, repository, key)?;
+    if peaks.is_empty() {
+        return highest_peak(db, repository, key);
+    }
+    Ok(Some(percentile(peaks) as u64))
+}
+
+/// The condition that selects the runs of the key of repository `?1`,
+/// kind `?2` and text `?3`.
+const KEY: &str = "repository_id=?1 AND kind=?2 AND key=?3";
+
+/// The condition that selects the runs an estimate reads as whole: one the
+/// OOM killer hit needed at least what it held, however it ended.
+const WHOLE: &str = "(whole OR oom_killed)";
+
+/// The peaks of the latest [`WHOLE_RUNS`] whole runs of `key`, each one the
+/// OOM killer hit raised by [`OOM_KILLED_FACTOR`].
+fn whole_peaks(db: &Connection, repository: &RepositoryId, key: &RunKey) -> Result<Vec<f64>> {
+    let mut statement = db.prepare(&format!(
+        "SELECT peak_memory, oom_killed FROM run_usage WHERE {KEY} AND {WHOLE}
+         ORDER BY ended_at DESC, rowid DESC LIMIT ?4"
+    ))?;
+    let rows = statement.query_map(
+        params![repository, key.kind(), key.text(), WHOLE_RUNS],
+        |row| {
+            let (peak, oom_killed): (i64, bool) = (row.get(0)?, row.get(1)?);
+            Ok(peak as f64 * if oom_killed { OOM_KILLED_FACTOR } else { 1.0 })
+        },
+    )?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// The highest peak among the runs of `key`.
+fn highest_peak(db: &Connection, repository: &RepositoryId, key: &RunKey) -> Result<Option<u64>> {
+    let peak: Option<i64> = db.query_row(
+        &format!("SELECT max(peak_memory) FROM run_usage WHERE {KEY}"),
+        params![repository, key.kind(), key.text()],
+        |row| row.get(0),
+    )?;
+    Ok(peak.and_then(|peak| u64::try_from(peak).ok()))
+}
+
+/// The [`PERCENTILE`] of `peaks`, at least one, interpolated between the
+/// two nearest.
+fn percentile(mut peaks: Vec<f64>) -> f64 {
+    peaks.sort_by(f64::total_cmp);
+    let rank = PERCENTILE * (peaks.len() - 1) as f64;
+    let below = rank.floor() as usize;
+    let above = (below + 1).min(peaks.len() - 1);
+    peaks[below] + (peaks[above] - peaks[below]) * (rank - below as f64)
+}
+
+/// Forget the whole runs of `key` before its latest [`WHOLE_RUNS`], and its
+/// runs cut short once it has a whole one.
+fn forget_unread_runs(db: &Connection, repository: &RepositoryId, key: &RunKey) -> Result<()> {
+    db.execute(
+        &format!(
+            "DELETE FROM run_usage WHERE {KEY}
+             AND rowid NOT IN (SELECT rowid FROM run_usage WHERE {KEY} AND {WHOLE}
+                 ORDER BY ended_at DESC, rowid DESC LIMIT ?4)
+             AND ({WHOLE} OR EXISTS (SELECT 1 FROM run_usage WHERE {KEY} AND {WHOLE}))"
+        ),
+        params![repository, key.kind(), key.text(), WHOLE_RUNS],
+    )?;
+    Ok(())
+}
+
+/// Forget every key whose latest run ended before `before`.
+fn forget_idle_keys(db: &Connection, before: UnixTime) -> Result<()> {
+    db.execute(
+        "DELETE FROM run_usage WHERE (repository_id,kind,key) IN (
+             SELECT repository_id,kind,key FROM run_usage
+             GROUP BY repository_id,kind,key HAVING max(ended_at)<?1)",
+        [before],
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;
