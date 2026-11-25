@@ -6,13 +6,13 @@ use std::{collections::HashMap, fmt::Display, time::Duration};
 
 use crate::time::UnixTime;
 use anyhow::Result;
-use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{agent::Agent, executions::ServiceLimit};
 
 use crate::Agents;
 use crate::daemon::Daemon;
+use crate::executions::execution_agent;
 use crate::log;
 pub use shoal_protocol::executions::UpstreamLimit;
 
@@ -177,18 +177,6 @@ impl Display for Reported<'_> {
             limit.limit
         )
     }
-}
-
-/// The agent `execution` runs, if it runs one.
-fn execution_agent(db: &rusqlite::Connection, execution: &ExecutionId) -> Result<Option<Agent>> {
-    Ok(db
-        .query_row(
-            "SELECT agent FROM executions WHERE id=?1",
-            [execution],
-            |row| row.get(0),
-        )
-        .optional()?
-        .flatten())
 }
 
 /// `limit`, reported at `now`, with the time it stands until.

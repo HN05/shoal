@@ -16,7 +16,6 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::executions::ExecutionKind;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
-use shoal_store::lifecycle::Reserved;
 use std::{fs, future::Future, sync::Arc};
 use std::{path::Path, time::Duration};
 use tokio::time::sleep;

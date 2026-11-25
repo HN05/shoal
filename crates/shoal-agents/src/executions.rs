@@ -42,8 +42,7 @@ use shoal_protocol::model::ByKind;
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_store;
-use shoal_store::lifecycle;
-use shoal_store::lifecycle::{Generation, Reserved};
+use shoal_store::lifecycle::Generation;
 use std::{
     collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},
@@ -51,9 +50,11 @@ use std::{
 };
 use tokio::sync::{OwnedMutexGuard, watch};
 
+pub mod reservation;
 pub mod state;
 
 pub use completion::agent_execution_space;
+pub use reservation::Reserved;
 pub use shoal_protocol::executions::ExecutionKind;
 pub use state::{Completing, Connections, Executions};
 pub use stopping::StopPolicy;
@@ -195,7 +196,7 @@ impl ExecutionKindExt for ExecutionKind {
         shoal_store::ensure_no_pending_move(tx, workspace_id)?;
         match self {
             Self::Command | Self::Merge | Self::Unmerge => {
-                lifecycle::ensure_unreserved(tx, workspace_id)?;
+                reservation::ensure_unreserved(tx, workspace_id)?;
                 shoal_store::require_ready(tx, workspace_id)?
             }
             Self::Setup => {
@@ -1220,6 +1221,19 @@ pub fn running_agents(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<Exe
             row.get(0)
         })?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The agent execution `id` runs, when it runs one.
+pub fn execution_agent(
+    db: &rusqlite::Connection,
+    id: &ExecutionId,
+) -> Result<Option<crate::agent::Agent>> {
+    Ok(db
+        .query_row("SELECT agent FROM executions WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?
+        .flatten())
 }
 
 /// Whether a reattaching wrapper is the one the record names. One awaiting a

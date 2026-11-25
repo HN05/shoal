@@ -44,7 +44,7 @@ impl Agents {
         let id = execution.id.clone();
         let agent = self
             .store
-            .run(move |db| shoal_store::execution_agent(db, &id))
+            .run(move |db| crate::executions::execution_agent(db, &id))
             .await?;
         let Some(name) = agent else {
             return Ok(());

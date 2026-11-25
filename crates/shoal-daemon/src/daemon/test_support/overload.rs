@@ -344,7 +344,7 @@ pub async fn record_group(
 pub async fn execution_agent(manager: &Manager, id: ExecutionId) -> Option<crate::agent::Agent> {
     manager
         .store
-        .run(move |db| store::execution_agent(db, &id))
+        .run(move |db| crate::daemon::executions::execution_agent(db, &id))
         .await
         .unwrap()
 }

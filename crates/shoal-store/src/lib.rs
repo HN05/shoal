@@ -463,16 +463,6 @@ pub fn executions(db: &Connection, space_id: &SpaceId) -> Result<Vec<Execution>>
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-/// The agent execution `id` runs, when it runs one.
-pub fn execution_agent(db: &Connection, id: &ExecutionId) -> Result<Option<crate::agent::Agent>> {
-    Ok(db
-        .query_row("SELECT agent FROM executions WHERE id=?1", [id], |row| {
-            row.get(0)
-        })
-        .optional()?
-        .flatten())
-}
-
 /// The wrappers of the recorded executions that run an agent.
 pub fn agent_wrappers(db: &Connection) -> Result<Vec<crate::process::identity::Identity>> {
     let mut statement = db.prepare(
