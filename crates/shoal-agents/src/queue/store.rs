@@ -460,3 +460,6 @@ pub fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         error: None,
     })
 }
+
+#[cfg(test)]
+mod tests;

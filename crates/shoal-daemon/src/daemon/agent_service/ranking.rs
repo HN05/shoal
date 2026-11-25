@@ -20,7 +20,6 @@ use crate::{
 
 mod areas;
 mod edges;
-mod entries;
 mod labels;
 mod spaces;
 
@@ -82,7 +81,7 @@ fn snapshot(
     leases: &[(Target, SpaceId)],
 ) -> Result<Snapshot> {
     Ok(Snapshot {
-        entries: entries::waiting(tx, jobs, oneshots)?,
+        entries: shoal_agents::queue::ranking::entries::waiting(tx, jobs, oneshots)?,
         spaces: spaces::ranked(tx)?,
         edges: edges::waits(tx, leases)?,
         now: UnixTime::now(),

@@ -1,6 +1,8 @@
 //! Ranking the queue: the policy `machine.schedule` names, over the
 //! snapshot the daemon builds, orders the waiting entries, spaces in the
 //! order their agents would start, and running work in the order it stops.
+pub mod entries;
+
 use anyhow::Result;
 
 use crate::Agents;

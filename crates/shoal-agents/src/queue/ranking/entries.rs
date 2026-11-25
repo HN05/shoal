@@ -8,9 +8,9 @@ use rusqlite::Connection;
 use crate::{
     forge::ci::runner::Trigger,
     model::QueuedJob,
+    queue::state::WaitingOneShot,
     state::{QueueKind, QueueState},
 };
-use shoal_agents::queue::state::WaitingOneShot;
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::time::UnixTime;
 use shoal_schedule::{
@@ -21,7 +21,7 @@ use shoal_schedule::{
 
 /// The waiting entries, the queue's and `oneshots`, numbered in the order
 /// they arrived; `jobs` holds the spaces each waiting job serves now.
-pub(super) fn waiting(
+pub fn waiting(
     db: &Connection,
     jobs: &HashMap<QueueEntryId, Vec<SpaceId>>,
     oneshots: &[WaitingOneShot],
@@ -141,3 +141,6 @@ fn job_tier(job: &QueuedJob) -> Tier {
         _ => Tier::New,
     }
 }
+
+#[cfg(test)]
+mod tests;

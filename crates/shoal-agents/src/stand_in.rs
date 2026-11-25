@@ -114,8 +114,9 @@ impl Fixture {
     }
 
     /// The repository `repo` at the root's `repo`, registered with the
-    /// stand-in, which the fixture's workspaces belong to.
-    pub(crate) fn repository(&self) -> Repository {
+    /// stand-in and recorded in the store, which the fixture's workspaces
+    /// belong to.
+    pub(crate) async fn repository(&self) -> Repository {
         let path = self.root.path().join("repo");
         std::fs::create_dir_all(&path).unwrap();
         let repository = Repository {
@@ -128,6 +129,18 @@ impl Fixture {
             contribution: false,
             shared_url: None,
         };
+        let recorded = repository.clone();
+        (self.agents.store)
+            .write(move |tx| {
+                tx.execute(
+                    "INSERT OR IGNORE INTO repositories(id,path,source,last_used)
+                     VALUES (?1,?2,?3,1)",
+                    rusqlite::params![recorded.id, recorded.path.to_str(), recorded.source],
+                )?;
+                Ok(())
+            })
+            .await
+            .unwrap();
         let mut repositories = self.daemon.repositories.lock().unwrap();
         if !repositories.iter().any(|known| known.id == repository.id) {
             repositories.push(repository.clone());
@@ -137,18 +150,13 @@ impl Fixture {
 
     /// Record a ready workspace `name`, of the fixture's repository.
     pub(crate) async fn workspace(&self, name: &str) -> Workspace {
-        self.repository();
+        self.repository().await;
         let path = self.root.path().join(name);
         std::fs::create_dir_all(&path).unwrap();
         let workspace = shoal_protocol::test_support::workspace(name, "repo", name, &path);
         let id = workspace.id.clone();
         (self.agents.store)
             .write(move |tx| {
-                tx.execute(
-                    "INSERT OR IGNORE INTO repositories(id,path,source,last_used)
-                     VALUES ('repo','/repo','/repo',1)",
-                    [],
-                )?;
                 tx.execute(
                     "INSERT INTO spaces(id,kind,repository_id,name)
                      VALUES (?1,'workspace','repo',?1)",

@@ -6,7 +6,7 @@ use crate::stand_in::Fixture;
 #[tokio::test]
 async fn a_removal_that_leaves_trust_entries_alerts_the_user() {
     let fixture = Fixture::new().await;
-    let repo = fixture.repository();
+    let repo = fixture.repository().await;
     // A config Shoal cannot read keeps the entries it holds.
     std::fs::write(fixture.agents.paths.home.join(".claude.json"), "not JSON").unwrap();
 
@@ -27,7 +27,7 @@ async fn a_removal_that_leaves_trust_entries_alerts_the_user() {
 #[tokio::test]
 async fn a_development_build_leaves_kept_locations_outside_its_home() {
     let fixture = Fixture::new().await;
-    let repo = fixture.repository();
+    let repo = fixture.repository().await;
     let outside = tempfile::tempdir_in("/tmp").unwrap();
     let kept = BTreeMap::from([(
         shoal_core::env::CLAUDE_CONFIG_DIR.to_owned(),

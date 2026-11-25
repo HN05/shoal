@@ -4,25 +4,21 @@ use std::collections::HashSet;
 use rusqlite::params;
 
 use super::*;
-use crate::daemon::agent_queue::state::WaitingOneShot;
 use crate::daemon::{approvals::Target, manager::Manager};
 use crate::{
     daemon::{
-        agent_queue::{Serving, last_seq},
         agent_service::tests::queue::{add, create, launch_in, limit_globally, register, request},
         test_support::{global_config, manager},
     },
     model::QueueRequest,
     state::QueueState,
 };
-use shoal_protocol::time::UnixTime;
 use shoal_protocol::{resources::Scope, space_names::SpaceSelector};
 use shoal_schedule::{
     priority::Priority,
     rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier},
     snapshot::{Carries, Edge, Node},
 };
-use std::collections::HashMap;
 
 #[tokio::test]
 async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launches() {
@@ -237,79 +233,6 @@ async fn a_space_with_a_pr_it_opened_finishes_until_the_pr_merges() {
         Ok(spaces::ranked(tx)?[&id].tier)
     });
     assert_eq!(tier.await.unwrap(), Tier::New);
-}
-
-#[tokio::test]
-async fn a_review_arrives_after_the_entries_queued_before_it_in_the_same_second() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    let id = repo.id.clone();
-    let queued_after = manager
-        .store
-        .run(move |db| {
-            let insert = |entry: &str| {
-                db.execute(
-                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at)
-                     VALUES (?1,'launch',?2,?1,'claude','{}','{}','queued',10)",
-                    params![entry, id],
-                )
-            };
-            insert("early")?;
-            let queued_after = last_seq(db)?;
-            insert("late")?;
-            Ok(queued_after)
-        })
-        .await
-        .unwrap();
-    let review = WaitingOneShot {
-        id: String::from("oneshot:0").into(),
-        repository: repo.id.clone(),
-        serving: Some(Serving {
-            space: String::from("reviewed").into(),
-            queued_after,
-        }),
-        requested_at: UnixTime::from_seconds(10),
-        after_stop: false,
-    };
-    let entries = manager
-        .store
-        .read(move |tx| entries::waiting(tx, &HashMap::new(), &[review]))
-        .await
-        .unwrap();
-    let arrived: Vec<_> = (entries.iter())
-        .map(|entry| (entry.id.to_string(), entry.arrival))
-        .collect();
-    assert_eq!(
-        arrived,
-        [
-            ("early".into(), 0),
-            ("oneshot:0".into(), 1),
-            ("late".into(), 2)
-        ]
-    );
-}
-
-#[tokio::test]
-async fn the_last_sequence_number_holds_after_the_newest_entry_leaves() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    let id = repo.id.clone();
-    let (before, after) = manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,state,created_at)
-                 VALUES ('gone','launch',?1,'gone','claude','{}','{}','queued',10)",
-                [&id],
-            )?;
-            let before = last_seq(db)?;
-            db.execute("DELETE FROM agent_queue WHERE id='gone'", [])?;
-            Ok((before, last_seq(db)?))
-        })
-        .await
-        .unwrap();
-    assert!(before > 0);
-    assert_eq!(after, before);
 }
 
 #[tokio::test]
@@ -539,43 +462,6 @@ async fn a_launch_in_a_space_without_a_priority_ranks_with_the_highest_its_issue
             ("unlabelled".into(), Priority::NORMAL),
             ("given".into(), Priority::LOW),
         ]
-    );
-}
-
-#[tokio::test]
-async fn a_queued_restore_reads_when_its_agents_prompt_cache_expires() {
-    let (temp, manager) = manager().await;
-    let repo = register(&manager, &temp, "repo").await;
-    let workspace = create(&manager, &repo, "stopped").await;
-    let (id, repository) = (workspace.id.clone(), repo.id.clone());
-    let entries = manager
-        .store
-        .read(move |tx| {
-            tx.execute(
-                "INSERT INTO executions(id,space_id,state,agent) VALUES ('agent',?1,?2,'claude')",
-                params![id, crate::state::ExecutionState::Unknown],
-            )?;
-            tx.execute(
-                "INSERT INTO space_agent_state(space_id,state,execution_id,since,prompt_cache_expires_at)
-                 VALUES (?1,'idle','agent',1,500)",
-                [&id],
-            )?;
-            tx.execute(
-                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,space_id,execution_id)
-                 VALUES ('restore','restore',?1,'stopped','claude',?2,1,?3,'agent')",
-                params![repository, QueueState::Queued, id],
-            )?;
-            entries::waiting(tx, &Default::default(), &[])
-        })
-        .await
-        .unwrap();
-    let caches: Vec<_> = entries
-        .iter()
-        .map(|entry| entry.prompt_cache_until)
-        .collect();
-    assert_eq!(
-        caches,
-        [Some(shoal_protocol::time::UnixTime::from_seconds(500))]
     );
 }
 
