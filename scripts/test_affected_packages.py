@@ -48,7 +48,7 @@ class AffectedPackagesTests(unittest.TestCase):
     def test_the_root_package_owns_only_its_sources_and_tests(self):
         self.assertEqual(WORKSPACE.affected(["src/main.rs"]), ["shoal"])
         self.assertEqual(WORKSPACE.affected(["tests/fixtures/forge.py"]), ["shoal"])
-        self.assertEqual(WORKSPACE.affected(["README.md", "docs/reference.md", "scripts/demo.py",
+        self.assertEqual(WORKSPACE.affected(["README.md", "docs/reference/agents.md", "scripts/demo.py",
                                              ".forgejo/workflows/flaky.yml", "crates/README"]),
                          [])
 

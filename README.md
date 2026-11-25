@@ -22,14 +22,14 @@ macOS keeps the bare binary's privacy grants only while it stays at the same
 path.
 Homebrew installs the additional tools for workspace management and interactive
 menus, but not zmx 1.0.1 or later, the default terminal host: install it with
-`brew install neurosnap/tap/zmx`, or use [another terminal host](docs/reference.md#agents)
+`brew install neurosnap/tap/zmx`, or use [another terminal host](docs/reference/agents.md)
 instead. Upgrading zmx from 0.8 leaves the agents already running in its
-sessions out of Shoal's reach: [stop them first](docs/reference.md#agents). For a downloaded binary, install
+sessions out of Shoal's reach: [stop them first](docs/reference/agents.md). For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
 `shoal daemon install` starts the per-user
 daemon and writes a missing config with its defaults in `~/.config/shoal/`;
 `shoal skill install` installs the `shoal` skill into each
-[AI tool's existing skill directory](docs/reference.md#agent-skill-outside-project-repositories);
+[AI tool's existing skill directory](docs/reference/install.md#agent-skill-outside-project-repositories);
 `shoal skill install <tool>` creates one. Later `shoal` commands keep installed
 skills current after upgrades.
 
@@ -65,7 +65,7 @@ and `happy` plus `curl` for Happy sessions. Simulator use requires macOS with
 Xcode, `xcrun simctl`, and an installed simulator runtime; containers require
 Docker or Podman with Compose.
 Service installation uses launchd on macOS or a systemd user session on Linux;
-without one, [run the daemon in the foreground](docs/reference.md#daemon).
+without one, [run the daemon in the foreground](docs/reference/daemon.md).
 
 ## Create a workspace
 
@@ -116,7 +116,7 @@ the new place, or the host's `enabled = false` to treat it as a plain terminal.
 `[terminal] default_host` names the host that launches from other terminals go
 to. With the default, zmx, an agent that starts with an issue or arguments runs
 in a detached zmx session that `shoal attach` reaches. See
-[Agents](docs/reference.md#agents) for each host's settings.
+[Agents](docs/reference/agents.md) for each host's settings.
 
 Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
 tools, or `--agent happy-claude`/`happy-codex` for
@@ -142,17 +142,17 @@ limit one repository's with `agent.max_heavy_running` (`--repo my-project`). `sh
 limit and starts them as heavy slots free; `--now` starts one anyway, and `shoal rm
 <name>` drops a queued one. `--add-blocker <space|issue>` holds an agent
 until that work is done and starts it on the finished branch; an issue's agent
-is also blocked by the issues blocking that issue. See the [agent queue](docs/reference.md#agent-queue).
+is also blocked by the issues blocking that issue. See the [agent queue](docs/reference/queue.md).
 
 Shoal can also run a registered repository's CI jobs on this machine:
 `shoal config set runner.enabled true --repo my-project` registers a runner on
 its Forgejo, and jobs with `runs-on: shoal` wait in the same queue, run in a
 workspace at their commit that starts from the seed build, and go once they
-end. See the [runner](docs/reference.md#runner).
+end. See the [runner](docs/reference/ci.md#runner).
 
 ## Everyday commands
 
-After [adding an AI tool](docs/reference.md#agents), run
+After [adding an AI tool](docs/reference/agents.md), run
 `shoal start my-project --branch fix-api --agent droid` or `shoal start <issue-url>`.
 
 An agent starts in a mode, which decides what it is told and whether it gets a
@@ -162,10 +162,10 @@ with you; `orchestrate` starts a master session, a chat without a repository
 that starts and steers the work of every repository for you. Without `--mode`,
 `shoal start` asks which on a terminal. Configure your own under
 `[modes.<name>]` and `[rules.<name>]`; see
-[modes and rules](docs/reference.md#modes-and-rules). A trigger,
+[modes and rules](docs/reference/modes.md). A trigger,
 `[triggers.<name>]`, starts an agent on its own, such as every weekday at
 09:00 or when a forge's webhook says an issue was labelled; see
-[triggers](docs/reference.md#triggers).
+[triggers](docs/reference/triggers.md).
 
 ```sh
 shoal                         # Inbox when something needs you, else workspaces; Tab switches
@@ -344,8 +344,8 @@ shoal thread resolve 3.2 false-positive --reason 'The caller checks it'
 
 With `[commands] review = ["tuicr", "-r", "{diff_base}..HEAD"]` configured,
 `review run` asks whether to run it or an agent. See
-[local reviews](docs/reference.md#local-reviews) for reviewers, outcomes and the
-[review command](docs/reference.md#configured-commands) for uncommitted review.
+[local reviews](docs/reference/reviews.md#local-reviews) for reviewers, outcomes and the
+[review command](docs/reference/run.md) for uncommitted review.
 
 CLI agents and chats run in sessions of a terminal host, by default
 [zmx](https://github.com/neurosnap/zmx), that keep running when you detach, with
@@ -359,7 +359,7 @@ for a custom invocation. Shoal's resource scope is cooperative, not a filesystem
 Apps that launch their own processes can request `shoal internal env 3 --json`
 and add the returned variables to each child's environment. Revoke its scope
 with `shoal internal env 3 --revoke <token>`. See
-[workspace scope](docs/reference.md#scoped-workspace-commands) for token lifetime
+[workspace scope](docs/reference/modes.md#scoped-workspace-commands) for token lifetime
 and cleanup behavior.
 The agents Shoal starts get JSON from `shoal` without `--json`; give an agent
 you start yourself `SHOAL_OUTPUT=json` for the same, and pass `--text` for
@@ -367,7 +367,7 @@ human output.
 
 Agents' issue and PR changes need an `agent_token` for the forge host: a
 separate agent account's token, or `{ same_as = "user_token" }` to make them
-with your login. A [Git profile](docs/reference.md#git-profiles) sets the
+with your login. A [Git profile](docs/reference/repo.md#git-profiles) sets the
 agent's commits:
 
 ```toml
@@ -379,11 +379,11 @@ user_token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"
 agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }  # Or { same_as = "user_token" }
 ```
 
-See [agent accounts](docs/reference.md#agent-accounts).
+See [agent accounts](docs/reference/agents.md#agent-accounts).
 
 Memory overload protection stops tracked agents by default while retaining their
 workspaces and leases; before that, Shoal tells running agents that memory pressure is high. To opt out, run `shoal config set machine.overload.memory.enabled
-false`. See [overload protection](docs/reference.md#overload-protection)
+false`. See [overload protection](docs/reference/load.md)
 for thresholds and timing. When disk space runs low, the daemon removes
 workspaces idle cleanup would remove; if space stays critical, it stops tracked
 executions. Agents restore once space returns; `shoal resume` brings back the rest. Stop agents manually with `shoal stop`:
@@ -456,23 +456,23 @@ requesting space's number and the request's, such as `3.2`.
 
 Select a named Git identity with `git_profile = "work"` in that file, or use
 `shoal start my-project --branch feature --git-profile work`. Define the profile
-in global config; see [Git profiles](docs/reference.md#git-profiles).
+in global config; see [Git profiles](docs/reference/repo.md#git-profiles).
 
 New workspaces get the repository checkout's ignored local files, such as `.env`;
 set `[setup] copy_ignored = false` in that file to turn this off. The same file can name a
 `setup.command`, run automatically on workspace creation or explicitly with
 `shoal setup [workspace]`, and hooks around setup, assignment completion,
 agent exits, removal, and resource acquisition/release, for example to open a tmux session or prepare an
-external device. See [setup and hooks](docs/reference.md#workspace-setup-and-hooks)
-and [resource hooks](docs/reference.md#resource-hooks) for configuration and failure behavior.
+external device. See [setup and hooks](docs/reference/setup.md)
+and [resource hooks](docs/reference/resources.md#resource-hooks) for configuration and failure behavior.
 A `[setup.seed]` table keeps a build of the default branch that new workspaces clone, so
-they rebuild only what their branch changed; see [seed builds](docs/reference.md#seed-builds).
+they rebuild only what their branch changed; see [seed builds](docs/reference/setup.md#seed-builds).
 `[setup] presets = ["cargo", "bun"]` sets that up for the tools a repository uses; see
-[build tool presets](docs/reference.md#build-tool-presets).
+[build tool presets](docs/reference/setup.md#build-tool-presets).
 
 Use `[env]` to give a space's tracked executions and hooks their own variables.
 Values substitute `{workspace}`, `{workspace_path}`, `{path}`, `{repo}`, `{branch}`,
-reserved `{port.NAME}` values and [shared cache](docs/reference.md#shared-caches)
+reserved `{port.NAME}` values and [shared cache](docs/reference/setup.md#shared-caches)
 directories `{cache.NAME}` once; inserted text is not evaluated, and a chat, which
 has no worktree, leaves unset a variable that names one of its fields. For example:
 
@@ -488,7 +488,7 @@ scope = "shared"
 
 Use `[secrets]` in global or local config to give agents, or only
 tools such as `agent-browser`, values fetched from your secret store; see
-[agent secrets](docs/reference.md#agent-secrets).
+[agent secrets](docs/reference/agents.md#agent-secrets).
 
 ## Cleanup
 
@@ -519,7 +519,7 @@ checkpoint kept, and resumes the agents the removal stopped in the same run; a r
 comes back the same way, with its agent's session; `--no-resume` keeps them
 saved for a later `shoal resume`. A checkpoint keeps
 HEAD only when the unsaved files include a nested repository or changed
-submodule, or, for an agent's exit or stop, exceed `archive_max_mb`; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
+submodule, or, for an agent's exit or stop, exceed `archive_max_mb`; see [Checkpoints and restore](docs/reference/removal.md#checkpoints-and-restore).
 `shoal restore <workspace> --checkpoint <number>` returns an existing workspace
 to one of its checkpoints. `shoal move <workspace> -o <file>`
 removes a workspace and writes its removal checkpoint and record to a file, and `shoal
@@ -545,8 +545,8 @@ enabled = false
 
 When something looks wrong, `shoal inbox` and `shoal alert list` show what Shoal
 found and the command that fixes it, and `shoal status <name>` shows one
-workspace or chat; see [cleanup](docs/reference.md#automatic-cleanup) and
-[recovery](docs/reference.md#recovery) for details.
+workspace or chat; see [cleanup](docs/reference/removal.md#automatic-cleanup) and
+[recovery](docs/reference/daemon.md#recovery) for details.
 
 ## Join your machines to a hub
 
@@ -567,7 +567,7 @@ shoal hub ls                         # Every machine and device, and whether it 
 ```
 
 The listener stays on loopback until something with TLS is in front of it; see
-[hub](docs/reference.md#hub).
+[hub](docs/reference/hub.md).
 
 ## Update
 
@@ -586,7 +586,7 @@ terminals.
 
 ## Development
 
-See [docs/design.md](docs/design.md) for decisions, the [command reference](docs/reference.md) for behavior and the [configuration reference](crates/shoal-cli/src/cli/commands/configuration/reference.md) for every option.
+See [docs/design.md](docs/design.md) for decisions, the [command reference](docs/reference/) for behavior and the [configuration reference](crates/shoal-cli/src/cli/commands/configuration/reference.md) for every option.
 Create releases through **Actions → release** ([setup](docs/releases.md)).
 
 Requires Rust at least as new as `package.rust-version` in [Cargo.toml](Cargo.toml)

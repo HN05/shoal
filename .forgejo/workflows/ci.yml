@@ -29,7 +29,7 @@
 # passing: Forgejo ranks `skipped` above `success`. The undraft job names the
 # rust and gate contexts; keep them in step with the job names.
 #
-# The rust job runs on a Shoal runner (docs/reference.md#runner), on Linux or
+# The rust job runs on a Shoal runner (docs/reference/ci.md#runner), on Linux or
 # macOS, whichever machine with `runner.enabled` for this repository admits it
 # first. Steps run on that machine's host with its installed tools, in a
 # disposable workspace at the job's commit, so there is no checkout step. The
