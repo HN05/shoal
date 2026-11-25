@@ -61,6 +61,8 @@ pub(super) fn spawn(
         .stderr(Stdio::piped());
     if let Some(env) = env {
         command.env_clear().envs(env);
+        // The caller's environment lacks what the daemon hands down.
+        command.envs(shoal_core::git::system_config_variable());
     }
     // The worker outlives its caller: no execution's process inventory may
     // count it, or that execution's end would stop it as a survivor.

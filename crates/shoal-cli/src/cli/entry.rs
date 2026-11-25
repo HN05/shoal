@@ -34,11 +34,13 @@ pub fn run(daemon: RunDaemon) {
         // repositories, never in one a Git hook that started it ran in.
         unsafe { git::forget_inherited_repository() };
     }
-    if cli
-        .command
-        .as_ref()
-        .is_some_and(cli::Command::wraps_execution)
-    {
+    let wraps_execution = (cli.command.as_ref()).is_some_and(cli::Command::wraps_execution);
+    if wraps_execution || cli.command.as_ref().is_some_and(cli::Command::runs_daemon) {
+        // SAFETY: as above. What the daemon and agents start reads Git's
+        // system config without asking Git again.
+        unsafe { git::hand_down_system_config() };
+    }
+    if wraps_execution {
         let releases = Paths::new(cli.state_dir.clone())
             .ok()
             .map(|paths| releases::Releases::new(paths.releases()));

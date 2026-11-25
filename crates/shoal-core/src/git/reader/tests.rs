@@ -200,6 +200,140 @@ async fn a_config_files_helper() {
     }
 }
 
+/// The variable that names the value [`a_system_config_helper`] reads.
+const HELPER_EXPECTED: &str = "SHOAL_TEST_EXPECTED_VALUE";
+
+/// Run [`a_system_config_helper`] with the Git [`config_reporting_git`]
+/// writes first on `PATH`, which names a system file setting
+/// `shoal.system` to `asked`, and a parent's answer for the Git `handed_by`
+/// gives, or the reporting Git where `None`, which names a file setting it to
+/// `handed`; the helper must read `expected`.
+fn read_system_config_handed_down(handed_by: Option<&Path>, expected: &str) {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let config = |name: &str| {
+        let file = root.path().join(format!("{name}.gitconfig"));
+        std::fs::write(&file, format!("[shoal]\n\tsystem = {name}\n")).unwrap();
+        file
+    };
+    let (asked, handed) = (config("asked"), config("handed"));
+    let path = std::env::var_os("PATH").unwrap();
+    let bin = config_reporting_git(root.path(), &path);
+    let git = std::fs::canonicalize(bin.join("git")).unwrap();
+    let handed_by = handed_by.unwrap_or(&git);
+    let search = std::env::join_paths([bin].into_iter().chain(std::env::split_paths(&path)));
+    run_helper("a_system_config_helper", &repo, |command| {
+        command
+            .env("PATH", search.unwrap())
+            .env_remove("GIT_CONFIG_NOSYSTEM")
+            .env_remove("GIT_CONFIG_SYSTEM")
+            .env(HELPER_INSTALLATION, root.path().join("none.gitconfig"))
+            .env(HELPER_SYSTEM, &asked)
+            .env(
+                super::HANDED_DOWN_SYSTEM_CONFIG,
+                format!("{}\n{}", handed_by.display(), handed.display()),
+            )
+            .env(HELPER_EXPECTED, expected)
+    });
+}
+
+#[test]
+fn a_system_config_handed_down_for_the_git_on_path_is_read_without_asking() {
+    read_system_config_handed_down(None, "handed");
+}
+
+#[test]
+fn a_system_config_handed_down_for_another_git_is_asked_again() {
+    read_system_config_handed_down(Some(Path::new("/elsewhere/git")), "asked");
+}
+
+#[test]
+fn a_system_config_handed_down_through_a_relative_path_is_asked_again() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let asked = root.path().join("asked.gitconfig");
+    std::fs::write(&asked, "[shoal]\n\tsystem = asked\n").unwrap();
+    let handed = root.path().join("handed.gitconfig");
+    std::fs::write(&handed, "[shoal]\n\tsystem = handed\n").unwrap();
+    let path = std::env::var_os("PATH").unwrap();
+    config_reporting_git(root.path(), &path);
+    let search = std::env::join_paths(
+        [std::path::PathBuf::from("bin")]
+            .into_iter()
+            .chain(std::env::split_paths(&path)),
+    );
+    // Handed down by a process whose `bin` was another directory's.
+    run_helper("a_system_config_helper", &repo, |command| {
+        command
+            .current_dir(root.path())
+            .env("PATH", search.unwrap())
+            .env_remove("GIT_CONFIG_NOSYSTEM")
+            .env_remove("GIT_CONFIG_SYSTEM")
+            .env(HELPER_INSTALLATION, root.path().join("none.gitconfig"))
+            .env(HELPER_SYSTEM, &asked)
+            .env(
+                super::HANDED_DOWN_SYSTEM_CONFIG,
+                format!("bin/git\n{}", handed.display()),
+            )
+            .env(HELPER_EXPECTED, "asked")
+    });
+}
+
+/// Read `shoal.system`, which must be [`HELPER_EXPECTED`], then hand the
+/// system config down and read the variable it sets.
+#[tokio::test]
+#[ignore = "run by the tests of read_system_config_handed_down"]
+async fn a_system_config_helper() {
+    let repo = helper_repository();
+    let value = crate::git::config_value(&repo, "shoal.system")
+        .await
+        .unwrap();
+    let expected = std::env::var(HELPER_EXPECTED).unwrap();
+    assert_eq!(value, Some(expected.clone()));
+    // SAFETY: this helper process runs no other test, and no thread of
+    // this one reads the environment meanwhile.
+    unsafe { super::hand_down_system_config() };
+    let handed = std::env::var(super::HANDED_DOWN_SYSTEM_CONFIG).unwrap();
+    let (git, file) = handed.split_once('\n').unwrap();
+    assert_eq!(git, super::git_on_path().unwrap().to_str().unwrap());
+    assert!(file.ends_with(&format!("{expected}.gitconfig")), "{file}");
+}
+
+#[test]
+fn no_system_config_is_asked_for_where_git_reads_none() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let asked = root.path().join("asked");
+    let path = std::env::var_os("PATH").unwrap();
+    let real = crate::fsutil::executables::find_executable("git".as_ref(), &path).unwrap();
+    let bin = root.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    let script = format!(
+        "#!/bin/sh\ncase \"$*\" in *'var GIT_CONFIG_SYSTEM') touch '{}';; esac\nexec '{}' \"$@\"\n",
+        asked.display(),
+        real.display()
+    );
+    crate::test_support::install_test_script(bin.join("git"), script);
+    let search = std::env::join_paths([bin].into_iter().chain(std::env::split_paths(&path)));
+    run_helper("a_plain_read_helper", &repo, |command| {
+        command
+            .env("PATH", search.unwrap())
+            .env("GIT_CONFIG_NOSYSTEM", "true")
+            .env_remove("GIT_CONFIG_SYSTEM")
+            .env_remove(super::HANDED_DOWN_SYSTEM_CONFIG)
+    });
+    assert!(!asked.exists());
+}
+
+/// Read a value the repository's own config sets.
+#[tokio::test]
+#[ignore = "run by no_system_config_is_asked_for_where_git_reads_none"]
+async fn a_plain_read_helper() {
+    let repo = helper_repository();
+    let value = crate::git::config_value(&repo, "core.bare").await.unwrap();
+    assert_eq!(value.as_deref(), Some("false"));
+}
+
 #[test]
 fn a_config_file_named_by_git_config_is_read_as_git_reads_it() {
     let root = tempfile::tempdir().unwrap();

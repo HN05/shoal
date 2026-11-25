@@ -40,8 +40,11 @@ registered worktrees in process with `gix` rather than starting a Git process fo
 those processes dominated the daemon's background load. Each read opens the
 repository afresh, so a moved or replaced worktree is caught as before, sees
 the user's and system config as Git does and none of the repository variables
-Shoal's Git commands drop, and runs on the blocking pool. A repository `gix`
-would not read as Git does, such as one whose refs are in a reftable, a partial
+Shoal's Git commands drop, and runs on the blocking pool. The daemon and each
+execution wrapper ask the Git on `PATH` once for its system config file and
+hand the answer down to the processes they start, which take it while `PATH`
+finds the same Git, so an agent's commands start no Git process to learn it.
+A repository `gix` would not read as Git does, such as one whose refs are in a reftable, a partial
 clone, whose missing objects Git fetches, one that enables an extension
 `gix` lacks, or one whose config includes a file on a condition `gix` evaluates
 otherwise, such as one on the branch, and a process whose environment points Git

@@ -13,7 +13,10 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{fsutil::off_runtime, tools::Tool};
+use crate::{
+    fsutil::{executables::find_executable, off_runtime},
+    tools::Tool,
+};
 
 /// The repository-format extensions with which gix reads a repository's
 /// location, refs and config as Git does, lowercase as Git compares them. A
@@ -86,8 +89,7 @@ fn open(path: &Path) -> Option<gix::Repository> {
         .permissions(permissions())
         .bail_if_untrusted(true)
         .strict_config(true);
-    // gix applies GIT_CONFIG_SYSTEM itself, unless given a path.
-    if std::env::var_os("GIT_CONFIG_SYSTEM").is_none()
+    if system_config_applies()
         && let Some(system) = system_config()
     {
         options = options.system_config_path(system);
@@ -130,31 +132,100 @@ fn permissions() -> gix::open::Permissions {
     permissions
 }
 
+/// Whether gix reads the system config file [`system_config`] names: it
+/// applies `GIT_CONFIG_SYSTEM` itself, unless given a path, and reads no
+/// system file under a true `GIT_CONFIG_NOSYSTEM`.
+fn system_config_applies() -> bool {
+    let no_system = std::env::var_os("GIT_CONFIG_NOSYSTEM")
+        .and_then(|value| gix::config::Boolean::try_from(value).ok())
+        .is_some_and(|value| value.0);
+    std::env::var_os("GIT_CONFIG_SYSTEM").is_none() && !no_system
+}
+
+/// The variable through which a process hands [`system_config`]'s answer
+/// down to the processes it starts, as `<git>\n<file>`: the Git executable
+/// on `PATH` that named it, then the file.
+const HANDED_DOWN_SYSTEM_CONFIG: &str = "SHOAL_GIT_SYSTEM_CONFIG";
+
 /// The system config file of the Git on `PATH`, the one Shoal's Git
 /// commands run, as `git var GIT_CONFIG_SYSTEM` names it: `/etc/gitconfig`
 /// for most, a file under its prefix for one such as Homebrew's, which
-/// reads no other. Asked once per process; `None` where that Git cannot
-/// say, which leaves gix its own default.
+/// reads no other. Once per process, taken from the parent where it handed
+/// down that Git's answer, else asked; `None` where that Git cannot say,
+/// which leaves gix its own default.
 fn system_config() -> Option<&'static Path> {
     static SYSTEM: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
-        let mut command = std::process::Command::new(Tool::Git.program());
-        command
-            .args(["--no-optional-locks", "var", "GIT_CONFIG_SYSTEM"])
-            .env_remove("GIT_CONFIG_SYSTEM")
-            .stdin(Stdio::null())
-            .stderr(Stdio::null());
-        for name in super::REPOSITORY_ENV {
-            command.env_remove(name);
-        }
-        let output = command
-            .output()
-            .ok()
-            .filter(|output| output.status.success())?;
-        let path = String::from_utf8(output.stdout).ok()?;
-        let path = path.trim_end_matches('\n');
-        (!path.is_empty()).then(|| PathBuf::from(path))
+        handed_down_system_config(git_on_path().as_deref()).or_else(ask_system_config)
     });
     SYSTEM.as_deref()
+}
+
+/// The Git executable `PATH` finds, which Shoal's Git commands run,
+/// canonical: a relative `PATH` entry finds another Git in another
+/// directory.
+fn git_on_path() -> Option<PathBuf> {
+    let search_path = std::env::var_os("PATH")?;
+    let found = find_executable(Tool::Git.program().as_ref(), &search_path)?;
+    std::fs::canonicalize(found).ok()
+}
+
+/// The system config file a parent process handed down as `git`'s.
+fn handed_down_system_config(git: Option<&Path>) -> Option<PathBuf> {
+    let value = std::env::var(HANDED_DOWN_SYSTEM_CONFIG).ok()?;
+    let (named_by, file) = value.split_once('\n')?;
+    (git == Some(Path::new(named_by)) && !file.is_empty()).then(|| PathBuf::from(file))
+}
+
+/// `git var GIT_CONFIG_SYSTEM`'s answer.
+fn ask_system_config() -> Option<PathBuf> {
+    let mut command = std::process::Command::new(Tool::Git.program());
+    command
+        .args(["--no-optional-locks", "var", "GIT_CONFIG_SYSTEM"])
+        .env_remove("GIT_CONFIG_SYSTEM")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null());
+    for name in super::REPOSITORY_ENV {
+        command.env_remove(name);
+    }
+    let output = command
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    let path = String::from_utf8(output.stdout).ok()?;
+    let path = path.trim_end_matches('\n');
+    (!path.is_empty()).then(|| PathBuf::from(path))
+}
+
+/// Hand [`system_config`]'s answer down to the processes this one starts,
+/// which take it instead of asking while `PATH` finds the same Git. Nothing
+/// is handed down where gix reads no such file, as where
+/// `GIT_CONFIG_SYSTEM` names the file instead.
+///
+/// # Safety
+/// Call before any other thread exists.
+pub unsafe fn hand_down_system_config() {
+    if !system_config_applies() {
+        return;
+    }
+    let (Some(git), Some(file)) = (git_on_path(), system_config()) else {
+        return;
+    };
+    let (Some(git), Some(file)) = (git.to_str(), file.to_str()) else {
+        return;
+    };
+    if !git.contains('\n') {
+        let value = format!("{git}\n{file}");
+        // SAFETY: the caller guarantees no other thread reads the environment.
+        unsafe { std::env::set_var(HANDED_DOWN_SYSTEM_CONFIG, value) };
+    }
+}
+
+/// The variable through which this process hands its system config file
+/// down, with its value, for a process started in another environment,
+/// such as a caller's; `None` where it hands nothing down.
+pub fn system_config_variable() -> Option<(&'static str, std::ffi::OsString)> {
+    let value = std::env::var_os(HANDED_DOWN_SYSTEM_CONFIG)?;
+    Some((HANDED_DOWN_SYSTEM_CONFIG, value))
 }
 
 /// Variables that name config files, which Git, run as `git -C <path>`,

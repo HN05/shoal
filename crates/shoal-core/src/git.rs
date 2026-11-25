@@ -30,6 +30,7 @@ pub use queries::{
 };
 pub mod checkpoint;
 mod reader;
+pub use reader::{hand_down_system_config, system_config_variable};
 pub(crate) mod refs;
 mod remotes;
 pub(crate) use remotes::{RemoteUrls, remote_urls, upstream};
