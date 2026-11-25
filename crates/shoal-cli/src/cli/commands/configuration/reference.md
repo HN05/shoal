@@ -811,7 +811,7 @@ settle_seconds = 5   # At most 60; 0 delivers each alert at once
 ```
 
 `settle_seconds` holds an agent's unread alerts until none has arrived for
-that long. See [alerts](../../../../../../docs/reference/alerts.md).
+that long. See [settle alerts](../../../../../../docs/reference/alerts.md#settle-alerts).
 
 ### Triggers
 

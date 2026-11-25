@@ -514,7 +514,7 @@ shoal internal agent-state working   # Also waiting (for the user mid-turn) or i
 Agent hooks report the agent's turn state with this command, and integrations
 read it instead of each inferring it from the terminal. Shoal's terminal
 Claude Code and Codex launches, including `start --agent`, [chats](chats.md) and resumed sessions, register
-the hooks with the [alert hooks](alerts.md); Happy sessions do not.
+the hooks with the [alert hooks](alerts.md#delivery-hooks); Happy sessions do not.
 A session that starts, resumes or clears reports `idle`, so a new agent shows
 `waiting` until its first turn. A turn that ends reports `idle` with
 `--ends-turn <integration>`, which reads how long the agent's prompt cache lives
@@ -545,7 +545,7 @@ on stdin with a `session_id`, as Claude Code and Codex hooks pass, names the ses
 to [resume](load.md). The command reads only that first event, and stops waiting after
 two seconds without input. `list` and `status` show
 `working`, `needs input` for `waiting`, or `waiting` for `idle`, since an idle
-agent waits for the user or for activity that [wakes it](alerts.md); `status`,
+agent waits for the user or for activity that [wakes it](alerts.md#wake-an-idle-agent); `status`,
 `inspect` and `list --json` give `agent_state` with `state` and the Unix-seconds
 `since` it began. An idle report that ends a turn starts the agent's prompt cache
 lifetime: until the agent works again, `status` shows `Prompt cache` with when

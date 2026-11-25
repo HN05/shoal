@@ -76,7 +76,9 @@ that outlasts its timeout, so the activity waits for a later delivery. Claude Co
 wakes the idle agent with it through `asyncRewake`. The hook
 tries a failed wait again instead of exiting, because a hook that ends leaves the
 idle agent with no wait until its next turn; waits outlast a daemon restart,
-including the time before the next daemon listens and knows the agent's scope. Codex
+including the time before the next daemon listens and knows the agent's scope.
+The hook exits with Claude Code's process, since Claude Code runs hooks outside
+its process group and stopping the agent would otherwise leave the hook behind. Codex
 has no hook that can start a turn, so its tracked wrapper types a fixed prompt
 into the place it runs in, where its host types into its places, once Codex is idle with updates, at most once
 per idle stretch, and the prompt's hook delivers them. Claude Code's wake hook

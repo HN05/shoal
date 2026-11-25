@@ -34,7 +34,7 @@ sets the status line.
 ## Steps from plan tools
 
 Claude Code's and Codex's plan tools set the steps through `PostToolUse` hooks.
-Shoal registers these hooks with the [alert hooks](alerts.md). They run
+Shoal registers these hooks with the [alert hooks](alerts.md#delivery-hooks). They run
 `shoal internal plan --integration <name>` with the hook event on stdin.
 
 - `TodoWrite` and `update_plan` replace the steps.
