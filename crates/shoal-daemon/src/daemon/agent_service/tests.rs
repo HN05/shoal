@@ -20,6 +20,5 @@ mod shutdown_stop;
 mod stopped_work;
 mod turn_retry;
 mod turn_state;
-mod upstream_limits;
 mod wake_timers;
 mod warnings;

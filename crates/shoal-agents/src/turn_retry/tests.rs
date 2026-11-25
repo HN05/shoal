@@ -7,6 +7,7 @@ use shoal_protocol::{agent::Agent, space_names::SpaceSelector};
 
 use super::*;
 use crate::{model::Workspace, stand_in::Fixture};
+use tokio::sync::watch::Receiver;
 
 #[test]
 fn waits_double_from_half_a_minute_to_a_quarter_hour_spread_a_fifth() {
@@ -61,7 +62,12 @@ async fn retry(fixture: &Fixture, workspace: &Workspace) -> Option<TurnRetry> {
         .unwrap()
 }
 
-async fn fail(fixture: &Fixture, workspace: &Workspace, execution: &str, failure: TurnFailure) {
+async fn fail(
+    fixture: &Fixture,
+    workspace: &Workspace,
+    execution: &str,
+    failure: impl Into<FailedTurn>,
+) {
     let status = fixture
         .agents
         .report_turn_failure(
@@ -507,4 +513,247 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
         .context("usage-limit retry")?;
     assert_eq!(limited.attempt, 1);
     Ok(())
+}
+
+/// A workspace `name` whose `claude` agent runs connected in the returned
+/// execution, and the receiver that keeps its connection open.
+async fn connected(fixture: &Fixture, name: &str) -> (Workspace, ExecutionId, Receiver<bool>) {
+    let workspace = fixture.workspace(name).await;
+    let (execution, connection) = rerun(fixture, &workspace).await;
+    (workspace, execution, connection)
+}
+
+/// A new execution of the connected `claude` agent in `workspace`, as a
+/// restore runs it, and the receiver keeping its connection open.
+async fn rerun(fixture: &Fixture, workspace: &Workspace) -> (ExecutionId, Receiver<bool>) {
+    let daemon = &*fixture.daemon;
+    let command = crate::executions::ExecutionKind::Command;
+    let started = (fixture.agents)
+        .begin_execution(daemon, workspace.id.as_str(), None, command, None)
+        .await
+        .unwrap();
+    let agent = shoal_protocol::executions::TrackedAgent::named("claude");
+    let (id, name) = (&started.plan.id, &workspace.name);
+    (fixture.agents)
+        .track_agent(
+            daemon,
+            id,
+            &agent,
+            &workspace.id,
+            name,
+            true,
+            Duration::ZERO,
+        )
+        .await;
+    (started.plan.id, started.stop)
+}
+
+/// The reset `execution`'s proxy reported, as the daemon keeps it.
+async fn stored_reset(fixture: &Fixture, execution: &ExecutionId) -> Option<UnixTime> {
+    let execution = execution.to_owned();
+    (fixture.agents.store)
+        .run(move |db| upstream_reset(db, &execution))
+        .await
+        .unwrap()
+}
+
+/// Report that the proxy of `execution` in `workspace` found its upstream
+/// limited until `reset`, or answering again for none.
+async fn upstream(
+    fixture: &Fixture,
+    workspace: &Workspace,
+    execution: &ExecutionId,
+    reset: Option<UnixTime>,
+) {
+    let selector = SpaceSelector::id(&workspace.id);
+    (fixture.agents)
+        .report_upstream_reset(&*fixture.daemon, &selector, execution.clone(), reset)
+        .await
+        .unwrap();
+}
+
+/// End the execution `id`, as once its wrapper leaves without restoring it.
+async fn end_execution(fixture: &Fixture, id: &ExecutionId) {
+    let id = id.clone();
+    (fixture.agents.store)
+        .run(move |db| {
+            db.execute("DELETE FROM executions WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// Disk space left out of a restore's wait, as the restores of agents
+/// asleep while the user is away leave it in their own tests.
+const DISK_OFF: &str = "[machine.overload.disk]\nenabled = false\n";
+
+#[tokio::test]
+async fn a_rate_limit_retries_after_the_reset_its_error_states() {
+    let fixture = Fixture::new().await;
+    let (workspace, execution, _connection) = connected(&fixture, "agent").await;
+    // An hour past any backoff of a first attempt.
+    let reset = now() + secs(60 * 60);
+    let stated = |failure| FailedTurn {
+        failure,
+        resets_at: Some(reset),
+    };
+    let limited = stated(TurnFailure::RateLimited);
+    fail(&fixture, &workspace, execution.as_str(), limited).await;
+    let pending = retry(&fixture, &workspace).await.unwrap();
+    assert_eq!((pending.attempt, pending.due_at), (1, reset + RESET_MARGIN));
+
+    // Only a rate limit's error is read for a reset.
+    let (other, execution, _other_connection) = connected(&fixture, "other").await;
+    let overloaded = stated(TurnFailure::Overloaded);
+    fail(&fixture, &other, execution.as_str(), overloaded).await;
+    let backoff = retry(&fixture, &other).await.unwrap();
+    assert!(backoff.due_at < reset, "{backoff:?}");
+}
+
+#[tokio::test]
+async fn a_reset_further_off_than_a_weekly_limit_holds_no_retry() {
+    let fixture = Fixture::new().await;
+    let (workspace, execution, _connection) = connected(&fixture, "agent").await;
+    // Milliseconds read as seconds.
+    let failed = FailedTurn {
+        failure: TurnFailure::RateLimited,
+        resets_at: Some(UnixTime::from_seconds(now().seconds() * 1000)),
+    };
+    fail(&fixture, &workspace, execution.as_str(), failed).await;
+    let backoff = retry(&fixture, &workspace).await.unwrap();
+    assert!(backoff.due_at < now() + secs(60 * 60), "{backoff:?}");
+}
+
+#[tokio::test]
+async fn a_retry_waits_past_the_reset_the_upstream_named() {
+    let fixture = Fixture::new().await;
+    let (workspace, execution, _connection) = connected(&fixture, "agent").await;
+    // Resets far past any clock and long gone, so however slowly the test
+    // runs, each wait is the reset's or the backoff's.
+    let reset = UnixTime::from_seconds(4_000_000_000_000);
+    // The proxy's report arrives first, as it does for Codex.
+    upstream(&fixture, &workspace, &execution, Some(reset)).await;
+    fail(
+        &fixture,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
+    let pending = retry(&fixture, &workspace).await.unwrap();
+    assert_eq!(pending.due_at, reset + RESET_MARGIN);
+    assert_eq!(deliver_now(&fixture).await, None);
+
+    // The agent's own report arrives first, as Claude's may.
+    let (other, execution, _other_connection) = connected(&fixture, "other").await;
+    fail(
+        &fixture,
+        &other,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
+    let early = retry(&fixture, &other).await.unwrap();
+    assert!(early.due_at < reset, "{early:?}");
+    upstream(&fixture, &other, &execution, Some(reset)).await;
+    let held = retry(&fixture, &other).await.unwrap();
+    assert_eq!(
+        (held.attempt, held.due_at),
+        (early.attempt, reset + RESET_MARGIN)
+    );
+    // A reset that has passed holds nothing back.
+    upstream(&fixture, &other, &execution, Some(UnixTime::EPOCH)).await;
+    assert_eq!(retry(&fixture, &other).await.unwrap().due_at, held.due_at);
+    // Once the upstream answers again, a later failure backs off as its own.
+    upstream(&fixture, &other, &execution, None).await;
+    assert_eq!(stored_reset(&fixture, &execution).await, None);
+    report(&fixture, &other, execution.as_str(), AgentState::Working).await;
+    fail(
+        &fixture,
+        &other,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
+    let transient = retry(&fixture, &other).await.unwrap();
+    assert!(transient.due_at < reset, "{transient:?}");
+    upstream(&fixture, &other, &execution, Some(reset)).await;
+    assert_eq!(stored_reset(&fixture, &execution).await, Some(reset));
+    // A wrapper that only lost its connection may come back, and the reset
+    // still holds for it; an execution that ended waits for nothing.
+    fixture.agents.forget_proxy_reports(&execution, false).await;
+    assert_eq!(stored_reset(&fixture, &execution).await, Some(reset));
+    fixture.agents.forget_proxy_reports(&execution, true).await;
+    assert_eq!(stored_reset(&fixture, &execution).await, None);
+}
+
+#[tokio::test]
+async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
+    let fixture = Fixture::new().await;
+    let daemon = &*fixture.daemon;
+    let (workspace, execution, _connection) = connected(&fixture, "agent").await;
+    let reset = UnixTime::from_seconds(4_000_000_000_000);
+    upstream(&fixture, &workspace, &execution, Some(reset)).await;
+    // The wrapper, with its proxy, may reattach.
+    let kind = crate::executions::ExecutionKind::Command;
+    (fixture
+        .agents
+        .finish_execution(daemon, execution.clone(), kind, None))
+    .await
+    .unwrap();
+    assert_eq!(stored_reset(&fixture, &execution).await, Some(reset));
+    (fixture
+        .agents
+        .finish_execution(daemon, execution.clone(), kind, Some(0)))
+    .await
+    .unwrap();
+    assert_eq!(stored_reset(&fixture, &execution).await, None);
+}
+
+/// An execution that ends with no restore of it waiting drops its retry.
+#[tokio::test]
+async fn an_ended_execution_without_a_restore_drops_its_retry() {
+    let fixture = Fixture::new().await;
+    let (workspace, execution, _connection) = connected(&fixture, "agent").await;
+    fail(
+        &fixture,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::Overloaded,
+    )
+    .await;
+    end_execution(&fixture, &execution).await;
+    assert_eq!(retry(&fixture, &workspace).await, None);
+}
+
+/// A restore that leaves the queue after its execution ended, such as one
+/// discarded or failed, drops the retry it has not delivered, which nothing
+/// could deliver any longer.
+#[tokio::test]
+async fn a_restore_that_leaves_the_queue_after_its_execution_drops_its_retry() {
+    let fixture = Fixture::with_config(DISK_OFF).await;
+    let daemon = &*fixture.daemon;
+    let (workspace, execution, connection) = connected(&fixture, "agent").await;
+    fail(
+        &fixture,
+        &workspace,
+        execution.as_str(),
+        TurnFailure::RateLimited,
+    )
+    .await;
+    (fixture.agents.stop_idle_agents(daemon, now() + secs(60)))
+        .await
+        .unwrap();
+    assert!(*connection.borrow(), "the idle agent sleeps");
+    (fixture.agents.queue_agent_restore(daemon, &execution))
+        .await
+        .unwrap();
+    end_execution(&fixture, &execution).await;
+    assert!(retry(&fixture, &workspace).await.is_some());
+
+    fixture.agents.remove_restore(&execution).await;
+    assert_eq!(retry(&fixture, &workspace).await, None);
+    let waits = fixture.agents.waiting_turn_retry(&workspace.id).await;
+    assert_eq!(waits.unwrap(), None);
 }

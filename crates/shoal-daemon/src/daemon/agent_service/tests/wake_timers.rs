@@ -3,10 +3,9 @@ use std::time::Duration;
 use shoal_protocol::{assignments::Done, sleep::WakeTimer, space_names::SpaceSelector};
 
 use crate::{
-    config::modes::ModeName,
     daemon::{
         manager::Manager,
-        test_support::{chat, manager, repository},
+        test_support::{manager, repository},
         workspace_files::Attacher,
     },
     model::Repository,
@@ -96,24 +95,4 @@ async fn waking_the_agent_and_finishing_the_work_cancel_its_timer() {
         .sleep(&*manager, &woken, None, Some(timer(20, None)))
         .await;
     assert!(refused.is_err());
-}
-
-#[tokio::test]
-async fn a_chats_timer_without_a_message_says_it_fired() {
-    let (temp, manager) = manager().await;
-    let repo = registered(&manager, &temp).await;
-    let talks = chat(&manager, "talks", ModeName::CHAT, Some(&repo), None).await;
-    let selector = SpaceSelector::id(&talks.id);
-    (manager.agents.sleep(
-        &*manager,
-        &selector,
-        Some(Sleep::Turn),
-        Some(timer(5, None)),
-    ))
-    .await
-    .unwrap();
-    fire_in(&manager, 5).await;
-    let delivered = messages(&manager, &selector).await;
-    assert_eq!(delivered.len(), 1, "{delivered:?}");
-    assert!(delivered[0].ends_with("fired."), "{delivered:?}");
 }

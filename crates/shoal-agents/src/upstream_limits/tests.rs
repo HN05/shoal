@@ -73,3 +73,21 @@ async fn a_reported_limit_stands_until_the_proxy_or_its_execution_ends() {
         .unwrap();
     assert!(limits().is_empty());
 }
+
+#[tokio::test]
+async fn a_chats_agent_reports_its_limit_too() {
+    let fixture = Fixture::new().await;
+    let chat = fixture.chat("master").await;
+    let limit = UpstreamLimit {
+        limit: ServiceLimit::Exhausted,
+        until: Some(UnixTime::from_seconds(5_000)),
+    };
+    let execution = ExecutionId::from("chat-agent");
+    let selector = SpaceSelector::id(&chat);
+    (fixture.agents)
+        .report_upstream_limit(&*fixture.daemon, &selector, execution.clone(), Some(limit))
+        .await
+        .unwrap();
+    let limits = fixture.agents.upstream_limits().lock().unwrap();
+    assert_eq!(limits.get(&execution), Some(&limit));
+}

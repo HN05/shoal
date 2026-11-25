@@ -125,3 +125,21 @@ async fn a_failed_firing_holds_back_only_the_timer_that_failed() {
     let kept = wake_at(&fixture, &replaced).await;
     assert_eq!(kept, Some(replacement.at));
 }
+
+#[tokio::test]
+async fn a_chats_timer_without_a_message_says_it_fired() {
+    let fixture = Fixture::new().await;
+    let repo = fixture.repository().await;
+    let talks = fixture.chat_in("talks", "chat", Some(&repo)).await;
+    let selector = SpaceSelector::id(&talks);
+    let sleep = Some(Sleep::Turn);
+    (fixture
+        .agents
+        .sleep(&*fixture.daemon, &selector, sleep, Some(timer(5, None))))
+    .await
+    .unwrap();
+    fire_in(&fixture, 5).await;
+    let delivered = messages(&fixture, &selector).await;
+    assert_eq!(delivered.len(), 1, "{delivered:?}");
+    assert!(delivered[0].ends_with("fired."), "{delivered:?}");
+}
