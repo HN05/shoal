@@ -5,7 +5,11 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use super::{forges, overload, same_as};
+use super::{
+    forges,
+    memory_limit::{self, MemoryLimitSetting},
+    overload, same_as,
+};
 
 shoal_states::states! {
     /// What the agent queue starts first within a priority.
@@ -88,9 +92,10 @@ pub struct Machine {
     pub max_jobs: MachineLimit,
     /// What the agent queue starts first after priority.
     pub schedule: Schedule,
-    /// The most memory Shoal's work holds together; no limit without it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub memory_limit: Option<super::memory_limit::MemoryLimit>,
+    /// The most memory Shoal's work holds together; `load` sets it where
+    /// it is left out.
+    #[serde(skip_serializing_if = "MemoryLimitSetting::follows_load")]
+    pub memory_limit: MemoryLimitSetting,
     pub overload: overload::Overload,
     /// What each AI tool needs of this machine.
     pub agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,
@@ -298,6 +303,11 @@ fn merge_tables(base: &mut toml::Table, top: toml::Table) {
 }
 
 impl Machine {
+    /// The limit on Shoal's work in effect on this machine.
+    pub fn work_memory_limit(&self) -> memory_limit::InEffect {
+        self.memory_limit.in_effect(self.load)
+    }
+
     /// `[machine]` of this machine's own global file over the shared
     /// file's, with each `same_as` reference followed and the overload
     /// thresholds the files leave out following `load`.

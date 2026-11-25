@@ -1,4 +1,5 @@
-//! The daemon's status and the file access stalls it reports.
+//! The daemon's status and the file access stalls it reports, and what sets
+//! the limit on Shoal's work memory.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,6 +23,16 @@ pub struct DaemonStatus {
     /// Since when the user paused this machine, none while it is not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paused: Option<crate::time::UnixTime>,
+}
+
+shoal_states::states! {
+    /// What sets the limit on Shoal's work memory.
+    MemoryLimitSource {
+        /// `[machine] load`, as `memory_limit` is left out.
+        Load => "load",
+        /// `[machine] memory_limit`.
+        Config => "config",
+    }
 }
 
 /// The cause besides a slow system that file access timeouts name: a privacy

@@ -38,7 +38,7 @@ impl Manager {
 /// Whether work that cannot be read holds back starts and recovery under
 /// `config`: with a limit, which memory protection reads.
 fn unread_work_holds(config: &Config) -> bool {
-    config.machine.overload.memory.enabled && config.machine.memory_limit.is_some()
+    config.machine.overload.memory.enabled && config.machine.work_memory_limit().limit.is_some()
 }
 
 /// Tells the user once, while containers the usage samples cannot read hold
@@ -80,7 +80,12 @@ impl UnreadContainers {
 /// The bytes `config` limits Shoal's work to on this machine; none without
 /// a limit, or for a share of RAM that cannot be read, which is logged.
 pub(crate) fn limit(config: &Config) -> Option<u64> {
-    let limit = config.machine.memory_limit?;
+    in_bytes(config.machine.work_memory_limit().limit?)
+}
+
+/// `limit` in bytes on this machine; none for a share of RAM that cannot be
+/// read, which is logged.
+fn in_bytes(limit: MemoryLimit) -> Option<u64> {
     let ram = match limit {
         MemoryLimit::Bytes(_) => 0,
         MemoryLimit::Percent(_) => (load::ram())

@@ -87,13 +87,15 @@ user's service manager cannot move, or before systemd 254, and in a
 development build, the command starts directly in the wrapper's control
 group.
 
-With [`memory_limit`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine)
-set, the daemon gives the slice `MemoryHigh` at the limit and `MemoryMax` a
+With a [`memory_limit`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine),
+which on Linux `load` sets where the config leaves it out, the daemon gives the slice `MemoryHigh` at the limit and `MemoryMax` a
 twentieth above it, at startup and on `shoal config reload`, and lifts both
 once the limit is removed: the kernel throttles work above the limit,
 reclaiming its cache and swapping it out, and where that cannot keep it below
 `MemoryMax`, its OOM killer kills inside the slice only, in the order of the
-OOM scores above, while the daemon and the desktop keep their memory. The service manager keeps the cap until the next boot.
+OOM scores above, while the daemon and the desktop keep their memory.
+`memory_limit = "none"` removes the limit. A development build leaves the
+slice to the installed Shoal, so `load` sets it no limit. The service manager keeps the cap until the next boot.
 
 With [memory protection](load.md) on, overload protection and
 dynamic admission count the limit as the machine's memory too, so Shoal warns

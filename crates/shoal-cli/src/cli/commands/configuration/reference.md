@@ -98,7 +98,7 @@ max_heavy_agents = "dynamic" # Or a number from 0
 max_jobs = "dynamic"     # Or a number from 0
 schedule = "balanced"    # "balanced", "speed" or "cache"
 load = "balanced"        # "light", "balanced" or "full"
-memory_limit = "24GiB"   # Or a share of RAM, such as "75%"; no default
+memory_limit = "24GiB"   # Or a share of RAM, such as "75%", or "none"; on Linux, load sets it
 keep_awake = "off"       # "off", "handover", "finish" or "on"
 availability = "auto"    # "auto", "always_on" or "intermittent"
 ```
@@ -126,13 +126,16 @@ See [queue order](../../../../../../docs/reference/queue.md#queue-order).
 
 `load` says how hard Shoal may load the machine: `light` for a computer you
 work on, `full` for one that only runs agents. It sets each CPU and memory
-percentage under [`[machine.overload]`](#overload) that the file leaves out.
+percentage under [`[machine.overload]`](#overload) that the file leaves out,
+and on Linux `memory_limit` when the file leaves it out.
 
 `memory_limit` caps the memory that Shoal's
 [work](../../../../../../docs/reference/load.md#work-slice) holds together. It
-takes a size in `B`, `KiB`, `MiB`, `GiB` or `TiB`, or a percentage of RAM.
-Without it, work may use the whole machine. On Linux the kernel enforces it;
-elsewhere only [memory protection](#overload) does.
+takes a size in `B`, `KiB`, `MiB`, `GiB` or `TiB`, a percentage of RAM, or
+`"none"`, under which work may use the whole machine. On Linux the kernel
+enforces it, and where the file leaves it out, `load` sets it: 60% of RAM
+under `light`, 75% under `balanced` and 85% under `full`. Elsewhere only
+[memory protection](#overload) enforces it, and it has no default.
 
 `keep_awake` picks what the machine does once you walk away from it:
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::memory_limit::MemoryLimitSetting;
 
 #[test]
 fn unread_containers_warn_once_each_time_they_begin_to_hold_back_work() {
@@ -15,8 +16,9 @@ fn unread_containers_warn_once_each_time_they_begin_to_hold_back_work() {
 #[test]
 fn unread_work_holds_back_starts_only_under_a_limit_protection_reads() {
     let mut config = Config::default();
+    config.machine.memory_limit = MemoryLimitSetting::Off;
     assert!(!unread_work_holds(&config));
-    config.machine.memory_limit = Some(MemoryLimit::Bytes(8 << 30));
+    config.machine.memory_limit = MemoryLimitSetting::Limit(MemoryLimit::Bytes(8 << 30));
     assert!(unread_work_holds(&config));
     config.machine.overload.memory.enabled = false;
     assert!(!unread_work_holds(&config));

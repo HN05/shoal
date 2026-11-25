@@ -54,6 +54,17 @@ impl Load {
         }
     }
 
+    /// The share of RAM, in percent, `memory_limit` defaults to on Linux.
+    /// It leaves room for zram, whose compressed pages RAM holds outside
+    /// the work slice.
+    pub(super) fn work_memory_percent(self) -> u8 {
+        match self {
+            Self::Light => 60,
+            Self::Balanced => 75,
+            Self::Full => 85,
+        }
+    }
+
     /// The share of time tasks stall waiting for memory, as Linux's pressure
     /// stall information reports it: some tasks over ten seconds warns, every
     /// task over ten seconds stops, and recovery waits for some tasks over a

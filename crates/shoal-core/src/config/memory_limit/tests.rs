@@ -29,3 +29,49 @@ fn a_limit_writes_back_as_it_reads() {
         assert_eq!(limit.to_string(), written);
     }
 }
+
+#[test]
+fn a_left_out_limit_follows_load_where_the_kernel_enforces_it() {
+    let percent = |load| {
+        let effect = MemoryLimitSetting::Load.where_enforced(load, true);
+        assert_eq!(effect.source, MemoryLimitSource::Load);
+        effect.limit
+    };
+    assert_eq!(percent(Load::Light), Some(MemoryLimit::Percent(60)));
+    assert_eq!(percent(Load::Balanced), Some(MemoryLimit::Percent(75)));
+    assert_eq!(percent(Load::Full), Some(MemoryLimit::Percent(85)));
+    let unenforced = MemoryLimitSetting::Load.where_enforced(Load::Full, false);
+    assert_eq!(unenforced.limit, None);
+}
+
+#[test]
+fn a_written_limit_or_none_overrides_load_wherever_it_runs() {
+    let written = MemoryLimitSetting::Limit(MemoryLimit::Bytes(8 << 30));
+    let off = MemoryLimitSetting::Off;
+    for enforced in [true, false] {
+        let effect = written.where_enforced(Load::Full, enforced);
+        assert_eq!(effect.limit, Some(MemoryLimit::Bytes(8 << 30)));
+        assert_eq!(effect.source, MemoryLimitSource::Config);
+        let effect = off.where_enforced(Load::Full, enforced);
+        assert_eq!(effect.limit, None);
+        assert_eq!(effect.source, MemoryLimitSource::Config);
+    }
+}
+
+#[test]
+fn the_machine_reads_none_a_limit_or_nothing() {
+    let read = |text: &str| {
+        crate::test_support::global_config(text)
+            .machine
+            .memory_limit
+    };
+    assert_eq!(read(""), MemoryLimitSetting::Load);
+    assert_eq!(
+        read("[machine]\nmemory_limit = \"none\"\n"),
+        MemoryLimitSetting::Off
+    );
+    assert_eq!(
+        read("[machine]\nmemory_limit = \"75%\"\n"),
+        MemoryLimitSetting::Limit(MemoryLimit::Percent(75))
+    );
+}

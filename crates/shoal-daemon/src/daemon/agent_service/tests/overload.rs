@@ -50,8 +50,9 @@ async fn a_reload_of_a_threshold_withdraws_published_readiness_until_a_new_windo
 #[tokio::test]
 async fn a_reload_of_the_memory_limit_withdraws_published_readiness_until_a_new_window() {
     a_reload_withdraws_readiness(|config| {
-        config.machine.memory_limit =
-            Some(crate::config::memory_limit::MemoryLimit::Bytes(8 << 30));
+        config.machine.memory_limit = crate::config::memory_limit::MemoryLimitSetting::Limit(
+            crate::config::memory_limit::MemoryLimit::Bytes(8 << 30),
+        );
     })
     .await;
 }

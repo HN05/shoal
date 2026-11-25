@@ -294,7 +294,7 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
 /// settings or the memory limit on Shoal's work changed.
 pub fn protection_changed(old: &crate::config::Config, new: &crate::config::Config) -> bool {
     old.machine.overload != new.machine.overload
-        || old.machine.memory_limit != new.machine.memory_limit
+        || old.machine.work_memory_limit() != new.machine.work_memory_limit()
 }
 
 /// Give job admission this sample's CPU ticks while `admission` reads

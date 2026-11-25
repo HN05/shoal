@@ -93,7 +93,7 @@ pub use reviews::{ReviewMethod, ReviewPiece};
 pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use spaces::SpaceMethod;
-pub use status::{AccessStall, DaemonStatus, PRIVACY_PROMPT};
+pub use status::{AccessStall, DaemonStatus, MemoryLimitSource, PRIVACY_PROMPT};
 pub use subscriptions::SubscriptionMethod;
 pub use threads::ThreadMethod;
 pub use triggers::TriggerMethod;
