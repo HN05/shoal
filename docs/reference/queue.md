@@ -196,10 +196,10 @@ creates the worktree on the done blocker's branch, or from the default branch
 when no blocker leaves one. It then sets the workspace up, and the agent waits
 for that in turn.
 
-A preparation also waits before it creates the worktree while free disk is
-below `[machine.overload.warning] disk_free_gib`. With disk protection on, it
-waits while disk is unread too. It starts once disk space allows. `--wait`
-returns at once for a preparation that waits.
+With disk protection on, a preparation also waits before it creates the
+worktree while free disk is below `[machine.overload.warning] disk_free_gib`,
+or unread. It starts once disk space allows. `--wait` returns at once for a
+preparation that waits.
 
 `shoal stop` of a preparing workspace cancels its agent's entry and keeps the
 workspace. Its preparation then waits until `shoal setup` runs it. While the
