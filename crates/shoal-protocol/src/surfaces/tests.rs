@@ -966,6 +966,31 @@ fn a_date_bound_a_function_gives_applies_where_shoal_runs_it() {
 }
 
 #[test]
+fn a_format_string_that_grows_past_its_bounds_is_left_to_a_renderer() {
+    let doubling = "${/x}${/x}";
+    let mut deep = json!("${/x}");
+    for _ in 0..30 {
+        deep = json!({"@call": "formatString", "args": {"value": deep}});
+    }
+    let wide = json!({"@call": "formatString", "args": {"value": "${/big}".repeat(10)}});
+    let shallow = json!({"@call": "formatString", "args": {"value":
+        {"@call": "formatString", "args": {"value": "${/x}"}}}});
+    let growing = surface(
+        json!([
+            {"id": "root", "component": "Button", "child": "label",
+             "action": {"event": {"name": "go",
+                 "context": {"deep": deep.clone(), "wide": wide.clone(), "shallow": shallow}}}},
+            {"id": "label", "component": "Text", "text": "Go"},
+        ]),
+        json!({"x": doubling, "big": "y".repeat(1024)}),
+    );
+    let resolved = growing.resolve("go", serde_json::Map::new()).unwrap();
+    assert_eq!(resolved["deep"], deep);
+    assert_eq!(resolved["wide"], wide);
+    assert_eq!(resolved["shallow"], json!(doubling.repeat(2)));
+}
+
+#[test]
 fn a_context_s_format_string_reads_the_entered_data() {
     let call = |value: &str| json!({"@call": "formatString", "args": {"value": value}});
     let greeting = surface(

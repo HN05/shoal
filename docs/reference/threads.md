@@ -171,7 +171,8 @@ such as an end date's earliest, read that data too. Shoal runs `@index` and
 `formatString` over data paths itself, in a context, a bound and the text it
 shows. It records any other function call in a context as written, since its
 result depends on the renderer, such as its locale or clock, and a bound it
-gives bounds nothing.
+gives bounds nothing. It treats the same way calls nested more than four deep
+and a `formatString` whose text would outgrow 8 KiB.
 
 ### Surfaces as text
 

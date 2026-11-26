@@ -17,8 +17,12 @@ impl Surface {
     /// What `call`, placed in `scope`, gives where Shoal runs it, a call
     /// of `@index` or `formatString` as [`Self::indexed`] and
     /// [`Self::formatted`] give it; none for a call only a renderer runs,
-    /// or a value that is no call.
+    /// a value that is no call, or calls nested deeper than
+    /// [`MAX_NESTED_CALLS`], which Shoal leaves to a renderer too.
     pub(super) fn called(&self, call: &Value, scope: &str) -> Option<Value> {
+        if nesting(call) > MAX_NESTED_CALLS {
+            return None;
+        }
         match call.get("@call").and_then(Value::as_str)? {
             "@index" => self.indexed(call, scope),
             "formatString" => self.formatted(call, scope).map(Value::String),
@@ -40,45 +44,68 @@ impl Surface {
     /// The text a call of `formatString` gives: its `value`, as
     /// [`Self::known_text`] gives it in `scope`, with each `${path}`
     /// replaced by the data at that path, empty where there is none, and
-    /// each `\${` a literal `${`. None where an expression calls a function, which only
-    /// a renderer runs.
+    /// each `\${` a literal `${`. None where an expression calls a
+    /// function, which only a renderer runs, or where the text would
+    /// outgrow [`MAX_FORMATTED_BYTES`].
     fn formatted(&self, call: &Value, scope: &str) -> Option<String> {
         let template = self.known_text(call.get("args")?.get("value")?, scope)?;
-
-        let mut text = String::new();
+        let mut text = Bounded::default();
         let mut rest = template.as_str();
         while let Some(start) = rest.find("${") {
             if rest[..start].ends_with('\\') {
-                text.push_str(&rest[..start - 1]);
-                text.push_str("${");
+                text.push(&rest[..start - 1])?;
+                text.push("${")?;
                 rest = &rest[start + 2..];
                 continue;
             }
-            text.push_str(&rest[..start]);
+            text.push(&rest[..start])?;
             let end = rest[start..].find('}')? + start;
             let path = rest[start + 2..end].trim();
             if path.contains('(') {
                 return None;
             }
-            text.push_str(
-                &self
-                    .data(&scoped(scope, path))
-                    .map_or_else(String::new, shown),
-            );
+            match self.data(&scoped(scope, path)) {
+                Some(Value::String(data)) => text.push(data)?,
+                Some(Value::Null) | None => {}
+                Some(other) => text.push(&other.to_string())?,
+            }
             rest = &rest[end + 1..];
         }
-        text.push_str(rest);
-        Some(text)
+        text.push(rest)?;
+        Some(text.0)
     }
 }
 
-/// `value` as interpolated text: a string as it is, null as nothing, and
-/// anything else as JSON.
-fn shown(value: &Value) -> String {
+/// Most calls Shoal runs nested in one another, such as a `formatString`
+/// whose value is another. Each level of a template that interpolates
+/// itself can double the text, so deeper ones are left to a renderer.
+const MAX_NESTED_CALLS: usize = 4;
+
+/// Most bytes a `formatString` Shoal runs gives, which keeps what a surface
+/// can make it build near what a post's text may hold.
+const MAX_FORMATTED_BYTES: usize = 8 * 1024;
+
+/// Text built up to [`MAX_FORMATTED_BYTES`].
+#[derive(Default)]
+struct Bounded(String);
+
+impl Bounded {
+    /// Add `piece`, or none once the text would outgrow its bound.
+    fn push(&mut self, piece: &str) -> Option<()> {
+        (self.0.len() + piece.len() <= MAX_FORMATTED_BYTES).then(|| self.0.push_str(piece))
+    }
+}
+
+/// How deeply calls nest in `value`: 0 for none, 1 for a call whose
+/// arguments call nothing.
+fn nesting(value: &Value) -> usize {
+    let below = |values: &mut dyn Iterator<Item = &Value>| values.map(nesting).max().unwrap_or(0);
     match value {
-        Value::String(text) => text.clone(),
-        Value::Null => String::new(),
-        other => other.to_string(),
+        Value::Object(fields) => {
+            usize::from(fields.contains_key("@call")) + below(&mut fields.values())
+        }
+        Value::Array(values) => below(&mut values.iter()),
+        _ => 0,
     }
 }
 
