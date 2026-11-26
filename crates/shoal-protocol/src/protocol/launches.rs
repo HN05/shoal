@@ -152,6 +152,20 @@ impl From<StartedWorkspace> for Launched {
 }
 
 impl LaunchMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::CheckLaunch { .. }
+            | Self::CheckCreation { .. }
+            | Self::LaunchModes { .. }
+            | Self::LabelledMode { .. } => true,
+            Self::Launch { .. }
+            | Self::TakeParentRepository { .. }
+            | Self::ReceiveSession { .. } => false,
+        }
+    }
+}
+
+impl LaunchMethod {
     /// A start in an existing space goes to that space's machine. A
     /// creation stays with the caller.
     pub fn forwarding(&self) -> Forwarding {

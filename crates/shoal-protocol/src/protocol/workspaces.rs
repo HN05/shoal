@@ -205,6 +205,31 @@ pub struct PullHead {
 }
 
 impl WorkspaceMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::UntrackedWorktrees | Self::InspectWorkspace { .. } | Self::CopyOrigin { .. } => {
+                true
+            }
+            Self::OpenBranch { .. }
+            | Self::CreateWorkspace { .. }
+            | Self::ReopenWorkspace { .. }
+            | Self::CreateChild { .. }
+            | Self::CreateCommitWorkspace { .. }
+            | Self::OpenPullHead { .. }
+            | Self::AdoptWorkspace { .. }
+            | Self::RenameBranch { .. }
+            | Self::SetBaseWorkspace { .. }
+            | Self::VerifyWorkspace { .. }
+            | Self::FastForwardWorkspace { .. }
+            | Self::RefreshWorkspace { .. }
+            | Self::KeepAgentEnvironment { .. }
+            | Self::CreatePendingWorktree { .. }
+            | Self::WorkspaceHook { .. } => false,
+        }
+    }
+}
+
+impl WorkspaceMethod {
     /// A request about a workspace's state goes to its machine. A creation,
     /// a listing, and what the caller's execution reads stay with the caller.
     pub fn forwarding(&self) -> Forwarding {

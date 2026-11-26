@@ -284,6 +284,42 @@ impl AgentMethod {
 }
 
 impl AgentMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::AgentUpdates { .. }
+            | Self::UpdatesWaiting { .. }
+            | Self::Progress { .. }
+            | Self::GitCredential { .. }
+            | Self::ListAgents => true,
+            Self::SetAgentState { .. }
+            | Self::SetProgress { .. }
+            | Self::Sleep { .. }
+            | Self::StartWokenTurn { .. }
+            | Self::ReportTurnFailure { .. }
+            | Self::ReportSubagent { .. }
+            | Self::ReportSubagentRequest { .. }
+            | Self::ReportWakeEnd { .. }
+            | Self::ReportProxyRetry { .. }
+            | Self::ReportUpstreamReset { .. }
+            | Self::ReportUpstreamLimit { .. }
+            | Self::ReportUpstreamAnswered { .. }
+            | Self::ReportInput { .. }
+            | Self::ReportTyping { .. }
+            | Self::ReportAttach { .. }
+            | Self::AwaitAgentWake { .. }
+            | Self::SpaceAgents { .. }
+            | Self::InterruptTurn { .. }
+            | Self::RestartAgent { .. }
+            | Self::CancelRestart { .. }
+            | Self::ResumeAgent { .. }
+            | Self::AgentSession { .. }
+            | Self::WaitAgentUpdates { .. }
+            | Self::AcknowledgePrUpdates { .. } => false,
+        }
+    }
+}
+
+impl AgentMethod {
     /// An agent's hooks and wrapper report to the machine the agent runs
     /// on, so their requests stay there.
     pub fn forwarding(&self) -> Forwarding {

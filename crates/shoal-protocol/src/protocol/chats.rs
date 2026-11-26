@@ -17,6 +17,14 @@ pub struct ChatRoot {
 }
 
 impl ChatMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ChatRoot => false,
+        }
+    }
+}
+
+impl ChatMethod {
     /// `root_dir` is the caller's machine's.
     pub fn forwarding(&self) -> Forwarding {
         match self {

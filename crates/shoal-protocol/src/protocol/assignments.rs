@@ -53,6 +53,19 @@ pub struct SavedAgent {
 }
 
 impl AssignmentMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::MarkDone { .. }
+            | Self::UndoDone { .. }
+            | Self::MarkReady { .. }
+            | Self::ClearReady { .. }
+            | Self::DiscardStoppedAgent { .. }
+            | Self::ChangeStoppedPermissions { .. } => false,
+        }
+    }
+}
+
+impl AssignmentMethod {
     /// Each changes the state of the space it names.
     pub fn forwarding(&self) -> Forwarding {
         match self {

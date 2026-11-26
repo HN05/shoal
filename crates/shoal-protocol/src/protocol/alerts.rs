@@ -107,6 +107,20 @@ pub enum AlertTarget {
 }
 
 impl AlertMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListAlerts { .. } => true,
+            Self::MarkAlertsRead { .. }
+            | Self::ClearAlerts
+            | Self::WatchAlerts { .. }
+            | Self::SendAlert { .. }
+            | Self::AlertInChat { .. }
+            | Self::WithdrawAlert { .. } => false,
+        }
+    }
+}
+
+impl AlertMethod {
     /// A message or a withdrawal goes to the recipient's machine, and a
     /// message waits for it while it is offline. The user's alerts stay
     /// here, since every machine keeps the other machines' copies.

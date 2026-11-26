@@ -42,6 +42,17 @@ impl DemoMethod {
 }
 
 impl DemoMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListDemos { .. } => true,
+            Self::DemoProgress { .. } | Self::StopDemos { .. } | Self::OpenDemoStream { .. } => {
+                false
+            }
+        }
+    }
+}
+
+impl DemoMethod {
     /// A demo runs on its workspace's machine, whose stream carries its
     /// bytes both ways; a start's progress is that of a start the caller
     /// made.

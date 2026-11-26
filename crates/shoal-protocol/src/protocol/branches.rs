@@ -30,6 +30,15 @@ pub enum BranchMethod {
 }
 
 impl BranchMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListForgeBranches { .. } => true,
+            Self::DeleteForgeBranches { .. } => false,
+        }
+    }
+}
+
+impl BranchMethod {
     /// Each asks the forge of the space's repository.
     pub fn forwarding(&self) -> Forwarding {
         match self {

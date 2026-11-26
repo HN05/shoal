@@ -29,6 +29,14 @@ impl SubscriptionMethod {
 }
 
 impl SubscriptionMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::Subscribe { .. } => false,
+        }
+    }
+}
+
+impl SubscriptionMethod {
     /// Events are the caller's machine's.
     pub fn forwarding(&self) -> Forwarding {
         match self {

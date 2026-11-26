@@ -26,6 +26,15 @@ pub enum ConfigMethod {
 }
 
 impl ConfigMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::TrackedConfig { .. } | Self::LayeredConfig { .. } => true,
+            Self::ConfigValue { .. } => false,
+        }
+    }
+}
+
+impl ConfigMethod {
     /// A space's config is read on its machine.
     pub fn forwarding(&self) -> Forwarding {
         match self {

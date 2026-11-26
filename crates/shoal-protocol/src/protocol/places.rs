@@ -35,6 +35,18 @@ pub enum PlaceMethod {
 }
 
 impl PlaceMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::SpacePlaces { .. }
+            | Self::RecordOwnedPlace { .. }
+            | Self::OwnedPlaces
+            | Self::CloseOwnedPlace { .. }
+            | Self::PlaceOwnership { .. } => false,
+        }
+    }
+}
+
+impl PlaceMethod {
     /// The places and terminal hosts are the caller's machine's.
     pub fn forwarding(&self) -> Forwarding {
         match self {

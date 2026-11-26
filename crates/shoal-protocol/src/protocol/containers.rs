@@ -35,6 +35,18 @@ pub enum ContainerMethod {
 }
 
 impl ContainerMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ContainerCatalog { .. } | Self::ContainerOverview { .. } => true,
+            Self::ContainerAcquire { .. }
+            | Self::ContainerRelease { .. }
+            | Self::ContainerSetUp { .. }
+            | Self::ContainerAgentStart { .. } => false,
+        }
+    }
+}
+
+impl ContainerMethod {
     /// Containers are a lease taken for the caller, and their setup the
     /// workspace's own; what the repository configures and what runs are
     /// state.

@@ -89,6 +89,16 @@ pub enum ConversionMethod {
 }
 
 impl ConversionMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ConvertToWorkspace { .. }
+            | Self::ConvertToChat { .. }
+            | Self::ConvertAgent { .. } => false,
+        }
+    }
+}
+
+impl ConversionMethod {
     /// A conversion goes to the machine of the space it converts.
     pub fn forwarding(&self) -> Forwarding {
         match self {

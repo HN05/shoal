@@ -29,6 +29,15 @@ pub enum TriggerMethod {
 }
 
 impl TriggerMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListTriggers { .. } => true,
+            Self::PauseTrigger { .. } | Self::RunTrigger { .. } => false,
+        }
+    }
+}
+
+impl TriggerMethod {
     /// A trigger fires on the machine of the space whose repository it is
     /// in.
     pub fn forwarding(&self) -> Forwarding {

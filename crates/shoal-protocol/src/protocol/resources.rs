@@ -25,6 +25,15 @@ pub enum ResourceMethod {
 }
 
 impl ResourceMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ResourceOverview { .. } | Self::ResourceCatalog { .. } => true,
+            Self::ResourceAcquire { .. } | Self::ResourceRelease { .. } => false,
+        }
+    }
+}
+
+impl ResourceMethod {
     /// A permit is a lease taken for the caller; what is leased and
     /// configured is state.
     pub fn forwarding(&self) -> Forwarding {

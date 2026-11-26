@@ -120,6 +120,25 @@ impl QueueMethod {
 }
 
 impl QueueMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListQueue | Self::QueuedPlan { .. } => true,
+            Self::QueueAgent { .. }
+            | Self::OpenStart { .. }
+            | Self::QueueRemove { .. }
+            | Self::QueueStart { .. }
+            | Self::QueueClaim { .. }
+            | Self::StartedLaunch { .. }
+            | Self::QueueHold { .. }
+            | Self::QueueAttach { .. }
+            | Self::QueueFail { .. }
+            | Self::QueueRetry { .. }
+            | Self::SetPriority { .. } => false,
+        }
+    }
+}
+
+impl QueueMethod {
     /// A space's priority goes to its machine. An entry is named by an ID
     /// only its machine knows, so entry requests stay with the caller.
     pub fn forwarding(&self) -> Forwarding {

@@ -242,6 +242,42 @@ pub enum RemovalMethod {
 }
 
 impl RemovalMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::CheckRemoval { .. }
+            | Self::CheckStop { .. }
+            | Self::RemovedSpaces
+            | Self::RemovedSpace { .. }
+            | Self::LocateRemovedSpace { .. } => true,
+            Self::StopTargets
+            | Self::StopSpace { .. }
+            | Self::StopProcesses { .. }
+            | Self::RemoveSpace { .. }
+            | Self::StartRemoval { .. }
+            | Self::AbsorbSpace(_)
+            | Self::Cleanup { .. }
+            | Self::RestoreSpace { .. }
+            | Self::DropRestoredSessions { .. }
+            | Self::ExportRemovedSpace { .. }
+            | Self::CopySpace { .. }
+            | Self::ExportMovingSpace { .. }
+            | Self::EndMovedSpace { .. }
+            | Self::AbandonMove { .. }
+            | Self::ImportPackage(_)
+            | Self::DeliverMove { .. }
+            | Self::DeliverCopy { .. }
+            | Self::ReadHeldPackage { .. }
+            | Self::ReleaseHeldMove { .. }
+            | Self::SettleMove { .. }
+            | Self::TakenRecords { .. }
+            | Self::DeliverRemovedSpace { .. }
+            | Self::SettleRemovedMove { .. }
+            | Self::ReceiveMove { .. } => false,
+        }
+    }
+}
+
+impl RemovalMethod {
     /// A request about a running space goes to its machine, and a stop
     /// waits for one that is offline. A removed space's record is read
     /// where it is kept. An absorb needs both worktrees, so it runs here, as

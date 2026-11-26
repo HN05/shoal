@@ -677,6 +677,21 @@ impl Failure {
 }
 
 impl OperationMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::StartOperation { .. }
+            | Self::FollowOperation { .. }
+            | Self::CancelOperation { .. }
+            | Self::StartWorkspace { .. }
+            | Self::StartCreation { .. }
+            | Self::StartChild { .. }
+            | Self::ReportProgress { .. }
+            | Self::StartMove { .. } => false,
+        }
+    }
+}
+
+impl OperationMethod {
     /// A move, an operation named with its space, and one that runs on its
     /// space's machine go to that machine. The rest run where the caller
     /// runs.

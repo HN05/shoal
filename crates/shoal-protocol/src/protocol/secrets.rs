@@ -23,6 +23,15 @@ pub enum SecretMethod {
 }
 
 impl SecretMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::SecretCatalog { .. } => true,
+            Self::SecretAcquire { .. } | Self::SecretRelease { .. } => false,
+        }
+    }
+}
+
+impl SecretMethod {
     /// A secret's grant is a lease taken for the caller; what is
     /// configured is state.
     pub fn forwarding(&self) -> Forwarding {

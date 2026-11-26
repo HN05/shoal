@@ -108,6 +108,30 @@ pub enum SpaceMethod {
 }
 
 impl SpaceMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListSpaces
+            | Self::JudgeSpaces { .. }
+            | Self::ListSpacesEverywhere { .. }
+            | Self::LocateSpace { .. }
+            | Self::SelectSpaces { .. }
+            | Self::FindSpaces { .. }
+            | Self::SpaceStatus { .. }
+            | Self::EnterSpace { .. }
+            | Self::SpaceSessions { .. }
+            | Self::FollowSession { .. }
+            | Self::SpaceLog { .. } => true,
+            Self::RenameSpace { .. }
+            | Self::IssueScope { .. }
+            | Self::RevokeScope { .. }
+            | Self::SpaceEnvironment { .. }
+            | Self::AttachSession { .. }
+            | Self::WatchSpaceEvents { .. } => false,
+        }
+    }
+}
+
+impl SpaceMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::WatchSpaceEvents { .. }

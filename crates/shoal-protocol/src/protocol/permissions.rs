@@ -29,6 +29,14 @@ pub enum PermissionMethod {
 }
 
 impl PermissionMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::LaunchPermissions { .. } | Self::HeldPermissions { .. } => false,
+        }
+    }
+}
+
+impl PermissionMethod {
     /// A launch's permissions are those of the workspace's machine; the
     /// caller's own are the caller's machine's.
     pub fn forwarding(&self) -> Forwarding {

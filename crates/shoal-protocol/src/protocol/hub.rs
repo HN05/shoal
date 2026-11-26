@@ -55,6 +55,21 @@ pub enum JoinVia {
 }
 
 impl HubMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::HubMembers => true,
+            Self::PairHub
+            | Self::JoinHub { .. }
+            | Self::LeaveHub
+            | Self::UpdateHub
+            | Self::RevokeHubMember { .. }
+            | Self::ServePlacement
+            | Self::AnswerPlacement { .. } => false,
+        }
+    }
+}
+
+impl HubMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::ServePlacement => Lifetime::Open,

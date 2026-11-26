@@ -314,6 +314,39 @@ impl ItemMethod {
 }
 
 impl ItemMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListItems { .. }
+            | Self::Labels { .. }
+            | Self::Reviewers { .. }
+            | Self::Capabilities { .. }
+            | Self::Reactions { .. }
+            | Self::ReviewThread { .. }
+            | Self::NumberKind { .. }
+            | Self::IssueDetails { .. }
+            | Self::IssueBlockers { .. }
+            | Self::PullRequest { .. }
+            | Self::ViewItems { .. }
+            | Self::ForgeDownload { .. } => true,
+            Self::LinkItem { .. }
+            | Self::RelinkSpace { .. }
+            | Self::UnlinkItems { .. }
+            | Self::SetPr { .. }
+            | Self::PrWait { .. }
+            | Self::WatchItems { .. }
+            | Self::OpenPull { .. }
+            | Self::RevertPull { .. }
+            | Self::MergedPull { .. }
+            | Self::OpenIssue { .. }
+            | Self::MergeWarning { .. }
+            | Self::ItemAction { .. }
+            | Self::ForgeApi { .. }
+            | Self::SelectItems { .. } => false,
+        }
+    }
+}
+
+impl ItemMethod {
     /// A wait's answer comes as its space's machine writes it, and a moved
     /// space's links are relinked where it arrives.
     pub fn forwarding(&self) -> Forwarding {

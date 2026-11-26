@@ -27,6 +27,14 @@ pub enum DiffMethod {
 }
 
 impl DiffMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::DiffBase { .. } | Self::Conflicts { .. } | Self::Diff { .. } => true,
+        }
+    }
+}
+
+impl DiffMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::Diff { .. } => Lifetime::Open,

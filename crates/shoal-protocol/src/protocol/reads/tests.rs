@@ -1,3 +1,4 @@
+use super::super::{AgentMethod, DaemonMethod, ItemContext, ItemMethod, RepositoryMethod};
 use super::*;
 
 #[test]
@@ -10,7 +11,7 @@ fn hook_reads_are_cancellable() {
 #[test]
 fn downloads_stop_when_their_client_hangs_up() {
     let download = ItemMethod::ForgeDownload {
-        target: super::super::ItemContext::space("w".into()).into(),
+        target: ItemContext::space("w".into()).into(),
         url: "https://forge.example/attachments/a1".into(),
     };
     assert!(Operation::from(download).reads_only());

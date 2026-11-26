@@ -96,6 +96,22 @@ pub enum CiMethod {
 }
 
 impl CiMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::CheckLog { .. }
+            | Self::ViewCiRun { .. }
+            | Self::CiRunJobs { .. }
+            | Self::CiRunJobLog { .. }
+            | Self::ListCiRuns { .. } => true,
+            Self::CiAction { .. }
+            | Self::CiRunAction { .. }
+            | Self::ApproveCiRuns { .. }
+            | Self::StartCiRun { .. } => false,
+        }
+    }
+}
+
+impl CiMethod {
     /// Each asks the forge of the space's repository.
     pub fn forwarding(&self) -> Forwarding {
         match self {

@@ -1,140 +1,52 @@
 //! Requests that only read state, which the daemon cancels when their client
 //! hangs up. Cancelling one that changes state could leave it half done, so
 //! those finish instead, including reads that first finish or record work.
-use super::{
-    AgentMethod, AlertMethod, AppMethod, ApprovalMethod, BranchMethod, ChangeMethod, CiMethod,
-    ConfigMethod, ContainerMethod, DaemonMethod, DemoMethod, DiffMethod, ExecutionMethod,
-    FileMethod, HoldMethod, HubMethod, ItemMethod, LaunchMethod, MergingMethod, Operation,
-    PortMethod, QueueMethod, RecoveryMethod, RemovalMethod, RepositoryMethod, ResourceMethod,
-    ReviewMethod, SecretMethod, SimulatorMethod, SpaceMethod, ThreadMethod, TriggerMethod,
-    WorkspaceMethod,
-};
+use super::Operation;
 
 impl Operation {
     pub fn reads_only(&self) -> bool {
-        matches!(
-            self,
-            Self::Daemon(DaemonMethod::Status)
-                | Self::Agent(
-                    AgentMethod::AgentUpdates { .. }
-                        | AgentMethod::UpdatesWaiting { .. }
-                        | AgentMethod::Progress { .. }
-                        | AgentMethod::GitCredential { .. }
-                        | AgentMethod::ListAgents
-                )
-                | Self::Approval(
-                    ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
-                )
-                | Self::Launch(
-                    LaunchMethod::CheckLaunch { .. }
-                        | LaunchMethod::CheckCreation { .. }
-                        | LaunchMethod::LaunchModes { .. }
-                        | LaunchMethod::LabelledMode { .. }
-                )
-                | Self::Ci(
-                    CiMethod::CheckLog { .. }
-                        | CiMethod::ViewCiRun { .. }
-                        | CiMethod::CiRunJobs { .. }
-                        | CiMethod::CiRunJobLog { .. }
-                        | CiMethod::ListCiRuns { .. }
-                )
-                | Self::Branch(BranchMethod::ListForgeBranches { .. })
-                | Self::Demo(DemoMethod::ListDemos { .. })
-                | Self::Execution(ExecutionMethod::CheckMerge | ExecutionMethod::CheckUnmerge)
-                | Self::File(FileMethod::ListFiles { .. } | FileMethod::ReadFile { .. })
-                | Self::Hold(HoldMethod::HoldList { .. })
-                | Self::Item(
-                    ItemMethod::ListItems { .. }
-                        | ItemMethod::Labels { .. }
-                        | ItemMethod::Reviewers { .. }
-                        | ItemMethod::Capabilities { .. }
-                        | ItemMethod::Reactions { .. }
-                        | ItemMethod::ReviewThread { .. }
-                        | ItemMethod::NumberKind { .. }
-                        | ItemMethod::IssueDetails { .. }
-                        | ItemMethod::IssueBlockers { .. }
-                        | ItemMethod::PullRequest { .. }
-                        | ItemMethod::ViewItems { .. }
-                        | ItemMethod::ForgeDownload { .. }
-                )
-                | Self::Alert(AlertMethod::ListAlerts { .. })
-                | Self::Review(ReviewMethod::PendingReviews)
-                | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
-                | Self::Thread(
-                    ThreadMethod::ListThreads { .. }
-                        | ThreadMethod::ShowThread { .. }
-                        | ThreadMethod::CurrentThread { .. }
-                )
-                | Self::Change(ChangeMethod::ListChanges { .. } | ChangeMethod::ChangeDiffs { .. })
-                | Self::Queue(QueueMethod::ListQueue | QueueMethod::QueuedPlan { .. })
-                | Self::Recovery(
-                    RecoveryMethod::Checkpoints { .. }
-                        | RecoveryMethod::Saved { .. }
-                        | RecoveryMethod::SavedSummaries
-                )
-                | Self::Removal(
-                    RemovalMethod::CheckRemoval { .. }
-                        | RemovalMethod::CheckStop { .. }
-                        | RemovalMethod::RemovedSpaces
-                        | RemovalMethod::RemovedSpace { .. }
-                        | RemovalMethod::LocateRemovedSpace { .. }
-                )
-                | Self::Repository(
-                    RepositoryMethod::ListRepositories
-                        | RepositoryMethod::ListBranches { .. }
-                        | RepositoryMethod::KeptBranches { .. }
-                )
-                | Self::Resource(
-                    ResourceMethod::ResourceOverview { .. }
-                        | ResourceMethod::ResourceCatalog { .. }
-                )
-                | Self::Secret(SecretMethod::SecretCatalog { .. })
-                | Self::Trigger(TriggerMethod::ListTriggers { .. })
-                | Self::Hub(HubMethod::HubMembers)
-                | Self::App(
-                    AppMethod::ReadAppConfig { .. }
-                        | AppMethod::ReadAppEntry { .. }
-                        | AppMethod::ListAppEntries { .. }
-                        | AppMethod::WatchAppEntries { .. }
-                )
-                | Self::Container(
-                    ContainerMethod::ContainerCatalog { .. }
-                        | ContainerMethod::ContainerOverview { .. }
-                )
-                | Self::Simulator(
-                    SimulatorMethod::SimCatalog { .. }
-                        | SimulatorMethod::SimOverview { .. }
-                        | SimulatorMethod::SimList { .. }
-                        | SimulatorMethod::SimHistory { .. }
-                )
-                | Self::Workspace(
-                    WorkspaceMethod::UntrackedWorktrees
-                        | WorkspaceMethod::InspectWorkspace { .. }
-                        | WorkspaceMethod::CopyOrigin { .. }
-                )
-                | Self::Space(
-                    SpaceMethod::ListSpaces
-                        | SpaceMethod::JudgeSpaces { .. }
-                        | SpaceMethod::ListSpacesEverywhere { .. }
-                        | SpaceMethod::LocateSpace { .. }
-                        | SpaceMethod::SelectSpaces { .. }
-                        | SpaceMethod::FindSpaces { .. }
-                        | SpaceMethod::SpaceStatus { .. }
-                        | SpaceMethod::EnterSpace { .. }
-                        | SpaceMethod::SpaceSessions { .. }
-                        | SpaceMethod::FollowSession { .. }
-                        | SpaceMethod::SpaceLog { .. }
-                )
-                | Self::Config(
-                    ConfigMethod::TrackedConfig { .. } | ConfigMethod::LayeredConfig { .. }
-                )
-                | Self::Diff(
-                    DiffMethod::DiffBase { .. }
-                        | DiffMethod::Conflicts { .. }
-                        | DiffMethod::Diff { .. }
-                )
-                | Self::Merging(MergingMethod::MergePath { .. })
-        )
+        match self {
+            Self::Daemon(method) => method.reads_only(),
+            Self::Repository(method) => method.reads_only(),
+            Self::Workspace(method) => method.reads_only(),
+            Self::Space(method) => method.reads_only(),
+            Self::Place(method) => method.reads_only(),
+            Self::Permission(method) => method.reads_only(),
+            Self::Config(method) => method.reads_only(),
+            Self::Diff(method) => method.reads_only(),
+            Self::Merging(method) => method.reads_only(),
+            Self::Removal(method) => method.reads_only(),
+            Self::Recovery(method) => method.reads_only(),
+            Self::Execution(method) => method.reads_only(),
+            Self::Assignment(method) => method.reads_only(),
+            Self::Agent(method) => method.reads_only(),
+            Self::Chat(method) => method.reads_only(),
+            Self::Conversion(method) => method.reads_only(),
+            Self::Launch(method) => method.reads_only(),
+            Self::Queue(method) => method.reads_only(),
+            Self::Hold(method) => method.reads_only(),
+            Self::Demo(method) => method.reads_only(),
+            Self::File(method) => method.reads_only(),
+            Self::Item(method) => method.reads_only(),
+            Self::Ci(method) => method.reads_only(),
+            Self::Branch(method) => method.reads_only(),
+            Self::Alert(method) => method.reads_only(),
+            Self::Operations(method) => method.reads_only(),
+            Self::Thread(method) => method.reads_only(),
+            Self::Change(method) => method.reads_only(),
+            Self::Review(method) => method.reads_only(),
+            Self::Approval(method) => method.reads_only(),
+            Self::Port(method) => method.reads_only(),
+            Self::Secret(method) => method.reads_only(),
+            Self::Resource(method) => method.reads_only(),
+            Self::Simulator(method) => method.reads_only(),
+            Self::Container(method) => method.reads_only(),
+            Self::Subscription(method) => method.reads_only(),
+            Self::Trigger(method) => method.reads_only(),
+            Self::Hub(method) => method.reads_only(),
+            Self::App(method) => method.reads_only(),
+            Self::Machine(method) => method.reads_only(),
+        }
     }
 }
 

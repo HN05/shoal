@@ -75,6 +75,21 @@ pub enum ApprovalMethod {
 }
 
 impl ApprovalMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListApprovals { .. } | Self::ShowApproval { .. } => true,
+            Self::DecideApproval { .. }
+            | Self::EscalateApproval { .. }
+            | Self::WithdrawApproval { .. }
+            | Self::BranchPush { .. }
+            | Self::RequestPush { .. }
+            | Self::AuthorizeAction { .. }
+            | Self::FinishPush { .. } => false,
+        }
+    }
+}
+
+impl ApprovalMethod {
     /// A decision goes to the request's machine, waiting for it while it is
     /// offline. An action's authorization and a push's end stay with the
     /// caller.

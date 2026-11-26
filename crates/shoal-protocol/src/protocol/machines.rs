@@ -23,6 +23,14 @@ pub enum MachineMethod {
 }
 
 impl MachineMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::PauseMachine { .. } | Self::UnpauseMachine { .. } => false,
+        }
+    }
+}
+
+impl MachineMethod {
     /// Each acts on a machine, not a space, and names the machine it
     /// goes to.
     pub fn forwarding(&self) -> Forwarding {

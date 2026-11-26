@@ -33,6 +33,18 @@ pub enum SimulatorMethod {
 }
 
 impl SimulatorMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::SimCatalog { .. }
+            | Self::SimOverview { .. }
+            | Self::SimList { .. }
+            | Self::SimHistory { .. } => true,
+            Self::SimAcquire { .. } | Self::SimRelease { .. } => false,
+        }
+    }
+}
+
+impl SimulatorMethod {
     /// A simulator is a lease taken for the caller; what is leased,
     /// configured and recorded is state.
     pub fn forwarding(&self) -> Forwarding {

@@ -43,6 +43,17 @@ pub enum RecoveryMethod {
 }
 
 impl RecoveryMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::Checkpoints { .. } | Self::Saved { .. } | Self::SavedSummaries => true,
+            Self::Checkpoint { .. } | Self::RestoreCheckpoint { .. } | Self::Reconcile { .. } => {
+                false
+            }
+        }
+    }
+}
+
+impl RecoveryMethod {
     /// Each reads or changes what the workspace keeps; a summary of every
     /// space is a listing of the caller's machine.
     pub fn forwarding(&self) -> Forwarding {

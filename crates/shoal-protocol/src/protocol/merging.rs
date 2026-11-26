@@ -27,6 +27,15 @@ pub enum MergingMethod {
 }
 
 impl MergingMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::MergePath { .. } => true,
+            Self::PreviewMerge { .. } => false,
+        }
+    }
+}
+
+impl MergingMethod {
     /// Each reads the space's links or the workspace's branch on its
     /// machine.
     pub fn forwarding(&self) -> Forwarding {

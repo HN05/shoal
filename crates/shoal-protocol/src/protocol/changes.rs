@@ -42,6 +42,18 @@ pub enum ChangeMethod {
 }
 
 impl ChangeMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListChanges { .. } | Self::ChangeDiffs { .. } => true,
+            Self::RecordChange { .. }
+            | Self::ClaimChanges { .. }
+            | Self::ReportEdits { .. }
+            | Self::UnclaimChanges { .. } => false,
+        }
+    }
+}
+
+impl ChangeMethod {
     /// A hook records its own agent's changes where it runs; the others go
     /// to the machine of the space whose worktree the changes are in.
     pub fn forwarding(&self) -> Forwarding {

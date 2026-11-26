@@ -87,6 +87,18 @@ impl AppMethod {
 }
 
 impl AppMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ReadAppConfig { .. }
+            | Self::ReadAppEntry { .. }
+            | Self::ListAppEntries { .. }
+            | Self::WatchAppEntries { .. } => true,
+            Self::WriteAppEntry { .. } | Self::DeleteAppEntry { .. } => false,
+        }
+    }
+}
+
+impl AppMethod {
     /// An app's entries go where the app store keeps them, which is no
     /// space's machine.
     pub fn forwarding(&self) -> Forwarding {

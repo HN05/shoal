@@ -128,6 +128,31 @@ impl RepositoryMethod {
 }
 
 impl RepositoryMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListRepositories | Self::ListBranches { .. } | Self::KeptBranches { .. } => true,
+            Self::RepositoriesElsewhere
+            | Self::RegisterRepository { .. }
+            | Self::RegisterContribution { .. }
+            | Self::HoldContribution { .. }
+            | Self::RenameRepository { .. }
+            | Self::ShareRepository { .. }
+            | Self::LocalConfigPath { .. }
+            | Self::EditLocalConfig { .. }
+            | Self::RemoveRepository { .. }
+            | Self::PreviewRepositoryRemoval { .. }
+            | Self::PlanRepositoryMoves { .. }
+            | Self::MoveRepositories { .. }
+            | Self::SyncRepository { .. }
+            | Self::FailingSyncs
+            | Self::DeleteKeptBranches { .. }
+            | Self::KeepRepositoryAgentEnvironment { .. }
+            | Self::ReceiveCommits { .. } => false,
+        }
+    }
+}
+
+impl RepositoryMethod {
     /// Each is about the caller's machine's registrations. The daemon sends
     /// a removal and its preview to the machine they name.
     pub fn forwarding(&self) -> Forwarding {

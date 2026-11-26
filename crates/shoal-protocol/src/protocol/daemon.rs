@@ -122,6 +122,15 @@ impl Exited {
 }
 
 impl DaemonMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::Status => true,
+            Self::ReloadConfig => false,
+        }
+    }
+}
+
+impl DaemonMethod {
     /// Each is about the caller's machine's daemon.
     pub fn forwarding(&self) -> Forwarding {
         match self {

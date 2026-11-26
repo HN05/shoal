@@ -21,6 +21,15 @@ pub enum HoldMethod {
 }
 
 impl HoldMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::HoldList { .. } => true,
+            Self::HoldAcquire { .. } | Self::HoldRelease { .. } => false,
+        }
+    }
+}
+
+impl HoldMethod {
     /// Each reads or changes the space's holds.
     pub fn forwarding(&self) -> Forwarding {
         match self {

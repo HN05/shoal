@@ -97,6 +97,15 @@ impl ExecutionMethod {
 }
 
 impl ExecutionMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::CheckMerge | Self::CheckUnmerge => true,
+            Self::Execute { .. } | Self::SessionSignalled { .. } => false,
+        }
+    }
+}
+
+impl ExecutionMethod {
     /// Each is the caller's own execution.
     pub fn forwarding(&self) -> Forwarding {
         match self {

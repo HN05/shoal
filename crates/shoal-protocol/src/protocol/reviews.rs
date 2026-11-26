@@ -93,6 +93,22 @@ impl ReviewMethod {
 pub struct ReviewPiece(pub String);
 
 impl ReviewMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::PendingReviews => true,
+            Self::RunReview { .. }
+            | Self::StartReview { .. }
+            | Self::SubmitReview { .. }
+            | Self::CancelReview { .. }
+            | Self::ListReviews { .. }
+            | Self::ShowReview { .. }
+            | Self::AwaitReview { .. }
+            | Self::CheckPrGate { .. } => false,
+        }
+    }
+}
+
+impl ReviewMethod {
     /// A review runs on its workspace's machine, which keeps its threads,
     /// and a wait's answer comes as that machine writes it.
     pub fn forwarding(&self) -> Forwarding {

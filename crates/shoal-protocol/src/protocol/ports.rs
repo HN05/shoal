@@ -25,6 +25,15 @@ pub enum PortMethod {
 }
 
 impl PortMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::PortOverview { .. } | Self::PortCatalog { .. } => true,
+            Self::PortAcquire { .. } | Self::PortRelease { .. } => false,
+        }
+    }
+}
+
+impl PortMethod {
     /// A port is a lease taken for the caller; what is reserved and
     /// configured is state.
     pub fn forwarding(&self) -> Forwarding {

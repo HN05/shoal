@@ -38,6 +38,17 @@ pub enum FileMethod {
 }
 
 impl FileMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListFiles { .. } | Self::ReadFile { .. } => true,
+            Self::FetchedDirectory { .. } | Self::AddFiles { .. } | Self::RemoveFiles { .. } => {
+                false
+            }
+        }
+    }
+}
+
+impl FileMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::ReadFile { .. } => Lifetime::Open,

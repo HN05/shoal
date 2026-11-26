@@ -177,6 +177,29 @@ impl ThreadMethod {
 }
 
 impl ThreadMethod {
+    pub(super) fn reads_only(&self) -> bool {
+        match self {
+            Self::ListThreads { .. } | Self::ShowThread { .. } | Self::CurrentThread { .. } => true,
+            Self::OpenThread { .. }
+            | Self::OpenComment { .. }
+            | Self::CloseOpened { .. }
+            | Self::ReopenOpened { .. }
+            | Self::Post { .. }
+            | Self::PostInChat { .. }
+            | Self::RepliedInChat { .. }
+            | Self::ForwardThread { .. }
+            | Self::ResolveThread { .. }
+            | Self::LinkThread { .. }
+            | Self::UnlinkThread { .. }
+            | Self::SwitchThread { .. }
+            | Self::AddChanges { .. }
+            | Self::RemoveChanges { .. }
+            | Self::AwaitPost { .. } => false,
+        }
+    }
+}
+
+impl ThreadMethod {
     /// A post goes to the machine the thread is numbered on, waiting for it
     /// while it is offline. What the caller's agent posts in its own
     /// conversation is its hooks' report, which stays here.
