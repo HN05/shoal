@@ -699,6 +699,12 @@ The copies outlive the tools' own files and moves between machines. Shoal
 copies a session again only once its files changed, so repeated handoffs keep
 one copy of each.
 
+A handoff settles every refusal before it stops the leaving agent. It writes
+the new tool's agent beside the space's last sessions first. Once the leaving
+agent is discarded, only renaming that file into place and recording the
+handoff remain, so a failure there leaves the space no agent only when the
+file system or the store fails.
+
 A handoff is recorded with the session it left. The new tool's first session
 report completes it, since that is when the new session is known. The report
 gives the new session's `continued_from` and journals the handoff, so apps show

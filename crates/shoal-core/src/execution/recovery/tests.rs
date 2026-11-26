@@ -496,6 +496,35 @@ fn each_agent_keeps_a_last_session() {
     );
 }
 
+/// A staged last session outlives the discarding of the space's saved work,
+/// replaces the session there once committed, and leaves nothing once
+/// dropped.
+#[test]
+fn a_staged_last_session_counts_only_once_committed() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let space = SpaceId::from("workspace");
+    let execution = ExecutionId::from("execution");
+    let agent = shoal_protocol::executions::TrackedAgent::named("claude");
+    LastSession::save(&paths, &space, &agent, &execution, None).unwrap();
+    let taking = LastSession {
+        agent: "codex".into(),
+        ..LastSession::all(&paths, &space).unwrap().remove(0)
+    };
+
+    let staged = taking.stage(&paths, &space).unwrap();
+    let agents = |paths| LastSession::all(paths, &space).unwrap();
+    assert_eq!(agents(&paths)[0].agent.name(), "claude");
+    LastSession::forget_all(&paths, &space).unwrap();
+    assert!(agents(&paths).is_empty());
+    staged.commit().unwrap();
+    assert_eq!(agents(&paths)[0].agent.name(), "codex");
+
+    drop(taking.stage(&paths, &space).unwrap());
+    let files = std::fs::read_dir(paths.space_state(&space)).unwrap();
+    assert_eq!(files.count(), 1);
+}
+
 #[test]
 fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
     let root = tempfile::tempdir().unwrap();

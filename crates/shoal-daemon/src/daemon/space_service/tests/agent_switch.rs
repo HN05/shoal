@@ -120,6 +120,31 @@ async fn a_switch_to_the_tool_the_space_runs_is_refused() {
     assert!(!restore_queued(&manager, &workspace.id).await);
 }
 
+/// A switch that cannot save the agent taking over fails before the leaving
+/// agent goes, so the space keeps it to resume.
+#[tokio::test]
+async fn a_switch_that_cannot_save_the_new_agent_keeps_the_old_one() {
+    let (root, manager) = manager().await;
+    manager.publish_config(global_config(TOOLS));
+    let workspace = stopped_workspace(root.path(), &manager).await;
+    let leaving = only_last_session(&manager, &workspace.id);
+    // A directory where the new agent's session is staged refuses it.
+    let path = LastSession::path(&manager.paths, &workspace.id, &leaving.execution);
+    std::fs::create_dir(format!("{}.staged", path.display())).unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+
+    let switching =
+        (manager.spaces).convert_agent(&*manager, &selector, None, to("codex", None), None);
+    switching.await.unwrap_err();
+
+    let last = only_last_session(&manager, &workspace.id);
+    assert_eq!(
+        (last.agent.name(), last.session.as_ref().map(|s| s.as_str())),
+        ("claude", Some("s1"))
+    );
+    assert!(!restore_queued(&manager, &workspace.id).await);
+}
+
 #[tokio::test]
 async fn a_stopped_agents_work_goes_over_at_once_from_copies_of_its_sessions() {
     let (root, manager) = manager().await;

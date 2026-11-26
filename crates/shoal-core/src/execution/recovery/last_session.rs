@@ -14,6 +14,10 @@ use crate::{
     state::AgentState,
 };
 
+/// Ends the name of a last session written beside its place until it is
+/// renamed there, which no reader of last sessions lists.
+const STAGED_SUFFIX: &str = ".staged";
+
 /// Operations on the client type [`LastSession`] that only the `shoal` command uses.
 pub trait LastSessionExt: Sized {
     /// This session where it is not available, which starts a new one.
@@ -36,6 +40,9 @@ pub trait LastSessionExt: Sized {
     ) -> Result<()>;
 
     fn write(&self, paths: &Paths, space_id: &SpaceId) -> Result<()>;
+
+    /// Write this session beside its place, where it counts once committed.
+    fn stage(&self, paths: &Paths, space_id: &SpaceId) -> Result<StagedLastSession>;
 
     /// Read the last session saved at `path`, `None` once it is consumed.
     fn load(path: &Path) -> Result<Option<Self>>;
@@ -108,6 +115,27 @@ impl LastSessionExt for LastSession {
         Ok(())
     }
 
+    fn stage(&self, paths: &Paths, space_id: &SpaceId) -> Result<StagedLastSession> {
+        let path = Self::path(paths, space_id, &self.execution);
+        let mut staged = path.clone().into_os_string();
+        staged.push(STAGED_SUFFIX);
+        let staged = StagedLastSession {
+            staged: staged.into(),
+            path,
+            committed: false,
+        };
+        std::fs::create_dir_all(paths.space_state(space_id))?;
+        crate::fsutil::atomic::replace_atomically(
+            &staged.staged,
+            &serde_json::to_vec(self)?,
+            ReplaceOptions {
+                permissions: Permissions::Temporary,
+                sync: true,
+            },
+        )?;
+        Ok(staged)
+    }
+
     fn load(path: &Path) -> Result<Option<Self>> {
         let execution = path
             .file_name()
@@ -141,5 +169,33 @@ impl LastSessionExt for LastSession {
             consume(&last.path)?;
         }
         Ok(())
+    }
+}
+
+/// A last session written beside its place, so the steps before its commit
+/// may fail and leave the space's last sessions as they were. Dropping it
+/// uncommitted removes it.
+#[must_use = "a staged last session counts only once committed"]
+pub struct StagedLastSession {
+    staged: PathBuf,
+    path: PathBuf,
+    committed: bool,
+}
+
+impl StagedLastSession {
+    /// Rename the session into its place, replacing the one there.
+    pub fn commit(mut self) -> Result<()> {
+        std::fs::rename(&self.staged, &self.path)
+            .with_context(|| format!("save {}", self.path.display()))?;
+        self.committed = true;
+        Ok(())
+    }
+}
+
+impl Drop for StagedLastSession {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = std::fs::remove_file(&self.staged);
+        }
     }
 }

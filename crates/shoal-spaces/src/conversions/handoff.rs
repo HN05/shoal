@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     agent::{Agent, ModelChoice},
     config::{modes::ModeName, permissions::PermissionsConfig},
-    execution::recovery::{HandoffBrief, LastSession, LastSessionExt as _},
+    execution::recovery::{HandoffBrief, LastSession, LastSessionExt as _, StagedLastSession},
     sessions::Origin,
     stops::StopRequest,
 };
@@ -84,10 +84,8 @@ impl Spaces {
     }
 
     /// `taking` is told what the space is and where the sessions `listed`
-    /// are. What can fail is settled before `leaving` is stopped and what it
-    /// saved discarded, and `taking` is saved right after, so a failure
-    /// never leaves the space without both. Returns the execution `taking`
-    /// is saved as, `leaving`'s when there was one.
+    /// are. Returns the execution `taking` is saved as, `leaving`'s when
+    /// there was one.
     pub(crate) async fn save_taking(
         &self,
         daemon: &dyn Daemon,
@@ -96,6 +94,20 @@ impl Spaces {
         taking: Taking,
         listed: &[Listed],
     ) -> Result<ExecutionId> {
+        let handoff = (self.plan_handoff(daemon, id, leaving, taking, listed)).await?;
+        self.carry_out_handoff(daemon, handoff).await
+    }
+
+    /// Settles what can fail before `leaving` is stopped, staging `taking`
+    /// beside the space's last sessions.
+    async fn plan_handoff(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        leaving: Option<Leaving>,
+        taking: Taking,
+        listed: &[Listed],
+    ) -> Result<Handoff> {
         let space = self.space(&SpaceSelector::id(id)).await?;
         let told = brief::told(&space, leaving.as_ref(), &taking.agent, listed);
         let sides = match &leaving {
@@ -108,12 +120,37 @@ impl Spaces {
         let origin = leaving.as_ref().and_then(|leaving| leaving.origin.clone());
         let execution =
             (leaving.map(|leaving| leaving.execution)).unwrap_or_else(ExecutionId::generate);
-        let saved = taking.saved(execution.clone(), origin, told);
+        let taking = taking
+            .saved(execution.clone(), origin, told)
+            .stage(&self.paths, id)?;
+        Ok(Handoff {
+            space,
+            execution,
+            taking,
+            sides,
+        })
+    }
+
+    /// Stops and discards the leaving agent, then puts `taking` in its place.
+    /// Only renaming the staged session and recording the handoff follow
+    /// the discard, so the space is left without an agent only when the file
+    /// system or the store fails.
+    async fn carry_out_handoff(
+        &self,
+        daemon: &dyn Daemon,
+        handoff: Handoff,
+    ) -> Result<ExecutionId> {
+        let Handoff {
+            space,
+            execution,
+            taking,
+            sides,
+        } = handoff;
         self.retire_leaving(daemon, &space).await?;
-        saved.write(&self.paths, id)?;
+        taking.commit()?;
         self.signals.agent_changed();
         if let Some((from, to)) = sides {
-            let space = id.to_owned();
+            let space = space.id;
             (self.store)
                 .write(move |tx| crate::store::agent_handoffs::record(tx, &space, &from, &to))
                 .await?;
@@ -150,6 +187,17 @@ impl Spaces {
         };
         Ok((from, to))
     }
+}
+
+/// A handoff whose refusals are settled: the agent taking over, staged as
+/// the space's last session under the execution it is saved as, and the
+/// sides it records. Only [`Spaces::plan_handoff`] builds one, and only
+/// [`Spaces::carry_out_handoff`] stops and discards the leaving agent.
+struct Handoff {
+    space: crate::model::Space,
+    execution: ExecutionId,
+    taking: StagedLastSession,
+    sides: Option<(HandedOverSession, HandedOverSession)>,
 }
 
 impl Taking {
