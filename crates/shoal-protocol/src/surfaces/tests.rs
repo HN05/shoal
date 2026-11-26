@@ -953,7 +953,8 @@ fn a_date_bound_a_function_gives_applies_where_shoal_runs_it() {
         )
     };
     let format = |value: &str| json!({"@call": "formatString", "args": {"value": value}});
-    for min in [format("2026-12-10"), format("${/start}")] {
+    let nested = json!({"@call": "formatString", "args": {"value": format("2026-12-10")}});
+    for min in [format("2026-12-10"), format("${/start}"), nested] {
         let surface = bounded(min);
         assert!(answer(&surface, "2026-12-01").is_err());
         answer(&surface, "2026-12-10").unwrap();

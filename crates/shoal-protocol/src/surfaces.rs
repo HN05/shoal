@@ -153,14 +153,20 @@ impl Surface {
     /// what a call Shoal runs there gives; none for a call only a renderer
     /// runs, or data that is missing or null.
     fn known_text(&self, value: &Value, base: &str) -> Option<String> {
-        let value = match value.get("@call") {
-            Some(_) => self.called(value, base)?,
-            None => self.value(value, base)?.clone(),
-        };
-        match value {
+        match self.dynamic(value, base)? {
             Value::String(text) => Some(text),
             Value::Null => None,
             other => Some(other.to_string()),
+        }
+    }
+
+    /// What the dynamic `value` gives under `base`: [`Self::value`]'s
+    /// value, or what a call Shoal runs there gives; none for a call only
+    /// a renderer runs.
+    fn dynamic(&self, value: &Value, base: &str) -> Option<Value> {
+        match value.get("@call") {
+            Some(_) => self.called(value, base),
+            None => self.value(value, base).cloned(),
         }
     }
 

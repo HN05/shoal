@@ -27,27 +27,26 @@ impl Surface {
     }
 
     /// The item's index a call of `@index` gives: the innermost list's
-    /// items counted from 0, plus its `offset`, a number or data it binds
-    /// in `scope`.
+    /// items counted from 0, plus its `offset`, a number, data it binds in
+    /// `scope` or what a call Shoal runs there gives.
     fn indexed(&self, call: &Value, scope: &str) -> Option<Value> {
         let item = scope.rsplit('/').next()?.parse::<u32>().ok()?;
         let offset = (call.get("args").and_then(|args| args.get("offset")))
-            .and_then(|offset| self.value(offset, scope))
-            .map_or(Some(0.0), Value::as_f64)?;
+            .and_then(|offset| self.dynamic(offset, scope))
+            .map_or(Some(0.0), |offset| offset.as_f64())?;
         Some(number_value(f64::from(item) + offset))
     }
 
-    /// The text a call of `formatString` gives: its `value`, literal or
-    /// the data it binds in `scope`, with each `${path}` replaced by the
-    /// data at that path, empty where there is none, and each `\${` a
-    /// literal `${`. None where an expression calls a function, which only
+    /// The text a call of `formatString` gives: its `value`, as
+    /// [`Self::known_text`] gives it in `scope`, with each `${path}`
+    /// replaced by the data at that path, empty where there is none, and
+    /// each `\${` a literal `${`. None where an expression calls a function, which only
     /// a renderer runs.
     fn formatted(&self, call: &Value, scope: &str) -> Option<String> {
-        let template = self
-            .value(call.get("args")?.get("value")?, scope)?
-            .as_str()?;
+        let template = self.known_text(call.get("args")?.get("value")?, scope)?;
+
         let mut text = String::new();
-        let mut rest = template;
+        let mut rest = template.as_str();
         while let Some(start) = rest.find("${") {
             if rest[..start].ends_with('\\') {
                 text.push_str(&rest[..start - 1]);
