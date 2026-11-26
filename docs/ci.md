@@ -71,9 +71,11 @@ same change then updates:
 The Shoal runners' machines install the same Rust.
 
 The Docker jobs' Cargo builds share the runner-mounted `/ci-target` through
-`.forgejo/scripts/lock-target-dir.sh`, as the Containerfile describes. The
-`musl` and `crates` jobs keep their slots' builds warm by touching their
-checkouts instead of cleaning them.
+`.forgejo/scripts/lock-target-dir.sh`, as the Containerfile describes. They
+also share the runner's Cargo registry and Git caches, and the image keeps
+Cargo's lock on them in the shared registry, so jobs take turns to unpack a
+crate. The `musl` and `crates` jobs keep their slots' builds warm by touching
+their checkouts instead of cleaning them.
 
 ## Other workflows
 

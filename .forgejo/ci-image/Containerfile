@@ -126,10 +126,22 @@ RUN rustup target add $(cut -d ' ' -f 1 /tmp/release-targets.txt) \
 RUN cargo install --locked apple-codesign --version 0.29.0 \
  && rm -rf "$CARGO_HOME/registry"
 
+# Cargo locks its registry and git caches through files at the root of
+# CARGO_HOME, which every job container has of its own, while the runner shares
+# only registry/ and git/ between them. Without one lock, jobs that fetch the
+# same new crate at once unpack it together and fail on its `.cargo-ok`. The
+# links put the lock files in the shared registry, so this layer follows every
+# layer that drops it. The empty registry serves runs without the mounts.
+RUN mkdir -p "$CARGO_HOME/registry" \
+ && for lock in .package-cache .package-cache-mutate; do \
+      ln -sfn "registry/$lock" "$CARGO_HOME/$lock"; \
+    done
+
 # Sanity: the versions the jobs will run with, visible in `podman build` output.
 RUN rustc --version && cargo clippy --version && cargo fmt --version \
  && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
  && tmux -V && zellij --version \
  && zig version && cargo-zigbuild --version && rcodesign --version \
  && cargo audit --version && cargo outdated --version && cargo nextest --version \
- && tini --version && [ "$(command -v tail)" = /usr/local/bin/tail ]
+ && tini --version && [ "$(command -v tail)" = /usr/local/bin/tail ] \
+ && [ -L "$CARGO_HOME/.package-cache" ] && [ -L "$CARGO_HOME/.package-cache-mutate" ]
