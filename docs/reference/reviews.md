@@ -50,7 +50,7 @@ The reviewer is `--agent`, else
 else `agent.default`, else one you pick. Its AI tool needs a
 [`review` template](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools).
 It runs with `--model` and `--effort` over its
-[configured model and effort](agents.md), and keeps them when the review starts
+[configured model and effort](agents.md#model-and-effort), and keeps them when the review starts
 over. The fallback agent runs with its own configured ones.
 
 The reviews of a workspace, and those of each PR reviewed in it, continue one

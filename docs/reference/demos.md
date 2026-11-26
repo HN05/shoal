@@ -60,7 +60,7 @@ that applies:
 
 1. The demo's `open` command runs in the workspace, with the demo's variables.
 2. The demo's [preset](#presets) opens it its own way.
-3. Shoal shows the demo where it runs, as [`shoal attach`](agents.md) shows a
+3. Shoal shows the demo where it runs, as [`shoal attach`](agents.md#attach-to-an-agent) shows a
    session. Inside the demo's host, the host focuses its place. From another
    terminal, Shoal attaches to the place, or shows it where the host shows its
    places, such as Rex's Mac app.

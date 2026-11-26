@@ -120,7 +120,7 @@ another priority or tier that it outranks and that needs measured memory
 starts: so a new agent waits for the CI job of an open PR, and an `urgent`
 launch goes ahead of finishing work of a lower priority. Work of the same
 priority and tier that fits starts ahead of it until it has waited 15
-minutes. Each entry it holds back waits with `memory_kept`, naming it. While the [proxy](agents.md) of a running
+minutes. Each entry it holds back waits with `memory_kept`, naming it. While the [proxy](agents.md#retrying-proxy) of a running
 agent finds its tool's upstream rate-limited or out of quota, queued agents of
 that tool wait with `upstream_limit` and others start ahead: until the reset
 the upstream names, or, without one, 15 minutes after the proxy last met the

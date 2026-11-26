@@ -286,7 +286,7 @@ error ended, it waits up to a week for the next alert or item activity. It
 then prints the update and exits 2, and Claude Code starts the idle agent's
 next turn with it.
 
-While a [turn retry](agents.md) waits for a rate limit's known reset, the hook
+While a [turn retry](agents.md#known-resets) waits for a rate limit's known reset, the hook
 waits for the retry's message or an alert from the user instead.
 
 No other hook reports the woken turn starting, so the wake hook first reports

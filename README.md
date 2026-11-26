@@ -29,7 +29,7 @@ Homebrew also installs the tools for workspaces and interactive menus. It does
 not install zmx 1.0.1 or later, the default terminal host. Install it with
 `brew install neurosnap/tap/zmx`, or use
 [another terminal host](docs/reference/terminals.md). When you upgrade zmx from
-0.8, [stop the agents](docs/reference/agents.md) running in its sessions
+0.8, [stop the agents](docs/reference/agents.md#upgrade-zmx) running in its sessions
 first; otherwise Shoal loses them.
 
 For directory navigation and tab completion, add this line to your `.zshrc`
@@ -151,7 +151,7 @@ existing worktree, copying a workspace and renaming.
 `pi` or `grok`, or `happy-claude` and `happy-codex` for a detached
 [Happy](https://github.com/slopus/happy) session in the Happy app. Without
 `--agent`, `shoal start` uses `agent.default`, or else asks on a terminal. See
-[agents](docs/reference/agents.md) to add another tool.
+[agents](docs/reference/agents.md#ai-tools) to add another tool.
 
 Claude Code and Codex run with their own sandbox and approval settings. Shoal
 turns on network access in Codex's sandbox, so that its commands reach the

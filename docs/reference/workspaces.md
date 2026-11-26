@@ -112,7 +112,7 @@ collide with another branch is refused, never suffixed. Full `refs/heads/...`
 and `refs/remotes/...` selectors tell names apart.
 
 A branch that already has a workspace takes the start into that workspace, as
-[`--in`](agents.md) does, and refuses what only a new workspace takes. That
+[`--in`](agents.md#start-a-workspaces-own-agent) does, and refuses what only a new workspace takes. That
 workspace reopens without setup, hooks or refresh. A branch checked out
 anywhere else, including the registered checkout's `main`, is refused.
 

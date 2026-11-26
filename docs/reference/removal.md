@@ -472,7 +472,7 @@ Pushed means one of these:
 Cleanup fetches nothing to decide it.
 
 A waiting restore of an idle agent keeps nothing when no
-[timer](sleep.md#sleep-timer) or [turn retry](agents.md) will wake the agent.
+[timer](sleep.md#sleep-timer) or [turn retry](agents.md#turn-retry) will wake the agent.
 Removal cancels it and keeps the agent stopped, so `shoal restore` brings the
 agent back with its space.
 

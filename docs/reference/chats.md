@@ -72,7 +72,7 @@ Where it runs depends on where you start it:
   current place, as `new_tab = false` does, runs it there.
 - On a terminal no host serves, it runs where `terminal.default_host` puts it.
   A zmx session there takes an opaque name, such as `chat-0b9c3a52`, and
-  [`shoal attach <number>`](agents.md) returns to it.
+  [`shoal attach <number>`](agents.md#attach-to-an-agent) returns to it.
 - In any other place of a host, such as a zmx session, it runs in place.
 - `--here` runs it in place in this terminal.
 
@@ -90,7 +90,7 @@ is one of these:
 ### Happy chats
 
 A Happy chat, with `happy-claude` or `happy-codex` as its
-[agent](agents.md), needs no terminal. It starts detached in the checkout, as
+[agent](agents.md#happy-sessions), needs no terminal. It starts detached in the checkout, as
 `start --in --agent happy-codex` starts a workspace's session, and you
 continue it in the Happy app. Happy's Claude takes the instructions as
 arguments. Happy's Codex receives them as its first message, the way it
@@ -226,7 +226,7 @@ stand for.
 `-m chat`, starts the chat in a ready workspace's worktree instead of the
 checkout. The chat debugs, audits or reviews the workspace's work, committed
 and uncommitted, whatever the workspace's own agent is doing. In a mode that
-starts in a workspace, `--in` starts [the workspace's own agent](agents.md)
+starts in a workspace, `--in` starts [the workspace's own agent](agents.md#start-a-workspaces-own-agent)
 instead.
 
 The workspace is the one named, else the current one, else one a picker of

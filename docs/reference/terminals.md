@@ -1,7 +1,7 @@
 # Terminal hosts
 
 This file says how Shoal works in each terminal host it supports besides zmx,
-the default host, which [Agents](agents.md) covers.
+the default host, which [Agents](agents.md#zmx-sessions) covers.
 
 ## Places
 
@@ -23,7 +23,7 @@ workspace at its next prompt.
 
 `--here` keeps a launch in your current place. A call without a terminal, such
 as an agent's tool call, opens no place: its agent starts detached, as
-[Agents](agents.md) describes.
+[Agents](agents.md#detached-agents) describes.
 
 [`terminal.focus`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#terminal)
 decides whether a new place takes the terminal. `shoal start -f`/`--focus`
@@ -32,7 +32,7 @@ start beside the terminal prints the planned `workspace` and its `agent` once
 the host opens the launch's place.
 
 With `nested_zmx`, agents, chats and demos run in zmx sessions attached in
-their places, as [Agents](agents.md) describes.
+their places, as [Agents](agents.md#nested-zmx-sessions) describes.
 
 ## Launches from other terminals
 

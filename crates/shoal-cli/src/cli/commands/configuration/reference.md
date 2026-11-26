@@ -314,7 +314,7 @@ A proxy is Shoal's retrying proxy for an agent's API requests.
   agent's own credentials. An `{ env }` reads the environment the agent runs
   with. A `key` needs an `upstream`.
 
-See the [proxy](../../../../../../docs/reference/agents.md).
+See the [proxy](../../../../../../docs/reference/agents.md#retrying-proxy).
 
 ### Simulators
 
@@ -459,7 +459,7 @@ git_profile = "agent"    # A Git profile for agents' Git commands; no default
 ### AI tools
 
 An `[agents.<name>]` table changes one of the
-[AI tools Shoal includes](../../../../../../docs/reference/agents.md), or adds
+[AI tools Shoal includes](../../../../../../docs/reference/agents.md#ai-tools), or adds
 another. A tool is an agent when it is built in or has a `command` or `base`.
 It may share a name with a [command](#commands). A tool's name, in `[agents]`
 and `[machine.agents]` alike, takes ASCII letters, digits, `-` and `_` and
@@ -553,9 +553,9 @@ user arguments stay literal.
   and chats, after `[env]`, the agent account and secrets. A
   `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set there is absolute or starts with
   `~/`, and cannot be removed.
-- `enabled = false` turns a tool's agents off. Pickers leave them out, and
-  launches, reviews and restores are refused. Happy is off until
-  `agents.happy.enabled = true`.
+- `enabled = false` turns a tool's agents off, as
+  [AI tools](../../../../../../docs/reference/agents.md#ai-tools) describes.
+  Happy is off until `agents.happy.enabled = true`.
 - `retry` resends a turn that an API error ended. It defaults to `true` for
   Claude Code and its launch profiles, and `false` for other tools.
 - `prompt_cache_minutes` sets how long the tool's prompt cache lives after its
@@ -564,7 +564,7 @@ user arguments stay literal.
 
 What a tool needs of the machine goes under
 [`[machine.agents.<name>]`](#agent-tools-on-this-machine). See
-[agents](../../../../../../docs/reference/agents.md).
+[agents](../../../../../../docs/reference/agents.md#ai-tools).
 
 ### Desktop apps
 
