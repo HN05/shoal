@@ -1,9 +1,6 @@
-//! The commit and branch name types the Shoal crates share, so a commit
-//! passed where a branch belongs, or the reverse, does not compile. Neither
-//! validates: each holds the text Git, the forge or a record gave, and
-//! serializes and stores as that text. A revision expression, such as
-//! `HEAD`, `origin/main` or an abbreviated commit someone typed, is neither
-//! and stays text where Git reads it.
+//! Commit and branch name types, so a commit passed where a branch belongs
+//! does not compile. Neither validates the text it holds. A revision
+//! expression, such as `HEAD` or `origin/main`, is neither and stays text.
 
 macro_rules! text_ref {
     ($(#[$meta:meta])* $name:ident) => {
@@ -53,7 +50,6 @@ macro_rules! text_ref {
             }
         }
 
-        /// The text Git, the forge or a record gave.
         impl From<String> for $name {
             fn from(text: String) -> Self {
                 Self(text)
@@ -66,7 +62,6 @@ macro_rules! text_ref {
             }
         }
 
-        /// The text a command-line argument gives, as clap parses it.
         impl std::str::FromStr for $name {
             type Err = std::convert::Infallible;
 

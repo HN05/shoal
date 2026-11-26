@@ -26,8 +26,8 @@ pub fn observe(observer: fn(&str, Duration)) {
     let _ = OBSERVER.set(observer);
 }
 
-/// Captured subprocess with optional input and a deadline for the entire exchange.
-/// The child is killed if the deadline expires or the caller drops the future.
+/// A captured subprocess whose deadline covers the whole exchange. The child
+/// is killed when the deadline passes or the caller drops the future.
 pub struct Run {
     command: Command,
     timeout: Option<Duration>,

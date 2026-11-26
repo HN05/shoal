@@ -18,7 +18,6 @@ use serde::{Deserialize, Serialize};
 pub struct UnixTime(i64);
 
 impl UnixTime {
-    /// 1970-01-01 00:00:00 UTC.
     pub const EPOCH: Self = Self(0);
     /// The latest representable time, for a deadline that never comes.
     pub const MAX: Self = Self(i64::MAX);

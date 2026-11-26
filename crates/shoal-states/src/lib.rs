@@ -1,7 +1,7 @@
 //! Macros that give Shoal's typed names one spelling in serde, `Display`
 //! and, with the `rusqlite` and `clap` features, SQLite columns and CLI
-//! values. A crate that expands them depends on `serde`, whose derives name
-//! it; this crate's features decide the SQLite and clap impls.
+//! values. A crate that expands them depends on `serde`. This crate's
+//! features, not the expanding crate's, decide the SQLite and clap impls.
 
 #[doc(hidden)]
 pub mod __private {

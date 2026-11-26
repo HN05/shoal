@@ -1,10 +1,6 @@
-//! The shape every ID the daemon gives a record shares: text that holds
-//! only that kind of ID, serialized and stored as the text it is.
-
-/// Defines `$name` as an ID held as text, with the conversions and
-/// comparisons code that reads, stores and prints it needs. It does not
-/// dereference to `str`: code that uses it as text says so with `as_str()`
-/// or an `AsRef` impl.
+/// Defines `$name` as an ID held as text, serialized and stored as that text.
+/// It does not dereference to `str`: code that uses it as text says so with
+/// `as_str()` or an `AsRef` impl.
 macro_rules! text_id {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
@@ -23,7 +19,6 @@ macro_rules! text_id {
         pub struct $name(String);
 
         impl $name {
-            /// A new record's ID.
             pub fn generate() -> Self {
                 Self(uuid::Uuid::new_v4().to_string())
             }
@@ -63,15 +58,15 @@ macro_rules! text_id {
             }
         }
 
-        /// The ID that recorded text, such as an environment variable or an
-        /// argument Shoal passes itself, holds.
+        /// Text Shoal recorded or passed itself, such as an environment
+        /// variable, so the conversion checks nothing.
         impl From<String> for $name {
             fn from(id: String) -> Self {
                 Self(id)
             }
         }
 
-        /// The ID an argument Shoal passes itself holds, as clap parses it.
+        /// An argument Shoal passes itself, as clap parses it.
         impl std::str::FromStr for $name {
             type Err = std::convert::Infallible;
 
