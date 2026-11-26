@@ -929,6 +929,42 @@ fn every_binding_of_an_answer_reads_the_values_it_enters() {
 }
 
 #[test]
+fn a_date_bound_a_function_gives_applies_where_shoal_runs_it() {
+    let bounded = |min: Value| {
+        surface(
+            json!([
+                {"id": "root", "component": "Column", "children": ["start", "day", "book"]},
+                {"id": "start", "component": "DateTimeInput", "enableDate": true,
+                 "value": {"@path": "/start"}},
+                {"id": "day", "component": "DateTimeInput", "enableDate": true,
+                 "min": min, "value": {"@path": "/day"}},
+                {"id": "book", "component": "Button", "child": "book-label",
+                 "action": {"event": {"name": "book",
+                     "context": {"start": {"@path": "/start"}, "day": {"@path": "/day"}}}}},
+                {"id": "book-label", "component": "Text", "text": "Book"},
+            ]),
+            json!({"start": "", "day": ""}),
+        )
+    };
+    let answer = |surface: &Surface, day: &str| {
+        surface.resolve(
+            "book",
+            values(&[("start", json!("2026-12-10")), ("day", json!(day))]),
+        )
+    };
+    let format = |value: &str| json!({"@call": "formatString", "args": {"value": value}});
+    for min in [format("2026-12-10"), format("${/start}")] {
+        let surface = bounded(min);
+        assert!(answer(&surface, "2026-12-01").is_err());
+        answer(&surface, "2026-12-10").unwrap();
+    }
+    // A bound only a renderer can work out bounds nothing.
+    let unknown = bounded(json!({"@call": "formatDate",
+        "args": {"value": {"@path": "/start"}, "format": "yyyy-MM-dd"}}));
+    answer(&unknown, "2026-12-01").unwrap();
+}
+
+#[test]
 fn a_context_s_format_string_reads_the_entered_data() {
     let call = |value: &str| json!({"@call": "formatString", "args": {"value": value}});
     let greeting = surface(

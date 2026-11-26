@@ -140,14 +140,25 @@ impl Surface {
         }
     }
 
-    /// The text `value` shows: itself, or the data it binds under `base`;
-    /// a function call, which only a renderer runs, shows as an ellipsis.
+    /// The text `value` shows, as [`Self::known_text`] gives it; a call
+    /// only a renderer runs shows as an ellipsis.
     fn text(&self, value: &Value, base: &str) -> Option<String> {
-        if value.get("@call").is_some() {
-            return Some("…".into());
+        match self.known_text(value, base) {
+            None if value.get("@call").is_some() => Some("…".into()),
+            text => text,
         }
-        match self.value(value, base)? {
-            Value::String(text) => Some(text.clone()),
+    }
+
+    /// The text `value` gives: itself, the data it binds under `base`, or
+    /// what a call Shoal runs there gives; none for a call only a renderer
+    /// runs, or data that is missing or null.
+    fn known_text(&self, value: &Value, base: &str) -> Option<String> {
+        let value = match value.get("@call") {
+            Some(_) => self.called(value, base)?,
+            None => self.value(value, base)?.clone(),
+        };
+        match value {
+            Value::String(text) => Some(text),
             Value::Null => None,
             other => Some(other.to_string()),
         }

@@ -8,16 +8,22 @@ use super::{Surface, scoped};
 
 impl Surface {
     /// A literal context `entry` of an action placed in `scope` as its
-    /// event carries it: a call of `@index` or `formatString` as
-    /// [`Self::indexed`] and [`Self::formatted`] give it, and any other
-    /// entry as written.
+    /// event carries it: a call Shoal runs as [`Self::called`] gives it,
+    /// and any other entry as written.
     pub(super) fn evaluated(&self, entry: &Value, scope: &str) -> Value {
-        let value = match entry.get("@call").and_then(Value::as_str) {
-            Some("@index") => self.indexed(entry, scope),
-            Some("formatString") => self.formatted(entry, scope).map(Value::String),
+        self.called(entry, scope).unwrap_or_else(|| entry.clone())
+    }
+
+    /// What `call`, placed in `scope`, gives where Shoal runs it, a call
+    /// of `@index` or `formatString` as [`Self::indexed`] and
+    /// [`Self::formatted`] give it; none for a call only a renderer runs,
+    /// or a value that is no call.
+    pub(super) fn called(&self, call: &Value, scope: &str) -> Option<Value> {
+        match call.get("@call").and_then(Value::as_str)? {
+            "@index" => self.indexed(call, scope),
+            "formatString" => self.formatted(call, scope).map(Value::String),
             _ => None,
-        };
-        value.unwrap_or_else(|| entry.clone())
+        }
     }
 
     /// The item's index a call of `@index` gives: the innermost list's

@@ -33,7 +33,9 @@ pub enum DateForm {
 
 impl Dates {
     /// What `component`, a `DateTimeInput` of `surface` placed in `scope`,
-    /// takes, its bounds read in that scope where they bind data.
+    /// takes, its bounds read in that scope where they bind data or call a
+    /// function Shoal runs; a bound only a renderer can work out binds
+    /// nothing.
     pub(super) fn of(surface: &Surface, component: Component<'_>, scope: &str) -> Self {
         let enabled = |field| component.get(field).and_then(Value::as_bool) == Some(true);
         let form = match (enabled("enableDate"), enabled("enableTime")) {
@@ -44,8 +46,8 @@ impl Dates {
         };
         Self {
             form,
-            min: (component.get("min")).and_then(|bound| surface.text(bound, scope)),
-            max: (component.get("max")).and_then(|bound| surface.text(bound, scope)),
+            min: (component.get("min")).and_then(|bound| surface.known_text(bound, scope)),
+            max: (component.get("max")).and_then(|bound| surface.known_text(bound, scope)),
         }
     }
 
