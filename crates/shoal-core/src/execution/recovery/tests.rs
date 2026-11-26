@@ -1,6 +1,15 @@
+use super::permissions::change_permissions;
 use super::*;
 use crate::time::UnixTime;
+use crate::{
+    paths::{Paths, StateFiles as _},
+    process::identity,
+    state::AgentState,
+};
+use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::sessions::Origin;
+use std::{collections::BTreeMap, ffi::OsString};
 
 #[test]
 fn pressure_handoffs_are_private() {
