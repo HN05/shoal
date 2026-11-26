@@ -1,6 +1,5 @@
-//! Handing a space's work over to another agent tool: the refusals, then
-//! the switch, at once for a stopped or asleep agent, else once the
-//! running agent's turn ends.
+//! Handing a space's work over to another agent tool: at once for a stopped
+//! or asleep agent, else once the running agent's turn ends.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, ensure};
@@ -17,10 +16,7 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// Hand the work of the space `selector` names over to the agent tool
-    /// `change` names, in `mode`, else the space's own, for `caller`: once
-    /// the turn of its running agent ends, or at once for a stopped or
-    /// asleep agent, or a space without one. Its own tool is refused.
+    /// In `mode`, else the space's own. Refuses the space's own tool.
     pub async fn convert_agent(
         &self,
         daemon: &dyn Daemon,
@@ -67,9 +63,8 @@ impl Spaces {
         })
     }
 
-    /// Refuse `taking` in the space `id` to the scoped `caller` where its
-    /// mode and the permissions given to it exceed what the caller's own
-    /// space holds.
+    /// Refuses where its mode and the permissions given to it exceed what
+    /// the caller's own space holds.
     pub(super) async fn ensure_taking_held(
         &self,
         daemon: &dyn Daemon,
@@ -88,10 +83,9 @@ impl Spaces {
         .await
     }
 
-    /// Refuse the scoped `caller` how the agent of the space `id` carries
-    /// on in a conversion where it gives more than the caller's own space
-    /// holds: `taking`'s mode and permissions when another tool takes over,
-    /// else the permissions `change` makes to those the agent was given.
+    /// Refuses where it gives more than the caller's own space holds:
+    /// `taking`'s mode and permissions when another tool takes over, else
+    /// the permissions `change` makes to those the agent was given.
     pub(super) async fn ensure_carrying_held(
         &self,
         daemon: &dyn Daemon,
@@ -117,11 +111,9 @@ impl Spaces {
         .await
     }
 
-    /// Hand the work of `space` over to `taking`: once the turn of its
-    /// running agent ends, which the conversion records, else at once, in
-    /// place of its stopped or asleep agent. Whether it went over at once.
-    /// The hand-overs are held throughout, so the relocation, which takes a
-    /// recorded switch over from the end of a turn, never runs it too.
+    /// Returns whether it went over at once. The hand-overs are held
+    /// throughout, so the relocation, which takes a recorded switch over
+    /// from the end of a turn, never runs it too.
     async fn switch_agent(
         &self,
         daemon: &dyn Daemon,
@@ -134,9 +126,9 @@ impl Spaces {
             .await
     }
 
-    /// [`Self::switch_agent`] once the hand-overs are held: the switch of a
-    /// stopped or asleep agent is recorded first, so no agent starts there
-    /// while its sessions are copied, and a switch that fails forgets it.
+    /// Call once the hand-overs are held. The switch of a stopped or asleep
+    /// agent is recorded first, so no agent starts there while its sessions
+    /// are copied. A switch that fails forgets it.
     async fn switch_held(
         &self,
         daemon: &dyn Daemon,
@@ -164,7 +156,8 @@ impl Spaces {
             .write(move |tx| super::record::record_stopped_switch(tx, &space, recorded, switching))
             .await?;
         drop(admissions);
-        // An attach follows the agent across the switch until its restore runs.
+        // An attach follows the agent across the switch until its restore
+        // runs.
         let _moving = self.relocating.mark(&id);
         let switched = (self.switch_after_turn(daemon, &id, &execution, taking, false)).await;
         if switched.is_err() {
@@ -176,7 +169,6 @@ impl Spaces {
         switched.map(|()| true)
     }
 
-    /// The execution that runs the agent of the space `id`, if one runs.
     pub(super) async fn running_agent(
         &self,
         daemon: &dyn Daemon,
@@ -188,10 +180,9 @@ impl Spaces {
     }
 }
 
-/// The agent `agent` that takes the work of a space over in `mode` as
-/// `change` asks, refused as a start under `settings` in a space of the kind
-/// `place` says refuses it, with the permissions `change` gives it over
-/// `narrowing`, those of the space's agent.
+/// Refused as a start under `settings` in a space of the kind `place` says
+/// refuses it. Takes the permissions `change` gives over `narrowing`, those
+/// of the space's agent.
 pub(super) fn taking(
     narrowing: PermissionsConfig,
     (settings, place): (&Effective, (SpaceKind, bool)),
@@ -213,11 +204,8 @@ pub(super) fn taking(
     })
 }
 
-/// The agent tool that takes the work of a space, whose agent is `current`
-/// and was given `narrowing`, over in `mode` as `change` asks, in a
-/// conversion to a space of the kind `place` says under its settings; none
-/// when `change` keeps the space's tool, which continues from a fork of its
-/// session and takes no note.
+/// None when `change` keeps the space's tool, which continues from a fork of
+/// its session and takes no note.
 pub(super) fn switching(
     narrowing: PermissionsConfig,
     place: (&Effective, (SpaceKind, bool)),
@@ -237,7 +225,6 @@ pub(super) fn switching(
     taking(narrowing, place, agent, mode.clone(), change.clone()).map(Some)
 }
 
-/// The mode a space of `kind` whose agent recorded none starts in.
 fn default_mode(kind: SpaceKind) -> ModeName {
     match kind {
         SpaceKind::Workspace => ModeName::DEFAULT,

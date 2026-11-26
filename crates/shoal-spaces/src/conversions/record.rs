@@ -1,6 +1,6 @@
 //! The store side of a conversion: changing a space's kind and swapping its
-//! kind's row, with what belongs to only one kind, and the record of a
-//! conversion whose agent has yet to start in the new place.
+//! kind's row, and the record of a conversion whose agent has yet to start
+//! in the new place.
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
@@ -23,39 +23,32 @@ use crate::{
 };
 use shoal_protocol::scope_tokens::ScopeToken;
 
-/// A conversion whose agent still runs where the space was, until its turn
-/// ends.
+/// The agent still runs where the space was, until its turn ends.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "to", rename_all = "snake_case")]
 pub enum Pending {
-    /// A chat that became a workspace, with the row the chat had, which
-    /// gives its running agent and gives the chat back should the
-    /// workspace's worktree fail, and the execution that agent runs as,
-    /// whose session files hold its session and under which its last
-    /// session in the workspace is kept.
+    /// A chat that became a workspace. The row the chat had gives its running
+    /// agent, and gives the chat back should the workspace's worktree fail.
+    /// The agent runs as `execution`, whose session files hold its session
+    /// and under which its last session in the workspace is kept.
     Workspace {
         mode: ModeName,
         chat: ChatRow,
         execution: ExecutionId,
-        /// The operation preparing the workspace, whose end, post-setup
-        /// hook included, the agent waits for.
+        /// The agent waits for this preparation to end, post-setup hook
+        /// included.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preparation: Option<String>,
-        /// Whether that preparation reported its end, kept beyond the
-        /// operation's own record.
+        /// Kept beyond the operation's own record.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         prepared: bool,
-        /// Why its post-setup hook failed, when it did.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hook_failure: Option<String>,
         #[serde(default, skip_serializing_if = "Carrying::is_default")]
         carrying: Carrying,
     },
-    /// A workspace that becomes the chat `chat` once the agent it carries on
-    /// stopped, with what its agent ran as and with, which outlives the
-    /// agent's execution, as when the agent exits first.
-    ///
-    /// A stop of the workspace's agents that keeps them down until `shoal
+    /// The agent's details outlive its execution, as when the agent exits
+    /// first. A stop that keeps the workspace's agents down until `shoal
     /// resume` `held` it: the workspace still becomes the chat, which stays
     /// stopped.
     Chat {
@@ -65,9 +58,9 @@ pub enum Pending {
         #[serde(default, skip_serializing_if = "Carrying::is_default")]
         carrying: Carrying,
     },
-    /// A space whose work `taking` takes over from the agent `execution`
-    /// runs once its turn ends. A stop that keeps that agent down until
-    /// `shoal resume` `held` it: `taking` then waits stopped too.
+    /// Runs once the turn of the agent `execution` runs ends. A stop that
+    /// keeps that agent down until `shoal resume` `held` it: `taking` then
+    /// waits stopped too.
     Agent {
         execution: ExecutionId,
         taking: Box<Taking>,
@@ -77,10 +70,8 @@ pub enum Pending {
 }
 
 impl Pending {
-    /// Whether the conversion restarts the agent in the new place, or starts
-    /// the agent tool that takes the work over, rather than leave it for
-    /// `shoal resume`: neither a stop held it nor the new workspace's
-    /// post-setup hook failed.
+    /// Rather than leave it for `shoal resume`: true unless a stop held it or
+    /// the new workspace's post-setup hook failed.
     pub fn restarts_agent(&self) -> bool {
         match self {
             Self::Workspace { hook_failure, .. } => hook_failure.is_none(),
@@ -89,9 +80,8 @@ impl Pending {
     }
 }
 
-/// How the agent of a space converted into the other kind goes on besides
-/// its mode: with the model asked of it, from a fork of its session, or
-/// else as the agent tool `taking` names takes its work over.
+/// Besides its mode: with the model asked of it, from a fork of its session,
+/// or else as the agent tool `taking` names takes its work over.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Carrying {
     #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
@@ -106,16 +96,14 @@ impl Carrying {
     }
 }
 
-/// The columns of a chat's row, which a conversion keeps as they are.
+/// A conversion keeps these as they are.
 const CHAT_COLUMNS: &[&str] = &["id", "workspace_id", "root_dir"];
 
-/// The columns of the chat's space's row it keeps with them, which name
-/// what the chat's agent ran in.
+/// They name what the chat's agent ran in.
 const SPACE_COLUMNS: &[&str] = &["repository_id", "name", "number", "mode", "narrowing"];
 
-/// A chat's row: its scope token, and its columns as a JSON object, with
-/// what restarting its agent reads from it, and the chat's completion, which
-/// a failed conversion gives back with the row.
+/// Its scope token, and its columns as a JSON object. Also the chat's
+/// completion, which a failed conversion gives back with the row.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatRow {
     #[serde(default)]
@@ -126,14 +114,12 @@ pub struct ChatRow {
     columns: serde_json::Map<String, serde_json::Value>,
 }
 
-/// A completion as `space_completion` records it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct KeptCompletion {
     record: String,
     cause: String,
 }
 
-/// What a converted chat's agent ran with.
 #[derive(Debug, Deserialize)]
 pub struct ChatAgent {
     #[serde(default)]
@@ -143,7 +129,6 @@ pub struct ChatAgent {
 }
 
 impl ChatRow {
-    /// The agent the row records.
     pub fn agent(&self) -> Result<ChatAgent> {
         let mut agent: ChatAgent =
             serde_json::from_value(serde_json::Value::Object(self.columns.clone()))?;
@@ -151,7 +136,6 @@ impl ChatRow {
         Ok(agent)
     }
 
-    /// The mode the row's agent ran in.
     fn mode(&self) -> Result<ModeName> {
         let mode = self.columns.get("mode").cloned();
         Ok(serde_json::from_value(
@@ -170,7 +154,6 @@ impl ChatAgent {
     }
 }
 
-/// Record `pending` for the space `id`.
 pub fn record(tx: &Transaction<'_>, id: &SpaceId, pending: &Pending) -> Result<()> {
     tx.execute(
         "INSERT INTO space_conversions(space_id,record) VALUES (?1,?2)",
@@ -179,8 +162,7 @@ pub fn record(tx: &Transaction<'_>, id: &SpaceId, pending: &Pending) -> Result<(
     Ok(())
 }
 
-/// The conversion of the space `id` whose agent has yet to start in the
-/// new place.
+/// One whose agent has yet to start in the new place.
 pub fn pending(db: &Connection, id: &SpaceId) -> Result<Option<Pending>> {
     let record: Option<String> = db
         .query_row(
@@ -194,7 +176,7 @@ pub fn pending(db: &Connection, id: &SpaceId) -> Result<Option<Pending>> {
         .transpose()?)
 }
 
-/// Every conversion whose agent has yet to start in the new place.
+/// Those whose agent has yet to start in the new place.
 pub fn all_pending(db: &Connection) -> Result<Vec<(SpaceId, Pending)>> {
     db.prepare("SELECT space_id,record FROM space_conversions")?
         .query_map([], |row| Ok((row.get(0)?, row.get::<_, String>(1)?)))?
@@ -205,8 +187,7 @@ pub fn all_pending(db: &Connection) -> Result<Vec<(SpaceId, Pending)>> {
         .collect()
 }
 
-/// Record `operation` as the one preparing the workspace `id` a chat
-/// became, whose end its agent's restart there waits for.
+/// The agent's restart in the workspace waits for its end.
 pub fn record_preparation(db: &Connection, id: &SpaceId, operation: &str) -> Result<()> {
     db.execute(
         "UPDATE space_conversions SET record=json_set(record,'$.preparation',?2)
@@ -216,10 +197,9 @@ pub fn record_preparation(db: &Connection, id: &SpaceId, operation: &str) -> Res
     Ok(())
 }
 
-/// Keep that the preparation `operation` of the workspace `id` a chat became
-/// ended, with why its post-setup hook failed when it did. An end reported
-/// before the conversion recorded its preparation, which starts before it
-/// does, records that preparation too.
+/// Records why its post-setup hook failed, when it did. An end reported
+/// before the conversion recorded its preparation, which starts first,
+/// records that preparation too.
 pub fn record_prepared(
     db: &Connection,
     id: &SpaceId,
@@ -237,9 +217,7 @@ pub fn record_prepared(
     Ok(())
 }
 
-/// Hold the conversion of the space `id` into a chat, or to another agent
-/// tool, whose agent a stop kept down: the agent that carries on stays
-/// stopped once the conversion is made.
+/// The agent that carries on stays stopped once the conversion is made.
 pub fn hold(db: &Connection, id: &SpaceId) -> Result<()> {
     db.execute(
         "UPDATE space_conversions SET record=json_set(record,'$.held',json('true'))
@@ -249,18 +227,16 @@ pub fn hold(db: &Connection, id: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// Forget the conversion of the space `id`, once its agent started in the
-/// new place.
+/// Runs once its agent started in the new place.
 pub fn forget(db: &Connection, id: &SpaceId) -> Result<()> {
     db.execute("DELETE FROM space_conversions WHERE space_id=?1", [id])?;
     Ok(())
 }
 
-/// Record that the workspace `id` becomes `chat` once its agent's turn ends,
-/// its agent carrying on as `carrying` says, while the workspace is ready
-/// and that agent's execution runs, as a stop, which first reserves the
-/// workspace, has not ended it; an agent tool that takes the work over
-/// takes it from a stopped agent too.
+/// Records only while the workspace is ready and the agent's execution
+/// runs, as a stop, which first reserves the workspace, has not ended it.
+/// An agent tool that takes the work over takes it from a stopped agent
+/// too.
 pub fn record_chat_conversion(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -286,8 +262,7 @@ pub fn record_chat_conversion(
     record(tx, id, &pending)
 }
 
-/// Record that `taking` takes the work of the space `id` over once the turn
-/// of the agent `execution` runs ends, while that agent's execution runs.
+/// Records only while that agent's execution runs.
 pub fn record_agent_switch(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -305,9 +280,7 @@ pub fn record_agent_switch(
     record(tx, id, &pending)
 }
 
-/// Record that `taking` takes the work of the space `id` over from its
-/// stopped or asleep agent, which saved itself as `execution`, while it
-/// copies the space's sessions: no agent starts there until it is done.
+/// No agent starts there until the space's sessions are copied.
 pub fn record_stopped_switch(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -322,13 +295,10 @@ pub fn record_stopped_switch(
     record(tx, id, &pending)
 }
 
-/// Replace the chat `id`, whose workspace row was just inserted under its
-/// ID, with that workspace, whose agent runs in `mode` with the permissions
-/// `narrowing` gives it, unless a stop saved the chat meanwhile and no other
-/// agent tool `switches` to take its work over: its threads, approval
-/// requests and unread messages become the workspace's, and its agent's
-/// scope token, which it keeps, acts for the workspace until the agent
-/// restarts there.
+/// Does nothing when a stop saved the chat meanwhile and no other agent tool
+/// `switches` to take its work over. The chat's threads, approval requests
+/// and unread messages become the workspace's, and its agent's scope token,
+/// which it keeps, acts for the workspace until the agent restarts there.
 /// Returns the row the chat had and the execution its agent runs as, or a
 /// new one for a stopped chat.
 pub fn replace_chat(
@@ -350,9 +320,8 @@ pub fn replace_chat(
     Ok((row, execution))
 }
 
-/// Forget the conversion of the chat that became the workspace `id`, whose
-/// agent, which carried the scope `token`, restarted there under a scope of
-/// its own. The tokens the chat issued go too, as a workspace's exported
+/// The agent restarted under a scope of its own, so the chat's `token`
+/// goes. So do the tokens the chat issued, as a workspace's exported
 /// environments go with its worktree when it becomes a chat.
 pub fn relocated_chat(
     tx: &Transaction<'_>,
@@ -366,10 +335,9 @@ pub fn relocated_chat(
     forget(tx, id)
 }
 
-/// Give back the chat `row`, which the workspace `id` replaced, and remove
-/// that workspace's row: its completion, threads, approval requests and
-/// unread messages return to the chat, and of its scope tokens only the
-/// chat's own stays.
+/// The workspace's completion, threads, approval requests and unread
+/// messages return to the chat. Of its scope tokens only the chat's own
+/// stays.
 pub fn restore_chat(
     tx: &Transaction<'_>,
     records: &dyn Records,
@@ -390,9 +358,8 @@ pub fn restore_chat(
     forget(tx, id)
 }
 
-/// The stopped chat a workspace becomes: its agent, the execution it ran
-/// as, whose session it carries on, the place it ran in, its mode and the
-/// permissions given to it.
+/// Its agent, the execution it ran as, whose session it carries on, the
+/// place it ran in, its mode and the permissions given to it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConvertedChat {
     pub agent: Agent,
@@ -402,10 +369,9 @@ pub struct ConvertedChat {
     pub narrowing: PermissionsConfig,
 }
 
-/// Replace the workspace `id` with the stopped chat `chat` under its ID,
-/// number and name, which restores in its repository's checkout: its
-/// threads, unread messages and requests to take actions become the
-/// chat's, and what only a workspace has goes with its row. Returns the requests the workspace
+/// The chat restores in its repository's checkout. The workspace's threads,
+/// unread messages and action requests become the chat's, and what only a
+/// workspace has goes with its row. Returns the requests the workspace
 /// decided, given back to the user, since a stopped chat decides none.
 pub fn replace_workspace(
     tx: &Transaction<'_>,
@@ -430,14 +396,12 @@ pub fn replace_workspace(
     Ok(released)
 }
 
-/// Forget the completion of the space `id`, which ends with the kind it
-/// had: its record, which a conversion keeps, does not take it with it.
+/// The completion ends with the kind the space had.
 fn forget_completion(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM space_completion WHERE space_id=?1", [id])?;
     Ok(())
 }
 
-/// The row of the chat `id`, with its space's.
 fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
     let pairs: Vec<String> = (CHAT_COLUMNS.iter().chain(SPACE_COLUMNS))
         .map(|column| format!("'{column}',{column}"))
@@ -470,7 +434,6 @@ fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
     Ok(row)
 }
 
-/// Make the space `id` the chat `row` again, as it was.
 fn give_back_chat_row(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
     let values: Vec<String> = (CHAT_COLUMNS.iter())
         .map(|column| format!("json_extract(?1,'$.{column}')"))

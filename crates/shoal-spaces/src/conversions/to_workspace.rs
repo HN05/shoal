@@ -1,6 +1,5 @@
-//! A chat becoming a workspace: the refusals, the issue it takes, the
-//! worktree and its setup, after which its agent restarts there when its
-//! turn ends.
+//! A chat becoming a workspace, after which its agent restarts there when
+//! its turn ends.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::daemon::OpenIssue;
@@ -23,9 +22,8 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// What a chat becomes: a workspace on `branch`, which the issue `issue`
-/// links when given, from `base` when the branch is new, leaving out what
-/// `options` say, with its agent in `mode`, carrying on as `agent` asks.
+/// A workspace on `branch`, which `issue` links when given, from `base` when
+/// the branch is new, with its agent in `mode`, carrying on as `agent` asks.
 pub struct WorkspaceConversion {
     pub branch: String,
     pub issue: Option<crate::forge::items::reference::ItemInput>,
@@ -36,11 +34,10 @@ pub struct WorkspaceConversion {
 }
 
 impl Spaces {
-    /// Turn the chat `selector` names into the workspace `conversion`
-    /// describes, for the space `caller` runs in, and start preparing it in
-    /// the caller's environment `env`. Its agent restarts there, resuming its
-    /// session, once its turn ends and the workspace is ready, or another
-    /// agent tool takes its work over then, also from a stopped agent.
+    /// Starts preparing it in the caller's environment `env`. The agent
+    /// restarts there, resuming its session, once its turn ends and the
+    /// workspace is ready, or another agent tool takes its work over then,
+    /// also from a stopped agent.
     pub async fn convert_to_workspace(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -79,10 +76,9 @@ impl Spaces {
         Ok(started)
     }
 
-    /// How `chat` becomes a workspace as `conversion` asks for `caller`,
-    /// under its repository's `settings`: its running agent carries on there
-    /// with the permissions `conversion` gives it, or another agent tool
-    /// takes the work over, also from a stopped agent.
+    /// The running agent carries on there with the permissions `conversion`
+    /// gives it, or another agent tool takes the work over, also from a
+    /// stopped agent.
     async fn converting_chat(
         &self,
         daemon: &dyn Daemon,
@@ -119,9 +115,7 @@ impl Spaces {
         })
     }
 
-    /// Make the workspace `converting` turns its chat into as `conversion`
-    /// describes, and start preparing it in `env` for `caller`, recording
-    /// the preparation the chat's agent waits for.
+    /// Records the preparation the chat's agent waits for.
     async fn make_converted(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -164,8 +158,8 @@ impl Spaces {
         Ok(started)
     }
 
-    /// The chat `selector` names, refusing a workspace and a chat that
-    /// cannot become one wherever its agent stands.
+    /// Refuses a workspace, and a chat that cannot become one wherever its
+    /// agent stands.
     async fn convertible_chat(&self, selector: &SpaceSelector) -> Result<Chat> {
         let chat = match self.space(selector).await?.by_kind() {
             ByKind::Chat(chat) => chat,
@@ -194,9 +188,8 @@ impl Spaces {
         Ok(chat)
     }
 
-    /// Assign `chat` the open issue `input` names in its repository, which
-    /// the workspace it becomes keeps, as `caller`'s account on the forge,
-    /// returning what that warns of.
+    /// The workspace it becomes keeps the issue. Assigns as `caller`'s
+    /// account on the forge and returns what that warns of.
     async fn link_converted_issue(
         &self,
         daemon: &dyn Daemon,
@@ -210,8 +203,8 @@ impl Spaces {
         (daemon.set_issue(&selector, &url.into(), Some(title), caller)).await
     }
 
-    /// Refuse a conversion of the space `id`, named `name`, whose agent has
-    /// yet to restart after another.
+    /// Refuses while the space's agent has yet to restart after another
+    /// conversion.
     pub(super) async fn ensure_not_converting(&self, id: &SpaceId, name: &str) -> Result<()> {
         ensure!(
             !self.converting(id).await?,
@@ -220,17 +213,14 @@ impl Spaces {
         Ok(())
     }
 
-    /// Whether the agent of the converted space `id` has yet to restart in
-    /// the new place.
     pub async fn converting(&self, id: &SpaceId) -> Result<bool> {
         let space = id.clone();
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;
         Ok(pending.is_some())
     }
 
-    /// Whether a conversion moves the agent of the space `id` to the new
-    /// place: one that restarts it there waits for its turn to end, or a
-    /// relocation is moving it now.
+    /// One that restarts it waits for its turn to end, or a relocation is
+    /// moving it now.
     pub async fn moves_agent(&self, id: &SpaceId) -> Result<bool> {
         if self.relocating.contains(id) {
             return Ok(true);

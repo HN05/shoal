@@ -1,8 +1,5 @@
-//! Converting a chat into a workspace and a workspace into a chat, and
-//! handing a space's work over to another agent tool: the space keeps its
-//! ID, number, name, place in the tree, links, threads, files and
-//! progress, and its agent carries on with its conversation in the new
-//! place, or the new tool from copies of it, once its current turn ends.
+//! Converting a space into the other kind, and handing its work over to
+//! another agent tool. See `docs/design/spaces.md`.
 use anyhow::Result;
 use rusqlite::Transaction;
 use shoal_ids::space_ids::SpaceId;
@@ -22,8 +19,7 @@ pub use record::{Carrying, Pending};
 pub use relocation::{ConversionStop, Relocating};
 pub use to_workspace::WorkspaceConversion;
 
-/// The chat a new workspace replaces, the mode the workspace's agent
-/// starts in and how it carries on.
+/// Also the mode the workspace's agent starts in and how it carries on.
 #[derive(Debug, Clone)]
 pub struct Converting {
     pub chat: crate::model::Chat,
@@ -32,8 +28,8 @@ pub struct Converting {
 }
 
 impl Converting {
-    /// The new workspace `record` under the chat's ID, number and name, in
-    /// the mode and with the permissions the chat's agent was given.
+    /// Takes the chat's ID, number and name, and the mode and permissions the
+    /// chat's agent was given.
     pub fn workspace(&self, record: Workspace) -> Workspace {
         Workspace {
             id: self.chat.id.clone(),
@@ -45,8 +41,8 @@ impl Converting {
         }
     }
 
-    /// Replace the chat with the workspace just recorded under its ID, and
-    /// record that the chat's agent restarts there once its turn ends.
+    /// Records that the chat's agent restarts in the workspace once its turn
+    /// ends.
     pub fn replace_chat(&self, tx: &Transaction<'_>) -> Result<()> {
         let switches = self.carrying.taking.is_some();
         let agent = (&self.mode, &self.chat.narrowing);
@@ -64,15 +60,14 @@ impl Converting {
     }
 }
 
-/// Refuse `mode` for the agent of a converted space, unless `settings`, those
-/// of the space's repository, define it and a start may name it.
+/// `settings` are those of the space's repository. The mode must be defined
+/// there and one a start may name.
 pub fn ensure_mode(settings: &crate::config::Effective, mode: &ModeName) -> Result<()> {
     crate::config::modes::ensure_startable(mode)?;
     crate::config::modes::get(&settings.modes, mode).map(drop)
 }
 
-/// The conversion of the space `id` whose agent has yet to start in the new
-/// place.
+/// One whose agent has yet to start in the new place.
 pub fn pending(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Pending>> {
     record::pending(db, id)
 }
