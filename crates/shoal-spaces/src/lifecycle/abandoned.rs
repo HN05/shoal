@@ -1,8 +1,7 @@
 //! Removals that stop before they finish without retaining their
-//! workspace, as when the daemon stops or a removal's work ends early: the
-//! workspace leaves `removing` for `failed`, and its log says where its
-//! removal stopped, so `shoal rm` finishes it; at startup, the files such a
-//! removal deleted of the worktree come back.
+//! workspace, as when the daemon stops. The workspace leaves `removing` for
+//! `failed`, and its log says where its removal stopped, so `shoal rm`
+//! finishes it. At startup, the files such a removal deleted come back.
 use crate::Spaces;
 use crate::model::EventCause;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,14 +19,14 @@ use crate::{
 };
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
-/// How the error begins of a workspace that a removal which stopped before
-/// it finished left failed, which a later removal looks for to tell that
-/// what the worktree misses is that removal's doing.
+/// How the error of a workspace begins that a stopped removal left failed.
+/// A later removal looks for it to tell that what the worktree misses is
+/// that removal's doing.
 pub const STOPPED_REMOVAL: &str = "removal stopped";
 
-/// A removal under way from its reservation. Dropped before
-/// [`Self::finish`], as when its work panics or is dropped, it fails the
-/// workspace, so none stays in `removing` with no removal running.
+/// Dropped before [`Self::finish`], as when its work panics or is dropped,
+/// it fails the workspace, so none stays in `removing` with no removal
+/// running.
 pub struct Underway {
     store: Store,
     id: SpaceId,
@@ -43,7 +42,7 @@ impl Underway {
         }
     }
 
-    /// The removal removed the workspace or retained it.
+    /// Call once the removal removed the workspace or retained it.
     pub fn finish(&self) {
         self.finished.store(true, Ordering::Relaxed);
     }
@@ -72,9 +71,8 @@ impl Drop for Underway {
 }
 
 impl Spaces {
-    /// Put back what each removal the daemon's stop cut short deleted of a
-    /// worktree, before anything else uses or readies the workspace, so
-    /// that no marker outlives the startup to undo later deletions.
+    /// Runs before anything else uses or readies the workspace, so no marker
+    /// outlives startup to undo later deletions.
     pub async fn restore_interrupted_removals(&self) -> Result<()> {
         for workspace in self.list_workspaces().await? {
             let settled = self.settle_interrupted_removal(&workspace, workspace.state);
@@ -89,8 +87,7 @@ impl Spaces {
     }
 }
 
-/// Fail every workspace a removal left in `removing` when the daemon
-/// stopped, in the transaction that quarantines the other interrupted
+/// Runs in the transaction that quarantines the other interrupted
 /// operations at startup.
 pub fn fail_interrupted_removals(tx: &Connection) -> Result<()> {
     let ids = tx
@@ -103,8 +100,7 @@ pub fn fail_interrupted_removals(tx: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Fail the workspace `id` while a removal that stopped because `why` left
-/// it in `removing`, recording that it stays, for that removal's cause.
+/// Records that the workspace stays, for that removal's cause.
 fn fail_stopped_removal(tx: &Connection, id: &SpaceId, why: &str) -> Result<()> {
     let number: Option<Option<SpaceNumber>> = tx
         .query_row(
@@ -122,8 +118,6 @@ fn fail_stopped_removal(tx: &Connection, id: &SpaceId, why: &str) -> Result<()> 
     events::retain(tx, id, WorkspaceState::Failed, cause, &error)
 }
 
-/// The cause of the latest removal of the workspace `id` that its log
-/// records as started.
 fn started_cause(tx: &Connection, id: &SpaceId) -> Result<EventCause> {
     let cause = tx
         .query_row(

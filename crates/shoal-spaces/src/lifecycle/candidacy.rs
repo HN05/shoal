@@ -1,6 +1,5 @@
 //! Cleanup candidacy of any space: what keeps it from cleanup, and the
-//! snapshot of a candidate, which its worktree's stage completes where it
-//! has one.
+//! snapshot of a candidate, which its worktree's stage completes.
 use super::super::space_removal::{AgentState, SpaceAgent};
 use super::Retention;
 use crate::Spaces;
@@ -15,8 +14,7 @@ use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 
 impl Spaces {
-    /// What keeps the space `id` from every unattended removal, completion
-    /// and PR cleanup included, read fresh on each call.
+    /// Includes completion and PR cleanup. Read fresh on each call.
     pub async fn keep_reason(
         &self,
         daemon: &dyn Daemon,
@@ -47,11 +45,10 @@ impl Spaces {
         Ok(waits.then_some(Retention::QueuedAgent))
     }
 
-    /// How many threads the space `id` opened wait for their holder: here,
-    /// and on other machines, which keep its comments of their reviews,
-    /// while its completion does not stand, since `done` closed those
-    /// there, so one whose close that machine never took, as while it
-    /// stayed offline past the hub's hold, counts no longer.
+    /// Counts those here, and those on other machines, which keep its
+    /// comments on their reviews, while its completion does not stand: `done`
+    /// closed those there, so one whose close that machine never took, as
+    /// while it stayed offline past the hub's hold, counts no longer.
     pub async fn waiting_threads(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<usize> {
         let here = daemon.coordination().waiting_here(id).await?;
         if self.completion(id).await?.is_some() {
@@ -87,11 +84,10 @@ impl Spaces {
         Ok(None)
     }
 
-    /// The agent of `space`, once what Shoal records about it leaves it to
-    /// `rule`, or the first reason it does not: what keeps it, its agent
-    /// running, and for idle cleanup, a saved agent, assignment state and a
-    /// coordinator working there. `cancelled` are the restores a removal
-    /// stopped.
+    /// The agent, once what Shoal records leaves the space to `rule`, or the
+    /// first reason it does not: what keeps it, its agent running, and for
+    /// idle cleanup a saved agent, assignment state and a coordinator
+    /// working there. `cancelled` are the restores a removal stopped.
     async fn recorded_candidate(
         &self,
         daemon: &dyn Daemon,
@@ -125,9 +121,8 @@ impl Spaces {
         Ok(Ok(agent))
     }
 
-    /// The signals of `space` as an idle cleanup candidate, or the first
-    /// reason it is not one: what Shoal records about it, then its
-    /// worktree, whose processes are read from `users`.
+    /// Checks what Shoal records first, then the worktree, whose processes
+    /// are read from `users`.
     async fn idle_signals(
         &self,
         daemon: &dyn Daemon,
@@ -155,12 +150,10 @@ impl Spaces {
         Ok(Ok(self.signals_of(space, agent, head.as_deref())))
     }
 
-    /// The signals of `space` as a merged cleanup candidate, or `None` when
-    /// it is not one: what Shoal records about it leaves it to merged
-    /// cleanup, which assignment state does not keep, no space is below it,
-    /// since its removal would take their work too, and its worktree, whose
-    /// processes are read from `users`, is merged into the default branch
-    /// and unused.
+    /// A candidate is one that assignment state does not keep, with no space
+    /// below it, since its removal would take their work too, and a
+    /// worktree merged into the default branch and unused. Processes are
+    /// read from `users`.
     async fn merged_signals(
         &self,
         daemon: &dyn Daemon,
@@ -190,15 +183,13 @@ impl Spaces {
         Ok(Some(self.signals_of(space, agent, head.as_deref())))
     }
 
-    /// What `space` records that cleanup compares on every pass: its
-    /// activity, when its `agent` last stopped, and its worktree's `head`,
-    /// so a restore and a new stop between two passes start over.
+    /// Compared on every pass, so a restore and a new stop between two
+    /// passes start over.
     fn signals_of(&self, space: &Space, agent: SpaceAgent, head: Option<&str>) -> u64 {
         signals(self.usage.activity(&space.id), agent.stopped_at, head)
     }
 
-    /// The signals of `space` as a candidate of `rule`, or `None` when it is
-    /// not one, with the processes in its worktree read from `users`.
+    /// Processes in the worktree are read from `users`.
     pub async fn candidate_signals(
         &self,
         daemon: &dyn Daemon,
@@ -216,9 +207,7 @@ impl Spaces {
         }
     }
 
-    /// The full snapshot of `space` as a candidate of `rule`, or `None` when
-    /// it is not one: its signals, and its worktree's files, which take a
-    /// walk.
+    /// Its signals and its worktree's files, which take a walk.
     pub async fn candidate_snapshot(
         &self,
         daemon: &dyn Daemon,
@@ -240,7 +229,6 @@ impl Spaces {
         }))
     }
 
-    /// One walk of the files of `space`: its worktree's, or none.
     pub async fn tree_of(&self, space: &Space) -> Result<Tree> {
         match space.worktree() {
             Some(worktree) => self.walk_worktree(worktree).await,
@@ -248,8 +236,7 @@ impl Spaces {
         }
     }
 
-    /// The snapshot of `space` as an idle cleanup candidate, or why it is
-    /// not one, with the processes in its worktree read from `users`.
+    /// Processes in the worktree are read from `users`.
     pub async fn idle_candidacy(
         &self,
         daemon: &dyn Daemon,
@@ -267,9 +254,8 @@ impl Spaces {
         }))
     }
 
-    /// The signals of `space` whose idle timer runs, or `None` when what
-    /// Shoal records about it, or its worktree's commands, leases or a
-    /// process `users` finds there, keeps it. A worktree's Git state and
+    /// `None` when what Shoal records, or the worktree's commands, leases or
+    /// a process `users` finds there, keeps it. The worktree's Git state and
     /// files are left to the full inspections when the timer starts and
     /// when it expires, which fail or differ after any change to them.
     pub async fn idle_timer_signals(
@@ -297,8 +283,8 @@ impl Spaces {
         Ok(Some(self.signals_of(space, agent, head.as_deref())))
     }
 
-    /// When `space` was last used: the later of its recorded activity and
-    /// its agent's last stop, or `None` while neither is recorded.
+    /// The later of its recorded activity and its agent's last stop. `None`
+    /// while neither is recorded.
     pub async fn last_used(
         &self,
         daemon: &dyn Daemon,
@@ -308,8 +294,8 @@ impl Spaces {
         Ok(self.active_at(&space.id).await?.max(stopped_at))
     }
 
-    /// Why automatic cleanup keeps `space`, or its idle delay when nothing
-    /// does; a failed inspection is reported as the reason.
+    /// Its idle delay when nothing keeps it. A failed inspection is reported
+    /// as the reason.
     pub async fn cleanup_reason(&self, daemon: &dyn Daemon, space: &Space) -> CleanupReason {
         self.inspect_cleanup(daemon, space)
             .await
