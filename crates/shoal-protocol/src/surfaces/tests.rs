@@ -388,3 +388,24 @@ fn a_date_answer_takes_the_input_s_form_and_bounds() {
         assert!(answer(refused).is_err(), "{refused}");
     }
 }
+
+#[test]
+fn a_date_bound_compares_moments_and_reads_bound_data() {
+    let meeting = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["at", "meet"]},
+            {"id": "at", "component": "DateTimeInput", "enableDate": true, "enableTime": true,
+             "min": {"@path": "/earliest"}, "value": {"@path": "/at"}},
+            {"id": "meet", "component": "Button", "child": "meet-label",
+             "action": {"event": {"name": "meet", "context": {"at": {"@path": "/at"}}}}},
+            {"id": "meet-label", "component": "Text", "text": "Meet"},
+        ]),
+        json!({"at": "", "earliest": "2026-11-26T12:00:00Z"}),
+    );
+    let answer = |at: &str| meeting.resolve("meet", values(&[("at", json!(at))]));
+    // 13:00 at UTC+2 is 11:00 UTC, before the bound the data model sets.
+    assert!(answer("2026-11-26T13:00:00+02:00").is_err());
+    assert!(answer("2026-11-26T11:59:00Z").is_err());
+    answer("2026-11-26T15:00:00+02:00").unwrap();
+    answer("2026-11-27T08:00:00Z").unwrap();
+}

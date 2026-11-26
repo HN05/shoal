@@ -153,7 +153,9 @@ impl Surface {
         let entering = (self.components()).find(|component| entering(*component, path));
         Input {
             key: key.to_owned(),
-            kind: entering.and_then(entry).unwrap_or(InputKind::Any),
+            kind: entering
+                .and_then(|input| self.entry(input))
+                .unwrap_or(InputKind::Any),
             initial: self.data(path).cloned(),
         }
     }
@@ -189,42 +191,54 @@ impl SurfaceAction {
     }
 }
 
+/// The component types that enter data, which their `value` binds.
+const INPUTS: &[&str] = &[
+    "TextField",
+    "CheckBox",
+    "Slider",
+    "DateTimeInput",
+    "ChoicePicker",
+];
+
 /// Whether `component` is an input that enters the data at `path`.
 fn entering(component: Component<'_>, path: &str) -> bool {
-    component.binding("value") == Some(path) && entry(component).is_some()
+    component.binding("value") == Some(path) && INPUTS.contains(&component.kind)
 }
 
-/// What `component` enters into the data its value binds, for an input.
-fn entry(component: Component<'_>) -> Option<InputKind> {
-    let number = |field| component.get(field).and_then(Value::as_f64);
-    Some(match component.kind {
-        "TextField" if component.literal("variant") == Some("number") => InputKind::Number {
-            min: None,
-            max: None,
-        },
-        "TextField" => InputKind::Text,
-        "CheckBox" => InputKind::Boolean,
-        "Slider" => InputKind::Number {
-            min: number("min").or(Some(0.0)),
-            max: number("max"),
-        },
-        "DateTimeInput" => InputKind::DateTime(Dates::of(component)),
-        "ChoicePicker" => InputKind::Options {
-            options: (component
-                .get("options")
-                .and_then(Value::as_array)
-                .into_iter())
-            .flatten()
-            .filter_map(|option| {
-                let value = option.get("value")?.as_str()?;
-                let label = option.get("label").and_then(Value::as_str).unwrap_or(value);
-                Some((value.to_owned(), label.to_owned()))
-            })
-            .collect(),
-            multiple: component.literal("variant") == Some("multipleSelection"),
-        },
-        _ => return None,
-    })
+impl Surface {
+    /// What `component`, one of its inputs, enters into the data its value
+    /// binds.
+    fn entry(&self, component: Component<'_>) -> Option<InputKind> {
+        let number = |field| component.get(field).and_then(Value::as_f64);
+        Some(match component.kind {
+            "TextField" if component.literal("variant") == Some("number") => InputKind::Number {
+                min: None,
+                max: None,
+            },
+            "TextField" => InputKind::Text,
+            "CheckBox" => InputKind::Boolean,
+            "Slider" => InputKind::Number {
+                min: number("min").or(Some(0.0)),
+                max: number("max"),
+            },
+            "DateTimeInput" => InputKind::DateTime(Dates::of(self, component)),
+            "ChoicePicker" => InputKind::Options {
+                options: (component
+                    .get("options")
+                    .and_then(Value::as_array)
+                    .into_iter())
+                .flatten()
+                .filter_map(|option| {
+                    let value = option.get("value")?.as_str()?;
+                    let label = option.get("label").and_then(Value::as_str).unwrap_or(value);
+                    Some((value.to_owned(), label.to_owned()))
+                })
+                .collect(),
+                multiple: component.literal("variant") == Some("multipleSelection"),
+            },
+            _ => return None,
+        })
+    }
 }
 
 impl InputKind {
