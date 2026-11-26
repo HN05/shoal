@@ -110,8 +110,8 @@ A scoped caller may run, view, cancel and answer the reviews of its own
 workspace and those below it, and write its own reviews of those below it.
 Where `[review] require_for_pr`, `require_for_ready` or `require_for_merge`
 holds the caller, a `pr open` that opens a new PR, a ready mark and a merge are
-refused until a finished review covers the commit they act on and no review of
-it has unresolved threads.
+refused until a review covers the commit they act on, as
+[Review gates](reviews.md#review-gates) says.
 
 ## Approvals
 

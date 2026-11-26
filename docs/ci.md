@@ -102,7 +102,8 @@ None of these is a required check.
 - `audit.yml` runs a read-only code audit of the whole application with
   `.review/audit.md`. It has no schedule. Someone dispatches it by hand with a
   focus (bugs, maintainability, testing, performance or docs) and a ref. It
-  opens one issue per new finding, labelled `audit/<focus>`.
+  opens one issue per new finding, labelled `audit/<focus>`. A failed or
+  incomplete run opens none.
 
 The review and audit workflows follow review-bot's latest `main` commit.
 
