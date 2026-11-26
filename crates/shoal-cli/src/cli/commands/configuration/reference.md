@@ -17,8 +17,8 @@ its own, from the first file that sets it:
    settings only you want. Shoal reads it in place on every request, so an
    edit applies to every workspace at once. An invalid file fails each request
    until it is fixed. A
-   [shared repository](../../../../../../docs/reference/hub.md) has the same
-   local config on every machine of its hub.
+   [shared repository](../../../../../../docs/reference/hub.md#shared-repositories)
+   has the same local config on every machine of its hub.
 2. The **repository file** in a workspace's worktree: `.shoal.toml` or
    `.shoal/config.toml`, never both. Where no workspace applies, such as for
    the seed build, the registered checkout's file applies. Shoal ignores a
@@ -36,8 +36,8 @@ its own, from the first file that sets it:
    `[machine.hub]`. It must be valid on its own. Paths, hooks and `{ cmd }`
    values in it resolve on each machine, except a `{ cmd }` whose `on` names
    the machine that runs it. Machines joined to a
-   [hub](../../../../../../docs/reference/hub.md) keep it, and its mode and
-   rule files in `shared/`, the same on each.
+   [hub](../../../../../../docs/reference/hub.md#shared-config) keep it, and
+   its mode and rule files in `shared/`, the same on each.
 5. The **built-in default**.
 
 The `[machine]` table holds the settings that describe this machine. Only the
@@ -70,10 +70,9 @@ values:
 - `{ cmd = [...] }`, an argument array run without input, whose output is the
   value;
 - `{ cmd = [...], on = "<machine>" }`, run on the machine of the
-  [hub](../../../../../../docs/reference/hub.md) that `on` names, by name or
-  ID. A secret set up there then serves every machine. This machine's daemon
-  asks for the value each time, and keeps the last one only in memory, for
-  while the named machine cannot be reached.
+  [hub](../../../../../../docs/reference/hub.md#settings-from-another-machine)
+  that `on` names, by name or ID. A secret set up there then serves every
+  machine.
 
 A secret written in `shared.toml` reaches every machine too, and sits in that
 file on each.
@@ -150,9 +149,10 @@ limit in effect.
 
 See [keeping the machine awake](../../../../../../docs/reference/machine.md#keeping-the-machine-awake).
 
-`availability` tells the [hub](../../../../../../docs/reference/hub.md)
-whether this machine stays reachable: `always_on`, `intermittent`, or `auto`
-for the hub's guess. It does nothing without a hub.
+`availability` tells the
+[hub](../../../../../../docs/reference/hub.md#availability) whether this
+machine stays reachable: `always_on`, `intermittent`, or `auto` for the hub's
+guess. It does nothing without a hub.
 
 `git_profile`, at the top level of any file, names the
 [Git profile](#git-profiles) new worktrees get. `shoal start --git-profile`

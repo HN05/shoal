@@ -227,8 +227,9 @@ chat and asks for its name.
 ## Space numbers
 
 Every space, a workspace or a [chat](chats.md), has a number that no other
-space holds on any machine joined to the same [hub](hub.md). It is the smallest
-free number when the space is created. It stays through renames and stops, and
+space holds on any machine joined to the same
+[hub](hub.md#space-numbers-across-machines). It is the smallest free number
+when the space is created. It stays through renames and stops, and
 a later space may take it once the space is removed. `shoal status` shows it,
 and `--json` gives it as `number`.
 

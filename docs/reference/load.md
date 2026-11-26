@@ -253,7 +253,7 @@ names the `shoal resume` command the work needs, naming done workspaces, which
 stop records `stop_failed`, and a refused lock `environment_problem`. A signal
 to the daemon stops work the same way unless a shutdown's stop already did, and
 records `daemon_stopped` instead of `system_shutdown`. On a machine joined
-to a hub, the stop then [hands its spaces over](hub.md) and
+to a hub, the stop then [hands its spaces over](hub.md#hand-over-at-shutdown) and
 the alert names where each went. An
 agent that was idle comes back only when an update arrives for it, unless
 processes it started outside its process group were still running. An

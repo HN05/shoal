@@ -1,7 +1,7 @@
 # Hub
 
 This file says what the `hub` commands do and how machines joined to a hub work
-together.
+together. [Hub](../design/hub.md) gives the reasons.
 
 ```sh
 shoal hub pair                     # On the hub or a joined machine: a code and its QR code
@@ -13,474 +13,751 @@ shoal hub update                   # The latest release on the hub, from any mac
 shoal hub leave
 ```
 
-One daemon of yours takes the hub role, with
-[`[machine.hub] enabled`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub),
-and your other machines join it; the hub stays the machine of its own spaces,
-and one without repositories is a hub alone. Each machine that joined keeps one
-link to the hub and opens it again with backoff after sleep or a network
-change; the hub never connects to a machine. `shoal status` shows the role the
-daemon takes: the hub's listener, or the machine's membership with whether its
-link is open and why not.
+## The hub and its members
 
-The hub's listener serves HTTP, and the link over a WebSocket at `/hub`, on
-`[machine.hub] listen`, loopback by default. Shoal handles no TLS, so
-`shoal status` and `shoal hub ls` show the listener as unencrypted: put a
-tunnel or reverse proxy in front of it, such as Tailscale Serve, cloudflared or
-Caddy, and set `[machine.hub] url` to the address machines reach it at there.
-The hub and every machine hold a key pair of their own, which pairing
-exchanges. Each link opens with both sides signing what the other sent,
-including a key exchange whose keys then encrypt and authenticate every frame,
-and a joiner proves its pairing code without sending it, so nothing between
-them, a proxy included, can pose as either, use a code it saw, or read,
-change, add or replay a frame.
+One of your daemons takes the hub role, which
+[`[machine.hub] enabled`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+turns on. Your other machines and devices join it. The hub stays the machine
+of its own spaces. A hub without repositories serves only as the hub.
 
-`shoal hub pair` runs on the hub, or on a machine that joined it, and prints a
-code with its QR code: the hub's URL, its key's fingerprint and a secret that
-admits one join within ten minutes. It warns when the URL is `http://` to
-another machine. `shoal hub join <code>` joins this machine under the host's
-name, or `--name`; an app joins as a device with the same code.
+Each joined machine keeps one link to the hub. It opens the link again with
+backoff after a sleep or a network change. The hub never connects to a
+machine.
 
-On a computer without Shoal, run the other line `hub pair` prints, `curl -fsSL
-<hub url>/install | sh -s -- '<code>'`: the hub's listener serves that script,
-which downloads exactly the hub's version for the platform from its GitHub
-release, checks it against the release's `SHA256SUMS` and its reported
-version, installs it as a downloaded binary at `~/.local/bin/shoal`, or on
-macOS as `~/Applications/Shoal.app` with that path linked to it, then runs
-`shoal daemon install` and `shoal hub join` with the code, which pins the
-hub's key. It installs nothing where `shoal` is already installed at either
-path: run `shoal hub join` there instead. It installs neither the [runtime
-dependencies](../../README.md#runtime-dependencies) nor agent tools and their
-logins; repositories are cloned once a start there needs them.
+`shoal status` shows the role the daemon takes. On the hub, it shows the
+listener. On a joined machine, it shows the membership, whether the link is
+open, and why not.
 
-The hub gives
-each machine or device an ID at pairing, and `hub ls` lists them with kind,
-name, Shoal version, when each was last seen, each machine's availability
-and, for a connected machine, the agent tools it has installed (`agents` in
-`--json`) and what it last reported for placement (`capacity`), by which `hub revoke` names one. `hub leave` revokes this machine's own credential, or names what to revoke
-on the hub when it cannot reach it. Only your own terminal pairs, joins, leaves
-and revokes; anyone lists.
+## Listener and encryption
 
-A setting whose `{ cmd }` names a machine with
-[`on`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#files-and-layers)
-takes its value from that machine, so a token or key set up once, such as in
-its keychain, serves every machine. The daemon that needs the value sends the
-command over its link, the hub passes it on, and the named machine runs it as
-the user for at most a minute and sends the output back; `on` naming this
-machine runs it here. Only a machine's daemon asks: a device cannot, and a
-process of a space asks its own daemon for the setting's value, which runs only
-the command its config gives. The value is fetched once per operation, so a
-rotated one applies at once, and the machine that asked keeps the last one in
-memory, never on disk, using it while the named machine cannot be reached;
-without one, reading the setting fails, naming the machine and the setting. The
-hub records which settings each machine fetched from which, and when, never the
-values: `shoal hub revoke` stops a machine from asking again and lists the
-settings it fetched, to rotate, since a value it received cannot be taken back. Agent tools' own logins, such as Claude Code's and Codex's, are files
-those tools own and are not shared: their rotating refresh tokens would log out
-the other copy.
+The hub's listener serves HTTP on `[machine.hub] listen`, on loopback by
+default. It serves the link as a WebSocket at `/hub`. Shoal handles no TLS, so
+`shoal status` and `shoal hub ls` show the listener as unencrypted. Put a
+tunnel or reverse proxy in front of it, as the
+[configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+describes. Set `[machine.hub] url` to the address machines reach the hub at
+there.
 
-Each machine is `always_on` or `intermittent`, which `hub ls` shows with the
-reason and `shoal status` shows for this machine.
-[`[machine] availability`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine)
-sets it (`set`); under `auto`, the default, the hub guesses from how reachable
-the machine was, never from what powers it. A machine whose link was open less
-than 95% of the last 7 days is `intermittent`, and any other `always_on`
-(`connected N% of 7 days`); an absence shorter than 5 minutes, such as a
-network blip or a daemon restart, counts as connected, and the hub's own
-machine counts as connected while its daemon runs with the machine awake. For
-the first day the hub knows a machine, it goes by the battery instead: a
-machine with one is `intermittent` (`new, battery`) and one without
-`always_on` (`new, no battery`). The hub tells each machine its availability
-when its link opens and whenever it changes.
+The hub and every member hold a key pair of their own, which pairing
+exchanges. Each link opens with both sides signing what the other sent. That
+includes a key exchange, whose keys then encrypt and authenticate every frame.
+A joiner proves its pairing code without sending it. So nothing between the
+two sides, a proxy included, can pose as either side or use a code it saw. Nor
+can it read, change, add or replay a frame.
 
-An `intermittent` machine keeps the latest package of each of its workspaces
-and chats on the hub, so their work outlives the machine going away: what
-`shoal move --keep -o` writes, a new checkpoint of a workspace with a bundle
-of its commits, its agents' session files and its records, but under the
-space's own ID, built without stopping its agents. The machine looks at a
-space when its agent's turn ends, and at every space every 10 minutes, and
-sends each whose HEAD, branch, files, agents' session files or records, such
-as its links, threads and queued work, changed since its last package, at
-most once every 5 minutes; a space that did not change sends nothing. The
-hub keeps one package per space in its state directory, replacing it only
-once the new one arrived whole, and deletes it once the space ends on its
-machine, as by removal or a move, or the machine is revoked. While the disk
-of its state directory has less free space than
-[`[machine.overload.warning] disk_free_gib`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#overload),
-it refuses new packages and records a `hub_package_refused` alert. The hub's
-own machine sends none.
+## Pair and join
 
-Every machine of a hub, the hub's own included, shares the
-[shared config](../../crates/shoal-cli/src/cli/commands/configuration/reference.md):
-`shared.toml` and the mode and rule files in `shared/` beside it. A machine
-sends the hub each of them it edited within ten seconds, or at once on
-`shoal config reload` and `shoal config set --shared`, once they load; an
-invalid file stays on the machine, and an alert says why. The hub keeps
-whichever edit reached it last, a removal included, and every other machine
-writes it and applies it. An edit made while a machine is offline goes once
-its link opens; a joining machine takes the hub's copy of each file it has
-and sends those the hub lacks. When a copy replaces an edit the hub never
-got, the machine keeps that edit as `<file>.backup`, such as
-`shared.toml.backup`, and alerts you naming it.
+`shoal hub pair` runs on the hub or on a joined machine. It prints a code and
+its QR code. The code holds the hub's URL, its key's fingerprint and a secret.
+The secret admits one join within ten minutes. `hub pair` warns when the URL
+is `http://` to another machine.
 
-`shoal repo ls` lists the repositories every other joined machine registers
-after this machine's, each naming its machine, which `--json` gives as
-`machine` and `machine_id`. They also share the repositories you mark shared: `shoal repo add <url>
---shared`, or `shoal repo share [repo]` for a registered one, which needs an
-origin, and `shoal repo ls` shows them. Every other machine registers each
-one as `shoal repo add <url>` would, matched by origin, cloning it at once in
-the background under its own `root_dir` and under the same name where no
-repository there has it; a repository it already has, whatever its name,
-keeps that registration and becomes shared; a `shoal contribute` clone that
-becomes shared is no longer removed on its own. A clone that fails records a
-`shared_repository_failed` alert naming `shoal repo add <url> --shared`,
-which registers it once you fix the cause; otherwise it is tried again when
-the machine next connects to the hub, or for the hub's own machine, when its
-daemon restarts. `shoal repo unshare [repo]`, or removing a shared repository, stops
-sharing it on every machine, which keeps its registration. Machines clone
-from the origin, never through the hub. A repository that is not shared stays
-on its machine, and `shoal start --machine` clones it there on demand.
+`shoal hub join <code>` joins this machine under its host's name, or the name
+`--name` gives. An app joins as a device with the same code.
 
-A shared repository's local config, `.shoal/config.toml` in its repository
-directory, is shared by the shared config's rules: an edit reaches every other
-machine within ten seconds, or at once on `shoal config set --repo`, once it
-parses; an invalid file stays on its machine, and an alert says why. A
-repository that becomes shared on a machine, cloned or registered there
-before, takes the hub's copy, and a replaced edit stays as
-`config.toml.backup`, with an alert naming it. Once a repository is no longer
-shared, each machine keeps its local config as it is.
+Each join gives the machine a key pair of its own. A machine that left or was
+revoked joins again as a new member.
 
-A machine can also reach the hub through a command, whose standard input and
-output its daemon uses as the link, restarting it with backoff and logging its
-standard error: `shoal daemon connect` on the hub relays them to its daemon's
-socket, byte for byte, and fails when no daemon runs there, never starting
-one. Running commands on the hub as you proves more than a code, so `shoal hub
-join --connect` joins without one: it checks that the command answers, names
-an absolute path to `shoal` when the other side does not find it, and keeps
-the command as the machine's route to the hub. `[machine.hub] connect`
-overrides the route a machine joined by. Each join makes the machine a key
-pair of its own, so one that left or was revoked joins again as a new
-member.
+Only your own terminal pairs, joins, leaves and revokes.
 
-The hub refuses a link that presents a revoked credential, which stops the
-machine from trying again until it joins again; one that presents a
-credential another machine's link holds, as a copy of a state directory does,
-which is told to join as a machine of its own; and one that runs another
-Shoal version, recording an alert that names the machine, its version and the
-update to run. A refused machine keeps working on its own.
+## Install Shoal from the hub
 
-The hub updates as it was installed: with `brew upgrade hn05/tap/shoal`
-there, or for a downloaded binary with `shoal update` there or `shoal hub
-update` on any of its machines, which the `daemon` permission governs. A managed
-daemon restarts on the new release once idle; `shoal hub update` says when a
-foreground one needs a restart.
+`hub pair` also prints a line to run on a computer without Shoal:
+
+```sh
+curl -fsSL <hub url>/install | sh -s -- '<code>'
+```
+
+The hub's listener serves that script. The script downloads exactly the hub's
+version for the platform from its GitHub release. It checks the download as
+[`shoal update`](install.md#update-a-downloaded-binary) does. It installs it as
+a downloaded binary at `~/.local/bin/shoal`. On macOS, it installs
+`~/Applications/Shoal.app` instead and links that path to it. It then runs
+`shoal daemon install`, and `shoal hub join` with the code, which pins the
+hub's key.
+
+The script installs nothing where `shoal` is already installed at either path.
+Run `shoal hub join` there instead. It installs neither the
+[runtime dependencies](../../README.md#runtime-dependencies) nor agent tools
+and their logins. A machine clones a repository once a start there needs it.
+
+## Join through a command
+
+A machine can reach the hub through a command instead of a URL. Its daemon
+uses the command's standard input and output as the link. It restarts the
+command with backoff and logs its standard error.
+
+The command ends in `shoal daemon connect` on the hub, such as
+`ssh desk shoal daemon connect`. `shoal daemon connect` relays its standard
+input and output to the daemon's socket there, byte for byte. It fails when no
+daemon runs there, and never starts one.
+
+`shoal hub join --connect "<command>"` joins without a code, since running
+commands on the hub as you proves more than a code does. It checks that the
+command answers. When the command fails, it suggests naming `shoal` by its
+absolute path, for a remote side whose `PATH` lacks it. The machine keeps the
+command as its route to the hub.
+[`[machine.hub] connect`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+overrides the route a machine joined by.
+
+## List, revoke and leave
+
+The hub gives each machine and device an ID at pairing. `shoal hub ls` lists
+them with their kind, name, Shoal version and when each was last seen. For
+each machine, it shows its [availability](#availability). For a connected
+machine, it also shows the agent tools it has installed, `agents` in
+`--json`, and what it last reported for [placement](#placement), `capacity`
+in `--json`. Anyone lists the members.
+
+`shoal hub revoke` revokes a member by the ID or name `hub ls` shows.
+`shoal hub leave` revokes this machine's own credential. When it cannot reach
+the hub, it names what to revoke on the hub instead.
+
+## Refused links
+
+The hub refuses a link that presents:
+
+- a revoked credential. The machine stops trying until it joins again.
+- a credential another machine's link holds, as a copy of a state directory
+  does. The machine is told to join as a machine of its own.
+- another Shoal version. The hub records an alert that names the machine, its
+  version and the update to run.
+
+A refused machine keeps working on its own.
+
+## Update the hub
+
+The hub updates the way it was installed. A Homebrew installation updates with
+`brew upgrade hn05/tap/shoal` on the hub. A downloaded binary updates with
+`shoal update` on the hub, or with `shoal hub update` on any of its machines.
+The [`daemon` permission](modes.md#permitted-actions) governs
+`shoal hub update`.
+
+A managed daemon restarts on the new release once idle. `shoal hub update`
+says when a foreground daemon needs a restart.
+
+## Follow the hub's version
 
 A machine follows the hub's version. Once the hub refuses it for running
-another one, a Shoal downloaded from a release installs exactly the hub's
-release, as `shoal update --version` does, older or newer, after the hub's key
-signed which one it is; a managed daemon restarts on it once idle, with its
-agents running through the restart, and connects again, while a foreground one
-tells you to restart it. It never installs a release too old to read the state
-its newer one migrated, and tells you to update the hub instead, there or with
-`shoal hub update` from a machine connected to it; nor does `shoal hub join`
-suggest one.
+another version, a downloaded Shoal installs exactly the hub's release, older
+or newer, as `shoal update --version` does. It first checks that the hub's key
+signed which release that is. A managed daemon then restarts on the release
+once idle, with its agents running through the restart, and connects again. A
+foreground daemon tells you to restart it.
+
+A machine never installs a release too old to read the state its newer release
+migrated. It tells you to update the hub instead, on the hub or with
+`shoal hub update` from a machine connected to it. `shoal hub join` never
+suggests such a release either.
+
 [`[machine.hub] auto_update = false`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
-turns that off. A Homebrew installation never updates on its own: its machine
-tells you to run `brew upgrade hn05/tap/shoal` there, or to update the hub
-when it runs an older release, which Homebrew never installs. A machine that does not
-follow, or fails to, stays off the hub and tells you what to run, and so does
-the hub's alert about it, which for a machine that follows comes only once
-the hub has refused it for 30 minutes.
+turns following off.
 
-Each machine keeps its spaces and reports a summary of each to the hub as it
-changes, all of them again whenever its link opens: its number and name, its
-kind, its repository by origin, the space above it, which may run on another
-machine, its mode, what lists show it doing, whether it has an agent and
-the name of the one that runs there, its progress, its open threads and
-approval requests, and on an `intermittent` machine since when it has changes
-the hub's package of it lacks (`unsent_since`), none while the package is
-current. `shoal list`, `shoal inbox` and
-`shoal status <space>` on any machine of the hub show the other machines'
-spaces as their machines last reported them, and once they do, every row names
-its machine; a space a scoped caller's scope reaches, through the spaces above
-it on any machine, is one it sees. A machine the hub has not heard from since
-keeps its spaces listed, with when the hub last saw it. `shoal status` of
-another machine's space, by its ID or a number no space here has, shows the
-status its machine answers, naming the machine, which keeps the space's
-sessions and transcripts; while that machine is offline, it shows what the
-machine last reported. The `--repo` filter
-matches another machine's spaces by their repository's origin. A hub that
-cannot be reached leaves the other machines out with a warning.
+A Homebrew installation never updates on its own. Its machine tells you to run
+`brew upgrade hn05/tap/shoal` there. When the hub runs an older release, which
+Homebrew never installs, the machine tells you to update the hub instead.
 
-The hub's machines number their spaces from one sequence, so a number names
-the same space on every one of them. The hub keeps a few spare numbers for
-each machine, so creating a space never waits for the hub; a machine that
-runs out of spares while it cannot reach the hub numbers above its own
-highest. A space whose number another machine's space or spares held
-first, as after that or when a machine joins with spaces of its own, takes
-the smallest number free on the hub, its threads and approval requests
-follow it as `S.N`, and its machine tells you and the space's agent the old
-and new numbers in a `space_renumbered` alert; the space that held the
-number first keeps it. A space `shoal move --machine` or `--ssh` moves
-between the hub's machines keeps its number; one `shoal move -o` wrote, imported after its
-source is gone, takes a new one.
+A machine that does not follow, or fails to, stays off the hub and tells you
+what to run. So does the hub's alert about it. For a machine that follows, the
+hub raises that alert only once it has refused the machine for 30 minutes.
+
+## Settings from another machine
+
+A setting whose `{ cmd }` names a machine with
+[`on`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#values)
+takes its value from that machine. A token or key set up once, such as in that
+machine's keychain, then serves every machine.
+
+Agent tools' own logins, such as Claude Code's and Codex's, are not shared.
+Those tools own the files, and their rotating refresh tokens would log out the
+other copy.
+
+The daemon that needs the value sends the command over its link, and the hub
+passes it on. The named machine runs it as the user, for at most a minute, and
+sends the output back. When `on` names this machine, the command runs here.
+
+Only a machine's daemon asks for a value, never a device. A space's process
+asks its own daemon for the setting's value, and that daemon runs only the
+command its config gives.
+
+The daemon fetches the value once per operation, so a rotated value applies
+at once. The machine that asked keeps the last value in memory, never on disk.
+It uses that value while the named machine cannot be reached. Without one,
+reading the setting fails, naming the machine and the setting.
+
+The hub records which settings each machine fetched from which machine, and
+when, never the values. `shoal hub revoke` stops a machine from asking again.
+It lists the settings that machine fetched, for you to rotate, since a value
+it received cannot be taken back.
+
+## Shared config
+
+Every machine of a hub, the hub's own included, shares the
+[shared config](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#files-and-layers):
+`shared.toml` and the mode and rule files in `shared/` beside it.
+
+A machine sends the hub each of those files it edited, once the file loads. It
+sends an edit within ten seconds, or at once on `shoal config reload` and
+`shoal config set --shared`. An invalid file stays on its machine, and an
+alert says why.
+
+The hub keeps whichever edit reached it last, a removal included. Every other
+machine writes it and applies it. An edit made while a machine is offline goes
+once its link opens.
+
+A joining machine takes the hub's copy of each file it has, and sends those
+the hub lacks. When a copy replaces an edit the hub never got, the machine
+keeps that edit as `<file>.backup`, such as `shared.toml.backup`, and alerts
+you naming it.
+
+## Repositories across machines
+
+`shoal repo ls` lists this machine's repositories, then those every other
+joined machine registers. Each names its machine, which `--json` gives as
+`machine` and `machine_id`.
+
+A repository that is not shared stays on its machine.
+[`shoal start --machine`](#start-on-another-machine) clones it on another
+machine on demand.
+
+## Shared repositories
+
+Machines also share the repositories you mark shared.
+`shoal repo add <url> --shared` adds one shared. `shoal repo share [repo]`
+shares a registered one, which needs an origin. `shoal repo ls` shows which
+are shared.
+
+Every other machine registers a shared repository as `shoal repo add <url>`
+would, matched by origin:
+
+- Where it has no repository of that origin, the machine clones it at once in
+  the background, under its own `root_dir` and under the same name.
+- A repository of that origin the machine already has, whatever its name,
+  keeps that registration and becomes shared.
+- A [`shoal contribute`](repo.md#contributions) clone that becomes shared is
+  no longer removed on its own.
+
+Machines clone from the origin, never through the hub. A clone that fails
+records a `shared_repository_failed` alert naming
+`shoal repo add <url> --shared`, which registers it once you fix the cause.
+Otherwise the machine tries again when it next connects to the hub. The hub's
+own machine tries again when its daemon restarts.
+
+`shoal repo unshare [repo]`, or removing a shared repository, stops sharing it
+on every machine. Each machine keeps its registration.
+
+### Local config of a shared repository
+
+A shared repository's
+[local config](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#files-and-layers),
+`.shoal/config.toml` in its repository directory, is shared as the
+[shared config](#shared-config) is. An edit reaches every other machine within
+ten seconds, or at once on `shoal config set --repo`, once it parses. An
+invalid file stays on its machine, and an alert says why.
+
+A repository that becomes shared on a machine, cloned or registered there
+before, takes the hub's copy. A replaced edit stays as `config.toml.backup`,
+and an alert names it. Once a repository is no longer shared, each machine
+keeps its local config as it is.
+
+## Availability
+
+Each machine is `always_on` or `intermittent`. `hub ls` shows each machine's
+availability with its reason, and `shoal status` shows this machine's.
+
+[`[machine] availability`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine)
+sets it, with the reason `set`. Under `auto`, the default, the hub guesses it
+from how reachable the machine was, never from what powers it:
+
+- A machine whose link was open less than 95% of the last 7 days is
+  `intermittent`, and any other is `always_on`. The reason reads
+  `connected N% of 7 days`.
+- An absence shorter than 5 minutes counts as connected, such as a network
+  blip or a daemon restart.
+- The hub's own machine counts as connected while its daemon runs with the
+  machine awake.
+- For the first day the hub knows a machine, it goes by the battery instead. A
+  machine with one is `intermittent` (`new, battery`), and one without is
+  `always_on` (`new, no battery`).
+
+The hub tells each machine its availability when its link opens and whenever
+it changes.
+
+## Spaces of other machines
+
+Each machine keeps its own spaces. It reports a summary of each to the hub as
+it changes, and all of them again whenever its link opens. A summary holds:
+
+- the space's number, name and kind;
+- its repository, by origin;
+- the space above it, which may run on another machine;
+- its mode, what lists show it doing, and its progress;
+- whether it has an agent, and the name of the one that runs there;
+- its open threads and approval requests;
+- on an `intermittent` machine, since when it has changes the hub's
+  [package](#packages-on-the-hub) of it lacks (`unsent_since`), none while the
+  package is current.
+
+`shoal list`, `shoal inbox` and `shoal status <space>` on any machine of the
+hub show the other machines' spaces as their machines last reported them.
+Once they do, every row names its machine. A scoped caller sees a space its
+scope reaches through the spaces above it, on any machine. The `--repo`
+filter matches another machine's spaces by their repository's origin.
+
+A machine the hub has not heard from since keeps its spaces listed, with when
+the hub last saw it. A revoked machine's spaces leave the hub's lists. A hub
+that cannot be reached leaves the other machines out, with a warning.
+
+`shoal status` of another machine's space, by its ID or by a number no space
+here has, shows the status its machine answers and names that machine. That
+machine keeps the space's sessions and transcripts. While it is offline,
+`status` shows what it last reported.
+
+## Space numbers across machines
+
+The hub's machines number their spaces from one sequence, so a
+[space number](workspaces.md#space-numbers) names the same space on every
+machine. The hub keeps a few spare numbers for each machine, so creating a
+space never waits for the hub. A machine that runs out of spares while it
+cannot reach the hub numbers above its own highest number.
+
+Another machine's space or spares may have held a space's number first, as
+after running out of spares or when a machine joins with spaces of its own.
+The space then takes the smallest number free on the hub, and its threads and
+approval requests follow it as `S.N`. Its machine tells you and the space's
+agent the old and new numbers in a `space_renumbered` alert. The space that
+held the number first keeps it.
+
+A space that `shoal move --machine` or `--ssh` moves between the hub's
+machines keeps its number. A space that `shoal move -o` wrote takes a new
+number when it is imported after its source is gone.
+
+## One machine per space
 
 The hub lists a space ID under one machine, the first that reported it. A
-second machine reporting it, as after copying a state directory, is left out
-and raises an alert naming the command that resolves it there: `shoal rm` of
-its copy, or `shoal start --copy` to keep it as a new space first; once the
-first machine's space ends, the copy takes its place. An import, as of
-`shoal move`, claims the ID first, so the machine it moves to takes the ID over
-and the one it moves from keeps a copy without a conflict until it ends the
-space there; that copy never takes the ID back, so removing and restoring the
-space on the machine it moved to finds no other machine running it.
+second machine that reports it, as after copying a state directory, is left
+out. It raises an alert naming the command that resolves the conflict there:
+`shoal rm` of its copy, or first `shoal start --copy` to keep it as a new
+space. Once the first machine's space ends, the copy takes its place.
+
+An import, as by [`shoal move`](move.md), claims the ID first. The machine a
+space moves to takes the ID over. The machine it moves from keeps a copy
+without a conflict until it ends the space there. That copy never takes the ID
+back, so removing and restoring the space on the machine it moved to finds no
+other machine running it.
+
 `shoal restore` of a space another machine runs is refused, naming
 `shoal move` and a copy, while that machine is connected or the hub keeps no
-package of the space; while the hub cannot be asked, the restore goes on,
-and a duplicate shows as a conflict once both machines report it.
+package of the space. While the hub cannot be asked, the restore goes on. A
+duplicate then shows as a conflict once both machines report it.
 
-`shoal restore <space>` of a space whose `intermittent` machine is offline,
-by its number or ID, takes the space over from the package the hub keeps of
-it, for an agent as its `admin` permission allows, as `restore --from` is: it fetches the package and imports it under the space's ID as
-`shoal restore --from` does, so its claim makes the space this machine's,
-and queues its agents' restores, which continue their sessions. It warns
-when the machine had changes the package lacks, naming how old the oldest
-is. When that machine's link opens again, the hub names the spaces taken
-over meanwhile, and the machine stops their agents and removes each through
-the removal path, keeping a checkpoint, its agents' sessions in its removal
-record and its branch, and leaving the spaces below it, whose parent now
-runs on the other machine. A copy that changed after the hub's package also
-raises a `space_diverged` alert naming what opens that work: for a
-workspace, `shoal start --copy <id> --checkpoint <number>` with the
-checkpoint its removal kept, and for a chat its agents' sessions. A copy the
-machine cannot remove raises a `space_conflict` alert naming the error and
-`shoal rm <id>`, and the hub asks it again the next time it connects.
+## Commands for another machine's space
 
-A machine joined to a hub hands its spaces over as it shuts down, whether
-it is `always_on` or `intermittent`, and under
-[`keep_awake = "handover"`](machine.md#handing-work-over) those with something
-to do once its user walks away or [pauses it](machine.md#pausing-a-machine); a machine
-in no hub keeps its spaces, and so does the hub's own until it is paused. Once the stop before the shutdown saved its agents, it
-sends the hub the final package of every workspace whose worktree is ready,
-but one a CI job runs in, and every chat, all at once, until a second
-before logind's `InhibitDelayMaxSec` ends, or for a signal for 15 seconds,
-which the service definition's stop timeout adds to the daemon's own. For
-each package that arrives whole, the hub chooses a machine by its
-[`[machine.hub] placement`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
-policy among the other
-connected machines, its own taking the place of the caller's, from the
-space's repository, its agent's tool and its mode. Once the shutting-down
-machine has read that choice and tells the hub it leaves the space there,
-that machine imports the package under the space's ID, as `shoal restore`
-of a kept package does, and queues its agents' restores, which continue
-their sessions. A chat in a workspace's worktree goes where that workspace
-went, once it has continued there, and stays when the workspace stays. The `system_shutdown`, `daemon_stopped` or `handed_over` alert names, for
-each space, the machine it went to, or that it stays and why: its package
-did not reach the hub in time, no machine can take it, or the hub cannot
-be reached. A space whose leaving the hub did not acknowledge in time may
-have gone, which the alert says; it keeps no restore here either. A space
-that stays restores here at boot as before. One that went keeps no restore
-here, and once this machine's link opens again it retires its copy as after
-any takeover; work a reboot moved does not come back on its own. A space
-the chosen machine fails to continue stays here too, and the hub raises a
-`handover_failed` alert naming `shoal resume <id>` here and
-`shoal restore <id>`, which takes it over from the hub's package. Every
-SIGTERM or SIGINT the daemon receives counts as a shutdown, on any
-platform, so a logout that ends the daemon, a service manager's stop and
-Ctrl-C of a foreground daemon hand work over too; `shoal daemon restart`,
-`shoal daemon stop` and upgrades hand nothing over. When a shutdown is
-cancelled after the hand-over, the machine has the hub retire its copies
-of the spaces that went, as it does once its link opens again.
+A command for a space another machine of the hub owns works from any of them.
+The daemon that receives it forwards it through the hub to the space's
+machine. That machine decides it as it decides its own callers' requests.
+This covers every command that reads or changes a space's state. It also
+covers following an agent's session and reading an attached file, whose bytes
+come back as that machine reads them.
 
-A machine joined to a hub announces its sleep, whether it is `always_on` or
-`intermittent`: on macOS from IOKit's will-sleep notification, on Linux from
-logind's `PrepareForSleep` under a sleep delay lock. It first sends the hub
-one notice naming each space whose package lacks changes and since when,
-then a new package of each space that changed, or on an `always_on` machine,
-which keeps no packages current, of each space with an agent working or
-queued, all at once, until a second before the platform stops waiting:
-logind's `InhibitDelayMaxSec`, or 30 seconds on macOS. Then it closes its
-link and admits no queued agent until the machine fully wakes, so a dark
-wake, such as Power Nap's, changes nothing. A machine whose link drops while
-its last report said it ran on battery below 5% counts as one that announced
-its sleep at that report.
+Your terminal's commands and a device's go as yours. A space's processes'
+commands go with that space's scope and permissions, which its machine vouches
+for. So an agent acts on the spaces below its own on every machine, and is
+refused the rest. An action a space's permission sets to `propose` is refused
+from another machine, since its approval request would belong to the space's
+machine.
 
-Once a machine that announced its sleep has been away for 10 minutes, the
-hub takes over each of its spaces that has something to do (an agent
-working at its last report, a queued agent, or an event or request the hub
-holds for it since the notice, which takes it over as it arrives) and whose package is
-current or lacks only changes from less than 15 minutes before the notice.
-It places each as a shutdown's hand-over does, and the machine it chose
-continues it under its ID and queues its agents' restores; a chat in a
-workspace's worktree goes with that workspace, and only together. A
-`spaces_taken_over` alert names where they went, and the events the hub
-held for them follow them there. A space whose package lags more stays, and
-the `machine_unreachable` alert below names it. The machine retires its
-copies of the spaces taken over once it wakes, as after any takeover, while
-waking within the 10 minutes leaves everything where it was. These times
-and the battery level are fixed, not settings.
+An attached file stays on the machine that keeps its copy. On any other
+machine, a record of it in `shoal files`, an alert or a thread names that
+machine where it would give the copy's path.
 
-The hub never takes a space over on its own otherwise: a machine that is
-awake but lost only the hub keeps working. Once an `intermittent` machine, or
-any that announced its sleep, has been unreachable for 30 minutes, the hub
-records one `machine_unreachable` alert
-for that drop, naming its spaces that had something to do (an agent working
-when its link dropped, a queued agent, or an event the hub holds for one
-since), how far behind the hub's package of each is, and the
-`shoal restore` that takes it over. A revoked
-machine's spaces leave the hub's lists.
+The link carries such answers as byte streams beside its other traffic. Each
+stream is held to what its reader has taken, so a reader that falls behind
+holds up nothing else.
 
-A command for a space another machine of the hub owns works from any of
-them: the daemon that takes it forwards it through the hub to the space's
-machine, which decides it as it decides its own callers'. Your terminal's
-commands go as yours; a space's processes' go with that space's scope and
-permissions, which its machine vouches for, so an agent acts on the spaces
-below its own on every machine and is refused the rest, and a device's go as
-yours. An action a space's permission sets to `propose` is refused from another
-machine, since its approval request would belong to that space's machine. This covers every command
-that reads or changes a space's state, and following an agent's session and
-reading an attached file, whose bytes come back as its machine reads them. An
-attached file stays on the machine that keeps its copy: a record of it on
-any other machine, in `shoal files`, an alert or a thread, names that machine
-where it would give the copy's path. The link to the hub carries such answers as byte streams beside
-its other traffic, each held to what its reader has taken, so a reader that
-falls behind holds up nothing else. A machine that received a request but
-did not answer it in time fails the command, saying that the request may go
-on there, which `shoal status <space>` shows. Commands that need the
-machine they run on, such as acquiring and releasing leases,
-starting a demo and an agent's hooks, are refused for a space elsewhere,
-naming its machine, as is a command that attaches files, which that
-machine cannot read, and `resume --focus` and `--execution`. `shoal stop`,
-`shoal resume`, `shoal restart` and `shoal restore --discard-agent` take
-`--machine <name or ID>`, repeatable, which selects the spaces of that
-machine that `--all` would select there, by what it last reported: those
-with something to stop, those whose saved work an unfinished assignment
-resumes, those with an agent running and those with something to discard.
+A machine that received a request but did not answer it in time fails the
+command. The error says the request may go on there, which
+`shoal status <space>` shows.
+
+A command that needs the machine it runs on is refused for a space elsewhere,
+naming its machine. Such commands acquire and release leases, start a demo,
+attach files, which the other machine cannot read, or run an agent's hooks.
+`resume` with `--focus` or `--execution` is refused the same way.
+
+## Select another machine's spaces
+
+`shoal stop`, `shoal resume`, `shoal restart` and
+`shoal restore --discard-agent` take `--machine <name or ID>`, which repeats.
+It selects the spaces of that machine that `--all` would select there, by what
+the machine last reported:
+
+- `stop` selects those with something to stop;
+- `resume` selects those whose saved work an unfinished assignment resumes;
+- `restart` selects those with an agent running;
+- `restore --discard-agent` selects those with something to discard.
+
 The reports name the machine of each space elsewhere, as `--json` does in
-`machine`. The picker of `shoal resume` offers the other machines' spaces
-with something to resume. Without a target, a
-command's picker offers the other machines' spaces that the request it
-sends for the picked space reaches, after this machine's, as each
-machine's daemon judges its own for that request, every space of one that
-is offline, each naming its machine, and an offline one with when the hub
-last saw it; choosing one acts as naming it does. A command that works in the
-space's worktree, terminal or files here, as `cd`, `exec` and
-`stop --interrupt` do, offers only this machine's.
+`machine`.
 
-While a space's machine is offline, a message, an answer, an approval
-decision or a stop for it waits at the hub, and the command says so, naming
-the machine, when the hub last saw it and when the request expires; the hub
-delivers what waits, in order, once the machine connects. A request still
-waiting after seven days is dropped, and the space whose process sent it, or
-else you, hears of it in a `hub_expired` alert, as of one the machine received
-but whose link closed before it confirmed it ran, which the hub never sends
-twice. A `stop --machine` reports one line per offline machine, with how
-many stops wait for it. Any other command for an
-offline machine's space, following a session included, fails at once, naming
-the machine and when the hub last saw it, and `shoal restore <id>`, which
-takes the space over here, where the hub keeps a package of it;
-under `--machine`, `resume` and `restore --discard-agent` skip an offline
-machine's spaces, naming it, and go on with the others. `shoal restore` of a
-removed space whose record another machine keeps names that machine, and
-`shoal move <id> -o FILE` with `shoal restore --from FILE`, which open it
-here.
+## Pickers
 
-`shoal start --machine <name or ID>` starts a space on another joined machine
-of the hub, a workspace or a chat, below the space `--parent` names, else
-below the caller's own, else at the top level. Your machine's daemon
-forwards the start through the hub, and that machine's daemon starts it as
-its own `shoal start` does, so the space's queue, limits, cleanup, ports and
-leases are that machine's, and its queue starts the agent in the background
-there with that machine's agent tools and modes: `--mode` names one of that
-machine's, which decides whether it starts a workspace or a chat, and a
-terminal's picker lists them. That machine finds the repository by
-its origin, cloning it as `shoal repo add <url>` does where it has none; a
-start on any machine below another machine's space, in a repository the
-starting machine lacks, clones it from the origin URL that space's machine
-reports to the hub. A
-`--base` goes as the origin's branch of that name, or as a commit one of the
-origin's branches holds; a base with commits only your machine has, such as
-a stacked branch you have not pushed, goes along as a Git bundle of what the
-origin's default branch lacks, so nothing needs a push first.
-`--wait` follows the workspace's preparation there, and `--here` and
-`--focus` start the agent there at once and attach your terminal to it once
-the workspace is prepared, as `shoal attach` does, or leave it running there
-without a terminal. `--fork` carries the forked session's files there first,
-where that machine's agent tool looks for them under the repository's
-settings, so its agent starts from them. `--copy` and `--checkpoint` carry the
-copied files there, ignored ones excepted, as a bundle of the copied HEAD and
-of a commit that keeps them, and the copy's new branch there starts at that
-HEAD with them unsaved. `--in`, which names a workspace of your machine, does
-not combine with `--machine`. A
-start from a device, such as an app, goes to the machine its launch names,
-else to the hub's
+Without a target, a command's picker offers this machine's spaces, then the
+other machines' spaces that the request it sends for the picked space
+reaches. Each machine's daemon judges its own spaces for that request. The
+picker offers every space of an offline machine. Each space names its machine,
+and an offline machine's says when the hub last saw it. Choosing a space acts
+as naming it does.
+
+The picker of `shoal resume` offers the other machines' spaces with something
+to resume.
+
+A command that works in the space's worktree, terminal or files here offers
+only this machine's spaces, as `cd`, `exec` and `stop --interrupt` do.
+
+## Requests for an offline machine
+
+While a space's machine is offline, a message, an answer, an approval decision
+or a stop for the space waits at the hub. The command says so, naming the
+machine, when the hub last saw it and when the request expires. The hub
+delivers what waits, in order, once the machine connects.
+
+A request still waiting after seven days is dropped. The space whose process
+sent it, or else you, hears of it in a `hub_expired` alert. A request the
+machine received, but whose link closed before it confirmed that it ran, is
+reported the same way. The hub never sends such a request twice.
+
+`stop --machine` reports one line per offline machine, with how many stops
+wait for it. Under `--machine`, `resume` and `restore --discard-agent` skip an
+offline machine's spaces, naming it, and go on with the others.
+
+Any other command for an offline machine's space fails at once, following a
+session included. The error names the machine and when the hub last saw it.
+Where the hub keeps a package of the space, it also names `shoal restore <id>`,
+which [takes the space over](#take-over-a-space-from-an-offline-machine) here.
+
+`shoal restore` of a removed space whose record another machine keeps names
+that machine. It also names `shoal move <id> -o FILE` with
+`shoal restore --from FILE`, which open the space here.
+
+## Start on another machine
+
+`shoal start --machine <name or ID>` starts a workspace or a chat on another
+joined machine. The space goes below the space `--parent` names, else below
+the caller's own, else at the top level.
+
+Your machine's daemon forwards the start through the hub. That machine's
+daemon starts it as its own `shoal start` does, so the space's queue, limits,
+cleanup, ports and leases are that machine's. Its queue starts the agent in
+the background there, with that machine's agent tools and modes. `--mode`
+names one of that machine's modes, which decides whether the start makes a
+workspace or a chat. A terminal's picker lists those modes.
+
+That machine finds the repository by its origin. Where it has none, it clones
+it as `shoal repo add <url>` does. A start below another machine's space, on
+any machine, in a repository the starting machine lacks, clones it from the
+origin URL that the space's machine reports to the hub.
+
+A `--base` goes as the origin's branch of that name, or as a commit that one
+of the origin's branches holds. A base with commits only your machine has,
+such as a stacked branch you have not pushed, goes along as a Git bundle of
+what the origin's default branch lacks. So nothing needs a push first.
+
+`--wait` follows the workspace's preparation there. `--here` and `--focus`
+start the agent there at once. Once the workspace is prepared, they attach
+your terminal to the agent as `shoal attach` does. Without a terminal, they
+leave it running there.
+
+`--fork` first carries the forked session's files there. That machine's agent
+tool looks for them under the repository's settings, so its agent starts from
+them. `--copy` and `--checkpoint` carry the copied files there, except ignored
+ones, as a bundle of the copied HEAD and of a commit that keeps them. The
+copy's new branch there starts at that HEAD, with the files unsaved.
+
+`--in` names a workspace of your machine, so it does not combine with
+`--machine`.
+
+A start from a device, such as an app, goes to the machine its launch names.
+Without one, it goes to the hub's
 [`[machine.hub] default_machine`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub),
 else to the machine the device sent it to.
 
-A start without `--machine` whose agent runs detached, such as a background
-chat, a child an agent starts or a trigger's launch, goes where the hub's
-[`[machine.hub] placement`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
-policy puts it, and continues there as a start with `--machine` does; one
-that runs in your terminal, or needs your machine, as `--in`, `--copy`,
-`--fork`, `--path`, `--add-blocker`, a workspace of yours it reopens on its
-branch or issue, and a repository your machine lacks or that has no origin
-do, stays on your machine. The hub places it from what each connected
-machine last reported with its spaces: the origins of its repositories, its
-`max_heavy_agents`, the heavy agents its admission would start now, the
-memory new work may use, the heavy agents waiting in its queue and whether
-its user walked away while its [`keep_awake`](machine.md#walking-away)
-admits nothing new then, or [paused it](machine.md#pausing-a-machine), which
-`hub ls --json` shows as `capacity`. A start that finds the machine full
-meanwhile waits in its queue there; placement never moves a space once it
-is created. `shoal start` names the machine with the policy's reason, and
-each connected machine it skipped for lacking the repository or the agent
-tool or for a user who walked away or paused it, which `--json` gives as `placement` in a chat's start and as a last
-document after a workspace's; a hub that cannot be asked leaves the start on
-your machine, as does a machine the start never reached, such as one that went
-offline since its last report, with a warning. Under `placement = "external"`, an
-unscoped client on the hub's machine, such as an app's server, registers as
-the placer with `shoal-client`'s `hub::Placing` and answers each snapshot the
-hub sends it, the start and every connected machine, with the machines in
-order of preference; the latest registration takes over from the one before.
-A start the placer does not answer within two seconds, or answers with a
-machine that is not connected or lacks the start's repository or agent tool,
-since placement never clones a repository, and one without a placer, is
-placed by `balanced`, which the start names.
+## Placement
 
-The tree of spaces may span machines: a space that moves to another machine,
-or that `shoal start --machine` starts there, without the space above it stays below it there, once what the hub lists of
-that space takes it as a parent here would, and its permissions stay no wider
-than that space's, as its machine last reported them. Removing a space
-removes the spaces below it on other machines first, through their own
-machines; one that cannot go, or a removal that confirmed only the spaces it
-saw here, keeps it. A space on an offline machine cannot go: for a removal
-you or an agent asked for, the hub holds that space's removal until its
-machine connects, and the space above stays until it is removed again. What a space passes up the
-tree, its agent's alerts, threads, approval requests, completion, ready
-marks and exits, and the issue and PR activity of a space without an agent,
-reaches the nearest space above with an agent wherever it runs, and that
-space decides the space's approval requests, answers the threads it holds and
-sends it an alert from its own machine. A machine whose link to the hub is down
-keeps what its spaces pass up and sends it once the link opens. A thread that
-waits for a holder, or an approval request for a coordinator, that waited
-[`[machine.hub] escalate_after_minutes`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
-for a coordinator whose machine is offline passes to the next space above
-with an agent on a connected machine, or to you.
+A start without `--machine` whose agent runs detached goes where the hub's
+[`[machine.hub] placement`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+policy puts it. Such starts include a background chat, a child an agent starts
+and a trigger's launch. The start then continues there as a start with
+`--machine` does.
+
+A start stays on your machine when it runs in your terminal or needs your
+machine:
+
+- it takes `--in`, `--copy`, `--fork`, `--path` or `--add-blocker`;
+- it reopens a workspace of yours on its branch or issue;
+- your machine lacks its repository, or the repository has no origin.
+
+The hub places a start from what each connected machine last reported with
+its spaces, which `hub ls --json` shows as `capacity`:
+
+- the origins of its repositories;
+- its `max_heavy_agents`, and the heavy agents its admission would start now;
+- the memory new work may use;
+- the heavy agents waiting in its queue;
+- whether its user [walked away](machine.md#walking-away) while its
+  `keep_awake` admits nothing new then, or
+  [paused it](machine.md#pausing-a-machine).
+
+A start that finds the machine full meanwhile waits in its queue there.
+Placement never moves a space once it is created.
+
+`shoal start` names the machine with the policy's reason. It also names each
+connected machine it skipped, for lacking the repository or the agent tool,
+or for a user who walked away or paused it. `--json` gives these as
+`placement`, in a chat's start and as a last document after a workspace's.
+
+A start stays on your machine, with a warning, when the hub cannot be asked.
+So does a start that never reached the chosen machine, such as one that went
+offline since its last report.
+
+### External placement
+
+Under `placement = "external"`, an unscoped client on the hub's machine, such
+as an app's server, registers as the placer with `shoal-client`'s
+`hub::Placing`. It answers each snapshot the hub sends it, of the start and
+every connected machine, with the machines in order of preference. The latest
+registration takes over from the one before.
+
+The hub places a start by `balanced` instead, and the start names it, when:
+
+- no placer is registered;
+- the placer does not answer in the time the
+  [configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+  gives;
+- it answers with a machine that is not connected or lacks the start's
+  repository or agent tool, since placement never clones a repository.
+
+## The space tree across machines
+
+The tree of spaces may span machines. A space stays below the space above it
+when it moves to another machine without that space, or when
+`shoal start --machine` starts it there. Its machine reads that parent from
+what the hub lists of it, as it reads a parent of its own. The space's
+permissions stay no wider than the parent's, as the parent's machine last
+reported them.
+
+Removing a space first removes the spaces below it on other machines, through
+their own machines. A space below that cannot go keeps the space above. So
+does a removal that confirmed only the spaces it saw here.
+
+A space on an offline machine cannot go. For a removal you or an agent asked
+for, the hub holds that space's removal until its machine connects. The space
+above stays until it is removed again.
+
+What a space passes up the tree reaches the nearest space above with an agent,
+wherever it runs. That covers its agent's alerts, threads, approval requests,
+completion, ready marks and exits, and the issue and PR activity of a space
+without an agent. That space decides the space's approval requests, answers
+the threads it holds and sends it alerts from its own machine. A machine whose
+link to the hub is down keeps what its spaces pass up, and sends it once the
+link opens.
+
+A thread or approval request that waits for a coordinator whose machine is
+offline passes on after
+[`[machine.hub] escalate_after_minutes`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub).
+
+## Packages on the hub
+
+An `intermittent` machine keeps the latest package of each of its workspaces
+and chats on the hub, so their work outlives the machine going away. A package
+is what [`shoal move --keep -o`](move.md) writes: a new checkpoint of a
+workspace with a bundle of its commits, its agents' session files and its
+records. The hub's package keeps the space's own ID, and the machine builds it
+without stopping its agents.
+
+The machine looks at a space when its agent's turn ends, and at every space
+every 10 minutes. It sends a space whose HEAD, branch, files, agents' session
+files or records changed since its last package. Records include its links,
+threads and queued work. It sends each space at most once every 5 minutes. A
+space that did not change sends nothing.
+
+The hub keeps one package per space in its state directory. It replaces a
+package only once the new one has arrived whole. It deletes the package once
+the space ends on its machine, as by removal or a move, or once the machine is
+revoked.
+
+While the disk of its state directory has less free space than
+[`[machine.overload.warning] disk_free_gib`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#overload),
+the hub refuses new packages and records a `hub_package_refused` alert.
+
+The hub's own machine sends no packages.
+
+## Take over a space from an offline machine
+
+`shoal restore <space>`, by number or ID, takes over a space whose
+`intermittent` machine is offline, from the package the hub keeps of it. An
+agent does so as its [`admin` permission](modes.md#permitted-actions) allows,
+as for `restore --from`.
+
+The restore fetches the package and imports it under the space's ID, as
+`shoal restore --from` does. Its claim makes the space this machine's. It
+queues the restores of the space's agents, which continue their sessions. It
+warns when the machine had changes the package lacks, naming how old the
+oldest is.
+
+## Retire a copy
+
+When the machine a space was taken from connects again, the hub names the
+spaces taken over meanwhile. The machine retires its copy of each: it stops
+the copy's agents and removes it through the removal path. The removal keeps a
+checkpoint, the agents' sessions in its removal record, and the branch. It
+leaves the spaces below, whose parent now runs on the other machine.
+
+A copy that changed after the hub's package also raises a `space_diverged`
+alert, naming what opens that work. For a workspace, that is
+`shoal start --copy <id> --checkpoint <number>` with the checkpoint its
+removal kept. For a chat, it is its agents' sessions.
+
+A copy the machine cannot remove raises a `space_conflict` alert, naming the
+error and `shoal rm <id>`. The hub asks the machine again the next time it
+connects.
+
+## Hand-over at shutdown
+
+A joined machine hands its spaces over as it shuts down, whether it is
+`always_on` or `intermittent`. Under
+[`keep_awake = "handover"`](machine.md#handing-work-over), it also hands over
+the spaces with something to do once its user walks away. So does a
+[pause](machine.md#pausing-a-machine). A machine in no hub keeps its spaces.
+So does the hub's own machine, unless it is paused.
+
+The [stop before the shutdown](load.md) saves the agents first. The machine
+then sends the hub the final package of every chat, and of every workspace
+whose worktree is ready except one a CI job runs in. It sends them all at
+once, until a second before logind's `InhibitDelayMaxSec` ends. For a signal,
+it sends them for 15 seconds, which the service definition's stop timeout adds
+to the daemon's own.
+
+For each package that arrives whole, the hub chooses a machine among the other
+connected machines, by its
+[`[machine.hub] placement`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
+policy. The hub's own machine stands in for the caller's. The hub chooses from
+the space's repository, its agent's tool and its mode.
+
+The shutting-down machine reads that choice and tells the hub it leaves the
+space there. The chosen machine then imports the package under the space's
+ID, as `shoal restore` of a kept package does. It queues the agents' restores,
+which continue their sessions. A chat in a workspace's worktree goes where
+that workspace went, once the workspace has continued there. It stays when the
+workspace stays.
+
+A `system_shutdown`, `daemon_stopped` or `handed_over` alert names the machine
+each space went to. For a space that stays, it says why: its package did not
+reach the hub in time, no machine can take it, or the hub cannot be reached. A
+space whose leaving the hub did not acknowledge in time may have gone, and the
+alert says so. It keeps no restore here either.
+
+A space that stays restores here at boot as before. A space that went keeps no
+restore here. Once this machine's link opens again, it
+[retires its copy](#retire-a-copy). Work a reboot moved does not come back on
+its own.
+
+When the chosen machine fails to continue a space, the space stays here too.
+The hub raises a `handover_failed` alert naming `shoal resume <id>` here and
+`shoal restore <id>`, which takes the space over from the hub's package.
+
+The daemon counts every SIGTERM or SIGINT it receives as a shutdown, on any
+platform. So a logout that ends the daemon, a service manager's stop and
+Ctrl-C of a foreground daemon hand work over too. `shoal daemon restart`,
+`shoal daemon stop` and upgrades hand nothing over.
+
+When a shutdown is cancelled after the hand-over, the machine has the hub
+retire its copies of the spaces that went at once, as it does once its link
+opens again.
+
+## Sleep announcement
+
+A joined machine announces its sleep, whether it is `always_on` or
+`intermittent`. On macOS, it acts on IOKit's will-sleep notification. On
+Linux, it acts on logind's `PrepareForSleep` under a sleep delay lock.
+
+It first sends the hub one notice, naming each space whose package lacks
+changes and since when. It then sends a new package of each space that
+changed, all at once. An `always_on` machine keeps no packages current, so it
+sends a package of each space with an agent working or queued instead. It
+sends until a second before the platform stops waiting: logind's
+`InhibitDelayMaxSec`, or 30 seconds on macOS.
+
+The machine then closes its link. It admits no queued agent until it fully
+wakes, so a dark wake, such as Power Nap's, changes nothing.
+
+A machine whose link drops while its last report said it ran on battery below
+5% counts as having announced its sleep at that report.
+
+## Takeover after a sleep
+
+Once a machine that announced its sleep has been away for 10 minutes, the hub
+takes over each of its spaces that has something to do. A space has something
+to do when:
+
+- its agent was working at the machine's last report;
+- it has a queued agent;
+- the hub holds an event or request for it since the notice. The hub takes
+  over such a space as the event arrives.
+
+The hub takes over only a space whose package is current, or lacks only
+changes from less than 15 minutes before the notice. It places each space as
+a [shutdown's hand-over](#hand-over-at-shutdown) does. The machine it chose
+continues the space under its ID and queues its agents' restores. A chat in a
+workspace's worktree goes with that workspace, and only together.
+
+A `spaces_taken_over` alert names where the spaces went. The events the hub
+held for them follow them there. A space whose package lags more stays, and
+the [`machine_unreachable` alert](#unreachable-machines) names it.
+
+The machine retires its copies of the spaces taken over once it wakes. A
+machine that wakes within the 10 minutes keeps everything where it was.
+
+These times and the battery level are fixed, not settings.
+
+## Unreachable machines
+
+The hub takes a space over on its own only after an announced sleep. A machine
+that is awake but lost only the hub keeps working.
+
+Once an `intermittent` machine, or one that announced its sleep, has been
+unreachable for 30 minutes, the hub records one `machine_unreachable` alert
+for that drop. The alert names the machine's spaces that had something to do:
+an agent working when its link dropped, a queued agent, or an event the hub
+holds for one since. For each space, it says how far behind the hub's package
+is, and gives the `shoal restore` that takes it over.
 
 ## Path forwarding
 
 [`[machine.hub] forward`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
-lets one address and tunnel serve the hub and an app's own server, such as
-Quay's, which runs as its own process, a paired device using `shoal-client`.
-The hub's listener forwards a request under one of its path prefixes, the
-longest that covers it, to that prefix's local address with its path
-unchanged, upgrades such as a WebSocket's included, once a paired machine or
-device signed it: the request names the member in `shoal-member`, the time
-it was signed in `shoal-time`, within five minutes of the hub's clock, a
-nonce no earlier request used in `shoal-nonce`, and in `shoal-signature`
-the member's signature of what `shoal_protocol::hub::app_servers::signed`
-makes of them, the method and the path with its query. The server receives
-`shoal-member`, which the hub checked, without the other three. The
-signature covers no body. Any other request under a prefix is refused with
-`401` and never reaches the server, and a request under no prefix is `404`.
+lets one address and tunnel serve both the hub and an app's own server, such
+as Quay's. That server runs as its own process, a paired device that uses
+`shoal-client`.
+
+The hub's listener forwards a request under one of the path prefixes to that
+prefix's local address, with its path unchanged. The longest prefix that
+covers the request wins. Upgrades, such as a WebSocket's, are forwarded too.
+
+The hub forwards a request only once a paired machine or device signed it. A
+signed request carries these headers:
+
+- `shoal-member` names the member;
+- `shoal-time` gives the time it was signed, within five minutes of the hub's
+  clock;
+- `shoal-nonce` gives a nonce no earlier request used;
+- `shoal-signature` gives the member's signature of what
+  `shoal_protocol::hub::app_servers::signed` makes of them, the method, and the
+  path with its query.
+
+The signature covers no body. The server receives `shoal-member`, which the
+hub checked, without the other three headers.
+
+The hub refuses any other request under a prefix with `401`, and it never
+reaches the server. A request under no prefix gets `404`.
+
 The hub keeps each nonce it took in its store until requests signed when it
-was are no longer taken, so a restart lets none through twice.
+was taken are no longer accepted. So a restart lets no request through twice.

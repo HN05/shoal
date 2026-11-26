@@ -5,7 +5,8 @@ deleting and moving repositories, and Git profiles.
 
 Other files cover the other `repo` commands: [Issues](issues.md#repository-conventions)
 covers `repo labels`, [Configuration](config.md) covers `repo setup` and
-`repo config`, and [Hub](hub.md) covers sharing repositories between machines.
+`repo config`, and [Hub](hub.md#shared-repositories) covers sharing
+repositories between machines.
 
 ## Register a repository
 

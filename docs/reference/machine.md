@@ -55,11 +55,11 @@ alert. It tries again only once no agent has work or the config reloads.
 
 Once the user walks away under `finish`, the machine admits no new work. The
 [agent queue](queue.md) starts no agent, restore, CI job or review, and the
-hub's [placement](hub.md) skips the machine. Queued work waits for the user's
+hub's [placement](hub.md#placement) skips the machine. Queued work waits for the user's
 return.
 
 Running turns go on. Once they end, the machine sleeps, and its sleep announcement hands what is left to
-the [hub](hub.md).
+the [hub](hub.md#sleep-announcement).
 
 ## Handing work over
 
@@ -68,7 +68,7 @@ it is about to sleep, as when its lid closes. It then admits no new work, as
 under `finish`.
 
 On a machine joined to a hub, other than the hub's own, the spaces with
-something to do go to other machines as a [shutdown's hand-over](hub.md) sends
+something to do go to other machines as a [shutdown's hand-over](hub.md#hand-over-at-shutdown) sends
 them. A space has something to do while its agent works on a turn or waits in
 the queue to be restored. Its agent stops as `shoal stop` stops it, saving its
 session, and its final package goes to the hub, which continues it on another
