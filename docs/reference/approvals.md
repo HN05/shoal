@@ -125,7 +125,7 @@ it. Otherwise the space deciding the request is told, or you get
 Requests survive a daemon restart and a failed removal. Removing a workspace
 deletes its requests, except proposed issues, which belong to the repository.
 Of all requests, only pending PR proposals and push requests keep a workspace
-from idle cleanup.
+from automatic cleanup.
 
 ## Approval for agent issues and PRs
 
@@ -160,7 +160,6 @@ open, with its defaults filled in, at the branch's current commit.
 
 Running it again at the same commit returns that request. At a newer commit it
 replaces the request, and the old one becomes [outdated](#outdated-requests).
-A pending PR proposal keeps the workspace from automatic cleanup.
 
 ### Attached files
 
@@ -282,8 +281,7 @@ The request binds:
 `--force-with-lease` works as usual. `--dry-run` and push options are refused.
 Pushing the same again names the same request. Pushing another commit to the
 ref replaces the request, and the old one becomes
-[outdated](#outdated-requests). A pending push keeps the workspace from
-automatic cleanup.
+[outdated](#outdated-requests).
 
 Shoal cannot hold an explicit push URL that a fetch URL starts with, such as
 one that is also fetched from: Git would rewrite that fetch URL too. The agent
