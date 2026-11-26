@@ -412,7 +412,8 @@ The inbox lists what needs you, each item with its workspace:
 - the [ready marks](completion.md#ready-for-review) of spaces whose agent is
   not working, one row per marked item;
 - running [demos](demos.md);
-- Git worktrees under a repository's Shoal directory that no workspace owns;
+- Git worktrees under a repository's Shoal directory that no workspace owns,
+  leaving out a repository whose worktrees' ownership is changing;
 - automatic cleanup that fails other than in a workspace;
 - repositories whose default branch has failed to [sync](repo.md#default-branch-sync) for 30
   minutes.
@@ -529,6 +530,10 @@ Their `links` hold the assigned issues in `issues`, first assigned first, the
 assigned PRs in `prs`, and the items recorded as opened or related in `opened`
 and `related`. Each item has `kind`, `url` and `title` when known. An
 acknowledgement without a PR URL leaves `links.prs` empty.
+
+Their `running` says whether an agent or command that Shoal started runs in the
+space. A workspace's execution that the daemon has not verified since it
+restarted does not count. Their `done` says whether a completion is recorded.
 
 ### Find the spaces of an item
 

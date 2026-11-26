@@ -47,7 +47,9 @@ and target.
 
 The reviewer is `--agent`, else
 [`[review] agent`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews),
-else `agent.default`, else one you pick. Its AI tool needs a
+else `agent.default`, else one you pick. The picker offers the agents whose
+review command is installed, and "No agent", which runs no review. Its AI tool
+needs a
 [`review` template](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#ai-tools).
 It runs with `--model` and `--effort` over its
 [configured model and effort](agents.md#model-and-effort), and keeps them when the review starts

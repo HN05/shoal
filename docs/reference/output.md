@@ -1,6 +1,7 @@
 # Output
 
 This file says how every command prints its results and errors.
+[Command line](../design/cli.md#output) gives the reasons.
 
 ## Format
 
