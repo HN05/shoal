@@ -120,7 +120,9 @@ carries its components and data model, and never changes once posted.
 A surface uses only the components of A2UI's basic catalog. It takes that
 catalog's `catalogId` when it names none. A `Text` takes Markdown. An image
 names a file sent with `--attach` by its file name: an `Image`'s literal `url`,
-or one in Markdown, in a `Text` or in the data model. Code and changes stay
+or one in Markdown, in a `Text` or in the data model. A `Text` a function
+builds, such as `formatString`, takes no bracket outside a whole image in its
+own text or the data it joins, since Shoal cannot see what it joins. Code and changes stay
 `--code` and `--changes`.
 
 Shoal refuses a surface that:

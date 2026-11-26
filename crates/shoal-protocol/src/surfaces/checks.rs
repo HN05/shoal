@@ -172,7 +172,10 @@ impl Surface {
                  by its file name",
                 component.id
             );
-            if let Some(part) = image_part(component) {
+            if let Some(part) = fragments(self, component)
+                .into_iter()
+                .find(|part| image_part(part))
+            {
                 bail!(
                     "component {} builds its text from {}, part of an image; write each \
                      image whole in one text so Shoal can check its file",
@@ -302,16 +305,64 @@ fn images(component: Component<'_>) -> Vec<&str> {
     }
 }
 
-/// The text a function building `component`'s text takes that holds part
-/// of a Markdown image, which the function could join into one Shoal
-/// cannot check.
-fn image_part(component: Component<'_>) -> Option<&str> {
-    let text = component
+/// The fragments a function building `component`'s text may join: its own
+/// texts and the data they interpolate, as `${/path}` or `@path` names it,
+/// all of the data for a relative path. Empty for a literal text.
+fn fragments<'a>(surface: &'a Surface, component: Component<'a>) -> Vec<&'a str> {
+    let Some(call) = component
         .get("text")
-        .filter(|text| text.get("@call").is_some())?;
-    strings(text).into_iter().find(|text| {
-        (text.contains("![") || text.contains("](")) && markdown::images(text).is_empty()
-    })
+        .filter(|text| text.get("@call").is_some())
+    else {
+        return Vec::new();
+    };
+    let own = strings(call);
+    let paths = (own.iter().flat_map(|text| interpolated(text)))
+        .chain(bound_paths(call))
+        .collect::<Vec<_>>();
+    let data = paths.into_iter().flat_map(|path| {
+        let read = match path.starts_with('/') {
+            true => surface.data(path),
+            false => surface.data("/"),
+        };
+        read.map_or_else(Vec::new, strings)
+    });
+    own.into_iter().chain(data).collect()
+}
+
+/// A fragment that holds a bracket outside its whole images: part of an
+/// image a function could join with other fragments into one.
+fn image_part(fragment: &str) -> bool {
+    let mut rest = fragment.to_owned();
+    for image in markdown::images(fragment) {
+        rest = rest.replace(image.source, "");
+    }
+    rest.contains(['[', ']'])
+}
+
+/// The paths the `${...}` of `text` interpolate.
+fn interpolated(text: &str) -> Vec<&str> {
+    let mut paths = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("${") {
+        rest = &rest[start + 2..];
+        let Some(end) = rest.find('}') else {
+            break;
+        };
+        paths.push(rest[..end].trim());
+        rest = &rest[end + 1..];
+    }
+    paths
+}
+
+/// The data paths `@path` names anywhere in `value`.
+fn bound_paths(value: &Value) -> Vec<&str> {
+    match value {
+        Value::Object(fields) => (fields.get("@path").and_then(Value::as_str).into_iter())
+            .chain(fields.values().flat_map(bound_paths))
+            .collect(),
+        Value::Array(values) => values.iter().flat_map(bound_paths).collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Every text `value` holds, however deep.

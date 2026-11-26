@@ -519,6 +519,19 @@ fn images_a_text_function_takes_are_checked_too() {
     whole.checked(&["https://example.com/chart.png"]).unwrap();
     let split = formatted("![chart](${/url}");
     assert!(refusal(split, &[]).contains("part of an image"));
+    // Data the function joins counts as its parts too.
+    let joined = surface(
+        json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
+            "args": {"value": "${/prefix}${/suffix}"}}}]),
+        json!({"prefix": "!", "suffix": "[chart](https://example.com/x.png)"}),
+    );
+    assert!(refusal(joined, &[]).contains("part of an image"));
+    let plain = surface(
+        json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
+            "args": {"value": "Hello ${/name}"}}}]),
+        json!({"name": "Ada"}),
+    );
+    plain.checked(&[]).unwrap();
 }
 
 #[test]
