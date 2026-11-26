@@ -332,10 +332,10 @@ fn show_kept(cleanup: &ManualCleanup) {
     let width = cleanup
         .kept
         .iter()
-        .map(|kept| kept.space.chars().count())
+        .map(|kept| shoal_text::width(&kept.space))
         .max()
         .unwrap_or(0);
     for kept in &cleanup.kept {
-        outln!("  {:width$}  {}", kept.space, kept.reason);
+        outln!("  {}  {}", shoal_text::pad(&kept.space, width), kept.reason);
     }
 }

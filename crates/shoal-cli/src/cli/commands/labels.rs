@@ -24,12 +24,16 @@ fn render(labels: &[Label]) {
     }
     let width = labels
         .iter()
-        .map(|label| label.name.len())
+        .map(|label| shoal_text::width(&label.name))
         .max()
         .unwrap_or(0);
     for label in labels {
         let exclusive = if label.exclusive { " (exclusive)" } else { "" };
-        let line = format!("{:width$}  {}{exclusive}", label.name, label.description);
+        let line = format!(
+            "{}  {}{exclusive}",
+            shoal_text::pad(&label.name, width),
+            label.description
+        );
         outln!("{}", line.trim_end());
     }
 }

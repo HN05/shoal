@@ -130,8 +130,8 @@ fn line(time: &str, space: Option<&str>, entry: &LogEntry, palette: Palette) -> 
     let label = format!("{label:<width$}", width = entries::LABEL_WIDTH);
     let line = match space {
         Some(space) => format!(
-            "{time}  {space:<width$}  {label}  {details}",
-            width = SPACE_WIDTH
+            "{time}  {}  {label}  {details}",
+            shoal_text::pad(space, SPACE_WIDTH)
         ),
         None => format!("{time}  {label}  {details}"),
     };

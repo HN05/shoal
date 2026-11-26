@@ -67,7 +67,7 @@ fn render(listed: &[ListedBranch]) {
         return;
     }
     let width = (listed.iter())
-        .map(|listed| listed.branch.name.as_str().chars().count())
+        .map(|listed| shoal_text::width(listed.branch.name.as_str()))
         .max()
         .unwrap_or(0);
     for listed in listed {
@@ -76,8 +76,8 @@ fn render(listed: &[ListedBranch]) {
             .map(|at| at.get(..10).unwrap_or(at))
             .unwrap_or("");
         let line = format!(
-            "{:width$}  {}  {day:10}  {:8}  {}",
-            branch.name,
+            "{}  {}  {day:10}  {:8}  {}",
+            shoal_text::pad(branch.name.as_str(), width),
             branch.head.short(),
             merged(listed.merged),
             notes(listed).join("  "),

@@ -41,7 +41,8 @@ pub fn wrapped(items: &[String], separator: &str, width: Option<usize>) -> Strin
         match lines.last_mut() {
             Some(line)
                 if width.is_none_or(|width| {
-                    line.chars().count() + separator.len() + item.chars().count() <= width
+                    shoal_text::width(line) + shoal_text::width(separator) + shoal_text::width(item)
+                        <= width
                 }) =>
             {
                 line.push_str(separator);
@@ -179,7 +180,7 @@ fn status_line(progress: Option<&Progress>) -> Option<&str> {
     progress?.status.as_deref()
 }
 
-/// The most characters a progress cell shows of the step under way.
+/// The most columns a progress cell shows of the step under way.
 const STEP_WIDTH: usize = 32;
 
 /// How far along a space's agent is, as `3/5 Fix the timeout`: the done
@@ -190,7 +191,10 @@ fn progress_cell(progress: Option<&Progress>) -> Cell {
     };
     let count = format!("{}/{}", progress.done(), progress.steps.len());
     let text = match progress.current_step() {
-        Some(step) => format!("{count} {}", truncated(step.name.clone(), STEP_WIDTH)),
+        Some(step) => format!(
+            "{count} {}",
+            shoal_text::cut_width(step.name.clone(), STEP_WIDTH)
+        ),
         None => count,
     };
     (text, None)
@@ -592,7 +596,7 @@ pub struct WidthLimit {
     pub width: usize,
 }
 
-/// A fitted column keeps this many characters however narrow the limit.
+/// A fitted column keeps this many columns however narrow the limit.
 const MIN_FITTED: usize = 12;
 
 /// `aligned`, cutting `limit`'s column with an ellipsis where rows would
@@ -605,7 +609,7 @@ pub fn aligned_to<const N: usize>(
     let mut widths: Vec<usize> = (0..N)
         .map(|column| {
             rows.iter()
-                .map(|row| row[column].0.chars().count())
+                .map(|row| shoal_text::width(&row[column].0))
                 .max()
                 .unwrap_or(0)
         })
@@ -616,7 +620,7 @@ pub fn aligned_to<const N: usize>(
     let rows = rows.into_iter().map(|row| {
         let mut column = 0;
         row.map(|(text, style)| {
-            let cell = (truncated(text, widths[column]), style);
+            let cell = (shoal_text::cut_width(text, widths[column]), style);
             column += 1;
             cell
         })
@@ -635,7 +639,7 @@ pub fn aligned_to<const N: usize>(
             let padding = if Some(column) == last {
                 0
             } else {
-                widths[column] - text.chars().count()
+                widths[column] - shoal_text::width(&text)
             };
             line.push_str(&match style {
                 Some(style) if !text.is_empty() => palette.paint(style, text),
@@ -656,15 +660,6 @@ fn narrow(widths: &mut [usize], limit: WidthLimit) {
     };
     let column = &mut widths[limit.column];
     *column = column.saturating_sub(excess).max(MIN_FITTED.min(*column));
-}
-
-fn truncated(text: String, width: usize) -> String {
-    if text.chars().count() <= width {
-        return text;
-    }
-    let mut cut: String = text.chars().take(width.saturating_sub(1)).collect();
-    cut.push('…');
-    cut
 }
 
 pub fn repository_label(repo: &Repository, palette: Palette) -> String {

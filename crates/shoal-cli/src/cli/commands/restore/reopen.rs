@@ -148,7 +148,7 @@ impl reopening::Reopening for Context {
 pub(super) fn removed_lines(removed: &[RemovedSpace]) -> Vec<String> {
     let width = removed
         .iter()
-        .map(|space| space.name.chars().count())
+        .map(|space| shoal_text::width(space.name.as_str()))
         .max()
         .unwrap_or(0);
     removed
@@ -165,8 +165,8 @@ pub(super) fn removed_lines(removed: &[RemovedSpace]) -> Vec<String> {
                 None => Default::default(),
             };
             format!(
-                "{:width$}{branch}  removed {} ({}){checkpoint}, restorable until {}",
-                space.name,
+                "{}{branch}  removed {} ({}){checkpoint}, restorable until {}",
+                shoal_text::pad(space.name.as_str(), width),
                 space.removed_at.local_seconds(),
                 space.cause,
                 space.expires_at.local_seconds(),

@@ -48,6 +48,12 @@ fn cut_width_keeps_wide_characters_within_the_columns() {
 }
 
 #[test]
+fn pad_fills_the_columns_a_wide_text_leaves() {
+    assert_eq!(pad("漢a", 5), "漢a  ");
+    assert_eq!(pad("漢字", 3), "漢字");
+}
+
+#[test]
 fn cut_width_keeps_text_that_fits() {
     assert_eq!(cut_width("漢字".to_owned(), 4), "漢字");
 }

@@ -26,12 +26,16 @@ fn render(reviewers: &[Reviewer]) {
     }
     let width = reviewers
         .iter()
-        .map(|reviewer| reviewer.name.len())
+        .map(|reviewer| shoal_text::width(&reviewer.name))
         .max()
         .unwrap_or(0);
     for reviewer in reviewers {
         let team = if reviewer.team { " (team)" } else { "" };
-        let line = format!("{:width$}  {}{team}", reviewer.name, reviewer.display_name);
+        let line = format!(
+            "{}  {}{team}",
+            shoal_text::pad(&reviewer.name, width),
+            reviewer.display_name
+        );
         outln!("{}", line.trim_end());
     }
 }

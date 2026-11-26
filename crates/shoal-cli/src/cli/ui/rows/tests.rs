@@ -265,6 +265,30 @@ fn width_limits_cut_one_column_and_keep_the_rest_aligned() {
 }
 
 #[test]
+fn wide_characters_take_two_columns_of_their_cell() {
+    let plain = Palette::stdout(true);
+    let cell = |text: &str| (text.to_owned(), None);
+    let rows = || {
+        vec![
+            [cell("漢字のタイトル"), cell("open")],
+            [cell("ascii"), cell("draft")],
+        ]
+    };
+    assert_eq!(
+        aligned(rows(), plain),
+        ["漢字のタイトル  open", "ascii           draft"]
+    );
+    let limit = Some(WidthLimit {
+        column: 0,
+        width: 12,
+    });
+    assert_eq!(
+        aligned_to(rows(), plain, limit),
+        ["漢字のタイ…   open", "ascii         draft"]
+    );
+}
+
+#[test]
 fn wrapped_items_fill_lines_up_to_the_width() {
     let items: Vec<String> = ["enter: cd", "tab: next view", "ctrl-d: delete"]
         .map(String::from)

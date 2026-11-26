@@ -101,7 +101,7 @@ fn pick(ctx: &Context, kept: Vec<KeptBranch>) -> Result<Vec<KeptBranch>> {
 pub(super) fn lines(kept: &[KeptBranch]) -> Vec<String> {
     let width = |field: fn(&KeptBranch) -> &str| {
         kept.iter()
-            .map(|branch| field(branch).chars().count())
+            .map(|branch| shoal_text::width(field(branch)))
             .max()
             .unwrap_or(0)
     };
@@ -114,9 +114,9 @@ pub(super) fn lines(kept: &[KeptBranch]) -> Vec<String> {
                 count => format!("{count} unpushed commits"),
             };
             format!(
-                "{:repository_width$}  {:branch_width$}  {commits}  last commit {}: {}",
-                branch.repository,
-                branch.branch,
+                "{}  {}  {commits}  last commit {}: {}",
+                shoal_text::pad(&branch.repository, repository_width),
+                shoal_text::pad(branch.branch.as_str(), branch_width),
                 branch.committed_at.local_seconds(),
                 branch.subject,
             )

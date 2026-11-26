@@ -64,6 +64,13 @@ pub fn cut_width(text: String, columns: usize) -> String {
     marked(&text[..end])
 }
 
+/// `text` followed by the spaces that make it `columns` wide, or as it is
+/// when it is wider, so that the columns after it line up.
+pub fn pad(text: &str, columns: usize) -> String {
+    let padding = columns.saturating_sub(width(text));
+    format!("{text}{}", " ".repeat(padding))
+}
+
 fn char_width(c: char) -> usize {
     c.width().unwrap_or(0)
 }
