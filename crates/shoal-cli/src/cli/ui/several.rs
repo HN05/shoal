@@ -63,14 +63,15 @@ pub fn pick_many_selected(
 }
 
 /// The binding that selects the entries `selected` names once the picker
-/// starts, then highlights the first; none when it names none of them.
+/// has loaded its rows, which `start` would not wait for, then highlights
+/// the first; none when it names none of them.
 fn selecting(entries: &Entries, selected: &[String]) -> Option<String> {
     let toggles: Vec<String> = (1..)
         .zip(entries.iter())
         .filter(|(_, (id, _))| selected.contains(id))
         .map(|(position, _)| format!("pos({position})+toggle"))
         .collect();
-    (!toggles.is_empty()).then(|| format!("start:{}+first", toggles.join("+")))
+    (!toggles.is_empty()).then(|| format!("load:{}+first", toggles.join("+")))
 }
 
 /// Ask once whether to go on with `action` on every item of `losses`, as

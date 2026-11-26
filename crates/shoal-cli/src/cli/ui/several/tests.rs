@@ -34,7 +34,7 @@ fn a_starting_selection_toggles_its_entries_by_position() {
         .collect();
     assert_eq!(
         selecting(&entries, &["a".to_owned(), "c".to_owned()]).as_deref(),
-        Some("start:pos(1)+toggle+pos(3)+toggle+first")
+        Some("load:pos(1)+toggle+pos(3)+toggle+first")
     );
     assert_eq!(selecting(&entries, &["z".to_owned()]), None);
 }
