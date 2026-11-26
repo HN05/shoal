@@ -14,17 +14,15 @@ use crate::{
     shoal_dirs::{ShoalDir, remove_dir, remove_file, remove_if_empty},
 };
 
-/// Delete the copies in `dir` last written before `cutoff`, and the
-/// directories of spaces they leave empty, keeping `dir` and its mark, which
-/// a fetch under way writes below; whether any went. A directory Shoal did
-/// not create stays.
+/// Also deletes the space directories they leave empty. Keeps `dir` and its
+/// mark, which a fetch under way writes below. A directory Shoal did not
+/// create stays. Returns whether any went.
 pub fn remove_written_before(dir: &ShoalDir, cutoff: SystemTime) -> Result<bool> {
     remove_copies(dir, |path| Ok(last_written(path)? < cutoff))
 }
 
-/// Delete the copies in `dir` that lose nothing, as [`remove_written_before`]
-/// deletes: each a fetch finished writing and nobody changed since, which
-/// the machine that keeps its source can give again.
+/// Deletes the copies a fetch finished writing and nobody changed since,
+/// which the machine that keeps their source can give again.
 pub fn remove_unchanged(dir: &ShoalDir) -> Result<bool> {
     remove_copies(dir, |path| {
         Ok(is_real_dir(path)?
@@ -32,8 +30,7 @@ pub fn remove_unchanged(dir: &ShoalDir) -> Result<bool> {
     })
 }
 
-/// Delete the copies in `dir` that `goes` selects, with the directories of
-/// spaces they leave empty, keeping `dir` and its mark; whether any went.
+/// Keeps `dir` and its mark. Returns whether any went.
 fn remove_copies(dir: &ShoalDir, goes: impl Fn(&Path) -> Result<bool>) -> Result<bool> {
     if !dir.is_own() {
         return Ok(false);
@@ -55,8 +52,7 @@ fn remove_copies(dir: &ShoalDir, goes: impl Fn(&Path) -> Result<bool>) -> Result
     Ok(removed)
 }
 
-/// Delete `path`, a copy's directory or anything else left there, when
-/// `goes` selects it; whether it did.
+/// Returns whether it did.
 fn remove_if(path: &Path, goes: impl Fn(&Path) -> Result<bool>) -> Result<bool> {
     if !goes(path)? {
         return Ok(false);
@@ -68,9 +64,8 @@ fn remove_if(path: &Path, goes: impl Fn(&Path) -> Result<bool>) -> Result<bool> 
     Ok(true)
 }
 
-/// When `path`, or anything directly in it, last changed, as a copy's
-/// directory changes when a fetch writes into it and its file when the user
-/// edits it; long ago for what is already gone.
+/// A copy's directory changes when a fetch writes into it, and its file when
+/// the user edits it. Long ago for what is already gone.
 fn last_written(path: &Path) -> Result<SystemTime> {
     let mut latest = modified(path)?;
     if is_real_dir(path)? {
@@ -81,7 +76,7 @@ fn last_written(path: &Path) -> Result<SystemTime> {
     Ok(latest)
 }
 
-/// When `path` itself, never what a symbolic link names, last changed.
+/// Never what a symbolic link names.
 fn modified(path: &Path) -> Result<SystemTime> {
     match std::fs::symlink_metadata(path) {
         Ok(metadata) => metadata
@@ -92,7 +87,7 @@ fn modified(path: &Path) -> Result<SystemTime> {
     }
 }
 
-/// Whether `path` is a directory, never through a symbolic link.
+/// Never through a symbolic link.
 fn is_real_dir(path: &Path) -> Result<bool> {
     match std::fs::symlink_metadata(path) {
         Ok(metadata) => Ok(metadata.is_dir()),
@@ -101,7 +96,7 @@ fn is_real_dir(path: &Path) -> Result<bool> {
     }
 }
 
-/// The paths in `directory`; none once it is gone.
+/// None once the directory is gone.
 fn entries(directory: &Path) -> Result<Vec<std::path::PathBuf>> {
     let read = match std::fs::read_dir(directory) {
         Ok(read) => read,

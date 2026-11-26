@@ -1,7 +1,6 @@
-//! The store's records of attached files: which copy belongs to which
-//! workspace or chat, how it came, and the removed workspaces and removed chats
-//! whose files stay. A space is gone when neither a workspace nor a chat has
-//! its ID; its row in `removed_space_files` says how long its files stay.
+//! The store's records of attached files. A space is gone when no space
+//! has its ID; its row in `removed_space_files` says how long its files
+//! stay.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use std::path::{Path, PathBuf};
@@ -20,7 +19,6 @@ const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached
         OR space_id IN (SELECT space_id FROM removed_space_files WHERE chat),
     space_id,session";
 
-/// The owners of attached files that are gone.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
@@ -72,10 +70,9 @@ fn space(row: &rusqlite::Row<'_>) -> rusqlite::Result<Space> {
     })
 }
 
-/// Record the `copies` as attached to the space `space_id` from
-/// `source` by `attacher`, in the caller's transaction. A
-/// copy already recorded, as when the same files are sent again, keeps its
-/// record and takes any new title; none is recorded for a space that is gone.
+/// Runs in the caller's transaction. A copy already recorded, as when the
+/// same files are sent again, keeps its record and takes any new title.
+/// Nothing is recorded for a space that is gone.
 pub fn record(
     tx: &Connection,
     space_id: &SpaceId,
@@ -117,7 +114,7 @@ pub fn record(
     Ok(())
 }
 
-/// [`record`], returning the copies' records in their order.
+/// Returns the copies' records in their order.
 pub(super) fn record_all(
     tx: &Transaction<'_>,
     space_id: &SpaceId,
@@ -137,8 +134,7 @@ pub(super) fn record_all(
     Ok(records)
 }
 
-/// The records of the copies at `paths`, in their order; a copy whose
-/// record is gone drops out.
+/// In their order. A copy whose record is gone drops out.
 pub(super) fn at(db: &Connection, paths: &[PathBuf]) -> Result<Vec<AttachedFile>> {
     let mut statement = db.prepare(&format!("SELECT {COLUMNS} FROM space_files WHERE path=?1"))?;
     let mut records = Vec::new();
@@ -151,8 +147,7 @@ pub(super) fn at(db: &Connection, paths: &[PathBuf]) -> Result<Vec<AttachedFile>
     Ok(records)
 }
 
-/// The records of the sent `files`, by their space and ID, in their
-/// order; a file whose record is gone drops out.
+/// In their order. A file whose record is gone drops out.
 pub(super) fn sent(db: &Connection, files: &[SentFile]) -> Result<Vec<AttachedFile>> {
     let mut statement = db.prepare(&format!(
         "SELECT {COLUMNS} FROM space_files WHERE id=?1 AND space_id=?2"
@@ -167,7 +162,7 @@ pub(super) fn sent(db: &Connection, files: &[SentFile]) -> Result<Vec<AttachedFi
     Ok(records)
 }
 
-/// The files of the space `space_id`, oldest first.
+/// Oldest first.
 pub(super) fn list(db: &Connection, space_id: &SpaceId) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
@@ -177,7 +172,6 @@ pub(super) fn list(db: &Connection, space_id: &SpaceId) -> Result<Vec<AttachedFi
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// How many files the space `space_id` has.
 pub fn count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
     let count: i64 = db.query_row(
         "SELECT COUNT(*) FROM space_files WHERE space_id=?1",
@@ -187,8 +181,8 @@ pub fn count(db: &Connection, space_id: &SpaceId) -> Result<usize> {
     Ok(usize::try_from(count)?)
 }
 
-/// The files `home` keeps whose workspace has no recorded execution, running
-/// or unresolved, and that no running chat owns, oldest first.
+/// Files whose workspace has no recorded execution, running or unresolved,
+/// and that no running chat owns. Oldest first.
 pub(super) fn idle(db: &Connection, home: &HomeKey) -> Result<Vec<AttachedFile>> {
     let running = crate::executions::spaces_with_executions(db)?;
     let files: Vec<AttachedFile> = db
@@ -205,11 +199,10 @@ pub(super) fn idle(db: &Connection, home: &HomeKey) -> Result<Vec<AttachedFile>>
         .collect())
 }
 
-/// Whether a record is kept in the home of the repository `?1`, or with none
-/// in the `root_dir` `?2`.
+/// A record is in the home of the repository `?1`, or without one in the
+/// `root_dir` `?2`.
 const IN_HOME: &str = "repository_id IS ?1 AND (?1 IS NOT NULL OR root_dir IS ?2)";
 
-/// The `root_dir`s that keep files of chats without a repository.
 pub fn roots(db: &Connection) -> Result<Vec<String>> {
     Ok(db
         .prepare(
@@ -220,7 +213,6 @@ pub fn roots(db: &Connection) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The removed workspace or removed chat `id` whose files are kept.
 pub(super) fn gone_space(db: &Connection, id: &SpaceId) -> Result<Option<Space>> {
     Ok(db
         .query_row(
@@ -235,8 +227,7 @@ pub(super) fn gone_space(db: &Connection, id: &SpaceId) -> Result<Option<Space>>
         .optional()?)
 }
 
-/// The removed workspaces and removed chats whose files are kept, those that
-/// attached them first oldest first.
+/// Those that attached them first come first.
 pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
     Ok(db
         .prepare(&format!(
@@ -247,8 +238,6 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The IDs of the removed workspaces and removed chats whose files are
-/// kept.
 pub fn kept_ids(db: &Connection) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
@@ -258,9 +247,9 @@ pub fn kept_ids(db: &Connection) -> Result<Vec<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The removed workspaces and removed chats whose files `home` keeps though
-/// their record expired, or that never had one. The record stays until the
-/// files are deleted, so a failed deletion still lists them as the space's.
+/// Includes spaces that never had an expiry. The record stays until the
+/// files are deleted, so a failed deletion still lists them as the
+/// space's.
 pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
@@ -274,7 +263,6 @@ pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Whether a record names a copy in one of `directories`.
 pub(super) fn any_in(db: &Connection, directories: &[PathBuf]) -> Result<bool> {
     for directory in directories {
         let prefix = format!("{}/", directory.to_string_lossy());
@@ -289,7 +277,6 @@ pub(super) fn any_in(db: &Connection, directories: &[PathBuf]) -> Result<bool> {
     Ok(false)
 }
 
-/// Forget the records `ids`.
 pub(super) fn forget(tx: &Transaction<'_>, ids: &[i64]) -> Result<()> {
     for id in ids {
         tx.execute("DELETE FROM space_files WHERE id=?1", [id])?;
@@ -297,7 +284,6 @@ pub(super) fn forget(tx: &Transaction<'_>, ids: &[i64]) -> Result<()> {
     Ok(())
 }
 
-/// Forget every record of the removed workspace or removed chat `space_id`.
 pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<()> {
     tx.execute("DELETE FROM space_files WHERE space_id=?1", [space_id])?;
     tx.execute(
@@ -307,10 +293,9 @@ pub(super) fn forget_space(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<(
     Ok(())
 }
 
-/// Keep the files of the removed space `space_id`, which keep its last
-/// name, until `expires_at`, and move those it was the parent of to its own
-/// parent, in the transaction that deletes its record, before the record
-/// goes.
+/// The files keep the space's last name. Moves those it was the parent of to
+/// its own parent. Runs in the transaction that deletes the space's record,
+/// before the record goes.
 pub fn keep_removed(
     tx: &Transaction<'_>,
     space_id: &SpaceId,
@@ -331,8 +316,7 @@ pub fn keep_removed(
     Ok(())
 }
 
-/// Forget the expired records of removed spaces whose files are gone, as
-/// when `files rm` deleted them all.
+/// As when `files rm` deleted them all.
 pub(super) fn forget_expired(db: &mut Connection) -> Result<()> {
     db.execute(
         "DELETE FROM removed_space_files WHERE expires_at <= unixepoch()
@@ -342,8 +326,8 @@ pub(super) fn forget_expired(db: &mut Connection) -> Result<()> {
     Ok(())
 }
 
-/// Give the restored space `id` back the files it kept, under its name and
-/// parent now, in the transaction that records the restore.
+/// Under the space's name and parent now, in the transaction that records
+/// the restore.
 pub fn restore(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute(
         "UPDATE space_files SET space=(SELECT name FROM spaces WHERE id=?1),
@@ -355,8 +339,7 @@ pub fn restore(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// Keep the files of the removed space `space_id` until `until` at least,
-/// while a restore of it runs.
+/// Keeps them at least until `until`, while a restore of the space runs.
 pub fn claim(tx: &Transaction<'_>, space_id: &SpaceId, until: crate::time::UnixTime) -> Result<()> {
     tx.execute(
         "UPDATE removed_space_files SET expires_at=?2 WHERE space_id=?1 AND expires_at < ?2",
@@ -365,8 +348,6 @@ pub fn claim(tx: &Transaction<'_>, space_id: &SpaceId, until: crate::time::UnixT
     Ok(())
 }
 
-/// Move the records of files whose space was below the space `id`, which
-/// goes, to its own parent.
 fn reparent(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     tx.execute(
         "UPDATE space_files
@@ -377,7 +358,6 @@ fn reparent(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// Forget every record of repository `repository_id`.
 pub(super) fn forget_repository(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     db.execute(
         "DELETE FROM space_files WHERE repository_id=?1",
@@ -386,8 +366,7 @@ pub(super) fn forget_repository(db: &Connection, repository_id: &RepositoryId) -
     Ok(())
 }
 
-/// Point the recorded copies of repository `repository_id` from `source` to
-/// `destination`, in the transaction that moves the repository's directory.
+/// Runs in the transaction that moves the repository's directory.
 pub fn rebase(
     tx: &Transaction<'_>,
     repository_id: &RepositoryId,

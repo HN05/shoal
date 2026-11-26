@@ -1,6 +1,4 @@
-//! How long attached files stay: a removed space's stay for
-//! `cleanup.restore.retention_days` after its removal, and every file goes
-//! with its repository.
+//! How long attached files stay. See `docs/design/cleanup.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::space_ids::SpaceId;
@@ -12,11 +10,11 @@ use super::{FilesHome, HomeKey, Space, records};
 use crate::{log, model::Repository, time::UnixTime};
 
 impl Spaces {
-    /// Delete the directory of attached files with the repository, once its
-    /// workspaces are gone.
+    /// Runs once the repository's workspaces are gone.
     pub async fn delete_repository_files(&self, repo: &Repository) -> Result<()> {
         let _files = self.gates.lock_message_files(&repo.id).await;
-        // Records outlive copies a failed deletion leaves, so they stay listed.
+        // Records outlive the copies a failed deletion leaves, so they stay
+        // listed.
         let layout = super::layout::Layout::of(repo);
         tokio::task::spawn_blocking(move || layout.remove()).await??;
         let id = repo.id.clone();
@@ -25,8 +23,7 @@ impl Spaces {
             .await
     }
 
-    /// When the files of `space` that outlive it expire if it is removed
-    /// now: after its `cleanup.restore.retention_days`, or the global
+    /// After the space's `cleanup.restore.retention_days`, or the global
     /// setting's when its own cannot be read.
     pub async fn removed_files_expiry(
         &self,
@@ -49,17 +46,15 @@ impl Spaces {
         UnixTime::now() + retention
     }
 
-    /// Delete the directories of attached files of the removed `space` when
-    /// no record names a copy in them, as once `shoal files rm` deleted them
-    /// all, since no expiry would delete them later. A failure is logged,
-    /// since the removal already happened.
+    /// Deletes them only when no record names a copy in them, as once `shoal
+    /// files rm` deleted them all, since no expiry would delete them later.
+    /// A failure is logged, since the removal already happened.
     pub async fn delete_unrecorded_files(&self, daemon: &dyn Daemon, space: &Space) {
         if let Err(error) = self.try_delete_unrecorded_files(daemon, space).await {
             log!("attached files of {} not deleted: {error:#}", space.name);
         }
     }
 
-    /// [`Self::delete_unrecorded_files`], returning its failure.
     async fn try_delete_unrecorded_files(&self, daemon: &dyn Daemon, space: &Space) -> Result<()> {
         let (home, _files) = self
             .lock_files_home(daemon, &self.space_home(daemon, space).await?)
@@ -77,9 +72,8 @@ impl Spaces {
         tokio::task::spawn_blocking(move || layout.remove_kept(&id, &[])).await?
     }
 
-    /// Delete the files kept for removed workspaces and removed chats whose
-    /// record has expired, or that never had one. A failure keeps what it
-    /// concerns for the next pass and does not skip the rest.
+    /// Includes removed spaces that never had an expiry. A failure keeps
+    /// what it concerns for the next pass and does not skip the rest.
     pub async fn expire_results(&self, daemon: &dyn Daemon) -> Result<()> {
         let mut failed = Vec::new();
         for key in self.files_homes(daemon).await? {
@@ -92,7 +86,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// Delete the expired files `key` keeps for removed spaces.
     async fn expire_home_results(&self, daemon: &dyn Daemon, key: &HomeKey) -> Result<()> {
         let (home, _files) = self.lock_files_home(daemon, key).await?;
         let key = key.clone();
@@ -105,16 +98,15 @@ impl Spaces {
         Ok(())
     }
 
-    /// The removed workspaces and removed chats whose files are kept, those
-    /// that attached them first oldest first.
+    /// Those that attached them first come first.
     pub async fn kept_results(&self) -> Result<Vec<Space>> {
         self.store.run(|db| records::kept(db)).await
     }
 
-    /// Delete the files kept for the removed workspace or removed chat `space`
-    /// when they, or the directories that keep them, are where `holds` says, as on a filesystem low on space,
-    /// and return whether it did. The place is checked with the files gate
-    /// held, so a move of the repository's directory cannot come between.
+    /// Deletes only where `holds` says the files or their directories are,
+    /// as on a filesystem low on space. The place is checked with the files
+    /// gate held, so a move of the repository's directory cannot come
+    /// between.
     pub async fn delete_results_in(
         &self,
         daemon: &dyn Daemon,
@@ -144,8 +136,7 @@ impl Spaces {
         Ok(there)
     }
 
-    /// Delete the files kept in `home` for the removed workspace or removed
-    /// chat `space_id`, and then their records. Callers hold the gate of its
+    /// Deletes the files, then their records. Callers hold the gate of its
     /// files.
     async fn delete_kept_files(&self, home: &FilesHome, space_id: SpaceId) -> Result<()> {
         let (layout, id) = (home.layout(), space_id.clone());
@@ -156,7 +147,6 @@ impl Spaces {
             .await
     }
 
-    /// The paths of the copies recorded for the removed space `space_id`.
     async fn kept_copies(&self, space_id: &SpaceId) -> Result<Vec<std::path::PathBuf>> {
         let id = space_id.clone();
         let files = self.store.read(move |db| records::list(db, &id)).await?;

@@ -1,5 +1,5 @@
-//! An attached file's bytes streamed to its caller, as to one on another
-//! machine: Shoal's copy as the daemon reads it, then its end.
+//! An attached file's bytes streamed to a caller, as to one on another
+//! machine.
 use crate::Spaces;
 
 use anyhow::{Context as _, Result};
@@ -9,12 +9,10 @@ use tokio::{net::UnixStream, sync::mpsc};
 
 use crate::frames::{self, OperationGuard};
 
-/// Shoal's copy of an attached file, open for a client to read.
 pub struct OpenedCopy(File);
 
 impl Spaces {
-    /// Open the copy of the file `id` attached to the workspace or chat
-    /// `selector` names, or kept for the removed space of that ID.
+    /// Also opens a file kept for a removed space of that ID.
     pub async fn open_attached_file(
         &self,
         selector: &SpaceSelector,
@@ -31,8 +29,8 @@ impl Spaces {
         Ok(OpenedCopy(copy))
     }
 
-    /// Send `copy`'s bytes as the answer to the request `id`, then its end,
-    /// until the client hangs up or a daemon restart closes the answer.
+    /// Sends the end last. Stops when the client hangs up or a daemon restart
+    /// closes the answer.
     pub async fn stream_attached_file(
         &self,
         stream: UnixStream,
@@ -57,8 +55,8 @@ impl Spaces {
     }
 }
 
-/// The frames of `copy`'s bytes, then its end, read on the blocking pool
-/// one frame ahead of the reader, until the reader drops them.
+/// Reads on the blocking pool one frame ahead of the reader, until the
+/// reader drops them.
 fn read_frames(mut copy: File) -> mpsc::Receiver<Result<FileBytes>> {
     let (sender, frames) = mpsc::channel(1);
     tokio::task::spawn_blocking(move || {

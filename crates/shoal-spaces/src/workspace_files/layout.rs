@@ -1,7 +1,6 @@
-//! Where a repository keeps the files attached to its workspaces and chats:
-//! beside the workspaces, in a directory its agents are given as a working
-//! directory, so they read the files where any sandbox lets them. The chats
-//! without a repository keep theirs in `root_dir`, where they run.
+//! Where attached files are kept: beside a repository's workspaces, or in
+//! `root_dir` for the chats without a repository. See
+//! `docs/design/coordination.md`.
 use shoal_ids::space_ids::SpaceId;
 use std::{
     io::ErrorKind,
@@ -19,28 +18,22 @@ use crate::{
 use shoal_daemon_base::file_copies::{incomplete_copies, keep_copies};
 use shoal_protocol::files::SessionCopy;
 
-/// The directory below a repository's attached files that keeps what
-/// workspaces handed back, which no workspace ID names.
+/// Keeps what workspaces handed back. No workspace ID names it.
 const RESULTS: &str = "results";
 
-/// The directory of one repository's attached files, or of those of the
-/// chats without a repository.
 #[derive(Debug, Clone)]
 pub struct Layout {
     dir: ShoalDir,
 }
 
 impl Layout {
-    /// The repository's attached files.
     pub fn of(repo: &Repository) -> Self {
         Self {
             dir: ShoalDir::of(repo, Contents::Attachments),
         }
     }
 
-    /// The attached files of the chats without a repository, in
-    /// `root_dir`, marked as those of the daemon whose state directory is
-    /// `state`.
+    /// Marked as those of the daemon whose state directory is `state`.
     pub fn outside_repositories(root_dir: &Path, state: &Path) -> Self {
         Self {
             dir: ShoalDir::outside_repositories(root_dir, state, Contents::Attachments),
@@ -51,20 +44,17 @@ impl Layout {
         self.dir.root()
     }
 
-    /// The directory, when this Shoal created it for its owner.
+    /// None unless this Shoal created the directory for its owner.
     pub fn own_root(&self) -> Option<&Path> {
         self.dir.is_own().then(|| self.root())
     }
 
-    /// The directory of the attached files of the space `id`, when this
-    /// Shoal keeps one there.
     pub fn existing(&self, id: &SpaceId) -> Option<PathBuf> {
         let directory = self.root().join(id);
         (self.dir.is_own() && directory.is_dir()).then_some(directory)
     }
 
-    /// The new, empty directory of the attached files of the space `id`,
-    /// creating the marked directory when missing.
+    /// Creates the marked directory when it is missing.
     pub fn prepare(&self, id: &SpaceId) -> Result<PathBuf> {
         self.dir.create()?;
         let directory = self.root().join(id);
@@ -73,17 +63,15 @@ impl Layout {
         Ok(directory)
     }
 
-    /// Copies of `files`, attached to `message` for the workspace
-    /// `workspace_id`. The same message with the same files reuses its
-    /// copies, so sending it again collapses with the unread one.
+    /// The same message with the same files reuses its copies, so sending it
+    /// again collapses with the unread one.
     pub fn keep(&self, workspace_id: &SpaceId, message: &str, files: &[NewFile]) -> Result<Kept> {
         let directory = self.root().join(workspace_id);
         self.keep_in(&directory, workspace_id, message, files, Limit::Sent)
     }
 
-    /// Copies of the files of an agent's session, each with the
-    /// [`SessionCopy`] it copies, for the space `space_id`, whatever their
-    /// size: a handoff that dropped one would lose the history it holds.
+    /// Copies whatever their size: a handoff that dropped one would lose the
+    /// history it holds.
     pub fn keep_session(
         &self,
         space_id: &SpaceId,
@@ -99,9 +87,7 @@ impl Layout {
         Ok(kept)
     }
 
-    /// Copies of the files `files` that the workspace `workspace_id` hands
-    /// the user with `message`, such as its completion or an alert, among its
-    /// results.
+    /// Such as with its completion or an alert.
     pub fn keep_results(
         &self,
         workspace_id: &SpaceId,
@@ -112,8 +98,7 @@ impl Layout {
         self.keep_in(&directory, workspace_id, message, files, Limit::Sent)
     }
 
-    /// Copies of `files` in `directory`, for the workspace `workspace_id`,
-    /// each refused as `limit` says.
+    /// Refuses each file as `limit` says.
     fn keep_in(
         &self,
         directory: &Path,
@@ -168,9 +153,9 @@ impl Layout {
         })
     }
 
-    /// Delete Shoal's copy at `path`, and the directories that held only it,
-    /// once the path is inside this repository's attached files, which Shoal
-    /// created, and stays there through any symbolic link.
+    /// Also deletes the directories that held only it. Refuses a path that
+    /// is not inside this repository's attached files, or leaves them
+    /// through a symbolic link.
     pub fn delete_copy(&self, path: &Path) -> Result<()> {
         self.dir.ensure_own()?;
         let shown = path.display();
@@ -194,8 +179,7 @@ impl Layout {
         Ok(())
     }
 
-    /// The directories that may hold the files kept for the space
-    /// `space_id` after it is gone: its own, and the results it handed back.
+    /// Its own directory, and the results it handed back.
     pub fn kept(&self, space_id: &SpaceId) -> [PathBuf; 2] {
         [
             self.root().join(space_id),
@@ -203,9 +187,8 @@ impl Layout {
         ]
     }
 
-    /// Delete the files kept for the space `space_id` after it is gone,
-    /// with the `copies` its records name elsewhere, as a restored workspace
-    /// keeps those of the ID it had before.
+    /// Also deletes the `copies` its records name elsewhere, as a restored
+    /// workspace keeps those of the ID it had before.
     pub fn remove_kept(&self, space_id: &SpaceId, copies: &[PathBuf]) -> Result<()> {
         if !self.dir.is_own() {
             return Ok(());
@@ -222,9 +205,8 @@ impl Layout {
         Ok(())
     }
 
-    /// Whether `path` is below this repository's attached files and its
-    /// directory stays there through any symbolic link; a directory that is
-    /// gone holds nothing to delete.
+    /// Its directory must stay there through any symbolic link. A directory
+    /// that is gone holds nothing to delete.
     fn contains(&self, path: &Path) -> bool {
         path.starts_with(self.root())
             && path
@@ -235,8 +217,6 @@ impl Layout {
                 })
     }
 
-    /// Whether the existing `directory` resolves inside this repository's
-    /// attached files through any symbolic link.
     fn resolves_inside(&self, directory: &Path) -> bool {
         match (directory.canonicalize(), self.root().canonicalize()) {
             (Ok(directory), Ok(root)) => directory.starts_with(root),
@@ -244,14 +224,12 @@ impl Layout {
         }
     }
 
-    /// Delete the directory with every attached file, when the repository
-    /// goes.
+    /// Runs when the repository goes.
     pub fn remove(&self) -> Result<()> {
         self.dir.remove()
     }
 }
 
-/// Which files a copy refuses.
 #[derive(Clone, Copy)]
 enum Limit {
     /// What a message cannot send, as [`super::check_path`] refuses it.
@@ -274,36 +252,32 @@ impl Limit {
     }
 }
 
-/// One of Shoal's copies, with its size in bytes, the title it was given
-/// and the session file it copies, as its record keeps it.
+/// As its record keeps it.
 #[derive(Debug, Clone)]
 pub struct Copy {
     pub path: PathBuf,
     pub bytes: u64,
     pub title: Option<String>,
-    /// The session file it copies, for a handoff's copy.
+    /// Set for a handoff's copy.
     pub session: Option<shoal_protocol::files::SessionCopy>,
 }
 
-/// The copies [`Layout::keep`] made or reused for one message.
 #[derive(Debug, Clone)]
 pub struct Kept {
     pub copies: Vec<Copy>,
-    /// The directory of copies made for this message, rather than reused.
+    /// None when the copies were reused.
     created: Option<PathBuf>,
-    /// The directory of the workspace's attached files.
     workspace: PathBuf,
 }
 
 impl Kept {
-    /// Whether the copies were made for an identical message before.
     pub fn reused(&self) -> bool {
         self.created.is_none()
     }
 
-    /// Delete the copies made for a message that was not queued, and the
-    /// workspace's directory when nothing else is left in it, as when the
-    /// workspace was removed while they were copied.
+    /// For a message that was not queued, as when the workspace was removed
+    /// while the files were copied. Also deletes the workspace's directory
+    /// when nothing else is left in it.
     pub fn discard(self) -> Result<()> {
         if let Some(created) = &self.created {
             remove_dir(created)?;

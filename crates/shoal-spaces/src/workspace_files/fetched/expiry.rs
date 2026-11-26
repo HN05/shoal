@@ -1,8 +1,4 @@
-//! How long fetched copies stay: `cleanup.restore.retention_days` after
-//! their fetch, the longest their source stays once its space is removed,
-//! or after their last change; or, when nobody changed them, until disk
-//! space cleanup needs their space, since the machine that keeps the source
-//! keeps them too; and every one goes with the repository it is kept beside.
+//! How long fetched copies stay. See `docs/design/coordination.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::{path::Path, time::SystemTime};
@@ -19,10 +15,10 @@ use crate::{
 };
 
 impl Spaces {
-    /// Delete the fetched copies fetched, or last changed, longer ago than
-    /// the retention of the repository they are kept beside, or the global
-    /// one in `root_dir`. A directory that fails keeps neither the others
-    /// nor its copies for the next pass.
+    /// Follows the retention of the repository they are kept beside, or the
+    /// global one in `root_dir`, counted from the fetch or the last change.
+    /// A directory that fails keeps neither the others nor its copies for
+    /// the next pass.
     pub async fn expire_fetched(&self, daemon: &dyn Daemon) -> Result<()> {
         let mut failed = Vec::new();
         for home in self.fetched_homes(daemon).await? {
@@ -35,8 +31,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// Delete the copies in `home` fetched, or last changed, longer ago than
-    /// its retention.
     async fn expire_fetched_in(&self, daemon: &dyn Daemon, home: Fetched) -> Result<()> {
         let retention = match &home.repository {
             Some(id) => daemon.repository_settings(id).await?,
@@ -53,10 +47,10 @@ impl Spaces {
         Ok(())
     }
 
-    /// Delete every fetched copy where `on` selects that loses nothing, as
-    /// on a filesystem low on space, returning whether any went: one a fetch
-    /// is writing, or the user changed since, stays for its expiry. A
-    /// failure is logged and keeps the rest of that directory.
+    /// Deletes only what loses nothing, as on a filesystem low on space: a
+    /// copy a fetch is writing, or the user changed since, stays for its
+    /// expiry. Returns whether any went. A failure is logged and keeps the
+    /// rest of that directory.
     pub async fn delete_fetched_in(&self, daemon: &dyn Daemon, on: impl Fn(&Path) -> bool) -> bool {
         let homes = match self.fetched_homes(daemon).await {
             Ok(homes) => homes,
@@ -75,15 +69,13 @@ impl Spaces {
         deleted
     }
 
-    /// Delete the directory of fetched copies beside the repository's
-    /// workspaces, as it goes.
+    /// Runs as the repository goes.
     pub async fn delete_repository_fetched(&self, repo: &Repository) -> Result<()> {
         let dir = ShoalDir::of(repo, Contents::Fetched);
         off_runtime::run(move || dir.remove()).await
     }
 
-    /// Every directory of fetched copies: each registered repository's and
-    /// `root_dir`'s.
+    /// Each registered repository's, and `root_dir`'s.
     async fn fetched_homes(&self, daemon: &dyn Daemon) -> Result<Vec<Fetched>> {
         let mut homes: Vec<_> = (daemon.repositories().await?.iter())
             .map(|repo| Fetched {
@@ -101,9 +93,8 @@ impl Spaces {
     }
 }
 
-/// One directory of fetched copies, named for logs, with the repository
-/// whose settings it follows; none for `root_dir`'s, which follows the
-/// global ones.
+/// Named for logs, with the repository whose settings it follows. None for
+/// `root_dir`'s, which follows the global settings.
 struct Fetched {
     name: String,
     dir: ShoalDir,
