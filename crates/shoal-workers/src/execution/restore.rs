@@ -155,14 +155,15 @@ async fn resolve_in(
     resolve(paths, records.home()?, restored, None, ending).await
 }
 
-/// Restore the `restored` session, which ended as `ending` says: one that
-/// ended mid-turn is asked to continue, told about its stop, and any other
-/// waits, or with resume arguments takes the updates that wait for it, and
-/// either is told `handoff` where the command accepts a prompt: agents with
+/// Restore the `restored` session, which ended as `ending` says. A session
+/// that ended mid-turn is asked to continue and told about its stop. Any
+/// other waits, or with resume arguments takes the updates that wait for
+/// it. Either is told `handoff` where the command accepts a prompt: with
 /// resume arguments and `{prompt}` in its `resume_command`.
-/// Resume arguments restore its session when known, otherwise the
-/// workspace's latest session, with its model and effort, in `home`, a
-/// workspace or a chat.
+///
+/// Resume arguments restore its session when known, and otherwise the
+/// latest session in `home`, a workspace or a chat, with its model and
+/// effort.
 pub async fn resolve<'a>(
     paths: &CommandPaths,
     home: impl Into<AgentHome<'a>>,

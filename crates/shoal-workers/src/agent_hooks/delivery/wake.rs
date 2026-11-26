@@ -67,8 +67,9 @@ async fn deliver(paths: &CommandPaths, inbox: &Inbox, updates: &Updates) -> Resu
 }
 
 /// Tell the daemon why the hook ends without starting the agent's turn, so
-/// a missed wake can be traced, for the inbox the wait found or was named,
-/// else the current one. Only Claude Code's debug output shows a failure.
+/// a missed wake can be traced. It reports for the inbox the wait found or
+/// was named, else the current one. Only Claude Code's debug output shows a
+/// failure.
 async fn report_end(paths: &CommandPaths, wait: &WakeWait, ended: WakeEnd) {
     let report = async {
         let space = match &wait.inbox {
@@ -118,13 +119,14 @@ async fn ending_signal() -> WakeEnd {
     }
 }
 
-/// Report the turn the wake starts before delivering its updates: Claude
-/// Code fires no hook when a hook's exit starts a turn, so the agent would
-/// show idle until its first tool call, and an idle stop could end the turn
-/// that consumed the update meant to restore it. Whether to deliver them:
-/// not when a stop of the agent came first, which leaves them unread for its
-/// restore. A failed report still delivers, since without the turn the agent
-/// would stay idle.
+/// Report the turn the wake starts, before delivering its updates. Claude
+/// Code fires no hook when a hook's exit starts a turn. Without the report,
+/// the agent would show idle until its first tool call, and an idle stop
+/// could end the turn that took the update meant to restore it.
+///
+/// Returns whether to deliver the updates. When a stop of the agent came
+/// first, they stay unread for its restore. A failed report still delivers,
+/// since without the turn the agent would stay idle.
 async fn woken_turn_starts(paths: &CommandPaths, inbox: &Inbox) -> bool {
     crate::client::agents::start_woken_turn(paths, inbox.space.clone())
         .await
@@ -190,9 +192,9 @@ async fn retry_next_updates(paths: &CommandPaths, wait: &mut WakeWait) -> Option
     }
 }
 
-/// The wake hook's wait: the space it was named, its inbox once found, and
-/// whether the daemon restarted before the next wait began, so it does not
-/// know the agent's scope until the agent's wrapper reattaches.
+/// The wake hook's wait: the space it was named, and its inbox once found.
+/// It records whether the daemon restarted before the next wait began. Such
+/// a daemon does not know the agent's scope until its wrapper reattaches.
 struct WakeWait {
     space: Option<SpaceSelector>,
     inbox: Option<Inbox>,

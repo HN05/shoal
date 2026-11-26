@@ -6,10 +6,10 @@ use super::{Relay, Relays};
 use crate::{client::connection::CommandPaths, operations::Failed, protocol::operations::Failure};
 use shoal_core::transfer::{Consent, MoveDestination, MoveOrder};
 
-/// Ask what the move `order` ends, `here` with its spaces this machine runs
-/// as planned, and each of `relays`, refusing before anything ends when a
+/// Ask what the move `order` ends: `here`, the spaces this machine runs as
+/// planned, and each of `relays`. Refuses before anything ends when a
 /// machine refuses its spaces, or without the caller's consent to all of
-/// it; the consent each relay passes on to its machine.
+/// it. Returns the consent each relay passes on to its machine.
 pub(super) async fn ask(
     paths: &CommandPaths,
     order: &MoveOrder,

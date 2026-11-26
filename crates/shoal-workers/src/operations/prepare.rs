@@ -69,9 +69,9 @@ pub(super) async fn prepare(
     Ok(Prepared { workspace, agent })
 }
 
-/// Create the worktree `workspace` has yet to get, then, when `setup`, run
-/// its setup for the agent that starts there when `for_agent`, unless the
-/// new worktree needs none, returning the workspace it leaves.
+/// Create the worktree `workspace` has yet to get. When `setup`, run its
+/// setup, for the agent that starts there when `for_agent`, unless the new
+/// worktree needs none. Returns the workspace as it leaves it.
 async fn ready(
     paths: &CommandPaths,
     workspace: Workspace,

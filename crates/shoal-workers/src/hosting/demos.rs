@@ -108,9 +108,9 @@ fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
     }
 }
 
-/// Show the demo `launch` describes in this terminal, or the session it
-/// runs in nested in its place where that place's host does not serve this
-/// terminal or the place no longer shows it.
+/// Show the demo `launch` describes in this terminal. Where the place's
+/// host does not serve this terminal, or the place no longer shows the
+/// demo, show the session it runs in nested instead.
 pub async fn open_demo(launch: &Launch) -> Result<()> {
     let place = crate::terminal::shown_here(&launch.origin).await;
     named(place.host)

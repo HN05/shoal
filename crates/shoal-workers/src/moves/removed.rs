@@ -12,10 +12,10 @@ use shoal_ids::{move_tickets::MoveTicket, space_ids::SpaceId};
 use shoal_protocol::model::RemovedSpace;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Move the record of the removed space `space`, with the records of the
-/// spaces its removal took that `carrying` carries, to the joined machine
-/// `destination` names, telling `steps` how far it got, while it holds the
-/// move lock of each record, which keeps its restore here off.
+/// Move the record of the removed space `space`, with the records
+/// `carrying` carries of the spaces its removal took, to the joined machine
+/// `destination` names. `steps` hears how far it got. It holds each
+/// record's move lock meanwhile, which keeps its restore here off.
 pub(super) async fn move_to_machine(
     paths: &CommandPaths,
     space: &RemovedSpace,
@@ -29,10 +29,10 @@ pub(super) async fn move_to_machine(
     moved
 }
 
-/// Have the daemon pack the record of `space` with those `carrying`
-/// carries and deliver it to the joined machine `destination` names,
-/// settling at the hub an arrival that machine could not report, taking
-/// each record's move lock into `held` first.
+/// Have the daemon pack the record of `space`, with those `carrying`
+/// carries, and deliver it to the joined machine `destination` names. Takes
+/// each record's move lock into `held` first. Settles at the hub an arrival
+/// that machine could not report.
 async fn deliver(
     paths: &CommandPaths,
     space: &RemovedSpace,
@@ -126,10 +126,10 @@ fn carried_ids(manifest: &Manifest) -> Vec<SpaceId> {
 }
 
 /// Settle at the hub the move `ticket` of the record of the removed space
-/// `selector` names, with the records of the spaces `carried`, to the
-/// joined machine named `machine`, whose arrival `error` left unknown:
-/// once the hub says that machine claimed it, this machine forgot it, with
-/// each carried record it claimed; otherwise it stays here.
+/// `selector` names, with the records `carried`, to the joined machine
+/// `machine`, whose arrival `error` left unknown. Once the hub says that
+/// machine claimed it, this machine forgets it, with each carried record it
+/// claimed. Otherwise it stays here.
 async fn settle(
     paths: &CommandPaths,
     (selector, carried): (&SpaceSelector, Vec<SpaceId>),

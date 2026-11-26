@@ -32,9 +32,9 @@ pub(super) struct Keys {
 }
 
 impl Keys {
-    /// Read the keys of the terminal on standard input when the block shows
-    /// on standard error and the wrapper holds it in the foreground, as it
-    /// does once its agent stopped; `None` otherwise.
+    /// Read the keys of the terminal on standard input. Only when the block
+    /// shows on standard error and the wrapper holds the terminal in the
+    /// foreground, as it does once its agent stopped; `None` otherwise.
     pub(super) fn open() -> Option<Self> {
         if !(std::io::stdin().is_terminal() && std::io::stderr().is_terminal() && foreground()) {
             return None;

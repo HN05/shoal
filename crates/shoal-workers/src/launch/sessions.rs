@@ -118,13 +118,12 @@ pub async fn place_session_files(
     placed_all
 }
 
-/// `shoal internal place-sessions`: put the session files whose list,
-/// with where each one's contents are, stdin holds where the agents look
-/// for them under the settings of `repository`, else of the global
-/// config, keeping one already there that the carried one does not
-/// continue. Exits 1 when a file could not be placed, so the fork that
-/// needs it is refused; a development build leaves them to the installed
-/// Shoal.
+/// `shoal internal place-sessions`: put the session files that stdin lists,
+/// with where each one's contents are, where the agents look for them. The
+/// settings of `repository`, else of the global config, say where. A file
+/// already there stays when the carried one does not continue it. Exits 1
+/// when a file could not be placed, so the fork that needs it is refused. A
+/// development build leaves them to the installed Shoal.
 pub async fn place_forked_sessions(
     paths: &CommandPaths,
     repository: Option<shoal_ids::repository_ids::RepositoryId>,
@@ -150,8 +149,8 @@ pub async fn place_forked_sessions(
 }
 
 /// Put `files`, which the daemon kept with the removal record `restored`,
-/// where the agents of `space` that restores it look for them, then have
-/// the daemon delete them once they all are.
+/// where the agents of `space`, which restores it, look for them. Once all
+/// are in place, have the daemon delete them.
 pub async fn install_kept_session_files(
     paths: &CommandPaths,
     space: SessionHome<'_>,
@@ -175,11 +174,11 @@ pub async fn install_kept_session_files(
     }
 }
 
-/// Copy the files of `session`, which agent `name` under `settings` starts
-/// from a fork of in `space`, where its tool looks for them under the
-/// space's `[env]`, from where it keeps them without it, as for a
-/// session another machine carried here. A failure only warns; the fork
-/// then starts from what that directory has.
+/// Copy the files of `session`, which agent `name` under `settings` forks
+/// from in `space`, to where its tool looks under the space's `[env]`. They
+/// come from where the tool keeps them without it, as for a session another
+/// machine carried here. A failure only warns; the fork then starts from
+/// what that directory has.
 pub async fn find_forked_session(
     paths: &CommandPaths,
     space: &crate::agents::HomeRecords,
@@ -214,9 +213,9 @@ pub async fn find_forked_session(
 }
 
 /// Copy the files of `session` of agent `name` that `store` keeps in
-/// `default` into `directory`, unless that is where they are, replacing a
-/// copy there that they continue, as after the session was carried again,
-/// and keeping one that went its own way.
+/// `default` into `directory`, unless they are there already. A copy there
+/// that they continue is replaced, as after the session was carried again.
+/// One that went its own way is kept.
 fn copy_session(
     store: &dyn transcripts::Store,
     (default, directory): (&Path, &Path),

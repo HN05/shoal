@@ -59,9 +59,9 @@ pub struct Shown<'a> {
     pub json: bool,
 }
 
-/// Start `spec` in this process's environment, without its secrets, or on
-/// the machine of the space it runs on, and follow it to its end below
-/// `display`, returning what it did. `json` says whether the process
+/// Start `spec` in this process's environment without its secrets, or on
+/// the machine of the space it runs on. Follow it to its end below
+/// `display`, and return what it did. `json` says whether the process
 /// prints JSON.
 pub async fn run<T>(
     paths: &CommandPaths,

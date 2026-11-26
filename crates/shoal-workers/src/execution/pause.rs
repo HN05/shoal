@@ -154,8 +154,8 @@ async fn await_restore(
 }
 
 /// Leave the restore of the agent this wrapper waited for, whose session
-/// `ended`, to the agent queue, which starts it in a new place once this
-/// execution has ended, as it does for an agent whose session ends while it
+/// `ended`, to the agent queue. The queue starts it in a new place once
+/// this execution has ended, as for an agent whose session ends while it
 /// runs. Without a `saved` record there is nothing to restore.
 fn leave_to_queue(paths: &CommandPaths, plan: &ExecutionPlan, ended: Halt, saved: bool) {
     if !saved {
@@ -177,10 +177,10 @@ fn leave_to_queue(paths: &CommandPaths, plan: &ExecutionPlan, ended: Halt, saved
     };
 }
 
-/// What restores the paused agent besides `shoal resume`: this wrapper when
-/// protection stopped it to restore it `automatic`ally, the agent queue when a
-/// signal ended its session or the system shut down and its restore needs no
-/// user, otherwise nothing.
+/// What restores the paused agent besides `shoal resume`. This wrapper does
+/// when protection stopped the agent to restore it `automatic`ally. The
+/// agent queue does when a signal ended its session or the system shut
+/// down, and its restore needs no user. Otherwise nothing does.
 fn restorer(recovery: &recovery::Recovery, stop: &Halt, automatic: bool) -> Restorer {
     if automatic {
         return this_wrapper().map_or(Restorer::User, Restorer::Wrapper);
@@ -482,8 +482,8 @@ pub(super) async fn wait(link: &mut Link, place: &mut Place) -> Result<Waited> {
 }
 
 /// Ask the daemon over `link` to start the agent's restore now, which only
-/// this execution's wrapper can, showing in `place` that the agent wakes or
-/// why the daemon cannot be asked; the restore ends the wait with `Resume`.
+/// this execution's wrapper can. `place` shows that the agent wakes, or why
+/// the daemon cannot be asked. The restore ends the wait with `Resume`.
 async fn wake_now(link: &mut Link, place: &mut Place) {
     place.waking();
     if let Err(error) = link.send(&ExecutionEvent::Wake).await {

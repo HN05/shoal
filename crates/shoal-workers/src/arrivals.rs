@@ -55,10 +55,10 @@ async fn receive(paths: &CommandPaths, claim: Claim) -> Result<ImportedPackage> 
     crate::client::transfer::import_streamed(paths, import, &mut input).await
 }
 
-/// Open the spaces `imported` recorded here, as `shoal restore --from`
-/// does: its own space set up, with its post-setup hook run and, once that
-/// succeeded, its agents' restores queued when `restore`, then the spaces
-/// it carries, whose IDs it returns with where its own arrived.
+/// Open the spaces `imported` recorded here, as `shoal restore --from` does.
+/// Its own space is set up and runs its post-setup hook. Once that
+/// succeeds, its agents' restores are queued when `restore`. Then the
+/// spaces it carries open. Returns their IDs, with where its own arrived.
 async fn open(
     paths: &CommandPaths,
     reopening: &impl Reopening,

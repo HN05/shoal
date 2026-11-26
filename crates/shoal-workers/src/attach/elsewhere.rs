@@ -16,13 +16,14 @@ use crate::{
 };
 
 /// Attach this terminal, which `viewer` views from another machine, to a
-/// session of `space` as `shoal attach` would on `machine`, this one, and
-/// report to the descriptor `report` the session it chose, then whether
-/// that session still runs once the viewer left it. A session that ends as
-/// its agent moves to a new place gives way to the agent's next, reported
-/// as chosen in turn. Attaching again after a lost connection finds the
-/// session at the place it names, without waking or restoring its agent a
-/// second time.
+/// session of `space`, as `shoal attach` would on `machine`, this one.
+/// Reports to the descriptor `report` the session it chose, then whether
+/// that session still runs once the viewer left it.
+///
+/// A session that ends as its agent moves to a new place gives way to the
+/// agent's next, which is reported as chosen in turn. Attaching again after
+/// a lost connection finds the session at the place it names, without
+/// waking or restoring its agent a second time.
 pub async fn for_viewer(
     paths: &CommandPaths,
     space: SpaceId,

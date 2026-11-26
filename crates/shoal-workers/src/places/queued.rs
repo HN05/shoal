@@ -80,8 +80,8 @@ pub async fn restore_in_background(
 }
 
 /// Run Shoal's `argv` for the chat `name` of `repository`, or of none, in
-/// `cwd`, its checkout, worktree or `root_dir`, in a new background place,
-/// of the first host that would start a queued agent, for the user to
+/// `cwd`, its checkout, worktree or `root_dir`. It runs in a new background
+/// place of the first host that would start a queued agent, for the user to
 /// attach to. A `restore` records the place as the chat's, as a
 /// workspace's restore does. Returns how that host reports it.
 pub async fn start_chat(
@@ -126,9 +126,9 @@ pub async fn start_chat(
     .context(NO_QUEUED_HOST)
 }
 
-/// Run Shoal with `args`, a restore of the agent of the chat `space`, in a
-/// new background place of the first host that would start a queued agent,
-/// in its home.
+/// Run Shoal with `args`, a restore of the agent of the chat `space`, in
+/// its home. It runs in a new background place of the first host that
+/// would start a queued agent.
 pub async fn restore_chat(
     paths: &CommandPaths,
     settings: &Effective,
@@ -148,8 +148,8 @@ pub async fn restore_chat(
 }
 
 /// Run Shoal with `args`, a restore of `workspace`, in a new background
-/// place of `host`'s `places` `beside`, telling the restore to close
-/// the place with the workspace when config says so.
+/// place of `host`'s `places` `beside`. The restore closes the place with
+/// the workspace when config says so.
 pub async fn start_in_background(
     paths: &CommandPaths,
     host: &Configured,

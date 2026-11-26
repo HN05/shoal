@@ -40,13 +40,13 @@ impl Running {
         self.private.path()
     }
 
-    /// Tell the daemon what the proxy learns for the agent that `execution`
-    /// runs in `workspace`: the retries it waits to make, its upstream's
-    /// resets and limits, its subagents' requests, and, when `ends_turns`,
-    /// each turn a failure it gave up on inside a response stream ends,
-    /// which the daemon may retry. Only an agent that reports no failed turn
-    /// itself takes such a failure for its turn's end, since a subagent's
-    /// request may fail while the turn goes on.
+    /// Tell the daemon what the proxy learns for the agent `execution` runs in
+    /// `workspace`: the retries it waits to make, its upstream's resets and
+    /// limits, and its subagents' requests. When `ends_turns`, a failure it
+    /// gave up on inside a response stream ends the turn, which the daemon may
+    /// retry. Only an agent that reports no failed turn itself takes such a
+    /// failure as its turn's end, since a subagent's request may fail while
+    /// the turn goes on.
     pub(crate) fn report_turns(
         &mut self,
         paths: &CommandPaths,
@@ -69,8 +69,8 @@ impl Running {
 }
 
 /// The binary an agent's wrapper started from, and whether an upgraded
-/// daemon has refused its protocol, after which its reports go to the
-/// installed release at once rather than to a call bound to fail.
+/// daemon refused its protocol. After that, its reports go to the installed
+/// release at once, rather than to a call bound to fail.
 pub(super) struct Origin {
     executable: crate::installed::Executable,
     upgraded: std::sync::atomic::AtomicBool,
@@ -238,8 +238,8 @@ pub(super) struct Sent {
     subagent_request: Option<UnixTime>,
 }
 
-/// How often a limit the proxy keeps meeting is sent again, so the daemon
-/// counts a limit without a named end from when it was last met and learns
+/// How often a limit the proxy keeps meeting is sent again. The daemon then
+/// counts a limit without a named end from when it was last met, and learns
 /// again one it lost in a restart.
 const LIMIT_RESENT_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
 
@@ -308,10 +308,10 @@ impl Reporter {
         self.sent.retry |= self.retried(Some(retry)).await;
     }
 
-    /// Clear what the daemon holds of an outage the upstream's answer
-    /// ended, each report on its own, keeping in [`Sent`] any clear it did
-    /// not take, so the next event's reports go out as they should, and
-    /// tell it the upstream answers.
+    /// Clear what the daemon holds of an outage the upstream's answer ended,
+    /// each report on its own, and tell it the upstream answers. A clear the
+    /// daemon did not take stays in [`Sent`], so the next event's reports go
+    /// out as they should.
     async fn answered(&mut self) {
         self.retry_done().await;
         if self.sent.reset.is_some() && self.reset_cleared().await {

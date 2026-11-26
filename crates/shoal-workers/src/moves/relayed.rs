@@ -127,11 +127,11 @@ async fn elsewhere(paths: &CommandPaths, id: &SpaceId) -> Result<Option<(Member,
     }
 }
 
-/// Run `order`, some of whose spaces `relays` other machines run: alone,
-/// those of one machine as that machine asks; together with others, once
-/// the caller consents to what ending all of them needs, this machine's
-/// first, then each other machine's, going on after one fails and
-/// printing a line for each.
+/// Run `order`, some of whose spaces `relays` other machines run. One
+/// machine's spaces alone go as that machine asks. Together with others,
+/// they go once the caller consents to what ending all of them needs: this
+/// machine's first, then each other machine's. It goes on after one fails,
+/// and prints a line for each.
 pub(super) async fn run(
     paths: &CommandPaths,
     order: &MoveOrder,
@@ -175,11 +175,11 @@ impl Relay {
         order.keep || (self.spaces.iter()).any(|space| space.id == *id && space.removed)
     }
 
-    /// Move its spaces, or copies of them, as `order` says, with
-    /// `consent`: its machine packs them and holds their packages, which
-    /// this one writes to their new files, refused before anything ends
-    /// there when one cannot be created, ending each space there once its
-    /// file holds it unless it stays there, as `report` records.
+    /// Move its spaces, or copies of them, as `order` says, with `consent`. Its
+    /// machine packs them and holds their packages, which this one writes to
+    /// their new files. When one file cannot be created, it refuses before
+    /// anything ends there. It ends each space there once its file holds it,
+    /// unless it stays there, as `report` records.
     async fn relay(
         &self,
         paths: &CommandPaths,
@@ -219,9 +219,9 @@ impl Relay {
         }
     }
 
-    /// Record in `report` the spaces `packed` failed to pack, as `order`
-    /// says, then deliver each it packed into its file among `reserved`,
-    /// deleting those of the spaces that went in another's package.
+    /// Record in `report` the spaces `packed` failed to pack, as `order` says.
+    /// Then deliver each packed one into its file among `reserved`, and delete
+    /// the files of the spaces that went in another's package.
     async fn deliver_packed(
         &self,
         paths: &CommandPaths,

@@ -68,9 +68,10 @@ pub(super) async fn settle(
 }
 
 /// How the hub, which `ask` asks, settled a move whose arrival `error` left
-/// unknown, asking again every [`ASK_AGAIN`] while it cannot be asked,
-/// saying `meanwhile` what stays as it is until it answers, until `steps`
-/// says the move was cancelled or the daemon finds nothing to settle.
+/// unknown. While the hub cannot be asked, it asks again every
+/// [`ASK_AGAIN`] and says `meanwhile` what stays as it is. It stops once
+/// `steps` says the move was cancelled, or the daemon finds nothing to
+/// settle.
 pub(super) async fn ask_hub<Asked>(
     ask: impl Fn() -> Asked,
     error: &anyhow::Error,

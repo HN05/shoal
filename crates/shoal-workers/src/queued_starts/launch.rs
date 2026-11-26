@@ -16,9 +16,9 @@ use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Start the place worker for the admitted launch `entry` in the space it
-/// names, whatever its kind, in the background where the terminal that
-/// queued it would have, or in no place for an agent that runs its own
-/// way, as the space's settings, a worktree's file included, decide.
+/// names, whatever its kind. It runs in the background where the terminal
+/// that queued it would have, or in no place for an agent that runs its own
+/// way. The space's settings decide, a worktree's file included.
 pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<()> {
     let queued = queue::plan(paths, entry.clone()).await?;
     let start = QueuedStart::of(&queued.plan)?;

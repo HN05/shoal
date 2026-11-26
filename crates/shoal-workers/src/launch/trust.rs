@@ -51,9 +51,9 @@ pub(super) async fn tracked(
 }
 
 /// Trust the directories of `space`, a workspace or a chat, and `added`,
-/// the other working directories its agent gets, for a tracked agent of
-/// `file`'s tool running with `profile`, as [`tracked`] and [`chat`] trust
-/// each kind's.
+/// the other working directories its agent gets. The trust is for a
+/// tracked agent of `file`'s tool running with `profile`, as [`tracked`]
+/// and [`chat`] trust each kind's.
 pub(super) async fn space(
     file: &TrustFile,
     paths: &CommandPaths,
@@ -124,9 +124,9 @@ async fn chat(
 }
 
 /// Trust `directory` and `added`, the other working directories its agent
-/// gets, for the tool of `file` running with `environment`, as
-/// [`TrustFile::launch_paths`] gives them for `repository`, whose removal or
-/// move cleans the entries for its paths. Those outside it stay trusted,
+/// gets, for the tool of `file` running with `environment`.
+/// [`TrustFile::launch_paths`] gives them for `repository`, whose removal
+/// or move cleans the entries for its paths. Paths outside it stay trusted,
 /// such as the `root_dir` of a chat without a repository.
 pub(super) async fn directory(
     file: &TrustFile,

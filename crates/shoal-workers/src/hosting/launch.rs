@@ -234,9 +234,9 @@ pub async fn run_agent(
 }
 
 /// The worker that runs `agent`'s tracked `command` for `owner` in a place
-/// or session the host named `name` opens, closing a workspace's with the
-/// workspace when config, which `closes_when_done` reads, says so; a chat's
-/// goes with the chat's removal.
+/// or session the host named `name` opens. A workspace's place closes with
+/// the workspace when config says so, which `closes_when_done` reads. A
+/// chat's goes with the chat's removal.
 fn agent_worker(
     caller: Caller<'_>,
     (name, closes_when_done): (HostName, bool),

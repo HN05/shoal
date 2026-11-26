@@ -402,11 +402,11 @@ pub(super) fn spawn(
 }
 
 /// Let the command stop when it uses the terminal from the background, as a
-/// shell's job does, even where this wrapper started with those stops
-/// ignored, as in a pane tmux's `respawn-pane` started. A command whose
-/// standard input is another file gets the terminal from the wrapper only
-/// after it starts: its use of the terminal before then waits for the
-/// handover instead of failing with EIO.
+/// shell's job does. This holds even where this wrapper started with those
+/// stops ignored, as in a pane tmux's `respawn-pane` started. A command
+/// whose standard input is another file gets the terminal only after it
+/// starts. Its use of the terminal before then waits for the handover
+/// instead of failing with EIO.
 fn restore_terminal_stops(process: &mut Command) {
     // SAFETY: sigaction is async-signal-safe, and the closure runs in the
     // forked child before exec without allocating.

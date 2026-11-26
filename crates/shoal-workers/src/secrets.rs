@@ -81,9 +81,9 @@ fn must_authorize(tool: &str, inherited: bool, token: bool) -> Result<bool> {
     Ok(inherited)
 }
 
-/// Fetch each served value, a command's with PATH set to `search`, and
-/// from the daemon one written in the config, which the manifest holds
-/// only as its digest, or one another machine prints.
+/// Fetch each served value. A command's value runs with PATH set to
+/// `search`. A value written in the config, which the manifest holds only
+/// as its digest, or one another machine prints, comes from the daemon.
 async fn fetch_served<'a>(
     paths: &CommandPaths,
     tool: &str,

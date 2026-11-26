@@ -11,10 +11,10 @@ use crate::{
 };
 use shoal_protocol::{links::OpenOutcome, space_names::SpaceSelector};
 
-/// Verify the worktree before anything leaves it, push without forcing
-/// unless the `push` permission holds the push back for the user, then let
-/// the daemon find or open the PR and link it, or record what waits for the
-/// user.
+/// Verify the worktree before anything leaves it, then push without
+/// forcing, unless the `push` permission holds the push for the user. Then
+/// let the daemon find or open the PR and link it, or record what waits for
+/// the user.
 pub(super) async fn push_and_open(
     paths: &CommandPaths,
     workspace: SpaceSelector,

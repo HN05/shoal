@@ -688,11 +688,11 @@ async fn prepare_agent_launch(
     }))
 }
 
-/// The helper that holds back the pushes of `agent`, starting in its mode
-/// and narrowing, to the remotes of the repository of the workspace `space`
-/// names for approval, or refuses them, as its `push` permission at launch
-/// says; none where it pushes directly, or in a chat, which has no branch
-/// of its own for push approvals to bind.
+/// The helper that holds back `agent`'s pushes to the remotes of the
+/// repository of the workspace `space` names, for approval, or refuses
+/// them. Its `push` permission at launch decides, with its mode and
+/// narrowing. None where it pushes directly, or in a chat, which has no
+/// branch of its own for push approvals to bind.
 async fn prepare_push_gate(
     paths: &CommandPaths,
     space: &SpaceSelector,

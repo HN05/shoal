@@ -98,8 +98,8 @@ pub fn current(spaces: &Spaces) -> Result<Vec<SpaceId>> {
 }
 
 /// Remember that this terminal showed an agent session of the space
-/// `selector` names, whose agent runs or is about to, and left it running,
-/// so `attach -` returns to it whichever process showed it.
+/// `selector` names, whose agent runs or is about to, and left it running.
+/// Then `attach -` returns to it, whichever process showed it.
 pub async fn record_attach(paths: &CommandPaths, selector: &SpaceSelector) {
     remember(paths, ATTACH, selector, false, |_| true).await;
 }

@@ -64,10 +64,10 @@ impl Reserved {
     }
 }
 
-/// Write the package of `packed`, which its machine holds, into `reserved`,
-/// and end the space there unless it `stays` there, as a copy's space or a
-/// removed space's record does, or `order` streams its file to the
-/// command, which ends it once copied.
+/// Write the package of `packed`, which its machine holds, into `reserved`.
+/// Then end the space there, unless it `stays` there, as a copy's space or
+/// a removed space's record does. When `order` streams its file to the
+/// command, the command ends it once copied.
 pub(super) async fn deliver(
     paths: &CommandPaths,
     order: &MoveOrder,

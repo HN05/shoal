@@ -39,9 +39,9 @@ pub async fn restore(
     Ok(report)
 }
 
-/// Have the daemon resume what `resume` names of `space`, adding what it
-/// did to `report` and telling of the stopped commands it gave back and of
-/// a failure as `resuming` does.
+/// Have the daemon resume what `resume` names of `space`, and add what it
+/// did to `report`. `resuming` tells of the stopped commands it gave back
+/// and of a failure.
 pub async fn resume_one(
     paths: &CommandPaths,
     space: &Space,

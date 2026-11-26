@@ -11,10 +11,10 @@ use shoal_core::execution::recovery::Saved;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Have the daemon make `change`, when given, to the permissions each agent
-/// and last session the `stopped` spaces keep and each of the `failed`
-/// launches was given, as their restores begin, so one that fails keeps it
-/// too; it changes none when it refuses one.
+/// Have the daemon make `change`, when given, to the permissions of each
+/// agent and last session the `stopped` spaces keep, and of each `failed`
+/// launch. It makes the change as their restores begin, so one that fails
+/// keeps it too. When it refuses one, it changes none.
 pub async fn apply(
     paths: &CommandPaths,
     stopped: &[(Space, Saved)],

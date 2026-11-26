@@ -47,11 +47,11 @@ pub(super) fn reserve(
     Ok(file)
 }
 
-/// The file the package of a copy of the space `id`, or of its removal
-/// record, which stays here too, goes to on its way to `destination`, as
-/// [`reserve`] finds a move's, except that one held for the joined machine
-/// that started the copy waits apart from the package of a move, refusing
-/// a copy while an earlier one's package waits there.
+/// The file the package of a copy of the space `id` goes to on its way to
+/// `destination`. The same holds for its removal record, which stays here
+/// too. [`reserve`] finds a move's file the same way. A copy held for the
+/// joined machine that started it waits apart from a move's package, and a
+/// copy is refused while an earlier one's package waits there.
 pub(super) fn reserve_copy(
     paths: &CommandPaths,
     destination: &MoveDestination,

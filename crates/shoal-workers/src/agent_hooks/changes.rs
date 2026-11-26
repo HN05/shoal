@@ -5,9 +5,9 @@ use shoal_protocol::changes::Change;
 
 use crate::{agents::integration, ai::IntegrationKind, client::connection::CommandPaths};
 
-/// Report what the tool call whose hook event stdin carries changed, as an
-/// agent with `integration` names it, and print the changes Shoal could
-/// not tell were the agent's as context for it.
+/// Report what the tool call in the hook event on stdin changed, as the
+/// agent's `integration` names it. Print the changes Shoal could not tell
+/// were the agent's, as context for it.
 pub async fn report(paths: &CommandPaths, integration: IntegrationKind) -> Result<i32> {
     let Some(event) = super::input::event() else {
         return Ok(0);

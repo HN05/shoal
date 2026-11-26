@@ -13,9 +13,9 @@ use crate::{
 };
 use shoal_core::{config::Effective, sessions::Origin};
 
-/// The repository whose name a configured group's name takes, looked up
-/// only once a name is needed, or for a chat without one, the `root_dir`
-/// it runs in, whose directory name the group takes.
+/// What a configured group's name takes its name from. For a repository,
+/// it is looked up only once a name is needed. For a chat without one, it
+/// is the directory name of the `root_dir` the chat runs in.
 pub enum Repo<'a> {
     Selected(crate::repository::Selector),
     Id(&'a str),

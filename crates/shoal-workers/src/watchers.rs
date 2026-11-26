@@ -186,13 +186,15 @@ async fn close_place(
     close_left_to_host(host, place, closed, at_removal).await
 }
 
-/// Close `place` through its host when the daemon, which `closed` says
-/// what it did, leaves that to the host: it cannot close the host's places,
-/// or it keeps no record of a place it said it leaves to the watcher. Only a
-/// host whose places prove their own ownership closes them. A missing
-/// record of a place the daemon closes, or has not answered for, means
-/// removal closed and forgot it, and the host would close more than the
-/// place, such as a Herdr tab with the panes the user split off.
+/// Close `place` through its host when the daemon leaves that to the host,
+/// as `closed` says. The daemon does when it cannot close the host's
+/// places, or keeps no record of a place it left to the watcher. Only a
+/// host whose places prove their own ownership closes them.
+///
+/// A missing record of a place the daemon closes, or has not answered for,
+/// means removal closed and forgot it. Closing it through the host would
+/// then close more than the place, such as a Herdr tab with the panes the
+/// user split off.
 async fn close_left_to_host(
     host: &dyn Host,
     place: &Watched,

@@ -103,9 +103,9 @@ fn execution_space(home: AgentHome<'_>) -> crate::model::ExecutionSpace {
 }
 
 /// Launch the `prepared` session of `agent` in `space` as a detached
-/// execution logging beside its other `files`, without the variables of
-/// this process its app must not inherit, discarding the preparation when
-/// it cannot start.
+/// execution that logs beside its other `files`. It leaves out the
+/// variables of this process its app must not inherit. A session that
+/// cannot start discards its preparation.
 async fn launch_session(
     caller: Caller<'_>,
     agent: &shoal_protocol::executions::TrackedAgent,

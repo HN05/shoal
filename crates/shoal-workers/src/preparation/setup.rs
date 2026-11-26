@@ -183,11 +183,12 @@ pub async fn settle_setup(
 }
 
 /// Retry, delete, ignore or keep the workspace whose setup failed with
-/// `failure`, on `machine` when another runs it, as `frontend` decides, or
-/// fail naming the commands that do where it does not; a workspace whose
-/// failure is ignored has not run its post-setup hook, nor has one retried
-/// without `retry`, which says what a retry runs. A setup that did not
-/// start leaves nothing to delete or ignore.
+/// `failure`, as `frontend` decides; `machine` names another machine that
+/// runs it. Where the frontend cannot decide, fail and name the commands
+/// that do. A workspace whose failure is ignored has not run its
+/// post-setup hook, and neither has one retried without `retry`, which
+/// says what a retry runs. A setup that did not start leaves nothing to
+/// delete or ignore.
 async fn settle_failure(
     paths: &CommandPaths,
     frontend: &impl Frontend,

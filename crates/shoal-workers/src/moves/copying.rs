@@ -8,9 +8,9 @@ use shoal_core::transfer::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Write a copy of `space` as `order` says to its new package file, at the
-/// checkpoint the order names or a new one, then hand it to another machine
-/// when the order goes there, telling `steps` how far it got.
+/// Write a copy of `space` to its new package file as `order` says, at the
+/// checkpoint the order names or a new one. Hand it to another machine
+/// when the order goes there. `steps` hears how far it got.
 pub(super) async fn copy_one(
     paths: &CommandPaths,
     order: &MoveOrder,

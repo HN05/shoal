@@ -47,10 +47,9 @@ impl<A: Attaching> Steps<'_, A> {
         .await
     }
 
-    /// Start the first queued entry that `picks` picks, unless it is
-    /// already starting, and wait until its agent runs in a session,
-    /// failing at once when it leaves the queue without one; `false` when
-    /// none waits.
+    /// Start the first queued entry that `picks` picks, unless it is already
+    /// starting, and wait until its agent runs in a session. Fails at once when
+    /// the entry leaves the queue without one. Returns `false` when none waits.
     async fn resume_queued(&self, picks: impl Fn(&QueueEntry) -> bool) -> Result<bool> {
         let entries = queue::entries(self.paths).await?;
         let Some(restore) = entries.into_iter().find(picks) else {
@@ -67,14 +66,15 @@ impl<A: Attaching> Steps<'_, A> {
     }
 }
 
-/// The ID of the workspace `entry` starts its agent in and the name of the
-/// terminal session the agent runs in, once it runs there; other sessions
+/// The ID of the workspace `entry` starts its agent in, and the name of the
+/// terminal session the agent runs in, once it runs there. Other sessions
 /// of the workspace, such as a shell left after a failed setup, do not
-/// count. A launch learns its workspace while it starts. The daemon records
-/// the agent where it runs before it takes the entry out of the queue, so
-/// an entry gone before the sessions were read without an agent session
-/// among them did not start in one. Only `execution`'s session counts when
-/// given.
+/// count. When given, only `execution`'s session counts.
+///
+/// A launch learns its workspace while it starts. The daemon records where
+/// the agent runs before it takes the entry out of the queue. So an entry
+/// that was gone before the sessions were read, with no agent session among
+/// them, did not start in one.
 pub async fn entry_session(
     paths: &CommandPaths,
     entry: &QueueEntry,

@@ -65,10 +65,10 @@ pub async fn report_failure(
     print(json, send_kept(paths, space, report).await?)
 }
 
-/// Send `report` for the agent of the space `space` selects, kept on disk
-/// while it is sent, so that one the daemon does not receive stays for the
-/// daemon to find and tell the user about, even when the hook's time limit
-/// ends this process first.
+/// Send `report` for the agent of the space `space` selects. The report
+/// stays on disk while it is sent. A report the daemon does not receive
+/// stays for the daemon to find and tell the user about, even when the
+/// hook's time limit ends this process first.
 async fn send_kept(
     paths: &CommandPaths,
     space: Option<SpaceSelector>,
@@ -145,8 +145,8 @@ fn print(json: bool, status: AgentStatus) -> Result<i32> {
 }
 
 /// The final message of the turn a `Stop` hook event ends, as Claude Code
-/// and Codex pass it, cut past the longest question the daemon keeps so the
-/// report stays small and the daemon still sees that it was cut.
+/// and Codex pass it. It is cut just past the longest question the daemon
+/// keeps, so the report stays small and the daemon still sees the cut.
 fn final_message(event: &serde_json::Value) -> Option<String> {
     let message = event["last_assistant_message"].as_str()?;
     let mut end = message.len().min(validate::MAX_AGENT_MESSAGE_LEN + 1);

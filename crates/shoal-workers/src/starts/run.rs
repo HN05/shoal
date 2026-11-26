@@ -20,8 +20,8 @@ use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// Run here the agent of the starting launch `entry`, which this process
-/// holds, in the space it names, the place it runs in named as
-/// `place_name` says, failing the entry when its start fails.
+/// holds, in the space it names. The place it runs in is named as
+/// `place_name` says. A failed start fails the entry.
 pub async fn run_entry(
     starting: &impl Starting,
     entry: &QueueEntryId,
@@ -40,8 +40,8 @@ pub async fn run_entry(
 }
 
 /// Start the agent of the starting launch `entry` as [`run_entry`] does,
-/// in the `scope` this process issues for its space when it is scoped,
-/// once the daemon opened the space for it.
+/// once the daemon opened the space for it. When this process is scoped, it
+/// runs in the `scope` this process issues for the space.
 async fn start_entry(
     starting: &impl Starting,
     entry: &QueueEntryId,
@@ -104,10 +104,10 @@ fn place_label(space: &HomeRecords, place_name: Option<PlaceName>) -> String {
     }
 }
 
-/// What the agent of `launch` in `space` starts on: the issue it names,
-/// read as the space reads it, open or closed, since its work goes on
-/// whatever the issue's state, else the CI run it names as it stands now,
-/// else its prompt.
+/// What the agent of `launch` in `space` starts on. That is the issue it
+/// names, read as the space reads it, open or closed, since the work goes
+/// on whatever the issue's state. Else it is the CI run it names as it
+/// stands now, else its prompt.
 async fn subject(
     starting: &impl Starting,
     space: &HomeRecords,

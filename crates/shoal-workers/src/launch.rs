@@ -129,10 +129,11 @@ fn noted(brief: templates::Brief, note: Option<&str>) -> templates::Brief {
     }
 }
 
-/// `brief` as an agent in `home` receives it: a chat's agent that takes no
-/// instructions apart from its first message, as `takes_instructions` says,
-/// gets them there ahead of its subject, or else of the request to wait for
-/// the user, since they start a turn before the user speaks.
+/// `brief` as an agent in `home` receives it. A chat's agent that takes no
+/// instructions apart from its first message, as `takes_instructions`
+/// says, gets them there. They go ahead of its subject, or else of the
+/// request to wait for the user, since they start a turn before the user
+/// speaks.
 fn delivered(
     brief: templates::Brief,
     home: AgentHome<'_>,

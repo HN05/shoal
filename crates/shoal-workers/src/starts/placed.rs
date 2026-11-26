@@ -70,10 +70,10 @@ pub async fn run(
 }
 
 /// Run the agent of `placed` here once a workspace's preparation ends and
-/// the queue lets it start, holding its entry meanwhile, in the place
-/// opened for it, named as `place_name` says, which its agent keeps once
-/// it starts there. Without an agent, follow the preparation and enter
-/// the workspace.
+/// the queue lets it start, holding its entry meanwhile. It runs in the
+/// place opened for it, named as `place_name` says, which its agent keeps
+/// once it starts there. Without an agent, follow the preparation and
+/// enter the workspace.
 async fn run_named(
     starting: &impl Starting,
     placed: Placed,
@@ -122,9 +122,9 @@ async fn run_named(
 }
 
 /// Run the agent of `placed`, or a workspace's shell without one, in a new
-/// place beside this terminal, `focused` or in the background, which
-/// follows a workspace's preparation, where the host under `settings`
-/// opens one; otherwise here.
+/// place beside this terminal, `focused` or in the background, where the
+/// host under `settings` opens one. That place follows a workspace's
+/// preparation. Otherwise run it here.
 async fn run_beside(
     starting: &impl Starting,
     placed: Placed,
@@ -182,10 +182,10 @@ async fn failing_entry(
     opened
 }
 
-/// Carry out `plan` in the place opened for it, or in no place: follow
-/// the preparation it hands over and run its agent once the queue lets it,
-/// as a place beside a start's terminal does, or run the agent of the
-/// starting launch it names, or else give the workspace it names a shell.
+/// Carry out `plan` in the place opened for it, or in no place. Follow the
+/// preparation it hands over and run its agent once the queue lets it, as a
+/// place beside a start's terminal does. Or run the agent of the starting
+/// launch it names, or else give the workspace it names a shell.
 pub async fn execute_place(starting: &impl Starting, plan: PlacePlan) -> Result<i32> {
     if plan.handoff.is_some() {
         return Box::pin(run_in_place(starting, plan)).await;
@@ -211,9 +211,9 @@ async fn shell_in_place(
     hosting::open_shell(starting.caller(), &workspace.path).await
 }
 
-/// Run, in the place opened for it, the agent `plan` names the entry of,
-/// once the preparation it follows ends and the queue lets it start, or
-/// the workspace's shell without one.
+/// Run the agent whose entry `plan` names, in the place opened for it, once
+/// the preparation it follows ends and the queue lets it start. Without an
+/// agent, give the workspace a shell.
 async fn run_in_place(starting: &impl Starting, plan: PlacePlan) -> Result<i32> {
     let spaces = crate::client::spaces::list(starting.caller().paths).await?;
     let space = (spaces.find(&SpaceSelector::id(&plan.space)))

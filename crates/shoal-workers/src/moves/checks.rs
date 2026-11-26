@@ -67,10 +67,10 @@ impl Checked {
     }
 }
 
-/// What ending `space`, among the `spaces` there are, with the spaces
-/// below it that `carrying` carries, for a move to the package `file`
-/// would do, refusing a move that would lose work or end the space its
-/// package goes into, with each space that would.
+/// What ending `space` would do for a move to the package `file`, with the
+/// spaces below it that `carrying` carries, among the `spaces` there are.
+/// Refuses a move that would lose work or end the space its package goes
+/// into, naming each space that would.
 pub async fn check_export(
     paths: &CommandPaths,
     space: Space,

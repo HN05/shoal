@@ -128,9 +128,9 @@ pub(super) struct Saving<'a, F> {
     pub(crate) ending: F,
 }
 
-/// Launch the command, register its process group, and wait for it to exit or
-/// for a stop request, with what its scope recorded of its memory where it
-/// ran in one of its own.
+/// Launch the command, register its process group, and wait for it to exit
+/// or for a stop request. Returns what its scope recorded of its memory,
+/// where it ran in a scope of its own.
 pub(super) async fn supervise(
     link: &mut Link,
     paths: &Paths,
@@ -336,9 +336,10 @@ async fn wait_for_child(
     }
 }
 
-/// Stop the command whose session `signal` ended, after `ending` saved what
-/// restores it, since the session's end, such as a shutdown, may kill this
-/// wrapper before the command exits, and `report` told the daemon.
+/// Stop the command whose session `signal` ended. It runs after `ending`
+/// saved what restores the command and `report` told the daemon, since the
+/// session's end, such as a shutdown, may kill this wrapper before the
+/// command exits.
 async fn end_session(
     child: &mut Child,
     group: &ProcessGroup,

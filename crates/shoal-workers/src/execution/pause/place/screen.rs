@@ -136,9 +136,9 @@ impl Drop for Screen {
     }
 }
 
-/// `line` in rows of at most `width` characters, broken at the last space
-/// that fits, or within a word that does not, each row after the first
-/// indented as the block's lines are.
+/// `line` in rows of at most `width` characters. Each row breaks at the
+/// last space that fits, or within a word that does not. Rows after the
+/// first are indented as the block's lines are.
 fn wrap(line: &str, width: usize) -> Vec<String> {
     let mut rows = Vec::new();
     let mut rest: Vec<char> = line.chars().collect();

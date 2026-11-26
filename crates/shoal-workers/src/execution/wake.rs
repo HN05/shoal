@@ -96,9 +96,9 @@ where
     }
 }
 
-/// Wait until whether the agent is idle with updates matches `due`, where
-/// the hook of the agent the `hooked` execution runs cannot wake it when
-/// given, waiting out a restarting or failing daemon.
+/// Wait until whether the agent is idle with updates matches `due`, waiting
+/// out a restarting or failing daemon. When `hooked` is given, it counts
+/// only the times the hook of that execution's agent cannot wake it.
 async fn await_wake(
     paths: &CommandPaths,
     workspace: &SpaceId,

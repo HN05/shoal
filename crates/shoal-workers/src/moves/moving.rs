@@ -38,11 +38,11 @@ pub(super) struct Moving<'a> {
     pub(super) again: bool,
 }
 
-/// Move the `checked` space, with the spaces it carries, as `order` says,
-/// its package going to `file` on the way, telling `steps` how far it got,
-/// while it holds the move's lock. A package for its command's standard
-/// output is the command's to copy, under the lock it holds, before it
-/// ends the space.
+/// Move the `checked` space with the spaces it carries, as `order` says,
+/// while it holds the move's lock. Its package goes to `file` on the way,
+/// and `steps` hears how far it got. A package for the command's standard
+/// output is the command's to copy, under the lock it holds, before the
+/// space ends.
 pub(super) async fn move_one(
     paths: &CommandPaths,
     order: &MoveOrder,
@@ -217,9 +217,9 @@ pub(super) fn refused_as(error: &anyhow::Error, code: ErrorCode) -> bool {
         .is_some_and(|refusal| refusal.code == code)
 }
 
-/// `error`, which left it unknown whether `holder`, another machine or
-/// what read its package, has the space `id`, once its move is forgotten
-/// and its agents stay stopped here, since the space may continue there.
+/// `error`, which left it unknown whether `holder`, another machine or what
+/// read its package, has the space `id`. Its move is forgotten and its
+/// agents stay stopped here, since the space may continue there.
 pub(super) async fn maybe_there(
     paths: &CommandPaths,
     id: &SpaceId,

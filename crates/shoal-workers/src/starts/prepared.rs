@@ -42,9 +42,9 @@ pub async fn follow_preparation(
 }
 
 /// Follow the preparation of the started workspace, which sets it up, links
-/// its PR and queues its agent, before reporting it, unless the start
-/// `named` it, which reports only its agent, and entering it unless `agent`
-/// takes the terminal.
+/// its PR and queues its agent, then report it. When the start `named` it,
+/// report only its agent. Enter the workspace unless `agent` takes the
+/// terminal.
 pub async fn finish_workspace(
     starting: &impl Starting,
     preparing: Preparing<'_, CommandPaths>,
@@ -162,9 +162,9 @@ async fn enters(
     Ok(!crate::launch::runs_in_session(chosen, &settings))
 }
 
-/// End the start of `workspace`, whose preparation failed, leaving its
-/// agent, if `with_agent`, waiting in the queue for a retried setup, and
-/// the place opened for it hosting the workspace meanwhile.
+/// End the start of `workspace`, whose preparation failed. If `with_agent`,
+/// its agent waits in the queue for a retried setup, and the place opened
+/// for it hosts the workspace meanwhile.
 pub async fn unprepared(
     starting: &impl Starting,
     workspace: &Workspace,
