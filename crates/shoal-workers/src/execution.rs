@@ -29,8 +29,8 @@ use shoal_protocol::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
 use crate::{client::connection::CommandPaths, env};
-use admission::Admission;
 pub use admission::CommandRun;
+use admission::{Admission, AfterStop};
 pub use cancellation::{cancel, cancellation};
 pub use completion::SetupVerificationFailure;
 use launch::{run_taken_over, run_tracked};
@@ -68,8 +68,9 @@ pub async fn run(
 /// A command the user chose, recorded when `shoal stop` interrupts it. A
 /// `shoal run` command, `run`, waits for the daemon to admit it by its
 /// memory, and runs again after protection stops it, up to
-/// [`admission::STOPS`] times; one inside an admitted command runs at once,
-/// since that command's admission counts it.
+/// [`admission::STOPS`] times, once the daemon verified that nothing of the
+/// stopped run survives; one inside an admitted command runs at once, since
+/// that command's admission counts it.
 pub async fn run_command(
     paths: &CommandPaths,
     workspace: SpaceSelector,
@@ -94,8 +95,9 @@ pub async fn run_command(
             return Ok(code);
         };
         stops += 1;
-        eprintln!("{}", admission::stopped_message(&run.key, &reason, stops));
-        if stops == admission::STOPS {
+        let next = AfterStop::after(stops, admission.left_nothing());
+        eprintln!("{}", admission::stopped_message(&run.key, &reason, next));
+        if next != AfterStop::RunsAgain {
             return Ok(if code == 0 { 1 } else { code });
         }
         admit_as = AdmitAs::AfterStop;

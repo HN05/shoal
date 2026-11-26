@@ -4,7 +4,10 @@
 //! holds and, as it ends, what it used. Protection's stop ends the run,
 //! which runs again once it fits, up to [`STOPS`] times.
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -60,6 +63,32 @@ struct Shared {
     /// processes by and which asks for the admission again as the running
     /// command's.
     execution: watch::Sender<Option<ExecutionId>>,
+    /// The daemon verified that no process of the run survives it.
+    left_nothing: AtomicBool,
+}
+
+/// What a command protection stopped does next.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum AfterStop {
+    RunsAgain,
+    /// It was stopped [`STOPS`] times.
+    GivesUp,
+    /// A process of its run may survive, which a run beside it could
+    /// clash with, such as over a build's outputs.
+    LeftProcesses,
+}
+
+impl AfterStop {
+    /// What follows the `stops`-th stop of a run that `left_nothing`.
+    pub(super) fn after(stops: u32, left_nothing: bool) -> Self {
+        if !left_nothing {
+            Self::LeftProcesses
+        } else if stops >= STOPS {
+            Self::GivesUp
+        } else {
+            Self::RunsAgain
+        }
+    }
 }
 
 impl Admission {
@@ -71,8 +100,11 @@ impl Admission {
         run: &CommandRun,
         admit_as: AdmitAs,
     ) -> Result<Self> {
+        // `--now` starts the first run alone: a run protection stopped
+        // waits for healthy readings however it was started.
+        let now = run.now && !matches!(admit_as, AdmitAs::AfterStop);
         let mut link =
-            CommandAdmission::request(paths, space.clone(), run.key.clone(), run.now, admit_as)
+            CommandAdmission::request(paths, space.clone(), run.key.clone(), now, admit_as)
                 .await?;
         tokio::select! {
             admitted = admitted(&mut link, Some(&run.key)) => admitted?,
@@ -87,6 +119,7 @@ impl Admission {
             ended: Mutex::new(Some(ended)),
             holder: Mutex::new(None),
             execution: watch::channel(None).0,
+            left_nothing: AtomicBool::new(false),
         });
         let holding = Holding {
             paths: paths.clone(),
@@ -118,6 +151,17 @@ impl Admission {
     /// Why protection stopped the command, if it did.
     pub(super) fn stopped(&self) -> Option<String> {
         self.0.stopped.borrow().clone()
+    }
+
+    /// The daemon answered the run's end: it verified that no process of
+    /// the run survives, or not.
+    pub(super) fn completed(&self, left_nothing: bool) {
+        self.0.left_nothing.store(left_nothing, Ordering::Relaxed);
+    }
+
+    /// Whether the daemon verified that no process of the run survives.
+    pub(super) fn left_nothing(&self) -> bool {
+        self.0.left_nothing.load(Ordering::Relaxed)
     }
 
     /// Report the run's end, `ran`, and give up its admission once the
@@ -276,14 +320,15 @@ impl Holding {
 }
 
 /// What the wrapper says as protection's stop of `key`, for `reason`,
-/// ends its run, which runs again once it fits unless this was the last
-/// of [`STOPS`].
-pub(super) fn stopped_message(key: &CommandKey, reason: &str, stops: u32) -> String {
+/// ends its run, which does `next`.
+pub(super) fn stopped_message(key: &CommandKey, reason: &str, next: AfterStop) -> String {
     let at = UnixTime::now().local_minutes();
-    match stops < STOPS {
-        true => format!("shoal: {key} stopped for {reason} at {at}; runs again once it fits"),
-        false => {
-            format!("shoal: {key} stopped for {reason} at {at}; giving up after {STOPS} stops")
+    let stopped = format!("shoal: {key} stopped for {reason} at {at}");
+    match next {
+        AfterStop::RunsAgain => format!("{stopped}; runs again once it fits"),
+        AfterStop::GivesUp => format!("{stopped}; giving up after {STOPS} stops"),
+        AfterStop::LeftProcesses => {
+            format!("{stopped}; not running again beside processes it may have left")
         }
     }
 }

@@ -23,9 +23,10 @@ async fn admitted_command_child() {
     let root = std::env::current_dir().unwrap();
     let paths = CommandPaths::from(crate::paths::Paths::for_test(root));
     let id = SpaceSelector::Id(std::env::var("SHOAL_TEST_WORKSPACE").unwrap().into());
+    // `--now` starts the first run at once, but not the one after a stop.
     let run = CommandRun {
         key: CommandKey::Named("build".into()),
-        now: false,
+        now: true,
     };
     let command = vec!["sh".into(), "-c".into(), COUNTED_RUNS.into()];
     let code = crate::execution::run_command(&paths, id, command, Some(run))

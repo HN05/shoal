@@ -51,7 +51,8 @@ turns instead of running it out of memory together. The
 estimate. Meanwhile `shoal queue` lists it and the command prints what it
 waits for, such as `waits for memory: needs 12.0 GiB, 7.0 GiB left`. `--now`
 runs it at once, as the space's [`limits` permission](modes.md#permitted-actions)
-allows. A configured `edit` command waits like any other; `shoal edit` with
+allows. It starts only the first run at once: a run that protection stopped
+waits for healthy readings all the same. A configured `edit` command waits like any other; `shoal edit` with
 `$VISUAL` or `$EDITOR` does not wait.
 
 A `shoal run` inside an admitted command, such as one a configured script
@@ -73,6 +74,10 @@ for healthy readings and its memory, and runs again, so its caller sees a slow
 command rather than a failure. Build tools such as Cargo keep what they
 finished, so the rerun redoes only what was being built. After its third stop
 the command gives up and exits non-zero, naming the stop.
+
+A stopped command runs again only once Shoal has verified that no process of
+the stopped run survives. Otherwise it exits non-zero, saying so, and
+`shoal stop` stops what is left.
 
 ## Agents are not commands
 

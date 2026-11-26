@@ -384,6 +384,9 @@ impl TrackedLaunch {
         // Report only after child/process-group cleanup. A lost connection never
         // grants the daemon permission to assume processes stopped.
         let report = report_completion(&mut self.link, code, self.memory, mode).await;
+        if let Some(admission) = mode.admission() {
+            admission.completed(matches!(report, Ok(true)));
+        }
         if mode.is_setup() {
             report?;
         } else if let Err(error) = report {

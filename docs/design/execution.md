@@ -204,6 +204,10 @@ the command, which counts as cut short, and reports its execution's end. It
 then asks for admission again and runs the command again in a new execution.
 After its third stop it exits non-zero, naming the stop.
 
+The command runs again only once the daemon verified that no process of the
+stopped run survives. A second run beside a survivor could clash with it,
+such as over a build's outputs, so the wrapper exits non-zero instead.
+
 After a daemon restart, the wrapper asks for admission again as its running
 execution's. The daemon admits it at once only when the connection comes from
 that execution's wrapper, since that skips the wait that `--now` needs the
