@@ -223,3 +223,46 @@ once the assignment is done, a closed item, is not looked up again, so an
 unreachable forge cannot fail or wake the wait of a finished workspace. Waiting
 does not resume stopped agents or grant merge permission; agent instructions
 direct agents to handle updates and wait again.
+
+## Chats' links
+
+A chat holds links as a workspace does. The link tables name the space, a
+workspace or a chat, by an ID from their shared namespace, and the links go with
+the space.
+
+A chat's assigned items neither complete it nor clean it up: only its own
+`done` records its completion. A watched PR keeps a chat from idle cleanup, but
+not a done chat from completion cleanup. A chat has no branch whose work an
+unmerged PR would keep.
+
+The activity Shoal polls for a chat's items waits on the chat's own cursor. The
+chat's hooks deliver it with the chat's messages, which wakes its agent. A
+watch in the chat and those hooks share one delivery, so the newest takes what
+is pending.
+
+## Assignees on the forge
+
+An assigned issue shows on the forge who works it, through its assignees. Every
+forge has assignees, while a label would need one per repository.
+[Assignees on the forge](../reference/links.md#assignees-on-the-forge) says
+when each account is assigned.
+
+Every Shoal that acts as the same account shares that assignee. Each Shoal
+therefore records the issues it put or kept the account on, and takes it off
+only those. It leaves the account on an issue another Shoal's agent may work.
+It reads the forge for whether the account is there, and settles assignees in
+the background, so a slow forge holds back no start or stop. Once the
+background poll sees an issue lose an assignee, the spaces that link it settle
+the account again. An issue another Shoal took the account off thus gets it
+back while an agent here works it.
+
+Shoal records, per issue, each of the user's logins it added. It takes back
+only those, and only once no space links the issue for them, never a login the
+user assigned themselves.
+
+A space's links carry whether an agent assigned each issue, and the user's
+login Shoal added. A restore or a move thus assigns as before and keeps Shoal's
+ownership. A moved space leaves the agent account to the machine it moved to.
+
+Assigning never refuses or undoes the link or the transition. Other assignees
+and forge failures come back as warnings or alerts.

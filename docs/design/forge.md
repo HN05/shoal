@@ -1,259 +1,332 @@
 # Forges
 
-This file covers `shoal-forge`: forge accounts, item references, forge reads and
-writes, branch deletion and other repositories.
+This file covers `shoal-forge`: which forge serves a host, the accounts
+requests act as, item references, forge reads and writes, branch deletion and
+other repositories. The [issues reference](../reference/issues.md) says what
+the `issue`, `pr` and `forge` commands do.
 
-Forge changes Shoal makes for a workspace act as the agent too, with the host's
-configured `agent_token`, and so does the Git of agents and of the pushes Shoal
-runs for them over HTTPS to that host, through a credential helper the agent's
-Git settings scope to the host after clearing the user's helpers for it, so the
-token never enters a file, the environment or argv, and that Git asks before its
-first request, ahead of a login of the user's `.netrc` for the host.
+## Requests through the daemon
 
-An issue, PR or CI run is read once, where it enters, into an item reference
-of its repository, kind and number: a command's argument, a protocol field, a
-stored link as it loads, or a forge's answer. Code past that point passes the
-reference and never reads its text again. Stores key items by their canonical
-URL text, read back into a reference as each row loads. A number names an item
-only once the repository it belongs to is known.
+Shoal owns the forge requests of its spaces. Every client, from an agent in a
+terminal to an app built on Shoal, thus gets one item model, one account rule
+and one policy. Every read and change runs in the daemon, where scope applies.
+A client chooses neither a login nor a host's forge, and the CLI resolves no
+forge host of its own.
 
-Shoal owns forge writes for its workspaces so that every client, from an agent
-in a terminal to an app built on Shoal, gets one item model, one account rule
-and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
-merge) and planned per forge as REST requests, sent with curl and the token
-`[machine.forges."<host>"]` gives the host; without one only reads go out,
-anonymously. GitHub's GraphQL requests go the same way. Shoal needs only a token per host, so it runs
-no forge CLI and reads none of their login files, and a forge works without its
-CLI installed. A token
-is given in the shared value form, so it may come from a command such as a
-password manager, on this machine or another of its hub, and is fetched at
-most once per operation and never stored;
-an `{ env }` token reads the environment of the process sending the request,
-which for the daemon is the service's. The agent account has its own
-`agent_token` per host; without one it reads with the user's token, as the
-agent itself would, but changes nothing, so no change goes out as the user
-unless `agent_token = { same_as = "user_token" }` says so. A change to a host
-with no token for the account is refused before it is sent, naming the setting
-and the reload the daemon needs, since a forge answers an unsigned change only
-with a bare 401.
-The forge is selected from the remote's host without requiring configuration:
-well-known hosts by name, and any other by asking it once through each forge's
-version or metadata endpoint with the user's token for that host, since a name
-cannot tell a GitHub Enterprise Server or a self-hosted GitLab from Forgejo;
-the token goes only to the host it is set for. The daemon records
-each answer in its state and asks recorded hosts again when it starts or
-reloads its config, recording a changed answer with an alert. A host it cannot reach then
-keeps its answer and raises no alert, since a machine may start offline; a global `[machine.forges."<host>"] type`
-pins one instead and is never asked, and a host that answers as none fails with a message naming that
-setting. Each process remembers the answers it resolved, so links of the host
-parse the same way, and the CLI starts out knowing the pinned ones. A pasted
-link of a host not yet resolved is classified without a request by the forge
-its routes name, such as `/pull/` for GitHub
-and `/-/merge_requests/` for GitLab; only an issue or repository URL, whose
-form several forges share, falls back to the name: GitLab for a `gitlab` name
-label, and otherwise Forgejo. Host types describe hosts rather than
-repositories, so they are global only, like the tokens in the same table. GitLab-only concepts such as approval rules and merge trains
-stay unmodeled; approvals count as approving reviews. Forge differences stay in planning, such as Forgejo keeping draft
-state in the title, so callers see the same item either way. Milestones are
-named by title and looked up as the ID each forge takes, and a new item gets its
-assignees and milestone from the edit that finishes it, so one path sets them.
-An edit fails when the item the forge then reports lacks its labels, assignees
-or milestone, because forges drop what they cannot apply without an error. Each backend
-declares the capabilities it has, and a request needing one it lacks is refused
-before anything is sent with one typed error naming the forge and the
-capability, so a backend gains a capability without changes elsewhere;
-`shoal forge capabilities` reports them so agents can check first. Where a
-forge's releases differ in a capability, the backend asks the server for its
-version before the request, so an older server refuses as clearly and the
-report matches the server. A revert uses
-the forge's own where it has one, and elsewhere reverts the merge with Git in a
-new workspace that opens the PR and goes once it merges, so backing out a merge
-needs no agent; a conflicting revert does, so it is abandoned rather than left
-half done. Which commits the merge added is established from their trees and
-patches, never assumed, since reverting a guess can undo someone else's work. Actions run in the
-daemon, where scope applies: they act as the workspace's agent account, except
-the user's own login among an issue's assignees, while
-merging and a review's verdict stay the user's
-decisions unless a permission gives them to a scoped caller: `merge` its
-merges, as the agent account, and `pr_review` its
-verdicts, as the host's `review_token`, a login of its own, since agents open
-their PRs as the agent account and forges take no verdict from a PR's
-author; the user's own act as the user's login.
-A PR merge, now
-or automatic, names the head commit a scoped request's approval bound, else the
-one Shoal read before merging, so the forge refuses a head pushed since instead
-of merging a commit nobody approved; Bitbucket takes none. A forge checks that
-head when an automatic merge is set, and only GitLab keeps checking it until
-the merge, so `auto_merge_at_head` names the forges where a later push still
-merges. A forge that refuses the user's verdict, such as on its author's
-own PR, says so itself rather than Shoal guessing first; a scoped verdict is
-refused before any request when `review_token` is missing or its account
-opened the PR, so the refusal names the setting to change. A review's line
-comments are checked against the PR's diff before anything is sent, so a
-review is refused whole rather than posted in part. GitLab publishes every
-draft note the account has on a merge request at once, so a review there is
-refused while other drafts are pending, rather than publishing them with it. Review
-threads are named by any of their comments' IDs. Reactions use GitHub's names
-on every forge, so a client offers one set, which `shoal forge reactions` narrows
-to what an instance allows, and are read for a view with its
-comments, which costs a request per comment on forges that list them per comment;
-reacting reads first and changes only a reaction not already as asked, since
-forges differ in whether adding one twice fails. A comment edit changes only
-a comment the acting login wrote, checked against the item's discussion before
-anything is sent, since an account with admin rights could otherwise rewrite
-someone else's words. Every forge read also runs in the daemon: listing issues
-and PRs, items' views, the kind of a bare number, an issue's details and
-blockers, a PR's head, possible reviewers and review threads, and a
-repository's labels, reactions and capabilities. Apps read them without
-choosing a login or a host's forge themselves, and the CLI resolves no forge
-host of its own: a scoped caller reads as the agent account and anyone else as
-the user's own logins, in another repository too, since checking for a
-duplicate before filing there is only a read. A search uses each forge's own search and
-reads pages only until the limit is met. A search for words matches them both
-ways by default: GitHub's search by meaning misses exact matches, such as an
-error message or a flag, that keyword search finds, so `both` adds its matches
-to the keyword ones, and gives the keyword ones alone when that search fails,
-such as under the stricter rate limit GitHub keeps for it or on a server
-without it, so the default never fails a search keyword matching answers. A forge's rate limit for some requests, such as
-GitHub's for searches, holds back only those requests, never the watches and
-reads the others serve; a pause the forge puts on the whole account, such as a
-`Retry-After`, holds back every request. `shoal forge api` passes any request under
-the repository's forge API root through the daemon the same way, for reads no
-command models. Forgejo's Actions lists ignore `limit` without `page` and
-return every run, so a GET there that sets only `limit` reads the first page. The daemon
-cannot tell what another method changes, so a scoped caller sends only GET
-unless its `api_writes` permission accepts that its writes may merge, approve or skip
-required labels, or `"propose"` asks for each write, bound to its method, path
-and body, and only GET in another repository, which that setting does
-not speak for; the path stays under the API root, so the login reaches only
-the API of the forge its repository is on. `shoal forge download` reads a file
-such as an image in a description the same way, so a client without forge
-logins shows a private repository's images; it takes only URLs on the
-repository's forge host, and the daemon sends the bytes back in frames, since
-the caller, not the daemon, chooses where they go. GitLab's web routes for
-uploads take no access token, so its backend maps an upload URL to the API
-route for the same file and reads it with the host's token, like every other
-GitLab request; curl sends the token only to that host, not to object storage
-a redirect leads to. Bitbucket's files need a browser session, so it
-has no downloads. Forgejo's issue search lists PRs
-without their branches, so each listed PR is read in full, and GitLab keeps
-merged merge requests apart from closed ones, so listing closed ones reads all
-and drops the open ones. Shoal does not sign in to a
-forge's web UI, so it cannot resolve threads on Forgejo, whose API has no
-endpoint for it. Resolving a thread nobody has answered needs confirmation,
-because the reply tells the reviewer why. Attached files are read
-by the daemon from paths the CLI checked, anywhere on disk: a body file can
-already come from anywhere and scope is cooperative, while recordings kept in the
-worktree would be untracked files that hold up cleanup. GitHub's REST API has no
-upload endpoint, so Shoal uses the one gh itself uses on GitHub's upload host. Forgejo
-takes a comment's files only once it is posted, so a failure there would leave it
-without them: Shoal refuses what the instance's attachment settings refuse before
-posting, detecting a file's media type from its leading bytes as Forgejo does, and resends the uploads and the comment's update after failures that may
-pass. An upload is resent only when the forge did not get it or answered 503,
-since a second copy would stay on the comment and a proxy's other 5xx may follow a
-stored one; the update also after those. A comment whose files still fail stays posted, neither deleted
-nor finished later, and its error says so. Each action
-returns the item as the forge reports it afterwards and records an
-`item_changed` event for integrations. A new issue is recorded as opened and
-assigned only on request: a workspace's assigned issues are its work, while an issue
-an agent opens is usually follow-up work. Browsing across repositories and review
-tooling stay with clients.
-An assigned issue shows on the forge who works it through its assignees, since
-every forge has them and a label would need one per repository. The agent
-account is assigned while an agent works the issue: a space linking it as
-assigned has an agent of its own that runs, is queued, restarts or is asleep, or
-an agent made the link and no agent of the space's own has ended since, as for a
-child a coordinator creates for its subagents, and the space's work is not done. It comes off an open issue once none does, at
-`shoal done`, a stop that waits for `shoal resume`, an exit, an unlink or a
-removal, and goes back on when an agent starts or is restored or `done --undo`
-withdraws the completion. Every Shoal acting as the same account shares that
-assignee, so each records the issues it put or kept the account on and takes it
-off only those, leaving one another Shoal's agent may work; it reads the forge
-for whether the account is there, and settles it in the background, so a slow
-forge holds back no start or stop. Once the background poll sees an issue lose
-an assignee, the spaces linking it settle the account again, so one another
-Shoal took off an issue an agent here works goes back on. The user's own login,
-under `[issue] assign = "user"` or `"both"`, joins on every assigned link, whoever makes it, and
-leaves through the link and unlink paths, removal among them: Shoal records each
-login it added, per issue, so it takes back only its own and only once no space
-links the issue for it, never one the user assigned themselves. A closed issue
-keeps its assignees. A space's links carry whether an agent assigned each issue
-and the user's login Shoal added, so a restore or a move assigns as before and
-keeps Shoal's ownership, and a moved space leaves the agent account to the
-machine it moved to. Assigning never refuses or undoes the link or the
-transition: other assignees and forge failures come back as warnings or
-alerts.
+Shoal sends REST requests with curl, and GitHub's GraphQL requests the same
+way. It needs only a token per host, so it runs no forge CLI and reads none of
+their login files. A forge thus works without its CLI installed. Without a
+token, only reads go out, anonymously.
 
-`shoal pr open` pushes to the branch's push remote, then finds or opens the branch's
-PR and assigns it in one daemon request; a push remote on the origin's forge host
-other than `origin` is a fork the PR comes from, so a PR Shoal opens is left unlinked only when removal started
-after its check, which the result reports as a warning, or as opened when it
-created the PR and assigning it failed. A new PR is ready
-unless `--draft` or `[pr] draft` asks for one, because opening a ready PR is
-what requests review.
-An explicitly supplied description is preserved verbatim; when no description
-is supplied, each assigned issue is referenced with `Closes #<number>`.
+Browsing across repositories and review tooling stay with clients.
+
+## Accounts
+
+A scoped caller acts as the agent account, the host's `agent_token`. The user,
+and any other unscoped caller, acts with the user's own logins.
+[Agent accounts](../reference/agents.md#agent-accounts) says which login each
+request uses. The one exception is the user's own login among an issue's
+assignees, which Shoal adds and removes with the user's token, as
+[assignees on the forge](links.md#assignees-on-the-forge) explains.
+
+Without an `agent_token`, the agent reads with the user's token, as the agent
+itself could, but changes nothing. No change goes out as the user unless
+`agent_token = { same_as = "user_token" }` says so. Shoal refuses a change to a
+host without a token for its account before it sends it, naming the setting and
+the reload the daemon needs. A forge would answer the unsigned change only with
+a bare 401.
+
+Merging and a review's verdict are the user's decisions. A permission gives
+them to a scoped caller: `merge` its merges, as the agent account, and
+`pr_review` its verdicts, as the host's `review_token`. That token is a login of
+its own, because agents open their PRs as the agent account and forges take no
+verdict from a PR's author.
+
+### Agents' Git
+
+An agent's Git over HTTPS to a host with an `agent_token` acts as the agent
+account too, as do the pushes Shoal runs for it. A credential helper gives Git
+the token, so the token never enters a file, the environment or argv. The
+agent's Git settings scope that helper to the host and clear the user's helpers
+for it. Git asks the helper before its first request, ahead of a login of the
+user's `.netrc` for the host.
+[Git over HTTPS](../reference/agents.md#git-over-https) says what it covers.
+
+## Which forge a host serves
+
+Shoal selects the forge from the remote's host without configuration. It knows
+well-known hosts by name. It asks any other host once, through each forge's
+version or metadata endpoint, since a name cannot tell a GitHub Enterprise
+Server or a self-hosted GitLab from Forgejo. The question carries the user's
+token for that host. A token goes only to the host it is set for.
+
+The daemon records each answer in its state. It asks recorded hosts again when
+it starts or reloads its config, and records a changed answer with an alert. A
+host it cannot reach keeps its answer and raises no alert, since a machine may
+start offline.
+
+A host's
+[`type`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#forges)
+pins its forge, and Shoal never asks that host. A host that answers as none
+fails with a message naming that setting. Types and tokens describe hosts
+rather than repositories, so only the global config sets them.
+
+Each process remembers the answers it resolved, so the links of a host parse
+the same way. The CLI starts out knowing the pinned ones. A pasted link of a
+host not yet resolved is classified without a request, by the forge its route
+names, such as `/pull/` for GitHub and `/-/merge_requests/` for GitLab. Several
+forges share the form of an issue or repository URL, so such a URL falls back
+to the host's name: GitLab for a `gitlab` name label, and otherwise Forgejo.
+
+## Item references
+
+An issue, PR or CI run is read once, where it enters, into an item reference of
+its repository, kind and number. It enters as a command's argument, a protocol
+field, a stored link as it loads, or a forge's answer. Code past that point
+passes the reference and never reads its text again.
+
+Stores key items by their canonical URL text, which each row reads back into a
+reference as it loads. A number names an item only once the repository it
+belongs to is known.
+
+## One model across forges
+
+Issue and PR actions are typed, such as edit, comment, close, reopen and merge.
+Each forge's backend plans an action as that forge's requests. What a forge does
+its own way stays in that planning, so callers see the same item on every forge.
+Forgejo, for example, keeps a PR's draft state in its title.
+
+Shoal models what forges share. GitLab-only concepts, such as approval rules and
+merge trains, stay unmodeled, and approvals count as approving reviews.
+
+Options are modeled rather than passed through to a forge, so they mean the
+same on every forge. A milestone is named by its title, which the backend looks
+up as the ID its forge takes. Labels and reviewers are listed under the names
+those options take, a team as `owner/team`. A client thus offers them without
+forge requests of its own. Reactions use GitHub's names on every forge, so a
+client offers one set, which `shoal forge reactions` narrows to what an instance
+allows.
+
+Hiding a difference can cost requests. Forgejo's issue search lists PRs without
+their branches, so each listed PR is read in full. GitLab keeps merged merge
+requests apart from closed ones, so listing closed ones reads all and drops the
+open ones.
+
+### Capabilities
+
+Each backend declares the capabilities it has. Shoal refuses a request that
+needs one the forge lacks before it sends anything, with one typed error that
+names the forge and the capability. A backend thus gains a capability without
+changes elsewhere. `shoal forge capabilities` reports them, so agents can check
+first.
+
+Where a forge's releases differ in a capability, the backend asks the server
+for its version before the request. An older server thus refuses as clearly,
+and the report matches the server.
+
+## Changes
+
+Each action returns the item as the forge reports it afterwards, and records an
+`item_changed` event for integrations.
+
+A new item gets its assignees and milestone from the edit that finishes it, so
+one path sets them. An edit fails when the item the forge then reports lacks its
+labels, assignees or milestone, because forges drop without an error what they
+cannot apply.
+
+### Opening issues and PRs
+
+A new issue is recorded as opened, and as assigned only on request. A space's
+assigned issues are its work, while an issue an agent opens is usually follow-up
+work.
+
+A new PR is ready unless the caller asks for a draft, because opening a ready PR
+is what requests review. `shoal pr open` pushes, then finds or opens the
+branch's PR and links it in one daemon request. Such a PR stays unlinked only
+when the space's removal started after the request's check, which the result
+reports as a warning. When assigning a PR it created fails, the space records it
+as opened.
+
 Repository conventions reach agents where they open and mark items, not only in
-instructions read at launch: `shoal repo labels` serves the forge's label scheme with
-its descriptions, repositories may require label prefixes, which refuse a new item
-before it exists, and missing labels or template headings come back as warnings
-that never fail a change that already happened. Shoal never fills a template in,
-because an unfilled template says less than a closing reference.
-Its options are modeled rather than passed through to a CLI, so they mean the
-same on every forge. Label and reviewer choices are listed under the names
-those options take, a team as `owner/team`, so a client can offer them without
-forge API calls of its own.
+the instructions they read at launch. `shoal repo labels` serves the forge's
+label scheme with its descriptions. Required labels refuse a new item before it
+exists. Missing labels or template headings come back as warnings, which never
+fail a change that already happened. Shoal never fills a template in, because an
+unfilled template says less than a closing reference.
 
-Deleting branches on the forge is `shoal branch delete`, which the daemon runs
-for a chat as for a workspace, since a chat has no `git push --delete`; `push`
-governs it as it governs a pushed deletion, with one `"propose"` request per
-branch bound to the commit the branch points to. The daemon deletes each with a
-Git push over HTTPS as the caller's account, leased at that commit, since the
-forges' APIs delete a branch by name: the forge keeps a branch that a push moved
-after the checks. Its token reaches Git on standard input, held by Git's
-credential cache for that host alone, never in a file, the environment or argv.
-It checks every named branch before deleting any, and refuses the default and
-protected branches, the head or base of an open PR, a branch whose changes the
-default branch lacks unless `--force`, and an active space's branch outside the
-caller's scope whatever `--force` says; a space's branch is active while the
-space exists without a recorded completion and the default branch lacks its
-changes, and a finished space's branch goes as any other. The space keeps its
-local branch.
+### Comments and reactions
+
+A comment edit changes only a comment the acting login wrote. Shoal checks that
+against the item's discussion before it sends anything. An account with admin
+rights could otherwise rewrite someone else's words.
+
+Reacting reads the reactions first and changes only one not already as asked,
+since forges differ in whether adding one twice fails. A view reads reactions
+with its comments, which costs a request per comment on forges that list them
+per comment.
+
+### Attached files
+
+The daemon reads attached files from paths the CLI checked, anywhere on disk. A
+body file can already come from anywhere, and scope is cooperative. Recordings
+kept in the worktree instead would be untracked files that hold up cleanup.
+
+GitHub's REST API has no upload endpoint, so Shoal uses the one gh uses, on
+GitHub's upload host.
+
+Forgejo takes a comment's files only once the comment is posted, so a failure
+there would leave it without them. Shoal therefore first refuses what the
+instance's attachment settings refuse. It detects a file's media type from its
+leading bytes, as Forgejo does. It resends the uploads and the comment's update
+after failures that may pass. It resends an upload only when the forge did not
+get it or answered 503: a second copy would stay on the comment, and a proxy's
+other 5xx may follow a stored one. A comment whose files still fail stays
+posted, neither deleted nor finished later, and its error says so.
+
+### Reviews
+
+A review's line comments are checked against the PR's diff before anything is
+sent, so a review is refused whole rather than posted in part. GitLab publishes
+every draft note the account has on a merge request at once. A review there is
+therefore refused while other drafts are pending, rather than publishing them
+with it.
+
+A forge that refuses the user's verdict, such as on the user's own PR, says so
+itself; Shoal does not guess first. A scoped verdict is refused before any
+request when the host has no `review_token` or its account opened the PR, so
+the refusal names the setting to change.
+
+Review threads are named by any of their comments' IDs. Shoal does not sign in
+to a forge's web UI, so it cannot resolve threads on Forgejo, whose API has no
+endpoint for it. Resolving a thread nobody has answered needs confirmation,
+because the reply tells the reviewer why.
+
+### Merges
+
+A PR merge, now or automatic, names a head commit: the one a scoped request's
+approval bound, else the one Shoal read before merging. The forge thus refuses a
+head pushed since, instead of merging a commit nobody approved. Bitbucket takes
+no head commit.
+
+A forge checks that head when an automatic merge is set. Only GitLab keeps it
+bound to that head until the merge. Elsewhere, a later push still merges, and
+the `auto_merge_at_head` capability tells the forges apart.
+
+### Reverts
+
+A revert uses the forge's own where it has one. Elsewhere Shoal reverts the
+merge with Git in a new workspace, which opens the PR and goes once it merges.
+Backing out a merge thus needs no agent. A conflicting revert would need one, so
+Shoal abandons it rather than leave it half done.
+
+Shoal establishes which commits the merge added from their trees and patches,
+and never assumes them. Reverting a guess could undo someone else's work.
+
+## Reads
+
+A scoped caller reads as the agent account, and anyone else as the user's own
+logins. This holds in another repository too, since checking for a duplicate
+before filing an issue there is only a read.
+
+A search uses each forge's own search, and reads pages only until the limit is
+met. A search for words matches them both ways by default. GitHub's search by
+meaning misses exact matches that keyword search finds, such as an error
+message or a flag, so `both` adds its matches to the keyword ones. When search
+by meaning fails, such as under GitHub's stricter rate limit for it or on a
+server without it, `both` gives the keyword matches alone. The default thus
+never fails a search that keyword matching answers.
+
+A forge's rate limit for some requests, such as GitHub's for searches, holds
+back only those requests, never the watches and reads the others serve. A pause
+the forge puts on the whole account, such as a `Retry-After`, holds back every
+request.
+
+### API requests
+
+`shoal forge api` passes any request under the repository's forge API root
+through the daemon, for reads no command models. The path stays under the API
+root, so the login reaches only the API of the forge its repository is on.
+
+The daemon cannot tell what a method other than GET changes. A scoped caller
+therefore sends one to its own repository only as its `api_writes` permission
+allows. `"direct"` accepts that its writes may merge, approve or skip required
+labels, and `"propose"` asks for each write, bound to its method, path and body.
+To another repository it sends only GET, since that setting does not speak for
+it.
+
+### Downloads
+
+`shoal forge download` reads a file, such as an image in a description, through
+the daemon the same way. A client without forge logins thus shows a private
+repository's images. It takes only URLs on the repository's forge host. The
+daemon sends the bytes back in frames, since the caller, not the daemon, chooses
+where they go.
+
+curl sends the token only to that host, never to the object storage a redirect
+leads to. GitLab's web routes for uploads take no access token, so its backend
+maps an upload URL to the API route for the same file. It reads that route with
+the host's token, like every other GitLab request. Bitbucket's files need a
+browser session, so it has no downloads.
+
+## Branch deletion
+
+`shoal branch delete` deletes branches on the forge. The daemon runs it for a
+chat as for a workspace, since a chat has no `git push --delete`. The `push`
+permission governs it as it governs a pushed deletion, with one `"propose"`
+request per branch, bound to the commit the branch points to.
+
+The daemon deletes each branch with a Git push over HTTPS as the caller's
+account, leased at that commit. The lease makes the forge keep a branch that a
+push moved after the checks. The forges' APIs cannot, since they delete a branch
+by name. The token reaches
+Git on standard input and stays in Git's credential cache for that host alone,
+never in a file, the environment or argv.
+
+The daemon checks every named branch before it deletes any.
+[Delete branches](../reference/branches.md#delete-branches) lists what it
+refuses. A space's branch is active while the space exists without a recorded
+completion and the default branch lacks its changes. A finished space's branch
+goes as any other. The space keeps its local branch.
+
+## Other repositories
 
 Agents also find problems that belong to another repository, such as a tool the
-project uses, so `issue open --repo` files an issue there, on any forge, as the
-agent account. Decision: every command that only talks to the forge names any
-repository, registered or not, by `--repo` or an item's or run's URL, which
-needs no space or checkout; a registered checkout is one way to name a
-repository, never a requirement. Every caller reads another repository as it
-reads its own, since `forge api` already reads it, while changing it stays the
-user's, with the user's own logins, and a scoped caller's change there is
-refused. Commands that need a space or checkout, such as `link`, `watch` and `pr
-open`, keep their rules. Item commands that need only a repository also run from
-a registered checkout outside any space. Only the user acts there, so they act
-with the user's own logins under the repository's settings and open without a
-proposal. They link or record nothing, since a checkout holds no links; workspace
-processes act from their workspace. A chat acts from its repository's checkout
-too, but as the agent account, under its own scope, and records what it opens as
-a workspace does: a new issue is linked as opened, or
-assigned with `--link`, and its item actions default to its linked items. A chat
-holds links as a workspace does: the link tables name the space, a workspace or
-chat, with IDs from their shared namespace, and go with it. Its assigned items
-neither complete a chat nor clean it up: only its own `done` records completion,
-and a watched PR keeps a chat from idle cleanup but not a done one from
-completion cleanup, since a chat has no branch whose work an unmerged PR would
-keep; and the activity Shoal polls for them waits on the chat's own cursor,
-which the chat's hooks deliver with its messages, waking its agent; a watch in
-the chat and those hooks share one delivery, so the newest takes what is
-pending. An unscoped client such as Quay names that repository with `--repo`
-instead of picking a workspace, whose worktree Shoal would check first: a
-registered repository's checkout is the place to act in, so it reaches PR, view
-and CI commands from anywhere, and an item URL of a registered repository
-selects it outside a workspace and checkout. Where `--repo` already names any
-repository to read, a registered one is read through its checkout the same way.
-People outside the project see such an issue, so the `issue_other_repositories`
-permission governs scoped callers separately from `issue_open`: `"propose"` by
-default, `"direct"`, or `"deny"`. The workspace's required labels and templates
-describe its own repository and do not apply there, and the issue cannot be
-linked, since an assignment's cleanup follows the workspace's repository. A
-proposal records the repository it opens in.
+project uses. Decision: every command that only talks to the forge names any
+repository, registered or not, by `--repo` or by an item's or run's URL. It
+needs no space or checkout. A registered checkout is one way to name a
+repository, never a requirement. Commands that need a space or checkout, such
+as `link`, `watch` and `pr open`, keep their rules.
+
+Every caller reads another repository as it reads its own, since `forge api`
+already reads it. Changing it stays the user's, with the user's own logins, and
+a scoped caller's change there is refused.
+
+### Issues in other repositories
+
+`issue open --repo` is the exception: it files an issue in another repository,
+on any forge, as the agent account. People outside the project see such an
+issue, so the `issue_other_repositories` permission governs it apart from
+`issue_open`. The workspace's required labels and templates describe its own
+repository and do not apply there. The issue cannot be linked, since an
+assignment's cleanup follows the workspace's repository. A proposal records the
+repository it opens in.
+
+### Registered checkouts
+
+Item commands that need only a repository also run from a registered checkout
+outside any space. Only the user acts there, so they act with the user's own
+logins under the repository's settings, and open without a proposal. They link
+and record nothing, since a checkout holds no links. Workspace processes act
+from their workspace.
+
+A chat acts from its repository's checkout too, but as the agent account, under
+its own scope. It records what it opens as a workspace does: a new issue is
+linked as opened, or assigned with `--link`, and its item actions default to its
+linked items. [Chats' links](links.md#chats-links) says how a chat holds them.
+
+An unscoped client such as Quay names a repository with `--repo` instead of
+picking a workspace, whose worktree Shoal would check first. A registered
+repository's checkout is the place to act in, so it reaches PR, view and CI
+commands from anywhere. An item URL of a registered repository selects it
+outside a workspace and checkout. Where `--repo` names a registered repository
+to read, Shoal reads it through its checkout the same way.
