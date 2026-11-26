@@ -329,11 +329,12 @@ impl Surface {
 
     /// The scope `component` is placed in where its data could be at
     /// `path`: for each list that repeats it, the item `path` names in
-    /// that list's data; none when `path` lies in no item of one. An input
-    /// that binds absolute data reads it in every item, so it takes the
-    /// item the button is in where the list is one of `around`, the lists
-    /// around the button with the item of each, else the first, for what
-    /// else it reads in its item, such as its bounds.
+    /// that list's data; none when `path` lies in no item of one, or the
+    /// list lacks the item. An input that binds absolute data reads it in
+    /// every item, so it takes the item the button is in where the list is
+    /// one of `around`, the lists around the button with the item of each,
+    /// else the first, for what else it reads in its item, such as its
+    /// bounds.
     fn scope_toward(
         &self,
         component: Component<'_>,
@@ -370,6 +371,14 @@ impl Surface {
                     .to_string(),
                 false => within(path)?,
             };
+            // An item the list lacks renders nothing, so no input of it.
+            let count = self
+                .data(&items)
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len);
+            if item.parse::<usize>().ok()? >= count {
+                return None;
+            }
             scope = format!("{items}/{item}");
         }
         Some(scope)

@@ -1002,6 +1002,23 @@ fn an_input_in_a_list_over_absolute_data_inside_another_list_is_an_input() {
 }
 
 #[test]
+fn an_input_in_an_empty_list_is_no_input() {
+    let empty = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["rows", "save"]},
+            {"id": "rows", "component": "List", "children": {"componentId": "shared", "path": "/items"}},
+            {"id": "shared", "component": "TextField", "label": "Shared",
+             "value": {"@path": "/shared"}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save", "context": {"shared": {"@path": "/shared"}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"items": [], "shared": "all"}),
+    );
+    assert!(empty.action("save").unwrap().inputs.is_empty());
+}
+
+#[test]
 fn a_list_input_bound_absolutely_is_an_action_s_input() {
     let listed = surface(
         json!([
