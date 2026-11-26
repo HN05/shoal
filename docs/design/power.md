@@ -35,3 +35,14 @@ sleep` timer will wake it, which gives it work at that time; `shoal resume` asks
 for the agent itself, so its restore waits for nothing but admission. The
 request is its own file so that forgetting it, as a stop does, never replaces a
 record a restore holds.
+
+## The crate's boundary
+
+The crate reads the machine's power and the user's presence from the platform:
+
+- logind's and IOKit's announcements of a sleep, and logind's of a shutdown,
+- the delay locks that hold either off until the daemon is ready,
+- the lid, dock and idle readings that say whether the user walked away.
+
+What the daemon does on each stays with it, such as holding the agent queue
+through a sleep or stopping agents for a shutdown.

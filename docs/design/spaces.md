@@ -446,3 +446,22 @@ number nor an ID before it asks the daemon. A number selects only a space that
 exists, never a removed workspace or a queued launch, which are selected by ID.
 `--add-blocker` is the exception: it names blockers, where a bare number stays
 an issue, as `shoal start` takes one.
+
+## The crate's boundary
+
+The `Spaces` service keeps the records of workspaces and chats and the tree
+they form. It keeps their marks and progress, worktrees, checkpoints and the
+files they send. It runs their lifecycle, removal, restores, conversions, moves
+and launches, the cleanup sweep's own steps and the startup audit of what they
+own.
+
+The crate's interface reaches the agents, links, repositories, hub, CI jobs,
+reviews, leases and demos, and gives the service coordination's service to
+call. The service reads and writes what other subsystems record of a space
+through the interface's record functions, in its own transactions. It reads
+executions through the store's shared readers.
+
+The daemon keeps the cleanup sweep's order across subsystems, the request
+dispatch with each request kind's target check, and the connections requests
+arrive on. It gives an operation that streams its answer, such as a diff, a
+file or a followed session, the writer its frames go to.

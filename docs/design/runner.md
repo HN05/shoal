@@ -70,3 +70,11 @@ organisation or instance, or on GitHub one runner per job, and what the forge
 does its own way is a `Runners` operation, so another forge adds an
 implementation, not daemon code. Container jobs and forges other than Forgejo
 and GitHub remain proposals.
+
+## The crate's boundary
+
+The `Runner` service fires the triggers from its timer loop and webhook
+listener. It launches their agents through the crate's interface, as
+`shoal start` does. It registers each repository's runner, and queues, claims
+and ends its jobs. The jobs' workspaces, permits and executions stay with the
+daemon, which the interface reaches.

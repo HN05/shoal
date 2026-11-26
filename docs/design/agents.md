@@ -308,3 +308,31 @@ since they come from the environment the agent runs with. Codex's default is
 the least time its OpenAI models keep a session's cache, which a resume in a
 new process reads too, though some models keep it for hours. Other tools'
 default is a guess.
+
+## The crate's boundary
+
+The `Agents` service owns the agents' records, the executions' and the
+queue's among them. It:
+
+- tracks the executions that wrappers register and relay,
+- admits, starts and restores agents through the agent queue,
+- stops, restarts and interrupts agents, and stops them for overload, disk
+  space and shutdowns,
+- recovers what a daemon restart left,
+- keeps the agents' sessions, places and stopped work,
+- records the turn state hooks report, the reports a hook left behind and the
+  subagents agents run,
+- retries the turns an API error ended,
+- queues an agent's alerts and delivers them once a run of them settles,
+- follows the user's engagement with each agent,
+- wakes the agents idle for their mode's period, and fires the timers of
+  `shoal sleep`,
+- keeps the agents' tools' trust in a repository's paths as it moves or goes,
+- holds the machine awake while agents have work.
+
+The crate's interface reaches what stays with the daemon: the spaces agents run
+in, with their lifecycles and settings, and the alerts that tell of them. So do
+the leases, CI jobs, demos, merges, links and conversions that end or wait with
+an agent. The daemon builds the snapshot the queue's policy ranks, which reads
+the spaces' labels and areas. Until they move into the crate, the launches that
+create a space for an agent stay with the daemon too.

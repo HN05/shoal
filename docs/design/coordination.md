@@ -633,3 +633,16 @@ left to supply it. Clients showing files follow the journal without polling.
 A file's optional title rides on its argument as `PATH#TITLE`, the form forge
 attachments use for alt text. Attach flags repeat, and a separate title flag
 could not say which file it names.
+
+## The crate's boundary
+
+The `Coordination` service sends, routes, reads and withdraws alerts. It keeps
+threads with their posts, code references and the changes agents make for
+them. It records approval requests and routes each to the space or user that
+decides it. It computes a space's permissions and grants, and resolves the
+caller a scope token stands for and the spaces its scope reaches.
+
+The crate's interface reaches what it routes between: the spaces with their
+files and holds, the agents and their queue, the hub, the repositories, the
+reviews and the links. Confining each request to its caller's scope stays with
+the daemon's request dispatch.

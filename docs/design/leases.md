@@ -247,3 +247,9 @@ The queue lives in memory. A daemon restart loses the order, and the commands
 still polling join again.
 [Queued requests](../reference/resources.md#queued-requests) says which
 requests ignore the queue and how long a place lasts.
+
+## The crate's boundary
+
+The `Leases` service keeps what leases hold in memory, such as the order in
+which queued requests take capacity. The spaces, settings, agents and approvals
+that leases need stay with the daemon, which the crate's interface reaches.

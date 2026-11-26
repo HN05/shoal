@@ -56,3 +56,15 @@ entries to the hub over its link, on a stream of the link when the answer goes
 on, as an entry's bytes or a watch do. The shared entries it held before it
 joined stay in its state directory, out of reach while it is a member. The hub
 keeps each device's own entries under the device's member ID.
+
+## The crate's boundary
+
+The `Apps` service resolves an app's `[apps.<name>]` table over the config
+layers the crate's interface reads. It keeps the app store's entries, and
+writes each only from the revision its writer read. It takes a write's bytes
+after its request, answers a hub member's requests and wakes the watches of its
+app's entries.
+
+The daemon's connections keep the socket and the hub link, the scope checks of
+a running watch, and sending this machine's writes of shared entries to its
+hub.

@@ -400,3 +400,31 @@ watches and their wake-ups do not change.
 Approving lets outside code run. Like merging, it is therefore the user's, with
 their own login. A scoped process approves as the agent account only as its
 `ci_approve` permission allows.
+
+## The crate's boundary
+
+The `Links` service keeps the watches' running waits. It finds where a
+request comes from and the repository it acts in, and reads the forge. It also:
+
+- links items to spaces under their relations, and keeps the spaces' PR
+  watches, merge acknowledgements and merge runs,
+- polls linked items, in watches and in the background,
+- starts, reads, reruns, cancels and approves CI runs,
+- lists and deletes the forge's branches, and reads failed check logs and item
+  views,
+- applies actions to linked items as the space's own changes, with the
+  warnings, bindings and review gate of their merges,
+- moves the workspaces stacked on a base once the base's work merges,
+- opens issues and PRs and reverts merged ones, or proposes them where a
+  permission asks, and runs the pushes an approval starts,
+- delivers the activity to agents, or through the hub to coordinators on other
+  machines.
+
+The approvals subsystem calls the service to decide a proposal or finish its
+push. The spaces, permission checks, the agents' records and messages, the
+approval requests' records and routing, the reviews and the hub stay with the
+daemon, which the crate's interface reaches. Whether an idle agent is due a
+wake is the agent queue's.
+
+The crate's record functions read and write what spaces link. Other
+subsystems call them in their own transactions.

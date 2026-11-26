@@ -237,3 +237,28 @@ space cleanup empty it, but only while no tracked execution or seed build of the
 repository runs; registering an execution prepares the directories in the
 transaction that records it, so emptying under the store's write lock cannot
 race a start.
+
+## The crate's boundary
+
+The `Repositories` service registers repositories and looks them up. It also:
+
+- prepares the `root_dir` that holds them, and moves their directories into a
+  new root,
+- resolves the config layers of repositories and their spaces,
+- keeps each checkout's default branch in sync,
+- builds the seeds and starts new workspaces from their snapshots,
+- empties the shared caches,
+- removes repositories and sweeps finished contributions.
+
+The crate's interface reaches what stays with the daemon:
+
+- the spaces a removal or move takes, and whether a workspace's worktree may go
+  or move with it,
+- where the chats without a repository keep their files,
+- the subsystems that work and keep files in a repository's directories, and
+  the agents that trust its paths,
+- the hooks' executables and environments, which read ports and temporary
+  directories,
+- fetching and fast-forwarding a default branch, which the refresh of a
+  workspace's branch shares,
+- whether the host has headroom for a build.

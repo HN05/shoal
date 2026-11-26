@@ -113,3 +113,14 @@ follow them without polling. Restarts between runs are no changes.
 The listing carries each demo's kind and a web demo's URL. The daemon derives
 the URL as opening does, so clients neither infer the kind from the preset nor
 rebuild the URL.
+
+## The crate's boundary
+
+The `Demos` service records each demo with its execution, lists demos, stops
+them and runs a demo's command again. It starts, reuses and retires the viewers
+of simulator demos. Its locks keep a viewer's spawn and its demo's stop from
+overlapping.
+
+The crate's interface reaches the spaces demos run in, the executions that run
+them and stop their processes, and the ports their viewers lease. Relaying a
+client's stream to a running demo stays with the daemon's connections.

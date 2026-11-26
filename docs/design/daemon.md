@@ -2,8 +2,8 @@
 
 This file covers the daemon process, held in `shoal-daemon`,
 `shoal-daemon-base` and `shoal-store`: its state directory, connections and
-limits, operations, store, journal, startup, exits, service and updates, and
-how it proves that processes ended. [Daemon](../reference/daemon.md) says what
+limits, operations, composition, store, journal, startup, exits, service and
+updates, and how it proves that processes ended. [Daemon](../reference/daemon.md) says what
 each command does; this file gives the reasons.
 
 ## State directory
@@ -83,6 +83,33 @@ A scoped process follows an operation of any space its scope reaches. It also
 follows one its own space started, whatever became of the space the operation
 works in. A move's operation thus stays visible once its space left this
 machine and before the hub lists it at its destination.
+
+## Composition
+
+`shoal-daemon` composes the daemon. Its `Manager` holds each subsystem's
+service and implements every interface they declare. The daemon keeps:
+
+- request dispatch, with each request's scope and target checks,
+- the connections and subscriptions requests arrive on,
+- startup and shutdown,
+- the work that spans subsystems, such as the cleanup sweep's order, freeing
+  disk space, clearing blockers and what a sleep or shutdown does.
+
+`shoal-daemon-base` holds what more than one subsystem uses. Examples are the
+log, who sends a request, the approval requests the daemon makes, the
+operations it starts in workers and the global config it runs under. It also
+holds the gates that order conflicting changes, the journal, the signals that
+wake waits, the alert record and the numbers of threads and approval requests.
+It reaches the forges for the daemon: the accounts its requests act as, which
+forge serves each host, and what the forge says of the items that block work.
+What the base reads of the rest of the daemon, such as a space's coordinator or
+a repository's retention, is an interface the base declares. `Manager` holds
+the base's types as fields.
+
+`shoal-store` holds the store: its schema, its migrations and the row mappers
+and guards that every subsystem shares. It also walks the tree of spaces up and
+down and tells whether a space on the way has an agent. Every subsystem that
+follows the tree takes these walks in its own transactions.
 
 ## Store
 

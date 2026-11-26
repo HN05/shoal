@@ -590,3 +590,10 @@ memory.
 `external` lets an app on the hub's machine take the decision over, registered
 as the placer. A start waits for it only briefly, and otherwise places by
 `balanced`, so a slow or absent app never holds starts up.
+
+## The crate's boundary
+
+The `Hub` service keeps the links, pairing codes, vouches and outbox. It reads
+the spaces, permissions, messages and approvals it routes across machines
+through the crate's interface. Request dispatch, which answers what the hub
+forwards to this machine, stays with the daemon.

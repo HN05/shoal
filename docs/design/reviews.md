@@ -145,3 +145,10 @@ action changes, so an agent cannot wear the gate down. A failure denies, since
 nothing is allowed without a verdict, and notifies no one: the agent can retry
 or ask. A gate that cannot be set up, as without an agent to run, notifies the
 user too, since only the config fixes it.
+
+## The crate's boundary
+
+Local reviews and the gate agent both decide in one-shot agent runs, so one
+crate holds both. The `Reviews` service keeps the running reviews, their
+checkouts and the gate's sessions. The agent queue admits each run through the
+crate's interface, as a handle that the run holds until it ends.
