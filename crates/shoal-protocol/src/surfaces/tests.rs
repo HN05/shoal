@@ -597,6 +597,17 @@ fn images_a_text_function_takes_are_checked_too() {
         json!({"obj": {"x": "\\![x](https://example.com/x.png)"}}),
     );
     assert!(refusal(serialized, &[]).contains("image https://example.com/x.png"));
+    // However far past what Shoal places the item that shows it lies.
+    let mut items = vec![json!({}); 2000];
+    items.push(json!({"obj": {"x": "\\![x](https://example.com/x.png)"}}));
+    let listed = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "row", "path": "/items"}},
+            {"id": "row", "component": "Text", "text": {"@path": "obj"}},
+        ]),
+        json!({"items": items}),
+    );
+    assert!(refusal(listed, &[]).contains("image https://example.com/x.png"));
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
             "args": {"value": "Hello ${/name}"}}}]),

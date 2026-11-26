@@ -358,9 +358,29 @@ fn context_catalog(context: &Value) -> Option<&str> {
 }
 
 /// The targets of the Markdown images in every text `value` holds, such
-/// as the data a `Text` may bind.
+/// as the data a `Text` may bind, and in the JSON of each object and list
+/// in it, which a `Text` bound to one shows and which can unescape an
+/// image its strings escape.
 fn data_images(value: &Value) -> Vec<Cow<'_, str>> {
-    strings(value).into_iter().flat_map(targets).collect()
+    let serialized = containers(value).into_iter().flat_map(|container| {
+        let json = serde_json::to_string(container).unwrap_or_default();
+        (markdown::images(&json).into_iter())
+            .map(|image| Cow::Owned(image.target))
+            .collect::<Vec<_>>()
+    });
+    (strings(value).into_iter().flat_map(targets))
+        .chain(serialized)
+        .collect()
+}
+
+/// Every object and list in `value`, itself included.
+fn containers(value: &Value) -> Vec<&Value> {
+    let below: Vec<&Value> = match value {
+        Value::Array(values) => values.iter().flat_map(containers).collect(),
+        Value::Object(fields) => fields.values().flat_map(containers).collect(),
+        _ => return Vec::new(),
+    };
+    std::iter::once(value).chain(below).collect()
 }
 
 /// The images `component` shows by name: an `Image`'s URL, or the targets
