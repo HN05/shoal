@@ -511,8 +511,9 @@ since setup comes first. Only a launch or a restore starts an agent to attach.
 `shoal queue cancel` removes a waiting entry. A cancelled restore stops the
 waiting wrapper as `shoal stop` does, and leaves the agent for
 `shoal resume`. A cancelled command exits, naming the cancel, and a cancelled
-seed build waits for the next check. `shoal rm` also removes a waiting launch
-by its ID. A starting entry belongs to its workspace.
+seed build waits for the next check. `shoal stop` of a space also cancels the
+commands waiting to run there. `shoal rm` also removes a waiting launch by its
+ID. A starting entry belongs to its workspace.
 
 ### Scope
 

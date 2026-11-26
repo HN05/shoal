@@ -494,6 +494,29 @@ impl AgentQueue {
         stop.map(|stop| stop(reason)).is_some()
     }
 
+    /// Cancel every command waiting to run in `space` for `reason`,
+    /// returning how many waited.
+    pub fn cancel_waiting_in(&self, space: &SpaceId, reason: &str) -> usize {
+        let stops: Vec<StopRun> = {
+            let mut oneshots = self.oneshots.lock().unwrap();
+            (oneshots.runs.values_mut())
+                .filter(|run| matches!(run.work, OneShotWork::Measured(_)))
+                .filter(|run| run.admitted.borrow().is_none())
+                .filter(|run| {
+                    run.serving
+                        .as_ref()
+                        .is_some_and(|serving| serving.space == *space)
+                })
+                .filter_map(|run| run.stop.take())
+                .collect()
+        };
+        let cancelled = stops.len();
+        for stop in stops {
+            stop(reason);
+        }
+        cancelled
+    }
+
     /// Where the admitted command or seed build `id` runs, once it said.
     pub fn measured_processes(&self, id: &QueueEntryId) -> Option<RunProcesses> {
         let number = oneshot_number(id)?;

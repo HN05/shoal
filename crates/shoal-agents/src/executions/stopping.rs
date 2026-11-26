@@ -408,7 +408,12 @@ impl Agents {
             Keep::LastSessions {
                 launches: QueuedLaunches::Cancel,
                 ..
-            } => self.cancel_waiting_launches(daemon, id).await,
+            } => {
+                // A command waiting for memory runs in no execution the
+                // stop reaches, so it is cancelled here.
+                (self.agent_queue).cancel_waiting_in(id, "its space was stopped");
+                self.cancel_waiting_launches(daemon, id).await
+            }
             Keep::LastSessions { .. } | Keep::Records => Ok(Vec::new()),
         }
     }

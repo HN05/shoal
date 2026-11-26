@@ -159,6 +159,23 @@ async fn a_waiting_command_is_listed_and_cancelled_in_the_queue() {
     assert!(matches!(wrapper.frame().await, AdmissionFrame::Stop { .. }));
 }
 
+#[tokio::test]
+async fn a_stop_of_its_space_cancels_a_waiting_command() {
+    let fixture = fixture().await;
+    let (api, web) = (
+        fixture.workspace("api").await,
+        fixture.workspace("web").await,
+    );
+    let mut stopped = admit(&fixture, &api, false).await;
+    let _waiting = admit(&fixture, &web, false).await;
+    let queue = fixture.agents.agent_queue();
+    while queue.waiting_oneshots().len() < 2 {
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(queue.cancel_waiting_in(&api.id, "its space was stopped"), 1);
+    assert!(matches!(stopped.frame().await, AdmissionFrame::Stop { .. }));
+}
+
 /// Record the running command `id` in `workspace`, whose wrapper is the
 /// process `pid`.
 async fn command_execution(fixture: &Fixture, workspace: &Workspace, id: &str, pid: u32) {
