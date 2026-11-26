@@ -561,6 +561,14 @@ fn images_a_text_function_takes_are_checked_too() {
         json!({"prefix": "!", "suffix": "[chart](https://example.com/x.png)"}),
     );
     assert!(refusal(joined, &[]).contains("part of an image"));
+    // So does data a template the function binds interpolates.
+    let templated = surface(
+        json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
+            "args": {"value": {"@path": "/template"}}}}]),
+        json!({"template": "${/prefix}${/suffix}", "prefix": "!",
+            "suffix": "[x](https://example.com/x.png)"}),
+    );
+    assert!(refusal(templated, &[]).contains("part of an image"));
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
             "args": {"value": "Hello ${/name}"}}}]),

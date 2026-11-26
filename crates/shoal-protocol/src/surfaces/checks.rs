@@ -350,7 +350,9 @@ fn images(component: Component<'_>) -> Vec<Cow<'_, str>> {
 
 /// The fragments a function building `component`'s text may join: its own
 /// texts and the data they interpolate, as `${/path}` or `@path` names it,
-/// all of the data for a relative path. Empty for a literal text.
+/// all of the data for a relative path, and so on for what that data
+/// interpolates, as a template a function binds does. Empty for a literal
+/// text.
 fn fragments<'a>(surface: &'a Surface, component: Component<'a>) -> Vec<&'a str> {
     let Some(call) = component
         .get("text")
@@ -358,18 +360,21 @@ fn fragments<'a>(surface: &'a Surface, component: Component<'a>) -> Vec<&'a str>
     else {
         return Vec::new();
     };
-    let own = strings(call);
-    let paths = (own.iter().flat_map(|text| interpolated(text)))
+    let mut fragments = strings(call);
+    let mut paths: Vec<&str> = (fragments.iter().flat_map(|text| interpolated(text)))
         .chain(bound_paths(call))
-        .collect::<Vec<_>>();
-    let data = paths.into_iter().flat_map(|path| {
-        let read = match path.starts_with('/') {
-            true => surface.data(path),
-            false => surface.data("/"),
-        };
-        read.map_or_else(Vec::new, strings)
-    });
-    own.into_iter().chain(data).collect()
+        .collect();
+    let mut read = BTreeSet::new();
+    while let Some(path) = paths.pop() {
+        let path = if path.starts_with('/') { path } else { "/" };
+        if !read.insert(path) {
+            continue;
+        }
+        let data = surface.data(path).map_or_else(Vec::new, strings);
+        paths.extend(data.iter().flat_map(|text| interpolated(text)));
+        fragments.extend(data);
+    }
+    fragments
 }
 
 /// A fragment that holds a bracket outside its whole images: part of an
