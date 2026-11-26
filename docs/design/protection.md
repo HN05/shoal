@@ -169,8 +169,9 @@ to 200. It lowers its own score to the floor its service manager allows
 without privilege. That floor differs between machines, so the service unit
 cannot state it.
 
-A command's processes are those of its execution, and a seed build's those of
-its running step's process group.
+A command's processes are those of its execution and every process below its
+child, so a `shoal run` inside it takes its place too. A seed build's are those
+of its running step's process group.
 
 The kernel kills a CI job's scope whole. A job that loses a process fails
 anyway, so killing all of it frees all its memory.

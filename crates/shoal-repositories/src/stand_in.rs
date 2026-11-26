@@ -261,6 +261,8 @@ impl SeedAdmission for SeedBuilds {
 
     fn using(&self, _: u64) {}
 
+    fn runs_in(&self, _: u32) {}
+
     fn ran(&self, run: RunUsage) -> BoxFuture<'_, ()> {
         self.runs.lock().unwrap().push(run);
         Box::pin(async {})

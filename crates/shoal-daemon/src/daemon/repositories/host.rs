@@ -6,7 +6,7 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use shoal_agents::queue::{
     OneShotAdmission,
-    state::{Measured, MeasuredKind},
+    state::{Measured, MeasuredKind, RunProcesses},
 };
 use shoal_daemon_base::run_usage::{RunKey, RunUsage, expected_memory, record_run};
 use shoal_ids::repository_ids::RepositoryId;
@@ -86,6 +86,10 @@ impl SeedAdmission for QueuedSeedBuild<'_> {
 
     fn using(&self, memory: u64) {
         self.admission.using(memory);
+    }
+
+    fn runs_in(&self, group: u32) {
+        self.admission.runs_as(RunProcesses::Group(group));
     }
 
     fn ran(&self, run: RunUsage) -> BoxFuture<'_, ()> {

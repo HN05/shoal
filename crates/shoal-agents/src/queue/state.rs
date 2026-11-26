@@ -71,6 +71,8 @@ struct OneShot {
     work: OneShotWork,
     /// The memory, in bytes, it holds now, as its last report said.
     using: u64,
+    /// Its processes, once it said where they run.
+    processes: Option<RunProcesses>,
     requested_at: UnixTime,
     /// Whether protection stopped its earlier run, so it waits for healthy
     /// readings as a stopped agent's restore does.
@@ -107,6 +109,16 @@ pub enum MeasuredKind {
     /// A `shoal run` command, as `shoal queue` names it.
     Command(String),
     SeedBuild,
+}
+
+/// Where a command's or seed build's processes run, which take its place
+/// in the kernel's OOM scores.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunProcesses {
+    /// A `shoal run` command's, which carry its execution's marker.
+    Execution(ExecutionId),
+    /// The process group of a seed build's step.
+    Group(u32),
 }
 
 /// An admitted command or seed build, as protection weighs its stop.
@@ -367,6 +379,7 @@ impl AgentQueue {
                 serving,
                 work,
                 using: 0,
+                processes: None,
                 requested_at: UnixTime::now(),
                 after_stop,
                 admitted,
@@ -479,6 +492,13 @@ impl AgentQueue {
             .filter(|run| run.admitted.borrow().is_none())
             .and_then(|run| run.stop.take());
         stop.map(|stop| stop(reason)).is_some()
+    }
+
+    /// Where the admitted command or seed build `id` runs, once it said.
+    pub fn measured_processes(&self, id: &QueueEntryId) -> Option<RunProcesses> {
+        let number = oneshot_number(id)?;
+        let oneshots = self.oneshots.lock().unwrap();
+        oneshots.runs.get(&number)?.processes.clone()
     }
 
     /// What the admitted command or seed build `id` holds now, if it runs.
@@ -609,6 +629,14 @@ impl OneShotAdmission<'_> {
     /// Admit it now, whatever the limits, as `--now` starts work.
     pub fn admit_now(&self) {
         self.queue.admit_oneshot(&self.id());
+    }
+
+    /// Record that the run's processes are `processes`.
+    pub fn runs_as(&self, processes: RunProcesses) {
+        let mut oneshots = self.queue.oneshots.lock().unwrap();
+        if let Some(run) = oneshots.runs.get_mut(&self.number) {
+            run.processes = Some(processes);
+        }
     }
 
     /// Record that the run holds `memory` bytes now.

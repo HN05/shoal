@@ -56,9 +56,10 @@ struct Shared {
     ended: Mutex<Option<oneshot::Sender<RunReport>>>,
     /// Holds the admission until the run's end reached the daemon.
     holder: Mutex<Option<JoinHandle<()>>>,
-    /// The execution the run registered, which asks for the admission
-    /// again as the running command's.
-    execution: Mutex<Option<ExecutionId>>,
+    /// The execution the run registered, which the daemon scores its
+    /// processes by and which asks for the admission again as the running
+    /// command's.
+    execution: watch::Sender<Option<ExecutionId>>,
 }
 
 impl Admission {
@@ -85,7 +86,7 @@ impl Admission {
             stopped,
             ended: Mutex::new(Some(ended)),
             holder: Mutex::new(None),
-            execution: Mutex::new(None),
+            execution: watch::channel(None).0,
         });
         let holding = Holding {
             paths: paths.clone(),
@@ -93,14 +94,15 @@ impl Admission {
             key: run.key.clone(),
             shared: Arc::downgrade(&shared),
         };
-        let holder = tokio::spawn(holding.hold(link, using_now, end));
+        let registered = shared.execution.subscribe();
+        let holder = tokio::spawn(holding.hold(link, (using_now, registered), end));
         *shared.holder.lock().unwrap() = Some(holder);
         Ok(Self(shared))
     }
 
     /// The run registered as `execution`.
     pub(super) fn runs_as(&self, execution: &ExecutionId) {
-        *self.0.execution.lock().unwrap() = Some(execution.clone());
+        self.0.execution.send_replace(Some(execution.clone()));
     }
 
     /// Where the run's memory reads report what it holds now.
@@ -187,7 +189,7 @@ impl Holding {
     async fn hold(
         self,
         mut link: CommandAdmission,
-        mut using: watch::Receiver<u64>,
+        (mut using, mut registered): (watch::Receiver<u64>, watch::Receiver<Option<ExecutionId>>),
         mut end: oneshot::Receiver<RunReport>,
     ) {
         let mut tick = tokio::time::interval(USING_INTERVAL);
@@ -211,6 +213,12 @@ impl Holding {
                     if using.has_changed().unwrap_or(false) {
                         let memory = *using.borrow_and_update();
                         let _ = link.report(RunReport::Using { memory }).await;
+                    }
+                }
+                Ok(()) = registered.changed() => {
+                    let execution = registered.borrow_and_update().clone();
+                    if let Some(execution) = execution {
+                        let _ = link.report(RunReport::Registered { execution }).await;
                     }
                 }
             }
@@ -254,7 +262,7 @@ impl Holding {
     /// once it registered one.
     async fn request_again(&self) -> Result<CommandAdmission> {
         let shared = self.shared.upgrade().context("the run ended")?;
-        let execution = shared.execution.lock().unwrap().clone();
+        let execution = shared.execution.borrow().clone();
         let admit_as = execution.map_or(AdmitAs::New, |execution| AdmitAs::Running { execution });
         let request = CommandAdmission::request(
             &self.paths,

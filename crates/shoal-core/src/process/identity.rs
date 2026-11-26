@@ -297,6 +297,22 @@ fn listed() -> Result<Vec<Listed>> {
     listed.retain(|process| process.pid > 1 && process.pid != std::process::id());
     Ok(listed)
 }
+/// The live processes of the process group `group`, as identified now.
+pub fn group_processes(group: u32) -> Result<Vec<Identity>> {
+    let members = platform::group_members(group)?;
+    Ok((members.into_iter())
+        .filter_map(|pid| capture(pid).ok().flatten())
+        .collect())
+}
+
+/// `root` and this user's live processes below it, as identified now; none
+/// once `root` has ended.
+pub fn tree_processes(root: u32) -> Result<Vec<Identity>> {
+    Ok((tree(root)?.into_iter())
+        .filter_map(|pid| capture(pid).ok().flatten())
+        .collect())
+}
+
 /// `root` and this user's live processes below it, from one listing; none
 /// once `root` has ended.
 pub(crate) fn tree(root: u32) -> Result<HashSet<u32>> {

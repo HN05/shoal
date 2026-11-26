@@ -154,7 +154,9 @@ On Linux the kernel's OOM killer follows the stop order. The daemon sets the
 - Every 10 seconds it gives each entry's processes the score of the entry's
   place in the order, from 900 for the first entry down to 200 for the last.
 - An entry's processes are those that carry its execution's identity, short of
-  its wrapper. A CI job's are every process of the scope its runner runs in.
+  its wrapper. A CI job's are every process of the scope its runner runs in,
+  a `shoal run` command's also every process below its command, and a seed
+  build's those of its running step's process group.
 - A command a wrapper starts begins at 200, so what it starts scores above
   Shoal's own processes before the daemon places it.
 

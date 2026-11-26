@@ -186,6 +186,10 @@ pub trait SeedAdmission: Send + Sync {
     /// The build holds `memory` bytes now.
     fn using(&self, memory: u64);
 
+    /// The build's step runs as the process group `group`, whose processes
+    /// take the build's place in the kernel's OOM scores.
+    fn runs_in(&self, group: u32);
+
     /// Keep the build's `run` for the next build's estimate, which a
     /// failure only logs.
     fn ran(&self, run: RunUsage) -> BoxFuture<'_, ()>;

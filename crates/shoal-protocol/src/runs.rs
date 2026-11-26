@@ -56,9 +56,12 @@ pub enum AdmissionFrame {
 }
 
 /// Wrapper → daemon frames about an admitted command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RunReport {
+    /// The run registered as `execution`, whose processes take its place
+    /// in the kernel's OOM scores.
+    Registered { execution: ExecutionId },
     /// The memory, in bytes, the running command holds now.
     Using { memory: u64 },
     /// The run ended: the most memory it held, how long it ran, whether it

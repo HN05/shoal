@@ -1,7 +1,9 @@
 //! The kernel's OOM scores, set from the stop order on Linux every
 //! [`INTERVAL`]. Only scores that changed are written. A CI job's processes are
-//! those of its runner's scope; every other entry's are those carrying its
-//! execution's marker, short of its wrapper, which keeps Shoal's floor.
+//! those of its runner's scope, a seed build's those of its step's process
+//! group; every other entry's are those carrying its execution's marker, and
+//! a command's also those below its child, short of each wrapper, which
+//! keeps Shoal's floor.
 //! `docs/design/protection.md` says why.
 use shoal_ids::execution_ids::ExecutionId;
 use std::{
@@ -20,6 +22,7 @@ use crate::log;
 use crate::model::Execution;
 use crate::process::identity;
 use crate::process::oom;
+use crate::queue::state::RunProcesses;
 
 /// How often the scores follow the stop order.
 const INTERVAL: Duration = Duration::from_secs(10);
@@ -52,8 +55,21 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
 /// An entry of the stop order with the processes that take its score.
 struct Scored {
     execution: Option<Execution>,
-    /// A CI job's, whose scope takes its score.
-    job: bool,
+    reach: Reach,
+}
+
+/// Which processes take an entry's score beside those carrying its
+/// execution's marker.
+enum Reach {
+    /// No others: a demo's or an agent's.
+    Marked,
+    /// Its runner's scope: a CI job's.
+    JobScope,
+    /// Those below its child: a command's, so a `shoal run` inside it, which
+    /// runs as an execution of its own, takes its place too.
+    ChildTree,
+    /// A process group: a seed build's step's.
+    Group(u32),
 }
 
 impl Agents {
@@ -95,35 +111,37 @@ impl Agents {
             .collect())
     }
 
-    /// The execution of each entry of `order`, in its order: a job's
-    /// runner's, a demo's or an agent's.
+    /// The processes of each entry of `order`, in its order: a job's
+    /// runner's, a command's, a demo's or an agent's execution, or a seed
+    /// build's step's process group.
     async fn scored_entries(&self, daemon: &dyn Daemon, order: &StopOrder) -> Result<Vec<Scored>> {
         let jobs = daemon.job_executions().await?;
-        let entries: Vec<(Option<ExecutionId>, bool)> = (order.stops().iter())
+        let entries: Vec<(Option<ExecutionId>, Reach)> = (order.stops().iter())
             .map(|stop| match &stop.work {
-                Work::Job => (
-                    stop.space
-                        .as_ref()
-                        .and_then(|space| jobs.get(space))
-                        .cloned(),
-                    true,
-                ),
-                // A command's or seed build's scope is its own wrapper's.
-                Work::Run(_) => (None, false),
+                Work::Job => {
+                    let space = stop.space.as_ref();
+                    let runner = space.and_then(|space| jobs.get(space)).cloned();
+                    (runner, Reach::JobScope)
+                }
+                Work::Run(id) => match self.agent_queue.measured_processes(id) {
+                    Some(RunProcesses::Execution(execution)) => (Some(execution), Reach::ChildTree),
+                    Some(RunProcesses::Group(group)) => (None, Reach::Group(group)),
+                    None => (None, Reach::Marked),
+                },
                 Work::Demo(execution) | Work::Agent { execution, .. } => {
-                    (Some(execution.clone()), false)
+                    (Some(execution.clone()), Reach::Marked)
                 }
             })
             .collect();
         self.store
             .read(move |db| {
                 (entries.into_iter())
-                    .map(|(id, job)| {
+                    .map(|(id, reach)| {
                         let execution = match id {
                             Some(id) => shoal_store::find_execution(db, &id)?,
                             None => None,
                         };
-                        Ok(Scored { execution, job })
+                        Ok(Scored { execution, reach })
                     })
                     .collect()
             })
@@ -185,18 +203,29 @@ fn wanted_scores(
     let mut wanted: HashMap<u32, (Found, i16)> = HashMap::new();
     let mut failed = None;
     for (entry, score) in entries.iter().zip(oom::scores(entries.len())) {
+        if let Reach::Group(group) = entry.reach {
+            let members = identity::group_processes(group).unwrap_or_default();
+            wanted.extend(members.into_iter().map(|process| {
+                let pid = process.pid;
+                (pid, (Found::Marked(process), score))
+            }));
+        }
         let Some(execution) = &entry.execution else {
             continue;
         };
         let marked = by_execution.get(&execution.id).into_iter().flatten();
+        let below = match entry.reach {
+            Reach::ChildTree => child_tree(execution),
+            _ => Vec::new(),
+        };
         let worker =
             |process: &identity::Identity| wrappers.contains(&(process.pid, process.birth.clone()));
-        for process in marked {
-            let found = Found::Marked((*process).clone());
-            let score = if worker(process) { floor } else { score };
-            wanted.insert(process.pid, (found, score));
+        for process in marked.map(|process| (*process).clone()).chain(below) {
+            let score = if worker(&process) { floor } else { score };
+            wanted.insert(process.pid, (Found::Marked(process), score));
         }
-        let Some(runner) = execution.child.as_ref().filter(|_| entry.job) else {
+        let job = matches!(entry.reach, Reach::JobScope);
+        let Some(runner) = execution.child.as_ref().filter(|_| job) else {
             continue;
         };
         match job_scope(runner) {
@@ -209,6 +238,18 @@ fn wanted_scores(
         }
     }
     (wanted.into_values().collect(), failed)
+}
+
+/// The processes below `execution`'s child, none where its child has ended
+/// or its PID names another process now.
+fn child_tree(execution: &Execution) -> Vec<identity::Identity> {
+    let Some(child) = &execution.child else {
+        return Vec::new();
+    };
+    match identity::alive(child) {
+        Ok(true) => identity::tree_processes(child.pid).unwrap_or_default(),
+        _ => Vec::new(),
+    }
 }
 
 /// The processes of the scope the job's `runner` runs in, which it has the

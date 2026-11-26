@@ -195,3 +195,23 @@ async fn only_its_own_wrapper_admits_a_command_as_running() {
     assert!(matches!(response.body, Body::Ok), "{:?}", response.body);
     assert_eq!(wrapper.frame().await, AdmissionFrame::Admitted);
 }
+
+#[tokio::test]
+async fn a_command_s_registered_execution_takes_its_place_in_the_oom_scores() {
+    let fixture = fixture().await;
+    let workspace = fixture.workspace("api").await;
+    let mut wrapper = admit(&fixture, &workspace, true).await;
+    assert_eq!(wrapper.frame().await, AdmissionFrame::Admitted);
+    let registered = RunReport::Registered {
+        execution: "run".into(),
+    };
+    protocol::write(&mut wrapper.writer, &registered)
+        .await
+        .unwrap();
+    let queue = &fixture.agents.agent_queue;
+    let id = queue.running_measured()[0].id.clone();
+    let execution = crate::queue::state::RunProcesses::Execution("run".into());
+    while queue.measured_processes(&id) != Some(execution.clone()) {
+        tokio::task::yield_now().await;
+    }
+}

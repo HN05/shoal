@@ -246,6 +246,7 @@ impl<'a> Steps<'a> {
         let group = child.id().context("seed build process ID unavailable")? as i32;
         // Dropping the build, as daemon shutdown does, kills its whole group.
         let mut guard = GroupGuard(Some(group));
+        self.memory.admission.runs_in(group as u32);
         // Read before the step is reaped, whose PID then names no group.
         let control_group = shoal_core::process::oom::group_of(group as u32)
             .ok()
