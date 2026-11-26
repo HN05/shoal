@@ -749,6 +749,11 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
     let unspaced = pattern(r"^\S+$");
     assert!(answer(&unspaced, "a\u{FEFF}b").is_err());
     answer(&pattern(r"^[\s\d]+$"), "1 2").unwrap();
+    // A class holds its members as ECMAScript reads them.
+    assert!(answer(&pattern(r"^[^a&&b]+$"), "a").is_err());
+    answer(&pattern(r"^[[~]+$"), "[~").unwrap();
+    answer(&pattern(r"^a[^]b$"), "a-b").unwrap();
+    assert!(answer(&pattern(r"^a[]?$"), "a]").is_err());
     let bounded = pattern(r"\bcat\b");
     assert!(answer(&bounded, "concatenate").is_err());
     answer(&bounded, "a cat").unwrap();

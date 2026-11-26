@@ -212,44 +212,71 @@ const WORD: &str = "[A-Za-z0-9_]";
 
 /// `pattern`, written in ECMAScript's syntax, with what Rust's syntax
 /// means otherwise spelled as ECMAScript means it: `\d`, `\w` and `\b`
-/// ASCII, `\s` ECMAScript's whitespace, and `.` excluding every line
-/// terminator.
+/// ASCII, `\s` ECMAScript's whitespace, `.` excluding every line
+/// terminator, and a character class as its literal members.
 fn ecmascript(pattern: &str) -> String {
     let mut translated = String::new();
-    let mut in_class = false;
-    let mut characters = pattern.chars();
+    let mut characters = pattern.chars().peekable();
     while let Some(character) = characters.next() {
-        let spelled = match (character, in_class) {
-            ('\\', _) => match characters.next() {
-                Some('d') => "[0-9]".to_owned(),
-                Some('D') => "[^0-9]".to_owned(),
-                Some('w') => WORD.to_owned(),
-                Some('W') => "[^A-Za-z0-9_]".to_owned(),
-                Some('s') => format!("[{SPACE}]"),
-                Some('S') => format!("[^{SPACE}]"),
-                Some('b') if !in_class => {
-                    format!("(?:(?<={WORD})(?!{WORD})|(?<!{WORD})(?={WORD}))")
-                }
-                Some('B') if !in_class => {
-                    format!("(?:(?<={WORD})(?={WORD})|(?<!{WORD})(?!{WORD}))")
-                }
-                Some(escaped) => format!("\\{escaped}"),
-                None => "\\".to_owned(),
-            },
-            ('[', false) => {
-                in_class = true;
-                "[".to_owned()
-            }
-            (']', true) => {
-                in_class = false;
-                "]".to_owned()
-            }
-            ('.', false) => "[^\\n\\r\\x{2028}\\x{2029}]".to_owned(),
-            (other, _) => other.to_string(),
+        let spelled = match character {
+            '\\' => escape(characters.next(), false),
+            '[' => class(&mut characters),
+            '.' => "[^\\n\\r\\x{2028}\\x{2029}]".to_owned(),
+            other => other.to_string(),
         };
         translated.push_str(&spelled);
     }
     translated
+}
+
+/// The class whose `[` `characters` follow, through its `]`: `[]`, which
+/// matches nothing, and `[^]`, which matches anything, as ECMAScript reads
+/// them, and its members escaped where Rust would read `[`, `&&`, `--` or
+/// `~~` as a nested class or a set operation.
+fn class(characters: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+    let negated = characters.next_if_eq(&'^').is_some();
+    if characters.next_if_eq(&']').is_some() {
+        let matched = if negated {
+            "[\\x{0}-\\x{10FFFF}]"
+        } else {
+            "[^\\x{0}-\\x{10FFFF}]"
+        };
+        return matched.to_owned();
+    }
+    let mut spelled = String::from(if negated { "[^" } else { "[" });
+    let mut previous = None;
+    while let Some(character) = characters.next() {
+        match character {
+            ']' => {
+                spelled.push(']');
+                return spelled;
+            }
+            '\\' => spelled.push_str(&escape(characters.next(), true)),
+            '[' | '&' | '~' => spelled.push_str(&format!("\\{character}")),
+            '-' if previous == Some('-') => spelled.push_str("\\-"),
+            other => spelled.push(other),
+        }
+        previous = Some(character);
+    }
+    spelled
+}
+
+/// What the escape of `escaped` means in ECMAScript, spelled for Rust,
+/// `in_class` where a character class holds it.
+fn escape(escaped: Option<char>, in_class: bool) -> String {
+    match escaped {
+        Some('d') => "[0-9]".to_owned(),
+        Some('D') => "[^0-9]".to_owned(),
+        Some('w') => WORD.to_owned(),
+        Some('W') => "[^A-Za-z0-9_]".to_owned(),
+        Some('s') => format!("[{SPACE}]"),
+        Some('S') => format!("[^{SPACE}]"),
+        Some('b') if in_class => "\\x08".to_owned(),
+        Some('b') => format!("(?:(?<={WORD})(?!{WORD})|(?<!{WORD})(?={WORD}))"),
+        Some('B') => format!("(?:(?<={WORD})(?={WORD})|(?<!{WORD})(?!{WORD}))"),
+        Some(escaped) => format!("\\{escaped}"),
+        None => "\\\\".to_owned(),
+    }
 }
 
 /// Most code points a `regex` check's pattern may hold, as the dialect
