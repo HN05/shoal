@@ -13,8 +13,9 @@ fn a_set_name_is_one_line_of_at_most_forty_columns() {
     }
     assert_eq!(parse(&"é".repeat(40)).unwrap().chars().count(), 40);
     assert_eq!(parse(&"漢".repeat(20)).unwrap().chars().count(), 20);
-    let longest = "\u{E0001}".repeat(MAX_SPACE_NAME_BYTES / 4);
-    assert_eq!(parse(&longest).unwrap().len(), MAX_SPACE_NAME_BYTES);
+    let longest = SpaceName::longest();
+    assert_eq!(parse(longest.as_str()).unwrap(), longest.as_str());
+    assert_eq!(longest.as_str().len(), MAX_SPACE_NAME_BYTES);
     for invalid in [
         "",
         "   ",

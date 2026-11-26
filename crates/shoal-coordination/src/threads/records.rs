@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
     changes::MAX_ENTRIES_BYTES,
-    space_names::{MAX_SPACE_NAME_BYTES, SpaceName},
+    space_names::SpaceName,
     threads::{
         Finding, Holder, MAX_THREAD_BYTES, NewPost, Outcome, Post, Resolution, Sender, Side,
         Thread, ThreadKind, ThreadSpace,
@@ -630,9 +630,7 @@ pub(super) fn ensure_fits(thread: &Thread) -> Result<()> {
 /// `thread` with the names and numbers of the spaces it names, and the
 /// alerts of its posts, as long as they get.
 fn at_longest(thread: &Thread) -> Thread {
-    // Tag characters take four bytes and no column, so this name is as long
-    // in bytes as a name gets.
-    let name = SpaceName::derive(&"\u{E0001}".repeat(MAX_SPACE_NAME_BYTES / 4), "");
+    let name = SpaceName::longest();
     let number = Some(SpaceNumber::new(u32::MAX));
     let longest = |space: &mut ThreadSpace| {
         space.name = Some(name.clone());

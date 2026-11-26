@@ -61,6 +61,16 @@ impl SpaceName {
         ))
     }
 
+    /// The name that takes the most bytes as JSON, for measuring the records
+    /// that carry names: quotation marks, which JSON escapes, fill its
+    /// columns, and tag characters, which take four bytes and no column, the
+    /// rest of its bytes.
+    pub fn longest() -> Self {
+        let tags = (MAX_SPACE_NAME_BYTES - MAX_SPACE_NAME_WIDTH) / 4;
+        let quotes = "\"".repeat(MAX_SPACE_NAME_WIDTH);
+        Self(format!("{quotes}{}", "\u{E0001}".repeat(tags)))
+    }
+
     /// The name as [`Self::parse`] reads it, refusing one a request sent
     /// that someone could not have set, since requests read names verbatim.
     pub fn checked(&self) -> Result<Self> {
