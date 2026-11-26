@@ -204,17 +204,16 @@ impl Surface {
     }
 
     /// The inputs of `button`'s event: the keys of its context that bind
-    /// data an input component enters in the button's items, in the order
-    /// those components render. A key that binds data no component enters
-    /// takes the data as it is.
+    /// data an input component enters, wherever the input is placed, in the
+    /// order those components render. A key that binds data no component
+    /// enters takes the data as it is.
     fn inputs(&self, event: &str, button: &Placed<'_>) -> Vec<Input> {
-        let lists = self.lists_above(button.component);
         let mut entered: Vec<(usize, Input)> = (self.context(event).into_iter())
             .filter_map(|(key, value)| {
                 let path = scoped(&button.scope, binding(value)?);
                 let (at, input) =
                     (self.tree_order().into_iter().enumerate()).find_map(|(at, component)| {
-                        let scope = self.scope_beside(component, &lists, &button.items)?;
+                        let scope = self.scope_toward(component, &path)?;
                         let placed = Placed {
                             component,
                             scope,
@@ -234,19 +233,19 @@ impl Surface {
         entered.into_iter().map(|(_, input)| input).collect()
     }
 
-    /// The scope of `component` in the items `items` of the lists `lists`
-    /// repeat a button in: none unless the lists that repeat `component`
-    /// are the outermost of those.
-    fn scope_beside(
-        &self,
-        component: Component<'_>,
-        lists: &[Component<'_>],
-        items: &[usize],
-    ) -> Option<String> {
-        let own = self.lists_above(component);
-        let shared = (own.len() <= lists.len())
-            && own.iter().zip(lists).all(|(own, list)| own.id == list.id);
-        shared.then(|| scope_in(&own, items))?
+    /// The scope `component` is placed in where its data could be at
+    /// `path`: for each list that repeats it, the item `path` names in
+    /// that list's data; none when `path` lies in no item of one.
+    fn scope_toward(&self, component: Component<'_>, path: &str) -> Option<String> {
+        let mut scope = String::new();
+        for list in self.lists_above(component) {
+            let items = scoped(&scope, list.template()?.1);
+            let rest = path.strip_prefix(&items)?.strip_prefix('/')?;
+            let item = rest.split('/').next()?;
+            item.parse::<usize>().ok()?;
+            scope = format!("{items}/{item}");
+        }
+        Some(scope)
     }
 
     /// What the component `id` says, as a button's label: a `Text`'s
@@ -278,17 +277,6 @@ impl SurfaceAction {
         let keys: Vec<&str> = self.inputs.iter().map(|input| input.key.as_str()).collect();
         keys.join(", ")
     }
-}
-
-/// The data path the items `items` of the lists `lists` read under, the
-/// outermost first; none when a list has no template.
-fn scope_in(lists: &[Component<'_>], items: &[usize]) -> Option<String> {
-    let mut scope = String::new();
-    for (list, item) in lists.iter().zip(items) {
-        let (_, path) = list.template()?;
-        scope = format!("{}/{item}", scoped(&scope, path));
-    }
-    Some(scope)
 }
 
 /// The component types that enter data, which their `value` binds.

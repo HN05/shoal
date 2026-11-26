@@ -726,3 +726,30 @@ fn an_option_s_label_bound_to_data_reads_the_data() {
         }
     );
 }
+
+#[test]
+fn a_button_outside_a_list_takes_an_input_inside_it() {
+    let listed = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["rows", "save"]},
+            {"id": "rows", "component": "List", "children": {"componentId": "row", "path": "/items"}},
+            {"id": "row", "component": "Column", "children": ["name", "pick"]},
+            {"id": "name", "component": "TextField", "label": "Name", "value": {"@path": "name"}},
+            {"id": "pick", "component": "Button", "child": "pick-label",
+             "action": {"event": {"name": "pick",
+                 "context": {"index": {"@call": "@index", "args": {"offset": 1}}}}}},
+            {"id": "pick-label", "component": "Text", "text": "Pick"},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save", "context": {"first": {"@path": "/items/0/name"}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"items": [{"name": "Ada"}, {"name": "Grace"}]}),
+    );
+    // A button outside the list takes a value for an input inside it.
+    let save = listed.action("save").unwrap();
+    assert_eq!(save.inputs.len(), 1);
+    let resolved = listed
+        .resolve("save", values(&[("first", json!("Ann"))]))
+        .unwrap();
+    assert_eq!(Value::Object(resolved), json!({"first": "Ann"}));
+}
