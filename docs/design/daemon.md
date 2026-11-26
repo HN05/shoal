@@ -169,6 +169,10 @@ The code that makes a change records its event. A chat's events take the same
 recording path and shape as a workspace's, and name the space by its ID and
 kind. No event kind belongs to one kind of space for what both record.
 
+Each kind of event has one shape. Its kind decides the fields it records,
+and it records each of them, null when empty. When a kind's shape changes,
+a migration rewrites the events stored in the old one.
+
 A space's log is a filtered view of the journal, not a second store, and so is
 Shoal's log. Shoal's own events belong to no space. A child's creation and
 removal are events of its parent too. A removed space's place in the tree is

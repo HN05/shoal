@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use shoal_states::states;
 
 use crate::{
-    events::{EventCursor, EventKind, FileEvent, ShoalEvent, SpaceEvent},
-    forge::updates::UpdateKind,
+    events::{EventCursor, EventKind, FileEvent, JournaledSpaceEvent, ShoalEvent},
     space_names::SpaceSelector,
     time::UnixTime,
 };
@@ -32,7 +31,7 @@ pub struct LogTopic {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LogEntry {
-    Event(Box<SpaceEvent>),
+    Event(Box<JournaledSpaceEvent>),
     File(Box<FileEvent>),
     Shoal(Box<ShoalEvent>),
 }
@@ -69,14 +68,9 @@ impl LogEntry {
         let Self::Event(event) = self else {
             return matches!(self, Self::Shoal(_));
         };
-        let details = &event.details;
-        match details.kind {
-            EventKind::ItemActivity => details.item_activity.as_ref().is_some_and(|activity| {
-                matches!(
-                    activity.update.kind,
-                    UpdateKind::Closed | UpdateKind::Merged | UpdateKind::Reopened
-                )
-            }),
+        let event = &event.details.event;
+        match event.kind() {
+            EventKind::ItemActivity => !event.is_bulk(),
             kind => ENTRY_KINDS.contains(&kind),
         }
     }

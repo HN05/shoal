@@ -215,7 +215,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
     let changed: Vec<_> = events
         .iter()
         .filter_map(|e| match e {
-            EventItem::Event(e) if e.details.kind == EventKind::BranchChanged => {
+            EventItem::Event(e) if e.details.kind() == EventKind::BranchChanged => {
                 Some(e.details.space.branch().map(BranchName::as_str))
             }
             _ => None,
@@ -309,7 +309,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         }
         assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
         let events = manager.space_events(None, 100).await.unwrap();
-        assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id == workspace.id && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
+        assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.space_id == workspace.id && e.details.kind() == EventKind::Removed && e.details.cause == Some(cause))));
     }
     let workspace = manager
         .create_workspace(&repo.id, "retain".into(), None, None, None)
@@ -342,7 +342,8 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .iter()
         .filter_map(|e| match e {
             EventItem::Event(e)
-                if e.details.space_id == workspace.id && e.details.kind == EventKind::Retained =>
+                if e.details.space_id == workspace.id
+                    && e.details.kind() == EventKind::Retained =>
             {
                 Some(e.details.error.as_deref().unwrap())
             }

@@ -1,0 +1,2 @@
+-- Each journal record has the one shape of its kind, which the
+-- migration's preparation rewrote the older ones into.

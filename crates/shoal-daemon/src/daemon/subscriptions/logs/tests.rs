@@ -37,7 +37,7 @@ fn kinds(entries: &[LogEntry]) -> Vec<EventKind> {
     entries
         .iter()
         .filter_map(|entry| match entry {
-            LogEntry::Event(event) => Some(event.details.kind),
+            LogEntry::Event(event) => Some(event.details.kind()),
             _ => None,
         })
         .collect()

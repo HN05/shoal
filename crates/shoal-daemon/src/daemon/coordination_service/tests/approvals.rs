@@ -165,7 +165,13 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
     // Each decision reaches the space's log once, though repeated.
     let decided: Vec<_> = (manager.space_events(None, 100).await?.into_iter())
         .filter_map(|item| match item {
-            crate::daemon::events::EventItem::Event(event) => event.details.approval,
+            crate::daemon::events::EventItem::Event(event) => match event.details.event {
+                shoal_protocol::events::SpaceEvent::ApprovalRequested { approval }
+                | shoal_protocol::events::SpaceEvent::ApprovalDecided { approval } => {
+                    Some(approval)
+                }
+                _ => None,
+            },
             _ => None,
         })
         .map(|approval| (approval.number, approval.status))

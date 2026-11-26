@@ -57,10 +57,10 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
     let agents: Vec<_> = items
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) => event.details.agent.map(|agent| {
+            EventItem::Event(event) => event.details.event.agent().map(|agent| {
                 (
-                    event.details.kind,
-                    agent.execution_id.unwrap().to_string(),
+                    event.details.kind(),
+                    agent.execution_id.clone().unwrap().to_string(),
                     agent.exit_code,
                 )
             }),
@@ -208,11 +208,11 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
         .collect::<serde_json::Result<Vec<_>>>()?;
     let kinds = events
         .iter()
-        .filter_map(|event| {
-            let link = event.link.as_ref().map(|link| link.kind);
-            let item = event.item.as_ref().map(|item| item.kind);
-            let activity = event.item_activity.as_ref().map(|activity| activity.kind);
-            link.or(item).or(activity)
+        .filter_map(|event| match &event.event {
+            SpaceEvent::Linked { link } | SpaceEvent::Unlinked { link } => Some(link.kind),
+            SpaceEvent::ItemChanged { item } => Some(item.kind),
+            SpaceEvent::ItemActivity { item_activity } => Some(item_activity.kind),
+            _ => None,
         })
         .collect::<Vec<_>>();
     assert_eq!(kinds, [LinkKind::Ci, LinkKind::Ci, LinkKind::Ci]);
@@ -261,7 +261,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
             ))
         })
         .collect::<Result<Vec<_>>>()?;
-    let kinds: Vec<_> = events.iter().map(|(_, event)| event.kind).collect();
+    let kinds: Vec<_> = events.iter().map(|(_, event)| event.kind()).collect();
     assert_eq!(
         kinds,
         [

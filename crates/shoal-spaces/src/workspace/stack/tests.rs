@@ -1,7 +1,7 @@
 use crate::model::EventCause;
 use crate::stand_in::Fixture;
 use crate::{
-    events::{EventItem, EventKind},
+    events::{EventItem, EventKind, SpaceEvent},
     model::WorkspaceRef,
     removal::{InspectionPolicy, UnsavedWork},
 };
@@ -86,14 +86,18 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
             EventItem::Event(event)
                 if event.details.space_id == upper.id
                     && matches!(
-                        event.details.kind,
+                        event.details.kind(),
                         EventKind::Created | EventKind::BaseChanged
                     ) =>
             {
                 Some((
-                    event.details.kind,
+                    event.details.kind(),
                     event.details.cause,
-                    event.details.base_workspace.clone(),
+                    match &event.details.event {
+                        SpaceEvent::Created { base_workspace, .. }
+                        | SpaceEvent::BaseChanged { base_workspace } => base_workspace.clone(),
+                        _ => None,
+                    },
                 ))
             }
             _ => None,
@@ -102,17 +106,13 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
     assert_eq!(
         bases,
         [
-            (EventKind::Created, None, Some(Some(reference(&middle)))),
+            (EventKind::Created, None, Some(reference(&middle))),
             (
                 EventKind::BaseChanged,
                 Some(EventCause::Removed),
-                Some(Some(reference(&lower)))
+                Some(reference(&lower))
             ),
-            (
-                EventKind::BaseChanged,
-                Some(EventCause::Removed),
-                Some(None)
-            ),
+            (EventKind::BaseChanged, Some(EventCause::Removed), None),
         ]
     );
 }

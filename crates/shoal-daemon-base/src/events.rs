@@ -11,8 +11,8 @@ use super::{log, store::Store};
 use crate::time::UnixTime;
 pub use shoal_protocol::events::{
     AgentEvent, AlertEvent, ApprovalEvent, EventCursor, EventDetails, EventItem, EventKind,
-    FileEvent, FileEventDetails, JobEndedEvent, ShoalEvent, ShoalEventDetails, ShoalEventKind,
-    SpaceEvent, StoppedProcess,
+    FileEvent, FileEventDetails, JobEndedEvent, JournaledSpaceEvent, ShoalEvent, ShoalEventDetails,
+    ShoalEventKind, SpaceEvent, StoppedProcess,
 };
 
 /// A journal row as stored: file events carry the space's identity in
@@ -28,7 +28,7 @@ enum Record {
 /// The stored event `record` with its journal ID and time.
 fn decode(id: EventCursor, created_at: UnixTime, record: &str) -> Result<EventItem> {
     Ok(match serde_json::from_str(record)? {
-        Record::Workspace(details) => EventItem::Event(Box::new(SpaceEvent {
+        Record::Workspace(details) => EventItem::Event(Box::new(JournaledSpaceEvent {
             id,
             created_at,
             details: *details,

@@ -70,7 +70,7 @@ fn shows(tx: &Transaction<'_>, entry: &LogEntry, filter: LogFilter) -> Result<bo
     let LogEntry::Event(event) = entry else {
         return Ok(entry.is_entry());
     };
-    if event.details.kind != EventKind::Created {
+    if event.details.kind() != EventKind::Created {
         return Ok(entry.is_entry());
     }
     let reopened: bool = tx.query_row(

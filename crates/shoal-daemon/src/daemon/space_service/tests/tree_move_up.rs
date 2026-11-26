@@ -97,7 +97,7 @@ async fn a_space_moves_below_its_grandparent_and_its_branch_past_its_old_base() 
     let changes: Vec<_> = (events.iter())
         .filter_map(|item| match item {
             EventItem::Event(event) if event.details.space_id == leaf.id => {
-                Some((event.details.kind, event.details.cause))
+                Some((event.details.kind(), event.details.cause))
             }
             _ => None,
         })

@@ -16,7 +16,7 @@ async fn retentions(manager: &Fixture) -> Vec<Option<EventCause>> {
     events
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::Retained => {
+            EventItem::Event(event) if event.details.kind() == EventKind::Retained => {
                 Some(event.details.cause)
             }
             _ => None,

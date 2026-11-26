@@ -9,7 +9,7 @@ use shoal_protocol::progress::StepState;
 use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{
-    events::{EventItem, EventKind},
+    events::{EventItem, EventKind, SpaceEvent},
     model::Workspace,
 };
 use shoal_ids::space_ids::SpaceId;
@@ -133,8 +133,11 @@ async fn workspaces<const N: usize>(
 async fn progress_events(manager: &Fixture) -> Vec<(SpaceId, Option<String>)> {
     (manager.space_events(None, 100).await.unwrap().into_iter())
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::ProgressChanged => {
-                let status = event.details.progress.and_then(|progress| progress.status);
+            EventItem::Event(event) if event.details.kind() == EventKind::ProgressChanged => {
+                let SpaceEvent::ProgressChanged { progress } = event.details.event else {
+                    return None;
+                };
+                let status = progress.status;
                 Some((event.details.space_id, status))
             }
             _ => None,
@@ -275,10 +278,14 @@ async fn a_done_summary_sets_the_status_line_with_the_completion_it_records() {
 async fn blocker_events(manager: &Fixture) -> Vec<(EventKind, String)> {
     (manager.space_events(None, 100).await.unwrap().into_iter())
         .filter_map(|item| match item {
-            EventItem::Event(event) => {
-                let blocker = event.details.blocker?;
-                Some((event.details.kind, blocker.blocker.cause()))
-            }
+            EventItem::Event(event) => match &event.details.event {
+                SpaceEvent::BlockerAdded { blocker }
+                | SpaceEvent::BlockerRemoved { blocker }
+                | SpaceEvent::BlockerCleared { blocker } => {
+                    Some((event.details.kind(), blocker.blocker.cause()))
+                }
+                _ => None,
+            },
             _ => None,
         })
         .collect()

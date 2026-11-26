@@ -217,7 +217,7 @@ fn journal(db: &Connection) -> Result<Vec<shoal_protocol::events::EventDetails>>
 
 #[test]
 fn renames_threads_and_children_reach_their_spaces_logs() -> Result<()> {
-    use shoal_protocol::events::EventKind;
+    use shoal_protocol::events::{EventKind, SpaceEvent};
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
     db.execute_batch(
@@ -252,14 +252,15 @@ fn renames_threads_and_children_reach_their_spaces_logs() -> Result<()> {
     )?;
     let events: Vec<_> = journal(&db)?
         .into_iter()
-        .filter(|event| !matches!(event.kind, EventKind::Created | EventKind::Ready))
+        .filter(|event| !matches!(event.kind(), EventKind::Created | EventKind::Ready))
         .map(|event| {
             let space = event.space_id.to_string();
-            let detail = match event.kind {
-                EventKind::ChildCreated | EventKind::ChildRemoved => {
-                    event.child.map(|child| child.name.to_string())
+            let kind = event.kind();
+            let detail = match &event.event {
+                SpaceEvent::ChildCreated { child } | SpaceEvent::ChildRemoved { child } => {
+                    Some(child.name.to_string())
                 }
-                EventKind::Renamed => Some(format!(
+                SpaceEvent::Renamed => Some(format!(
                     "{} {}",
                     event.name,
                     event
@@ -268,18 +269,16 @@ fn renames_threads_and_children_reach_their_spaces_logs() -> Result<()> {
                         .map(ToString::to_string)
                         .unwrap_or_default()
                 )),
-                EventKind::ThreadOpened
-                | EventKind::ThreadPosted
-                | EventKind::ThreadForwarded
-                | EventKind::ThreadResolved => event.thread.map(|thread| {
-                    format!(
-                        "{} {:?} {:?} {:?} {:?}",
-                        thread.number, thread.sender, thread.text, thread.to, thread.outcome
-                    )
-                }),
+                SpaceEvent::ThreadOpened { thread }
+                | SpaceEvent::ThreadPosted { thread }
+                | SpaceEvent::ThreadForwarded { thread }
+                | SpaceEvent::ThreadResolved { thread } => Some(format!(
+                    "{} {:?} {:?} {:?} {:?}",
+                    thread.number, thread.sender, thread.text, thread.to, thread.outcome
+                )),
                 _ => None,
             };
-            (space, event.kind, detail)
+            (space, kind, detail)
         })
         .collect();
     let some = |text: &str| Some(text.to_owned());
@@ -338,8 +337,10 @@ fn a_workspace_s_creation_takes_the_base_recorded_after_it() -> Result<()> {
     )?;
     let created: Vec<_> = journal(&db)?
         .into_iter()
-        .filter(|event| event.kind == shoal_protocol::events::EventKind::Created)
-        .map(|event| event.base_ref)
+        .filter_map(|event| match event.event {
+            shoal_protocol::events::SpaceEvent::Created { base_ref, .. } => Some(base_ref),
+            _ => None,
+        })
         .collect();
     assert_eq!(created, [Some("refs/heads/main".to_owned())]);
     Ok(())

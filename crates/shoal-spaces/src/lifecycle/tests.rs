@@ -57,7 +57,7 @@ pub(super) async fn removal_entries(
     entries
         .into_iter()
         .filter_map(|entry| match entry {
-            LogEntry::Event(event) => Some((event.details.kind, event.details.cause)),
+            LogEntry::Event(event) => Some((event.details.kind(), event.details.cause)),
             _ => None,
         })
         .filter(|(kind, _)| matches!(kind, EventKind::RemovalStarted | EventKind::Retained))

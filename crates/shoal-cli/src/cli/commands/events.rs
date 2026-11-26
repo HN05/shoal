@@ -21,7 +21,12 @@ pub(super) async fn run(ctx: &Context, follow: bool, after: Option<EventCursor>)
         };
         ctx.show(&item, |item| match item {
             EventItem::Event(event) => {
-                outln!("{} {} {}", event.id, event.details.kind, event.details.name)
+                outln!(
+                    "{} {} {}",
+                    event.id,
+                    event.details.kind(),
+                    event.details.name
+                )
             }
             EventItem::File(event) => {
                 outln!(

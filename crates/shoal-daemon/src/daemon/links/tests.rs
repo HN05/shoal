@@ -43,9 +43,11 @@ async fn link_events(manager: &Manager, kind: EventKind) -> Vec<LinkEvent> {
         .unwrap()
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == kind => {
-                event.details.link.map(|link| *link)
-            }
+            EventItem::Event(event) if event.details.kind() == kind => match event.details.event {
+                shoal_protocol::events::SpaceEvent::Linked { link }
+                | shoal_protocol::events::SpaceEvent::Unlinked { link } => Some(*link),
+                _ => None,
+            },
             _ => None,
         })
         .collect()

@@ -5,10 +5,11 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
 mod github_activity;
+mod journal_shapes;
 mod post_surfaces;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 302;
+pub const SCHEMA_VERSION: i64 = 303;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -53,6 +54,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         302,
         include_str!("migrations/0302_github_activity_ids.sql"),
         Some(github_activity::key_by_database_ids),
+    ),
+    (
+        303,
+        include_str!("migrations/0303_journal_event_shapes.sql"),
+        Some(journal_shapes::rewrite_records),
     ),
 ];
 

@@ -525,8 +525,14 @@ async fn demo_events(
         .into_iter()
         .filter_map(|item| match item {
             EventItem::Event(event) if event.details.space_id == *workspace => {
-                let demo = event.details.demo?;
-                Some((event.details.kind, demo.name, demo.udid))
+                let kind = event.details.kind();
+                match event.details.event {
+                    shoal_protocol::events::SpaceEvent::DemoStarted { demo }
+                    | shoal_protocol::events::SpaceEvent::DemoStopped { demo } => {
+                        Some((kind, demo.name, demo.udid))
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         })

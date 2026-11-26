@@ -138,7 +138,7 @@ async fn a_chats_progress_is_its_own_and_goes_with_it() {
     let events: Vec<_> = (manager.space_events(None, 100).await.unwrap())
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::ProgressChanged => {
+            EventItem::Event(event) if event.details.kind() == EventKind::ProgressChanged => {
                 Some(event.details)
             }
             _ => None,

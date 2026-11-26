@@ -29,12 +29,20 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
         .filter_map(|item| match item {
             EventItem::Event(event)
                 if event.details.space.kind() == SpaceKind::Chat
-                    && matches!(event.details.kind, EventKind::Created | EventKind::Renamed) =>
+                    && matches!(
+                        event.details.kind(),
+                        EventKind::Created | EventKind::Renamed
+                    ) =>
             {
-                Some(format!("{} {}", event.details.kind, event.details.name))
+                Some(format!("{} {}", event.details.kind(), event.details.name))
             }
-            EventItem::Event(event) if event.details.kind == EventKind::ParentChanged => {
-                let parent = event.details.parent.flatten().map(|parent| parent.id);
+            EventItem::Event(event) if event.details.kind() == EventKind::ParentChanged => {
+                let shoal_protocol::events::SpaceEvent::ParentChanged { parent } =
+                    &event.details.event
+                else {
+                    return None;
+                };
+                let parent = parent.as_ref().map(|parent| &parent.id);
                 Some(format!("{} {parent:?}", event.details.name))
             }
             EventItem::Event(_)
@@ -431,7 +439,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
         shoal_protocol::log::LogEntry::Event(event) => Some(event.details),
         _ => None,
     });
-    let removed = removed.map(|details| (details.kind, details.cause));
+    let removed = removed.map(|details| (details.kind(), details.cause));
     assert_eq!(
         removed,
         Some((EventKind::Removed, Some(EventCause::Manual)))
@@ -926,7 +934,7 @@ async fn a_chat_s_log_shows_a_removal_that_failed() {
         .unwrap();
     let removal: Vec<_> = (entries.into_iter())
         .filter_map(|entry| match entry {
-            shoal_protocol::log::LogEntry::Event(event) => Some(event.details.kind),
+            shoal_protocol::log::LogEntry::Event(event) => Some(event.details.kind()),
             _ => None,
         })
         .filter(|kind| matches!(kind, EventKind::RemovalStarted | EventKind::Retained))

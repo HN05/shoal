@@ -42,10 +42,16 @@ async fn review_events(manager: &Manager) -> Vec<(String, Option<String>)> {
         .unwrap()
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) => event
-                .details
-                .review
-                .map(|review| (event.details.kind.to_string(), review.url)),
+            EventItem::Event(event) => {
+                let kind = event.details.kind().to_string();
+                match event.details.event {
+                    shoal_protocol::events::SpaceEvent::ReviewReady { review }
+                    | shoal_protocol::events::SpaceEvent::ReviewCleared { review } => {
+                        Some((kind, review.url))
+                    }
+                    _ => None,
+                }
+            }
             EventItem::File(_) | EventItem::Shoal(_) | EventItem::Gap { .. } => None,
         })
         .collect()
@@ -703,7 +709,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap()
         .into_iter()
         .filter(|item| {
-            matches!(item, EventItem::Event(event) if event.details.kind == EventKind::ItemChanged)
+            matches!(item, EventItem::Event(event) if event.details.kind() == EventKind::ItemChanged)
         })
         .count();
     assert_eq!(changes, 1);

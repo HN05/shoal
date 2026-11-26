@@ -1,7 +1,7 @@
 use super::*;
 use crate::daemon::manager::Manager;
 use crate::daemon::{
-    events::{EventItem, EventKind},
+    events::EventItem,
     test_support::{git, manager, repository},
 };
 use shoal_protocol::{links::issue::Registration, space_names::SpaceSelector};
@@ -73,9 +73,10 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         .unwrap()
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::Linked => {
-                event.details.link
-            }
+            EventItem::Event(event) => match event.details.event {
+                shoal_protocol::events::SpaceEvent::Linked { link } => Some(link),
+                _ => None,
+            },
             _ => None,
         })
         .collect();
@@ -150,8 +151,8 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         .await
         .unwrap();
     assert!(reopened.space_events(None, 100).await.unwrap().iter().any(
-        |item| matches!(item, EventItem::Event(event) if event.details.kind == EventKind::Unlinked
-                && event.details.link.as_ref().is_some_and(|link| link.url == url))
+        |item| matches!(item, EventItem::Event(event)
+            if matches!(&event.details.event, shoal_protocol::events::SpaceEvent::Unlinked { link } if link.url == url))
     ));
     let registrations = reopened
         .links

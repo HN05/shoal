@@ -173,7 +173,8 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         .into_iter()
         .filter(|item| {
             matches!(item,
-                crate::daemon::events::EventItem::Event(event) if event.details.item.is_some())
+                crate::daemon::events::EventItem::Event(event)
+                    if matches!(event.details.event, shoal_protocol::events::SpaceEvent::ItemChanged { .. }))
         })
         .count();
     assert_eq!(created, 2);

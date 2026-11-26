@@ -107,7 +107,7 @@ async fn event_kinds(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> V
     let events = manager.space_events(None, 500).await.unwrap();
     (events.iter())
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.space_id == *id => Some(event.details.kind),
+            EventItem::Event(event) if event.details.space_id == *id => Some(event.details.kind()),
             _ => None,
         })
         .collect()

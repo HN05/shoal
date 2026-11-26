@@ -147,7 +147,7 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
     let removals: Vec<_> = events
         .iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::Removed => {
+            EventItem::Event(event) if event.details.kind() == EventKind::Removed => {
                 Some((event.details.name.to_string(), event.details.cause))
             }
             _ => None,

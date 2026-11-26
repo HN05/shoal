@@ -61,8 +61,11 @@ fn the_new_tools_first_session_completes_the_handoff_and_journals_it() -> Result
     );
     assert_eq!(event["space_kind"], "chat");
     let details: shoal_protocol::events::EventDetails = serde_json::from_value(event)?;
+    let shoal_protocol::events::SpaceEvent::Converted { handoff } = details.event else {
+        anyhow::bail!("not a conversion: {:?}", details.event);
+    };
     assert_eq!(
-        details.handoff.map(|handoff| handoff.to.session),
+        handoff.map(|handoff| handoff.to.session),
         Some(Some("after".into()))
     );
     Ok(())

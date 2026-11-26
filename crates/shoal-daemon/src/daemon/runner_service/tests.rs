@@ -1492,12 +1492,13 @@ async fn a_runner_that_outlives_its_run_is_stopped_after_what_its_steps_left() {
 
 /// The `job_ended` events of every space.
 async fn ended_jobs(manager: &Manager) -> Vec<shoal_protocol::events::JobEndedEvent> {
-    use crate::daemon::events::{EventItem, EventKind};
+    use crate::daemon::events::EventItem;
     (manager.space_events(None, 1000).await.unwrap().into_iter())
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::JobEnded => {
-                event.details.job.map(|job| *job)
-            }
+            EventItem::Event(event) => match event.details.event {
+                shoal_protocol::events::SpaceEvent::JobEnded { job } => Some(*job),
+                _ => None,
+            },
             _ => None,
         })
         .collect()
@@ -1640,7 +1641,10 @@ async fn load_protection_ends_a_job_before_agents_and_reruns_it_once_its_run_fin
         .unwrap()
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) => event.details.job.map(|job| job.reason),
+            EventItem::Event(event) => match event.details.event {
+                shoal_protocol::events::SpaceEvent::JobEnded { job } => Some(job.reason),
+                _ => None,
+            },
             _ => None,
         })
         .collect();

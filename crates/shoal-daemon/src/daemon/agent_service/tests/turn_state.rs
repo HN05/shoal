@@ -1,7 +1,7 @@
 use crate::daemon::scope::Access;
 use crate::{
     daemon::{
-        events::{EventItem, EventKind},
+        events::EventItem,
         manager::Manager,
         scope::{self, Caller},
         test_support::{manager, repository},
@@ -20,9 +20,12 @@ async fn state_events(manager: &Manager) -> Vec<Option<AgentState>> {
         .unwrap()
         .into_iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::AgentState => {
-                Some(event.details.agent_state.unwrap().state)
-            }
+            EventItem::Event(event) => match event.details.event {
+                shoal_protocol::events::SpaceEvent::AgentState { agent_state } => {
+                    Some(agent_state.state)
+                }
+                _ => None,
+            },
             _ => None,
         })
         .collect()

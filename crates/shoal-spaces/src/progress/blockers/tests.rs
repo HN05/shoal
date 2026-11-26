@@ -1,4 +1,4 @@
-use crate::events::{EventItem, EventKind};
+use crate::events::{EventItem, EventKind, SpaceEvent};
 use crate::progress::Plan;
 use crate::progress::blockers::*;
 use crate::stand_in::Fixture;
@@ -247,8 +247,11 @@ async fn forge_blockers_clear_as_their_lookups_say_and_failures_keep_them() {
 
     let events: Vec<_> = (manager.space_events(None, 100).await.unwrap().into_iter())
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::BlockerCleared => {
-                event.details.blocker.map(|blocker| blocker.blocker.target)
+            EventItem::Event(event) if event.details.kind() == EventKind::BlockerCleared => {
+                match event.details.event {
+                    SpaceEvent::BlockerCleared { blocker } => Some(blocker.blocker.target),
+                    _ => None,
+                }
             }
             _ => None,
         })

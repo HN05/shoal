@@ -2,7 +2,7 @@ use crate::daemon::scope::Access;
 use crate::model::EventCause;
 use crate::{
     daemon::{
-        events::{EventItem, EventKind},
+        events::EventItem,
         test_support::{manager, repository},
     },
     model::WorkspaceRef,
@@ -99,11 +99,14 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
     let changes: Vec<_> = events
         .iter()
         .filter_map(|item| match item {
-            EventItem::Event(event) if event.details.kind == EventKind::BaseChanged => Some((
-                event.details.space_id.clone(),
-                event.details.cause,
-                event.details.base_workspace.clone(),
-            )),
+            EventItem::Event(event) => match &event.details.event {
+                shoal_protocol::events::SpaceEvent::BaseChanged { base_workspace } => Some((
+                    event.details.space_id.clone(),
+                    event.details.cause,
+                    base_workspace.clone(),
+                )),
+                _ => None,
+            },
             _ => None,
         })
         .collect();
@@ -113,9 +116,9 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
             (
                 upper.id.clone(),
                 Some(EventCause::Manual),
-                Some(Some(reference(lower)))
+                Some(reference(lower))
             ),
-            (upper.id.clone(), Some(EventCause::Manual), Some(None)),
+            (upper.id.clone(), Some(EventCause::Manual), None),
         ]
     );
     // A base is also named by its space's number.

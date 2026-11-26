@@ -1540,8 +1540,8 @@ async fn wait_start_handled(manager: &Manager, workspace: &crate::model::Workspa
             let events = manager.space_events(None, 100).await.unwrap();
             if events.iter().any(|item| match item {
                 EventItem::Event(event) => {
-                    event.details.kind == EventKind::AgentStarted
-                        && (event.details.agent.as_ref())
+                    event.details.kind() == EventKind::AgentStarted
+                        && (event.details.event.agent())
                             .and_then(|agent| agent.execution_id.as_ref().map(ExecutionId::as_str))
                             == Some(execution.as_str())
                 }

@@ -35,13 +35,6 @@ fn details_name_what_each_entry_is_about() {
         "from api-part"
     );
     assert_eq!(
-        details(serde_json::json!({"kind": "created", "space_kind": "chat",
-            "base_ref": null, "base_workspace": null,
-            "agent": {"name": "codex", "execution_id": null, "exit_code": null},
-            "parent": {"id": "p", "name": "plan-auth", "kind": "workspace"}})),
-        "codex, parent plan-auth"
-    );
-    assert_eq!(
         details(
             serde_json::json!({"kind": "renamed", "name": "Login retries",
             "branch": "fix/login"})

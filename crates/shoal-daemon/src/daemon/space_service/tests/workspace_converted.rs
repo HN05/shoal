@@ -24,7 +24,7 @@ async fn kinds(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -> Vec<Str
     (manager.space_events(None, 100).await.unwrap().into_iter())
         .filter_map(|item| match item {
             EventItem::Event(event) if event.details.space_id == *id => {
-                Some(event.details.kind.to_string())
+                Some(event.details.kind().to_string())
             }
             _ => None,
         })

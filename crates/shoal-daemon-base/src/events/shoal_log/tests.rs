@@ -42,7 +42,7 @@ fn lines(entries: &[LogEntry]) -> Vec<String> {
     entries
         .iter()
         .map(|entry| match entry {
-            LogEntry::Event(event) => format!("{} {}", event.details.name, event.details.kind),
+            LogEntry::Event(event) => format!("{} {}", event.details.name, event.details.kind()),
             LogEntry::Shoal(event) => event.details.kind.to_string(),
             other => panic!("unexpected entry {other:?}"),
         })

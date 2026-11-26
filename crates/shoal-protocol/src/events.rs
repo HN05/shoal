@@ -199,7 +199,6 @@ states!(
 /// An event of a space, a workspace or a chat.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventDetails {
-    pub kind: EventKind,
     pub space_id: SpaceId,
     /// What the space was when it recorded the event.
     #[serde(flatten)]
@@ -209,82 +208,233 @@ pub struct EventDetails {
     pub name: SpaceName,
     pub cause: Option<EventCause>,
     pub error: Option<String>,
-    /// The ref a workspace started from, such as `refs/heads/main`, on its
-    /// creation; null for one at a commit and for a chat.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_ref: Option<String>,
-    /// The mark a review event describes.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<ReviewEvent>,
-    /// Present on creation and base changes; null when there is no base.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "present_or_null"
-    )]
-    pub base_workspace: Option<Option<crate::model::WorkspaceRef>>,
-    /// Present on creation and parent changes; null when there is no parent.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "present_or_null"
-    )]
-    pub parent: Option<Option<crate::model::SpaceRef>>,
-    /// The issue, PR or CI run link changed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub link: Option<Box<LinkEvent>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_state: Option<AgentStateEvent>,
-    /// The issue or PR Shoal changed, and how.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub item: Option<Box<ItemEvent>>,
-    /// An issue or PR changed on its forge.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub item_activity: Option<Box<ItemActivityEvent>>,
-    /// The demo that started or stopped.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub demo: Option<DemoEvent>,
-    /// The simulator lease acquired or released.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub simulator: Option<SimulatorEvent>,
-    /// The agent that started, stopped or exited, or that a chat was created
-    /// with, which a chat's creation an earlier Shoal journaled names.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<AgentEvent>,
-    /// The thread opened, posted in, forwarded or resolved.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub thread: Option<Box<ThreadEvent>>,
-    /// The approval requested or decided.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approval: Option<Box<ApprovalEvent>>,
-    /// The gate's verdict on an approval.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gate: Option<Box<GateEvent>>,
-    /// The alert sent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub alert: Option<AlertEvent>,
-    /// The space's progress after a change, as `shoal progress --json`
+    #[serde(flatten)]
+    pub event: SpaceEvent,
+}
+
+impl EventDetails {
+    pub fn kind(&self) -> EventKind {
+        self.event.kind()
+    }
+}
+
+/// What happened to a space, with what only that kind of event records.
+/// Its `kind` is the [`EventKind`] of the same name.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SpaceEvent {
+    Created {
+        /// The ref a workspace started from, such as `refs/heads/main`;
+        /// null for one at a commit and for a chat.
+        base_ref: Option<String>,
+        base_workspace: Option<crate::model::WorkspaceRef>,
+        parent: Option<crate::model::SpaceRef>,
+    },
+    Ready,
+    SetupFailed,
+    Completed,
+    Undone,
+    RemovalStarted,
+    Removed,
+    Retained,
+    BranchChanged,
+    ReviewReady {
+        review: ReviewEvent,
+    },
+    ReviewCleared {
+        review: ReviewEvent,
+    },
+    BaseChanged {
+        base_workspace: Option<crate::model::WorkspaceRef>,
+    },
+    ParentChanged {
+        parent: Option<crate::model::SpaceRef>,
+    },
+    Linked {
+        link: Box<LinkEvent>,
+    },
+    Unlinked {
+        link: Box<LinkEvent>,
+    },
+    AgentState {
+        agent_state: AgentStateEvent,
+    },
+    ItemChanged {
+        item: Box<ItemEvent>,
+    },
+    ItemActivity {
+        item_activity: Box<ItemActivityEvent>,
+    },
+    DemoStarted {
+        demo: DemoEvent,
+    },
+    DemoStopped {
+        demo: DemoEvent,
+    },
+    SimulatorAcquired {
+        simulator: Box<SimulatorEvent>,
+    },
+    SimulatorReleased {
+        simulator: Box<SimulatorEvent>,
+    },
+    Renamed,
+    Restored,
+    AgentStarted {
+        agent: Box<AgentEvent>,
+    },
+    AgentStopped {
+        agent: Box<AgentEvent>,
+    },
+    AgentExited {
+        agent: Box<AgentEvent>,
+    },
+    ThreadOpened {
+        thread: Box<ThreadEvent>,
+    },
+    ThreadPosted {
+        thread: Box<ThreadEvent>,
+    },
+    ThreadForwarded {
+        thread: Box<ThreadEvent>,
+    },
+    ThreadResolved {
+        thread: Box<ThreadEvent>,
+    },
+    ApprovalRequested {
+        approval: Box<ApprovalEvent>,
+    },
+    ApprovalDecided {
+        approval: Box<ApprovalEvent>,
+    },
+    GateDecided {
+        gate: Box<GateEvent>,
+    },
+    AlertSent {
+        alert: AlertEvent,
+    },
+    /// The space's progress after the change, as `shoal progress --json`
     /// shows it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub progress: Option<crate::progress::Progress>,
-    /// The space created or removed below this one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub child: Option<crate::model::SpaceRef>,
-    /// The CI job Shoal ended.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub job: Option<Box<JobEndedEvent>>,
-    /// The blocker added, removed or cleared.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blocker: Option<Box<BlockerEvent>>,
-    /// The merge whose default branch runs Shoal looked for.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub merge: Option<Box<MergeEvent>>,
-    /// The other side of an absorb, and what moved.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub absorb: Option<Box<AbsorbEvent>>,
-    /// The sessions a handoff to another agent tool went from and to.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub handoff: Option<Box<HandoffEvent>>,
+    ProgressChanged {
+        progress: Box<crate::progress::Progress>,
+    },
+    BlockerAdded {
+        blocker: Box<BlockerEvent>,
+    },
+    BlockerRemoved {
+        blocker: Box<BlockerEvent>,
+    },
+    BlockerCleared {
+        blocker: Box<BlockerEvent>,
+    },
+    ChildCreated {
+        child: crate::model::SpaceRef,
+    },
+    ChildRemoved {
+        child: crate::model::SpaceRef,
+    },
+    Absorbed {
+        absorb: Box<AbsorbEvent>,
+    },
+    AbsorbedSpace {
+        absorb: Box<AbsorbEvent>,
+    },
+    /// With the fields of the kind the space became, or a `handoff`.
+    Converted {
+        handoff: Option<Box<HandoffEvent>>,
+    },
+    JobEnded {
+        job: Box<JobEndedEvent>,
+    },
+    NoMergeRuns {
+        merge: Box<MergeEvent>,
+    },
+}
+
+impl SpaceEvent {
+    pub fn kind(&self) -> EventKind {
+        match self {
+            Self::Created { .. } => EventKind::Created,
+            Self::Ready => EventKind::Ready,
+            Self::SetupFailed => EventKind::SetupFailed,
+            Self::Completed => EventKind::Completed,
+            Self::Undone => EventKind::Undone,
+            Self::RemovalStarted => EventKind::RemovalStarted,
+            Self::Removed => EventKind::Removed,
+            Self::Retained => EventKind::Retained,
+            Self::BranchChanged => EventKind::BranchChanged,
+            Self::ReviewReady { .. } => EventKind::ReviewReady,
+            Self::ReviewCleared { .. } => EventKind::ReviewCleared,
+            Self::BaseChanged { .. } => EventKind::BaseChanged,
+            Self::ParentChanged { .. } => EventKind::ParentChanged,
+            Self::Linked { .. } => EventKind::Linked,
+            Self::Unlinked { .. } => EventKind::Unlinked,
+            Self::AgentState { .. } => EventKind::AgentState,
+            Self::ItemChanged { .. } => EventKind::ItemChanged,
+            Self::ItemActivity { .. } => EventKind::ItemActivity,
+            Self::DemoStarted { .. } => EventKind::DemoStarted,
+            Self::DemoStopped { .. } => EventKind::DemoStopped,
+            Self::SimulatorAcquired { .. } => EventKind::SimulatorAcquired,
+            Self::SimulatorReleased { .. } => EventKind::SimulatorReleased,
+            Self::Renamed => EventKind::Renamed,
+            Self::Restored => EventKind::Restored,
+            Self::AgentStarted { .. } => EventKind::AgentStarted,
+            Self::AgentStopped { .. } => EventKind::AgentStopped,
+            Self::AgentExited { .. } => EventKind::AgentExited,
+            Self::ThreadOpened { .. } => EventKind::ThreadOpened,
+            Self::ThreadPosted { .. } => EventKind::ThreadPosted,
+            Self::ThreadForwarded { .. } => EventKind::ThreadForwarded,
+            Self::ThreadResolved { .. } => EventKind::ThreadResolved,
+            Self::ApprovalRequested { .. } => EventKind::ApprovalRequested,
+            Self::ApprovalDecided { .. } => EventKind::ApprovalDecided,
+            Self::GateDecided { .. } => EventKind::GateDecided,
+            Self::AlertSent { .. } => EventKind::AlertSent,
+            Self::ProgressChanged { .. } => EventKind::ProgressChanged,
+            Self::BlockerAdded { .. } => EventKind::BlockerAdded,
+            Self::BlockerRemoved { .. } => EventKind::BlockerRemoved,
+            Self::BlockerCleared { .. } => EventKind::BlockerCleared,
+            Self::ChildCreated { .. } => EventKind::ChildCreated,
+            Self::ChildRemoved { .. } => EventKind::ChildRemoved,
+            Self::Absorbed { .. } => EventKind::Absorbed,
+            Self::AbsorbedSpace { .. } => EventKind::AbsorbedSpace,
+            Self::Converted { .. } => EventKind::Converted,
+            Self::JobEnded { .. } => EventKind::JobEnded,
+            Self::NoMergeRuns { .. } => EventKind::NoMergeRuns,
+        }
+    }
+
+    /// Whether the event is one of the frequent ones a space's journal
+    /// keeps only the newest of, and that its log shows only with every
+    /// event: turn states, progress, and forge activity other than an
+    /// item closing, merging or reopening.
+    pub fn is_bulk(&self) -> bool {
+        use crate::forge::updates::UpdateKind;
+        match self {
+            Self::AgentState { .. } | Self::ProgressChanged { .. } => true,
+            Self::ItemActivity { item_activity } => !matches!(
+                item_activity.update.kind,
+                UpdateKind::Closed | UpdateKind::Merged | UpdateKind::Reopened
+            ),
+            _ => false,
+        }
+    }
+
+    /// The agent a start, stop or exit names.
+    pub fn agent(&self) -> Option<&AgentEvent> {
+        match self {
+            Self::AgentStarted { agent }
+            | Self::AgentStopped { agent }
+            | Self::AgentExited { agent } => Some(agent),
+            _ => None,
+        }
+    }
+
+    /// The space a child's creation or removal names.
+    pub fn child(&self) -> Option<&crate::model::SpaceRef> {
+        match self {
+            Self::ChildCreated { child } | Self::ChildRemoved { child } => Some(child),
+            _ => None,
+        }
+    }
 }
 
 /// The kind of space that recorded an event, with what only that kind has.
@@ -313,27 +463,6 @@ impl EventSpace {
             Self::Workspace { branch, .. } => branch.as_ref(),
             Self::Chat => None,
         }
-    }
-}
-
-/// Distinguish an absent field from an explicit null.
-mod present_or_null {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<T: Serialize, S: Serializer>(
-        value: &Option<Option<T>>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        value
-            .as_ref()
-            .and_then(Option::as_ref)
-            .serialize(serializer)
-    }
-
-    pub fn deserialize<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<Option<T>>, D::Error> {
-        Option::deserialize(deserializer).map(Some)
     }
 }
 
@@ -554,8 +683,9 @@ pub struct ItemActivityUpdate {
     pub message: String,
 }
 
+/// A space's event as the journal holds it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpaceEvent {
+pub struct JournaledSpaceEvent {
     pub id: EventCursor,
     pub created_at: UnixTime,
     #[serde(flatten)]
@@ -619,7 +749,7 @@ impl ShoalEventDetails {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EventItem {
-    Event(Box<SpaceEvent>),
+    Event(Box<JournaledSpaceEvent>),
     File(Box<FileEvent>),
     Shoal(Box<ShoalEvent>),
     /// The journal no longer holds every event after the requested cursor.

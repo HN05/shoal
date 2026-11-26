@@ -5,13 +5,17 @@ use crate::{
         items::{change::ItemChange, link::LinkKind},
         updates::UpdateKind,
     },
-    model::SpaceKind,
+    model::{SpaceKind, SpaceRef, WorkspaceRef},
 };
 use shoal_protocol::{
     events::{
-        EventDetails, EventKind, EventSpace, FileEventKind, ShoalEventDetails, ShoalEventKind,
+        AbsorbEvent, AgentEvent, AlertEvent, BlockerEvent, EventDetails, EventSpace, FileEventKind,
+        GateEvent, HandoffEvent, ItemActivityEvent, ItemEvent, JobEndedEvent, LinkEvent,
+        MergeEvent, ReviewEvent, ShoalEventDetails, ShoalEventKind, SimulatorEvent, SpaceEvent,
+        ThreadEvent,
     },
     log::LogEntry,
+    progress::Progress,
 };
 
 /// The width labels are padded to: the longest one's.
@@ -62,72 +66,110 @@ fn removed(event: &ShoalEventDetails, error: Option<String>) -> String {
     }
 }
 
-fn event_line(event: &EventDetails) -> (String, String) {
-    let fixed = |label: &str, details: String| (label.to_owned(), details);
-    match event.kind {
-        EventKind::Created => fixed("Created", created(event)),
-        EventKind::Renamed => fixed("Renamed", renamed(event)),
-        EventKind::RemovalStarted => fixed(
-            "Removal started",
-            event.cause.map(cause).unwrap_or_default(),
+fn event_line(details: &EventDetails) -> (String, String) {
+    let fixed = |label: &str, text: String| (label.to_owned(), text);
+    let cause_text = || details.cause.map(cause).unwrap_or_default();
+    let error = || details.error.clone().unwrap_or_default();
+    match &details.event {
+        SpaceEvent::Created {
+            base_ref,
+            base_workspace,
+            parent,
+        } => fixed(
+            "Created",
+            created(
+                base_ref.as_deref(),
+                base_workspace.as_ref(),
+                parent.as_ref(),
+            ),
         ),
-        EventKind::Removed => fixed("Removed", event.cause.map(cause).unwrap_or_default()),
-        EventKind::Restored => fixed("Restored", String::new()),
-        EventKind::Converted => fixed("Converted", converted(event)),
-        EventKind::Absorbed => fixed("Absorbed", absorbed_into(event)),
-        EventKind::AbsorbedSpace => fixed("Absorbed a space", took_over(event)),
-        EventKind::AgentStarted => fixed("Agent started", started(event)),
-        EventKind::AgentStopped => fixed("Agent stopped", agent(event)),
-        EventKind::AgentExited => fixed("Agent exited", exit(event)),
-        EventKind::ReviewReady => fixed("Marked ready", review(event)),
-        EventKind::ReviewCleared => fixed("Ready withdrawn", review(event)),
-        EventKind::Completed => fixed("Done", String::new()),
-        EventKind::Undone => fixed("Done withdrawn", String::new()),
-        EventKind::Linked | EventKind::Unlinked => link(event),
-        EventKind::ItemChanged => item_changed(event),
-        EventKind::ItemActivity => item_activity(event),
-        EventKind::ThreadOpened => fixed("Thread opened", thread(event)),
-        EventKind::ThreadPosted => fixed("Thread post", thread(event)),
-        EventKind::ThreadForwarded => fixed("Thread forwarded", thread(event)),
-        EventKind::ThreadResolved => fixed("Thread resolved", thread(event)),
-        EventKind::ApprovalRequested => fixed("Approval requested", approval(event, false)),
-        EventKind::ApprovalDecided => fixed("Approval decided", approval(event, true)),
-        EventKind::GateDecided => fixed("Gate decided", gate(event)),
-        EventKind::AlertSent => fixed("Alert sent", alert(event)),
-        EventKind::ProgressChanged => fixed("Progress", progress(event)),
-        EventKind::ChildCreated => fixed("Child created", child(event)),
-        EventKind::ChildRemoved => fixed("Child removed", child(event)),
-        EventKind::JobEnded => fixed("CI job ended", job(event)),
-        EventKind::NoMergeRuns => fixed("No CI run of the merge", merge(event)),
-        EventKind::BlockerAdded => fixed("Blocker added", blocker(event)),
-        EventKind::BlockerRemoved => fixed("Blocker removed", blocker(event)),
-        EventKind::BlockerCleared => fixed("Blocker cleared", blocker(event)),
-        EventKind::Ready => fixed("Setup finished", String::new()),
-        EventKind::SetupFailed => fixed("Setup failed", error(event)),
-        EventKind::Retained => fixed("Removal failed", error(event)),
-        EventKind::BranchChanged => fixed(
+        SpaceEvent::Renamed => fixed("Renamed", details.name.to_string()),
+        SpaceEvent::RemovalStarted => fixed("Removal started", cause_text()),
+        SpaceEvent::Removed => fixed("Removed", cause_text()),
+        SpaceEvent::Restored => fixed("Restored", String::new()),
+        SpaceEvent::Converted { handoff } => fixed("Converted", converted(details, handoff)),
+        SpaceEvent::Absorbed { absorb } => fixed("Absorbed", absorbed_into(absorb)),
+        SpaceEvent::AbsorbedSpace { absorb } => fixed("Absorbed a space", took_over(absorb)),
+        SpaceEvent::AgentStarted { agent } => fixed("Agent started", started(agent)),
+        SpaceEvent::AgentStopped { agent } => fixed("Agent stopped", agent.name.to_string()),
+        SpaceEvent::AgentExited { agent } => fixed("Agent exited", exit(agent)),
+        SpaceEvent::ReviewReady { review: mark } => fixed("Marked ready", review(mark)),
+        SpaceEvent::ReviewCleared { review: mark } => fixed("Ready withdrawn", review(mark)),
+        SpaceEvent::Completed => fixed("Done", String::new()),
+        SpaceEvent::Undone => fixed("Done withdrawn", String::new()),
+        SpaceEvent::Linked { link: changed } => link(changed, "linked"),
+        SpaceEvent::Unlinked { link: changed } => link(changed, "unlinked"),
+        SpaceEvent::ItemChanged { item } => item_changed(item),
+        SpaceEvent::ItemActivity { item_activity } => item_activity_line(item_activity),
+        SpaceEvent::ThreadOpened { thread: opened } => fixed("Thread opened", thread(opened)),
+        SpaceEvent::ThreadPosted { thread: posted } => fixed("Thread post", thread(posted)),
+        SpaceEvent::ThreadForwarded { thread: forwarded } => {
+            fixed("Thread forwarded", thread(forwarded))
+        }
+        SpaceEvent::ThreadResolved { thread: resolved } => {
+            fixed("Thread resolved", resolution(resolved))
+        }
+        SpaceEvent::ApprovalRequested { approval } => fixed(
+            "Approval requested",
+            format!("{} {}", approval.number, approval.subject),
+        ),
+        SpaceEvent::ApprovalDecided { approval } => fixed(
+            "Approval decided",
+            format!(
+                "{} {}: {}",
+                approval.number, approval.status, approval.subject
+            ),
+        ),
+        SpaceEvent::GateDecided { gate: verdict } => fixed("Gate decided", gate(verdict)),
+        SpaceEvent::AlertSent { alert: sent } => fixed("Alert sent", alert(sent)),
+        SpaceEvent::ProgressChanged { progress: changed } => fixed("Progress", progress(changed)),
+        SpaceEvent::ChildCreated { child: created } => fixed("Child created", child(created)),
+        SpaceEvent::ChildRemoved { child: removed } => fixed("Child removed", child(removed)),
+        SpaceEvent::JobEnded { job: ended } => fixed("CI job ended", job(ended)),
+        SpaceEvent::NoMergeRuns { merge: merged } => fixed("No CI run of the merge", merge(merged)),
+        SpaceEvent::BlockerAdded { blocker: added } => fixed("Blocker added", blocker(added)),
+        SpaceEvent::BlockerRemoved { blocker: removed } => {
+            fixed("Blocker removed", blocker(removed))
+        }
+        SpaceEvent::BlockerCleared { blocker: cleared } => {
+            fixed("Blocker cleared", blocker(cleared))
+        }
+        SpaceEvent::Ready => fixed("Setup finished", String::new()),
+        SpaceEvent::SetupFailed => fixed("Setup failed", error()),
+        SpaceEvent::Retained => fixed("Removal failed", error()),
+        SpaceEvent::BranchChanged => fixed(
             "Branch changed",
-            (event.space.branch()).map_or_else(|| "detached HEAD".into(), ToString::to_string),
+            (details.space.branch()).map_or_else(|| "detached HEAD".into(), ToString::to_string),
         ),
-        EventKind::BaseChanged => fixed("Base changed", base(event)),
-        EventKind::ParentChanged => fixed("Parent changed", parent(event)),
-        EventKind::AgentState => fixed(
+        SpaceEvent::BaseChanged { base_workspace } => fixed(
+            "Base changed",
+            base_workspace
+                .as_ref()
+                .map_or_else(|| "none".into(), |base| base.name.to_string()),
+        ),
+        SpaceEvent::ParentChanged { parent } => fixed(
+            "Parent changed",
+            parent
+                .as_ref()
+                .map_or_else(|| "none".into(), |parent| parent.name.to_string()),
+        ),
+        SpaceEvent::AgentState { agent_state } => fixed(
             "Agent state",
-            (event.agent_state.as_ref().and_then(|state| state.state))
-                .map_or_else(|| "ended".into(), |state| state.to_string()),
+            (agent_state.state).map_or_else(|| "ended".into(), |state| state.to_string()),
         ),
-        EventKind::DemoStarted => fixed("Demo started", demo(event)),
-        EventKind::DemoStopped => fixed("Demo stopped", demo(event)),
-        EventKind::SimulatorAcquired => fixed("Simulator acquired", simulator(event)),
-        EventKind::SimulatorReleased => fixed("Simulator released", simulator(event)),
+        SpaceEvent::DemoStarted { demo } => fixed("Demo started", demo.name.clone()),
+        SpaceEvent::DemoStopped { demo } => fixed("Demo stopped", demo.name.clone()),
+        SpaceEvent::SimulatorAcquired {
+            simulator: acquired,
+        } => fixed("Simulator acquired", simulator(acquired)),
+        SpaceEvent::SimulatorReleased {
+            simulator: released,
+        } => fixed("Simulator released", simulator(released)),
     }
 }
 
 /// How many steps are done and the status line, as `2/5 steps: Reproduced`.
-fn progress(event: &EventDetails) -> String {
-    let Some(progress) = &event.progress else {
-        return String::new();
-    };
+fn progress(progress: &Progress) -> String {
     let steps = format!("{}/{} steps", progress.done(), progress.steps.len());
     match &progress.status {
         Some(status) => format!("{steps}: {status}"),
@@ -135,10 +177,7 @@ fn progress(event: &EventDetails) -> String {
     }
 }
 
-fn blocker(event: &EventDetails) -> String {
-    let Some(event) = &event.blocker else {
-        return String::new();
-    };
+fn blocker(event: &BlockerEvent) -> String {
     let mut text = event.blocker.cause();
     if let Some(step) = &event.step {
         text += &format!(" on step {step}");
@@ -150,33 +189,34 @@ fn blocker(event: &EventDetails) -> String {
     text
 }
 
-fn created(event: &EventDetails) -> String {
-    let base = match event.base_workspace.clone().flatten() {
-        Some(base) => base.branch.map(|branch| branch.to_string()),
-        None => event.base_ref.as_deref().map(short_ref),
+fn created(
+    base_ref: Option<&str>,
+    base_workspace: Option<&WorkspaceRef>,
+    parent: Option<&SpaceRef>,
+) -> String {
+    let base = match base_workspace {
+        Some(base) => base.branch.as_ref().map(ToString::to_string),
+        None => base_ref.map(short_ref),
     };
     let mut parts = Vec::new();
-    if let Some(agent) = &event.agent {
-        parts.push(agent.name.to_string());
-    }
     if let Some(base) = base {
         parts.push(format!("from {base}"));
     }
-    if let Some(parent) = event.parent.clone().flatten() {
+    if let Some(parent) = parent {
         parts.push(format!("parent {}", parent.name));
     }
     parts.join(", ")
 }
 
-fn converted(event: &EventDetails) -> String {
-    if let Some(handoff) = &event.handoff {
+fn converted(details: &EventDetails, handoff: &Option<Box<HandoffEvent>>) -> String {
+    if let Some(handoff) = handoff {
         return format!(
             "from {} to {}",
             handed_over(&handoff.from),
             handed_over(&handoff.to)
         );
     }
-    match &event.space {
+    match &details.space {
         EventSpace::Workspace {
             path,
             branch: Some(branch),
@@ -195,20 +235,14 @@ fn handed_over(side: &shoal_protocol::transcripts::HandedOverSession) -> String 
     }
 }
 
-fn absorbed_into(event: &EventDetails) -> String {
-    let Some(absorb) = &event.absorb else {
-        return String::new();
-    };
+fn absorbed_into(absorb: &AbsorbEvent) -> String {
     match absorb.method {
         Some(method) => format!("into {} by {method}", absorb.space.name),
         None => format!("into {}", absorb.space.name),
     }
 }
 
-fn took_over(event: &EventDetails) -> String {
-    let Some(absorb) = &event.absorb else {
-        return String::new();
-    };
+fn took_over(absorb: &AbsorbEvent) -> String {
     let mut parts = vec![absorb.space.name.to_string()];
     if let Some(method) = absorb.method {
         parts.push(format!("merged by {method}"));
@@ -226,10 +260,6 @@ fn took_over(event: &EventDetails) -> String {
         }
     }
     parts.join(", ")
-}
-
-fn renamed(event: &EventDetails) -> String {
-    event.name.to_string()
 }
 
 fn short_ref(reference: &str) -> String {
@@ -261,21 +291,14 @@ fn cause(cause: EventCause) -> String {
     .to_owned()
 }
 
-fn agent(event: &EventDetails) -> String {
-    (event.agent.as_ref()).map_or_else(String::new, |agent| agent.name.to_string())
-}
-
-fn started(event: &EventDetails) -> String {
-    match event.agent.as_ref().and_then(|agent| agent.source.as_ref()) {
-        Some(source) => format!("{}, {source}", agent(event)),
-        None => agent(event),
+fn started(agent: &AgentEvent) -> String {
+    match &agent.source {
+        Some(source) => format!("{}, {source}", agent.name),
+        None => agent.name.to_string(),
     }
 }
 
-fn exit(event: &EventDetails) -> String {
-    let Some(agent) = &event.agent else {
-        return String::new();
-    };
+fn exit(agent: &AgentEvent) -> String {
     let exit = match agent.exit_code {
         Some(code) => format!("{}, exit code {code}", agent.name),
         None => format!("{}, no exit code", agent.name),
@@ -286,30 +309,16 @@ fn exit(event: &EventDetails) -> String {
     }
 }
 
-fn review(event: &EventDetails) -> String {
-    let url = event
-        .review
-        .as_ref()
-        .and_then(|review| review.url.as_deref());
-    url.map(reference).unwrap_or_default()
+fn review(review: &ReviewEvent) -> String {
+    review.url.as_deref().map(reference).unwrap_or_default()
 }
 
-fn link(event: &EventDetails) -> (String, String) {
-    let Some(link) = &event.link else {
-        return ("Link changed".into(), String::new());
-    };
-    let change = match event.kind {
-        EventKind::Unlinked => "unlinked",
-        _ => "linked",
-    };
+fn link(link: &LinkEvent, change: &str) -> (String, String) {
     let label = format!("{} {change}", kind_name(link.kind));
     (label, format!("{} {}", reference(&link.url), link.relation))
 }
 
-fn item_changed(event: &EventDetails) -> (String, String) {
-    let Some(item) = &event.item else {
-        return ("Item changed".into(), String::new());
-    };
+fn item_changed(item: &ItemEvent) -> (String, String) {
     let kind = kind_name(item.kind);
     let reference = reference(&item.url);
     let done = match item.action {
@@ -340,10 +349,7 @@ fn item_changed(event: &EventDetails) -> (String, String) {
     (format!("{kind} {done}"), reference)
 }
 
-fn item_activity(event: &EventDetails) -> (String, String) {
-    let Some(activity) = &event.item_activity else {
-        return ("Item activity".into(), String::new());
-    };
+fn item_activity_line(activity: &ItemActivityEvent) -> (String, String) {
     let kind = kind_name(activity.kind);
     let reference = reference(&activity.url);
     let done = match activity.update.kind {
@@ -376,40 +382,27 @@ fn reference(url: &str) -> String {
     }
 }
 
-fn thread(event: &EventDetails) -> String {
-    let Some(thread) = &event.thread else {
-        return String::new();
-    };
+fn thread(thread: &ThreadEvent) -> String {
     let mut line = format!("{} {}", thread.number, thread.name.replace('\n', " "));
-    match (&thread.sender, &thread.to, &thread.text, thread.outcome) {
-        (Some(sender), Some(to), _, _) => line.push_str(&format!(": {sender} to {to}")),
-        (Some(sender), None, Some(text), _) => {
+    match (&thread.sender, &thread.to, &thread.text) {
+        (Some(sender), Some(to), _) => line.push_str(&format!(": {sender} to {to}")),
+        (Some(sender), None, Some(text)) => {
             line.push_str(&format!(": {sender}: {}", text.replace('\n', " ")))
         }
-        (_, _, _, Some(outcome)) => line.push_str(&format!(": {outcome}")),
-        _ if event.kind == EventKind::ThreadResolved => line.push_str(": reopened"),
         _ => {}
     }
     line
 }
 
-fn approval(event: &EventDetails, decided: bool) -> String {
-    let Some(approval) = &event.approval else {
-        return String::new();
-    };
-    match decided {
-        true => format!(
-            "{} {}: {}",
-            approval.number, approval.status, approval.subject
-        ),
-        false => format!("{} {}", approval.number, approval.subject),
+/// A resolved thread with its outcome, or that it was reopened.
+fn resolution(resolved: &ThreadEvent) -> String {
+    match resolved.outcome {
+        Some(outcome) => format!("{}: {outcome}", thread(resolved)),
+        None => format!("{}: reopened", thread(resolved)),
     }
 }
 
-fn gate(event: &EventDetails) -> String {
-    let Some(gate) = &event.gate else {
-        return String::new();
-    };
+fn gate(gate: &GateEvent) -> String {
     let rule = (gate.rule.as_ref()).map_or_else(String::new, |rule| format!(" ({rule})"));
     format!(
         "{} {}: {}: {}{rule}",
@@ -417,10 +410,7 @@ fn gate(event: &EventDetails) -> String {
     )
 }
 
-fn alert(event: &EventDetails) -> String {
-    let Some(alert) = &event.alert else {
-        return String::new();
-    };
+fn alert(alert: &AlertEvent) -> String {
     let message = alert.message.replace('\n', " ");
     if alert.alerts.is_empty() {
         return message;
@@ -429,18 +419,14 @@ fn alert(event: &EventDetails) -> String {
     format!("{} {message}", numbers.join(", "))
 }
 
-fn child(event: &EventDetails) -> String {
-    match &event.child {
-        Some(child) if child.kind() == SpaceKind::Chat => format!("{} (chat)", child.name),
-        Some(child) => child.name.to_string(),
-        None => String::new(),
+fn child(child: &SpaceRef) -> String {
+    match child.kind() {
+        SpaceKind::Chat => format!("{} (chat)", child.name),
+        _ => child.name.to_string(),
     }
 }
 
-fn job(event: &EventDetails) -> String {
-    let Some(job) = &event.job else {
-        return String::new();
-    };
+fn job(job: &JobEndedEvent) -> String {
     let ended = format!("{}, {}; {}", job.name, reference(&job.run), job.reason);
     if job.stopped.is_empty() {
         return ended;
@@ -456,10 +442,7 @@ fn job(event: &EventDetails) -> String {
 
 /// The merged PR and its merge commit, as `#12 at 0a1b2c3`, or the
 /// commit a pushed merge left, as `pushed 0a1b2c3`.
-fn merge(event: &EventDetails) -> String {
-    let Some(merge) = &event.merge else {
-        return String::new();
-    };
+fn merge(merge: &MergeEvent) -> String {
     let commit = merge.commit.short();
     match &merge.pr {
         Some(pr) => format!("{} at {commit}", reference(pr)),
@@ -467,32 +450,8 @@ fn merge(event: &EventDetails) -> String {
     }
 }
 
-fn error(event: &EventDetails) -> String {
-    event.error.clone().unwrap_or_default()
-}
-
-fn base(event: &EventDetails) -> String {
-    match event.base_workspace.clone().flatten() {
-        Some(base) => base.name.to_string(),
-        None => "none".into(),
-    }
-}
-
-fn parent(event: &EventDetails) -> String {
-    match event.parent.clone().flatten() {
-        Some(parent) => parent.name.to_string(),
-        None => "none".into(),
-    }
-}
-
-fn demo(event: &EventDetails) -> String {
-    (event.demo.as_ref()).map_or_else(String::new, |demo| demo.name.clone())
-}
-
-fn simulator(event: &EventDetails) -> String {
-    (event.simulator.as_ref()).map_or_else(String::new, |simulator| {
-        format!("{} {}", simulator.device, simulator.runtime)
-    })
+fn simulator(simulator: &SimulatorEvent) -> String {
+    format!("{} {}", simulator.device, simulator.runtime)
 }
 
 #[cfg(test)]

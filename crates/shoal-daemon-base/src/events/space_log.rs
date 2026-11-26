@@ -68,7 +68,7 @@ fn shown(events: Vec<LogEntry>, filter: LogFilter, limit: u32) -> Vec<LogEntry> 
         .into_iter()
         .filter(|entry| {
             let kind = match entry {
-                LogEntry::Event(event) => Some(event.details.kind),
+                LogEntry::Event(event) => Some(event.details.kind()),
                 _ => None,
             };
             let reopened = removed && kind == Some(EventKind::Created);

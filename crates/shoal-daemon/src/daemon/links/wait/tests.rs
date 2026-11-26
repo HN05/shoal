@@ -221,7 +221,7 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
             .await
             .unwrap()
             .iter()
-            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind == crate::daemon::events::EventKind::ItemActivity)));
+            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind() == crate::daemon::events::EventKind::ItemActivity)));
 
     manager
         .links
@@ -234,11 +234,12 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
         .unwrap();
     let events = manager.space_events(None, 100).await.unwrap();
     let activity = events.iter().find_map(|item| match item {
-        crate::daemon::events::EventItem::Event(event)
-            if event.details.kind == crate::daemon::events::EventKind::ItemActivity =>
-        {
-            event.details.item_activity.as_deref()
-        }
+        crate::daemon::events::EventItem::Event(event) => match &event.details.event {
+            shoal_protocol::events::SpaceEvent::ItemActivity { item_activity } => {
+                Some(&**item_activity)
+            }
+            _ => None,
+        },
         _ => None,
     });
     let activity = activity.expect("background activity event");
@@ -341,7 +342,7 @@ async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
             .await
             .unwrap()
             .iter()
-            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind == crate::daemon::events::EventKind::ItemActivity)));
+            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind() == crate::daemon::events::EventKind::ItemActivity)));
 }
 
 #[tokio::test]
@@ -2165,7 +2166,7 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
             .await
             .unwrap()
             .iter()
-            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind == crate::daemon::events::EventKind::ItemActivity)));
+            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind() == crate::daemon::events::EventKind::ItemActivity)));
 }
 
 #[tokio::test]
@@ -3340,8 +3341,8 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
     let events = manager.space_events(None, 100).await.unwrap();
     assert!(events.iter().any(|item| matches!(item,
         crate::daemon::events::EventItem::Event(event)
-            if event.details.item_activity.as_deref().is_some_and(|activity|
-                activity.url == RUN.as_str() && activity.update.kind == UpdateKind::CiCompleted))));
+            if matches!(&event.details.event, shoal_protocol::events::SpaceEvent::ItemActivity { item_activity: activity }
+                if activity.url == RUN.as_str() && activity.update.kind == UpdateKind::CiCompleted))));
 }
 
 #[tokio::test]
