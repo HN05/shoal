@@ -288,6 +288,9 @@ The agent:
    where modes have labels;
 5. opens follow-up issues for work the plan splits off.
 
+A plan that splits the work into sub-issues opens them, and the
+[`coordinate`](#coordinating-issues) mode then carries out the issue.
+
 You start an agent on the issue when you want one. `shoal start --issue` takes
 the mode its labels call for.
 

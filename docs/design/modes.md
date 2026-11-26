@@ -154,6 +154,9 @@ Threads and forge comments serve agents blocked during implementation.
 The agent does not offer to start the implementation. When the user has it
 start a workspace, the chat coordinates it.
 
+A plan that splits the work into sub-issues opens them and hands the issue to
+the coordinate mode, through the label of that mode where it has one.
+
 ## The coordinate mode
 
 The coordinate mode carries out an issue whose plan splits it into
