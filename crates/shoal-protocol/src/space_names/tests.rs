@@ -41,6 +41,8 @@ fn a_derived_name_drops_what_a_set_one_refuses_and_is_cut_with_an_ellipsis() {
     assert_eq!(long.chars().count(), 40);
     assert!(long.ends_with("word…"), "{long}");
     assert_eq!(derive(&"漢".repeat(30)), format!("{}…", "漢".repeat(19)));
+    let accented = format!("{}a{}", "a".repeat(39), "\u{301}".repeat(61));
+    assert!(SpaceName::derive(&accented, "chat").checked().is_ok());
 }
 
 #[test]

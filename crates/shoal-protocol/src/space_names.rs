@@ -16,10 +16,10 @@ pub const MAX_SPACE_NAME_BYTES: usize = 160;
 
 /// A space's name: the one label people read, a single line within
 /// [`MAX_SPACE_NAME_WIDTH`] and [`MAX_SPACE_NAME_BYTES`], without control
-/// characters or bidirectional overrides, with
-/// no leading or trailing whitespace and single spaces inside. It never
-/// selects a space and nothing is built from it, so names may repeat. A
-/// name a record holds reads as it was stored, whatever rule it predates.
+/// characters or bidirectional overrides, with no leading or trailing
+/// whitespace and single spaces inside. It never selects a space and nothing
+/// is built from it, so names may repeat. A name a record holds reads as it
+/// was stored, whatever rule it predates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub struct SpaceName(String);
@@ -37,7 +37,7 @@ impl SpaceName {
         ensure!(!name.is_empty(), "a space's name cannot be empty");
         ensure!(
             shoal_text::width(&name) <= MAX_SPACE_NAME_WIDTH && name.len() <= MAX_SPACE_NAME_BYTES,
-            "a space's name is at most {MAX_SPACE_NAME_WIDTH} columns wide, a wide character counting as two"
+            "a space's name is at most {MAX_SPACE_NAME_WIDTH} columns wide, a wide character counting as two, and {MAX_SPACE_NAME_BYTES} bytes"
         );
         Ok(Self(name))
     }
@@ -54,8 +54,11 @@ impl SpaceName {
             name if name.is_empty() => fallback.to_owned(),
             name => name,
         };
-        let name = shoal_text::cut_width(name, MAX_SPACE_NAME_WIDTH);
-        Self(shoal_text::cut_bytes(name, MAX_SPACE_NAME_BYTES))
+        Self(shoal_text::cut(
+            name,
+            MAX_SPACE_NAME_WIDTH,
+            MAX_SPACE_NAME_BYTES,
+        ))
     }
 
     /// The name as [`Self::parse`] reads it, refusing one a request sent
