@@ -1,9 +1,4 @@
-//! The leases Shoal takes back from asleep agents, which otherwise keep
-//! them: one that keeps something running, a simulator or containers, once
-//! its agent has slept past `[sleep] keep_leases_minutes` or the machine
-//! needs its memory, and one other requests can find busy, a permit or a
-//! simulator, for the request that needs it. The agent reads which it lost,
-//! why, and how to get it back once it runs again.
+//! The leases Shoal takes back from asleep agents.
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -79,15 +74,15 @@ impl Leases {
         Ok(false)
     }
 
-    /// Release one of the sets of leases in `freeing`, doing what `device`
-    /// says with a simulator's, each of which would grant a request for
-    /// `workspace` from `caller` that capacity keeps busy, once every lease
-    /// in it is an asleep agent's that may yield to
-    /// the request: any for the user's, else one whose space's priority is
-    /// no higher than the workspace's. The set whose highest-ranked holder
-    /// ranks lowest goes, the smallest among equals, once every holder's
-    /// workspace can release it. Whether any of it went, which the request
-    /// claims again for.
+    /// Release one of the sets of leases in `freeing`, each of which would
+    /// grant a request for `workspace` from `caller` that capacity keeps
+    /// busy. Only a set held wholly by asleep agents that may yield goes:
+    /// every agent yields to the user, and otherwise one whose space's
+    /// priority is no higher than the workspace's. The set whose
+    /// highest-ranked holder ranks lowest goes, the smallest among equals,
+    /// once every holder's workspace can release it. `device` says what to
+    /// do with a simulator's device. Returns whether any of it went, so the
+    /// request claims again.
     pub(crate) async fn give_to_request(
         &self,
         daemon: &dyn Daemon,

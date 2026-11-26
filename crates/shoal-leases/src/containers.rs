@@ -1,7 +1,6 @@
-//! A workspace's service containers: one Compose project per workspace,
-//! started on its reserved ports, stopped on release and removed with the
-//! workspace. Each project is recorded before any `compose` call, so Shoal
-//! never touches a project it has no record of.
+//! A workspace's service containers, one Compose project per workspace.
+//! Each project is recorded before any `compose` call, so Shoal never
+//! touches a project it has no record of.
 mod automatic;
 mod compose;
 pub mod records;

@@ -448,10 +448,9 @@ impl Leases {
 
     /// Claim the lease `claim` asks for in one transaction, with `ahead`
     /// queued requests that arrived earlier, under the workspace's resource
-    /// guard, exclusive when a hook runs after the claim, which the claim
-    /// keeps. A hook in the
-    /// workspace holds the guard briefly; a queued request waits it out in
-    /// place instead of failing.
+    /// guard. The guard is exclusive when a hook runs after the claim, and
+    /// the claim keeps it. A hook in the workspace holds the guard briefly,
+    /// so a queued request waits it out in place instead of failing.
     async fn claim_resource(
         &self,
         daemon: &dyn Daemon,

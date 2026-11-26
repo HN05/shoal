@@ -1,9 +1,5 @@
-//! The leases the daemon grants a workspace: TCP port reservations,
-//! resource permits, simulators, service containers and grants of secrets,
-//! the order queued requests take capacity in, and the outcome every
-//! allocation shares.
-//! [`Leases`] holds what they keep in memory and offers their operations;
-//! what they need of the rest of the daemon is the interface in [`daemon`].
+//! Secrets, ports, simulators, resource permits and containers, as
+//! `docs/design/leases.md` describes them.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -37,7 +33,6 @@ use gates::Gates;
 use model::Workspace;
 use store::Store;
 
-/// The leases of every workspace, with the daemon's services they use.
 pub struct Leases {
     store: Store,
     gates: Arc<Gates>,

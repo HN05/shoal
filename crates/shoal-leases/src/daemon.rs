@@ -1,6 +1,4 @@
-//! What leases need of the rest of the daemon, which implements it: the
-//! spaces they belong to, their repositories' settings and hooks, the agents
-//! that acquire them and the approval requests that gate them.
+//! What leases need of the rest of the daemon.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -121,7 +119,6 @@ pub trait Agents: Send + Sync {
 /// An asleep agent, as the leases it keeps read it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sleeper {
-    /// Its space.
     pub space: SpaceId,
     /// When its harness stopped.
     pub since: UnixTime,
@@ -143,8 +140,6 @@ pub trait Approvals: Send + Sync {
     fn announce<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()>;
 }
 
-/// Everything leases need of the daemon, which each of their operations
-/// that reaches beyond them takes.
 pub trait Daemon: Spaces + Settings + Agents + Approvals + Coordinators {}
 
 impl<T: Spaces + Settings + Agents + Approvals + Coordinators> Daemon for T {}

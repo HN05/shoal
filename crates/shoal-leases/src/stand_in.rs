@@ -1,8 +1,5 @@
 //! A stand-in for the rest of the daemon, which the tests of leases build
-//! the service over: one ready workspace, recorded in a temporary store,
-//! whose repository's settings a test gives, and approval requests kept in
-//! memory, which a test decides and which need a reason as the daemon's
-//! do.
+//! the service over, with one ready workspace.
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -368,9 +365,9 @@ pub(crate) struct StandInHook {
     pub(crate) fails: bool,
 }
 
-/// Approval requests by owner, target and name, each under a key of its
-/// own and bound to its settings as the daemon's are, which a test decides; every registered repository can be borrowed,
-/// and the fixture's workspace is the only space.
+/// Approval requests by owner, target and name, each bound to its settings
+/// as the daemon's are, which a test decides. Every registered repository
+/// can be borrowed, and the fixture's workspace is the only space.
 #[derive(Default)]
 pub(crate) struct StandInRecords {
     requests: Mutex<HashMap<(SpaceId, Target, String), ApprovalRequest>>,

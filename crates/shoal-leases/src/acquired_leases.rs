@@ -1,9 +1,5 @@
-//! The simulator leases, containers and resource permits an agent or a
-//! demo acquired, which end with it: who acquires a lease, the lease a demo
-//! takes over from the agent that started it, and releasing the leases of
-//! an acquirer through each kind's release path once it ends: a demo with
-//! its execution, an agent once its space has no agent left to run, asleep
-//! or restoring.
+//! The simulator leases, containers and resource permits that end with the
+//! agent or demo that acquired them.
 use std::collections::HashSet;
 
 use anyhow::Result;
