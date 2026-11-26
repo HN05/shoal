@@ -6,9 +6,7 @@ use shoal_refs::BranchName;
 use super::{Leaving, copies::Listed};
 use crate::{agent::Agent, model::Space};
 
-/// What `taking`, the agent taking the work of `space` over from
-/// `leaving`, is told of the space and of the sessions `listed`, oldest
-/// first.
+/// The sessions `listed` come oldest first.
 pub fn told(space: &Space, leaving: Option<&Leaving>, taking: &Agent, listed: &[Listed]) -> String {
     let mut parts = vec![taken_over(space, leaving, taking)];
     if !listed.is_empty() {
@@ -17,8 +15,6 @@ pub fn told(space: &Space, leaving: Option<&Leaving>, taking: &Agent, listed: &[
     parts.join("\n\n")
 }
 
-/// That `taking` continues the work of `space`, with what the space is and
-/// what it works on.
 fn taken_over(space: &Space, leaving: Option<&Leaving>, taking: &Agent) -> String {
     let kind = space.kind();
     let from = match leaving {
@@ -46,8 +42,8 @@ fn taken_over(space: &Space, leaving: Option<&Leaving>, taking: &Agent) -> Strin
     )
 }
 
-/// The sessions `listed`, oldest first, each with where its copy is, the
-/// one `leaving` stopped marked to read first.
+/// Oldest first, each with where its copy is. The one `leaving` stopped is
+/// marked to read first.
 fn sessions(space: &Space, leaving: Option<&Leaving>, listed: &[Listed]) -> String {
     let stale = match space.worktree() {
         Some(_) => "the worktree",
@@ -65,7 +61,6 @@ fn sessions(space: &Space, leaving: Option<&Leaving>, listed: &[Listed]) -> Stri
     text
 }
 
-/// The line that lists `session`, marked to read first when `first`.
 fn line(session: &Listed, first: bool) -> String {
     let mark = match first {
         true => " (the one just stopped: read it first)",

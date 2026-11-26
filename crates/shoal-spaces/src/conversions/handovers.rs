@@ -1,9 +1,8 @@
-//! The hand-overs of converted spaces' agents: one at a time, held by the
-//! relocation, the stops of a converting workspace's agents and the making
-//! of a chat's workspace, and held again by nothing within one of them, as
-//! a relocation's removal stops the agents of the spaces below it. They come
-//! before a repository's gates: whatever takes both, such as a conversion,
-//! a repository's removal or a repair, takes them first.
+//! The hand-overs of converted spaces' agents, one at a time. A task that
+//! holds them may take them again within, as a relocation's removal stops
+//! the agents of the spaces below it. Whatever takes both these and a
+//! repository's gates, such as a conversion, a repository's removal or a
+//! repair, takes these first.
 use std::future::Future;
 
 tokio::task_local! {
@@ -11,13 +10,11 @@ tokio::task_local! {
     static HELD: ();
 }
 
-/// What a hand-over holds.
 #[derive(Default)]
 pub struct Handovers(tokio::sync::Mutex<()>);
 
 impl Handovers {
-    /// Run `work` holding the hand-overs, unless this task holds them
-    /// already, which then goes on holding them.
+    /// A task that holds them already goes on holding them.
     pub async fn hold<F: Future>(&self, work: F) -> F::Output {
         if HELD.try_with(|()| ()).is_ok() {
             return work.await;

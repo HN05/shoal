@@ -1,8 +1,6 @@
 //! Which sessions of a space a handoff copies into its attached files, and
-//! how it lists them for the new tool: every session the space's agents
-//! reported, copied again only when its files changed since an earlier
-//! handoff copied them, and those whose files are not here named as
-//! missing.
+//! how it lists them for the new tool. A session is copied again only when
+//! its files changed since an earlier handoff copied them.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::{collections::BTreeMap, path::Path, path::PathBuf};
@@ -18,9 +16,8 @@ use shoal_protocol::integrations::IntegrationKind;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::transcripts::{self, Environments, ReportedSession, SpaceSessions};
 
-/// A session a handoff lists for the new tool: the copy of its
-/// conversation and how many other files of it were copied, or why its
-/// files are not here.
+/// The copy of its conversation and how many other files of it were copied,
+/// or why its files are not here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Listed {
     pub agent: Agent,
@@ -31,8 +28,8 @@ pub struct Listed {
     pub missing: Option<String>,
 }
 
-/// One file of a session as its tool keeps it now: its path in the tool's
-/// session directory, its path here and its length.
+/// As its tool keeps it now: its path in the tool's session directory, its
+/// path here and its length.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Present {
     pub relative: PathBuf,
@@ -41,7 +38,6 @@ pub struct Present {
     pub transcript: bool,
 }
 
-/// A session's files as its tool keeps them now, or why they are not here.
 #[derive(Debug)]
 enum Located {
     Here(Vec<Present>),
@@ -49,8 +45,8 @@ enum Located {
 }
 
 impl Spaces {
-    /// The sessions of `space` a handoff lists, oldest first, once the ones
-    /// whose files changed since a handoff copied them are copied again.
+    /// Oldest first, once the ones whose files changed since a handoff
+    /// copied them are copied again.
     pub(crate) async fn copy_sessions(
         &self,
         daemon: &dyn Daemon,
@@ -85,8 +81,7 @@ impl Spaces {
     }
 }
 
-/// The reported `sessions` with their tools and where their files are,
-/// those that run now last, as they are likely the newest.
+/// Those that run now come last, as they are likely the newest.
 fn locate(
     home: &Path,
     sessions: &SpaceSessions,
@@ -103,8 +98,7 @@ fn locate(
         .collect()
 }
 
-/// Where the files of `reported`, kept as `integration`'s tool keeps them,
-/// are in the first of `environments` that has them.
+/// In the first of `environments` that has them.
 fn located(
     reported: &ReportedSession,
     integration: IntegrationKind,
@@ -123,8 +117,7 @@ fn located(
     }
 }
 
-/// The files `found` names, with their lengths now; one gone meanwhile
-/// drops out.
+/// With their lengths now. One gone meanwhile drops out.
 fn present(found: &transcripts::Found) -> Vec<Present> {
     (found.files.files.iter())
         .filter_map(|relative| {
@@ -140,9 +133,8 @@ fn present(found: &transcripts::Found) -> Vec<Present> {
         .collect()
 }
 
-/// Whether `files`, the files of `session` now, differ from what the
-/// handoff copies among `attached` last copied of it: a file it never
-/// copied, or one whose length changed.
+/// Compares with what the handoff copies among `attached` last copied of
+/// it: a file it never copied, or one whose length changed.
 pub fn changed_since_copied(
     session: &AgentSessionId,
     files: &[Present],
@@ -159,8 +151,8 @@ pub fn changed_since_copied(
     })
 }
 
-/// The handoff copies among `attached` by session, then by the session
-/// file each copies, the newest copy of each.
+/// By session, then by the session file each copies, the newest copy of
+/// each.
 fn copied_files(
     attached: &[AttachedFile],
 ) -> BTreeMap<&AgentSessionId, BTreeMap<&PathBuf, &AttachedFile>> {
@@ -179,8 +171,6 @@ fn copied_files(
     copied
 }
 
-/// What attaches copies of `files`, the files of `reported`'s session that
-/// `integration`'s tool keeps.
 fn session_copies(
     reported: &ReportedSession,
     integration: IntegrationKind,
@@ -211,9 +201,8 @@ fn session_copies(
         .collect()
 }
 
-/// The sessions the handoff copies among `attached` hold, in the order
-/// they were first copied, each with the newest copy of its conversation,
-/// then the `missing` ones that no copy holds.
+/// In the order they were first copied, each with the newest copy of its
+/// conversation, then the `missing` ones that no copy holds.
 pub fn listing(attached: &[AttachedFile], missing: Vec<Listed>) -> Vec<Listed> {
     let copied = copied_files(attached);
     let mut first_copied: Vec<(i64, Listed)> = copied

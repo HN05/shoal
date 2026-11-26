@@ -1,6 +1,5 @@
-//! A workspace becoming a chat: the refusals, then the conversion its
-//! agent's turn end carries out, which removes the worktree and restarts the
-//! agent in the repository's checkout.
+//! A workspace becoming a chat once its agent's turn ends, which removes
+//! the worktree and restarts the agent in the repository's checkout.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, bail, ensure};
@@ -18,9 +17,8 @@ use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// Record that the workspace `selector` names becomes a chat in `mode`,
-    /// once its agent's turn ends, its agent carrying on as `change` asks
-    /// for `caller`; the checks of the removal it makes then come first.
+    /// The agent carries on as `change` asks for `caller`. The checks of the
+    /// removal the conversion makes then come first.
     pub async fn convert_to_chat(
         &self,
         daemon: &dyn Daemon,
@@ -30,7 +28,8 @@ impl Spaces {
         caller: Option<&Caller>,
     ) -> Result<Workspace> {
         let workspace = self.convertible_workspace(daemon, selector).await?;
-        // The chat runs in the checkout, under its settings, not the worktree's.
+        // The chat runs in the checkout, under its settings, not the
+        // worktree's.
         let settings = (daemon.repository_settings_with_templates(workspace.repository())).await?;
         super::ensure_mode(&settings, &mode)?;
         let current = self.agent_of(&workspace.id).await?;
@@ -58,10 +57,9 @@ impl Spaces {
         Ok(workspace)
     }
 
-    /// The stopped chat `workspace` becomes in `mode`: its running agent,
-    /// with the permissions `change` gives it, which carries on in it as
-    /// `carrying` says, or else the agent it saved last, whose work an agent
-    /// tool `carrying` names takes over.
+    /// Its running agent, with the permissions `change` gives it, carries on
+    /// in it as `carrying` says, or else an agent tool `carrying` names takes
+    /// over the work of the agent it saved last.
     async fn carrying_on(
         &self,
         daemon: &dyn Daemon,
@@ -100,11 +98,11 @@ impl Spaces {
         })
     }
 
-    /// Refuse an agent of the space `selector` names while it converts: a
-    /// workspace that becomes a chat, whose agent carries on there, or a
-    /// chat that became it, whose agent's turn end, which another agent's
-    /// reports would hide, moves it there, or a space whose work goes over to
-    /// another agent tool. The caller holds the agents' admissions.
+    /// Refuses while the space converts: a workspace that becomes a chat,
+    /// whose agent carries on there; a chat that became it, whose agent's
+    /// turn end, which another agent's reports would hide, moves it there;
+    /// or a space whose work goes over to another agent tool. The caller
+    /// holds the agents' admissions.
     pub async fn ensure_takes_agents(&self, selector: &SpaceSelector) -> Result<()> {
         let space = self.space(selector).await?;
         let id = space.id.clone();
@@ -125,8 +123,7 @@ impl Spaces {
         }
     }
 
-    /// The stopped chat the workspace `id` becomes in `mode`, whose agent
-    /// `execution` runs.
+    /// Its agent runs as `execution`.
     async fn converted_chat(
         &self,
         id: &SpaceId,
@@ -151,9 +148,9 @@ impl Spaces {
         })
     }
 
-    /// The workspace `selector` names, refusing a chat, and a workspace that
-    /// cannot become one now: one the user holds, another builds on, whose
-    /// unsaved files no checkpoint can keep.
+    /// Refuses a chat, and a workspace that cannot become one now: one the
+    /// user holds, another builds on, or whose unsaved files no checkpoint
+    /// can keep.
     async fn convertible_workspace(
         &self,
         daemon: &dyn Daemon,

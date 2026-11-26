@@ -1,8 +1,5 @@
-//! Handing a space's work from one agent tool to another: copies of the
-//! sessions its agents reported go into its attached files, and the new
-//! tool starts a new session told where they are. Shoal never converts one
-//! tool's session into another's format, and a tool the space used before
-//! starts a new session too.
+//! Handing a space's work from one agent tool to another through copies of
+//! its sessions in its attached files. See `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::{
@@ -27,8 +24,8 @@ mod copies;
 
 pub use copies::Listed;
 
-/// The agent a handoff takes a space's work from: its tool, the session it
-/// reported last, the execution it ran as and where it ran.
+/// Its tool, the session it reported last, the execution it ran as and
+/// where it ran.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Leaving {
     pub agent: Agent,
@@ -39,9 +36,8 @@ pub struct Leaving {
     pub origin: Option<Origin>,
 }
 
-/// The agent that takes a space's work over: its tool and mode, the model
-/// asked of it, the permissions given to it and the note it is told after
-/// its mode's instructions.
+/// Its tool and mode, the model asked of it, the permissions given to it and
+/// the note it is told after its mode's instructions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Taking {
     pub agent: Agent,
@@ -55,12 +51,10 @@ pub struct Taking {
 }
 
 impl Spaces {
-    /// Hand the work of the space `id`, whose recorded conversion keeps
-    /// any agent from starting there meanwhile, over from `leaving`, the
-    /// agent it had, if any, to `taking`: copy its agents' sessions into its
-    /// attached files, save `taking` in place of `leaving` and forget the
-    /// conversion, then start `taking` unless `held` keeps it for `shoal
-    /// resume`.
+    /// The recorded conversion keeps any agent from starting there
+    /// meanwhile. Copies the agents' sessions into the attached files, saves
+    /// `taking` in place of `leaving`, if any, and forgets the conversion,
+    /// then starts `taking` unless `held` keeps it for `shoal resume`.
     pub async fn hand_off(
         &self,
         daemon: &dyn Daemon,
@@ -89,13 +83,11 @@ impl Spaces {
             .map(drop)
     }
 
-    /// Save `taking` as the stopped agent of the space `id` in place of
-    /// `leaving`, told what the space is and where the sessions `listed`
-    /// are, and record the handoff. What can fail is settled before
-    /// `leaving` is stopped and what it saved discarded, and `taking` is
-    /// saved right after, so a failure never leaves the space without both.
-    /// Returns the execution `taking` is saved as, `leaving`'s when there
-    /// was one.
+    /// `taking` is told what the space is and where the sessions `listed`
+    /// are. What can fail is settled before `leaving` is stopped and what it
+    /// saved discarded, and `taking` is saved right after, so a failure
+    /// never leaves the space without both. Returns the execution `taking`
+    /// is saved as, `leaving`'s when there was one.
     pub(crate) async fn save_taking(
         &self,
         daemon: &dyn Daemon,
@@ -129,18 +121,15 @@ impl Spaces {
         Ok(execution)
     }
 
-    /// Stop the agent of `space` that leaves, keeping nothing of it, and
-    /// discard what a stop saved of it, so that the agent taking over is
-    /// its only one.
+    /// Keeps nothing of it, and discards what a stop saved of it, so the
+    /// agent taking over is the space's only one.
     async fn retire_leaving(&self, daemon: &dyn Daemon, space: &crate::model::Space) -> Result<()> {
         let request = StopRequest::handoff();
         (daemon.stop_space_agent_executions(&space.id, &request)).await?;
         daemon.discard_replaced_agent(space).await
     }
 
-    /// The sessions a handoff of the work of `space` from `leaving` to
-    /// `taking` goes from and to, each with the tool the space's settings
-    /// give it.
+    /// Each with the tool the space's settings give it.
     async fn handoff_sides(
         &self,
         daemon: &dyn Daemon,
@@ -164,9 +153,8 @@ impl Spaces {
 }
 
 impl Taking {
-    /// This agent as the stopped agent of a space, saved as execution
-    /// `execution` that ran at `origin`, which starts a new session told
-    /// `told`.
+    /// Saved as `execution`, which ran at `origin`. It starts a new session
+    /// told `told`.
     fn saved(self, execution: ExecutionId, origin: Option<Origin>, told: String) -> LastSession {
         LastSession {
             execution,
