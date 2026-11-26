@@ -1,6 +1,4 @@
-//! Starting, reading, rerunning and cancelling CI workflow runs of the
-//! workspace's repository as its agent account, or of another repository as
-//! the user.
+//! Starting, reading, rerunning and cancelling CI workflow runs.
 pub mod place;
 pub mod reach;
 
@@ -144,7 +142,6 @@ impl Links {
             .with_context(|| format!("could not {action} {}", run.url))
     }
 
-    /// The run `input` names.
     pub async fn view_ci_run(
         &self,
         daemon: &dyn Daemon,
@@ -187,7 +184,6 @@ impl Links {
             .with_context(|| format!("could not read CI run {run}"))
     }
 
-    /// Every job of the run `input` names.
     pub async fn ci_run_jobs(
         &self,
         daemon: &dyn Daemon,
@@ -204,7 +200,6 @@ impl Links {
             .with_context(|| format!("could not read the jobs of CI run {run}"))
     }
 
-    /// The log of the job `job` of the run `input` names.
     pub async fn ci_run_job_log(
         &self,
         daemon: &dyn Daemon,
@@ -277,7 +272,7 @@ impl Links {
         Ok(None)
     }
 
-    /// The one PR linked to the space `id`, if any.
+    /// The one PR linked to the space `id`, if any, refusing several.
     async fn linked_pr(&self, id: &SpaceId) -> Result<Option<ItemRef>> {
         let id = id.to_owned();
         let prs = (self.store)

@@ -1,7 +1,4 @@
-//! Where a CI run request acts: the repository of the workspace or
-//! registered checkout it comes from as its account there, or another
-//! repository `--repo` or a run's or workflow's URL names, which a scoped
-//! caller only reads, and the branch a run starts on there.
+//! The repository, account and branch a CI run request acts with.
 use anyhow::{Context, Result, ensure};
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
@@ -38,7 +35,6 @@ pub(crate) struct RunPlace {
 }
 
 impl RunPlace {
-    /// The repository the request acts in.
     pub fn forge(&self) -> &ForgeRepo {
         &self.forge
     }

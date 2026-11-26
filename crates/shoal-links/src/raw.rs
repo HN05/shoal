@@ -1,7 +1,4 @@
-//! Requests `shoal forge api` and `shoal forge download` send to the forge of
-//! a space's repository or another one, so a scoped caller acts as its
-//! agent account and only reads, unless its `api_writes` permission lets it
-//! write to its own repository.
+//! The requests of `shoal forge api` and `shoal forge download`.
 use anyhow::Result;
 use serde_json::Value;
 use shoal_daemon_base::{callers::Caller, permitted_actions::Action};

@@ -1,5 +1,4 @@
-//! Waiting for a space's messages and item activity, and building what a
-//! watch or a hook delivers to its agent.
+//! What a watch or a hook delivers to a space's agent, and waiting for it.
 use anyhow::{Result, ensure};
 use shoal_forge_types::{
     items::link::{LinkKind, Selection},
@@ -116,11 +115,11 @@ impl Links {
         Ok(Updates::messages(messages))
     }
 
-    /// The next messages or item activity of the agent of the space
-    /// `selector` names, as an unfiltered [`Self::wait_items`] without a
-    /// deadline finds them, unless a newer wait or delivery takes them
-    /// first, once no failed turn's retry holds them back. The wake hook's
-    /// wait, so the daemon logs how one ends without updates.
+    /// The wake hook's wait: the next messages or item activity of the agent
+    /// of the space `selector` names, as an unfiltered [`Self::wait_items`]
+    /// without a deadline finds them, unless a newer wait or delivery takes
+    /// them first. It waits while a failed turn's retry holds wakes back, and
+    /// the daemon logs how it ends without updates.
     pub async fn wait_space_updates(
         &self,
         daemon: &dyn Daemon,
@@ -143,9 +142,8 @@ impl Links {
     /// settled messages, its leftovers and the updates queued on its
     /// cursor, without waiting or polling the forge. Delivery replaces a
     /// running watch, which would otherwise deliver the same updates again.
-    /// Cleanup and item changes hold a space's PR gate across their forge
-    /// requests and its removal, longer than an agent waits for its hook,
-    /// so while one runs the updates wait for a later delivery.
+    /// While cleanup or an item change holds the space's PR gate, which can
+    /// outlast a hook's wait, the updates wait for a later delivery.
     pub async fn agent_updates(
         &self,
         daemon: &dyn Daemon,
@@ -306,9 +304,6 @@ impl Links {
     }
 }
 
-/// What a wait for a space's updates takes: the items it watches, the
-/// repository of an item a chat without one names, when it gives up, and
-/// whether it wakes the agent, which waits while its wakes are held back.
 struct Watch<'a> {
     selection: &'a Selection,
     repository: Option<&'a RepositoryId>,

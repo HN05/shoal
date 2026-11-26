@@ -1,5 +1,4 @@
-//! The items recorded as linked to a space, as lists and its status show
-//! them.
+//! The items linked to a space, as lists and its status show them.
 use rusqlite::{Connection, Row};
 use shoal_forge_types::items::link::ItemKind;
 use shoal_ids::space_ids::SpaceId;
@@ -7,7 +6,8 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_forge_types::items::reference::ItemRef;
 use shoal_protocol::model::{LinkedItem, Relation, SpaceLinks};
 
-/// Read canonical links while keeping malformed legacy PR records out of list output.
+/// The space's links, as lists show them. An unreadable PR registration
+/// lists no PRs.
 pub fn space_links(db: &Connection, space_id: &SpaceId) -> rusqlite::Result<SpaceLinks> {
     let issues = (assigned_issues(db, space_id)?.into_iter())
         .map(|issue| LinkedItem {

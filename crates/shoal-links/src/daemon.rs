@@ -1,11 +1,4 @@
-//! What links need of the rest of the daemon, which implements it: the
-//! registered repositories, the spaces requests come from and the
-//! workspaces a scope reaches, the watches
-//! of their linked items, the messages agents receive beside them, the
-//! hub their activity goes up through, which forge
-//! each host serves, the permission a scoped caller acts with, the
-//! coordinators alerts about a space reach, and the spaces' state links
-//! check in their own transactions.
+//! What links need of the rest of the daemon, which implements it.
 use std::collections::BTreeMap;
 
 use anyhow::Result;
@@ -47,13 +40,11 @@ use crate::space::LinkSpace;
 /// The registered repositories and the spaces requests about items come
 /// from.
 pub trait Spaces: Send + Sync {
-    /// The registered repository `id`.
     fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>>;
 
     /// The workspace or chat `selector` names, by ID or name.
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>>;
 
-    /// The workspace or chat with the ID `id`, while it exists.
     fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>>;
 
     /// Verify a workspace's worktree before a request relies on it.
@@ -110,22 +101,18 @@ pub trait Spaces: Send + Sync {
         named: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Option<Repository>>>;
 
-    /// The spaces whose agent the daemon tracks.
     fn tracked_agents(&self) -> BoxFuture<'_, Vec<SpaceId>>;
 
-    /// The workspaces of the registered repository `id`.
     fn repository_workspaces<'a>(
         &'a self,
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<Vec<Workspace>>>;
 
-    /// The workspaces `caller`'s scope reaches.
     fn reached_workspaces<'a>(
         &'a self,
         caller: &'a Caller,
     ) -> BoxFuture<'a, Result<Vec<Workspace>>>;
 
-    /// Whether `caller`'s scope reaches the space `id`.
     fn reaches<'a>(&'a self, caller: &'a Caller, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
     /// The workspace `selector` names, refusing a chat.
@@ -134,14 +121,12 @@ pub trait Spaces: Send + Sync {
     /// The workspace `id`, as it is now.
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>>;
 
-    /// The workspace `id`, while it exists.
     fn find_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Workspace>>>;
 
     /// Prove that the worktree of `workspace` is still its own, before a
     /// request relies on it.
     fn verify_worktree<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>>;
 
-    /// The registered repositories.
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
 
     /// The workspace of the repository `id` that owns `branch`.
@@ -164,7 +149,6 @@ pub trait Spaces: Send + Sync {
     /// proposes for it; none for one from outside an agent's execution.
     fn proposing_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<Agent>>;
 
-    /// Every space present on this machine.
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>>;
 
     /// The conflicts a workspace watch reports for the workspace
@@ -177,7 +161,7 @@ pub trait Spaces: Send + Sync {
     ) -> BoxFuture<'a, Result<Option<ConflictCheck>>>;
 }
 
-/// What the daemon wakes for the watches of a space's linked items.
+/// What the daemon wakes for the watches of linked items.
 pub trait Watches: Send + Sync {
     /// Wake the agents whose watches just queued updates.
     fn item_updates_queued(&self);
@@ -196,8 +180,8 @@ pub trait Watches: Send + Sync {
     fn draft_changed(&self, id: &SpaceId);
 }
 
-/// What an agent receives beside its items' activity, which the daemon
-/// keeps: its messages and the leftover processes of its space.
+/// What an agent receives beside its items' activity: its messages and the
+/// leftover processes of its space.
 pub trait Messages: Send + Sync {
     /// The unread messages of the space `id`, oldest first, and whether one
     /// of them wakes an idle agent.
@@ -230,8 +214,8 @@ pub trait Messages: Send + Sync {
     fn message_queued(&self);
 }
 
-/// The hub, through which the item activity of this machine's spaces goes
-/// up to their coordinators on other machines.
+/// The hub, through which item activity goes up to coordinators on other
+/// machines.
 pub trait Elsewhere: Send + Sync {
     /// Whether this machine is the hub or reaches it now.
     fn reaches_hub(&self) -> bool;
@@ -250,9 +234,8 @@ pub trait Elsewhere: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-/// The approval requests that proposals and pushes wait for, which the
-/// daemon's approvals subsystem routes and decides, and the operations that
-/// run the pushes it approves.
+/// The approval requests that proposals and pushes wait for, and the
+/// operations that run the pushes they approve.
 pub trait Approvals: Send + Sync {
     /// Tell whoever decides the pending `request` about it.
     fn announce<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()>;
@@ -315,17 +298,14 @@ pub trait Reviews: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-/// What the daemon records of a space's agent, which settling the agent
-/// account on its issues reads.
+/// What settling the agent account on a space's issues reads of its agent.
 pub struct SpaceAgent {
-    /// Whether the space's work is done.
     pub done: bool,
     /// Whether it has an agent that runs, sleeps, is queued, restarts or
     /// waits for a conversion to restart it.
     pub present: bool,
 }
 
-/// The permission a scoped caller acts with.
 pub trait Permissions: Send + Sync {
     /// Let `caller` take `action` as its space's permission for the
     /// action's key allows; the user takes every action.
@@ -361,8 +341,8 @@ pub trait Permissions: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-/// Everything links need of the daemon, which each of their operations
-/// that reaches beyond them takes.
+/// Everything links need of the daemon, which each operation that reaches
+/// beyond links takes.
 pub trait Daemon:
     Spaces + Watches + Messages + Elsewhere + Approvals + Reviews + Permissions + Coordinators
 {
@@ -373,7 +353,6 @@ impl<T> Daemon for T where
 {
 }
 
-/// Which kind of proposal a request records.
 #[derive(Clone, Copy)]
 pub enum ProposalKind {
     Issue,
@@ -381,8 +360,8 @@ pub enum ProposalKind {
     Push,
 }
 
-/// What links check of a space in their own transactions. Its methods run
-/// on the store's thread, so they are not futures.
+/// What links check of a space inside their own transactions. Its methods
+/// run on the store's thread, so they are not futures.
 pub trait Records: Send + Sync {
     /// Refuse a change to the space `id`'s links while it takes none, as
     /// while a workspace is removed.
@@ -447,14 +426,12 @@ pub trait Records: Send + Sync {
     /// Keep `request` as outdated, so it is no longer decided.
     fn retire_approval(&self, tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()>;
 
-    /// The approval request numbered `number`, if any.
     fn approval_by_number(
         &self,
         db: &Connection,
         number: ItemNumber,
     ) -> Result<Option<ApprovalRequest>>;
 
-    /// The approval request whose key is `key`, if any.
     fn approval_by_key(&self, db: &Connection, key: &str) -> Result<Option<ApprovalRequest>>;
 
     /// The approval requests of the space `space`, or of every space.

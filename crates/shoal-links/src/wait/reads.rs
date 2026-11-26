@@ -1,6 +1,5 @@
-//! The reads of item activity a watch, a watch's start and the background
-//! poll make, as the user's own logins, and the word to the user when a
-//! forge limits them.
+//! The reads of item activity that watches and polls make with the user's
+//! own logins, and the alert when a forge limits them.
 use anyhow::Result;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use shoal_daemon_base::alerts::{About, NewAlert};

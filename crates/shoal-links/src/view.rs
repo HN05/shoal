@@ -1,5 +1,4 @@
-//! Issues and PRs the daemon reads for `shoal view` and apps, as the forge
-//! reports them now, with the logs of failed checks.
+//! The issues and PRs `shoal view` shows, with the logs of failed checks.
 use anyhow::Result;
 use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::forge_access::ForgeAccess;

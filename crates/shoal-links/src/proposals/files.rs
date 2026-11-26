@@ -1,7 +1,5 @@
-//! Copies of the files proposed issues and PRs attach, kept until the user
-//! or a coordinator decides, since the agent's own may be gone by then. They
-//! live in the `.proposals` directory of the repository the proposal is
-//! for.
+//! Copies of the files a proposal attaches, kept until it is decided, since
+//! the agent's own may be gone by then.
 use std::{
     collections::BTreeSet,
     ffi::OsString,

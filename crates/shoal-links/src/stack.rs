@@ -1,5 +1,4 @@
-//! Move stacked workspaces down when their base workspace's work merges:
-//! through its PRs, or into the space that absorbs it.
+//! Moving stacked workspaces onto the branch their base's work merged into.
 use anyhow::{Result, ensure};
 use shoal_daemon_base::alerts::AlertKind;
 use shoal_forge::{

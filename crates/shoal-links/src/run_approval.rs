@@ -1,7 +1,4 @@
-//! Approving the CI runs a forge holds for approval, from a workspace or a
-//! registered checkout: approval lets a fork's or first-time contributor's
-//! code run, so it is the user's decision, or a scoped caller's as its
-//! `ci_approve` permission allows, as the agent account.
+//! Approving the CI runs a forge holds for approval.
 use anyhow::{Context, Result};
 use shoal_daemon_base::{callers::Caller, events, permitted_actions::Action};
 use shoal_forge::{ci::approval::ApprovalRequests, transport::account::Account};

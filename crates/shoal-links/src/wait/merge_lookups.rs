@@ -1,6 +1,5 @@
-//! The lookups of the default branch's CI runs for the merges a space
-//! follows, as the store records them: which merges a space follows, the
-//! runs each lookup linked, and when a lookup ends.
+//! The stored lookups of the default branch's CI runs for the merges a
+//! space follows.
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -25,8 +24,8 @@ use shoal_refs::{BranchName, CommitId};
 use super::{cursor::cursor_record, followed::observed_item};
 use crate::{Links, daemon::Daemon};
 
-/// How long after a watch saw a merge Shoal looks for the default branch's
-/// runs for its commit.
+/// How long after a merge Shoal looks for the default branch's runs for its
+/// commit. A run that has not started by then is not coming.
 pub const LOOKUP_WINDOW: Duration = Duration::from_secs(10 * 60);
 
 /// What the merge update of a PR whose merge commit the forge did not
@@ -45,17 +44,13 @@ pub struct MergeTarget {
 /// branch's upstream.
 pub struct PushedMerge {
     pub space: SpaceId,
-    /// The URLs it was pushed to.
     pub remotes: Vec<String>,
-    /// The remote's branch that took it.
     pub branch: BranchName,
-    /// The commit it left there.
     pub commit: CommitId,
 }
 
 /// What a lookup follows the merge of, whose forge lists its runs.
 pub enum Merged {
-    /// A PR.
     Pr(ItemRef),
     /// A merge `shoal merge` pushed to the remote at this URL.
     Push(String),
@@ -79,7 +74,6 @@ pub struct MergeLookup {
     pub merged_at: UnixTime,
     /// Whether no listing has run since the lookup's window ended.
     pub looking: bool,
-    /// The runs it linked.
     pub runs: Vec<ItemRef>,
 }
 
@@ -146,7 +140,6 @@ pub fn follow_reported_merge(
 /// seen merge or close.
 #[derive(Default)]
 pub struct UnseenPrs {
-    /// Those it watches.
     pub watched: Vec<ItemRef>,
     /// Those it links as opened, and does not watch.
     pub opened: Vec<ItemRef>,
@@ -164,9 +157,9 @@ pub enum Following {
     NoMergeCommit,
 }
 
-/// Follow the merge that `snapshot` shows of the PR at `url`, when the
-/// space `id` watches it or links it as opened and it merged into `target`'s branch: look up the
-/// runs of its merge commit from `now`, unless a lookup already does.
+/// Look up the runs of the merge commit `snapshot` shows for the PR at
+/// `url` from `now`, when the space `id` follows the PR, it merged into
+/// `target`'s branch and no lookup already does.
 pub fn follow_merge(
     db: &rusqlite::Connection,
     id: &SpaceId,
@@ -329,7 +322,6 @@ fn link_merge_run(
     Ok(())
 }
 
-/// Whether the space `id` links the item at `url` under any relation.
 fn links(db: &rusqlite::Connection, id: &SpaceId, url: &ItemRef) -> Result<bool> {
     Ok(db
         .query_row(
@@ -364,7 +356,7 @@ fn run_finished(db: &rusqlite::Connection, id: &SpaceId, run: &ItemRef) -> Resul
     Ok(polled.is_some_and(|read| read.run_finished()))
 }
 
-/// The space `id`'s lookups of its merges' runs that have not ended.
+/// The lookups of the space `id` that have not ended.
 pub fn merge_lookups(db: &rusqlite::Connection, id: &SpaceId) -> Result<Vec<MergeLookup>> {
     let mut statement = db.prepare(
         "SELECT pr_url, remote_url, merge_commit, branch, merged_at, looking, runs

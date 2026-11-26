@@ -1,5 +1,5 @@
-//! Opening a workspace's PR, or proposing it, and the review gate a new
-//! PR waits for.
+//! Opening or proposing a workspace's PR, behind the review a new PR waits
+//! for.
 use std::sync::Arc;
 
 use anyhow::Result;

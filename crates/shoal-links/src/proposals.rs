@@ -1,6 +1,5 @@
-//! Issues and PRs a space's permissions make scoped callers propose
-//! instead of opening: recording them, and opening, denying or merging them
-//! as duplicates once the user decides.
+//! Issues and PRs that scoped callers propose instead of opening, and their
+//! decision.
 mod files;
 mod store;
 

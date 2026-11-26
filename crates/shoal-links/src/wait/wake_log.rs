@@ -1,7 +1,5 @@
 //! The daemon log's record of a wake hook that ends without starting its
-//! agent's turn, so an agent left idle can be traced to how its hook ended:
-//! the daemon logs how the hook's wait ended, and the hook reports the
-//! reasons the daemon cannot see.
+//! agent's turn, so that an idle agent can be traced to how its hook ended.
 use anyhow::Result;
 
 use shoal_daemon_base::log;

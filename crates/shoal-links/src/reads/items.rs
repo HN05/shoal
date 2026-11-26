@@ -1,6 +1,5 @@
-//! The issues and PRs a read names: which items a selection names and what
-//! kind a bare number is, an issue's details and blockers, and a PR's head,
-//! reviewers and review threads.
+//! Reads of single issues and PRs, and of what a selection or a bare number
+//! names.
 use anyhow::{Context, Result};
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{

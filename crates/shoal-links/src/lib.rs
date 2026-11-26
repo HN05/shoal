@@ -1,5 +1,5 @@
-//! The issues, PRs and CI runs the daemon's spaces link. [`Links`] holds
-//! what links keep in memory and offers their operations.
+//! The issues, PRs and CI runs spaces link, the polls that read them and
+//! the watches that report them.
 pub mod actions;
 pub mod branches;
 mod checks;
@@ -41,7 +41,6 @@ use shoal_daemon_base::{
 };
 use shoal_store::Store;
 
-/// The links' service, which `Manager` holds.
 pub struct Links {
     store: Store,
     gates: Arc<Gates>,

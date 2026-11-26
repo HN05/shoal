@@ -1,5 +1,5 @@
-//! Keeping what a space opens: linking an open PR of its branch, and
-//! assigning or recording an item it just created, journaled as its own.
+//! Recording what a space opens as its own: an open PR of its branch, or an
+//! item it just created.
 use std::sync::Arc;
 
 use anyhow::{Context, Result};

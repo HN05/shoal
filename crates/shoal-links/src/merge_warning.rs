@@ -1,7 +1,6 @@
-//! What merging a PR warns about: the sensitive files that the last
-//! conflict check of the merged head found changed on both sides. It reads
-//! that record and checks nothing again, so merging stays as fast without
-//! one. A branch's local merge reads its own record the same way.
+//! The sensitive files a merge warns about, as the last conflict check of
+//! the merged head found them. It reads that record and checks nothing
+//! again, so a merge takes no longer for the warning.
 use anyhow::{Context, Result, ensure};
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{RepoRequests, items::item::ItemRequests};
@@ -80,12 +79,11 @@ impl Links {
         (self.item_action(daemon, target, ItemKind::Pr, input, action, caller)).await
     }
 
-    /// Bind a merge in `action` of the PR `input` names, or of `target`'s
-    /// linked PR, for a scoped `caller`, to the commit the PR's head has now, unless it names one,
-    /// and to the `[merge] method` it merges by, unless it names one, and
-    /// return what it does as an approval of it binds it: a later commit,
-    /// another method or another message needs another decision, and the
-    /// forge refuses to merge another commit.
+    /// Bind a scoped `caller`'s merge in `action` of the PR `input` names,
+    /// or of `target`'s linked PR, to the PR's current head and to its
+    /// `[merge] method`, where the merge names neither. Returns what the
+    /// merge does as its approval names it, so that a later commit, another
+    /// method or another message needs another decision.
     pub async fn bind_merge(
         &self,
         daemon: &dyn Daemon,

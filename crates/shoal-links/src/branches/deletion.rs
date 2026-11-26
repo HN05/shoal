@@ -1,11 +1,5 @@
-//! Deleting branches on the forge. Every named branch is checked first, and
-//! none goes while one is refused: the default branch, a protected one, the
-//! head or base of an open PR, one whose changes the default branch lacks
-//! unless forced, and the branch of an active space outside the caller's
-//! scope. A scoped caller deletes as its `push` permission allows. Each
-//! branch goes only at the commit it was read at, which an approval binds:
-//! Git deletes it with that commit as its lease, so the forge keeps one
-//! that a push moved after the checks.
+//! Deleting branches on the forge, each only at the commit it was read at.
+//! `docs/design/forge.md` says which branches go.
 use anyhow::{Context, Result, bail};
 use shoal_core::git;
 use shoal_daemon_base::{callers::Caller, permitted_actions::Action};

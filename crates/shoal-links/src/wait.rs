@@ -1,9 +1,5 @@
-//! What watches keep and answer: the running wait of each space, each
-//! item's record on a space's watch cursor and what it holds back, the
-//! items it follows, its merge lookups and the runs they find, what a
-//! branch's local merge check reports, the polls, what a watch or hook
-//! delivers or the hub carries to a coordinator elsewhere, and how a
-//! response fits one frame.
+//! Watches of linked items: the polls that read them, the cursors that
+//! record what each space saw, and what they deliver.
 pub mod activity;
 pub mod background;
 pub mod branch_report;

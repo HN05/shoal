@@ -1,9 +1,5 @@
 //! A stand-in for the rest of the daemon, which the links' tests build
-//! their operations over: the workspaces and repositories a test gives,
-//! the settings they act with, over each repository's tracked config file a
-//! test gives, the issues and PRs a test assigns to each space, the spaces
-//! whose agent runs, forges on hosts whose kind a test learned, and records that take
-//! every link change.
+//! their operations over.
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::{Arc, Mutex},
@@ -125,7 +121,6 @@ pub struct StandIn {
     pub assigned: HashMap<SpaceId, Vec<ItemRef>>,
     /// The workspaces requests come from.
     pub workspaces: Vec<Workspace>,
-    /// The registered repositories.
     pub repositories: Vec<Repository>,
     /// The config every space's settings resolve under.
     pub config: Option<Config>,

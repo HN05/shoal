@@ -1,11 +1,6 @@
-//! The item activity of this machine's spaces whose coordinator runs on
-//! another machine: the spaces without an agent below a space elsewhere,
-//! whose activity no agent here receives. It goes up through the hub as
-//! the other events those spaces pass up do, in events that fit the
-//! coordinator's unread messages, and leaves their cursors once the hub
-//! took it, which holds it while the coordinator's machine is offline;
-//! while this machine's link is down, or what it sent is refused, the
-//! cursors keep it for a later sweep.
+//! Passing item activity up through the hub to a coordinator on another
+//! machine. The activity leaves the cursors only once the hub took it, so a
+//! sweep resends what a lost link or a refusal left.
 use anyhow::Result;
 use shoal_daemon_base::{alerts::MAX_UNREAD_BYTES, log};
 use shoal_forge_types::updates::Update;

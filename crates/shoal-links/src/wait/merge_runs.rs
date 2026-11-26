@@ -1,10 +1,6 @@
-//! Following the default branch's CI runs for the merge commits of the PRs
-//! a space watches or links as opened, and of the merges of its branch
-//! `shoal merge` pushed, where `[pr] watch_merge_runs` is on: the read that
-//! records such a PR's merge, or the end of the merge that pushed, starts a
-//! lookup, which each background poll of the space runs for
-//! [`LOOKUP_WINDOW`], linking every run it finds as related, so the space's
-//! watches report how they end.
+//! Following the default branch's CI runs for a space's merges under
+//! `[pr] watch_merge_runs`. Each background poll runs a lookup for
+//! [`LOOKUP_WINDOW`] and links the runs it finds as related.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::sync::Arc;
 
@@ -36,11 +32,10 @@ use super::{
 use crate::{Links, daemon::Daemon, space::LinkSpace};
 
 impl Links {
-    /// Look up the runs of the commit a space's `shoal merge` pushed, as
-    /// the read that sees a PR merge does, where `[pr] watch_merge_runs` is
-    /// on. It follows the first URL the merge was pushed to that names a
-    /// repository on a network host, since a local repository has no forge
-    /// to list them on; a push to none starts no lookup.
+    /// Look up the runs of the commit a space's `shoal merge` pushed, where
+    /// `[pr] watch_merge_runs` is on. It follows the first URL the merge was
+    /// pushed to on a network host, since a local repository has no forge to
+    /// list runs on.
     pub async fn follow_pushed_merge(
         &self,
         daemon: &dyn Daemon,
@@ -136,28 +131,22 @@ impl Links {
     }
 
     /// Whether a PR whose merges the space `id` follows may have merged
-    /// unseen: where `[pr] watch_merge_runs` is on, no read of Shoal's own
-    /// has seen a PR it watches merge or close, or one it links as opened
-    /// merged on the forge unseen, and the read that sees a merge starts
-    /// the lookup of its runs. PR cleanup, which found every watched PR
-    /// merged on the forge, waits for that read.
+    /// without a read of Shoal's own seeing it. That read starts the lookup
+    /// of the merge's runs, so PR cleanup waits for it.
     pub async fn merge_unseen(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
         let unseen = self.unseen_prs(daemon, id).await?;
         Ok(!unseen.watched.is_empty() || self.any_merged(unseen.opened).await?)
     }
 
-    /// Whether a PR whose merges the space `id` follows merged on the forge
-    /// while no read of Shoal's own has seen it, as [`Self::merge_unseen`]
-    /// says, reading those PRs from the forge: merged cleanup, which finds
-    /// the branch merged without them, waits only for one that did merge,
-    /// so a PR left open keeps nothing.
+    /// Whether a PR [`Self::merge_unseen`] counts did merge, as the forge
+    /// reports it now. Merged cleanup waits only for such a PR, so a PR left
+    /// open keeps nothing.
     pub async fn merged_unseen(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
         let unseen = self.unseen_prs(daemon, id).await?;
         let prs = [unseen.watched, unseen.opened].concat();
         self.any_merged(prs).await
     }
 
-    /// Whether the forge shows one of `prs` merged.
     async fn any_merged(&self, prs: Vec<ItemRef>) -> Result<bool> {
         if prs.is_empty() {
             return Ok(false);

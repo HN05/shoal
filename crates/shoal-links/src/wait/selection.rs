@@ -1,6 +1,4 @@
-//! The items a request selects among a space's links: the one it names, or
-//! the space's linked items of a kind, and the registered repository a chat
-//! without one watches an item in.
+//! The items a request selects among a space's links.
 use anyhow::{Context, Result, ensure};
 use shoal_core::repository::remote_url_from_path;
 use shoal_forge_types::items::{

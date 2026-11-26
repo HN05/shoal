@@ -1,4 +1,4 @@
-//! What a repository's forge offers: its capabilities, reactions and labels.
+//! What a repository's forge offers.
 use anyhow::Result;
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
@@ -41,7 +41,6 @@ impl Links {
             .await
     }
 
-    /// The labels of the `target` repository.
     pub async fn labels(
         &self,
         daemon: &dyn Daemon,

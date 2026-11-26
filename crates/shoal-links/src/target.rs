@@ -1,7 +1,4 @@
-//! The repository a request about issues, PRs or CI runs acts in: that of
-//! the space or registered checkout it comes from, or another one its
-//! `--repo` or an item's, run's or workflow's URL names, registered or not.
-//! Every caller reads another repository; only the user changes one.
+//! The repository a request about issues, PRs or CI runs acts in.
 use anyhow::{Result, bail, ensure};
 use shoal_daemon_base::forge_access::ForgeAccess;
 
@@ -48,12 +45,10 @@ pub struct ForgeTarget {
 }
 
 impl ForgeTarget {
-    /// The forge of the repository the request acts in.
     pub fn forge(&self) -> Result<&ForgeRepo> {
         (self.forge.as_ref()).map_err(|error| anyhow::anyhow!("{error:#}"))
     }
 
-    /// [`Self::forge`], taken.
     pub fn into_forge(self) -> Result<ForgeRepo> {
         self.forge
     }

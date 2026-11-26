@@ -1,5 +1,4 @@
-//! What a workspace branch's local merge check reports to its watch, and
-//! how it reads as an observation.
+//! What a workspace branch's local merge check reports to its watch.
 use anyhow::Result;
 use shoal_forge::updates::{MergeCheck, Snapshot};
 use shoal_forge_types::items::{
@@ -8,7 +7,8 @@ use shoal_forge_types::items::{
 };
 use shoal_protocol::model::ConflictCheck;
 
-/// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
+/// How many conflicting paths a branch conflict message names; `shoal
+/// conflicts` lists them all.
 const MAX_LISTED_FILES: usize = 10;
 
 /// What a workspace branch's local check reports: every conflict, or only

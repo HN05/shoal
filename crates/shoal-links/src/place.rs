@@ -1,6 +1,5 @@
-//! Where a request about a repository's issues, PRs and CI runs comes from:
-//! a space, a workspace's worktree verified, or the registered checkout of
-//! a repository, and whether it reads or changes what it acts on there.
+//! Where a request about issues, PRs and CI runs comes from: a space or a
+//! registered checkout.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::path::Path;
 

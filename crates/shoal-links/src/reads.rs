@@ -1,6 +1,4 @@
-//! What the daemon reads from a forge for a space or a registered checkout,
-//! so a scoped caller reads as its agent account and anyone else with the
-//! user's own logins.
+//! What the daemon reads from a forge for a space or a registered checkout.
 use anyhow::Result;
 use shoal_daemon_base::callers::Caller;
 use shoal_forge_types::ForgeRepo;

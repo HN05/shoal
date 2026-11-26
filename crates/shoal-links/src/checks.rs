@@ -1,5 +1,4 @@
-//! Failed Actions logs resolved from a PR's current check, using the agent
-//! account of the workspace or registered checkout.
+//! The logs of a PR's failed checks.
 use anyhow::{Context as _, Result, bail};
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::{
@@ -31,8 +30,10 @@ use crate::{
 };
 
 impl Links {
-    /// Log failures stay on their CI update and never hide other activity;
-    /// a check without a CI job gets no pointer to a log it does not have.
+    /// Add a summary of each failed check's log to its update, with the
+    /// command that reads the log, while the updates still fit a frame. A
+    /// log's failure stays on its own update and hides no other activity; a
+    /// check without a CI job gets no pointer to a log it does not have.
     pub async fn summarize_failed_checks(
         &self,
         daemon: &dyn Daemon,

@@ -1,5 +1,4 @@
-//! Rerunning failed and cancelling running CI jobs on a PR's current head,
-//! as the agent account of the workspace or registered checkout.
+//! Rerunning and cancelling the CI jobs on a PR's current head.
 use anyhow::{Context, Result};
 use shoal_daemon_base::{callers::Caller, events};
 use shoal_forge::ci::{CiRequests, checks::validate_check_name};

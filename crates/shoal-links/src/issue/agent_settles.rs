@@ -1,6 +1,5 @@
-//! Settling the agent account on the issues of the spaces whose agent
-//! started or stopped, or whose work was done or resumed, in the
-//! background, so a slow forge holds none of those back.
+//! Settling the agent account on a space's issues in the background, so
+//! that a slow forge holds back no agent's start or stop.
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex, PoisonError},
@@ -45,7 +44,6 @@ pub async fn run(links: Arc<Links>, daemon: Arc<dyn Daemon>) {
 }
 
 impl Links {
-    /// The spaces whose issues wait for the agent account to be settled.
     pub fn agent_settles(&self) -> &AgentSettles {
         &self.agent_settles
     }

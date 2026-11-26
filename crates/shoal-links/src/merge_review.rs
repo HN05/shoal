@@ -1,7 +1,5 @@
-//! The review gate of a PR merge: with `[review] require_for_merge` holding
-//! the caller, a finished review by the PR's workspace, the one that owns
-//! its head branch or, for a fork's, the one at a commit made for or linked
-//! to it, must cover the head the merge names, with every finding resolved.
+//! The local review a PR merge waits for under `[review]
+//! require_for_merge`, by the workspace that owns the PR's head.
 use anyhow::{Context, Result};
 use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::forge_access::ForgeAccess;
@@ -42,13 +40,13 @@ impl Links {
     }
 
     /// Refuse merging the PR `input` names, or `target`'s linked PR, at
-    /// `head`, else at the head it has now, where `[review]
-    /// require_for_merge` of its repository, or of the global config for an
-    /// unregistered one, holds `caller`, unless a finished review of the
-    /// PR's workspace covers that head with every finding resolved, and the
-    /// forge has `binding`, which keeps the merge at that head. Returns the
-    /// head checked, which the merge must name, or none where the gate does
-    /// not hold `caller`.
+    /// `head` or else its current head, while `[review] require_for_merge`
+    /// holds `caller` and no finished review of the PR's workspace covers
+    /// that head with every finding resolved. An unregistered repository
+    /// takes the setting from the global config. The forge must have
+    /// `binding`, which keeps the merge at that head. Returns the head
+    /// checked, which the merge must name, or none where the gate does not
+    /// hold `caller`.
     pub async fn require_pull_review(
         &self,
         daemon: &dyn Daemon,

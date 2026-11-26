@@ -1,5 +1,4 @@
-//! The PRs a space assigns, as its PR watch record names them, and their
-//! titles.
+//! The PRs a space assigns, as its PR watch record names them.
 use std::sync::Arc;
 
 use anyhow::{Context, Result, ensure};
@@ -32,7 +31,7 @@ pub fn watched_prs(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<ItemRe
     Ok(watched_urls(registration.as_ref()).to_vec())
 }
 
-/// The PR registration of the space `id`, refusing an unreadable one.
+/// Refuses an unreadable registration.
 pub fn registration(db: &Connection, id: &SpaceId) -> anyhow::Result<Option<Registration>> {
     let record = stored(db, id)?;
     Ok(record.map(|text| serde_json::from_str(&text)).transpose()?)
@@ -219,7 +218,8 @@ impl Links {
         let workspace = (space.to_workspace()).with_context(|| {
             format!("{} has no branch whose merge it acknowledges", space.space)
         })?;
-        // Links serve more than cleanup; only an acknowledgement exists for it alone.
+        // Unlike a PR link, an acknowledgement serves only cleanup, so refuse
+        // it while PR cleanup is off.
         ensure!(
             daemon
                 .workspace_settings(&workspace)
@@ -242,7 +242,8 @@ impl Links {
         check: WatchCheck,
     ) -> Result<(RegistrationKind, ItemRef)> {
         let (forge, url) = self.pr_forge(space.origin_path(), &input).await?;
-        // Detect missing tools or login and invalid PRs now.
+        // Refuse a PR the forge cannot read, or a missing login, before it is
+        // recorded.
         if check == WatchCheck::Lookup {
             forge
                 .merged_commits(&self.forges.user_account(), url.pull()?)
@@ -296,7 +297,7 @@ impl Links {
         Ok((!urls.is_empty()).then_some(RegistrationKind::Watch { urls, merged_head }))
     }
 
-    /// The PR registration of the space `id`, refusing an unreadable one.
+    /// Refuses an unreadable registration.
     pub async fn pr_registration(&self, id: &SpaceId) -> anyhow::Result<Option<Registration>> {
         let id = id.to_owned();
         self.store.read(move |tx| registration(tx, &id)).await

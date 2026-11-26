@@ -1,8 +1,5 @@
-//! The user's own login among the forge assignees of the issues spaces link
-//! as assigned: it joins them on each link where `[issue] assign` says so,
-//! whoever links the issue, and leaves them once no space links the issue
-//! for it, if Shoal added it. The records hold who stands for it and
-//! whether Shoal added it.
+//! The user's own login among the assignees of the issues spaces link as
+//! assigned, under `[issue] assign`.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use shoal_daemon_base::{

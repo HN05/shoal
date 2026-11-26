@@ -1,8 +1,5 @@
-//! The branches on the forge of a space's repository, or another one, with
-//! what decides whether each can go: whether the default branch has its
-//! changes, the open PRs it is the head of and the space whose branch it
-//! is. A scoped caller reads them as the agent account, the user with their
-//! own logins.
+//! A repository's branches on its forge, with what decides whether each can
+//! be deleted.
 mod deletion;
 
 use std::path::Path;

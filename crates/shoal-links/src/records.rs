@@ -1,6 +1,4 @@
-//! What a space records of the items it links beyond its assignments: the
-//! relations it records them under, while it takes link changes, and what
-//! its links kept, which goes with them.
+//! The stored links of a space beyond its assignments.
 use anyhow::{Result, bail, ensure};
 use rusqlite::Connection;
 use shoal_daemon_base::events::{self, EventKind};

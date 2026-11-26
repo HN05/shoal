@@ -1,7 +1,4 @@
-//! The space whose items a request links, watches or shows: a workspace, or
-//! a running chat, which acts in its repository's registered checkout and
-//! links items the same way, without a branch or an assignment that
-//! completes.
+//! The space whose items a request links, watches or shows.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};

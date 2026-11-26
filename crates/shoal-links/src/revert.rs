@@ -1,6 +1,5 @@
-//! Revert a merged PR of a space's repository: through a forge that opens
-//! the revert itself, or by reading what reverting its merge with Git in a
-//! new workspace needs.
+//! Reverting a merged PR: through the forge where it reverts PRs, or else
+//! by reading what a revert with Git needs.
 use std::sync::Arc;
 
 use anyhow::{Result, ensure};

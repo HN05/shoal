@@ -1,5 +1,4 @@
-//! The items a space's watches, background polls and views follow, as its
-//! links and watch cursors record them.
+//! The items a space's watches, background polls and views follow.
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use shoal_forge::updates::Snapshot;

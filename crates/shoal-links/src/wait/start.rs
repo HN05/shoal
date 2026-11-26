@@ -1,7 +1,5 @@
-//! Starting a space's watches of its items from a read made now, when it
-//! links them and when an agent begins a new session there, so they report
-//! only what changes after that: what the items held before is their
-//! history, which `shoal view` shows.
+//! Starting a space's watches from a read made now, so that they report
+//! only what changes after it.
 use anyhow::Result;
 use shoal_daemon_base::log;
 use shoal_forge::updates::Snapshot;
@@ -149,9 +147,7 @@ impl Links {
 
 /// What a read that starts a space's watches looked at.
 struct Starting {
-    /// When the read began.
     read_at: UnixTime,
-    /// Which watches it starts.
     start: Start,
     /// The items Shoal was changing on its own as the read was recorded.
     changing: Vec<String>,

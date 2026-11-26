@@ -1,6 +1,5 @@
-//! The background poll of every polled space's linked items for
-//! integrations, with its own baseline, which queues what changed on each
-//! space's watch cursor.
+//! The background poll of spaces' linked items, which queues what changed
+//! on each space's watch cursor.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -36,8 +35,8 @@ use crate::{
 const POLLED_SPACES_AT_ONCE: usize = 4;
 
 impl Links {
-    /// Poll linked items for integrations, with their own baseline, and queue
-    /// the changes on each polled space's cursor.
+    /// Poll the linked items of every polled space and queue the changes on
+    /// each space's cursor.
     pub async fn poll_linked_item_activity(self: &Arc<Self>, daemon: &dyn Daemon) -> Result<()> {
         let mut polls = stream::iter(self.polled_spaces(daemon).await?)
             .map(|space| async move {
@@ -238,7 +237,6 @@ fn polled_kind(linked: &[ItemRef], opened: &[ItemRef], url: &str) -> Option<(Lin
     (find(linked).map(|kind| (kind, true))).or_else(|| find(opened).map(|kind| (kind, false)))
 }
 
-/// A background read of one linked item.
 struct Observed<'a> {
     url: &'a str,
     kind: LinkKind,
@@ -310,11 +308,9 @@ fn is_ready(space: &Space) -> bool {
 /// What a background poll saw change that Shoal acts on.
 #[derive(Default)]
 pub struct Seen {
-    /// An item merged.
     pub merged: bool,
     /// A PR moved into or out of draft.
     pub changed_draft: bool,
-    /// An item lost an assignee.
     pub lost_assignee: bool,
 }
 

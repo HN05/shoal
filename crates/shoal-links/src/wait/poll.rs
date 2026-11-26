@@ -1,6 +1,5 @@
-//! A watch's polling of the forge for the activity of the items it
-//! follows, and what it shares with the background poll: the local check
-//! of a workspace's branch and the items whose activity is still to come.
+//! A watch's polls of the items it follows, and what the background poll
+//! shares with them.
 use std::time::Duration;
 
 use anyhow::{Context, Result};

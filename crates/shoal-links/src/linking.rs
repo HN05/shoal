@@ -1,8 +1,5 @@
-//! Linking issues, PRs and CI runs to spaces, workspaces and chats, by
-//! relation. Assigned items keep the issue and PR watch rules, which drive
-//! a workspace's completion and cleanup; opened and related items are only
-//! recorded, and watches report each finish of a linked run until the
-//! space is done.
+//! Linking issues, PRs and CI runs to a space under a relation, and
+//! unlinking them.
 use std::sync::Arc;
 
 use anyhow::{Result, bail, ensure};
@@ -220,7 +217,6 @@ impl Links {
         Ok(())
     }
 
-    /// Record opened or related items in one transaction.
     pub async fn record_items(
         self: &Arc<Self>,
         id: &SpaceId,

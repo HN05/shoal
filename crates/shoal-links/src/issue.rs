@@ -51,11 +51,11 @@ pub fn assignees_of(db: &Connection, id: &SpaceId) -> rusqlite::Result<Vec<Issue
 }
 
 impl Links {
-    /// Association is part of opening a workspace, before tracked setup starts.
-    /// The issue joins the space's assigned issues as `assigner` assigns it;
-    /// linking an assigned one again records a newly known title. An issue
-    /// no assignee is recorded for, a new one or one whose assignment
-    /// failed, is assigned on the forge; returns the warnings that gives.
+    /// Assign the issue to the space as `assigner` assigns it, which opening
+    /// a workspace does before its setup starts. Linking an assigned issue
+    /// again records a newly known title. An issue without a recorded
+    /// assignee, new or one whose assignment failed, is assigned on the
+    /// forge; returns the warnings that gives.
     pub async fn set_issue(
         self: &Arc<Self>,
         daemon: &dyn Daemon,
@@ -163,7 +163,6 @@ impl Links {
         Ok(warnings)
     }
 
-    /// The space's assigned issues in the order they were assigned.
     pub async fn issue_registrations(&self, id: &SpaceId) -> Result<Vec<Registration>> {
         let id = id.to_owned();
         self.store

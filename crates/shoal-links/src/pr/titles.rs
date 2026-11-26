@@ -1,5 +1,4 @@
-//! The titles of a space's assigned PRs, which lists and pickers show for
-//! them; the space's PR watch record names the PRs.
+//! The titles of a space's assigned PRs, which lists and pickers show.
 use std::collections::HashMap;
 
 use anyhow::Result;

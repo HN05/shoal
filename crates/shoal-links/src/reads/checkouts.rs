@@ -1,6 +1,5 @@
-//! What the origin of a registered checkout or worktree names, read with
-//! the user's own logins: an open issue a new space is assigned, a PR's
-//! title, and the issue a number or URL names there.
+//! Reads of the repository a registered checkout or worktree has as its
+//! origin, with the user's own logins.
 use std::path::Path;
 
 use anyhow::{Context, Result};

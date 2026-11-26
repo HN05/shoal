@@ -1,8 +1,5 @@
-//! The agent account among the forge assignees of the issues spaces link as
-//! assigned: it joins an issue while an agent works it and leaves it once
-//! none does. Every Shoal acting as the account shares that assignee, so
-//! each records the issues it put or kept the account on and takes it off
-//! only those, and reads the forge for whether it is there.
+//! The agent account among the assignees of the issues spaces link as
+//! assigned. `docs/design/forge.md` says when it joins and leaves.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use shoal_daemon_base::{

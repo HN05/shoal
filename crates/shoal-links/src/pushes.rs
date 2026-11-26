@@ -1,7 +1,5 @@
-//! Pushes a space's `push` permission holds back for the user's
-//! approval: whether one is held, recording it, and pushing what the user
-//! approved in an operation whose end decides the request, opening the PR a
-//! proposal held back with it.
+//! Pushes that a space's `push` permission holds back for approval, and
+//! running the approved ones.
 use std::collections::BTreeMap;
 
 use std::sync::Arc;
@@ -46,8 +44,8 @@ fn denied(push: Permission<Pushes>) -> anyhow::Error {
 impl Links {
     /// Whether the push of the workspace's branch that `shoal pr open` runs
     /// waits for approval: one from a scoped caller whose `push` permission
-    /// is `"propose"` or `"gate"`, unless the remote has the branch's commit already.
-    /// `"deny"` refuses it.
+    /// is `"propose"` or `"gate"`, unless the remote has the branch's commit
+    /// already. `"deny"` refuses it.
     pub async fn branch_push_held(
         self: &Arc<Self>,
         daemon: &dyn Daemon,
@@ -177,7 +175,6 @@ impl Links {
             .try_for_each(|request| self.ensure_not_pushing(request))
     }
 
-    /// Record `push` for the user's approval.
     pub async fn propose_push(
         self: &Arc<Self>,
         daemon: &dyn Daemon,

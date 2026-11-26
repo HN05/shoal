@@ -1,6 +1,5 @@
-//! An item's record on a space's watch cursor, stored in SQLite: what its
-//! watch last saw of the item, and the updates delivered from it that are
-//! not acknowledged yet, stored apart so reading them reads none of the
+//! An item's record on a space's watch cursor. Unacknowledged updates are
+//! stored apart from what the watch saw, so reading them reads none of the
 //! item's history.
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};

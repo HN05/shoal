@@ -1,7 +1,4 @@
-//! Reviews that approve or request changes on a PR for a scoped caller:
-//! its `pr_review` permission governs them, they go out as the host's
-//! `review_token`, and approving one binds the PR's head and the review's
-//! text.
+//! A scoped caller's reviews that approve or request changes on a PR.
 use anyhow::Result;
 use serde::Serialize;
 use shoal_daemon_base::{callers::Caller, permitted_actions::Action};

@@ -1,5 +1,5 @@
-//! The registry of running waits, one per space, in which a newer wait
-//! supersedes an older one.
+//! The running waits, one per space, where a newer wait supersedes an older
+//! one.
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},

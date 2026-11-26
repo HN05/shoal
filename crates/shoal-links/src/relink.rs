@@ -1,7 +1,5 @@
-//! Linking a space's carried links again, as a restored workspace or a
-//! moved chat brings them: its assigned issues as whoever assigned each,
-//! with the user's assignments Shoal had added, and its opened and related
-//! items. The caller links its PRs.
+//! Linking again the links a restored workspace or a moved chat carries,
+//! besides its PRs, which the caller links.
 use std::sync::Arc;
 
 use shoal_daemon_base::callers::Caller;
@@ -96,9 +94,8 @@ fn assigned_as(carried: &[IssueAssignee], url: &ItemRef, caller: Option<&Caller>
 }
 
 /// The opened and related items to record again from `links`, each under the
-/// first relation it lists: a record taken before an item had one relation
-/// can also list an assigned item as opened or related, or an item as both,
-/// which keeps the assignment, or else opened, as the migration does.
+/// first relation it lists. A record taken before an item had one relation
+/// can list it under several: the assignment wins, else opened.
 fn recorded(links: &SpaceLinks) -> Vec<(Relation, LinkedItem)> {
     (links.relations().into_iter())
         .filter(|(relation, item)| {

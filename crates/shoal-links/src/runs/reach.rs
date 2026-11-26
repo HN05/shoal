@@ -1,6 +1,4 @@
-//! The branches whose CI runs a scoped caller starts, reruns and cancels:
-//! the default branch and the branches of the workspaces its scope reaches,
-//! in the repository it acts in.
+//! The branches whose CI runs a scoped caller acts on.
 use anyhow::{Context, Result, ensure};
 use shoal_core::git::{self, default_branch::DefaultBranchLookup};
 use shoal_daemon_base::callers::Caller;

@@ -1,7 +1,5 @@
-//! What a space's watch cursors record of the changes they need not report
-//! and the updates they hold: its own changes and Shoal's, the updates
-//! queued ahead of newly observed activity, and the deliveries an agent
-//! acknowledged.
+//! What a space's watch cursors record besides what they saw: changes they
+//! need not report and updates they hold.
 use anyhow::Result;
 use shoal_forge::updates::Edited;
 use shoal_forge_types::{items::item::ItemState, updates::Update};

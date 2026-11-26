@@ -1,5 +1,5 @@
-//! The forge of the repository a space, a name or an item names, and the
-//! PR a checkout's origin names, read under the file-access stall guard.
+//! The forge of the repository a space, a name or an item names. Reads of a
+//! checkout run under the file-access stall guard.
 use anyhow::{Context, Result};
 use shoal_core::repository::remote_url_from_path;
 use shoal_forge_types::{

@@ -1,6 +1,4 @@
-//! Issues and PRs the links list for a workspace, a chat or a registered
-//! checkout, in its repository or another one, so a scoped caller's search
-//! goes out as its agent account.
+//! Listing the issues and PRs of a repository.
 use anyhow::Result;
 use shoal_daemon_base::callers::Caller;
 use shoal_forge::items::list::ListRequests;

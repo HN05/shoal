@@ -1,5 +1,5 @@
-//! Recording observed activity and a space's own changes on watch cursors,
-//! and acknowledging the updates delivered from them.
+//! Recording activity on watch cursors, and acknowledging the updates
+//! delivered from them.
 use anyhow::{Result, ensure};
 use shoal_forge::updates::Snapshot;
 use shoal_forge_types::{
@@ -122,7 +122,6 @@ struct Poll {
     selection: Selection,
     /// What the poll's check of the workspace branch reports.
     report: BranchReport,
-    /// When the poll started.
     observed_at: UnixTime,
     /// The observed items Shoal was changing on its own as the poll
     /// recorded them, which it records as the spaces' own once changed.

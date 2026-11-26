@@ -1,5 +1,5 @@
-//! Issue and PR actions the daemon carries out for a workspace, so its
-//! scope rules apply and each change reaches the event journal.
+//! The issue and PR changes the daemon makes for a space or a registered
+//! checkout.
 mod accounts;
 mod created;
 mod open_issue;

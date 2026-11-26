@@ -1,5 +1,5 @@
-//! The proposals' approval requests as the daemon's approvals records keep
-//! them, each read or change in a transaction of its own.
+//! The stored approval requests of proposals, each read or change in a
+//! transaction of its own.
 use anyhow::Result;
 use shoal_daemon_base::item_numbers::{self, ItemKind, ItemNumber};
 use shoal_ids::space_ids::SpaceId;
@@ -45,7 +45,6 @@ impl Links {
             .await
     }
 
-    /// The approval request numbered `number`, if any.
     pub async fn approval_request(&self, number: ItemNumber) -> Result<Option<ApprovalRequest>> {
         let records = self.records.clone();
         (self.store)
@@ -65,7 +64,6 @@ impl Links {
             .await
     }
 
-    /// The approval request whose key is `key`, if any.
     pub(crate) async fn approval_by_key(&self, key: &str) -> Result<Option<ApprovalRequest>> {
         let (key, records) = (key.to_owned(), self.records.clone());
         (self.store)

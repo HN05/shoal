@@ -1,6 +1,4 @@
-//! How `shoal merge` merges a space's work: through the one open PR the
-//! space links as assigned or opened, else, for a workspace, by merging its
-//! branch into the default branch.
+//! Whether `shoal merge` merges a space's work through its PR or locally.
 use anyhow::{Result, bail};
 use rusqlite::Connection;
 use shoal_forge::items::item::ItemRequests;

@@ -1,6 +1,4 @@
-//! Opening an issue for a space, or from a registered
-//! checkout, in its repository or another one, or recording it for the
-//! user's approval where the repository asks for that.
+//! Opening or proposing an issue from a space or a registered checkout.
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -126,13 +124,12 @@ impl Links {
         Ok(space.filter(|space| space.repository_id.is_none()))
     }
 
-    /// Open the issue a request from no repository, or a chat without one,
-    /// opens in the repository the URL `repository` names, which is not
-    /// registered, and so another repository under a scoped `caller`'s
-    /// `issue_other_repositories` permission in the global config, as its
-    /// agent account, and as the user's own logins for the user.
-    /// A proposal belongs to a registered repository, so a scoped `caller`
-    /// that the setting would have propose one is refused.
+    /// Open the issue in the unregistered repository the URL `repository`
+    /// names, for a request from no repository or from a chat without one.
+    /// A scoped `caller` opens it as its agent account under the global
+    /// config's `issue_other_repositories`, and is refused where that would
+    /// propose, since a proposal belongs to a registered repository. The
+    /// user opens it with their own logins.
     async fn open_outside_issue(
         self: &Arc<Self>,
         daemon: &dyn Daemon,
