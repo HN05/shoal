@@ -1,12 +1,5 @@
-//! What the agents need of the rest of the daemon, which implements it: the
-//! spaces they run in, their settings, lifecycles and hooks, the
-//! repositories whose paths they trust, the alerts that tell of them, what
-//! else ends with an agent's turn, the operations that start and prepare
-//! spaces, the merges an execution runs, the demos and viewers of
-//! executions, the links, CI jobs, leases and reviews that follow an
-//! agent's work, the conversions that hand an agent over, the snapshot the
-//! queue ranks, the hub a shutdown hands spaces over through, and the records of other subsystems they read and write in
-//! their own transactions.
+//! What the agents need of the rest of the daemon, which implements these
+//! traits.
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -65,7 +58,6 @@ pub trait Spaces: Send + Sync {
     /// The workspace or chat `selector` names, by ID or name.
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>>;
 
-    /// The workspace or chat with the ID `id`.
     fn space_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>>;
 
     /// Stop the untracked processes of the workspace or chat `selector`
@@ -85,7 +77,6 @@ pub trait Spaces: Send + Sync {
         pids: &'a [u32],
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Whether the space `id` exists.
     fn space_exists<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
     /// The spaces of this machine.
@@ -133,7 +124,6 @@ pub trait Spaces: Send + Sync {
     /// The workspace `selector` names, refusing a chat.
     fn workspace<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Workspace>>;
 
-    /// The worktree paths of every workspace.
     fn workspace_paths(&self) -> BoxFuture<'_, Result<Vec<PathBuf>>>;
 
     /// The workspace a chat in it reads, for a chat in a workspace's
@@ -143,13 +133,10 @@ pub trait Spaces: Send + Sync {
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<Workspace>>;
 
-    /// The chat with the ID `id`, while it exists.
     fn chat_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Chat>>>;
 
-    /// The repository `chat` runs in, when it has one.
     fn chat_repository<'a>(&'a self, chat: &'a Chat) -> BoxFuture<'a, Result<Option<Repository>>>;
 
-    /// The checkout `chat` runs in.
     fn chat_checkout_path<'a>(&'a self, chat: &'a Chat) -> BoxFuture<'a, Result<PathBuf>>;
 
     /// The temporary directory of `chat`, of `repository` where it has one.
@@ -162,10 +149,8 @@ pub trait Spaces: Send + Sync {
     /// Withdraw the completion of the space `id`, whose agent resumes.
     fn reopen_for_resume<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()>;
 
-    /// Whether the space `id` is blocked.
     fn space_blocked<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
-    /// The progress of the space `selector` names.
     fn space_progress<'a>(
         &'a self,
         selector: &'a SpaceSelector,
@@ -241,7 +226,6 @@ pub trait Spaces: Send + Sync {
 
 /// The lifecycles of workspaces, which an execution waits out and holds.
 pub trait Lifecycles: Send + Sync {
-    /// Record `state`, and `error`, for the workspace `id`.
     fn set_state<'a>(
         &'a self,
         id: &'a SpaceId,
@@ -266,7 +250,6 @@ pub trait Lifecycles: Send + Sync {
     /// How many times the lifecycle of the workspace `id` changed.
     fn lifecycle_generation<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Generation>>;
 
-    /// Refuse the workspace `id` while a lifecycle operation holds it.
     fn check_lifecycle<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 
     /// Wait until no lifecycle operation that passes holds the workspace
@@ -277,7 +260,6 @@ pub trait Lifecycles: Send + Sync {
         wanted: &'a (dyn Fn() -> Result<()> + Send + Sync),
     ) -> BoxFuture<'a, Result<Generation>>;
 
-    /// Refuse the workspace `id` while a rename of it is unfinished.
     fn ensure_no_pending_rename<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 
     /// Refuse `workspace` unless its worktree is verifiably its own.
@@ -309,19 +291,15 @@ pub trait Operations: Send + Sync {
 
 /// The registered repositories, whose paths agents trust.
 pub trait Repositories: Send + Sync {
-    /// The registered repository `id`.
     fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>>;
 
-    /// The registered repository `selector` names.
     fn selected_repository<'a>(
         &'a self,
         selector: &'a Selector,
     ) -> BoxFuture<'a, Result<Repository>>;
 
-    /// The settings of the repository `id`.
     fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>>;
 
-    /// The config layers of the repository `id`.
     fn repository_layers<'a>(&'a self, id: &'a RepositoryId)
     -> BoxFuture<'a, Result<ConfigLayers>>;
 }
@@ -430,7 +408,6 @@ pub trait Merges: Send + Sync {
 
 /// The demos executions run and the viewers of their simulators.
 pub trait Demos: Send + Sync {
-    /// The demos running now.
     fn running_demos(&self) -> BoxFuture<'_, Result<Vec<RunningDemo>>>;
 
     /// The process group of the viewer the demo of `execution` runs.
@@ -495,7 +472,6 @@ pub trait Links: Send + Sync {
         stop: watch::Receiver<bool>,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// The HEAD of `workspace` now.
     fn current_head<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>>;
 
     /// Link the item `item` names to the space `selector` names with
@@ -520,13 +496,11 @@ pub trait Runner: Send + Sync {
     /// runs in, with when it started.
     fn running_jobs(&self) -> BoxFuture<'_, Result<Vec<RunningJob>>>;
 
-    /// Whether a job runs in the space `id`.
     fn runs_job<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, bool>;
 
     /// Wake the runner whose job the execution `id` ran.
     fn wake_runner_for_ended_job<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, ()>;
 
-    /// The workspaces jobs run in.
     fn job_workspaces(&self) -> BoxFuture<'_, HashSet<SpaceId>>;
 
     /// End every running job for `why`, what cuts them off, to rerun.
@@ -550,10 +524,8 @@ pub trait Runner: Send + Sync {
     /// Wake the jobs' loops, since the queue admitted one.
     fn wake_jobs(&self);
 
-    /// Whether the jobs of the repository `id` wait for busy permits.
     fn job_permits_busy(&self, id: &RepositoryId) -> bool;
 
-    /// What a run of `job` of the repository `id` costs.
     fn job_cost<'a>(
         &'a self,
         id: &'a RepositoryId,
@@ -569,7 +541,6 @@ pub trait Runner: Send + Sync {
         job: &'a QueuedJob,
     ) -> BoxFuture<'a, Result<bool>>;
 
-    /// What the running jobs use.
     fn job_activities(&self) -> BoxFuture<'_, Result<Vec<Activity>>>;
 }
 
@@ -595,7 +566,6 @@ pub trait Leases: Send + Sync {
         launch: &'a shoal_protocol::demos::Launch,
     ) -> BoxFuture<'a, ()>;
 
-    /// The ports the workspace `id` reserved.
     fn reserved_ports<'a>(&'a self, id: &'a SpaceId)
     -> BoxFuture<'a, Result<Vec<PortReservation>>>;
 }
@@ -643,8 +613,8 @@ pub trait Memory: Send + Sync {
     fn work_limit(&self) -> Option<WorkLimit>;
 }
 
-/// The hub, through which a machine of one hands its spaces over as it
-/// shuts down, its user walks away or pauses it.
+/// The hub, through which a machine hands its spaces over as it shuts down, or
+/// as its user walks away or pauses it.
 pub trait Handovers: Send + Sync {
     /// Whether this machine hands its spaces over as it is `leaving`: one
     /// joined to a hub, and the hub's own once paused.
@@ -662,14 +632,13 @@ pub trait Handovers: Send + Sync {
     ) -> BoxFuture<'_, Vec<(Space, Handed)>>;
 
     /// Tell the hub this machine stays after all, as once its shutdown was
-    /// cancelled or its user came back, so it retires the spaces it handed
+    /// cancelled or its user came back. The hub retires the spaces it handed
     /// over that other machines took.
     fn stay(&self) -> BoxFuture<'_, ()>;
 }
 
 /// The snapshot the agent queue ranks.
 pub trait Ranking: Send + Sync {
-    /// What ranking reads now.
     fn ranking_snapshot(&self) -> BoxFuture<'_, Result<Snapshot>>;
 }
 
@@ -721,7 +690,6 @@ pub trait Records: Send + Sync {
     /// no hook reports the end of once it is idle.
     fn end_commands(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()>;
 
-    /// Whether a stop is recorded for the execution `id`.
     fn stop_recorded(&self, db: &Connection, id: &ExecutionId) -> Result<bool>;
 
     /// Wake the agent of the space `id` if it is asleep: the restores Shoal
@@ -738,15 +706,12 @@ pub trait Records: Send + Sync {
         running: &[SpaceId],
     ) -> Result<bool>;
 
-    /// Whether `shoal done` recorded that the work of the space `id` is
-    /// finished.
     fn space_done(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
 
     /// Whether the space `id` is a workspace, which takes its agent's state
     /// reports whether an agent of it runs or not.
     fn space_is_workspace(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
 
-    /// Whether the space `id` is a chat.
     fn space_is_chat(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
 
     /// The kind and ID of the space `selector` names, while it exists.
@@ -756,7 +721,6 @@ pub trait Records: Send + Sync {
         selector: &SpaceSelector,
     ) -> Result<Option<(SpaceKind, SpaceId)>>;
 
-    /// The parent of each space that has one.
     fn parent_ids(&self, db: &Connection) -> Result<std::collections::HashMap<SpaceId, SpaceId>>;
 
     /// Refuse an alert for the agent of the space `id` once the space is
@@ -764,14 +728,12 @@ pub trait Records: Send + Sync {
     /// has.
     fn ensure_takes_alerts(&self, db: &Connection, id: &SpaceId) -> Result<()>;
 
-    /// The scope token of the agent of the chat `id`.
     fn agent_token(
         &self,
         db: &Connection,
         id: &SpaceId,
     ) -> Result<Option<shoal_protocol::scope_tokens::ScopeToken>>;
 
-    /// Whether the repository `id` is registered.
     fn repository_registered(&self, db: &Connection, id: &RepositoryId) -> Result<bool>;
 
     /// What the preparation of the workspace `id` waits for, while it waits.
@@ -819,7 +781,6 @@ pub trait Records: Send + Sync {
     /// What the space `id` records that the agents read, while it exists.
     fn space_facts(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceFacts>>;
 
-    /// The workspace `id`, while it exists.
     fn workspace(&self, db: &Connection, id: &SpaceId) -> Result<Option<Workspace>>;
 
     /// The workspaces of `repository` that link the issue at `url`, by name.
@@ -834,10 +795,8 @@ pub trait Records: Send + Sync {
     /// conversion into them.
     fn converting_to_workspaces(&self, db: &Connection) -> Result<HashSet<SpaceId>>;
 
-    /// The workspaces a recorded CI job runs in.
     fn recorded_job_workspaces(&self, db: &Connection) -> Result<HashSet<SpaceId>>;
 
-    /// Whether this machine registered any CI runner.
     fn runners_registered(&self, db: &Connection) -> Result<bool>;
 
     /// Record `mode` and `narrowing` as the space `id`'s agent's.
@@ -875,7 +834,6 @@ pub trait Removals: Send + Sync {
     /// a removal holds it or it is not ready.
     fn require_taking_work(&self, db: &Connection, id: &SpaceId) -> Result<()>;
 
-    /// Whether a removal holds the space `id`.
     fn being_removed(&self, id: &SpaceId) -> bool;
 }
 
@@ -888,9 +846,7 @@ pub struct SpaceFacts {
     pub name: String,
     /// A workspace's lifecycle state; none for a chat.
     pub state: Option<WorkspaceState>,
-    /// Whether a workspace's setup finished.
     pub setup_finished: bool,
-    /// Whether the space's work is done.
     pub done: bool,
 }
 
@@ -904,7 +860,6 @@ impl SpaceFacts {
 
 /// What a space records that its agent's terminal shows.
 pub struct SpaceStatus {
-    /// The space's name.
     pub name: String,
     /// The newest of its threads whose turn is the user's.
     pub thread: Option<Waiting>,
@@ -927,7 +882,6 @@ pub struct Waiting {
 /// Where the agent is in its work.
 #[derive(Default)]
 pub struct Steps {
-    /// Its status line.
     pub line: Option<String>,
     pub done: usize,
     pub total: usize,
