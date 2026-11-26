@@ -71,11 +71,11 @@ expires.
 
 ### Allocation
 
-Allocation plans over the recorded devices and the inventory alone, without
-side effects. The executor then takes the simulator gate. Under it, the
-executor checks ownership and live capacity again, since both may have changed
-since the plan. It then writes the audit record, records the claim and runs
-`simctl`, in that order.
+An allocation runs under the simulator gate, from planning through execution.
+It plans over the recorded devices and the inventory alone, without side
+effects. Before it acts, the executor checks ownership and live capacity
+again, since a plan is no proof of either. It then writes the audit record,
+records the claim and runs `simctl`, in that order.
 
 Only a confirmed shutdown frees running capacity. A device in any other state
 may still run.
