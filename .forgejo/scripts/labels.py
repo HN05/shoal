@@ -8,7 +8,7 @@ inside a workspace, whose agent account can only read:
     python3 .forgejo/scripts/labels.py
 
 `area/` allows several labels per issue; `type/` and `complexity/` are exclusive.
-Reviewer request labels are combinable; keep .review/review.md in step when this changes.
+docs/ci.md says how the review bot reads its request labels; keep it in step.
 """
 import json
 import subprocess

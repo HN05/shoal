@@ -92,8 +92,11 @@ None of these is a required check.
   report` issue with every test that failed, and a failure fails the run. The
   run log keeps each failed test's output for the issue that fixes it.
 - `review.yml` posts an advisory review-bot review, with `.review/review.md`
-  as its project brief. AGENTS.md says when a PR gets one. Claude and Codex
-  use independent queues, so one review of each can run at once.
+  as its project brief. AGENTS.md says when a PR gets one. `review/default`
+  runs the reviewer the `REVIEW_AGENT` variable names, else Codex, and
+  `review/claude` and `review/codex` combine. A run removes its request label
+  as it starts, while `review/none` stays. Claude and Codex use independent
+  queues, so one review of each can run at once.
 - `audit.yml` runs a read-only code audit of the whole application with
   `.review/audit.md`. It has no schedule. Someone dispatches it by hand with a
   focus (bugs, maintainability, testing, performance or docs) and a ref. It
