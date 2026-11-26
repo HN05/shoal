@@ -348,9 +348,15 @@ Absorb withdraws the absorbed space's pending PR proposals and push requests.
 Its issue proposals stay with the repository.
 
 The spaces directly below the absorbed space move up one level, below its
-parent, and each logs its parent change. A workspace built on the absorbed
-branch then builds on the branch that took the merge. When that branch builds
-on the absorbed one, it builds instead on what the absorbed branch built on.
+parent, and each logs its parent change.
+
+A workspace built on the absorbed branch then builds on the branch that took
+the merge. It builds instead on what the absorbed branch built on, its base
+workspace's branch or else the default branch, in two cases:
+
+- when no branch took the merge, as when a chat absorbs the space,
+- when the branch that took the merge builds on the absorbed one.
+
 Its PRs are retargeted to the new base, and its agent is told the rebase
 command.
 
