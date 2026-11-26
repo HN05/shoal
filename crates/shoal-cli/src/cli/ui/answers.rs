@@ -11,13 +11,13 @@ use super::{
 };
 use crate::cli::context::Context;
 
-/// The prefix of an action's picker id, which keeps it apart from the
-/// reply in words whatever the action's id.
+/// The prefix of an action's picker id, before its place among the
+/// actions: an action's own id could hold what the picker trims or splits.
 const ACTION: &str = "action:";
 /// The picker id of the reply in words.
 const WORDS: &str = "words";
-/// The prefix of an option's picker id, which keeps it apart from picking
-/// none whatever the option's value.
+/// The prefix of an option's picker id, before its place among the
+/// options, which keeps it apart from picking none whatever its value.
 const OPTION: &str = "option:";
 /// The picker id of picking no option.
 const NO_OPTION: &str = "none";
@@ -38,18 +38,18 @@ pub enum Answering {
 /// ask for each value the action takes.
 pub fn pick_answer(ctx: &Context, asked: &str, actions: &[SurfaceAction]) -> Result<Answering> {
     let picked = pick_with_header(ctx, "Answer> ", entries(actions), Some(asked))?;
-    let Some(id) = picked.strip_prefix(ACTION) else {
+    let Some(place) = picked.strip_prefix(ACTION) else {
         return Ok(Answering::Words(input(ctx, "Reply")?));
     };
-    let action = (actions.iter())
-        .find(|action| action.id == id)
+    let action = (place.parse::<usize>().ok())
+        .and_then(|place| actions.get(place))
         .context("picker returned an unknown action")?;
     let mut values = Map::new();
     for input in &action.inputs {
         values.insert(input.key.clone(), value(ctx, input)?);
     }
     Ok(Answering::Action {
-        id: id.to_owned(),
+        id: action.id.clone(),
         values,
     })
 }
@@ -57,16 +57,16 @@ pub fn pick_answer(ctx: &Context, asked: &str, actions: &[SurfaceAction]) -> Res
 /// The picker's rows: each action, the recommended one first, then the
 /// reply in words.
 fn entries(actions: &[SurfaceAction]) -> Entries {
-    let mut ordered: Vec<&SurfaceAction> = actions.iter().collect();
-    ordered.sort_by_key(|action| !action.recommended);
-    let rows = ordered.into_iter().map(|action| {
+    let mut ordered: Vec<(usize, &SurfaceAction)> = actions.iter().enumerate().collect();
+    ordered.sort_by_key(|(_, action)| !action.recommended);
+    let rows = ordered.into_iter().map(|(place, action)| {
         let recommended = if action.recommended {
             " (recommended)"
         } else {
             ""
         };
         let label = format!("{}{recommended}  --action {}", action.label, action.id);
-        (format!("{ACTION}{}", action.id), label)
+        (format!("{ACTION}{place}"), label)
     });
     let words = (WORDS.to_owned(), "Reply in words instead".to_owned());
     rows.chain(std::iter::once(words)).collect()
@@ -92,7 +92,8 @@ fn picked(
     options: &[(String, String)],
     multiple: bool,
 ) -> Result<Value> {
-    let rows = (options.iter()).map(|(value, label)| (format!("{OPTION}{value}"), label.clone()));
+    let rows = (options.iter().enumerate())
+        .map(|(place, (_, label))| (format!("{OPTION}{place}"), label.clone()));
     let none = (NO_OPTION.to_owned(), "No option".to_owned());
     let entries: Entries = rows.chain(std::iter::once(none)).collect();
     let prompt = format!("{prompt}> ");
@@ -100,10 +101,11 @@ fn picked(
         true => pick_many(ctx, &prompt, entries)?,
         false => vec![pick(ctx, &prompt, entries)?],
     };
-    let values = (picked.iter()).filter_map(|id| id.strip_prefix(OPTION));
+    let places = (picked.iter()).filter_map(|id| id.strip_prefix(OPTION)?.parse::<usize>().ok());
+    let values = places.filter_map(|place| options.get(place));
     Ok(Value::Array(
         values
-            .map(|value| Value::String(value.to_owned()))
+            .map(|(value, _)| Value::String(value.clone()))
             .collect(),
     ))
 }

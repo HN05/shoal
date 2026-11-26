@@ -426,10 +426,10 @@ fn thread_picker_answers_the_selected_thread_with_the_action_picked() {
         ],
     );
     let id = question["number"].as_str().unwrap().to_owned();
-    let (output, rows) = fixture.pick(&["thread", "list"], &format!("{id} action:2"), "");
+    let (output, rows) = fixture.pick(&["thread", "list"], &format!("{id} action:1"), "");
     assert!(output.status.success(), "{}", printed(&output));
     // The recommended action comes first, where the picker starts.
-    assert!(rows.starts_with("action:2\t"), "{rows}");
+    assert!(rows.starts_with("action:1\t"), "{rows}");
     let answer = latest(&fixture, &id);
     assert_eq!(answer["text"], "SQLite", "{answer}");
     assert_eq!(answer["answer"]["action"], "2", "{answer}");
@@ -462,7 +462,7 @@ fn thread_picker_asks_for_the_values_an_action_takes() {
         &["What should I call you?", "--ui", form.to_str().unwrap()],
     );
     let id = question["number"].as_str().unwrap().to_owned();
-    let (output, _) = fixture.pick(&["thread", "list"], &format!("{id} action:submit"), "Ada\n");
+    let (output, _) = fixture.pick(&["thread", "list"], &format!("{id} action:0"), "Ada\n");
     assert!(output.status.success(), "{}", printed(&output));
     let answer = latest(&fixture, &id);
     assert_eq!(answer["text"], "Save", "{answer}");
@@ -500,7 +500,7 @@ fn thread_picker_answers_an_options_input_with_none() {
         &["Which tags?", "--ui", form.to_str().unwrap()],
     );
     let id = question["number"].as_str().unwrap().to_owned();
-    let (output, rows) = fixture.pick(&["thread", "list"], &format!("{id} action:tag none"), "");
+    let (output, rows) = fixture.pick(&["thread", "list"], &format!("{id} action:0 none"), "");
     assert!(output.status.success(), "{}", printed(&output));
     assert!(rows.contains("none\t"), "{rows}");
     let answer = latest(&fixture, &id);
