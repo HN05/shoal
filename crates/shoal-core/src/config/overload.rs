@@ -44,7 +44,7 @@ impl Load {
         }
     }
 
-    /// The share of RAM and swap in use. Only Linux reads these; macOS uses
+    /// The share of RAM and disk swap in use. Only Linux reads these; macOS uses
     /// native pressure.
     fn memory(self) -> Levels {
         match self {
@@ -108,7 +108,7 @@ impl Default for Overload {
 #[serde(default, deny_unknown_fields)]
 pub struct Memory {
     pub enabled: bool,
-    /// The share of RAM and swap in use, which stops work at once. Linux
+    /// The share of RAM and disk swap in use, which stops work at once. Linux
     /// counts reclaimable cache as available; macOS uses native pressure.
     pub used_percent: u8,
     /// The share of time every task stalls waiting for memory, which stops

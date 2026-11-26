@@ -92,7 +92,7 @@
 
 # [machine.overload.memory]
 # enabled = true
-# Linux: RAM and swap in use, excluding reclaimable cache, stops at once, and
+# Linux: RAM and disk swap in use, excluding reclaimable cache, stops at once, and
 # every task stalled on memory stops once sustained; macOS uses native critical
 # pressure.
 # used_percent = 95

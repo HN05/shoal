@@ -167,7 +167,7 @@ cooldown_seconds = 5
 
 [machine.overload.memory]
 enabled = true                 # Opt out with false
-used_percent = 95              # RAM and swap in use; Linux only; 50–99
+used_percent = 95              # RAM and disk swap in use; Linux only; 50–99
 stall_percent = 10             # Full memory stall; Linux only; 1–99
 sustained_seconds = 10         # How long the stall must hold
 
@@ -212,8 +212,8 @@ agents and CI jobs.
 
 Memory percentages apply on Linux; macOS uses its native pressure levels.
 
-- Memory used is the share of RAM and swap together in use, counting
-  reclaimable cache as free.
+- Memory used is the share of RAM and swap on disk together in use, counting
+  reclaimable cache as free. Zram swap counts as neither, since RAM holds it.
 - Memory stall is the share of time tasks wait for memory, from the kernel's
   pressure stall information (`/proc/pressure/memory`). A kernel without it
   is measured by memory used alone.

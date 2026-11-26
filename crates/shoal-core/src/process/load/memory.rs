@@ -5,7 +5,7 @@ mod work;
 pub use work::{SampledWork, WorkLimit};
 
 /// Memory in bytes: all of it, and what new work can use without pushing
-/// other memory out. On Linux the machine's both count swap.
+/// other memory out. On Linux the machine's both count swap on disk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Memory {
     pub total: u64,
@@ -111,11 +111,12 @@ pub fn memory(levels: &MemoryLevels, work: Option<WorkLimit>) -> Result<MemoryRe
     })
 }
 
-/// Read memory in use with swap, and the stall where the kernel reports it.
+/// Read memory in use with swap on disk, and the stall where the kernel
+/// reports it.
 #[cfg(target_os = "linux")]
 fn machine(levels: &MemoryLevels) -> Result<MemoryReading> {
     let text = std::fs::read_to_string("/proc/meminfo").context("read memory availability")?;
-    let memory = linux_memory(&text)?;
+    let memory = linux_memory(&text, &read_swaps()?)?;
     Ok(MemoryReading {
         memory,
         work: None,
@@ -162,25 +163,78 @@ fn read_stall(path: &std::path::Path) -> Result<Option<Stall>> {
     }
 }
 
-/// The total and available memory, RAM and swap together, that
-/// `/proc/meminfo`'s `text` reports.
+/// The swap devices and files `/proc/swaps` lists, empty for a kernel built
+/// without swap, which has no such file.
+#[cfg(target_os = "linux")]
+fn read_swaps() -> Result<String> {
+    match std::fs::read_to_string("/proc/swaps") {
+        Ok(text) => Ok(text),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(error).context("read /proc/swaps"),
+    }
+}
+
+/// The total and available memory, RAM and swap on disk together, that
+/// `/proc/meminfo`'s `meminfo` and `/proc/swaps`'s `swaps` report.
 #[cfg(any(target_os = "linux", test))]
-fn linux_memory(text: &str) -> Result<Memory> {
-    let read = |name: &str| meminfo_bytes(text, name);
+fn linux_memory(meminfo: &str, swaps: &str) -> Result<Memory> {
+    let read = |name: &str| meminfo_bytes(meminfo, name);
     let total = read("MemTotal:")?;
     let available = read("MemAvailable:")?;
-    let swap_total = read("SwapTotal:")?;
-    let swap_free = read("SwapFree:")?;
     ensure!(
-        total > 0 && available <= total && swap_free <= swap_total,
+        total > 0 && available <= total,
         "invalid memory availability"
     );
+    let swap = disk_swap(swaps)?;
     Ok(Memory {
         total: total
-            .checked_add(swap_total)
+            .checked_add(swap.total)
             .context("memory reading overflow")?,
-        available: available + swap_free,
+        available: available.saturating_add(swap.available),
     })
+}
+
+/// The swap on disk that `/proc/swaps`'s `text` lists, as [`Memory`]. A zram
+/// device keeps what it swaps in RAM, compressed, so it counts as neither:
+/// RAM already counts what it holds, and a full zram device comes only long
+/// after the machine has stopped responding.
+#[cfg(any(target_os = "linux", test))]
+fn disk_swap(text: &str) -> Result<Memory> {
+    let mut swap = Memory {
+        total: 0,
+        available: 0,
+    };
+    // The first line names the columns.
+    for line in text.lines().skip(1).filter(|line| !line.trim().is_empty()) {
+        let mut fields = line.split_whitespace();
+        let (Some(name), Some(_kind), Some(size), Some(used)) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
+            anyhow::bail!("invalid swap line {line:?}");
+        };
+        let kib = |value: &str| -> Result<u64> {
+            let value: u64 = value.parse()?;
+            value.checked_mul(1024).context("swap reading overflow")
+        };
+        let (size, used) = (kib(size)?, kib(used)?);
+        ensure!(used <= size, "invalid swap use of {name}");
+        if is_zram(name) {
+            continue;
+        }
+        swap.total = swap
+            .total
+            .checked_add(size)
+            .context("swap reading overflow")?;
+        swap.available += size - used;
+    }
+    Ok(swap)
+}
+
+/// Whether the swap `name` is a zram device, `/dev/zram0` and on.
+#[cfg(any(target_os = "linux", test))]
+fn is_zram(name: &str) -> bool {
+    name.strip_prefix("/dev/zram")
+        .is_some_and(|number| !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// The share of time, in percent, that tasks stalled waiting for memory:

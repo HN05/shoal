@@ -117,8 +117,8 @@ const HEADS_UP: &str = "This is information only; it needs no action from you.";
 /// that of Shoal's work against its memory limit.
 pub fn memory(settings: &Overload, limited: bool) -> Warning {
     let used = match limited {
-        true => "RAM and swap, or Shoal's work against its memory limit,",
-        false => "RAM and swap",
+        true => "RAM and disk swap, or Shoal's work against its memory limit,",
+        false => "RAM and disk swap",
     };
     let level = if cfg!(target_os = "macos") && !limited {
         "Memory pressure is high: macOS reports warning pressure, and Shoal stops an agent at critical pressure.".to_owned()

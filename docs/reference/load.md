@@ -54,14 +54,16 @@ An agent is idle when its
 hooks last reported a finished turn, it runs no [subagent](agents.md#agent-state), and
 none of its processes run outside its process group, such as a background
 command whose completion would start its next turn; an agent without turn reports counts as working. On Linux,
-memory pressure is critical when RAM and swap in use together, counting
-reclaimable cache in `MemAvailable` as free, pass `memory.used_percent`, at
-once, or when every task has stalled waiting for memory for at least
+memory pressure is critical when RAM and swap on disk in use together,
+counting reclaimable cache in `MemAvailable` as free, pass
+`memory.used_percent`, at once, or when every task has stalled waiting for memory for at least
 `memory.stall_percent` of the last ten seconds, from the kernel's pressure stall
 information, for `memory.sustained_seconds`. Stall shows a machine thrashing
 while memory in use still looks short of full; memory in use catches an
 allocation that reaches the kernel's OOM killer before any stall builds up, and
-alone measures a kernel without pressure stall information. macOS uses native
+alone measures a kernel without pressure stall information. Zram swap counts
+as neither memory nor free space, since RAM holds what it swaps out: the
+compressed pages count as RAM in use. macOS uses native
 critical pressure. The wrapper terminates the agent's process
 group through its normal grace period. The monitor waits for the cooldown before
 resampling and stopping another entry if pressure persists. It retains workspaces, execution recovery records and resource

@@ -13,8 +13,11 @@ percentage; explicit thresholds override it. On Linux, memory protection acts on
 stall time, not only on available memory: with swap, the kernel keeps
 `MemAvailable` just short of any threshold while swap fills and the machine
 thrashes, so the threshold came with the OOM, if at all. Pressure stall
-information is the main signal; a measure of RAM and swap in use together is the
-backstop, for an allocation too fast to stall first and for kernels without it.
+information is the main signal; a measure of RAM and swap on disk in use
+together is the backstop, for an allocation too fast to stall first and for
+kernels without it. Zram swap is not capacity: RAM holds its compressed pages,
+so counting it as memory would put the backstop's level past the point where the
+machine stops responding.
 Either signal counts: critical when either is, safe only when both are. Stall
 stops work only once it has held, so one burst stops nothing. Protection stops
 work in one stop order, by what a stop loses, which `shoal-schedule` computes

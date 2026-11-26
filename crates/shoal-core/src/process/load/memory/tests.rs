@@ -21,39 +21,67 @@ const CALM: Stall = Stall {
     full_avg10: 0.0,
 };
 
-/// A reading of 10000 kB of RAM and as much swap.
-fn meminfo(available: u64, swap_free: u64) -> String {
+/// A reading of 10000 kB of RAM.
+fn meminfo(available: u64) -> String {
     format!(
-        "MemTotal: 10000 kB\nMemFree: 1 kB\nMemAvailable: {available} kB\nSwapTotal: 10000 kB\nSwapFree: {swap_free} kB\n"
+        "MemTotal: 10000 kB\nMemFree: 1 kB\nMemAvailable: {available} kB\nSwapTotal: 18000 kB\nSwapFree: 18000 kB\n"
+    )
+}
+
+const SWAPS_HEADER: &str = "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n";
+
+/// A swap file of 10000 kB with `used` of it in use, beside a zram device
+/// of 8000 kB.
+fn swaps(used: u64) -> String {
+    format!(
+        "{SWAPS_HEADER}/dev/zram0                              partition\t8000\t\t8000\t\t100\n/swapfile                               file\t\t10000\t\t{used}\t\t-2\n"
     )
 }
 
 #[test]
-fn memory_counts_swap_with_reclaimable_cache_available() {
+fn memory_counts_swap_on_disk_with_reclaimable_cache_available() {
     assert_eq!(
-        linux_memory(&meminfo(500, 2000)).unwrap(),
+        linux_memory(&meminfo(500), &swaps(8000)).unwrap(),
         Memory {
             total: 20000 * 1024,
             available: 2500 * 1024,
         }
     );
-    let without_swap = "MemTotal: 10000 kB\nMemAvailable: 500 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB";
-    assert_eq!(
-        linux_memory(without_swap).unwrap(),
-        Memory {
-            total: 10000 * 1024,
-            available: 500 * 1024,
-        }
-    );
+    // A machine whose only swap is zram counts its RAM alone.
+    let zram = format!("{SWAPS_HEADER}/dev/zram0 partition 8000 4000 100\n");
+    for swaps in [zram.as_str(), SWAPS_HEADER, ""] {
+        assert_eq!(
+            linux_memory(&meminfo(500), swaps).unwrap(),
+            Memory {
+                total: 10000 * 1024,
+                available: 500 * 1024,
+            },
+            "{swaps}"
+        );
+    }
     for reading in [
-        "MemTotal: 0 kB\nMemAvailable: 0 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB",
-        "MemTotal: 10 kB\nMemAvailable: 11 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB",
-        "MemTotal: 10 kB\nMemAvailable: 1 kB\nSwapTotal: 1 kB\nSwapFree: 2 kB",
-        "MemTotal: 10 kB\nMemAvailable: 1 kB",
-        "MemTotal: 10 MB\nMemAvailable: 0 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB",
-        "MemTotal: x kB\nMemAvailable: 0 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB",
+        "MemTotal: 0 kB\nMemAvailable: 0 kB",
+        "MemTotal: 10 kB\nMemAvailable: 11 kB",
+        "MemTotal: 10 kB",
+        "MemTotal: 10 MB\nMemAvailable: 0 kB",
+        "MemTotal: x kB\nMemAvailable: 0 kB",
     ] {
-        assert!(linux_memory(reading).is_err(), "{reading}");
+        assert!(linux_memory(reading, "").is_err(), "{reading}");
+    }
+    for swaps in [
+        format!("{SWAPS_HEADER}/swapfile file 10 11 -2"),
+        format!("{SWAPS_HEADER}/swapfile file 10"),
+        format!("{SWAPS_HEADER}/swapfile file x 0 -2"),
+    ] {
+        assert!(linux_memory(&meminfo(500), &swaps).is_err(), "{swaps}");
+    }
+}
+
+#[test]
+fn only_zram_devices_count_as_zram() {
+    assert!(is_zram("/dev/zram0") && is_zram("/dev/zram12"));
+    for name in ["/dev/zram", "/dev/zramx", "/dev/sda2", "/swap/zram0"] {
+        assert!(!is_zram(name), "{name}");
     }
 }
 
@@ -81,23 +109,23 @@ fn stall_reads_both_lines_of_the_pressure_file() {
 
 #[test]
 fn filling_swap_counts_though_ram_alone_stays_below_a_level() {
-    let pressure = |available, swap_free| {
-        let memory = linux_memory(&meminfo(available, swap_free)).unwrap();
+    let pressure = |available, swap_used| {
+        let memory = linux_memory(&meminfo(available), &swaps(swap_used)).unwrap();
         pressure(memory, None, &LEVELS)
     };
     // RAM alone is 80% used; with full swap, 90% of both is.
-    let filled = pressure(2000, 0);
+    let filled = pressure(2000, 10000);
     assert!(filled.warning && !filled.safe);
     assert!(!filled.critical && !filled.stalled);
     // At 95% of both, it stops at once.
-    assert!(pressure(1000, 0).critical);
-    let calm = pressure(4000, 10000);
+    assert!(pressure(1000, 10000).critical);
+    let calm = pressure(4000, 0);
     assert!(!calm.warning && calm.safe && !calm.critical);
 }
 
 #[test]
 fn stall_warns_stops_and_holds_recovery_apart_from_memory_in_use() {
-    let memory = linux_memory(&meminfo(9000, 10000)).unwrap();
+    let memory = linux_memory(&meminfo(9000), &swaps(0)).unwrap();
     let pressure = |stall| pressure(memory, Some(stall), &LEVELS);
     assert_eq!(
         pressure(CALM),
