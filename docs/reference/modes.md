@@ -18,6 +18,7 @@ Shoal ships these modes:
 | `worker` | workspace | `work`, `worker` | [implement the subject](../../crates/shoal-core/src/config/modes/worker.md) | unset | 60 |
 | `chat` | chat | `work`, `chat` | none | `true` | unset |
 | `plan` | chat | `work`, `chat` | [settle the issue's plan](../../crates/shoal-core/src/config/modes/plan.md) | `true` | unset |
+| `coordinate` | chat | `work`, `chat` | [carry out the issue through its sub-issues](../../crates/shoal-core/src/config/modes/coordinate.md) | unset | unset |
 | `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../../crates/shoal-core/src/config/rules/orchestrate.md) | none | `true` | unset |
 
 Shoal also ships these rules:
@@ -289,6 +290,33 @@ The agent:
 
 You start an agent on the issue when you want one. `shoal start --issue` takes
 the mode its labels call for.
+
+## Coordinating issues
+
+`shoal start --mode coordinate --issue ISSUE` starts a [chat](chats.md),
+linked to the issue, whose agent carries out the issue through agents for its
+sub-issues. A start on an issue with the mode's
+[`label`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules)
+does the same, once config gives the mode one, such as
+`[modes.coordinate] label = "epic"`.
+
+The agent:
+
+1. finds the sub-issues wherever the issue records them, such as its body, the
+   forge's dependencies or its comments;
+2. starts an agent for each with `shoal start --issue`, so each reports to it
+   and takes the mode its labels call for, the sub-issues whose plan is settled
+   first;
+3. holds an agent with `--add-blocker` where its work builds on another's;
+4. starts a plan chat for a sub-issue that needs a plan once the work it
+   builds on is done, alerts you when the chat runs, and starts the
+   implementing agent once the plan is settled;
+5. answers its children's threads and approvals, passes on what it cannot
+   decide, and tells you when a PR waits for you;
+6. comments on the issue once every sub-issue is closed, closes it, and runs
+   `shoal done`.
+
+It does none of the code work itself.
 
 ## Scoped workspace commands
 

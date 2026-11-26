@@ -70,7 +70,7 @@ pub struct RuleConfig {
 }
 
 /// The modes Shoal ships, each with the `work` rule before its own; the
-/// chats, which wait for the user's input, take the terminal, and only the
+/// chats that wait for the user's input take the terminal, and only the
 /// worker is woken while it stays idle.
 pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
     let mode = |kind, rule: &str, instructions: &str| ModeConfig {
@@ -112,6 +112,10 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
         (
             ModeName::PLAN.into(),
             focused(mode(SpaceKind::Chat, "chat", include_str!("modes/plan.md"))),
+        ),
+        (
+            ModeName::COORDINATE.into(),
+            mode(SpaceKind::Chat, "chat", include_str!("modes/coordinate.md")),
         ),
         (
             ModeName::ORCHESTRATE.into(),
@@ -276,7 +280,9 @@ pub fn permission_layers(
 fn built_in_permissions(name: &ModeName) -> PermissionsConfig {
     match name {
         name if *name == ModeName::ORCHESTRATE => PermissionsConfig::ORCHESTRATING,
-        name if [ModeName::CHAT, ModeName::PLAN].contains(name) => PermissionsConfig::COORDINATING,
+        name if [ModeName::CHAT, ModeName::PLAN, ModeName::COORDINATE].contains(name) => {
+            PermissionsConfig::COORDINATING
+        }
         _ => PermissionsConfig::default(),
     }
 }

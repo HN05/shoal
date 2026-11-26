@@ -18,6 +18,9 @@ impl ModeName {
     /// The mode whose `--issue` without a value offers the issues that need
     /// a plan.
     pub const PLAN: Self = Self::built_in("plan");
+    /// The mode of a chat that carries out an issue through agents for its
+    /// sub-issues.
+    pub const COORDINATE: Self = Self::built_in("coordinate");
     /// The mode of a chat without a repository that manages every space.
     pub const ORCHESTRATE: Self = Self::built_in("orchestrate");
     /// The mode in which an agent writes Shoal's config, which `shoal repo

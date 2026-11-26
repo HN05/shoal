@@ -733,8 +733,8 @@ key resolves from the first of these that sets it:
 
 The built-in modes change these defaults:
 
-- `chat`, `plan` and `orchestrate` set `issue_other_repositories` to
-  `"direct"`.
+- `chat`, `plan`, `coordinate` and `orchestrate` set
+  `issue_other_repositories` to `"direct"`.
 - `orchestrate` sets `merge`, `admin`, `limits`, `user_holds`,
   `notifications`, `decide`, `ci_approve` and `pr_review` to `"direct"`, and
   `api_writes` and `daemon` to `"propose"`.

@@ -133,22 +133,23 @@ fn every_space_gets_its_facts_and_the_space_rules_before_its_modes_rules() {
         let place = chat(home, Delivery::Pushed);
         let chat = brief(&settings, &"chat".into(), place, None).unwrap();
         assert_layers(&chat.system, place_text, "\n\nAnswer in shoal.");
-        let plan = brief(&settings, &"plan".into(), place, Some(&issue())).unwrap();
-        assert_eq!(plan.system, chat.system);
-        let first = plan.first_message.unwrap();
-        assert!(first.starts_with("Issue #7: Decide {path}\n"), "{first}");
-        assert!(first.ends_with(plan_instructions_end()), "{first}");
+        for (mode, instructions) in [
+            ("plan", include_str!("../modes/plan.md")),
+            ("coordinate", include_str!("../modes/coordinate.md")),
+        ] {
+            let issue_chat = brief(&settings, &mode.into(), place, Some(&issue())).unwrap();
+            assert_eq!(issue_chat.system, chat.system, "{mode}");
+            let first = issue_chat.first_message.unwrap();
+            assert!(first.starts_with("Issue #7: Decide {path}\n"), "{first}");
+            assert!(first.ends_with(last_line(instructions)), "{first}");
+        }
     }
 }
 
-/// The built-in plan instructions' last line, which ends a plan's first
+/// The last line of a mode's built-in `instructions`, which ends its first
 /// message.
-fn plan_instructions_end() -> &'static str {
-    include_str!("../modes/plan.md")
-        .trim_end()
-        .lines()
-        .last()
-        .unwrap()
+fn last_line(instructions: &str) -> &str {
+    instructions.trim_end().lines().last().unwrap()
 }
 
 #[test]

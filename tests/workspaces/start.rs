@@ -2748,14 +2748,18 @@ fn start_on_a_terminal_picks_its_mode() {
     assert!(output.status.success(), "{}", printed(&output));
     assert_eq!(
         modes(&rows),
-        ["worker", "chat", "orchestrate", "plan"],
+        ["worker", "chat", "coordinate", "orchestrate", "plan"],
         "{rows}"
     );
     let chats = fixture.ok(&["list", "--chats"]);
     assert_eq!(chats[0]["mode"], "chat", "{chats}");
     let repo = fixture.repo.to_str().unwrap();
     let (_, rows) = fixture.pick(&["start", "--wait", repo, "--agent", "claude"], "none", "");
-    assert_eq!(modes(&rows), ["worker", "chat", "plan"], "{rows}");
+    assert_eq!(
+        modes(&rows),
+        ["worker", "chat", "coordinate", "plan"],
+        "{rows}"
+    );
 }
 
 #[test]

@@ -165,6 +165,7 @@ chat:
 - `worker`, the default, implements its subject in a workspace.
 - `chat` discusses the repository.
 - `plan` settles an issue's plan with you.
+- `coordinate` carries out an issue through agents for its sub-issues.
 - `orchestrate` starts a master session: a chat without a repository that
   starts and steers work in every repository for you.
 

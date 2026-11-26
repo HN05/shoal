@@ -27,6 +27,7 @@ fn the_mode_picker_lists_the_usual_mode_first_with_the_space_it_starts() {
         [
             pair("worker", "workspace"),
             pair("chat", "chat"),
+            pair("coordinate", "chat"),
             pair("orchestrate", "master"),
             pair("plan", "chat")
         ]
@@ -36,7 +37,14 @@ fn the_mode_picker_lists_the_usual_mode_first_with_the_space_it_starts() {
         kind: Some(SpaceKind::Chat),
         repository: Some(true),
     };
-    assert_eq!(listed(chat), [pair("chat", "chat"), pair("plan", "chat")]);
+    assert_eq!(
+        listed(chat),
+        [
+            pair("chat", "chat"),
+            pair("coordinate", "chat"),
+            pair("plan", "chat")
+        ]
+    );
 }
 
 #[test]

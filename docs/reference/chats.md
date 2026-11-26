@@ -7,10 +7,10 @@ the reasons.
 ## Start a chat
 
 `shoal start [repository | --in [WORKSPACE]] --mode NAME [--permission KEY=VALUE]... [--issue [ISSUE]] [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
-starts a chat when the [mode's](modes.md) kind is `chat`, as it is for `chat`
-and `plan`. A chat is a conversation with an agent about a repository. The
-agent discusses the repository, its issues and plans, or coordinates work. It
-changes no code.
+starts a chat when the [mode's](modes.md) kind is `chat`, as it is for `chat`,
+`plan` and `coordinate`. A chat is a conversation with an agent about a
+repository. The agent discusses the repository, its issues and plans, or
+coordinates work. It changes no code.
 
 Every call starts a new chat. Its repository is the first of these:
 

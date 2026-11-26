@@ -68,7 +68,7 @@ make a workspace without an agent, use `shoal create`.
 
 The mode decides the kind of space. `--mode` picks the mode, else the mode
 whose `label` the issue or PR carries, else `worker`. `worker` starts in a
-workspace; `chat` and `plan` start in a chat. A start that names no branch,
+workspace; `chat`, `plan` and `coordinate` start in a chat. A start that names no branch,
 issue, PR or copy begins as a chat in its mode. `shoal convert workspace`
 makes it a workspace once the work is known.
 

@@ -1,8 +1,9 @@
 # Modes and guidance
 
-This file covers modes, the guidance agents receive, the plan and setup modes,
-and the `shoal` skill. [Modes and permissions](../reference/modes.md) says
-what each mode and rule does, and the
+This file covers modes, the guidance agents receive, the plan, coordinate and
+setup modes, and the `shoal` skill.
+[Modes and permissions](../reference/modes.md) says what each mode and rule
+does, and the
 [configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules)
 how to configure them.
 
@@ -152,6 +153,44 @@ Threads and forge comments serve agents blocked during implementation.
 
 The agent does not offer to start the implementation. When the user has it
 start a workspace, the chat coordinates it.
+
+## The coordinate mode
+
+The coordinate mode carries out an issue whose plan splits it into
+sub-issues. The user starts one agent and follows one chat, not each piece.
+
+It is a mode of its own, not the master session's `orchestrate`, which manages
+every space rather than one issue's work.
+
+It starts a chat linked to the issue as `assigned`, since it changes no code.
+Its agent never waits for the user to start, so its launches leave the
+terminal alone.
+
+Its agent drives the work with the commands every agent has, told how by the
+mode's instructions. Shoal adds no daemon automation for it, so a repository
+changes the coordination by changing the instructions.
+
+The agent finds the sub-issues wherever the issue records them. Shoal
+prescribes no format, since forges and authors record them differently.
+
+It starts each sub-issue's agent with `shoal start --issue`. The agent is then
+its child and reports to it, and the sub-issue's label decides its mode, as
+for any start.
+
+It orders the sub-issues with blockers. The forge's recorded blockers already
+hold an agent. For a dependency only the text states, the agent adds an issue
+as the blocker when the work needs the other merged, or the other's space when
+it can build on that branch before it merges.
+
+It starts the sub-issues whose plan is settled first. A sub-issue that needs a
+plan waits until the work it builds on is done, since its plan then reads the
+code as it is. Its plan chat opens in the background, so the agent alerts the
+user once it runs. Once the plan is settled, the agent starts the
+implementation.
+
+It does none of the code work. It answers or passes on its children's threads
+and approvals and follows their reviews, CI and merges. Once every sub-issue
+is closed, it records what was done on the issue, closes it and finishes.
 
 ## The setup mode
 
