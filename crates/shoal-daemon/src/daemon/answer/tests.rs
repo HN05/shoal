@@ -28,10 +28,14 @@ async fn an_oversized_answer_to_a_wait_arrives_in_pieces_too() {
     let env: std::collections::BTreeMap<String, String> =
         [("VALUE".to_owned(), "x".repeat(MAX_FRAME))].into();
     let waited = async { Ok(Body::SpaceEnvironment(env.clone())) };
-    answer_wait(stream, 9, &manager, waited).await.unwrap();
-    let response = protocol::read_response(&mut tokio::io::BufReader::new(client))
-        .await
-        .unwrap();
+    // Read as it writes: the reply outgrows a socket's buffer on some hosts.
+    let mut client = tokio::io::BufReader::new(client);
+    let (answered, response) = tokio::join!(
+        answer_wait(stream, 9, &manager, waited),
+        protocol::read_response(&mut client),
+    );
+    answered.unwrap();
+    let response = response.unwrap();
     let Body::SpaceEnvironment(joined) = response.body else {
         panic!("expected the environment");
     };
