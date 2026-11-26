@@ -475,6 +475,35 @@ fn stream_payloads_and_acknowledgements_preserve_remote_errors() {
 mod requests;
 
 #[tokio::test]
+async fn a_thread_too_large_for_a_frame_arrives_in_pages_that_join() {
+    let choices: Vec<String> = (1..=20).map(|number| format!("choice {number}")).collect();
+    let post = |id: i64| {
+        serde_json::json!({"id": id, "created_at": 0, "side": "holder", "sender": "space",
+            "text": "Which?", "ui": crate::surfaces::Surface::choices(&choices, None, None)})
+    };
+    let thread: crate::threads::Thread = serde_json::from_value(serde_json::json!({
+        "id": 1, "space_number": 2, "item": 3, "space_id": "w1", "space": "cache",
+        "kind": "question", "name": "Which layout?", "opener": "space",
+        "holder": {"kind": "user"}, "created_at": 0,
+        "posts": (1..=40).map(post).collect::<Vec<_>>(),
+    }))
+    .unwrap();
+    let response = Response::new(9, Body::SpaceThread(Box::new(thread.clone())));
+    let frames = response.frames().unwrap();
+    assert!(frames.len() > 2, "{}", frames.len());
+    let mut wire = Vec::new();
+    for frame in &frames {
+        write(&mut wire, frame).await.unwrap();
+    }
+    let mut reader = tokio::io::BufReader::new(wire.as_slice());
+    let joined = read_response(&mut reader).await.unwrap();
+    let Body::SpaceThread(joined) = joined.body else {
+        panic!("not a thread");
+    };
+    assert_eq!(*joined, thread);
+}
+
+#[tokio::test]
 async fn a_list_too_large_for_a_frame_arrives_in_pages_that_join() {
     let entries: Vec<String> = (0..4000).map(|n| format!("{n:>40}")).collect();
     let response = Response::new(7, Body::ApiResponse(entries.clone()));

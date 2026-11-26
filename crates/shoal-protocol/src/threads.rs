@@ -618,6 +618,33 @@ impl Thread {
         }
     }
 
+    /// The thread in pages that each fit in a protocol frame, for one whose
+    /// posts outgrew a frame: its record with what changed for it first,
+    /// then its posts in order, each page with its record again. A thread
+    /// that fits is one page.
+    pub fn pages(mut self) -> Result<Vec<Self>> {
+        const ENVELOPE: usize = 1024;
+        let posts = std::mem::take(&mut self.posts);
+        let record = Self {
+            changes: Vec::new(),
+            ..self.clone()
+        };
+        let room = (crate::protocol::MAX_FRAME - ENVELOPE)
+            .saturating_sub(serde_json::to_vec(&record)?.len());
+        let pages = crate::protocol::pages_within(posts, room)?;
+        let continued = pages.into_iter().map(|posts| Self {
+            posts,
+            ..record.clone()
+        });
+        Ok(std::iter::once(self).chain(continued).collect())
+    }
+
+    /// Append `page`, the next of its [`pages`](Self::pages).
+    pub fn extend(&mut self, page: Self) {
+        self.posts.extend(page.posts);
+        self.changes.extend(page.changes);
+    }
+
     /// Its name on one line, as listings and alerts show it.
     pub fn one_line(&self) -> String {
         self.name.replace(['\n', '\t'], " ")

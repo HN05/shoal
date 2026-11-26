@@ -394,18 +394,22 @@ response_bodies! {
     RecordRemoved(crate::subscriptions::records::RecordKey),
 }
 
-// The lists a response sends in pages when they do not fit in one frame.
+// The lists a response sends in pages when they do not fit in one frame;
+// a thread sends its posts so too.
 macro_rules! paged_bodies {
     ($($variant:ident),* $(,)?) => {
         impl Body {
             /// This body in pages that each fit in a frame: a list's items,
-            /// in order; any other body whole.
+            /// or a thread's posts, in order; any other body whole.
             pub fn pages(self) -> Result<Vec<Self>> {
                 Ok(match self {
                     $(Self::$variant(items) => frame_pages(items)?
                         .into_iter()
                         .map(Self::$variant)
                         .collect(),)*
+                    Self::SpaceThread(thread) => (thread.pages()?.into_iter())
+                        .map(|page| Self::SpaceThread(Box::new(page)))
+                        .collect(),
                     body => vec![body],
                 })
             }
@@ -414,6 +418,7 @@ macro_rules! paged_bodies {
             pub fn extend(&mut self, page: Self) -> Result<()> {
                 match (self, page) {
                     $((Self::$variant(items), Self::$variant(more)) => items.extend(more),)*
+                    (Self::SpaceThread(thread), Self::SpaceThread(page)) => thread.extend(*page),
                     (body, page) => anyhow::bail!(
                         "a {} response cannot continue with {}",
                         body.variant_name(),
