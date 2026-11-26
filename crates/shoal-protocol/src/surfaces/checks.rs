@@ -417,12 +417,15 @@ fn bound_paths(value: &Value) -> Vec<&str> {
     }
 }
 
-/// Every text `value` holds, however deep.
+/// Every text `value` holds, however deep: its strings and its objects'
+/// keys, which formatting an object shows too.
 fn strings(value: &Value) -> Vec<&str> {
     match value {
         Value::String(text) => vec![text.as_str()],
         Value::Array(values) => values.iter().flat_map(strings).collect(),
-        Value::Object(fields) => fields.values().flat_map(strings).collect(),
+        Value::Object(fields) => (fields.iter())
+            .flat_map(|(key, value)| std::iter::once(key.as_str()).chain(strings(value)))
+            .collect(),
         _ => Vec::new(),
     }
 }

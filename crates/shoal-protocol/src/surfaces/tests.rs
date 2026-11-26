@@ -584,6 +584,13 @@ fn images_a_text_function_takes_are_checked_too() {
         json!({"url": "https://example.com/x.png"}),
     );
     assert!(refusal(interpolated, &["${url}"]).contains("part of an image"));
+    // An object's keys show when a function formats it.
+    let keyed = surface(
+        json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
+            "args": {"value": "${/obj}"}}}]),
+        json!({"obj": {"![x](https://example.com/x.png)": "ok"}}),
+    );
+    assert!(refusal(keyed, &[]).contains("image https://example.com/x.png"));
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
             "args": {"value": "Hello ${/name}"}}}]),
