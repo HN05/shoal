@@ -17,9 +17,9 @@ use crate::{Runner, daemon::Daemon, log};
 use shoal_daemon_base::jobs::JobStop;
 
 impl Runner {
-    /// Cancel on the forge the run of the job running in the workspace
-    /// `selector` names, as `cause` stops it, returning the run's URL, or
-    /// `None` when the workspace runs no job.
+    /// Cancel on the forge the run of the job in the workspace `selector`
+    /// names, as `cause` stops it. Returns the run's URL, or `None` when the
+    /// workspace runs no job.
     pub async fn cancel_job_in(
         &self,
         daemon: &dyn Daemon,

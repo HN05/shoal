@@ -47,9 +47,9 @@ impl Runner {
         Ok(())
     }
 
-    /// Record that `runner`, registered for `job` alone, took a job of the
-    /// run `took` names, move the job's workspace to that run's commit when
-    /// its hook holds the job back for it, and then name the job it took.
+    /// Record that `runner`, registered for `job` alone, took a job of the run
+    /// `took` names. When its hook holds the job back, move the workspace to
+    /// that run's commit first. Then name the job it took.
     async fn follow_taken_job(
         &self,
         daemon: &dyn Daemon,

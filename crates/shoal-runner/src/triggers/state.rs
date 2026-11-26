@@ -136,8 +136,8 @@ pub fn fired(db: &Connection, scope: &str, name: &str, at: UnixTime) -> Result<(
 }
 
 /// Add `run` to the trigger's history, with what a queued run waits to
-/// launch, and drop the oldest runs beyond the history but the queued run
-/// and the last started one.
+/// launch. Drop the oldest runs beyond [`HISTORY`], but keep the queued
+/// run and the last started one.
 pub fn record(
     db: &Connection,
     scope: &str,

@@ -159,9 +159,9 @@ pub trait Executions: Send + Sync {
         command: JobCommand,
     ) -> BoxFuture<'a, Result<ExecutionId>>;
 
-    /// Stop every process of the job workspace `id` but its runner as
-    /// [`Self::stop_job_processes`] does, under a reserved lifecycle that
-    /// `first` runs in before anything is signaled, so another lifecycle
+    /// Stop every process of the job workspace `id` but its runner, as
+    /// [`Self::stop_job_processes`] does. It reserves the workspace's lifecycle
+    /// and runs `first` before it signals anything, so another lifecycle
     /// operation refuses both.
     fn interrupt_job_processes<'a>(
         &'a self,
@@ -188,10 +188,10 @@ pub trait Workspaces: Send + Sync {
     /// it.
     fn remove_job_workspace<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 
-    /// Record a job workspace of `repository` in the directory and with the
-    /// name `names` gives, at `commit`, fetched by `reference` when it is
-    /// not there yet, before it is checked out, holding the repository's
-    /// Git gate until it is.
+    /// Record a job workspace of `repository` at `commit`, before it is checked
+    /// out. `names` gives its directory and name, and `reference` fetches the
+    /// commit when it is missing. The workspace holds the repository's Git gate
+    /// until it is checked out.
     fn record_job_workspace<'a>(
         &'a self,
         repository: &'a RepositoryId,

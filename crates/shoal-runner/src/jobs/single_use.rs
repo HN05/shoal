@@ -46,10 +46,9 @@ impl Runner {
             .await
     }
 
-    /// Delete each runner registered for one job that has waited for the
-    /// forge to give it one, took none and has no job left to take, so it
-    /// exits and its workspace goes. One that cannot be checked is checked
-    /// again on the next pass.
+    /// Delete each single-job runner that waited for a job, took none and has
+    /// none left to take, so it exits and its workspace goes. One that cannot
+    /// be checked is checked again on the next pass.
     pub async fn release_idle_runners(&self) -> Result<()> {
         let now = UnixTime::now();
         for job in self.claimed_jobs().await? {

@@ -65,9 +65,9 @@ impl Runner {
             .await
     }
 
-    /// Keep what the ended `job` used as the latest run of its job, unless
-    /// no sample saw it run or it is kept already, as before a removal that
-    /// is tried again.
+    /// Keep what the ended `job` used as the latest run of its job. Nothing is
+    /// kept when no sample saw it run, or when a removal tried again kept it
+    /// already.
     pub async fn record_job_usage(&self, job: &ClaimedJob) -> Result<()> {
         let (id, repository, key) = (job.id.clone(), job.repository_id.clone(), key(&job.job));
         let now = UnixTime::now();

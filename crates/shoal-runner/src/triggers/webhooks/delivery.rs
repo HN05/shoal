@@ -143,10 +143,10 @@ impl Runner {
         Ok(signed.signature.verifies(value.as_bytes(), request, body))
     }
 
-    /// The secret `trigger` signs with. A repository's trigger takes it
-    /// from that repository's local config alone, which reaches no other
-    /// repository's agents, and the global config's from the global
-    /// config, whose triggers' secrets reach no agent.
+    /// The secret `trigger` signs with. A repository's trigger reads it only
+    /// from that repository's local config, which no other repository's agents
+    /// receive. A global trigger reads it from the global config, whose
+    /// triggers' secrets reach no agent.
     async fn trigger_secret(
         &self,
         daemon: &dyn Daemon,

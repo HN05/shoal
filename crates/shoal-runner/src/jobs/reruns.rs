@@ -72,9 +72,8 @@ impl StoppedJob {
 }
 
 impl Runner {
-    /// End the CI job running in the workspace `space` for `cause`, load
-    /// protection or what cuts it off, recording it to rerun once its run
-    /// has finished, returning whether a job ran there.
+    /// End the CI job in the workspace `space` for `cause` and record it to
+    /// rerun once its run has finished. Returns whether a job ran there.
     pub async fn stop_job_to_rerun(
         &self,
         daemon: &dyn Daemon,
@@ -106,8 +105,8 @@ impl Runner {
     }
 
     /// End every running CI job for `cause`, the machine's sleep or a
-    /// shutdown, as [`Self::stop_job_to_rerun`] does, hand the hub those
-    /// cut off, then rerun those left whose runs have finished already.
+    /// shutdown, as [`Self::stop_job_to_rerun`] does. Then hand the hub the
+    /// jobs cut off, and rerun those left whose runs have finished.
     pub async fn stop_jobs_to_rerun(&self, daemon: &dyn Daemon, cause: JobStop) {
         let jobs = match self.running_claims(daemon).await {
             Ok(jobs) => jobs,
@@ -131,9 +130,9 @@ impl Runner {
         }
     }
 
-    /// Hand the hub the jobs waiting to rerun that a sleep or shutdown cut
-    /// off, to rerun while this machine is away, and forget them once it
-    /// keeps them, so this machine never reruns one again.
+    /// Hand the hub the jobs a sleep or shutdown cut off, to rerun while this
+    /// machine is away. Forget each one the hub keeps, so this machine never
+    /// reruns it again.
     async fn hand_over_cut_off_jobs(&self, daemon: &dyn Daemon) -> Result<()> {
         let _rerunning = self.jobs.rerunning.lock().await;
         let stopped = self.stopped_jobs().await?;
@@ -150,11 +149,10 @@ impl Runner {
         Ok(())
     }
 
-    /// Have the forge cancel alone the job the runner of `job` took, which
-    /// `cause`, a signal ending its wrapper's session, cuts off, recording
-    /// its run as cut short and the job to rerun; the wrapper then stops
-    /// the runner. A job the forge does not name is left to fail there, as
-    /// [`Self::stop_job_to_rerun`] leaves one.
+    /// Have the forge cancel only the job that `job`'s runner took, which
+    /// `cause`, a signal that ends its wrapper's session, cuts off. Records the
+    /// run as cut short and the job to rerun; the wrapper then stops the
+    /// runner. A job the forge does not name is left to fail there.
     pub(super) async fn cancel_job_to_rerun(&self, job: &ClaimedJob, cause: JobStop) -> Result<()> {
         self.mark_job_cut_short(&job.id).await?;
         let taken = match self.identified_job(job).await {
@@ -193,9 +191,9 @@ impl Runner {
         Ok(running)
     }
 
-    /// Rerun each job waiting to rerun whose run has finished, and tell the
-    /// user of those a sleep or shutdown cut off, one caller at a time, so
-    /// none reruns a job twice.
+    /// Rerun each recorded job whose run has finished, and tell the user of
+    /// those a sleep or shutdown cut off. One caller runs at a time, so no job
+    /// reruns twice.
     async fn rerun_recorded_jobs(&self) -> Result<()> {
         let _rerunning = self.jobs.rerunning.lock().await;
         let mut reran = Vec::new();
@@ -220,13 +218,14 @@ impl Runner {
             .unwrap_or_else(|_| Err(anyhow::anyhow!("its forge did not answer in time")))
     }
 
-    /// Stop the processes of `job`'s workspace under its lifecycle,
-    /// recording first that its run is cut short and that `taken`, when
-    /// known, is to rerun for `cause`, and having its forge cancel it,
-    /// returning the processes stopped and whether the forge cancelled it:
-    /// a stop another lifecycle operation refuses records and cancels
-    /// nothing, and the record outlives a stop that fails or a daemon that
-    /// ends once anything may have been signaled.
+    /// Stop the processes of `job`'s workspace under its lifecycle, and have
+    /// its forge cancel it. Returns the processes stopped and whether the forge
+    /// cancelled the job.
+    ///
+    /// Before it signals anything, it records the run as cut short and
+    /// `taken`, when known, as to rerun for `cause`. That record outlives a
+    /// failed stop or a daemon that exits. A stop another lifecycle operation
+    /// refuses records and cancels nothing.
     async fn interrupt_job(
         &self,
         daemon: &dyn Daemon,
@@ -280,12 +279,11 @@ impl Runner {
         }
     }
 
-    /// The run and job the runner of `job` runs: the run it reported
-    /// taking a job of, which the claim may not name yet, and the claim's
-    /// job where the forge hands its runner that job, or else the job the
-    /// forge says the runner registered for it alone took. A rerun of a
-    /// guess could rerun an unrelated failure, so a job the forge does not
-    /// name is an error.
+    /// The run and job that `job`'s runner runs. The run is the one the runner
+    /// reported, which the claim may not name yet. The job is the claim's,
+    /// where the forge hands the runner that job, or else the one the forge
+    /// says the single-job runner took. A job the forge does not name is an
+    /// error: rerunning a guess could rerun an unrelated failure.
     async fn taken_job(&self, job: &ClaimedJob) -> Result<TakenJob> {
         let forge = self.forges.item_forge(&job.job.run.url).await?;
         // One read of the report names both the run and the job taken of it.
@@ -365,9 +363,9 @@ impl Runner {
         (forge.rerun_job(&self.forges.user_account(), &job.run, job.id)).await
     }
 
-    /// Rerun `job`, which another machine cut off and handed the hub, on
-    /// its forge as the user once its run has finished, or say this
-    /// machine has no login of the user's for its forge.
+    /// Rerun `job`, which another machine cut off and handed the hub, on its
+    /// forge as the user once its run has finished. Says so instead when this
+    /// machine has no login of the user's for the forge.
     pub async fn rerun_cut_off(&self, job: &CutOffJob) -> Result<CutOffRerun> {
         let forge = self.forges.item_forge(&job.run).await?;
         let account = self.forges.user_account();

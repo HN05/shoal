@@ -150,10 +150,10 @@ impl Runner {
         created
     }
 
-    /// Record the workspace `entry`'s job runs in and the claim of the job
-    /// there, before the workspace is checked out, takes a permit or runs
-    /// anything, so the claim's end removes it with what it holds, also
-    /// after a restart.
+    /// Record the workspace `entry`'s job runs in, and the job's claim there.
+    /// It records them before the workspace is checked out, takes a permit or
+    /// runs anything, so the claim's end removes the workspace with what it
+    /// holds, also after a restart.
     pub async fn record_claimed_workspace<'a>(
         &self,
         daemon: &'a dyn Daemon,
@@ -433,9 +433,9 @@ async fn copy_installation(installation: &Installation) -> Result<()> {
     Ok(())
 }
 
-/// What the workflow's `env` context and every step of a job get besides
-/// the runner's own environment, so a job's steps can find its workspace
-/// and tell it runs on Shoal.
+/// The variables the workflow's `env` context and every step of a job get
+/// besides the runner's own environment. With them, a job's steps find
+/// their workspace and tell that they run on Shoal.
 fn job_env(workspace: &Workspace) -> Vec<(String, String)> {
     vec![
         (
