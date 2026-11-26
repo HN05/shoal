@@ -91,14 +91,17 @@ fn queued(
 }
 
 /// The waiting one-shot run `oneshot`, with when it arrived: one that
-/// serves nothing goes last.
+/// serves nothing goes last, and a seed build at the lowest priority, after
+/// every other entry.
 fn oneshot(oneshot: &WaitingOneShot) -> (Arrived, Entry) {
     let serving = oneshot.serving.as_ref();
     let after = serving.map_or(i64::MAX, |serving| serving.queued_after);
+    let seed = matches!(&oneshot.work, OneShotWork::Measured(measured)
+        if measured.kind == MeasuredKind::SeedBuild);
     let entry = Entry {
         id: oneshot.id.clone(),
         name: oneshot_name(&oneshot.work),
-        priority: None,
+        priority: seed.then_some(Priority::LOWEST),
         work: Work::OneShot {
             space: serving.map(|serving| serving.space.clone()),
         },

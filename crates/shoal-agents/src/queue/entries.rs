@@ -593,32 +593,39 @@ fn all_entries(db: &rusqlite::Connection) -> Result<Vec<QueueEntry>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The entries of the `shoal run` commands among `oneshots`, each named
-/// after the space it runs in.
+/// The entries of the `shoal run` commands and seed builds among
+/// `oneshots`: a command named after the space it runs in, a seed build
+/// `seed`.
 fn waiting_commands(
     db: &rusqlite::Connection,
     oneshots: Vec<WaitingOneShot>,
 ) -> Result<Vec<QueueEntry>> {
     let mut entries = Vec::new();
     for oneshot in oneshots {
-        let (OneShotWork::Measured(measured), Some(serving)) = (oneshot.work, oneshot.serving)
-        else {
+        let OneShotWork::Measured(measured) = oneshot.work else {
             continue;
         };
-        let MeasuredKind::Command(command) = measured.kind else {
-            continue;
-        };
-        let name = db.query_row(
-            "SELECT name FROM spaces WHERE id=?1",
-            [&serving.space],
-            |row| row.get(0),
-        );
-        let Some(name) = name.optional()? else {
-            continue;
+        let space = oneshot.serving.map(|serving| serving.space);
+        let (kind, name, command) = match (measured.kind, &space) {
+            (MeasuredKind::Command(command), Some(space)) => {
+                let name = db.query_row("SELECT name FROM spaces WHERE id=?1", [space], |row| {
+                    row.get(0)
+                });
+                let Some(name) = name.optional()? else {
+                    continue;
+                };
+                (QueueKind::Command, name, Some(command))
+            }
+            (MeasuredKind::SeedBuild, _) => (
+                QueueKind::SeedBuild,
+                SpaceName::derive("seed", "seed"),
+                None,
+            ),
+            (MeasuredKind::Command(_), None) => continue,
         };
         entries.push(QueueEntry {
             id: oneshot.id,
-            kind: QueueKind::Command,
+            kind,
             repository_id: Some(oneshot.repository),
             name,
             agent: crate::agent::Agent::unchecked(String::new()),
@@ -628,7 +635,7 @@ fn waiting_commands(
             state: QueueState::Queued,
             position: None,
             created_at: oneshot.requested_at,
-            space_id: Some(serving.space),
+            space_id: space,
             execution: None,
             opens: None,
             queued_by: None,
@@ -636,7 +643,7 @@ fn waiting_commands(
             waits_for_update: false,
             base: None,
             job: None,
-            command: Some(command),
+            command,
             held_by: None,
             rank: None,
             error: None,

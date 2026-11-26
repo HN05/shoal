@@ -70,6 +70,9 @@ states!(QueueKind {
     /// A `shoal run` command waiting for memory; the queue keeps it in
     /// memory alone.
     Command => "command",
+    /// A repository's seed build waiting for memory; the queue keeps it in
+    /// memory alone.
+    SeedBuild => "seed_build",
 });
 
 impl QueueKind {

@@ -20,6 +20,21 @@ async fn configure(manager: &Manager, text: &str) {
     crate::daemon::test_support::configure(manager, text).await;
 }
 
+/// Admit what the agent queue admits, seed builds among it, as the daemon's
+/// dispatcher does, until the returned task is dropped.
+fn admitting(manager: &std::sync::Arc<Manager>) -> AbortOnDrop {
+    let dispatching = crate::daemon::queued_starts::run(manager.agents.clone(), manager.clone());
+    AbortOnDrop(tokio::spawn(dispatching))
+}
+
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 const NO_PRESSURE: &str =
     "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false\n";
 
@@ -61,6 +76,7 @@ async fn new_workspaces_start_from_the_default_branch_build() {
         .register(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
+    let _admitting = admitting(&manager);
     manager.repositories.refresh_seeds(&*manager).await;
     // The build prepared and used the shared cache.
     let cache = repo.workspaces_dir.join(".caches/shared/go");
@@ -197,6 +213,7 @@ async fn a_copy_s_starting_checkpoint_holds_the_seed_it_started_with() {
         .take_checkpoint(&*manager, &SpaceSelector::id(&source.id), None)
         .await
         .unwrap();
+    let _admitting = admitting(&manager);
     manager.repositories.refresh_seeds(&*manager).await;
     let layout = Layout::of(&repo);
     if !native_cloning(layout.root()) {

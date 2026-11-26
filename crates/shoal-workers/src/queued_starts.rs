@@ -29,6 +29,7 @@ async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<()> {
         QueueKind::Restore => restore::start(paths, &queued).await,
         QueueKind::Job => anyhow::bail!("the daemon starts a CI job itself"),
         QueueKind::Command => anyhow::bail!("a command's own wrapper starts it"),
+        QueueKind::SeedBuild => anyhow::bail!("the daemon builds a seed itself"),
     }
 }
 

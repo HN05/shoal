@@ -20,6 +20,7 @@ use shoal_daemon_base::{
     file_access::FileAccess,
     gates::Gates,
     notifications::{Coordinators, Notifications, Source},
+    run_usage::RunUsage,
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
@@ -36,7 +37,9 @@ use shoal_store::test_support::seeds;
 
 use crate::{
     Repositories,
-    daemon::{Activity, Agents, Branches, Followers, Host, Occupants, Records, Spaces},
+    daemon::{
+        Activity, Agents, Branches, Followers, Host, Occupants, Records, SeedAdmission, Spaces,
+    },
     moves::{Running, chats::OutsideChat},
 };
 
@@ -220,12 +223,48 @@ impl Worktree {
     }
 }
 
-/// A daemon whose spaces are those a test records and whose host is clear
-/// of overload until a test strains it.
+/// A daemon whose spaces are those a test records, whose host is clear of
+/// overload until a test strains it, and which admits every seed build at
+/// once, keeping its runs, until a test stops it.
 #[derive(Clone, Default)]
 pub(crate) struct StandIn {
     spaces: Arc<Mutex<Vec<Space>>>,
     strained: Arc<AtomicBool>,
+    pub(crate) seed_builds: SeedBuilds,
+}
+
+/// The seed builds the stand-in admitted: whether protection stops the
+/// running one, and the runs they reported.
+#[derive(Clone)]
+pub(crate) struct SeedBuilds {
+    pub(crate) stop: Arc<tokio::sync::watch::Sender<bool>>,
+    pub(crate) runs: Arc<Mutex<Vec<RunUsage>>>,
+}
+
+impl Default for SeedBuilds {
+    fn default() -> Self {
+        Self {
+            stop: Arc::new(tokio::sync::watch::channel(false).0),
+            runs: Default::default(),
+        }
+    }
+}
+
+impl SeedAdmission for SeedBuilds {
+    fn admitted(&mut self) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
+
+    fn stopped(&self) -> tokio::sync::watch::Receiver<bool> {
+        self.stop.subscribe()
+    }
+
+    fn using(&self, _: u64) {}
+
+    fn ran(&self, run: RunUsage) -> BoxFuture<'_, ()> {
+        self.runs.lock().unwrap().push(run);
+        Box::pin(async {})
+    }
 }
 
 impl StandIn {
@@ -375,6 +414,15 @@ impl Branches for StandIn {
 impl Host for StandIn {
     fn clear_of_overload(&self, _: &[&Path]) -> bool {
         !self.strained.load(Ordering::Relaxed)
+    }
+
+    fn admit_seed_build<'a>(
+        &'a self,
+        _: &'a RepositoryId,
+        _: bool,
+    ) -> BoxFuture<'a, Result<Box<dyn SeedAdmission + 'a>>> {
+        let admission: Box<dyn SeedAdmission> = Box::new(self.seed_builds.clone());
+        Box::pin(async { Ok(admission) })
     }
 }
 

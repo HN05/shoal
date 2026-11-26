@@ -310,7 +310,12 @@ fn place<K>(entry: &Entry, lead: K, standing: &Standing, snapshot: &Snapshot) ->
     let tier = aged(own_tier(&entry.work), entry, snapshot.now);
     let (mut rank, space) = match &entry.work {
         Work::Job { spaces, .. } => served(tier, spaces, standing, snapshot),
-        Work::OneShot { space } => served(tier, space.as_slice(), standing, snapshot),
+        Work::OneShot { space: Some(space) } => {
+            served(tier, std::slice::from_ref(space), standing, snapshot)
+        }
+        // A one-shot run that serves no space, such as a seed build, keeps
+        // its own priority.
+        Work::OneShot { space: None } => (own(entry.priority.unwrap_or_default(), tier), None),
         Work::Launch { .. } | Work::Restore { .. } => agent_rank(entry, tier, standing, snapshot),
     };
     // Waiting raises it from the tier of its space as well as its own.

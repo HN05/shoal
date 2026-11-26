@@ -113,6 +113,15 @@ pub fn scope_of(pid: u32) -> Result<Option<PathBuf>> {
     Ok(own_scope(&groups, &own).map(|path| Path::new("/sys/fs/cgroup").join(path)))
 }
 
+/// The control group the process `pid` runs in on the unified hierarchy,
+/// whatever kind it is.
+pub fn group_of(pid: u32) -> Result<Option<PathBuf>> {
+    let path = Path::new("/proc").join(pid.to_string()).join("cgroup");
+    let groups =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    Ok(unified(&groups).map(|path| Path::new("/sys/fs/cgroup").join(path)))
+}
+
 /// The transient scope the control groups `groups` of a process name, unless
 /// the groups `own` of this process name the same group.
 fn own_scope<'a>(groups: &'a str, own: &str) -> Option<&'a str> {

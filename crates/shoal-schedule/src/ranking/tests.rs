@@ -718,3 +718,16 @@ fn shared_areas_order_only_launches_of_new_workspaces_by_the_others_areas() {
     );
     assert!(rank_of(&snapshot, "alone").shared_areas.is_empty());
 }
+
+#[test]
+fn a_seed_build_at_the_lowest_priority_waits_for_low_priority_work_however_long() {
+    let mut snapshot = snapshot();
+    space(&mut snapshot, "unwanted", Tier::New, 1);
+    prioritize(&mut snapshot, "unwanted", Priority::LOW);
+    entry(&mut snapshot, "seed", Work::OneShot { space: None });
+    entry(&mut snapshot, "unwanted", restore("unwanted"));
+    let seed = &mut snapshot.entries[0];
+    seed.priority = Some(Priority::LOWEST);
+    seed.queued_at = at(NOW - 24 * 3600);
+    assert_eq!(order(&snapshot), ["unwanted", "seed"]);
+}

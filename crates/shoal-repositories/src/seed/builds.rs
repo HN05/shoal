@@ -3,7 +3,7 @@
 //! seed still builds, only from scratch.
 use std::{collections::BTreeMap, ffi::OsString, sync::Arc, time::Duration};
 
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use shoal_core::{
     config::Effective,
     fsutil::off_runtime,
@@ -16,18 +16,24 @@ use shoal_daemon_base::{
     alerts::NewAlert,
     log,
     notifications::{About, AlertKind},
+    run_usage::RunUsage,
 };
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::model::Repository;
+use shoal_protocol::time::UnixTime;
 use shoal_refs::{BranchName, CommitId};
 
 use super::{
     Layout, Snapshot, Staged,
     build::{self, Build, Previous, Toolchains},
-    steps::{StepFailure, run_build},
+    state::SeedSlot,
+    steps::{BuildMemory, Built, SeedStopped, StepFailure, run_build},
     worktree::check_out_seed,
 };
-use crate::{Repositories, daemon::Daemon};
+use crate::{
+    Repositories,
+    daemon::{Daemon, SeedAdmission},
+};
 
 /// How often the daemon looks for a default branch that moved.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(60);
@@ -135,7 +141,13 @@ impl Repositories {
         if failed || current || !self.seed_headroom(daemon, &layout) {
             return Ok(());
         }
-        let result = self.build_seed(repo, &layout, &plan, &build).await;
+        let result = self.build_seed(daemon, repo, &layout, &plan, &build).await;
+        // A build protection stopped builds again once it fits.
+        let stopped = matches!(&result, Err(error) if error.is::<SeedStopped>());
+        self.seeds.record_stop(&repo.id, stopped);
+        if stopped {
+            return Ok(());
+        }
         self.seeds
             .record_result(&repo.id, result.is_err().then_some(build));
         self.report_soft_failures(daemon, repo, &result?).await;
@@ -184,11 +196,14 @@ impl Repositories {
         Ok(())
     }
 
-    /// Check the seed worktree out at `tip`, build it and freeze the outputs.
-    /// Returns how its soft steps failed. Repository removal cancels the
-    /// build and waits for it to return.
+    /// Check the seed worktree out at `tip`, build it once the agent queue
+    /// admits it, keep what it used for the next build's estimate and
+    /// freeze the outputs. Returns how its soft steps failed. Repository
+    /// removal cancels the build and waits for it to return, and
+    /// protection's stop fails it with [`SeedStopped`].
     async fn build_seed(
         &self,
+        daemon: &dyn Daemon,
         repo: &Repository,
         layout: &Layout,
         plan: &Plan,
@@ -200,6 +215,7 @@ impl Repositories {
         if self.repository(&repo.id).await.is_err() {
             return Ok(Vec::new());
         }
+        let admission = self.admitted_build(daemon, &repo.id, &slot).await?;
         {
             let _git = self.gates.lock_git(&repo.id).await;
             self.ensure_available(&repo.id).await?;
@@ -209,19 +225,32 @@ impl Repositories {
         shoal_core::caches::directories(repo, &plan.caches)?;
         let previous = previous_build(layout, tip).await?;
         log!("seed build for {} at {tip}", repo.path.display());
-        let built = run_build(
-            plan,
-            previous.as_ref(),
-            &layout.worktree(),
-            &layout.log(),
-            slot.cancelled(),
-        )
-        .await?;
+        let built = measured_build(plan, previous.as_ref(), layout, &slot, &*admission).await?;
         self.freeze_seed(repo, layout, plan, build, built.toolchains)
             .await?;
         // The new snapshot needs its own spare.
         self.seeds.want_spare();
         Ok(built.soft_failures)
+    }
+
+    /// The admission of a build of the seed of `repository` once the agent
+    /// queue grants it, after healthy readings too when protection stopped
+    /// the last build. Removal's cancel of the build `slot` ends the wait,
+    /// and `shoal queue cancel` ends it as protection's stop does.
+    async fn admitted_build<'a>(
+        &self,
+        daemon: &'a dyn Daemon,
+        repository: &'a RepositoryId,
+        slot: &SeedSlot,
+    ) -> Result<Box<dyn SeedAdmission + 'a>> {
+        let after_stop = self.seeds.stopped_last(repository);
+        let mut admission = daemon.admit_seed_build(repository, after_stop).await?;
+        let (mut cancel, mut stopped) = (slot.cancelled(), admission.stopped());
+        tokio::select! {
+            () = admission.admitted() => Ok(admission),
+            _ = cancel.wait_for(|cancelled| *cancelled) => bail!("seed build cancelled"),
+            _ = stopped.wait_for(|stopped| *stopped) => Err(SeedStopped.into()),
+        }
     }
 
     /// Replace the snapshot with the outputs the seed worktree built with
@@ -332,6 +361,34 @@ impl Repositories {
         let alert = NewAlert::shoal(AlertKind::SeedFailed, about, message);
         self.notifications.notify(daemon, alert).await;
     }
+}
+
+/// Run the build `plan` describes in `layout`'s worktree, after `previous`,
+/// until `slot`'s cancel, and keep what it used for the next build's
+/// estimate through `admission`: cut short when it was cancelled or
+/// protection stopped it.
+async fn measured_build(
+    plan: &Plan,
+    previous: Option<&Previous>,
+    layout: &Layout,
+    slot: &SeedSlot,
+    admission: &dyn SeedAdmission,
+) -> Result<Built> {
+    let memory = BuildMemory::new(admission);
+    let started = std::time::Instant::now();
+    let paths = (&*layout.worktree(), &*layout.log());
+    let built = run_build(plan, previous, paths, slot.cancelled(), &memory).await;
+    let cut_short =
+        memory.cut_short() || *admission.stopped().borrow() || *slot.cancelled().borrow();
+    let run = RunUsage {
+        ended_at: UnixTime::now(),
+        peak_memory: memory.peak(),
+        duration: started.elapsed(),
+        whole: !cut_short,
+        oom_killed: memory.oom_killed(),
+    };
+    admission.ran(run).await;
+    built
 }
 
 /// What the current snapshot was built from, with the files changed between

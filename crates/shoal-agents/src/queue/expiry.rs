@@ -51,7 +51,10 @@ pub fn expire_starts(
             (QueueKind::Restore, Some(space)) => Some(FailedStart::UnstartedRestore(name, space)),
             // Jobs carry no start environment, a restore is always of a
             // space's agent, and the queue keeps no command's entry.
-            (QueueKind::Job | QueueKind::Restore | QueueKind::Command, _) => None,
+            (
+                QueueKind::Job | QueueKind::Restore | QueueKind::Command | QueueKind::SeedBuild,
+                _,
+            ) => None,
         };
         tx.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
         failures.extend(failure);

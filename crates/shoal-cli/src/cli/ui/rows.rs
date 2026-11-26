@@ -446,6 +446,7 @@ fn queue_subject(entry: &QueueEntry) -> String {
         (QueueKind::Command, _) => {
             format!("shoal run {}", entry.command.as_deref().unwrap_or_default())
         }
+        (QueueKind::SeedBuild, _) => "Seed build".into(),
     }
 }
 

@@ -48,6 +48,9 @@ pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> 
             entry.command.as_deref().unwrap_or_default(),
             entry.name
         ),
+        QueueKind::SeedBuild => {
+            "Cancelled the seed build; it builds again once readings are healthy".into()
+        }
     };
     ctx.emit(&message, &entry)?;
     Ok(0)

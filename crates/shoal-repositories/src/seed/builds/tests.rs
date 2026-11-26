@@ -411,3 +411,55 @@ async fn a_start_clones_while_a_refill_reads_the_snapshot() {
         "built\n"
     );
 }
+
+#[tokio::test]
+async fn a_build_protection_stops_is_no_failure_and_builds_again() {
+    let fixture = Fixture::new().await;
+    // The first build waits to be stopped; the next one builds.
+    let script = "#!/bin/sh\nif [ -e stopped ]; then mkdir -p out; exit 0; fi\n\
+                  touch stopped\nwhile :; do sleep 1; done\n";
+    let (_checkout, repo) = seeded(&fixture, script).await;
+    let layout = Layout::of(&repo);
+    let builds = fixture.daemon.seed_builds.clone();
+    let stopping = tokio::spawn(async move {
+        while !layout_started(&Layout::of(&repo)) {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        builds.stop.send_replace(true);
+    });
+    refresh(&fixture).await;
+    stopping.await.unwrap();
+    assert!(seed_failures(&fixture).await.is_empty());
+    assert!(Snapshot::open(&layout).unwrap().is_none());
+    let runs = fixture.daemon.seed_builds.runs.lock().unwrap().clone();
+    assert_eq!(
+        runs.iter().map(|run| run.whole).collect::<Vec<_>>(),
+        [false]
+    );
+    fixture.daemon.seed_builds.stop.send_replace(false);
+    refresh(&fixture).await;
+    assert!(Snapshot::open(&layout).unwrap().is_some() || !native_cloning(layout.root()));
+    let runs = fixture.daemon.seed_builds.runs.lock().unwrap().clone();
+    assert_eq!(
+        runs.iter().map(|run| run.whole).collect::<Vec<_>>(),
+        [false, true]
+    );
+}
+
+/// Whether the stopped build of the test above has started its loop.
+fn layout_started(layout: &Layout) -> bool {
+    layout.worktree().join("stopped").exists()
+}
+
+#[tokio::test]
+async fn a_build_whose_step_a_signal_ended_is_kept_as_cut_short() {
+    let fixture = Fixture::new().await;
+    let (_checkout, _repo) = seeded(&fixture, "#!/bin/sh\nkill -TERM $$\n").await;
+    refresh(&fixture).await;
+    let runs = fixture.daemon.seed_builds.runs.lock().unwrap().clone();
+    assert_eq!(
+        runs.iter().map(|run| run.whole).collect::<Vec<_>>(),
+        [false]
+    );
+    assert!(!runs[0].oom_killed);
+}

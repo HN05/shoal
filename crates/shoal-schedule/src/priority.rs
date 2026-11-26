@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub struct Priority(u8);
 
 impl Priority {
+    /// Work that waits for every other, such as a seed build.
+    pub const LOWEST: Self = Self(0);
     pub const LOW: Self = Self(25);
     pub const NORMAL: Self = Self(50);
     pub const URGENT: Self = Self(75);

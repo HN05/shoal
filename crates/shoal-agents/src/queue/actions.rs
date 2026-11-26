@@ -136,7 +136,7 @@ impl Agents {
         mut entry: QueueEntry,
         here: bool,
     ) -> Result<QueueEntry> {
-        if entry.kind == QueueKind::Command {
+        if matches!(entry.kind, QueueKind::Command | QueueKind::SeedBuild) {
             ensure!(
                 self.agent_queue.admit_oneshot(&entry.id),
                 "{} is no longer waiting",
@@ -213,7 +213,7 @@ impl Agents {
         let entry = self
             .waiting_entry(daemon, selector, caller, "; remove its workspace instead")
             .await?;
-        if entry.kind == QueueKind::Command {
+        if matches!(entry.kind, QueueKind::Command | QueueKind::SeedBuild) {
             let cancelled = (self.agent_queue).cancel_waiting(&entry.id, "cancelled in the queue");
             ensure!(cancelled, "{} is no longer waiting", entry.name);
             return Ok(entry);

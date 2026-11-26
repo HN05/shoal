@@ -9,16 +9,100 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use shoal_core::process::usage::tree_memory;
 use shoal_daemon_base::log;
+use std::os::unix::process::ExitStatusExt as _;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::{process::Command, sync::watch};
 
 use super::{
     build::{Build, Previous, Step, Toolchains},
     builds::Plan,
 };
+use crate::daemon::SeedAdmission;
 
 /// Longest a seed build may run before it is killed and reported.
 const BUILD_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
+
+/// How often a running step's process tree is read.
+const SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Protection stopped the seed build, which builds again once it fits.
+#[derive(Debug)]
+pub(crate) struct SeedStopped;
+
+impl fmt::Display for SeedStopped {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("protection stopped the seed build")
+    }
+}
+
+impl std::error::Error for SeedStopped {}
+
+/// What a running seed build holds, which its admission hears, and the
+/// most it held.
+pub(super) struct BuildMemory<'a> {
+    admission: &'a dyn SeedAdmission,
+    peak: AtomicU64,
+    /// A step ended other than by itself: a signal, its deadline, a cancel
+    /// or protection's stop.
+    cut_short: AtomicBool,
+    /// The kernel's OOM killer killed a step.
+    oom_killed: AtomicBool,
+}
+
+impl<'a> BuildMemory<'a> {
+    pub(super) fn new(admission: &'a dyn SeedAdmission) -> Self {
+        Self {
+            admission,
+            peak: AtomicU64::new(0),
+            cut_short: AtomicBool::new(false),
+            oom_killed: AtomicBool::new(false),
+        }
+    }
+
+    /// The most the build held.
+    pub(super) fn peak(&self) -> u64 {
+        self.peak.load(Ordering::Relaxed)
+    }
+
+    /// Whether a step ended other than by itself.
+    pub(super) fn cut_short(&self) -> bool {
+        self.cut_short.load(Ordering::Relaxed)
+    }
+
+    /// Whether the kernel's OOM killer killed a step.
+    pub(super) fn oom_killed(&self) -> bool {
+        self.oom_killed.load(Ordering::Relaxed)
+    }
+
+    /// Record how a step ended: with `status`, `stopped` early, or with an
+    /// OOM kill its control group counted between its start and its end,
+    /// `kills`. The kill may hit a process below the step, such as `rustc`
+    /// under a `cargo` that then exits by itself.
+    fn step_ended(&self, status: ExitStatus, stopped: bool, kills: (Option<u64>, Option<u64>)) {
+        let oom = matches!(kills, (Some(before), Some(after)) if after > before);
+        if oom && !stopped {
+            self.oom_killed.store(true, Ordering::Relaxed);
+        } else if stopped || status.signal().is_some() {
+            self.cut_short.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Read what the step `pid` and the processes below it hold, every
+    /// [`SAMPLE_INTERVAL`] until dropped.
+    async fn follow(&self, pid: u32) -> ! {
+        let mut interval = tokio::time::interval(SAMPLE_INTERVAL);
+        loop {
+            interval.tick().await;
+            let read = tokio::task::spawn_blocking(move || tree_memory(pid)).await;
+            if let Ok(Ok(memory)) = read {
+                self.peak.fetch_max(memory, Ordering::Relaxed);
+                self.admission.using(memory);
+            }
+        }
+    }
+}
 
 /// What a seed build that went to its end built with, and how its soft
 /// steps failed.
@@ -48,15 +132,16 @@ impl fmt::Display for StepFailure {
 /// Run the seed build in its worktree, writing its output to `log`: name
 /// each preset's toolchain, reset the outputs `previous` left that this build
 /// would not reuse, then run the build's commands in order, until one that
-/// is not soft fails, the build times out or `cancel` is set.
+/// is not soft fails, the build times out, `cancel` is set or protection
+/// stops it, telling `memory` what it holds.
 pub(super) async fn run_build(
     plan: &Plan,
     previous: Option<&Previous>,
-    worktree: &Path,
-    log: &Path,
+    (worktree, log): (&Path, &Path),
     cancel: watch::Receiver<bool>,
+    memory: &BuildMemory<'_>,
 ) -> Result<Built> {
-    let mut steps = Steps::new(plan, worktree, log, cancel)?;
+    let mut steps = Steps::new(plan, worktree, log, cancel, memory)?;
     let toolchains = identify_toolchains(&mut steps, &plan.build).await?;
     let resets = plan.build.resets(previous, &plan.settings()?, &toolchains);
     let mut soft_failures = Vec::new();
@@ -87,6 +172,9 @@ struct Steps<'a> {
     output: fs::File,
     deadline: tokio::time::Instant,
     cancel: watch::Receiver<bool>,
+    /// Set once protection stopped the build.
+    stop: watch::Receiver<bool>,
+    memory: &'a BuildMemory<'a>,
 }
 
 impl<'a> Steps<'a> {
@@ -95,6 +183,7 @@ impl<'a> Steps<'a> {
         worktree: &'a Path,
         log: &'a Path,
         cancel: watch::Receiver<bool>,
+        memory: &'a BuildMemory<'a>,
     ) -> Result<Self> {
         Ok(Self {
             plan,
@@ -103,6 +192,8 @@ impl<'a> Steps<'a> {
             output: fs::File::create(log).with_context(|| format!("create {}", log.display()))?,
             deadline: tokio::time::Instant::now() + BUILD_TIMEOUT,
             cancel,
+            stop: memory.admission.stopped(),
+            memory,
         })
     }
 
@@ -155,10 +246,15 @@ impl<'a> Steps<'a> {
         let group = child.id().context("seed build process ID unavailable")? as i32;
         // Dropping the build, as daemon shutdown does, kills its whole group.
         let mut guard = GroupGuard(Some(group));
+        // Read before the step is reaped, whose PID then names no group.
+        let control_group = shoal_core::process::oom::group_of(group as u32)
+            .ok()
+            .flatten();
+        let kills_before = oom_kills(control_group.as_deref());
         let stopped = tokio::select! {
             exited = tokio::time::timeout_at(self.deadline, exited(group)) => match exited {
                 Ok(exited) => Ok(exited?),
-                Err(_) => Err(format!(
+                Err(_) => Err(anyhow::anyhow!(
                     "the seed build timed out after {} minutes in {}; output is in {}",
                     BUILD_TIMEOUT.as_secs() / 60,
                     step.label,
@@ -166,21 +262,31 @@ impl<'a> Steps<'a> {
                 )),
             },
             _ = self.cancel.wait_for(|cancelled| *cancelled) => {
-                Err("seed build cancelled".to_owned())
+                Err(anyhow::anyhow!("seed build cancelled"))
             }
+            _ = self.stop.wait_for(|stopped| *stopped) => Err(SeedStopped.into()),
+            never = self.memory.follow(group as u32) => never,
         };
         // The leader is not reaped yet, so its ID still names this group
         // alone: nothing else can have taken it.
         // SAFETY: killpg takes no pointers; a group without members is ESRCH.
         unsafe { libc::killpg(group, libc::SIGKILL) };
         let status = child.wait().await?;
+        let kills = (kills_before, oom_kills(control_group.as_deref()));
+        self.memory.step_ended(status, stopped.is_err(), kills);
         group_gone(group).await;
         guard.0 = None;
-        if let Err(reason) = stopped {
-            bail!(reason);
-        }
+        stopped?;
         Ok(status)
     }
+}
+
+/// How many processes the kernel's OOM killer killed in `group`, a step's
+/// control group and the daemon's own, where it can be read.
+fn oom_kills(group: Option<&std::path::Path>) -> Option<u64> {
+    shoal_core::process::control_group::oom_kills(group?)
+        .ok()
+        .flatten()
 }
 
 /// `step` as its own process group in the seed worktree, with the
@@ -287,3 +393,6 @@ async fn exited(pid: i32) -> Result<()> {
     })
     .await?
 }
+
+#[cfg(test)]
+mod tests;

@@ -9,6 +9,7 @@ use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};
 use shoal_core::shoal_dirs::ShoalDir;
 use shoal_daemon_base::notifications::Coordinators;
+use shoal_daemon_base::run_usage::RunUsage;
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{Repository, RepositoryRemoval, Space, SyncedRepository, Workspace},
@@ -16,6 +17,7 @@ use shoal_protocol::{
     state::WorkspaceState,
 };
 use shoal_refs::BranchName;
+use tokio::sync::watch;
 
 use crate::moves::{Running, chats::OutsideChat};
 
@@ -161,6 +163,32 @@ pub trait Host: Send + Sync {
     /// warning thresholds, so a seed build or spare adds no load to a
     /// strained host. A failed reading defers it.
     fn clear_of_overload(&self, paths: &[&Path]) -> bool;
+
+    /// Ask the agent queue to admit a build of the seed of `repository` at
+    /// the memory its earlier builds estimate, once readings are healthy
+    /// too `after_stop`. The admission ends when the returned value drops.
+    fn admit_seed_build<'a>(
+        &'a self,
+        repository: &'a RepositoryId,
+        after_stop: bool,
+    ) -> BoxFuture<'a, Result<Box<dyn SeedAdmission + 'a>>>;
+}
+
+/// A seed build's admission in the agent queue, which it holds while it
+/// lives.
+pub trait SeedAdmission: Send + Sync {
+    /// Resolves once the build may run.
+    fn admitted(&mut self) -> BoxFuture<'_, ()>;
+
+    /// Set once protection stopped the build.
+    fn stopped(&self) -> watch::Receiver<bool>;
+
+    /// The build holds `memory` bytes now.
+    fn using(&self, memory: u64);
+
+    /// Keep the build's `run` for the next build's estimate, which a
+    /// failure only logs.
+    fn ran(&self, run: RunUsage) -> BoxFuture<'_, ()>;
 }
 
 pub trait Daemon: Spaces + Followers + Occupants + Agents + Branches + Host + Coordinators {}

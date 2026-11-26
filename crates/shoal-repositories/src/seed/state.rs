@@ -18,6 +18,9 @@ pub struct Seeds {
     failures: Mutex<HashMap<RepositoryId, Build>>,
     /// Running seed builds, which repository removal cancels and waits for.
     builds: Mutex<HashMap<RepositoryId, Arc<SeedSlot>>>,
+    /// The repositories whose last build protection stopped, which wait
+    /// for healthy readings to build again.
+    stopped: Mutex<std::collections::HashSet<RepositoryId>>,
     /// Woken when a snapshot needs a spare.
     spares: tokio::sync::Notify,
 }
@@ -54,6 +57,23 @@ impl Seeds {
     /// when it asked since the last wait.
     pub async fn spare_wanted(&self) {
         self.spares.notified().await;
+    }
+
+    /// Whether protection stopped the repository's last build.
+    pub(crate) fn stopped_last(&self, repository_id: &RepositoryId) -> bool {
+        self.stopped
+            .lock()
+            .expect("seed stops lock")
+            .contains(repository_id)
+    }
+
+    /// Remember whether protection stopped the repository's last build.
+    pub(crate) fn record_stop(&self, repository_id: &RepositoryId, stopped: bool) {
+        let mut stops = self.stopped.lock().expect("seed stops lock");
+        match stopped {
+            true => stops.insert(repository_id.to_owned()),
+            false => stops.remove(repository_id),
+        };
     }
 
     /// Remember the build that failed, or forget an earlier failure.
