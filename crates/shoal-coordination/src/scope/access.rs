@@ -160,9 +160,10 @@ impl Coordination {
         Ok(space)
     }
 
-    /// `space`, which must not be the caller's own; [`super::authorize`]
-    /// confines it to the spaces below. `refusal` says why the caller's own
-    /// is refused.
+    /// `space`, which must not be the caller's own. It checks nothing else:
+    /// the caller confines it to the spaces its scope reaches, as
+    /// [`Self::stopped_below`] does. `refusal` says why the caller's own is
+    /// refused.
     pub async fn workspace_below<'a>(
         &self,
         daemon: &dyn Daemon,
