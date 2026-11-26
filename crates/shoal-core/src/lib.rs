@@ -5,7 +5,6 @@
 #[macro_use]
 pub mod stdout;
 
-pub mod agent_git;
 pub mod agents;
 pub mod ai;
 pub mod build;

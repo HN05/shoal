@@ -1,5 +1,6 @@
 //! The tracked execution wrapper, which runs a command in its space and
 //! reports it to the daemon. See `docs/design/execution.md`.
+mod agent_git;
 mod cancellation;
 mod completion;
 mod containers;

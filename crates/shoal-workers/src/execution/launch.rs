@@ -664,7 +664,7 @@ async fn prepare_agent_launch(
         Some(agent) => prepare_push_gate(paths, workspace, agent).await?,
         None => Default::default(),
     };
-    let mut git = crate::agent_git::Launch::prepare(
+    let mut git = super::agent_git::Launch::prepare(
         settings.agent.git_profile.as_deref(),
         &config.machine.git_profiles,
     )?;
@@ -697,7 +697,7 @@ async fn prepare_push_gate(
     paths: &CommandPaths,
     space: &SpaceSelector,
     agent: &shoal_protocol::executions::TrackedAgent,
-) -> Result<shoal_core::agent_git::push_gate::Launch> {
+) -> Result<super::agent_git::push_gate::Launch> {
     let records = crate::homes::records(paths, space).await?;
     let crate::agents::AgentHome::Workspace(workspace) = records.home()? else {
         return Ok(Default::default());
@@ -715,7 +715,7 @@ async fn prepare_push_gate(
         on_branch: false,
     };
     let workspace: crate::model::Workspace = connection::request(paths, method).await?;
-    shoal_core::agent_git::push_gate::Launch::prepare(paths, &workspace.path)
+    super::agent_git::push_gate::Launch::prepare(paths, &workspace.path)
         .await
         .context("the push permission")
 }

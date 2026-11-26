@@ -245,7 +245,7 @@ pub fn apply_configured(command: &mut Command, values: &BTreeMap<String, OsStrin
 /// Put the colon-separated `directories` first on the PATH `command` would
 /// get, ahead of any directories an earlier step put there. Directories that
 /// cannot join a PATH leave it unchanged.
-pub(crate) fn prepend_path(command: &mut Command, directories: &OsStr) {
+pub fn prepend_path(command: &mut Command, directories: &OsStr) {
     let current = command
         .as_std()
         .get_envs()

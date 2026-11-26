@@ -16,7 +16,7 @@ fn claude() -> Vec<OsString> {
 /// A Claude launch with no proxy running yet.
 fn launch(home: &std::path::Path) -> AgentLaunch {
     AgentLaunch {
-        git: crate::agent_git::Launch::prepare(None, &Default::default()).unwrap(),
+        git: crate::execution::agent_git::Launch::prepare(None, &Default::default()).unwrap(),
         push_gate: Default::default(),
         secrets: Default::default(),
         output: None,

@@ -1,8 +1,8 @@
 //! The Git settings of agent launches only: the selected Git profile, the
 //! agent token logins of [`git_credential`], and the push rewrites of
 //! [`push_gate`].
-pub mod git_credential;
-pub mod push_gate;
+pub(super) mod git_credential;
+pub(super) mod push_gate;
 
 use anyhow::{Context, Result};
 
@@ -14,7 +14,10 @@ pub struct Launch {
 impl Launch {
     /// The child's environment changes for the Git profile `git_profile`
     /// names; nested commands inherit it.
-    pub fn prepare(git_profile: Option<&str>, git: &crate::git_profile::Git) -> Result<Self> {
+    pub fn prepare(
+        git_profile: Option<&str>,
+        git: &crate::config::git_profiles::Git,
+    ) -> Result<Self> {
         let git = match git_profile {
             Some(name) => git
                 .profile(name)

@@ -1,12 +1,16 @@
 //! Holding a tracked agent's `git push` for approval, or refusing it, as its
 //! `push` permission says. Fetches keep their URLs. See
 //! `docs/design/permissions.md`.
-use crate::paths::PathsExt;
 use std::{os::unix::fs::PermissionsExt, path::Path};
 
 use anyhow::{Context, Result};
 
-use crate::{env, git, paths::Paths};
+use crate::{
+    env, git,
+    paths::{Paths, PathsExt},
+    shell,
+    workers::{Worker, internal_command},
+};
 
 /// The remote helper the rewritten URLs reach.
 const HELPER: &str = "git-remote-shoal";
@@ -54,7 +58,7 @@ fn write_helper(paths: &Paths) -> Result<tempfile::TempDir> {
             directory.path().display()
         )
     })?;
-    let words = crate::workers::internal_command(paths, false, crate::workers::Worker::PushGate)?
+    let words = internal_command(paths, false, Worker::PushGate)?
         .into_iter()
         .map(|word| {
             word.into_string()
@@ -62,7 +66,7 @@ fn write_helper(paths: &Paths) -> Result<tempfile::TempDir> {
         })
         .collect::<Result<Vec<_>>>()?;
     let path = directory.path().join(HELPER);
-    let invocation = crate::shell::quote(&words);
+    let invocation = shell::quote(&words);
     std::fs::write(&path, format!("#!/bin/sh\nexec {invocation} \"$@\"\n"))?;
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
     Ok(directory)

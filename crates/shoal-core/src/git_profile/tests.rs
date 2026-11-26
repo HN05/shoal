@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::git_profiles::Git;
 
 fn profile(text: &str) -> Result<Vec<(String, String)>> {
     toml::from_str::<Profile>(text)?.settings()

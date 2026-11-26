@@ -15,7 +15,7 @@ use crate::{
 /// The settings for `hosts`, the hosts with an agent token, leaving out
 /// those a credential helper in `profile`, the launch's Git profile
 /// settings, covers.
-pub(crate) fn settings<'a>(
+pub(super) fn settings<'a>(
     paths: &Paths,
     hosts: impl IntoIterator<Item = &'a str>,
     profile: &[(String, String)],

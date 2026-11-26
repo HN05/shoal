@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-pub(crate) use crate::config::git_profiles::{Git, Profile};
+pub(crate) use crate::config::git_profiles::Profile;
 use crate::git;
 
 /// Write `profile` into the worktree's own config. The first profile in a

@@ -23,10 +23,10 @@ use shoal_protocol::{config::value::ValueKey, space_names::SpaceSelector};
 /// environment: the agent Git profile and, for agents, the configured secrets
 /// and the output default.
 pub(super) struct AgentLaunch {
-    pub(super) git: crate::agent_git::Launch,
+    pub(super) git: super::agent_git::Launch,
     /// The helper that holds back an agent's pushes where its `push`
     /// permission asks, whose rewrites `git` carries.
-    pub(super) push_gate: shoal_core::agent_git::push_gate::Launch,
+    pub(super) push_gate: super::agent_git::push_gate::Launch,
     pub(super) secrets: shoal_core::secrets::Launch,
     pub(super) output: Option<(&'static str, &'static str)>,
     /// The agent's integration, which launch profiles share with their base.
@@ -101,7 +101,7 @@ async fn daemon_key(key: &Value, daemon: Option<&KeyDaemon>) -> Result<String> {
 impl AgentLaunch {
     /// Hold back the agent's pushes through `gate` in place of the one it
     /// launched with.
-    pub(super) fn regate(&mut self, gate: shoal_core::agent_git::push_gate::Launch) {
+    pub(super) fn regate(&mut self, gate: super::agent_git::push_gate::Launch) {
         self.git
             .retain(|key| !crate::git::push_gate::is_rewrite(key.as_ref()));
         self.git.add(gate.settings());
@@ -359,7 +359,7 @@ pub(super) fn spawn(
     // A merge pushes the default branch as the user, not as an enclosing
     // agent's account.
     if matches!(mode, Mode::Merge { .. }) {
-        shoal_core::agent_git::git_credential::strip(&mut process);
+        super::agent_git::git_credential::strip(&mut process);
     }
     export_execution(&mut process, paths, plan);
     // A demo is the user's, so the agent's output setting stays behind, and
