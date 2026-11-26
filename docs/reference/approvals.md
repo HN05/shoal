@@ -22,8 +22,15 @@ Unscoped callers act without a request.
 A command that needs approval exits 2 at once, with JSON
 `code: "approval_pending"` and the request. Run it again once the request is
 decided. After approval, it proceeds. After denial, it returns
-`"approval_denied"`. A proposal is the exception: `issue open` and `pr open`
-exit 0 with `proposed`, and the agent goes on with its work.
+`"approval_denied"`.
+
+Proposals and pushes are the exception, since their approval carries them out:
+
+- `issue open` and `pr open` exit 0 with `proposed`, and the agent goes on
+  with its work. Approval opens the item, or pushes the branch that `pr open`
+  held back.
+- Git reports a held `git push` as rejected, naming the request. Approval
+  runs the push.
 
 Each request has a [number](threads.md#numbers) `S.N`, as threads have.
 
@@ -447,7 +454,11 @@ coordinator as one line.
 on a resource, port, simulator or tool-scoped secret makes a scoped acquisition
 an approval request. `approval_lifetime` says how long the approval lasts. With
 `"workspace"`, the approved grant stays for later acquisitions, and
-`shoal approvals` lists it.
+`shoal approvals` lists it. Where policies overlap, `"lease"` lifetime wins
+over `"workspace"`.
+
+Selecting a protected profile's device and runtime directly does not relax the
+profile.
 
 ### What an approval binds
 
@@ -457,9 +468,6 @@ an approval request. `approval_lifetime` says how long the approval lasts. With
 - A simulator approval binds the installed device and runtime, and whether a
   clean device was requested. A clean request still needs a reason and the
   usual audit before the device changes.
-- Selecting a protected profile's device and runtime directly does not relax
-  the profile.
-- Where policies overlap, `"lease"` lifetime wins over `"workspace"`.
 
 Changed effective settings cannot reuse a grant.
 
