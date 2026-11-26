@@ -1,5 +1,4 @@
-//! Which workspaces, chats and queued agents `shoal list` shows, and which
-//! spaces of the other joined machines.
+//! Which spaces and queued agents `shoal list` shows.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -10,8 +9,7 @@ use crate::{
     model::{Chat, QueueEntry, Workspace},
 };
 
-/// The `shoal list` filters, with the repository resolved to its ID. No
-/// statuses keeps every status.
+/// No statuses keeps every status.
 pub(super) struct ListFilter {
     repository: Option<RepositoryId>,
     /// The origin of the filter's repository, which tells it on the other
@@ -59,10 +57,9 @@ impl ListFilter {
             && self.keeps_status(ListStatus::of_entry(entry))
     }
 
-    /// An agent queued in one of the `listed` workspaces, whose row names
-    /// it, or one the filters keep by its own status, which lists in a row
-    /// of its own: an agent of a new workspace, or of one outside the
-    /// caller's scope, since every caller sees every entry.
+    /// An agent queued in one of the `listed` workspaces, whose row names it,
+    /// or one the filters keep by its own status, which lists in a row of its
+    /// own. Every caller sees every entry.
     pub(super) fn keeps_listed_entry(&self, entry: &QueueEntry, listed: &[Workspace]) -> bool {
         let in_listed = |workspace: &SpaceId| listed.iter().any(|w| &w.id == workspace);
         entry.space().is_some_and(in_listed) || self.keeps_entry(entry)

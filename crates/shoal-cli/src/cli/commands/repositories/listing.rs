@@ -1,5 +1,5 @@
-//! Render the registered repositories: this machine's, then the other
-//! joined machines'.
+//! The registered repositories of this machine, then the other joined
+//! machines'.
 use anyhow::Result;
 use shoal_client::output::repositories::ListedRepository as Listed;
 
@@ -25,7 +25,6 @@ pub(super) async fn list(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-/// The line that shows `listed`.
 fn row(listed: &Listed, palette: Palette) -> String {
     let (label, shared) = match listed {
         Listed::Here(repo) => (

@@ -1,7 +1,5 @@
-//! Where `shoal repo rm` removes a repository: here, where it is registered
-//! here, else the one other joined machine that registers it, or the
-//! machines `--machine` names, or every machine with `--all`; each other
-//! machine by its own registration of the name or of the same origin.
+//! Where `shoal repo rm` removes a repository. Each other machine is matched by
+//! its own registration of the name or of the same origin.
 use anyhow::{Result, bail};
 use shoal_client::output::repositories::RepositoryElsewhere;
 use shoal_protocol::{
@@ -12,19 +10,15 @@ use shoal_protocol::{
 
 use crate::time::UnixTime;
 
-/// The machines a removal acts on.
 pub(in crate::cli::commands::repositories) enum Machines {
     /// Wherever the repository is registered: here, else the one other
     /// machine that registers it.
     Found,
-    /// The joined machines these name, by name or ID.
     Named(Vec<String>),
-    /// Every joined machine that registers it.
     All,
 }
 
 impl Machines {
-    /// The machines `--machine`, the `named` ones, and `--all` select.
     pub fn of(named: Vec<String>, all: bool) -> Self {
         match (all, named.is_empty()) {
             (true, _) => Self::All,
@@ -34,26 +28,21 @@ impl Machines {
     }
 }
 
-/// Where a removal acts.
 #[derive(Debug, Clone)]
 pub(super) enum Target {
     Here(Repository),
     Elsewhere(RepositoryElsewhere),
 }
 
-/// What a removal's targets are chosen from.
 pub(super) struct Registered<'a> {
-    /// This machine's repository the removal names, if it registers one.
     pub here: Option<&'a Repository>,
     /// The key of that repository's origin.
     pub here_origin: Option<String>,
-    /// The other machines' registrations.
     pub elsewhere: &'a [RepositoryElsewhere],
     /// The hub's view of its machines; none on a machine in no hub.
     pub view: Option<&'a HubView>,
 }
 
-/// Where a removal acts, once the caller knows.
 #[derive(Debug)]
 pub(super) enum Resolved {
     /// These targets; none where no machine registers the repository.
@@ -63,9 +52,7 @@ pub(super) enum Resolved {
     Choose(Vec<RepositoryElsewhere>),
 }
 
-/// Where removing the repository `named` names acts on `machines`, among
-/// the `registered` ones; refused while a machine it would act on is
-/// offline, naming it.
+/// Refused while a machine it would act on is offline.
 pub(super) fn resolve(
     named: &str,
     registered: &Registered,
@@ -149,8 +136,6 @@ fn on_machine(
     }
 }
 
-/// Here, where `registered` has the repository here, and on each other
-/// machine that registers it.
 fn everywhere(named: &str, registered: &Registered, origins: &[&str]) -> Result<Vec<Target>> {
     let mut targets: Vec<Target> = registered
         .here
@@ -200,7 +185,6 @@ fn of_machine(
     }
 }
 
-/// The one registration among `candidates`, all of the machine `machine`.
 fn one(candidates: &[&RepositoryElsewhere], machine: &str) -> Result<RepositoryElsewhere> {
     match candidates {
         [one] => Ok((*one).clone()),
@@ -225,7 +209,6 @@ fn origin(other: &RepositoryElsewhere) -> Option<&str> {
     other.registered.repository.origin.as_deref()
 }
 
-/// Whether `a` and `b` act on the same machine.
 fn same_machine(a: &Target, b: &Target) -> bool {
     match (a, b) {
         (Target::Here(_), Target::Here(_)) => true,
@@ -234,7 +217,6 @@ fn same_machine(a: &Target, b: &Target) -> bool {
     }
 }
 
-/// Refuse `targets` while a machine of theirs is offline, naming each.
 fn ensure_online(targets: &[Target], view: Option<&HubView>) -> Result<()> {
     let Some(view) = view else {
         return Ok(());

@@ -1,4 +1,3 @@
-//! Coordination commands: the request each sends for the space it acts on.
 use crate::cli::{
     args::{
         coordination::{AlertCommand, ChangeCommand, CoordinationCommand, FilesCommand},
@@ -8,7 +7,6 @@ use crate::cli::{
     ui::Acting,
 };
 
-/// What a coordination command sends for the space it acts on.
 pub(super) fn acting(command: &CoordinationCommand) -> Option<Acting> {
     Some(match command {
         CoordinationCommand::Send { in_chat: true, .. } => send::marking(),
@@ -51,8 +49,7 @@ pub(super) fn acting(command: &CoordinationCommand) -> Option<Acting> {
     })
 }
 
-/// A thread command's request; only opening one picks the space it goes
-/// to.
+/// Only opening a thread picks the space it goes to.
 fn thread(command: &ThreadCommand) -> Option<Acting> {
     match command {
         ThreadCommand::Open { kind, .. } => Some(threads::opening(*kind)),

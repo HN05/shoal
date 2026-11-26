@@ -1,5 +1,4 @@
-//! Typed acquisition and release across ports, simulators, containers and
-//! resources.
+//! Acquiring and releasing leases of every kind.
 
 use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result, ensure};
@@ -151,8 +150,7 @@ async fn select_target(
     }
 }
 
-/// What acquiring `kind` sends for the space a picker picks. Every lease
-/// but a hold is taken on this machine, where the worktree is.
+/// Every lease but a hold is taken on this machine, where the worktree is.
 pub(super) fn acquiring(kind: &AcquireKind) -> Acting {
     match kind {
         AcquireKind::Hold { .. } => {
@@ -176,10 +174,9 @@ pub(super) fn acquiring(kind: &AcquireKind) -> Acting {
     }
 }
 
-/// What releasing `kind` sends for the space a picker picks; a release of
-/// any kind sends a port's, which needs what every release but a hold's
-/// needs. Every lease but a hold is given back on this machine, where the
-/// worktree is.
+/// A release of any kind sends a port's, which needs what every release but a
+/// hold's needs. Every lease but a hold is given back on this machine, where
+/// the worktree is.
 pub(super) fn releasing(kind: Option<&ReleaseKind>) -> Acting {
     match kind {
         Some(ReleaseKind::Hold { .. }) => {
@@ -201,7 +198,6 @@ pub(super) fn releasing(kind: Option<&ReleaseKind>) -> Acting {
     }
 }
 
-/// Release the selected leases in order; a failure leaves the rest held.
 pub(super) async fn release(
     ctx: &Context,
     kind: Option<ReleaseKind>,

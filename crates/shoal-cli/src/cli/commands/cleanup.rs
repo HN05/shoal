@@ -1,5 +1,4 @@
-//! Removing what Shoal left behind: the spaces idle or merged cleanup would
-//! remove, branches removal kept, and shared caches.
+//! `shoal cleanup`.
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
@@ -58,8 +57,7 @@ fn selection(args: &CleanupArgs, spaces: Pick, caches: Pick) -> Selection {
     }
 }
 
-/// The IDs of the spaces `selectors` name, which a cleanup request selects
-/// spaces by, since names repeat.
+/// Cleanup requests select spaces by ID, since names repeat.
 async fn space_ids(ctx: &Context, selectors: &[SpaceSelector]) -> Result<Vec<String>> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     (selectors.iter())
@@ -80,7 +78,6 @@ async fn clean(ctx: &Context, dry_run: bool, selection: Selection) -> Result<Man
     .await
 }
 
-/// List every kind; on a terminal, remove what the user picks.
 async fn everything(ctx: &Context, args: &CleanupArgs) -> Result<Report> {
     let listing = Report {
         cleanup: clean(ctx, true, selection(args, Pick::All, Pick::All)).await?,
@@ -106,8 +103,6 @@ async fn everything(ctx: &Context, args: &CleanupArgs) -> Result<Report> {
     })
 }
 
-/// What the user picked: space IDs, the IDs of repositories whose caches
-/// to empty, and kept branches.
 struct Picked {
     spaces: Vec<String>,
     caches: Vec<String>,
@@ -251,7 +246,6 @@ fn show(ctx: &Context, report: &Report) -> Result<i32> {
     })
 }
 
-/// What a dry run found, by kind.
 fn show_listing(report: &Report) {
     let cleanup = &report.cleanup;
     let caches = |busy: bool| -> Vec<String> {
@@ -286,7 +280,6 @@ fn show_listing(report: &Report) {
     }
 }
 
-/// What a cleanup removed.
 fn show_outcome(report: &Report, json: bool) {
     let cleanup = &report.cleanup;
     let palette = Palette::stdout(json);
@@ -331,7 +324,6 @@ fn show_outcome(report: &Report, json: bool) {
     }
 }
 
-/// The spaces cleanup kept, with why.
 fn show_kept(cleanup: &ManualCleanup) {
     if cleanup.kept.is_empty() {
         return;

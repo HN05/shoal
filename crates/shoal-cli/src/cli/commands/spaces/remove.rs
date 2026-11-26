@@ -1,4 +1,4 @@
-//! Removing spaces after checking what each loses.
+//! `shoal rm`.
 use anyhow::{Result, ensure};
 
 use super::super::removal::{ensure_batch_removable, leaving};
@@ -41,8 +41,8 @@ pub(in crate::cli::commands) async fn remove(ctx: &Context, args: RmArgs) -> Res
     }
 }
 
-/// Check every space `names` select, each once, before removing any, so one
-/// that cannot be removed leaves the others in place.
+/// Every space is checked before any is removed, so one that cannot be removed
+/// leaves the others in place.
 async fn check_removals(
     ctx: &Context,
     names: Vec<SpaceSelector>,
@@ -83,9 +83,8 @@ async fn remove_one(ctx: &Context, check: SpaceRemovalCheck, wait: bool) -> Resu
     Ok(0)
 }
 
-/// Remove each checked space, those below another named one after it,
-/// going on after one fails. One that a removal before it took, or takes in
-/// the background, with its own is not removed again.
+/// A space below another named one goes after it, and one that a removal before
+/// it took, or takes in the background, is not removed again.
 async fn remove_each(ctx: &Context, checks: Vec<SpaceRemovalCheck>, wait: bool) -> Result<i32> {
     let checks = ancestors_first(checks);
     // Names repeat, so what a removal took is told by ID.
@@ -114,14 +113,12 @@ async fn remove_each(ctx: &Context, checks: Vec<SpaceRemovalCheck>, wait: bool) 
     report.finish(ctx, "", |removed, failed| Removals { removed, failed })
 }
 
-/// Whether the space `id` still exists.
 async fn present(ctx: &Context, id: &SpaceId) -> Result<bool> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     Ok(spaces.find(&SpaceSelector::id(id)).is_some())
 }
 
-/// `checks` with each space after those of the others it lies below, so a
-/// removal that takes it is tried first.
+/// A removal that takes a space below is tried first.
 fn ancestors_first(checks: Vec<SpaceRemovalCheck>) -> Vec<SpaceRemovalCheck> {
     let depths: Vec<usize> = (checks.iter())
         .map(|check| {
@@ -136,10 +133,8 @@ fn ancestors_first(checks: Vec<SpaceRemovalCheck>) -> Vec<SpaceRemovalCheck> {
     ordered.into_iter().map(|(_, check)| check).collect()
 }
 
-/// Remove the space `check` inspected, which a removal of several reports
-/// by its `name`, or without `wait` start removing it; either deletes only
-/// the unsaved work it saw: more appearing meanwhile makes the daemon
-/// refuse.
+/// It deletes only the unsaved work it saw: more appearing meanwhile makes the
+/// daemon refuse.
 async fn remove_checked(
     ctx: &Context,
     check: &SpaceRemovalCheck,
@@ -159,8 +154,6 @@ async fn remove_checked(
     })
 }
 
-/// Remove the space `check` inspected, warning of a post-remove hook that
-/// failed.
 async fn finish_removal(ctx: &Context, check: &SpaceRemovalCheck) -> Result<RemovalResult> {
     let unsaved = UnsavedWork::confirming(check);
     let selector = SpaceSelector::id(&check.space.id);
@@ -172,8 +165,6 @@ async fn finish_removal(ctx: &Context, check: &SpaceRemovalCheck) -> Result<Remo
     Ok(result)
 }
 
-/// Start removing the space `check` inspected, which takes the spaces below
-/// it the check listed.
 async fn start_removal(ctx: &Context, check: &SpaceRemovalCheck) -> Result<BackgroundRemoval> {
     let unsaved = UnsavedWork::confirming(check);
     let selector = SpaceSelector::id(&check.space.id);
@@ -188,8 +179,6 @@ async fn start_removal(ctx: &Context, check: &SpaceRemovalCheck) -> Result<Backg
     })
 }
 
-/// Ask once before removing spaces that would lose spaces below them,
-/// unsaved work or holds, naming what each loses.
 fn confirm_removals(ctx: &Context, checks: &[SpaceRemovalCheck]) -> Result<()> {
     let losses: Vec<(String, Vec<String>)> = (checks.iter())
         .map(|check| (check.space.name.to_string(), removal_losses(ctx, check)))
@@ -216,9 +205,7 @@ fn confirm_removals(ctx: &Context, checks: &[SpaceRemovalCheck]) -> Result<()> {
     Ok(())
 }
 
-/// What removing the space `check` inspected loses: the spaces below it,
-/// the unsaved work of its worktree, with the changed files on a terminal,
-/// and its holds. Nothing in a disposable workspace counts.
+/// Nothing in a disposable workspace counts.
 fn removal_losses(ctx: &Context, check: &SpaceRemovalCheck) -> Vec<String> {
     let mut lines: Vec<String> = children_loss(check).into_iter().collect();
     let worktree = check.worktree.as_ref();
@@ -233,9 +220,6 @@ fn removal_losses(ctx: &Context, check: &SpaceRemovalCheck) -> Vec<String> {
     lines
 }
 
-/// That removing the space `check` inspected takes the spaces below it
-/// first, naming those that are not disposable; none when it takes no such
-/// space.
 fn children_loss(check: &SpaceRemovalCheck) -> Option<String> {
     let below: Vec<&str> = (check.children.iter())
         .filter(|child| !check.disposable_children.contains(&child.id))
@@ -249,17 +233,15 @@ fn children_loss(check: &SpaceRemovalCheck) -> Option<String> {
     })
 }
 
-/// That Git no longer knows the worktree `check` inspected, so removal
-/// reads what is left there against its branch; none for a disposable
-/// workspace, whose files count for nothing.
+/// Git no longer knows the worktree, so removal reads what is left there
+/// against its branch. None for a disposable workspace, whose files count for
+/// nothing.
 fn disowned_loss(check: &RemovalCheck) -> Option<String> {
     (check.disowned && !check.workspace.disposable).then(|| {
         "Git no longer knows its worktree, so files left there that differ from its branch count as uncommitted; the branch stays.".into()
     })
 }
 
-/// What removing the worktree `check` inspected deletes, and whether its
-/// checkpoint keeps it.
 fn unsaved_losses(check: &RemovalCheck) -> Vec<String> {
     let unsaved = check.unsaved_work();
     if unsaved.is_empty() {
@@ -276,8 +258,6 @@ fn unsaved_losses(check: &RemovalCheck) -> Vec<String> {
     lines
 }
 
-/// The uncommitted changes and untracked files of the worktree `check`
-/// inspected, as Git's status lists them.
 fn changed_files(check: &RemovalCheck) -> Vec<String> {
     if check.changed_files.is_empty() && check.changed_files_omitted == 0 {
         return Vec::new();
@@ -293,9 +273,6 @@ fn changed_files(check: &RemovalCheck) -> Vec<String> {
     lines
 }
 
-/// That the space `name` was removed, with the Git branch the removal kept
-/// and the spaces below it it took, or that it is being removed, with those
-/// it takes, for one that goes on in the background.
 fn removal_message(name: &SpaceName, removed: &Removed) -> String {
     let (mut message, also) = match &removed.removal {
         Some(result) => match &result.branch {
@@ -322,8 +299,6 @@ fn removal_message(name: &SpaceName, removed: &Removed) -> String {
     message
 }
 
-/// What removing a space first sends for each space a picker picks: the
-/// check of what its removal would lose.
 pub(in crate::cli::commands) fn removing() -> Acting {
     Acting::request(|space| crate::client::removal::check(space, false))
 }

@@ -1,11 +1,9 @@
-//! What `shoal send --in-chat` tells the agent it marked: where its turn's
-//! final message goes once the turn ends, and the mark it replaced.
+//! What `shoal send --in-chat` tells the agent it marked.
 use anyhow::Result;
 use shoal_protocol::chat_marks::{ChatMark, ChatMarked};
 
 use crate::cli::context::Context;
 
-/// Print `marked`.
 pub(in crate::cli) fn show(ctx: &Context, marked: &ChatMarked) -> Result<i32> {
     let mut message = match &marked.mark {
         ChatMark::Post { thread } => format!(

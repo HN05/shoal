@@ -1,4 +1,5 @@
-//! CLI OS-service administration, including offline/protocol-upgrade handling.
+//! Administering the OS service and the daemon, including across a protocol
+//! upgrade.
 mod config;
 mod daemon;
 mod install;

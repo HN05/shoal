@@ -1,4 +1,4 @@
-//! `shoal hub pair`: a pairing code from the hub, with its QR code.
+//! `shoal hub pair`.
 use anyhow::{Context as _, Result};
 
 use crate::{
@@ -9,7 +9,6 @@ use crate::{
     client::output::hub::Paired,
 };
 
-/// Print a new pairing code with its QR code.
 pub(super) async fn pair(ctx: &Context) -> Result<i32> {
     let pairing = crate::client::hub::pair(&ctx.paths).await?;
     let url = &pairing.code.url;

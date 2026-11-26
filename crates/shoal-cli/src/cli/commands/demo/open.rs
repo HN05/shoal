@@ -1,6 +1,4 @@
-//! `shoal demo [name]`: opening a running demo, named or picked, in this
-//! terminal, or one another joined machine runs: a terminal demo shown in
-//! this terminal, any other forwarded from a port here.
+//! `shoal demo [name]`: opening a running demo.
 use anyhow::{Context as _, Result, ensure};
 use shoal_workers::hosting;
 
@@ -37,8 +35,6 @@ pub(super) async fn open(
     Ok(0)
 }
 
-/// Open `demo`, which another joined machine, `machine`, runs: a terminal
-/// demo in this terminal, any other forwarded from a port here.
 async fn open_elsewhere(ctx: &Context, demo: Running, machine: &str) -> Result<i32> {
     match demo.kind {
         Kind::Terminal => show_elsewhere(ctx, demo, machine).await,
@@ -46,8 +42,6 @@ async fn open_elsewhere(ctx: &Context, demo: Running, machine: &str) -> Result<i
     }
 }
 
-/// Show the terminal demo `demo`, which `machine` runs, in this terminal,
-/// exiting as the demo's host's client there does.
 async fn show_elsewhere(ctx: &Context, demo: Running, machine: &str) -> Result<i32> {
     ensure!(
         ctx.on_terminal(),
@@ -79,8 +73,6 @@ pub(super) fn pick(ctx: &Context, demos: Vec<Running>) -> Result<Running> {
     ui::pick_choice(ctx, "Open demo> ", &choices).cloned()
 }
 
-/// Open a running demo in this terminal: its `open` command, its preset's
-/// way, or else the host's view of it.
 async fn open_running(ctx: &Context, demo: &Running) -> Result<()> {
     match (&demo.launch.open, demo.launch.preset) {
         (Some(open), _) => run_opener(ctx, demo, open).await,
@@ -89,8 +81,6 @@ async fn open_running(ctx: &Context, demo: &Running) -> Result<()> {
     }
 }
 
-/// Run the demo's `open` command in its workspace with the demo's variables,
-/// once the worktree is verified to be the recorded one.
 async fn run_opener(ctx: &Context, demo: &Running, open: &[String]) -> Result<()> {
     let workspace =
         crate::client::workspaces::verify(&ctx.paths, SpaceSelector::id(&demo.workspace_id), false)

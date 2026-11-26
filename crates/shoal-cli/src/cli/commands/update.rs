@@ -1,4 +1,4 @@
-//! Replace a downloaded Shoal binary or app bundle with a GitHub release.
+//! `shoal update`.
 use anyhow::Result;
 
 use crate::{

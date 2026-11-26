@@ -33,7 +33,6 @@ const APPS: [(&str, DesktopApp); 3] = [
     ("t3", DesktopApp::T3),
 ];
 
-/// What to run in `workspace`, as chosen.
 pub(super) async fn execute_command(
     ctx: &Context,
     workspace: Option<SpaceSelector>,

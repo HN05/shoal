@@ -1,5 +1,4 @@
-//! `shoal changes`: list a space's or a thread's changes, and say who made
-//! them with `claim` and `unclaim`.
+//! `shoal changes`, `claim` and `unclaim`.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::{
@@ -18,8 +17,6 @@ use crate::{
     client::changes,
 };
 
-/// List the changes of the thread `thread`, else the latest of the space
-/// `space`, the caller's own or the current workspace by default.
 pub(in crate::cli::commands) async fn list(
     ctx: &Context,
     thread: Option<ThreadNumber>,
@@ -46,8 +43,6 @@ pub(in crate::cli::commands) async fn list(
     Ok(0)
 }
 
-/// Say the changes `numbers` names are the agent's, and with `thread` for
-/// it.
 pub(in crate::cli::commands) async fn claim(
     ctx: &Context,
     numbers: Vec<ChangeNumber>,
@@ -64,7 +59,6 @@ pub(in crate::cli::commands) async fn claim(
     Ok(0)
 }
 
-/// Say the changes `numbers` names are not the agent's.
 pub(in crate::cli::commands) async fn unclaim(
     ctx: &Context,
     numbers: Vec<ChangeNumber>,
@@ -94,7 +88,6 @@ pub(in crate::cli::commands) async fn own_space(
     }
 }
 
-/// The numbers of `changes`, as a sentence lists them.
 pub(in crate::cli::commands) fn labels(changes: &[Change]) -> String {
     let own = one_space(changes);
     let labels: Vec<String> = changes.iter().map(|change| change.label(own)).collect();
@@ -104,8 +97,6 @@ pub(in crate::cli::commands) fn labels(changes: &[Change]) -> String {
     }
 }
 
-/// One aligned row per change: its number, who made it, where it is now,
-/// its size and its thread.
 pub(in crate::cli::commands) fn rows(changes: &[Change], palette: Palette) -> Vec<String> {
     let own = one_space(changes);
     let cells: Vec<[Cell; 5]> = (changes.iter())

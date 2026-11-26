@@ -1,6 +1,4 @@
-//! `shoal ci` and `shoal view ci`: list, start, read, rerun and cancel CI runs
-//! of the workspace's repository, or of another one --repo or their URLs
-//! name, and the checks on a PR's head.
+//! `shoal ci` and `shoal view ci`.
 mod act;
 mod read;
 
@@ -42,9 +40,7 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
     }
 }
 
-/// The repository `ci run` starts a workflow in with `starting`: as
-/// [`select_item_target`] finds it, except that a workflow named by its
-/// URL, `url`, names its repository and needs no context.
+/// A workflow named by its URL names its repository and needs no context.
 async fn workflow_target(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -62,8 +58,6 @@ async fn workflow_target(
     select_item_target(ctx, space, repo, None, starting).await
 }
 
-/// What `view` and `status` say of the `waiting` runs on the head of the PR
-/// `pull` that wait for approval, with how to approve them.
 pub(super) fn waiting_runs_line(pull: &ItemRef, waiting: usize) -> String {
     let (runs, them) = match waiting {
         1 => ("1 CI run waits".to_owned(), "it"),

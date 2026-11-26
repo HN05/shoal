@@ -31,7 +31,6 @@ pub(in crate::cli::commands) async fn conflicts(
     Ok(i32::from(!check.clean()))
 }
 
-/// `files` under `heading`, unless there are none.
 fn show_files(heading: &str, files: &[String]) {
     if files.is_empty() {
         return;
@@ -42,9 +41,7 @@ fn show_files(heading: &str, files: &[String]) {
     }
 }
 
-/// What checking a workspace's conflicts sends for the workspace a picker
-/// picks; the branch it checks against decides nothing of which
-/// workspaces it reaches.
+/// The branch it checks against decides nothing of which workspaces it reaches.
 pub(super) fn checking() -> Acting {
     Acting::request(|space| crate::client::diffs::conflicts(space, None))
 }

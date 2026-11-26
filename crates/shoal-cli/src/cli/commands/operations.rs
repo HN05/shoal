@@ -1,7 +1,5 @@
-//! Operations from the CLI: the daemon starts the work in a worker of its
-//! own, and the command follows it, showing what its processes write as it
-//! showed them when it ran them itself. Failures come back typed, as the
-//! errors the command handled before.
+//! Operations from the CLI: the daemon starts the work in a worker of its own,
+//! and the command follows it, showing what its processes write.
 use std::io::Stderr;
 
 use anyhow::Result;
@@ -13,8 +11,8 @@ use crate::{
     protocol::operations::{OperationRef, OperationSpec, Outcome, Step},
 };
 
-/// Start `spec` in this process's environment, without its secrets, and
-/// follow it to its end, returning what it did.
+/// Start `spec` in this process's environment, without its secrets, and follow
+/// it to its end.
 pub(super) async fn run<T>(ctx: &Context, spec: OperationSpec) -> Result<T>
 where
     T: TryFrom<Outcome, Error = anyhow::Error>,
@@ -22,8 +20,6 @@ where
     following::run(&ctx.paths, ctx.json, &mut steps(ctx), spec).await
 }
 
-/// Follow `operation`, which the daemon started for a request of this
-/// command, to its end, returning what it did.
 pub(super) async fn follow_started<T>(ctx: &Context, operation: OperationRef) -> Result<T>
 where
     T: TryFrom<Outcome, Error = anyhow::Error>,
@@ -47,7 +43,6 @@ pub(super) async fn show<E>(
     following::show(&ctx.paths, shown, &mut steps(ctx), next).await
 }
 
-/// The spinner of an operation this command follows.
 pub(super) fn steps(ctx: &Context) -> Steps {
     Steps(Spinner::stderr(ctx.json, doing(None)))
 }
@@ -69,7 +64,6 @@ impl Display for Steps {
     }
 }
 
-/// What an operation does after reporting `step`, or before its first.
 fn doing(step: Option<Step>) -> &'static str {
     match step {
         None => "Starting",

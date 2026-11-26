@@ -1,5 +1,5 @@
-//! Link relations: selecting a space's issues, PRs and CI runs, linking,
-//! unlinking and watching them, and marking them ready.
+//! Selecting a space's issues, PRs and CI runs, linking, unlinking and watching
+//! them, and marking them ready.
 use anyhow::{Result, bail, ensure};
 
 use super::spaces;
@@ -23,8 +23,6 @@ use crate::{
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The space and the items selected in it, with the kind of a bare number
-/// resolved.
 pub(super) async fn select(
     ctx: &Context,
     items: ItemArgs,
@@ -38,10 +36,7 @@ pub(super) async fn select(
     Ok((space, selection))
 }
 
-/// The items selected in the named or current space, or in the repository
-/// `repo` names, of the checkout the current directory or a URL is in, or
-/// of a URL, where only a number or URL selects one. A bare number keeps no
-/// kind, which the daemon gives it as it reads.
+/// A bare number keeps no kind, which the daemon gives it as it reads.
 pub(super) async fn in_context(
     ctx: &Context,
     items: ItemArgs,
@@ -55,8 +50,6 @@ pub(super) async fn in_context(
     Ok((target, selection))
 }
 
-/// [`in_context`], with the kind of a bare number selected in a space
-/// resolved.
 pub(super) async fn select_in_context(
     ctx: &Context,
     items: ItemArgs,
@@ -201,7 +194,6 @@ pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// Print what changing an issue's assignees on the forge warned of.
 pub(super) fn print_warnings(warnings: &[String]) {
     for warning in warnings {
         eprintln!("warning: {warning}");
@@ -226,8 +218,6 @@ pub(super) async fn watch(
     spaces::watch_items(ctx, space, selection, repository, timeout, resumed).await
 }
 
-/// Where a watch in `space` reads its items, with the registered repository
-/// `repo` names: the space, or a chat acting in that repository.
 async fn watch_context(
     ctx: &Context,
     space: &SpaceSelector,
@@ -279,8 +269,6 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>)
     Ok(0)
 }
 
-/// What a mark on the space `space` itself is called: `workspace` or
-/// `chat`.
 async fn space_kind(ctx: &Context, space: &SpaceSelector) -> Result<&'static str> {
     Ok(
         (crate::client::spaces::present_space(&ctx.paths, space).await?)
@@ -301,9 +289,8 @@ pub(super) fn review_lines(marks: &[ReviewMark], itself: &str) -> String {
         .join("\n")
 }
 
-/// What linking an item as `relation` sends for the space a picker picks;
-/// the item, which the space's context classifies once it is picked,
-/// decides nothing of which spaces the link reaches.
+/// The item, which the space's context classifies once it is picked, decides
+/// nothing of which spaces the link reaches.
 pub(super) fn linking(relation: Relation) -> Acting {
     Acting::request(move |space| {
         let item = ItemInput::Number(1);
@@ -311,25 +298,19 @@ pub(super) fn linking(relation: Relation) -> Acting {
     })
 }
 
-/// What unlinking items of `relation` sends for the space a picker picks.
 pub(super) fn unlinking(relation: Relation) -> Acting {
     Acting::request(move |space| crate::client::items::unlink(space, relation, None, None))
 }
 
-/// What watching items sends for the space a picker picks; the items
-/// decide nothing of which spaces it reaches.
+/// The items decide nothing of which spaces a watch reaches.
 pub(super) fn watching() -> Acting {
     Acting::request(|space| crate::client::items::watch(space, Selection::default(), None, None))
 }
 
-/// What marking a space's work ready for review sends for the space a
-/// picker picks.
 pub(super) fn marking() -> Acting {
     Acting::request(|space| assignments::mark_ready(space, Selection::default()))
 }
 
-/// What clearing a space's ready-for-review marks sends for the space a
-/// picker picks.
 pub(super) fn clearing() -> Acting {
     Acting::request(|space| assignments::clear_ready(space, Selection::default(), None))
 }

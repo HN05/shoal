@@ -1,6 +1,5 @@
-//! Where an item command that needs only a repository runs: a workspace, or
-//! a registered checkout, where a chat runs its agent and where the
-//! user names a registered repository to act in without a workspace.
+//! Where an item command that needs only a repository runs: a workspace, or a
+//! registered checkout.
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
@@ -26,8 +25,6 @@ const NO_CONTEXT: &str =
 const NO_REPOSITORY: &str =
     "no current workspace or registered checkout; run this in one, or pass --repo";
 
-/// Where a command that acts on a space, a workspace or chat, runs: as
-/// [`known_item_context`] finds it, else a space the user picks.
 pub(in crate::cli::commands) async fn select_space_item_context(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -91,15 +88,12 @@ async fn known_item_context(
     item_checkout(ctx, item).await
 }
 
-/// A space the user picks, for what the command does in its context.
 async fn picked_space(ctx: &Context, acting: &Acting) -> Result<ItemContext> {
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory(acting)).await?;
     Ok(ItemContext::space(space))
 }
 
-/// What a command sends in the context of a space its picker picks, which
-/// `request` builds for that space's repository target.
 pub(in crate::cli::commands) fn in_context<R: Sendable>(
     request: impl Fn(RepoTarget) -> R + Send + Sync + 'static,
 ) -> Acting {
@@ -141,7 +135,6 @@ fn named_by_url(repo: Option<&str>) -> bool {
     repo.is_some_and(ForgeRepo::named_by_url)
 }
 
-/// The checkout of a registered repository the user picks.
 async fn picked_repository(ctx: &Context) -> Result<ItemContext> {
     ensure!(ctx.interactive(), "{NO_REPOSITORY}");
     let repos = crate::client::repositories::list(&ctx.paths).await?;
@@ -178,8 +171,6 @@ pub(in crate::cli::commands) async fn select_open_context(
     })
 }
 
-/// The checkout of the registered repository of the issue, PR or CI run URL
-/// `item`, if it names one.
 async fn item_checkout(ctx: &Context, item: Option<&ItemInput>) -> Result<Option<ItemContext>> {
     let Some(ItemInput::Url(item)) = item else {
         return Ok(None);
@@ -247,8 +238,6 @@ pub(in crate::cli::commands) async fn current_context(
     Ok(checkout.map(|repo| ItemContext::Checkout(repo.id.clone())))
 }
 
-/// The registered repository `repo` names, a path read from the current
-/// directory.
 pub(in crate::cli::commands) async fn named_repository(
     ctx: &Context,
     repo: &str,
@@ -258,7 +247,6 @@ pub(in crate::cli::commands) async fn named_repository(
     Ok(repository::select(&repos, selector).await?.clone())
 }
 
-/// The registered repository `repo` names, if any.
 async fn registered(ctx: &Context, repo: &str) -> Result<Option<Repository>> {
     match named_repository(ctx, repo).await {
         Ok(repo) => Ok(Some(repo)),

@@ -1,4 +1,4 @@
-//! `shoal repo move`: move every repository directory into a new `root_dir`.
+//! `shoal repo move`.
 use super::super::resume::queue::{restore_stopped, saved_agents};
 use crate::cli::commands::resume::reports::QueuedExt;
 use crate::client::output::resume::Queued;
@@ -26,12 +26,7 @@ use crate::{
     protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
-/// Check that every repository outside the root `args` name, or the
-/// configured root, can move, with the files of the chats without a
-/// repository, confirm, save that root as `root_dir` when given, stop the
-/// commands and agents running in them, then have the daemon move them,
-/// into a directory Spotlight skips unless they ask for a regular one, and
-/// queue the stopped agents' restores, even when the move fails.
+/// The stopped agents' restores are queued even when the move fails.
 pub(super) async fn run(ctx: &Context, args: MoveArgs) -> Result<()> {
     let MoveArgs {
         root,
@@ -73,13 +68,10 @@ async fn plan_moves(
     .await
 }
 
-/// Stop the spaces `executions` run in, keeping their agents' sessions, and
-/// add to `stopped` the agents and last sessions each stop saved for `shoal
-/// resume`, by space, including any started since the plan or ended by a
-/// stop that failed. A CI job's workspace is waited for until the job, whose run
-/// the stop cancelled, ends and its workspace goes, and stays out of
-/// `stopped`. An execution Shoal cannot prove ended stops once the user
-/// confirms it did, or when `confirmed`.
+/// A CI job's workspace is waited for until the job, whose run the stop
+/// cancelled, ends and the workspace goes; it stays out of `stopped`. An
+/// execution Shoal cannot prove ended stops once the user confirms it did, or
+/// when `confirmed`.
 async fn stop_running(
     ctx: &Context,
     executions: &[Execution],
@@ -127,7 +119,6 @@ async fn stop_running(
     Ok(())
 }
 
-/// Whether the daemon still lists the space `id`.
 async fn space_listed(ctx: &Context, id: &SpaceId) -> Result<bool> {
     let selector = SpaceSelector::id(id);
     Ok((crate::client::spaces::present_space(&ctx.paths, &selector).await?).is_some())
@@ -219,8 +210,8 @@ fn plan(moves: &RepositoryMoves, spaces: &Spaces) -> String {
     text
 }
 
-/// Save `root` as the global `root_dir` and apply it to the daemon, which
-/// moves repositories into the root it has loaded.
+/// The daemon moves repositories into the root it has loaded, so it reloads
+/// first.
 async fn save_root(ctx: &Context, root: &Path) -> Result<()> {
     let value = toml::Value::String(
         root.to_str()

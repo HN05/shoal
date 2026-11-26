@@ -1,8 +1,5 @@
-//! `shoal attach`: choosing the space to attach to, and what the CLI does
-//! its own way in the attach steps `shoal_workers::attach` takes, which
-//! hand this terminal to one of a workspace's or a chat's sessions. A user
-//! on another machine attaches through a terminal the space's machine
-//! makes for them.
+//! `shoal attach`, and what the CLI does its own way in the attach steps
+//! [`shoal_workers::attach`] takes.
 
 use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
@@ -55,9 +52,7 @@ pub(super) async fn attach(
     Ok(0)
 }
 
-/// Attach to a session of `space`, which another joined machine, `machine`,
-/// runs, through that machine, and remember it for `attach -` once its
-/// session was shown and still runs there.
+/// Remembered for `attach -` once its session was shown and still runs there.
 async fn view_elsewhere(
     ctx: &Context,
     space: SpaceId,
@@ -72,9 +67,6 @@ async fn view_elsewhere(
     Ok(ended.code)
 }
 
-/// Attach this terminal to the agent a start began in `space`, which
-/// `machine` runs where another joined machine than this one does, once
-/// it runs in a session, as `shoal attach` does.
 pub(in crate::cli::commands) async fn attach_started(
     ctx: &Context,
     space: SpaceId,
@@ -86,9 +78,6 @@ pub(in crate::cli::commands) async fn attach_started(
     }
 }
 
-/// `shoal internal attach`: attach this terminal, which `viewer` views
-/// from another machine, to a session of `space` on `machine`, this one,
-/// reporting the session chosen to the descriptor `report`.
 pub(in crate::cli::commands) async fn attach_for_viewer(
     ctx: &Context,
     space: SpaceId,
@@ -100,7 +89,6 @@ pub(in crate::cli::commands) async fn attach_for_viewer(
     shoal_workers::attach::for_viewer(&ctx.paths, space, viewer, machine, report, &callbacks).await
 }
 
-/// What the CLI does its own way in an attach's steps.
 struct Callbacks<'a>(&'a Context);
 
 impl Attaching for Callbacks<'_> {
@@ -131,30 +119,19 @@ impl Attaching for Callbacks<'_> {
     }
 }
 
-/// The spaces `attach -` returns to: every workspace and the chats whose
-/// agent runs, since a chat whose agent exited has no session left.
+/// A chat whose agent exited has no session left.
 fn attachable(spaces: Spaces) -> Spaces {
     (spaces.0.into_iter())
         .filter(|space| space.kind().has_worktree() || space.running)
         .collect()
 }
 
-/// The space an attach shows, on this machine or another joined one.
 enum Chosen {
     Here(Target),
-    /// Another machine's space, with that machine's name.
-    Elsewhere {
-        space: SpaceId,
-        machine: String,
-    },
+    Elsewhere { space: SpaceId, machine: String },
 }
 
-/// The space `name` selects, on this machine or another joined one, where
-/// `-` is the one whose session this terminal last left running; without
-/// one, the current workspace, else the current checkout's only running
-/// chat, else a picker of the workspaces and the chats with sessions or an
-/// agent that sleeps or is stopped, then the other machines' spaces with an
-/// agent.
+/// `-` is the space whose session this terminal last left running.
 async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
     if name.as_ref().is_some_and(recent::is_previous) {
         return previous(ctx).await;
@@ -168,7 +145,6 @@ async fn resolve(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
     resolve_here(ctx, name).await
 }
 
-/// Another machine's space `space`, which the machine named `machine` runs.
 fn chosen_elsewhere(space: SpaceId, machine: String) -> Chosen {
     Chosen::Elsewhere { space, machine }
 }
@@ -195,8 +171,6 @@ async fn previous(ctx: &Context) -> Result<Chosen> {
     }
 }
 
-/// [`resolve`] for a space `name` selects on this machine, else the current
-/// or a picked one.
 async fn resolve_here(ctx: &Context, name: Option<SpaceSelector>) -> Result<Chosen> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let chats = spaces.into_chats();
@@ -231,9 +205,6 @@ async fn workspace(
     Target::inspected(&ctx.paths, workspace).await
 }
 
-/// A workspace or one of `chats` with an agent session, or whose agent
-/// sleeps or is stopped, which the picker's status shows, or another
-/// machine's space with an agent, from a picker.
 async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
     let places = chat_places(&ctx.paths, &chats).await;
     let places: Vec<_> = places.iter().map(|(id, place)| (id, place)).collect();
@@ -262,9 +233,7 @@ async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Chosen> {
     }
 }
 
-/// Where the daemon recorded `chats` running, by chat ID: where their agents
-/// run and the places Shoal created for them, as a workspace's. A list the
-/// daemon cannot give counts as no place.
+/// A list the daemon cannot give counts as no place.
 pub(in crate::cli) async fn chat_places(
     paths: &CommandPaths,
     chats: &[Chat],
@@ -298,8 +267,6 @@ pub(in crate::cli::commands) async fn checkout_chat(
     })
 }
 
-/// What attaching to a space's agent session sends for the space a picker
-/// picks.
 pub(super) fn attaching() -> Acting {
     Acting::request(|space| crate::client::attaching::attach_request(space, Default::default()))
 }

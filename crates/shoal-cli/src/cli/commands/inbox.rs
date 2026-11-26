@@ -1,10 +1,5 @@
-//! `shoal inbox`: what needs the user now, each with its space: threads
-//! that wait for the user, pending approvals, agents that need input, failed workspaces,
-//! agents Shoal put to sleep, work marked ready at its current commit, running demos, Git worktrees
-//! under Shoal's directories that no workspace owns, automatic cleanup
-//! failing other than in a workspace, and repositories whose default branch
-//! has stopped syncing, and what of the other joined machines' spaces needs
-//! the user.
+//! `shoal inbox`: what needs the user now, on this machine and the other joined
+//! machines.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use std::collections::HashSet;
@@ -28,8 +23,6 @@ use shoal_protocol::{approvals::ApprovalRequest, hub::directory::HubView, thread
 
 mod elsewhere;
 
-/// The inbox's items in the order it lists them, and the workspaces and
-/// chats they belong to.
 pub(in crate::cli) struct Inbox {
     pub items: Vec<Item>,
     workspaces: Vec<Workspace>,
@@ -64,10 +57,6 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
 }
 
 impl Inbox {
-    /// Threads, then approvals, agents that need input, failed workspaces,
-    /// ready marks and running demos, for the workspaces `filter` keeps, then
-    /// untracked worktrees and failing automatic cleanup, then what needs the
-    /// user of the other machines' spaces it keeps.
     pub(in crate::cli) async fn request(ctx: &Context, filter: &ListFilter) -> Result<Self> {
         // Without its token, the daemon would answer a workspace process as the user.
         ensure!(
@@ -143,10 +132,6 @@ impl Inbox {
         })
     }
 
-    /// One aligned row per item: its kind, space, the space's machine once
-    /// any item is another machine's, its repository when the rows span
-    /// several, its mode, what it is about, cut to fit `width`, and a note,
-    /// which names the workspace a chat runs in.
     pub(in crate::cli) fn rows(
         &self,
         repositories: &[(String, String)],
@@ -173,7 +158,6 @@ impl Inbox {
         ui::aligned_to(cells, palette, limit)
     }
 
-    /// The machines rows name, once any item is another machine's.
     fn machines(&self) -> Option<ui::Machines<'_>> {
         let elsewhere = |item: &Item| matches!(item, Item::Elsewhere { .. });
         let view = self.view.as_ref()?;
@@ -183,9 +167,6 @@ impl Inbox {
             .then(|| ui::Machines::new(view))
     }
 
-    /// The name of the repository of the item's space, or of the one that
-    /// owns a proposed issue whose workspace is gone, of `(id, name)` pairs
-    /// for this machine's.
     fn repository_name<'a>(
         &'a self,
         item: &'a Item,
@@ -200,7 +181,6 @@ impl Inbox {
     }
 }
 
-/// The machine of the item's space, when rows name one.
 fn machine_cell(machines: Option<&ui::Machines<'_>>, item: &Item) -> Cell {
     match (machines, item) {
         (None, _) => (String::new(), None),
@@ -209,11 +189,6 @@ fn machine_cell(machines: Option<&ui::Machines<'_>>, item: &Item) -> Cell {
     }
 }
 
-/// Threads that wait for the user, then the pending approval requests the
-/// user decides, of
-/// `workspaces`; a coordinating agent decides the others.
-/// The repository of the item's workspace or chat, or the one that owns a
-/// proposed issue whose workspace is gone.
 fn repository_of<'a>(
     workspaces: &'a [Workspace],
     chats: &'a [Chat],
@@ -231,7 +206,6 @@ fn repository_of<'a>(
         .or_else(|| item.repository_id())
 }
 
-/// The item's note, after the workspace its chat runs in, if it is one.
 fn note(chats: &[Chat], item: &Item) -> String {
     let space = item.space_id();
     let place = (chats.iter().find(|chat| Some(&chat.id) == space))
@@ -241,9 +215,6 @@ fn note(chats: &[Chat], item: &Item) -> String {
     place.into_iter().chain(note).collect::<Vec<_>>().join("; ")
 }
 
-/// Threads of the listed workspaces and chats, approvals of the listed
-/// workspaces, and the requests `detached` keeps: issue proposals that
-/// outlived their workspace.
 fn decision_items(
     threads: impl IntoIterator<Item = Thread>,
     requests: Vec<ApprovalRequest>,
@@ -267,8 +238,6 @@ fn decision_items(
     threads.chain(requests).collect()
 }
 
-/// The failed launches among `entries` of the `workspaces` and `chats`
-/// listed, each with its space's number.
 fn failed_starts(entries: Vec<QueueEntry>, workspaces: &[Workspace], chats: &[Chat]) -> Vec<Item> {
     let number = |space: &SpaceId| {
         (workspaces.iter().find(|w| w.id == *space).map(|w| w.number)).or_else(|| {
@@ -292,9 +261,6 @@ fn failed_starts(entries: Vec<QueueEntry>, workspaces: &[Workspace], chats: &[Ch
         .collect()
 }
 
-/// Workspaces whose agent needs input, then blocked ones, then failed ones,
-/// then those whose agent is asleep, then each mark of those whose agent is
-/// not working.
 fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<Item> {
     let status = |w: &Workspace| ListStatus::of_workspace(w, stopped.contains(&w.id));
     let waiting = workspaces
@@ -334,9 +300,6 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<SpaceId>) -> Vec<
         .collect()
 }
 
-/// Running chats whose agent needs input, then blocked chats, then chats
-/// whose agent is asleep, then each running chat that recorded its work as
-/// finished, and each mark of the others whose agent is not working.
 fn chat_items(chats: &[Chat]) -> Vec<Item> {
     let running = || chats.iter().filter(|chat| chat.running);
     let waiting = running()
@@ -367,7 +330,6 @@ fn chat_items(chats: &[Chat]) -> Vec<Item> {
 
 /// Operations on the client type [`Item`] that only the `shoal` command uses.
 pub(crate) trait ItemExt {
-    /// The workspace or chat it belongs to, if any.
     fn space_id(&self) -> Option<&SpaceId>;
 
     /// The repository that owns a proposed issue, which outlives the
@@ -380,10 +342,8 @@ pub(crate) trait ItemExt {
     /// it. Repositories are `(id, name)` pairs.
     fn name(&self, repositories: &[(String, String)]) -> String;
 
-    /// What kind of item it is, with a thread's or request's number.
     fn kind(&self) -> Cell;
 
-    /// The mode of the workspace or chat it reports on.
     fn mode(&self) -> Cell;
 
     /// What the item asks or reports: the thread, the access requested
@@ -580,12 +540,10 @@ fn thread_note(thread: &Thread) -> String {
         .join("; ")
 }
 
-/// Why Shoal put an agent to sleep and what wakes it.
 fn asleep(asleep: Option<&crate::model::Asleep>) -> String {
     asleep.map(ui::asleep_label).unwrap_or_default()
 }
 
-/// The first of what blocks a space, with its reason, and how many more.
 fn blocked_by(progress: Option<&shoal_protocol::progress::Progress>) -> String {
     let mut blockers =
         (progress.into_iter()).flat_map(shoal_protocol::progress::Progress::all_blockers);
@@ -599,8 +557,6 @@ fn blocked_by(progress: Option<&shoal_protocol::progress::Progress>) -> String {
     }
 }
 
-/// The marked item, with the title of the space's first issue when it has
-/// one.
 fn marked(mark: &ReviewMark, links: &SpaceLinks) -> String {
     let label = ui::mark_label(mark);
     match links.issue_title() {

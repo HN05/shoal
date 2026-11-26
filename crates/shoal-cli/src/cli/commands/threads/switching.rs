@@ -1,5 +1,4 @@
-//! `shoal thread switch`, `add` and `remove`: say which thread the changes
-//! of a space's agent are for.
+//! `shoal thread switch`, `add` and `remove`.
 use anyhow::Result;
 use shoal_protocol::{
     changes::ChangeNumber,
@@ -16,16 +15,11 @@ use crate::{
     client::threads,
 };
 
-/// What `shoal thread switch` does.
 pub(in crate::cli::commands) enum Switch {
-    /// Switch to this thread, or to none.
     To(Option<ThreadNumber>),
-    /// Show the current thread, or on a terminal pick an open one.
     Show,
 }
 
-/// Switch the changes of `space`'s agent, the caller's own by default, as
-/// `switch` says, or show the thread they are for.
 pub(in crate::cli::commands) async fn switch(
     ctx: &Context,
     switch: Switch,
@@ -67,7 +61,6 @@ async fn picked(ctx: &Context, space: &SpaceSelector) -> Result<Option<ThreadNum
     Ok(Some(ThreadNumber::Full(thread.number)))
 }
 
-/// `thread` as the sentence names it.
 fn described(thread: Option<&Thread>) -> String {
     match thread {
         Some(thread) => format!("thread {}: {}", thread.number, thread.one_line()),
@@ -75,7 +68,6 @@ fn described(thread: Option<&Thread>) -> String {
     }
 }
 
-/// Put the changes `numbers` names into the thread `thread`.
 pub(in crate::cli::commands) async fn add(
     ctx: &Context,
     thread: ThreadNumber,
@@ -89,7 +81,6 @@ pub(in crate::cli::commands) async fn add(
     Ok(0)
 }
 
-/// Take the changes `numbers` names out of the thread `thread`.
 pub(in crate::cli::commands) async fn remove(
     ctx: &Context,
     thread: ThreadNumber,

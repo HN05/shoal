@@ -69,7 +69,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -
     }
 }
 
-/// `view review [ID]`, which takes none of the item options.
 async fn view_review(ctx: &Context, args: ViewArgs) -> Result<i32> {
     ensure!(
         !args.no_comments

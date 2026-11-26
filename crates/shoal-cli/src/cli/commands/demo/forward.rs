@@ -1,7 +1,6 @@
-//! `shoal demo [name] --workspace S` for a `server`, `web` or `simulator`
-//! demo another joined machine runs: a port on this machine's loopback, the
-//! demo's own number, or its viewer's, when it is free, whose every
-//! connection goes to the demo through the hub, until Ctrl-C.
+//! `shoal demo` for a `server`, `web` or `simulator` demo another joined
+//! machine runs: a loopback port here forwards each connection to the demo
+//! through the hub.
 use anyhow::{Context as _, Result, bail};
 use shoal_protocol::{
     demos::{Kind, PORT, Running},
@@ -41,9 +40,8 @@ pub(super) async fn forward(ctx: &Context, demo: Running, machine: &str) -> Resu
     Ok(0)
 }
 
-/// The port `demo`, which `machine` runs, serves on there, with the demo
-/// as it is then: a simulator demo's viewer's, which opening a stream to it
-/// starts. Refused for a terminal demo, which serves on none.
+/// Opening a stream to a simulator demo's viewer starts it. Refused for a
+/// terminal demo, which serves on no port.
 async fn forwarded(paths: &CommandPaths, demo: Running, machine: &str) -> Result<(Running, u16)> {
     let name = demo.launch.name.clone();
     let port = match demo.kind {
@@ -57,7 +55,6 @@ async fn forwarded(paths: &CommandPaths, demo: Running, machine: &str) -> Result
     ))
 }
 
-/// A listener on loopback: on `port` when it is free, else on any port.
 async fn listen(port: u16) -> Result<TcpListener> {
     match TcpListener::bind(("127.0.0.1", port)).await {
         Ok(listener) => Ok(listener),
@@ -66,8 +63,6 @@ async fn listen(port: u16) -> Result<TcpListener> {
     }
 }
 
-/// Where the user reaches `demo` on this machine's port `local`: a web
-/// demo's URL or a simulator demo's viewer's, otherwise its address.
 fn local_location(demo: &Running, local: u16) -> Result<String> {
     if demo.kind == Kind::Simulator {
         let viewer = demo.launch.viewer(Some(local));
@@ -82,8 +77,6 @@ fn local_location(demo: &Running, local: u16) -> Result<String> {
     launch.location().context("the demo has no address")
 }
 
-/// Send each connection `listener` takes to `space`'s demo `name`, until
-/// the listener fails.
 async fn serve(
     ctx: &Context,
     listener: &TcpListener,
@@ -101,8 +94,6 @@ async fn serve(
     }
 }
 
-/// Carry `connection`'s bytes to and from `space`'s demo `name`, both
-/// ways, until both sides end.
 async fn relay(
     paths: &CommandPaths,
     mut connection: TcpStream,

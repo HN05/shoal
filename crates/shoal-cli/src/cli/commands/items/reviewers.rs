@@ -1,5 +1,4 @@
-//! `shoal pr reviewers`: who a PR can ask for a review, named as
-//! `shoal pr edit --add-reviewer` takes them.
+//! `shoal pr reviewers`.
 use anyhow::Result;
 
 use super::item_target;
@@ -20,8 +19,6 @@ pub(super) async fn reviewers(ctx: &Context, selector: &ItemSelector) -> Result<
     Ok(0)
 }
 
-/// One line per reviewer: the name to pass, the name the forge shows, and
-/// whether it is a team.
 fn render(reviewers: &[Reviewer]) {
     if reviewers.is_empty() {
         outln!("No reviewers");

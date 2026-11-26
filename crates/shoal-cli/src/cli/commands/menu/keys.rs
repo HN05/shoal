@@ -1,5 +1,4 @@
-//! What each key of the picker does: the command a key and the row it
-//! chose become.
+//! What each key of the picker does.
 use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::model::ByKind;
 
@@ -24,7 +23,6 @@ use crate::cli::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// What a key of the picker does.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Action {
     Enter,
@@ -52,7 +50,6 @@ impl Action {
         Self::Delete,
     ];
 
-    /// The key that does it.
     pub(super) fn key(self) -> Key {
         match self {
             Self::Enter => Key::Enter,
@@ -67,7 +64,6 @@ impl Action {
         }
     }
 
-    /// The action `key` does.
     pub(super) fn of(key: Key) -> Result<Self> {
         Self::ALL
             .into_iter()
@@ -146,7 +142,6 @@ async fn chat_command(ctx: &Context, action: Action, chat: SpaceSelector) -> Res
     }
 }
 
-/// [`chat_command`] for the actions that read nothing of the chat.
 fn chat_action(action: Action, chat: SpaceSelector) -> Result<Command> {
     let chat = Some(chat);
     Ok(match action {
@@ -249,7 +244,6 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     })))
 }
 
-/// `shoal stop` of `space` and the spaces below it.
 fn stop(space: Option<SpaceSelector>) -> Command {
     Command::Lifecycle(LifecycleCommand::Stop(StopArgs {
         targets: SpaceTargets {
@@ -272,7 +266,6 @@ fn add() -> Command {
     })))
 }
 
-/// What `action` does to `workspace`.
 async fn workspace_command(
     ctx: &Context,
     action: Action,

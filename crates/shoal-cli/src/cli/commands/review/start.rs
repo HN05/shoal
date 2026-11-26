@@ -1,5 +1,4 @@
-//! `shoal review run`: queue a review of a workspace's changes or a PR, or
-//! run the configured `review` command.
+//! `shoal review run`.
 use crate::cli::ui::Acting;
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
@@ -45,7 +44,6 @@ pub(super) enum Reviewer {
     Agent(Option<Agent>),
 }
 
-/// What `shoal review` reviews.
 pub(super) enum Target {
     /// A workspace's changes, or a chat's linked PR, which `post` applies to.
     Space {
@@ -101,7 +99,6 @@ impl Target {
     }
 }
 
-/// The PR an agent review covers, if any, and whether it posts there.
 enum Subject {
     Changes,
     Pull {
@@ -110,8 +107,6 @@ enum Subject {
     },
 }
 
-/// Review the target with the chosen reviewer, an agent with `model`, or
-/// forward `args` to the configured review command.
 pub(super) async fn start(
     ctx: &Context,
     target: Target,
@@ -164,7 +159,6 @@ pub(super) async fn start(
     }
 }
 
-/// The chat's one linked PR, with the chat's repository.
 async fn chat_pull(ctx: &Context, chat: &Chat) -> Result<(Repository, ItemInput)> {
     let url = match chat.links.prs.as_slice() {
         [pr] => pr.url.clone(),
@@ -328,9 +322,8 @@ async fn pull_request(
     .await
 }
 
-/// The workspace at a commit a fork PR's review reads: the one at its head,
-/// or a new one without setup, since the reviewer only reads a checkout,
-/// with the PR linked.
+/// A new workspace at a commit needs no setup, since the reviewer only reads a
+/// checkout.
 async fn fork_pull_workspace(
     ctx: &Context,
     repo: &Repository,
@@ -365,8 +358,8 @@ async fn fork_pull_workspace(
     Ok(workspace.id)
 }
 
-/// Fast-forward a reused workspace to the PR's pushed head so the review sees
-/// the author's latest commits; local commits ahead of it stay as they are.
+/// The review must see the author's latest commits; local commits ahead of the
+/// head stay as they are.
 async fn update_to_head(
     ctx: &Context,
     repo: &Path,
@@ -437,9 +430,8 @@ async fn run(
     }
 }
 
-/// Refuse a manual PR review in a workspace at a commit whose HEAD moved past
-/// the PR head it was opened at: the review command reads the checkout, so
-/// it would review commits the PR does not have.
+/// The review command reads the checkout, so a HEAD that moved past the PR head
+/// would review commits the PR does not have.
 async fn ensure_at_pull_head(ctx: &Context, workspace: &SpaceSelector) -> Result<()> {
     let workspace = crate::client::workspaces::inspect(workspace.clone())
         .send(&ctx.paths)
@@ -457,8 +449,6 @@ async fn ensure_at_pull_head(ctx: &Context, workspace: &SpaceSelector) -> Result
     Ok(())
 }
 
-/// The agent that reviews without --agent: `[review] agent`, else
-/// `agent.default`.
 fn configured_reviewer(settings: &Effective) -> Option<Agent> {
     settings
         .review
@@ -467,8 +457,6 @@ fn configured_reviewer(settings: &Effective) -> Option<Agent> {
         .or_else(|| settings.agent.default.clone())
 }
 
-/// Queue a review by `agent`, else the configured reviewer, else one picked,
-/// with `model`.
 async fn queue(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -502,7 +490,6 @@ async fn queue(
 }
 
 impl Subject {
-    /// What the daemon reviews, with whether a PR review posts.
     fn target(self, post: bool) -> ReviewTarget {
         match self {
             Self::Changes => ReviewTarget::Workspace,
@@ -516,9 +503,8 @@ impl Subject {
     }
 }
 
-/// What a review by `reviewer` sends for the workspace a picker picks: an
-/// agent's review runs on the workspace's machine; the manual command,
-/// which a run without --agent may choose, runs here.
+/// An agent's review runs on the workspace's machine; the manual command runs
+/// here.
 pub(super) fn reviewing(reviewer: &Reviewer) -> Acting {
     match reviewer {
         Reviewer::Agent(_) => {

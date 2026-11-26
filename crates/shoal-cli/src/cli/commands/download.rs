@@ -1,6 +1,4 @@
-//! `shoal forge download`: an image or attached file on the forge of the
-//! repository of the workspace or registered checkout, or of another one,
-//! read with the login Shoal uses there.
+//! `shoal forge download`.
 use std::{io::Write as _, path::Path};
 
 use anyhow::{Context as _, Result};
@@ -35,7 +33,6 @@ pub(super) async fn download(ctx: &Context, args: DownloadArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// Write `bytes` to standard output as they are.
 fn write_stdout(bytes: &[u8]) -> Result<()> {
     let mut stdout = std::io::stdout().lock();
     stdout
@@ -44,7 +41,6 @@ fn write_stdout(bytes: &[u8]) -> Result<()> {
         .context("write the file to standard output")
 }
 
-/// Write `download` to `output`, relative to the current directory.
 fn save(output: &Path, download: Download) -> Result<Written> {
     let path =
         std::path::absolute(output).with_context(|| format!("resolve {}", output.display()))?;

@@ -1,4 +1,4 @@
-//! The `shoal approvals` picker: requests chosen to open or decide.
+//! The `shoal approvals` picker.
 use anyhow::{Context as _, Result, ensure};
 use sha2::{Digest as _, Sha256};
 
@@ -28,7 +28,6 @@ pub(super) async fn pick_and_open(
     show_request(ctx, Box::new(request)).await
 }
 
-/// Print the list's rows for the picker to reload after a decision.
 pub(in crate::cli::commands) async fn print_rows(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -59,8 +58,6 @@ pub(in crate::cli::commands) async fn decide_row(
     .await
 }
 
-/// Choose a request's row, with keys that decide the highlighted one
-/// without leaving the list.
 fn choose(
     ctx: &Context,
     space: Option<&SpaceSelector>,
@@ -81,7 +78,6 @@ fn choose(
     )
 }
 
-/// `key`, which makes `decision` through the decision worker.
 fn decision_key<'a>(
     ctx: &Context,
     key: ui::Key,
@@ -115,7 +111,6 @@ async fn displayed(ctx: &Context, row: &str) -> Result<ApprovalRequest> {
     Ok(*request)
 }
 
-/// Every request's row, pending ones first.
 fn listed_rows(mut requests: Vec<ApprovalRequest>) -> Result<Entries> {
     requests.sort_by_key(|request| request.status != DecisionStatus::Pending);
     picker_rows(&requests)
@@ -136,8 +131,6 @@ pub(super) async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
         .context("picker returned an unknown approval request")
 }
 
-/// One aligned row per request, by [`row_id`]: its number, its status once
-/// decided, the space, and what it asks for and why, cut to fit the picker.
 fn picker_rows(requests: &[ApprovalRequest]) -> Result<Entries> {
     let cells = requests
         .iter()
@@ -156,8 +149,6 @@ fn picker_rows(requests: &[ApprovalRequest]) -> Result<Entries> {
     Ok(ids.into_iter().zip(labels).collect())
 }
 
-/// A decided request's status: a mark for an approval or a denial, and the
-/// status's name otherwise.
 fn status_cell(status: DecisionStatus) -> ui::Cell {
     match status {
         DecisionStatus::Pending => (String::new(), None),

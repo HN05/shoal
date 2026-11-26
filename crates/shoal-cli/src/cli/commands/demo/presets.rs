@@ -1,6 +1,5 @@
-//! What a demo's preset and ports give it: reservations made before it
-//! starts, the variables its command and `open` receive, and how the preset
-//! shows it to the user.
+//! What a demo's preset and ports give it: reservations, variables, and how the
+//! preset shows the demo.
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result};
@@ -27,7 +26,6 @@ use shoal_protocol::space_names::SpaceSelector;
 /// shows the device the agent installed on.
 const SIM_LEASE: &str = "default";
 
-/// What the preset and ports provide the demo's command.
 #[derive(Debug, Default)]
 pub(super) struct Provided {
     pub environment: BTreeMap<String, String>,
@@ -37,7 +35,6 @@ pub(super) struct Provided {
 /// reported already.
 pub(super) type Declinable<T> = std::result::Result<T, i32>;
 
-/// Reserve the demo's ports, then set up what its preset provides.
 pub(super) async fn provide(
     ctx: &Context,
     workspace: &Workspace,
@@ -70,7 +67,6 @@ async fn reserve_ports(
     Ok(Ok(ports))
 }
 
-/// A serving demo's first port, as `PORT`.
 fn server(ports: &[PortReservation]) -> Provided {
     Provided {
         environment: ports
@@ -99,7 +95,6 @@ async fn simulator(
     }))
 }
 
-/// The configured ports, or for a serving demo one named after it.
 fn port_names(chosen: &Chosen) -> Vec<String> {
     match (&chosen.demo.ports, chosen.demo.preset) {
         (Some(ports), _) => ports.clone(),
@@ -193,7 +188,6 @@ pub(super) async fn start_viewer(paths: &CommandPaths, demo: &Running) -> Result
     Ok((opened.demo, port))
 }
 
-/// Bring the demo's device forward in Simulator on this machine's screen.
 fn show_simulator(launch: &Launch) -> Result<()> {
     let udid = launch
         .environment
@@ -206,8 +200,6 @@ fn show_simulator(launch: &Launch) -> Result<()> {
     Ok(())
 }
 
-/// What opening tells the user, given the `SSH_CONNECTION` the session
-/// has and the port a simulator demo's `viewer` serves on.
 fn instructions(
     preset: Preset,
     launch: &Launch,
@@ -240,7 +232,6 @@ fn instructions(
     })
 }
 
-/// `location`, then over SSH to `host` the command that forwards `port`.
 fn reach(location: String, port: u16, host: Option<&str>) -> Vec<String> {
     let mut lines = vec![location];
     if let Some(host) = host {

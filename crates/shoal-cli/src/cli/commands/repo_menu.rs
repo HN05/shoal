@@ -1,5 +1,5 @@
-//! The bare `shoal repo` invocation: an fzf menu over registered repositories
-//! that turns a selection plus key binding into an ordinary [`Command`].
+//! The bare `shoal repo` picker. A repository and key become an ordinary
+//! [`Command`].
 use anyhow::{Result, ensure};
 
 use crate::cli::{

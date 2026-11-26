@@ -1,5 +1,4 @@
-//! `shoal ci run`, `rerun`, `cancel` and `approve`: start a run, or act on
-//! one run or on the checks or runs on a PR's head.
+//! `shoal ci run`, `rerun`, `cancel` and `approve`.
 use anyhow::Result;
 use std::collections::BTreeMap;
 
@@ -43,8 +42,6 @@ pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// Apply `action` to the run `target` names, otherwise to the checks on its
-/// PR's head.
 pub(super) async fn act(
     ctx: &Context,
     target: Target,
@@ -75,8 +72,6 @@ pub(super) async fn act(
     }
 }
 
-/// Approve the run `subject` names, otherwise every waiting run on its PR's
-/// head.
 pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
     let approving = {
         let (run, pr) = (subject.run.clone(), subject.pr.clone());
@@ -98,7 +93,6 @@ async fn subject_target(ctx: &Context, subject: &Subject, acting: &Acting) -> Re
     select_item_target(ctx, space, repo, item, acting).await
 }
 
-/// One line per approved run.
 fn approved_text(approved: &RunsApproved) -> String {
     approved
         .approved
@@ -122,8 +116,6 @@ async fn act_on_run(
     Ok(0)
 }
 
-/// Act on the named checks on the head of the PR `item`, by default the
-/// linked one.
 async fn act_on_checks(
     ctx: &Context,
     target: RepoTarget,
@@ -153,9 +145,8 @@ fn outcome(action: CiAction) -> &'static str {
     }
 }
 
-/// How to find and follow a started run whose URL the forge does not
-/// report: `ci ls` lists only the repository of the workspace or checkout,
-/// while a workflow's URL may name another, and only a workspace links runs.
+/// `ci ls` lists only the repository of the workspace or checkout, while a
+/// workflow's URL may name another, and only a workspace links runs.
 fn follow_hint(context: Option<&ItemContext>, by_url: bool) -> &'static str {
     match (context, by_url) {
         (
@@ -175,8 +166,6 @@ fn follow_hint(context: Option<&ItemContext>, by_url: bool) -> &'static str {
     }
 }
 
-/// The run that started, its URL where the forge reports one, and whether
-/// the workspace links and watches it, or otherwise how to `follow` it.
 fn started_text(started: &StartedRun, follow: &str) -> String {
     let run = match &started.workflow {
         Some(workflow) => format!("{workflow} on {}", started.branch),

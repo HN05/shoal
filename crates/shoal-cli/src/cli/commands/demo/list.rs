@@ -1,4 +1,4 @@
-//! `shoal demo ls`: the running demos and the configured ones.
+//! `shoal demo ls`.
 use std::collections::BTreeMap;
 
 use anyhow::Result;
@@ -47,8 +47,6 @@ pub(super) async fn list(ctx: &Context, workspace: Option<SpaceSelector>) -> Res
     Ok(0)
 }
 
-/// One row per demo: its name, workspace, state and preset; configured demos
-/// that are not running follow the running ones.
 fn listing_rows(listing: &Listing, palette: Palette) -> Vec<String> {
     let preset = |preset: Option<Preset>| preset.map(Preset::as_str).unwrap_or_default().to_owned();
     let mut rows: Vec<[ui::Cell; 4]> = listing

@@ -1,5 +1,4 @@
-//! `shoal merge`: merge a space's work, through its open PR on the forge or
-//! a workspace's branch locally into the default branch, or a PR it names.
+//! `shoal merge`.
 use crate::cli::ui::Acting;
 use anyhow::Result;
 
@@ -25,8 +24,8 @@ pub(super) async fn run(ctx: &Context, args: MergeArgs) -> Result<i32> {
     }
 }
 
-/// What merging as `args` ask sends for the space a picker picks; `None`
-/// where they conflict, which the merge refuses before any picker.
+/// `None` where the arguments conflict, which the merge refuses before any
+/// picker.
 pub(super) fn acting(args: &MergeArgs) -> Option<Acting> {
     Some(match args.merged().ok()? {
         Merged::Pr(item) => merging_pr(item, args),
@@ -34,8 +33,6 @@ pub(super) fn acting(args: &MergeArgs) -> Option<Acting> {
     })
 }
 
-/// What merging the PR `item` names, or the space's linked one, sends in
-/// the context of the space a picker picks.
 fn merging_pr(item: Option<ItemInput>, args: &MergeArgs) -> Acting {
     let action = pull::action(args).0;
     crate::cli::commands::items::in_context(move |target| {
@@ -43,8 +40,7 @@ fn merging_pr(item: Option<ItemInput>, args: &MergeArgs) -> Acting {
     })
 }
 
-/// What merging a space's work sends for the space a picker picks: a
-/// space without a PR merges in an operation on the machine that runs it,
+/// A space without a PR merges in an operation on the machine that runs it,
 /// into the default branch of that machine's checkout.
 fn merging_work() -> Acting {
     Acting::request(|workspace| {
@@ -56,8 +52,6 @@ fn merging_work() -> Acting {
     })
 }
 
-/// Merge the PR `item` names, or the space's linked one, in the repository
-/// `args` name.
 async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -> Result<i32> {
     let named = match &item {
         Some(item) => format!("PR {item}"),
@@ -70,8 +64,6 @@ async fn merge_named(ctx: &Context, args: &MergeArgs, item: Option<ItemInput>) -
     pull::merge(ctx, target, item, args).await
 }
 
-/// Merge the work of the space `args` name as the daemon decides: through
-/// its open PR, or a workspace's branch locally.
 async fn merge_work(ctx: &Context, args: &MergeArgs) -> Result<i32> {
     let merging = merging_work();
     let space = ui::select_space(

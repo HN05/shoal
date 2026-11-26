@@ -1,5 +1,4 @@
-//! `shoal hub ls` and `shoal hub revoke`: the hub's listener and members,
-//! and what `shoal status` says of the hub role.
+//! `shoal hub ls` and `shoal hub revoke`.
 use anyhow::Result;
 use shoal_protocol::hub::{HubRole, Listener, Member, Overview, Revoked};
 
@@ -12,7 +11,6 @@ use crate::{
     time::UnixTime,
 };
 
-/// List the hub's listener and members.
 pub(super) async fn list(ctx: &Context) -> Result<i32> {
     let overview = crate::client::hub::members(&ctx.paths).await?;
     ctx.show(&overview, |overview| {
@@ -65,7 +63,6 @@ fn member_rows(overview: &Overview, palette: Palette) -> Vec<String> {
     ui::aligned(rows, palette)
 }
 
-/// Whether `member` is connected, the hub, or when it was last seen.
 fn state(member: &Member, now: UnixTime) -> (String, Style) {
     match (member.hub, member.connected, member.last_seen) {
         (true, _, _) => ("hub".into(), Style::Success),
@@ -75,8 +72,6 @@ fn state(member: &Member, now: UnixTime) -> (String, Style) {
     }
 }
 
-/// Since when `member`'s user paused it, as of `now`, as its last report
-/// says; empty while it is not paused.
 fn paused(member: &Member, now: UnixTime) -> String {
     let since = (member.capacity.as_ref()).and_then(|capacity| capacity.paused);
     since
@@ -84,8 +79,8 @@ fn paused(member: &Member, now: UnixTime) -> String {
         .unwrap_or_default()
 }
 
-/// Revoke a member's credential, naming the settings whose values it
-/// fetched from other machines, which it may still hold.
+/// The member may still hold the values it fetched of settings from other
+/// machines, so the report names them.
 pub(super) async fn revoke(ctx: &Context, member: String) -> Result<i32> {
     let revoked = crate::client::hub::revoke(&ctx.paths, member).await?;
     let message = revoked_message(&revoked, UnixTime::now());
@@ -93,8 +88,6 @@ pub(super) async fn revoke(ctx: &Context, member: String) -> Result<i32> {
     Ok(0)
 }
 
-/// What `hub revoke` says of `revoked` at `now`: the member, and each
-/// setting it fetched from another machine, to rotate.
 fn revoked_message(revoked: &Revoked, now: UnixTime) -> String {
     let member = &revoked.member;
     let mut message = format!(
@@ -118,7 +111,6 @@ fn revoked_message(revoked: &Revoked, now: UnixTime) -> String {
     message
 }
 
-/// What `shoal status` says of the hub role the daemon takes.
 pub(in crate::cli::commands) fn role_line(role: &HubRole) -> String {
     match role {
         HubRole::Hub {

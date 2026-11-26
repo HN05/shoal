@@ -1,6 +1,4 @@
-//! `shoal forge api`: any request to the forge API of the repository of the
-//! workspace or registered checkout, or of another one, for what no other
-//! command reads.
+//! `shoal forge api`.
 use std::{io::Read, path::Path};
 
 use anyhow::{Context as _, Result};
@@ -38,7 +36,6 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// The JSON body in the file at `path`, or on standard input for `-`.
 fn read_json(path: &Path) -> Result<Value> {
     let text = if path == Path::new("-") {
         let mut text = String::new();

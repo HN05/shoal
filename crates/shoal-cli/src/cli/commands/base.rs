@@ -1,4 +1,4 @@
-//! CLI access to a stacked workspace's base workspace.
+//! `shoal branch base`.
 use anyhow::{Result, bail, ensure};
 
 use crate::client::output::workspaces::Bases;
@@ -59,7 +59,6 @@ pub(super) async fn run(
 }
 
 enum Change {
-    /// Record this base, or one chosen when omitted.
     Set(Option<String>),
     Clear,
 }
@@ -84,7 +83,6 @@ async fn find<'a>(
     }
 }
 
-/// Choose another workspace of the same repository as the base.
 async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
     let workspaces = crate::client::spaces::list(&ctx.paths)
         .await?
@@ -110,7 +108,6 @@ async fn pick(ctx: &Context, selector: &SpaceSelector) -> Result<String> {
     )
 }
 
-/// The base and stacked workspaces, when the workspace has any.
 pub(super) fn render(workspace: &Workspace) {
     if let Some(base) = &workspace.base_workspace {
         outln!("Base workspace: {}", describe(base));
@@ -141,8 +138,7 @@ pub(super) fn describe(workspace: &WorkspaceRef) -> String {
     }
 }
 
-/// What `command` sends for the workspace a picker picks: a base to
-/// record or clear, or without one a read of it.
+/// A base to record or clear, or without one a read of it.
 pub(super) fn basing(command: Option<&BaseCommand>) -> Acting {
     match command {
         Some(BaseCommand::Set { .. }) => {

@@ -1,4 +1,3 @@
-//! Lifecycle commands: the request each sends for the space it acts on.
 use crate::cli::{
     args::lifecycle::{LifecycleCommand, StopArgs},
     commands::{spaces, stop, transfer, turns},
@@ -6,7 +5,6 @@ use crate::cli::{
 };
 use shoal_protocol::processes::Selection;
 
-/// What a lifecycle command sends for the space it acts on.
 pub(super) fn acting(command: &LifecycleCommand) -> Option<Acting> {
     Some(match command {
         LifecycleCommand::Stop(StopArgs {

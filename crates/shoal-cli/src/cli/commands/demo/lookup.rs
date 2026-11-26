@@ -12,7 +12,6 @@ use crate::{
 use shoal_protocol::demos::Running;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The running demo `name` of the workspace given or chosen.
 pub(super) async fn named(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
@@ -47,8 +46,6 @@ pub(super) fn find(
     }
 }
 
-/// The workspace whose demos to show: the one named, the current one, a
-/// workspace process's own, or `None` for every workspace.
 pub(super) async fn scope(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
@@ -87,9 +84,8 @@ pub(super) async fn running(ctx: &Context, workspace: Option<&Workspace>) -> Res
     .await
 }
 
-/// What finding a running demo reads of the workspace a picker picks; a
-/// demo's screen is read, and its keys typed, through this machine's
-/// terminal host.
+/// A demo's screen is read, and its keys typed, through this machine's terminal
+/// host.
 pub(super) fn looking() -> Acting {
     Acting::here(crate::client::workspaces::inspect)
 }

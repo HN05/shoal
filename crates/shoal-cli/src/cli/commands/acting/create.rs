@@ -1,11 +1,9 @@
-//! Commands that start, create or convert a space: the request each sends for the space it acts on.
 use crate::cli::{
     args::create::{ConvertCommand, CreateCommand},
     commands::{convert, copies, start},
     ui::Acting,
 };
 
-/// What a start, creation or conversion sends for the space it acts on.
 pub(super) fn acting(command: &CreateCommand) -> Option<Acting> {
     Some(match command {
         CreateCommand::Start(_) => start::starting(),

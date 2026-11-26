@@ -1,11 +1,9 @@
-//! Item link commands: the request each sends for the space it acts on.
 use crate::cli::{
     args::items::ItemsCommand,
     commands::{links, threads},
     ui::Acting,
 };
 
-/// What an item link command sends for the space it acts on.
 pub(super) fn acting(command: &ItemsCommand) -> Option<Acting> {
     match command {
         // A thread is linked by its number, and a review watched by its ID.

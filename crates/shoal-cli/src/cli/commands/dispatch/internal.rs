@@ -235,8 +235,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
     }
 }
 
-/// The place worker: carry out the plan `args` give in the place of the
-/// host they name that this process runs in, or in no place without one.
 async fn place_worker(mut ctx: Context, args: PlaceWorkerArgs) -> Result<i32> {
     let plan = serde_json::from_str(&args.plan).context("invalid place plan")?;
     if let Some(host) = args.host {

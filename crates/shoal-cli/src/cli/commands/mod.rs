@@ -1,5 +1,4 @@
-//! CLI dispatch. Domain handlers own requests, prompts, and rendering;
-//! daemon modules own lifecycle and allocation policy.
+//! The CLI's commands and how each runs.
 use crate::paths::PathsExt;
 mod absorb;
 mod acquisition;
@@ -146,8 +145,7 @@ impl<T> OverviewResultExt for WorkspaceOverviewResult<T> {
     }
 }
 
-/// Collect every workspace before reporting partial failures. Domains retain
-/// their successful JSON payload and resource-specific text rendering.
+/// Collect every workspace before reporting partial failures.
 async fn workspace_overviews<T: Output + serde::de::DeserializeOwned>(
     ctx: &Context,
     request: impl AsyncFn(&Workspace) -> Result<T>,
@@ -206,10 +204,8 @@ async fn collect_workspace_overviews<T>(
     overviews.into_iter().map(Option::unwrap).collect()
 }
 
-/// Subcommand path of an invocation that opens a menu; without a terminal its
-/// help is printed instead.
-/// The view the picker opens on for `command`: bare `shoal` lets it choose,
-/// and a listing names its own unless it prints. `None` runs the command.
+/// The view the picker opens on for `command`: bare `shoal` lets it choose, and
+/// a listing names its own unless it prints. `None` runs the command.
 fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu::View>> {
     match command {
         None => Some(None),
@@ -341,17 +337,14 @@ pub(crate) async fn run(cli: Cli, daemon: RunDaemon) -> Result<i32> {
     }
 }
 
-/// Run `command` once this process's permissions let it take what it does.
 async fn run_authorized(ctx: Context, command: Command, daemon: Daemon) -> Result<i32> {
     authorization::authorize(&ctx, &command).await?;
     dispatch(ctx, command, daemon).await
 }
 
-/// Run `command` through its group's dispatcher.
-///
-/// The group's future is built here and boxed, outside any poll: a debug
-/// build keeps every arm's future in the frame that builds it, which would
-/// otherwise sit on the main thread's stack beneath the whole command.
+/// The group's future is built here and boxed, outside any poll: a debug build
+/// keeps every arm's future in the frame that builds it, which would otherwise
+/// sit on the main thread's stack beneath the whole command.
 fn dispatch(
     ctx: Context,
     command: Command,

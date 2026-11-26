@@ -1,5 +1,4 @@
-//! The picker `shoal alert list` opens on a terminal: one row per alert,
-//! where a key binding chooses what to do with it.
+//! The picker `shoal alert list` opens on a terminal.
 use anyhow::{Context as _, Result};
 
 use super::{cells, withdraw};
@@ -24,7 +23,6 @@ const BINDINGS: &[(Key, &str, AlertAction)] = &[
     (Key::Ctrl('w'), "withdraw", AlertAction::Withdraw),
 ];
 
-/// Pick one of `alerts` and act on it.
 pub(super) async fn choose(ctx: &Context, alerts: &[Alert]) -> Result<i32> {
     if alerts.is_empty() {
         outln!("No alerts");
@@ -46,7 +44,6 @@ pub(super) async fn choose(ctx: &Context, alerts: &[Alert]) -> Result<i32> {
     }
 }
 
-/// One row per alert, newest first, cut to fit the picker.
 fn entries(alerts: &[Alert]) -> ui::Entries {
     let now = crate::time::UnixTime::now();
     let newest: Vec<&Alert> = alerts.iter().rev().collect();

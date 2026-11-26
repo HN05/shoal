@@ -1,11 +1,9 @@
-//! `shoal hub join` and `shoal hub leave`: this machine's membership of
-//! the hub.
+//! `shoal hub join` and `shoal hub leave`.
 use anyhow::{Context as _, Result};
 use shoal_protocol::protocol::JoinVia;
 
 use crate::cli::{args::hub::JoinArgs, context::Context, output::Style};
 
-/// Join the hub, by a pairing code or through a command.
 pub(super) async fn join(ctx: &Context, args: JoinArgs) -> Result<i32> {
     let JoinArgs {
         code,
@@ -26,14 +24,12 @@ pub(super) async fn join(ctx: &Context, args: JoinArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// The words of `command`, split as a shell would.
 fn command_words(command: &str) -> Result<Vec<String>> {
     let words = shlex::split(command).with_context(|| format!("unbalanced quotes in {command}"))?;
     anyhow::ensure!(!words.is_empty(), "--connect names no command");
     Ok(words)
 }
 
-/// Leave the hub.
 pub(super) async fn leave(ctx: &Context) -> Result<i32> {
     let left = crate::client::hub::leave(&ctx.paths).await?;
     let message = match left.revoked {

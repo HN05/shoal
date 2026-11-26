@@ -1,7 +1,4 @@
-//! `shoal send <thread>`: post in a thread, optionally offering a surface,
-//! the other side's interface to pick or fill in, or answering one of its
-//! actions, wait for the other side's next post, or mark the agent's turn
-//! to post its final message instead.
+//! `shoal send <thread>`.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
@@ -24,7 +21,6 @@ use crate::{
     },
 };
 
-/// A post `shoal send` makes in a thread.
 pub(in crate::cli) struct Posting {
     pub(in crate::cli) thread: ThreadNumber,
     /// The text given inline; none with --body-file, --action or --in-chat.
@@ -71,8 +67,6 @@ pub(in crate::cli) async fn post(ctx: &Context, mut posting: Posting) -> Result<
     print_reply(ctx, &replied, after).await
 }
 
-/// What `posting` says: its text, read from `--body-file` when it names
-/// one, the surface it offers and the action it answers.
 fn new_post(posting: Posting) -> Result<NewPost> {
     let Posting {
         text,
@@ -91,14 +85,11 @@ fn new_post(posting: Posting) -> Result<NewPost> {
     })
 }
 
-/// The text of the file `path`, without its trailing newline.
 fn read_text(path: &std::path::Path) -> Result<String> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     Ok(text.trim_end().to_owned())
 }
 
-/// The surface `options` offer: the file `--ui` names, or the one the
-/// `--choice` shorthand builds.
 fn offered(options: &PostArgs) -> Result<Option<Surface>> {
     if let Some(path) = &options.ui {
         let surface = Surface::parse(&read_text(path)?);
@@ -113,8 +104,7 @@ fn offered(options: &PostArgs) -> Result<Option<Surface>> {
     Ok(Some(Surface::choices(&options.choices, recommend, reason)))
 }
 
-/// The answer that takes the action `action` with `values`, a key given
-/// more than once selecting each of its values.
+/// A key given more than once selects each of its values.
 fn answering(action: String, values: Vec<(String, String)>) -> Answer {
     let mut given = serde_json::Map::new();
     for (key, value) in values {
@@ -135,8 +125,6 @@ fn answering(action: String, values: Vec<(String, String)>) -> Answer {
     }
 }
 
-/// Mark the agent's turn as posting its final message in the thread
-/// `number`.
 pub(in crate::cli) async fn post_in_chat(ctx: &Context, number: ThreadNumber) -> Result<i32> {
     super::refuse_workspace_processes(ctx)?;
     let space = ui::select_space(ctx, None, Fallback::OwnSpace).await?;
@@ -144,17 +132,14 @@ pub(in crate::cli) async fn post_in_chat(ctx: &Context, number: ThreadNumber) ->
     crate::cli::commands::send::in_chat::show(ctx, &marked)
 }
 
-/// Continue an earlier `send --wait` after the post `after` of the thread
-/// `number`.
 async fn resume(ctx: &Context, number: ThreadNumber, after: i64) -> Result<i32> {
     let thread = threads::show(&ctx.paths, number).await?;
     let replied = await_reply(ctx, &thread, after, true).await?;
     print_reply(ctx, &replied, after).await
 }
 
-/// `thread` once the other side posts after the post `after`, or it is
-/// resolved. Waits across daemon restarts; after an upgrade, the
-/// installed release resumes the wait.
+/// Waits across daemon restarts; after an upgrade, the installed release
+/// resumes the wait.
 async fn await_reply(
     ctx: &Context,
     thread: &Thread,
@@ -169,14 +154,11 @@ async fn await_reply(
         .map_err(|error| executable.resume_or(error, || resume_arguments(after)))
 }
 
-/// This command's arguments, resuming the wait after the post `after`
-/// without posting again.
 fn resume_arguments(after: i64) -> Vec<std::ffi::OsString> {
     replace_option(arguments(), "--resume", &after.to_string())
 }
 
-/// Print the other side's posts after the post `after`, or how the thread
-/// was settled; printed here, their alerts need not reach the agent again.
+/// Printed here, their alerts need not reach the agent again.
 async fn print_reply(ctx: &Context, thread: &Thread, after: i64) -> Result<i32> {
     let replies: Vec<&Post> = (thread.replies_to(after).into_iter().flatten()).collect();
     let text = match (&replies[..], &thread.resolution) {
@@ -199,8 +181,6 @@ async fn print_reply(ctx: &Context, thread: &Thread, after: i64) -> Result<i32> 
     Ok(0)
 }
 
-/// A reply of `thread` as `send --wait` prints it: who sent it, its text,
-/// and what it offers or answers.
 fn reply_text(thread: &Thread, post: &Post) -> String {
     let interaction = thread.interaction_lines(post).into_iter();
     std::iter::once(format!("{}: {}", post.author(), post.post.text))

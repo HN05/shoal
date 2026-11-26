@@ -1,4 +1,4 @@
-//! `shoal edit`: opening a workspace in the editor.
+//! `shoal edit`.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
@@ -13,7 +13,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The configured command `shoal edit` runs instead of `$VISUAL` or `$EDITOR`.
 const EDIT: &str = "edit";
 
 pub(in crate::cli::commands) async fn edit(
@@ -42,8 +41,7 @@ pub(in crate::cli::commands) async fn edit(
     shoal_workers::execution::run_command(&ctx.paths, workspace, command).await
 }
 
-/// The first set of `$VISUAL` and `$EDITOR` as an argument array: split on
-/// whitespace, as in `code --wait`, unless it is not UTF-8.
+/// Split on whitespace, as in `code --wait`, unless it is not UTF-8.
 fn editor(values: [Option<OsString>; 2]) -> Result<Vec<OsString>> {
     let value = values
         .into_iter()
@@ -56,8 +54,6 @@ fn editor(values: [Option<OsString>; 2]) -> Result<Vec<OsString>> {
     })
 }
 
-/// What editing in a workspace sends for the workspace a picker picks: the
-/// editor's run there, on this machine.
 pub(super) fn editing() -> Acting {
     Acting::here(crate::client::executions::command_run)
 }

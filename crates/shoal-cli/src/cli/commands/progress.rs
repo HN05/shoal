@@ -1,5 +1,4 @@
-//! `shoal progress`: show or set where a space's agent is in its work, as a
-//! status line, the steps of its plan and what blocks it.
+//! `shoal progress`.
 use std::io::Read;
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -17,7 +16,6 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-/// The blocker `shoal progress` adds or removes.
 pub(super) struct BlockerFlags {
     pub add: Option<String>,
     pub reason: Option<String>,
@@ -26,10 +24,6 @@ pub(super) struct BlockerFlags {
     pub step: Option<usize>,
 }
 
-/// Set the status line to `status`, which clears it when empty, with
-/// `steps` replace the steps with the task list on stdin, and add or remove
-/// the blocker `blocker` names; with none of them, show the progress of the
-/// space `space` names, else the current one.
 pub(super) async fn run(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -52,9 +46,8 @@ pub(super) async fn run(
     Ok(0)
 }
 
-/// The changes `status` and `steps` ask for, the steps first. A status
-/// line that is not a valid line is refused before anything is read,
-/// picked or changed.
+/// An invalid status line is refused before anything is read, picked or
+/// changed.
 fn changes(status: Option<String>, steps: bool) -> Result<Vec<ProgressChange>> {
     if let Some(status) = status.as_deref().filter(|status| !status.is_empty()) {
         shoal_protocol::progress::validate_line("status lines", status)?;
@@ -71,8 +64,8 @@ fn changes(status: Option<String>, steps: bool) -> Result<Vec<ProgressChange>> {
     Ok(changes)
 }
 
-/// The blocker change `flags` ask for, refused before anything is picked
-/// or changed when its blocker or reason is not valid.
+/// An invalid blocker or reason is refused before anything is picked or
+/// changed.
 fn blocker_change(flags: BlockerFlags) -> Result<Option<ProgressChange>> {
     let BlockerFlags {
         add,
@@ -104,7 +97,6 @@ fn blocker_change(flags: BlockerFlags) -> Result<Option<ProgressChange>> {
     })
 }
 
-/// Apply each of `changes` in order, returning the progress after the last.
 async fn apply(
     ctx: &Context,
     space: SpaceSelector,
@@ -119,7 +111,6 @@ async fn apply(
     Ok(progress)
 }
 
-/// The steps of the markdown task list on stdin.
 fn read_steps() -> Result<Vec<PlanStep>> {
     let mut text = String::new();
     std::io::stdin()
@@ -128,8 +119,8 @@ fn read_steps() -> Result<Vec<PlanStep>> {
     task_list(&text)
 }
 
-/// The steps of a markdown task list, one `- [ ] name` or `- [x] name` per
-/// line; blank lines are skipped and any other line is refused.
+/// One `- [ ] name` or `- [x] name` per line; blank lines are skipped and any
+/// other line is refused.
 pub(in crate::cli) fn task_list(text: &str) -> Result<Vec<PlanStep>> {
     text.lines()
         .enumerate()
@@ -138,7 +129,6 @@ pub(in crate::cli) fn task_list(text: &str) -> Result<Vec<PlanStep>> {
         .collect()
 }
 
-/// The step one task list line names.
 fn task(line: &str) -> Result<PlanStep> {
     let item = line.trim_start();
     let item = (item.strip_prefix("- ").or_else(|| item.strip_prefix("* ")))
@@ -157,8 +147,6 @@ fn task(line: &str) -> Result<PlanStep> {
     })
 }
 
-/// `progress` as `shoal progress` shows it: the status line, then the
-/// numbered steps.
 fn render(progress: Option<&Progress>, palette: Palette) {
     let Some(progress) = progress else {
         outln!("No progress reported.");
@@ -175,8 +163,6 @@ fn render(progress: Option<&Progress>, palette: Palette) {
     }
 }
 
-/// `progress` as a space's status shows it: how many steps are done, then
-/// the status line and the numbered steps.
 pub(in crate::cli) fn render_section(progress: Option<&Progress>, palette: Palette) {
     let Some(progress) = progress else {
         outln!("Progress:      none");
@@ -194,8 +180,6 @@ pub(in crate::cli) fn render_section(progress: Option<&Progress>, palette: Palet
     }
 }
 
-/// How many of the steps are done, as `3/5 steps`, and `blocked` when the
-/// space is.
 fn summary(progress: &Progress) -> String {
     let steps = match progress.steps.len() {
         0 => "no steps".to_owned(),
@@ -207,7 +191,6 @@ fn summary(progress: &Progress) -> String {
     }
 }
 
-/// Each blocker as `Blocked by issue <url>: reason`, with a failed lookup.
 fn blocker_lines(blockers: &[RecordedBlocker]) -> Vec<String> {
     (blockers.iter())
         .map(|blocker| {
@@ -220,8 +203,6 @@ fn blocker_lines(blockers: &[RecordedBlocker]) -> Vec<String> {
         .collect()
 }
 
-/// Each step as `2. [x] name`, the current one marked, each followed by
-/// what blocks it.
 fn step_lines(progress: &Progress, palette: Palette) -> Vec<String> {
     let width = progress.steps.len().to_string().len();
     let mut lines = Vec::new();
@@ -240,8 +221,6 @@ fn step_lines(progress: &Progress, palette: Palette) -> Vec<String> {
     lines
 }
 
-/// What reporting progress sends for the space a picker picks: a change
-/// where it `changes` a status, the steps or a blocker, else a read of it.
 pub(super) fn reporting(changes: bool) -> Acting {
     match changes {
         true => Acting::request(|space| progress::set(space, ProgressChange::Status(None))),

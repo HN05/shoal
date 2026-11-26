@@ -1,6 +1,4 @@
-//! `shoal pr revert`: open a PR that undoes a merged one for a workspace or
-//! chat, through the forge where it reverts PRs, and otherwise from a new
-//! workspace whose branch reverts the merge with `git revert`.
+//! `shoal pr revert`.
 use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result};
 use shoal_ids::repository_ids::RepositoryId;
@@ -93,7 +91,6 @@ enum Reverting {
 }
 
 impl Reverting {
-    /// The workspace or running chat `space` names.
     async fn of(ctx: &Context, space: SpaceSelector) -> Result<Self> {
         match crate::client::spaces::present_space(&ctx.paths, &space)
             .await?
@@ -115,7 +112,6 @@ impl Reverting {
         }
     }
 
-    /// Whether the forge of the space's repository reverts PRs.
     async fn forge_reverts(&self, ctx: &Context) -> Result<bool> {
         let context = ItemContext::space(SpaceSelector::id(self.id()));
         let capabilities = client::capabilities(&ctx.paths, context.into()).await?;
@@ -123,7 +119,6 @@ impl Reverting {
     }
 }
 
-/// What the revert is opened with, its files checked and its body read.
 fn revert_args(args: RevertArgs) -> Result<PullOptions> {
     let (body, attachments) = read_content(args.body, args.files)?;
     Ok(PullOptions {
@@ -139,11 +134,8 @@ fn revert_args(args: RevertArgs) -> Result<PullOptions> {
     })
 }
 
-/// A new workspace on branch `revert-<number>` from the remote's latest
-/// base branch of the merged PR, set up as any new workspace is: a child of
-/// a workspace process's own workspace, since that is the only kind it may
-/// create, and one a chat opens when the revert comes from a chat; `None`
-/// when setup failed.
+/// A workspace process may create only a child of its own workspace, so the
+/// revert workspace goes there. `None` when setup failed.
 async fn revert_workspace(
     ctx: &Context,
     from: &Reverting,
@@ -173,8 +165,6 @@ async fn revert_workspace(
     create::set_up(ctx, preparing).await
 }
 
-/// Start a new workspace `name` of `repository` on `base`, opened by
-/// `chat`, if any, and follow its preparation.
 async fn start_workspace(
     ctx: &Context,
     repository: RepositoryId,
@@ -190,10 +180,8 @@ async fn start_workspace(
     preparation::create(&ctx.paths, new, crate::env::without_secrets()).await
 }
 
-/// Revert the merge on the workspace's branch as tracked commands of that
-/// workspace, once its worktree is verified, since setup ran in it.
-/// A revert that conflicts needs a person or an agent to resolve, so it is
-/// abandoned.
+/// Setup ran in the worktree, so it is verified first. A revert that conflicts
+/// needs a person or an agent to resolve, so it is abandoned.
 async fn revert_merge(
     ctx: &Context,
     workspace: &Workspace,
@@ -238,8 +226,7 @@ async fn remove(ctx: &Context, workspace: &Workspace) -> Result<()> {
     .map(drop)
 }
 
-/// Record the revert workspace's assignment as done, so cleanup removes it
-/// once its PR merges.
+/// Recorded as done, so that cleanup removes it once its PR merges.
 async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let space = workspace.id.clone();
     let done = shoal_protocol::assignments::Done {
@@ -275,8 +262,8 @@ fn report(ctx: &Context, outcome: OpenOutcome, workspace: Option<&Workspace>) ->
     Ok(0)
 }
 
-/// What reverting a PR reads of the space a picker picks: a revert is
-/// opened from a worktree it verifies here, or a chat's checkout here.
+/// A revert is opened from a worktree it verifies here, or a chat's checkout
+/// here.
 pub(in crate::cli::commands) fn reverting() -> Acting {
     Acting::here(crate::client::spaces::status)
 }

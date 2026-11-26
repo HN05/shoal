@@ -1,5 +1,5 @@
-//! Branches Shoal kept when it removed their workspaces, because only they
-//! have some commits, and deleting them on request.
+//! Branches Shoal kept when it removed their workspaces, because only they have
+//! some commits.
 use anyhow::{Result, bail, ensure};
 
 use crate::{
@@ -7,7 +7,6 @@ use crate::{
     model::{BranchTarget, KeptBranch},
 };
 
-/// The kept branches, only those of the repository `repo` selects.
 pub(super) async fn kept(ctx: &Context, repo: Option<&str>) -> Result<Vec<KeptBranch>> {
     let repository = repo.map(str::to_owned);
     crate::client::repositories::kept_branches(&ctx.paths, repository).await
@@ -61,7 +60,6 @@ pub(super) async fn delete(ctx: &Context, selected: &[KeptBranch]) -> Result<Vec
     crate::client::repositories::delete_kept_branches(&ctx.paths, targets).await
 }
 
-/// The kept branches `names` name, each in exactly one repository.
 pub(super) fn select_named(kept: Vec<KeptBranch>, names: &[String]) -> Result<Vec<KeptBranch>> {
     let mut selected = Vec::new();
     for name in names {

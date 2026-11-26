@@ -26,7 +26,6 @@ use shoal_protocol::space_names::SpaceSelector;
 /// network access.
 const REFERENCE: &str = include_str!("configuration/reference.md");
 
-/// `KEY VALUE` pairs as the changes they set.
 pub(super) fn sets(assignments: Vec<String>) -> Result<Vec<Change>> {
     ensure!(
         assignments.len().is_multiple_of(2),
@@ -49,7 +48,6 @@ pub(super) fn unsets(keys: Vec<String>) -> Vec<Change> {
         .collect()
 }
 
-/// The config file a `config set` or `unset` edits.
 pub(super) enum EditedFile {
     Global,
     Shared,
@@ -86,8 +84,6 @@ pub(super) async fn edit(ctx: &Context, changes: Vec<Change>, file: EditedFile) 
     Ok(0)
 }
 
-/// Save `changes` to this machine's global file, as the caller's `admin`
-/// permission allows.
 async fn edit_global(ctx: &Context, changes: &[Change]) -> Result<(PathBuf, Option<PathBuf>)> {
     ensure_edits_held(ctx, changes).await?;
     let admin = crate::config::permissions::PermissionKey::Admin;
@@ -95,9 +91,8 @@ async fn edit_global(ctx: &Context, changes: &[Change]) -> Result<(PathBuf, Opti
     crate::config::Config::edit(&ctx.paths, changes)
 }
 
-/// Edit a repository's local config through the daemon, which holds off
-/// moves and removal; it reads the file on each request, so nothing
-/// reloads.
+/// The daemon holds off moves and removal while it edits. It reads the file on
+/// each request, so nothing reloads.
 async fn edit_local(ctx: &Context, changes: Vec<Change>, repository: String) -> Result<i32> {
     let repository = crate::cli::ui::repository_selector(repository)?;
     let edit =
@@ -224,9 +219,6 @@ async fn target(ctx: &Context, explicit: Option<SpaceSelector>) -> Result<Config
     })
 }
 
-/// Every option with its winning layer, and warnings for retired settings
-/// and an ignored worktree file: the daemon's repository layers under the
-/// global file read now.
 async fn report(paths: &CommandPaths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
     let layers = crate::client::config::config_layers(paths, target).await?;
     let stack = Stack::new(&Config::load_with_templates(paths)?, &layers)?;
@@ -238,8 +230,6 @@ async fn report(paths: &CommandPaths, target: ConfigTarget) -> Result<(Vec<Entry
     Ok((stack.report()?, warnings))
 }
 
-/// What reading a workspace's configuration sends for the workspace a
-/// picker picks.
 pub(super) fn reading() -> Acting {
     Acting::request(|space| crate::client::config::layered_config(ConfigTarget::Space(space)))
 }

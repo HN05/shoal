@@ -1,4 +1,4 @@
-//! Choose and save repository display names.
+//! `shoal repo rename`.
 use anyhow::Result;
 
 use super::selection::chosen;

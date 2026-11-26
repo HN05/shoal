@@ -1,6 +1,4 @@
-//! `shoal review start` and `submit`: the caller's own review of a
-//! workspace's work, whose comments are the threads it opens towards that
-//! workspace until it submits them together.
+//! `shoal review start` and `submit`.
 use anyhow::{Result, bail};
 
 use super::super::items::content::read_body;
@@ -10,8 +8,6 @@ use crate::client::reviews;
 use crate::{cli::context::Context, reviews::Review};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Start the caller's review of the workspace `space` names, else the
-/// current one or one picked.
 pub(super) async fn start(ctx: &Context, space: Option<SpaceSelector>) -> Result<i32> {
     let starting = starting();
     let workspace = ui::select_workspace(ctx, space, Fallback::CurrentDirectory(&starting));
@@ -27,14 +23,10 @@ pub(super) async fn start(ctx: &Context, space: Option<SpaceSelector>) -> Result
     Ok(0)
 }
 
-/// What starting a review sends for the space a picker picks.
 pub(super) fn starting() -> Acting {
     Acting::request(reviews::start)
 }
 
-/// Submit the caller's pending review of the workspace `space` names, else
-/// its only one, with the summary `body` gives, approving the work when
-/// `approve`.
 pub(super) async fn submit(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -85,7 +77,6 @@ pub(super) async fn only_pending(ctx: &Context) -> Result<Option<SpaceSelector>>
     }
 }
 
-/// The workspaces `reviews` are of, as a refusal lists them.
 fn names(reviews: &[Review]) -> String {
     (reviews.iter())
         .map(|review| format!("{} (review {})", review.workspace, review.id))

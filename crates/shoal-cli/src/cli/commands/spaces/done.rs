@@ -1,4 +1,4 @@
-//! Recording a space's work as done, and withdrawing that.
+//! `shoal done` and `shoal done --undo`.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{assignments::Done, model::ByKind};
@@ -11,8 +11,6 @@ use crate::client::assignments;
 use crate::client::output::spaces::{self, Withdrawn};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The space `space` names, else the current chat or workspace, else a
-/// picked one: a running chat's ID, or else a workspace.
 async fn selected(ctx: &Context, space: Option<SpaceSelector>) -> Result<Selected> {
     let marking = marking();
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory(&marking)).await?;
@@ -48,7 +46,6 @@ pub(in crate::cli::commands) async fn undone(
     Ok(0)
 }
 
-/// Record `done`, which stops a workspace's demos unless it keeps them.
 pub(in crate::cli::commands) async fn done(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -72,14 +69,11 @@ pub(in crate::cli::commands) async fn done(
     Ok(0)
 }
 
-/// What recording a space's completion sends for the space a picker picks;
-/// how it completes decides nothing of which spaces it reaches.
+/// How it completes decides nothing of which spaces it reaches.
 pub(in crate::cli::commands) fn marking() -> Acting {
     Acting::request(|space| assignments::mark_done(space, Done::default()))
 }
 
-/// What withdrawing a space's completion sends for the space a picker
-/// picks.
 pub(in crate::cli::commands) fn undoing() -> Acting {
     Acting::request(assignments::undo_done)
 }

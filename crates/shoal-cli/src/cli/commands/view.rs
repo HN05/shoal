@@ -1,4 +1,4 @@
-//! Show issues, PRs and linked CI runs as the forge reports them.
+//! `shoal view`.
 use anyhow::{Result, ensure};
 
 use super::{ci, links};
@@ -21,8 +21,6 @@ use crate::{
     protocol::{ItemContext, RepoTarget},
 };
 
-/// Show or open what `args` selects: one CI run as `ci` reads it, otherwise
-/// issues, PRs and linked runs.
 pub(super) async fn show(ctx: &Context, args: ViewArgs) -> Result<i32> {
     let job = args.job.map(JobRef::Name);
     if args.items.selects_ci() && (args.items.item.is_some() || job.is_some()) {
@@ -94,7 +92,6 @@ impl ShownExt for Shown {
     }
 }
 
-/// The items one after another, separated by a blank line.
 fn render_views(views: &[Shown], json: bool) {
     let palette = Palette::stdout(json);
     let emoji = output::stdout_shows_emoji(json);
@@ -125,8 +122,8 @@ fn render_views(views: &[Shown], json: bool) {
     }
 }
 
-/// Open the selected items in the browser and print each URL, also when
-/// the opener fails, for a terminal elsewhere; workspace processes cannot.
+/// Each URL is printed too, also when the opener fails, for a terminal
+/// elsewhere. Workspace processes cannot.
 async fn open(ctx: &Context, items: ItemArgs, repo: Option<String>) -> Result<i32> {
     may_open_browser(ctx)?;
     let (target, selection) = links::select_in_context(ctx, items, repo).await?;
@@ -139,7 +136,6 @@ async fn open(ctx: &Context, items: ItemArgs, repo: Option<String>) -> Result<i3
     )
 }
 
-/// Open `urls` in the browser and print each, also when the opener fails.
 pub(super) fn open_urls(ctx: &Context, urls: Vec<String>) -> Result<i32> {
     let failed = urls.iter().find_map(|url| desktop::open(url).err());
     ctx.show(&urls, |urls| {
@@ -159,7 +155,6 @@ pub(super) fn may_open_browser(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-/// The log of the selected PR's `check`.
 async fn show_log(
     ctx: &Context,
     target: RepoTarget,
@@ -219,7 +214,6 @@ fn render(item: &ShownItem, palette: Palette, emoji: bool) {
     }
 }
 
-/// The relations under which the space links an item, when it does.
 pub(super) fn render_relations(relations: &[Relation]) {
     if !relations.is_empty() {
         let names: Vec<_> = relations.iter().map(|relation| relation.as_str()).collect();
@@ -355,8 +349,6 @@ fn render_reactions(reactions: &[Reaction], indent: usize, emoji: bool) {
     );
 }
 
-/// Each reaction as its emoji where `emoji` allows and it has one, otherwise
-/// by name, with its count.
 fn reactions_text(reactions: &[Reaction], emoji: bool) -> String {
     let reactions: Vec<String> = reactions
         .iter()

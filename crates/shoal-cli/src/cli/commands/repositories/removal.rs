@@ -1,5 +1,4 @@
-//! Remove repositories, here or on other joined machines, once the user
-//! confirms what each machine loses.
+//! `shoal repo rm`, here or on other joined machines.
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_client::output::repositories::{RemovedRepository, RepositoryElsewhere};
 
@@ -30,8 +29,6 @@ pub(super) async fn remove(
     Ok(0)
 }
 
-/// Where removing the repository `named`, or the current or a picked one,
-/// acts on `machines`.
 async fn targets(ctx: &Context, named: Option<String>, machines: Machines) -> Result<Vec<Target>> {
     let here = crate::client::repositories::list(&ctx.paths).await?;
     let Named {
@@ -75,16 +72,11 @@ async fn targets(ctx: &Context, named: Option<String>, machines: Machines) -> Re
     }
 }
 
-/// What a removal that names no repository removes.
 enum Chosen {
-    /// The repository this text names here.
     Named(String),
-    /// Another machine's, which the user picked.
     Elsewhere(RepositoryElsewhere),
 }
 
-/// The current checkout's or workspace's repository, else one the user
-/// picks among this machine's and then the other machines'.
 async fn chosen(ctx: &Context, here: &[Repository]) -> Result<Chosen> {
     if let Some(id) = super::super::issues::current_repository_id(ctx, here).await? {
         return Ok(Chosen::Named(id.to_string()));
@@ -106,8 +98,6 @@ async fn chosen(ctx: &Context, here: &[Repository]) -> Result<Chosen> {
     )
 }
 
-/// The other machine's registration among `candidates`, each of which
-/// registers `named`, that the user picks.
 fn pick(
     ctx: &Context,
     named: &str,
@@ -142,20 +132,14 @@ fn label(other: &RepositoryElsewhere) -> String {
     format!("{}  {}  on {}", other.name(), other.source(), other.machine)
 }
 
-/// What a removal resolves before it asks the hub.
 struct Named<'a> {
-    /// The text that names the repository.
     named: String,
-    /// This machine's repository of it, if any.
     local: Option<&'a Repository>,
     /// Why this machine has none, which stands when no machine has it.
     not_here: Option<anyhow::Error>,
-    /// The machines it acts on.
     machines: Machines,
 }
 
-/// `named`, with the repository among `here` it names, or why none is,
-/// when it names none here, on `machines`.
 async fn named_here(here: &[Repository], named: String, machines: Machines) -> Result<Named<'_>> {
     let selector = ui::repository_selector(named.clone())?;
     match repository::select(here, selector).await {
@@ -193,8 +177,6 @@ async fn picked(here: &[Repository], other: RepositoryElsewhere, machines: Machi
     }
 }
 
-/// The repository among `here` of `origin`, a key as [`identity`] reads
-/// it; none for no origin.
 async fn of_origin<'a>(here: &'a [Repository], origin: Option<&str>) -> Option<&'a Repository> {
     let origin = origin?;
     for local in here {
@@ -213,8 +195,7 @@ async fn identity(local: &Repository) -> Option<String> {
         .flatten()
 }
 
-/// Have the user confirm removing `targets`, unless `confirmed`; refused
-/// without asking where nobody can answer.
+/// Refused without asking where nobody can answer.
 async fn confirm(ctx: &Context, targets: &[Target], confirmed: bool) -> Result<()> {
     if confirmed {
         return Ok(());
@@ -230,9 +211,8 @@ async fn confirm(ctx: &Context, targets: &[Target], confirmed: bool) -> Result<(
     Ok(())
 }
 
-/// Remove each of `targets` in turn, this machine's last, so another
-/// machine that refuses its removal stops it before anything here goes;
-/// one that fails names those removed before it.
+/// This machine's removal goes last, so another machine that refuses its
+/// removal stops it before anything here goes.
 async fn remove_each(ctx: &Context, mut targets: Vec<Target>) -> Result<Vec<RemovedRepository>> {
     targets.sort_by_key(|target| matches!(target, Target::Here(_)));
     let mut removed: Vec<RemovedRepository> = Vec::new();
@@ -249,7 +229,6 @@ async fn remove_each(ctx: &Context, mut targets: Vec<Target>) -> Result<Vec<Remo
     Ok(removed)
 }
 
-/// Remove `target`, saying so unless the output is JSON.
 async fn remove_one(ctx: &Context, target: &Target) -> Result<RemovedRepository> {
     let (selector, machine) = request(target);
     let shown = machine_name(target);
@@ -271,8 +250,6 @@ async fn remove_one(ctx: &Context, target: &Target) -> Result<RemovedRepository>
     })
 }
 
-/// The registration `target` removes, by its ID there, and the machine
-/// the removal names, none for this one.
 fn request(target: &Target) -> (Selector, Option<String>) {
     match target {
         Target::Here(local) => (local.id.clone().into(), None),
@@ -283,7 +260,6 @@ fn request(target: &Target) -> (Selector, Option<String>) {
     }
 }
 
-/// The name of the other machine `target` acts on, none for this one.
 fn machine_name(target: &Target) -> Option<String> {
     match target {
         Target::Here(_) => None,
@@ -291,7 +267,6 @@ fn machine_name(target: &Target) -> Option<String> {
     }
 }
 
-/// Where `removed` was removed, as "here" or "on desk".
 fn where_removed(removed: &RemovedRepository) -> String {
     match &removed.machine {
         Some(machine) => format!("on {machine}"),

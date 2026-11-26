@@ -1,11 +1,9 @@
-//! Workspace commands: the request each sends for the space it acts on.
 use crate::cli::{
     args::workspace::WorkspaceCommand,
     commands::{cd, edit, refresh, restore, setup},
     ui::Acting,
 };
 
-/// What a workspace command sends for the space it acts on.
 pub(super) fn acting(command: &WorkspaceCommand) -> Option<Acting> {
     Some(match command {
         WorkspaceCommand::Cd { .. } => cd::entering(),

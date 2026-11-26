@@ -1,5 +1,4 @@
-//! Listing spaces, children below their parent, with the agents queued to
-//! start and the other joined machines' spaces, or only the chats.
+//! `shoal list --print`.
 use anyhow::Result;
 use shoal_protocol::hub::directory::{HubView, Listed};
 
@@ -13,8 +12,6 @@ use crate::cli::{
 use crate::client::output::spaces::ListedSpace;
 use crate::model::{Chat, SpaceKind, Workspace};
 
-/// `shoal list --print`: the spaces and queued agents `filter` keeps, or
-/// with `chats` only the chats it keeps, of this machine and the others.
 pub(in crate::cli::commands) async fn list(
     ctx: &Context,
     filter: &listing::ListFilter,
@@ -61,14 +58,11 @@ pub(in crate::cli::commands) async fn list(
     Ok(0)
 }
 
-/// The chats among `chats`, running or stopped, that `filter` keeps.
 fn kept_chats(mut chats: Vec<Chat>, filter: &listing::ListFilter) -> Vec<Chat> {
     chats.retain(|chat| filter.keeps_chat(chat));
     chats
 }
 
-/// The other machines' spaces of `view` that `filter` keeps, or with
-/// `chats` only their chats.
 fn kept_elsewhere<'a>(
     view: Option<&'a HubView>,
     filter: &listing::ListFilter,
@@ -81,8 +75,6 @@ fn kept_elsewhere<'a>(
         .collect()
 }
 
-/// The workspaces among `workspaces` that `filter` keeps by the statuses
-/// their rows show, with those statuses and the queued agents it keeps.
 async fn kept_workspaces(
     ctx: &Context,
     mut workspaces: Vec<Workspace>,

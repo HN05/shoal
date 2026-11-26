@@ -1,6 +1,4 @@
-//! `shoal pr` and `shoal issue`: ask the daemon to list, open or
-//! change items of the repository of the workspace or registered checkout and
-//! report them as the forge now does.
+//! `shoal pr` and `shoal issue`.
 use anyhow::Result;
 
 use crate::{
@@ -157,7 +155,6 @@ async fn act(
     act_in(ctx, target, selector.item, kind, action, outcome).await
 }
 
-/// The repository `selector` names an item in.
 async fn item_target(
     ctx: &Context,
     selector: &ItemSelector,

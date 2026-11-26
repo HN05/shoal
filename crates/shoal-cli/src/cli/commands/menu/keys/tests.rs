@@ -5,7 +5,6 @@ use crate::cli::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The stop key on a chat row stops the chat and the spaces below it.
 #[test]
 fn the_stop_key_stops_a_chat() {
     let chat = SpaceSelector::parse("3").unwrap();

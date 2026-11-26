@@ -1,6 +1,4 @@
-//! Shoal's own status, which `shoal status` shows outside a space; `shoal
-//! daemon start`, `stop` and `restart`, which wait for work in progress the
-//! daemon's exit would cut off; and stopping a daemon that does not answer.
+//! Shoal's own status, and `shoal daemon start`, `stop` and `restart`.
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceNumber;
 
@@ -43,9 +41,6 @@ pub(in crate::cli::commands) async fn status(ctx: &Context) -> Result<i32> {
     Ok(if running { 0 } else { 1 })
 }
 
-/// The running daemon, since when the machine is paused, each directory
-/// whose file access stalls, why automatic cleanup fails other than in a
-/// workspace, and the limit on Shoal's work memory.
 fn status_message(status: &crate::protocol::DaemonStatus) -> String {
     let mut message = format!(
         "Daemon running (PID {}, version {}{})",
@@ -143,7 +138,6 @@ pub(super) async fn restart(ctx: &Context, when: ExitWhen) -> Result<i32> {
     Ok(0)
 }
 
-/// What a daemon's exit left for `shoal resume`.
 pub(super) enum Left {
     /// The stopped work of these spaces, by number, which the exit stopped.
     Spaces(Vec<SpaceNumber>),
@@ -152,8 +146,8 @@ pub(super) enum Left {
 }
 
 impl Left {
-    /// The command that restores what is left, while some is or may be:
-    /// the spaces' own, so it restores nothing the exit did not stop.
+    /// It names the stopped spaces, so it restores nothing the exit did not
+    /// stop.
     fn restore(&self) -> Option<String> {
         match self {
             Self::Spaces(spaces) if spaces.is_empty() => None,
@@ -169,8 +163,6 @@ impl Left {
     }
 }
 
-/// Stopping saves running agents and commands, as does a restart for those
-/// that cannot reattach; point to restoring what is `left`.
 fn emit_stopped_work(
     ctx: &Context,
     message: &str,
@@ -198,9 +190,6 @@ fn emit_stopped_work(
     )
 }
 
-/// Report that the daemon did not `exit`, since that would cut off `work`,
-/// naming the commands that wait for it or cut it off; exit 2, as for other
-/// busy requests.
 fn kept(ctx: &Context, exit: Exit, work: Vec<Work>) -> Result<i32> {
     let (done, command) = match exit {
         Exit::Stop => ("stopped", "shoal daemon stop"),
@@ -218,9 +207,7 @@ fn kept(ctx: &Context, exit: Exit, work: Vec<Work>) -> Result<i32> {
     Ok(2)
 }
 
-/// [`stop_daemon`] as `exit` and `when` say, below a spinner, with a line
-/// naming the work in progress it waits for each time that changes. Work
-/// that changes kind, as a workspace's preparation does when the workspace
+/// Work that changes kind, as a workspace's preparation does when the workspace
 /// turns ready, reads the same and gets no new line.
 async fn stop_showing_work(ctx: &Context, exit: Exit, when: ExitWhen) -> Result<Stopping> {
     let (changed, mut changes) = tokio::sync::mpsc::unbounded_channel();
@@ -253,7 +240,6 @@ async fn start_service(ctx: &Context) -> Result<()> {
         .await
 }
 
-/// What asking the daemon to exit did.
 pub(super) enum Stopping {
     /// It exited, after the work in progress it waited for, leaving what it
     /// says it stopped.
@@ -262,12 +248,9 @@ pub(super) enum Stopping {
     Refused(Vec<Work>),
 }
 
-/// Ask the daemon to exit as `request` says, then unload its service; what
-/// it left, or the work that keeps it running when it refuses. `waiting`
-/// hears the work in progress it waits for each time that changes. A daemon
-/// that does not answer gets SIGTERM, which stops its work saved first; one
-/// that went while it waited, as for an update, is asked again once the
-/// daemon that follows it answers.
+/// A daemon that does not answer gets SIGTERM, which saves its work before it
+/// stops. A daemon that went while it waited, as for an update, is asked again
+/// once its successor answers.
 pub(super) async fn stop_daemon(
     paths: &CommandPaths,
     request: ExitRequest,
@@ -308,8 +291,7 @@ pub(super) async fn stop_daemon(
     Ok(Stopping::Stopped { left, waited_for })
 }
 
-/// The stop of a daemon that went while it waited and that no daemon
-/// followed, with its service unloaded so none starts.
+/// Its service is unloaded so that none starts.
 async fn stopped_without_successor(
     paths: &CommandPaths,
     waited_for: Vec<Work>,
@@ -321,9 +303,9 @@ async fn stopped_without_successor(
     Ok(Stopping::Stopped { left, waited_for })
 }
 
-/// Stop a daemon with SIGTERM through the OS service manager, or directly
-/// when it runs in the foreground or does not answer status without an
-/// installed service, as while it starts.
+/// Through the OS service manager, or directly when the daemon runs in the
+/// foreground or, without an installed service, does not answer status, as
+/// while it starts.
 async fn terminate(paths: &CommandPaths) -> Result<()> {
     match client::status(paths).await {
         Ok(Some(status)) if !status.managed => {

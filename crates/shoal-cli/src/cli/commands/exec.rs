@@ -1,4 +1,4 @@
-//! `shoal run` with a command: running it in a workspace.
+//! `shoal run` with a command.
 use std::ffi::OsString;
 
 use anyhow::Result;
@@ -19,8 +19,6 @@ pub(in crate::cli::commands) async fn exec(
     shoal_workers::execution::run_command(&ctx.paths, workspace, command).await
 }
 
-/// What running a command sends for the workspace a picker picks: its run
-/// there, on this machine.
 pub(in crate::cli::commands) fn running() -> Acting {
     Acting::here(crate::client::executions::command_run)
 }

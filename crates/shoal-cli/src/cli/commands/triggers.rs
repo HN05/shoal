@@ -1,6 +1,4 @@
-//! `shoal trigger`: the triggers of the repository this runs in, or that
-//! `--repo` names, beside the global config's, and pausing, resuming and
-//! running one.
+//! `shoal trigger`.
 use std::path::Path;
 
 use anyhow::{Context as _, Result};
@@ -39,7 +37,6 @@ pub(in crate::cli::commands) async fn run(ctx: &Context, command: TriggerCommand
     }
 }
 
-/// List the triggers with their runtime state.
 async fn list(ctx: &Context, repository: Option<String>) -> Result<i32> {
     let context = trigger_context(ctx, repository).await?;
     let triggers = crate::client::triggers::list(&ctx.paths, context).await?;
@@ -56,7 +53,6 @@ async fn list(ctx: &Context, repository: Option<String>) -> Result<i32> {
     Ok(0)
 }
 
-/// Pause the trigger `name`, or resume it when not `paused`.
 async fn set_paused(
     ctx: &Context,
     name: String,
@@ -78,9 +74,7 @@ async fn set_paused(
     Ok(0)
 }
 
-/// Fire the trigger `name` now, a webhook trigger with `sample`, and print
-/// its run's outcome or the filter condition that dropped it; a failed run
-/// exits 1.
+/// A failed run exits 1.
 async fn fire(
     ctx: &Context,
     name: String,
@@ -102,8 +96,6 @@ async fn fire(
     Ok(i32::from(failed))
 }
 
-/// The sample request whose body is the file `payload` and whose headers
-/// `headers` gives as `NAME=VALUE`; none without either.
 fn sample_request(payload: Option<&Path>, headers: &[String]) -> Result<Option<WebhookRequest>> {
     if payload.is_none() && headers.is_empty() {
         return Ok(None);
@@ -128,9 +120,6 @@ fn sample_request(payload: Option<&Path>, headers: &[String]) -> Result<Option<W
     }))
 }
 
-/// The context the triggers are of: the registered repository `repository`
-/// names, else the workspace, chat or checkout this runs in, else none,
-/// for the global config's alone.
 async fn trigger_context(ctx: &Context, repository: Option<String>) -> Result<Option<ItemContext>> {
     match repository {
         Some(repository) => {
@@ -141,8 +130,6 @@ async fn trigger_context(ctx: &Context, repository: Option<String>) -> Result<Op
     }
 }
 
-/// One row per trigger: its name, where it is configured, its source,
-/// whether it is paused, its next firing and its last run.
 fn trigger_rows(
     triggers: &[TriggerStatus],
     repositories: &[Repository],
@@ -176,8 +163,6 @@ fn trigger_rows(
     ui::aligned(rows, palette)
 }
 
-/// Where a trigger is configured: its repository's name, else the global
-/// config.
 fn configured_in(repository: Option<&RepositoryId>, repositories: &[Repository]) -> String {
     let Some(id) = repository else {
         return "global".to_owned();
@@ -190,8 +175,6 @@ fn configured_in(repository: Option<&RepositoryId>, repositories: &[Repository])
         )
 }
 
-/// A run's outcome, with the space it started or waits for, or the queued
-/// launch of a space not yet opened, or why it skipped or failed.
 fn run_text(run: &TriggerRun) -> String {
     let launched = (run.space_id.as_ref().map(|space| format!("space {space}")))
         .or_else(|| (run.queue_entry.as_ref()).map(|entry| format!("queued launch {entry}")));

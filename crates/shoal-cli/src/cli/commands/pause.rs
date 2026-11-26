@@ -1,11 +1,9 @@
-//! `shoal pause` and `shoal unpause`: stop all work on a machine, sending
-//! what it can to other machines of the hub, and admit work there again.
+//! `shoal pause` and `shoal unpause`.
 use anyhow::Result;
 use shoal_protocol::pause::{Paused, Unpaused};
 
 use crate::cli::{context::Context, output::Style};
 
-/// Pause the joined machine `machine` names, or this one.
 pub(super) async fn pause(ctx: &Context, machine: Option<String>) -> Result<i32> {
     let paused = crate::client::pause::pause(&ctx.paths, machine.clone()).await?;
     let message = paused_message(&paused, machine.as_deref());
@@ -13,7 +11,6 @@ pub(super) async fn pause(ctx: &Context, machine: Option<String>) -> Result<i32>
     Ok(0)
 }
 
-/// Unpause the joined machine `machine` names, or this one.
 pub(super) async fn unpause(ctx: &Context, machine: Option<String>) -> Result<i32> {
     let unpaused = crate::client::pause::unpause(&ctx.paths, machine.clone()).await?;
     let message = unpaused_message(&unpaused, machine.as_deref());
@@ -21,7 +18,6 @@ pub(super) async fn unpause(ctx: &Context, machine: Option<String>) -> Result<i3
     Ok(0)
 }
 
-/// The machine a command acts on: the one `machine` names, or this one.
 fn which(machine: Option<&str>) -> String {
     match machine {
         Some(machine) => format!("machine {machine}"),
@@ -29,7 +25,6 @@ fn which(machine: Option<&str>) -> String {
     }
 }
 
-/// What `shoal pause` says of `paused` on the machine `machine` names.
 fn paused_message(paused: &Paused, machine: Option<&str>) -> String {
     let which = which(machine);
     let since = paused.since.local_minutes();
@@ -38,7 +33,6 @@ fn paused_message(paused: &Paused, machine: Option<&str>) -> String {
     )
 }
 
-/// What `shoal unpause` says of `unpaused` on the machine `machine` names.
 fn unpaused_message(unpaused: &Unpaused, machine: Option<&str>) -> String {
     let which = which(machine);
     match unpaused.paused_since {
@@ -50,7 +44,6 @@ fn unpaused_message(unpaused: &Unpaused, machine: Option<&str>) -> String {
     }
 }
 
-/// `text` with its first letter capitalized.
 fn capitalized(text: &str) -> String {
     let mut chars = text.chars();
     chars

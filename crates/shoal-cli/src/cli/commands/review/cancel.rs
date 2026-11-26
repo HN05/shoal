@@ -1,5 +1,4 @@
-//! `shoal review cancel`: cancel a queued or running review, or drop a
-//! pending one with its comments.
+//! `shoal review cancel`.
 use anyhow::{Context as _, Result};
 
 use crate::client::reviews::{self, PreparedReview};
@@ -68,7 +67,6 @@ async fn chat_cancelled(ctx: &Context, chat: &Chat, here: bool) -> Result<Prepar
     Ok(reviews::cancel(Some(workspace), None))
 }
 
-/// The ID of the queued or running review of the chat's linked PRs.
 async fn active_review(ctx: &Context, chat: &Chat) -> Result<Option<ReviewId>> {
     let reviews = super::chat_reviews(ctx, chat).await?;
     let active = (reviews.into_iter()).find(|review| review.state.is_active());

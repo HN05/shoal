@@ -127,8 +127,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
     }
 }
 
-/// What the `--permission` assignments of a restore or restart change in the
-/// permissions the agents were given; none without any, which keeps them.
+/// None without any assignment, which keeps the permissions the agents were
+/// given.
 fn change(changes: &[PermissionChange]) -> Option<PermissionChange> {
     (!changes.is_empty()).then(|| PermissionChange::combined(changes))
 }

@@ -1,5 +1,4 @@
-//! `shoal demo`: commands kept running in a workspace for the user to try.
-//! An agent starts one, the user opens it, and both can read its screen.
+//! `shoal demo`.
 mod forward;
 mod list;
 mod lookup;
@@ -64,8 +63,7 @@ pub(super) async fn run(
     }
 }
 
-/// What the demo `command` sends for the workspace a picker picks; opening
-/// and listing demos pick none.
+/// Opening and listing demos pick no workspace.
 pub(super) fn acting(command: Option<&DemoCommand>) -> Option<Acting> {
     match command {
         Some(DemoCommand::Start { .. }) => Some(start::starting()),
@@ -75,7 +73,6 @@ pub(super) fn acting(command: Option<&DemoCommand>) -> Option<Acting> {
     }
 }
 
-/// The demo name the command line gives, if it gives one.
 fn requested_name<'a>(command: Option<&'a DemoCommand>, name: Option<&'a str>) -> Option<&'a str> {
     match command {
         None => name,

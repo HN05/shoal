@@ -398,7 +398,6 @@ fn workspace_rows_align_status_and_titles() {
     );
 }
 
-/// An assigned issue titled `title`.
 fn issue(title: &str) -> crate::model::LinkedItem {
     crate::model::LinkedItem {
         url: "https://forge.example/team/repo/issues/1".parse().unwrap(),

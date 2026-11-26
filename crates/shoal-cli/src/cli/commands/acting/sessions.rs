@@ -1,11 +1,9 @@
-//! Agent session commands: the request each sends for the space it acts on.
 use crate::cli::{
     args::sessions::{QueueCommand, SessionsCommand, TriggerCommand},
     commands::{demo, restart, restore, sessions},
     ui::Acting,
 };
 
-/// What an agent session command sends for the space it acts on.
 pub(super) fn acting(command: &SessionsCommand) -> Option<Acting> {
     Some(match command {
         SessionsCommand::Attach { .. } => sessions::attaching(),

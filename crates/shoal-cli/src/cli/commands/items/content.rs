@@ -20,7 +20,6 @@ use crate::{
 };
 use shoal_forge::items::attach;
 
-/// The edit of a PR, with the changes only PRs take.
 pub(super) fn pr_edit(edit: PrEditArgs) -> Result<Edit> {
     Ok(Edit {
         base: edit.base,
@@ -50,7 +49,6 @@ pub(super) fn edit_fields(edit: EditArgs) -> Result<Edit> {
     })
 }
 
-/// A new comment, reported as `posted`, or the edit of comment `edit`.
 pub(super) fn comment(
     body: BodyArgs,
     files: AttachArgs,

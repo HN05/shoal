@@ -1,5 +1,4 @@
-//! `shoal pr ls` and `shoal issue ls`: search the items of the
-//! repository of the workspace or registered checkout, or of another one.
+//! `shoal pr ls` and `shoal issue ls`.
 use anyhow::Result;
 
 use super::context::select_repo_context;
@@ -32,7 +31,6 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
     Ok(0)
 }
 
-/// One line per item.
 fn render_list(kind: ItemKind, items: &[Item]) {
     if items.is_empty() {
         match kind {
@@ -51,7 +49,6 @@ fn render_list(kind: ItemKind, items: &[Item]) {
     }
 }
 
-/// `item`'s number, padded to `width`, state, title, labels and assignees.
 fn item_line(item: &Item, width: usize) -> String {
     let state = match &item.pr {
         Some(pr) if pr.draft && item.state == ItemState::Open => "draft",

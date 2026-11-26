@@ -1,10 +1,4 @@
-//! `shoal alert list` shows alerts: the caller's own, the user's from the
-//! user's terminal or its own space's from an agent, a space's with
-//! `--space`, or every recipient's it may read with `--all`; in a picker on
-//! a terminal, else as a list. Showing one recipient's marks them read
-//! unless `--keep-unread`; `--follow` keeps the terminal on the user's stream and
-//! raises each one as a terminal notification. `withdraw` takes back an
-//! unread alert the caller sent, and `clear` deletes the user's.
+//! `shoal alert`: listing, following, withdrawing and clearing alerts.
 use std::io::{IsTerminal, Write};
 
 use anyhow::{Result, ensure};
@@ -35,8 +29,6 @@ struct Listing {
     marks_read: bool,
 }
 
-/// Show the alerts `args` ask for: follow the user's, pick one on a
-/// terminal, or print them.
 pub(super) async fn list(ctx: &Context, args: AlertListArgs) -> Result<i32> {
     if args.follow {
         return follow(ctx, args.keep_unread, args.resume.unwrap_or_default()).await;
@@ -59,8 +51,6 @@ pub(super) async fn list(ctx: &Context, args: AlertListArgs) -> Result<i32> {
     Ok(code)
 }
 
-/// Whose alerts `args` asks for: every recipient's, the space's it names,
-/// or else the caller's own.
 async fn listing(ctx: &Context, args: &AlertListArgs) -> Result<Listing> {
     refuse_workspace_processes(ctx)?;
     if args.all {
@@ -113,7 +103,6 @@ pub(super) async fn sending_space(ctx: &Context) -> Result<Option<SpaceSelector>
     }
 }
 
-/// Print `shown`, or that there are none.
 fn print(ctx: &Context, shown: &[Alert], unread: bool) -> Result<()> {
     ctx.show(&shown.to_vec(), |shown| {
         let now = crate::time::UnixTime::now();
@@ -167,7 +156,6 @@ pub(super) fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-/// Withdraw the alert `id`, to the space `space` names when it names one.
 pub(super) async fn withdraw(ctx: &Context, id: i64, space: Option<SpaceSelector>) -> Result<i32> {
     let from = sending_space(ctx).await?;
     let withdrawn = alerts::withdraw(&ctx.paths, id, space, from).await?;
@@ -178,10 +166,9 @@ pub(super) async fn withdraw(ctx: &Context, id: i64, space: Option<SpaceSelector
     Ok(0)
 }
 
-/// The daemon marks each alert read as it delivers it unless `keep_unread`;
-/// the stream resumes after the last one printed. On a terminal, each one
-/// is also raised as a terminal notification so the emulator can show it
-/// while another window has focus.
+/// The daemon marks each alert read as it delivers it unless `keep_unread`. On
+/// a terminal, each alert is also raised as a terminal notification, so the
+/// emulator can show it while another window has focus.
 pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: AlertCursor) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
     let executable = Executable::current();
@@ -221,7 +208,6 @@ fn render(alert: &Alert, palette: Palette, now: crate::time::UnixTime) -> String
     with_files(&line, alert)
 }
 
-/// The alert's row `line`, then a line for each file sent with it.
 fn with_files(line: &str, alert: &Alert) -> String {
     std::iter::once(line.to_owned())
         .chain((alert.files.iter()).map(|file| format!("  Attached file: {}", file.shown())))
@@ -229,8 +215,6 @@ fn with_files(line: &str, alert: &Alert) -> String {
         .join("\n")
 }
 
-/// When, read at `now`, the alert's number, who sent it, who it is for,
-/// and its text.
 fn cells(alert: &Alert, now: crate::time::UnixTime) -> [ui::Cell; 5] {
     let recipient = match &alert.recipient {
         Some(recipient) => format!("to {}", recipient.label()),

@@ -28,8 +28,7 @@ pub(in crate::cli::commands) async fn rename_branch(
     Ok(0)
 }
 
-/// What renaming a workspace's branch sends for the workspace a picker
-/// picks; the new name decides nothing of which workspaces it reaches.
+/// The new name decides nothing of which workspaces a rename reaches.
 pub(super) fn renaming() -> Acting {
     Acting::request(|space| crate::client::workspaces::rename_branch(space, String::new()))
 }

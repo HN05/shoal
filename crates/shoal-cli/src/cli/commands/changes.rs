@@ -1,5 +1,4 @@
-//! `shoal changes`: the hunks Shoal records as the agents it runs change
-//! the files of their worktrees.
+//! `shoal changes` and `shoal diff --thread`.
 mod diffs;
 mod listing;
 

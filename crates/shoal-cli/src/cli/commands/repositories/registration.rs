@@ -44,7 +44,6 @@ async fn register(
     .await
 }
 
-/// Register `source` for a command that needs it, when the user agrees.
 pub(in crate::cli::commands) async fn offer_registration(
     ctx: &Context,
     source: &str,

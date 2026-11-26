@@ -1,4 +1,4 @@
-//! Refresh a repository without moving workspace branches.
+//! `shoal repo sync`, which moves no workspace branch.
 use anyhow::Result;
 
 use crate::{

@@ -20,7 +20,6 @@ impl View {
         }
     }
 
-    /// The actions the view binds, in header order.
     fn binds(self, action: Action) -> bool {
         match self {
             Self::Inbox => !matches!(action, Action::Execute | Action::Stop | Action::Delete),
@@ -47,15 +46,12 @@ impl View {
         }
     }
 
-    /// The actions a caller with this scope may use here.
     fn bound(self, scoping: Scoping) -> impl Iterator<Item = Action> {
         Action::ALL.into_iter().filter(move |&action| {
             self.binds(action) && (scoping == Scoping::Unscoped || action.allowed_scoped())
         })
     }
 
-    /// The view's presentation and keys for the shared picker, naming Tab
-    /// when it `switches` to another view.
     pub(super) fn description(self, scoping: Scoping, switches: bool) -> PickerView<'static> {
         let keys: Vec<_> = self
             .bound(scoping)

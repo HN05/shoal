@@ -1,7 +1,4 @@
-//! `shoal hub`: pairing the user's machines and devices with the hub,
-//! joining and leaving it, listing and revoking its members, updating it,
-//! and `shoal daemon connect`, the relay a joined machine reaches the hub's
-//! daemon by.
+//! `shoal hub` and `shoal daemon connect`.
 use anyhow::Result;
 
 use crate::cli::{args::hub::HubCommand, context::Context};

@@ -1,6 +1,5 @@
-//! What this process's permissions let it take: the daemon decides each
-//! action a permission key governs, and records the approval request a
-//! `propose` asks for.
+//! What this process's permissions let it take. The daemon decides each action
+//! a permission key governs.
 use anyhow::{Result, ensure};
 
 use crate::{
@@ -9,10 +8,9 @@ use crate::{
     env,
 };
 
-/// Refuse a scoped process `command` where its space's permissions do not
-/// let it take what it does, asking the daemon, which records the approval
-/// request a permission asks for. An approval lets the requests the command
-/// sends take what it governs.
+/// Refuse a scoped process `command` where its space's permissions do not let
+/// it take what it does, asking the daemon, which records the approval request
+/// a permission asks for.
 pub(super) async fn authorize(ctx: &Context, command: &Command) -> Result<()> {
     ensure!(
         !(command.rewrites_config() && crate::process::scoped::inherits_scope(&ctx.paths.state)),
@@ -39,8 +37,6 @@ pub(in crate::cli::commands) async fn authorize_key(
     authorize_in(ctx, key, None).await
 }
 
-/// [`authorize_key`] for an action in the registered repository
-/// `repository` names, in whose config a chat without one resolves it.
 async fn authorize_in(ctx: &Context, key: PermissionKey, repository: Option<&str>) -> Result<()> {
     if !scoped(ctx)? {
         return Ok(());
@@ -89,7 +85,6 @@ pub(in crate::cli::commands) async fn permits(ctx: &Context, key: PermissionKey)
     Ok(held.acting(key) != Acting::Deny)
 }
 
-/// This command as the user typed it, which an approval of it names.
 fn command_line() -> String {
     let words: Vec<String> = std::iter::once("shoal".to_owned())
         .chain(std::env::args().skip(1))

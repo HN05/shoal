@@ -1,5 +1,4 @@
-//! How text shows a space's status: a workspace's adds what needs its
-//! worktree.
+//! How text shows a space's status.
 use super::StatusView;
 use crate::{
     cli::{
@@ -39,7 +38,6 @@ pub(super) fn render_status(view: &StatusView, json: bool) {
     }
 }
 
-/// The workspace, its branch, setup, changes and holds.
 fn render_workspace(status: &WorktreeStatus, palette: Palette) {
     let workspace = &status.workspace;
     outln!(
@@ -104,7 +102,6 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
     render_holds(&workspace.holds);
 }
 
-/// What keeps the space from cleanup until released.
 fn render_holds(holds: &[crate::model::SpaceHold]) {
     outln!("Holds:         {}", holds.len());
     for hold in holds {
@@ -118,8 +115,6 @@ fn render_holds(holds: &[crate::model::SpaceHold]) {
     }
 }
 
-/// The workspace a copy was made from, and its checkpoint the copy started
-/// from, if any.
 fn copy_source(copied: &crate::model::CopiedFrom) -> String {
     let workspace = match &copied.workspace {
         Some(workspace) => base::describe(workspace),
@@ -131,7 +126,6 @@ fn copy_source(copied: &crate::model::CopiedFrom) -> String {
     }
 }
 
-/// The sensitive paths the last conflict check found changed on both sides.
 fn render_changed_on_both_sides(status: &WorktreeStatus, palette: Palette) {
     let changed = status.changed_on_both_sides.as_ref();
     let Some(changed) = changed.filter(|changed| !changed.files.is_empty()) else {
@@ -145,8 +139,6 @@ fn render_changed_on_both_sides(status: &WorktreeStatus, palette: Palette) {
     outln!("  {}", palette.paint(Style::Warning, &line));
 }
 
-/// The chat, its status as listings show it, its agent, and the spaces
-/// around it.
 fn render_chat(chat: &Chat, palette: Palette) {
     let status = ListStatus::of_chat(chat);
     outln!(
@@ -172,8 +164,6 @@ fn render_chat(chat: &Chat, palette: Palette) {
     render_holds(&chat.holds);
 }
 
-/// When the repository's default branch last synced with its remote, and
-/// why the syncs since then failed.
 fn render_sync(status: &WorktreeStatus, palette: Palette) {
     let Some(sync) = &status.sync else {
         return;
@@ -191,8 +181,6 @@ fn render_sync(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// What runs in the space: a workspace's executions and agent, the CI jobs
-/// for either, the sessions of either and its agent's retries.
 fn render_activity(view: &StatusView, palette: Palette) {
     if let Some(worktree) = view.status.space.worktree() {
         render_processes(worktree, palette);
@@ -206,7 +194,6 @@ fn render_activity(view: &StatusView, palette: Palette) {
     render_retries(&view.status);
 }
 
-/// The agent sessions found for the space, or why they could not be listed.
 fn render_sessions(view: &StatusView, palette: Palette) {
     outln!("Sessions:      {}", view.sessions.len());
     for session in &view.sessions {
@@ -217,8 +204,6 @@ fn render_sessions(view: &StatusView, palette: Palette) {
     }
 }
 
-/// Each session the space's agents reported, with its transcript's path or
-/// why it has none here.
 fn render_transcripts(view: &StatusView, palette: Palette) {
     outln!("Transcripts:   {}", view.transcripts.len());
     for transcript in &view.transcripts {
@@ -236,7 +221,6 @@ fn render_transcripts(view: &StatusView, palette: Palette) {
     }
 }
 
-/// The workspace's executions, what its processes use, and those left over.
 fn render_processes(status: &WorktreeStatus, palette: Palette) {
     outln!("Executions:    {}", status.executions.len());
     for execution in &status.executions {
@@ -274,9 +258,6 @@ fn render_processes(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// The CI jobs running for the space's PR, or a workspace's branch, each
-/// with what its processes use, then those waiting, each with what holds it
-/// back.
 fn render_jobs(status: &SpaceStatus, palette: Palette) {
     if !status.jobs.is_empty() {
         outln!("CI jobs:       {}", status.jobs.len());
@@ -312,7 +293,6 @@ fn render_jobs(status: &SpaceStatus, palette: Palette) {
     }
 }
 
-/// The turn state the workspace's agent reported.
 fn render_agent(status: &WorktreeStatus) {
     render_agent_state(status.workspace.agent_state);
     render_sleep(status.workspace.sleep, status.workspace.wake_at);
@@ -320,8 +300,6 @@ fn render_agent(status: &WorktreeStatus) {
     render_restart(status.workspace.restart.as_ref());
 }
 
-/// The retries of the space's agent: the request its proxy waits to make
-/// and its turn an API failure ended.
 fn render_retries(status: &SpaceStatus) {
     if let Some(retry) = &status.proxy_retry {
         outln!("API retry:     {}", proxy_retry_label(retry));
@@ -331,8 +309,6 @@ fn render_retries(status: &SpaceStatus) {
     }
 }
 
-/// The turn state a space's agent reported, and when an idle agent's
-/// prompt cache expires.
 fn render_agent_state(agent_state: Option<AgentStatus>) {
     outln!(
         "Agent state:   {}",
@@ -343,8 +319,6 @@ fn render_agent_state(agent_state: Option<AgentStatus>) {
     }
 }
 
-/// How long a space's agent sleeps, and when its timer wakes it, while
-/// either holds.
 fn render_sleep(sleep: Option<crate::state::Sleep>, wake_at: Option<crate::time::UnixTime>) {
     if sleep.is_none() && wake_at.is_none() {
         return;
@@ -360,9 +334,6 @@ fn render_sleep(sleep: Option<crate::state::Sleep>, wake_at: Option<crate::time:
     }
 }
 
-/// Why Shoal put the agent of the space numbered `number` to sleep, what
-/// wakes it, the commands that wake it now and the leases it keeps, while
-/// it is asleep.
 fn render_asleep(asleep: Option<&crate::model::Asleep>, number: shoal_ids::space_ids::SpaceNumber) {
     if let Some(asleep) = asleep {
         let (label, wake) = (ui::asleep_label(asleep), ui::wake_now(number));
@@ -374,8 +345,6 @@ fn render_asleep(asleep: Option<&crate::model::Asleep>, number: shoal_ids::space
     }
 }
 
-/// A lease an asleep agent keeps, with when Shoal stops it: "simulator
-/// default (until 14:30)".
 fn kept_label(kept: &crate::model::KeptLease) -> String {
     let mut label = kept.kind.to_string();
     if let Some(name) = &kept.name {
@@ -387,8 +356,6 @@ fn kept_label(kept: &crate::model::KeptLease) -> String {
     label
 }
 
-/// When the agent restarts for the restart the daemon recorded, how, and
-/// what it changes in the permissions the agent was given.
 fn render_restart(restart: Option<&crate::model::AgentRestart>) {
     let Some(restart) = restart else {
         return;
@@ -403,7 +370,6 @@ fn render_restart(restart: Option<&crate::model::AgentRestart>) {
     outln!("Restart:       {line}");
 }
 
-/// The ports, simulators, containers and resources the workspace holds.
 fn render_leases(status: &WorktreeStatus, palette: Palette) {
     outln!("Ports:         {}", status.ports.len());
     for port in &status.ports {
@@ -444,7 +410,6 @@ fn render_leases(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// The space's issues, completion and PRs.
 fn render_assignment(status: &SpaceStatus, palette: Palette) {
     for issue in &status.issues {
         outln!("Issue:         {}", issue.url);
@@ -516,7 +481,6 @@ fn render_pr_watch(status: &SpaceStatus, palette: Palette) {
     }
 }
 
-/// When and why cleanup removes the space.
 fn render_cleanup(status: &SpaceStatus, palette: Palette) {
     outln!("Cleanup:       {}", status.cleanup_reason);
     if let Some(at) = status.cleanup_at {
@@ -531,7 +495,6 @@ fn render_cleanup(status: &SpaceStatus, palette: Palette) {
     }
 }
 
-/// What the space's agents may do, and where each permission comes from.
 fn render_permissions(status: &SpaceStatus, palette: Palette) {
     let Some(permissions) = &status.permissions else {
         outln!("Permissions:   unavailable");
@@ -546,8 +509,6 @@ fn render_permissions(status: &SpaceStatus, palette: Palette) {
     }
 }
 
-/// What awaits the user: the review mark, threads, approval requests,
-/// attached files and unread notifications.
 fn render_attention(status: &SpaceStatus) {
     let review = status.space.review();
     if review.is_empty() {
@@ -599,7 +560,6 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
     }
 }
 
-/// A request the agent's proxy waits to retry as `status` shows it.
 fn proxy_retry_label(retry: &shoal_protocol::executions::ProxyRetry) -> String {
     let now = crate::time::UnixTime::now();
     format!(
@@ -610,8 +570,6 @@ fn proxy_retry_label(retry: &shoal_protocol::executions::ProxyRetry) -> String {
     )
 }
 
-/// When the idle agent's prompt cache expires, or expired, as `status`
-/// shows it.
 fn prompt_cache_label(expires_at: crate::time::UnixTime) -> String {
     let now = crate::time::UnixTime::now();
     let at = expires_at.local_minutes();
@@ -622,7 +580,6 @@ fn prompt_cache_label(expires_at: crate::time::UnixTime) -> String {
     }
 }
 
-/// A pending retry of the agent's failed turn as `status` shows it.
 fn turn_retry_label(retry: &shoal_protocol::executions::TurnRetry) -> String {
     let (failure, attempt) = (retry.failure.describe(), retry.attempt);
     if retry.delivered {

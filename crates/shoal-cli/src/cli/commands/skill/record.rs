@@ -28,7 +28,6 @@ impl Entry {
         Self::Sha256(digest.iter().map(|byte| format!("{byte:02x}")).collect())
     }
 
-    /// Whether `path` is exactly what this entry installed.
     pub(super) fn matches(&self, path: &Path) -> Result<bool> {
         let metadata = match fs::symlink_metadata(path) {
             Ok(metadata) => metadata,

@@ -1,4 +1,5 @@
-//! Review daemon-owned approval requests and render allocation decisions.
+//! `shoal approvals`: listing, deciding, escalating and withdrawing approval
+//! requests.
 use anyhow::{Context as _, Result, ensure};
 use serde_json::Value;
 
@@ -63,7 +64,6 @@ async fn show(ctx: &Context, number: ItemNumber) -> Result<i32> {
     show_request(ctx, numbered(ctx, number).await?).await
 }
 
-/// The request `number`.
 async fn numbered(ctx: &Context, number: ItemNumber) -> Result<Box<ApprovalRequest>> {
     approvals::show(&ctx.paths, number).await
 }
@@ -134,8 +134,6 @@ fn print_request(request: &ApprovalRequest) {
     }
 }
 
-/// The request's number and subject, then labeled rows with what the user
-/// needs to decide it, and a proposal's description below them.
 fn print_details(ctx: &Context, request: &ApprovalRequest) {
     let palette = Palette::stdout(ctx.json);
     let heading = format!("Approval {}: {}", request.number, request.subject());
@@ -164,8 +162,6 @@ fn gate_step(request: &ApprovalRequest) -> String {
     }
 }
 
-/// Status once decided, space, reason, and the settings an approval
-/// grants or the labels a proposal adds.
 fn detail_rows(request: &ApprovalRequest) -> Vec<[Cell; 2]> {
     let mut rows = Vec::new();
     let mut row = |label: &str, value: String| {
@@ -318,8 +314,6 @@ pub(super) async fn submit(
     Ok(0)
 }
 
-/// Pass a request routed to this space up to the space above it, or to the
-/// user.
 async fn escalate(
     ctx: &Context,
     number: ItemNumber,
@@ -348,8 +342,6 @@ pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-/// Withdraw the space's pending request `number`, which its agent no
-/// longer needs.
 pub(super) async fn withdraw(ctx: &Context, number: ItemNumber) -> Result<i32> {
     let space = numbered(ctx, number).await?.space_id;
     let request = approvals::withdraw(&ctx.paths, SpaceSelector::id(&space), number).await?;
@@ -380,7 +372,6 @@ pub(super) async fn list_requests(
     approvals::list(&ctx.paths, space).await
 }
 
-/// What a request asks for, and why when its agent said.
 pub(in crate::cli) fn about(request: &ApprovalRequest) -> String {
     match request.reason.as_str() {
         "" => request.subject(),
@@ -388,7 +379,6 @@ pub(in crate::cli) fn about(request: &ApprovalRequest) -> String {
     }
 }
 
-/// The request's new status after a decision or withdrawal.
 fn outcome(request: &ApprovalRequest) -> String {
     format!(
         "Approval {} {}: {}",
@@ -425,7 +415,6 @@ fn describe(request: &ApprovalRequest) -> String {
     )
 }
 
-/// The space that made the request, by name, marked once removed.
 pub(in crate::cli) fn space_label(request: &ApprovalRequest) -> String {
     match request.space_removed {
         true => format!("{} (removed)", request.space_name()),

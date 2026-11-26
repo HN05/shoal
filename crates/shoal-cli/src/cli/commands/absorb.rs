@@ -1,5 +1,4 @@
-//! `shoal absorb`: fold a space into a space of the caller's subtree, which
-//! takes over its work, then remove it.
+//! `shoal absorb`.
 use anyhow::Result;
 
 use crate::cli::{
@@ -9,7 +8,6 @@ use crate::cli::{
 };
 use shoal_protocol::absorb::{Absorb, Absorbed};
 
-/// Absorb the space `args` names and say what moved.
 pub(super) async fn run(ctx: &Context, args: AbsorbArgs) -> Result<i32> {
     let request = Absorb {
         space: args.space,

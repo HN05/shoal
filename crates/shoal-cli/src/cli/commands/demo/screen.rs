@@ -1,5 +1,4 @@
-//! `shoal demo screen` and `shoal demo send`: reading a demo's screen and
-//! typing into it.
+//! `shoal demo screen` and `shoal demo send`.
 use anyhow::Result;
 use shoal_workers::hosting;
 
@@ -37,7 +36,6 @@ pub(super) async fn send(
     Ok(0)
 }
 
-/// The last `count` lines of `screen` with trailing blank lines dropped.
 pub(super) fn last_lines(screen: &str, count: usize) -> Option<String> {
     let lines: Vec<&str> = screen.trim_end().lines().collect();
     let start = lines.len().saturating_sub(count);

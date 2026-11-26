@@ -1,5 +1,4 @@
-//! Request access to approval-gated secrets; the value is fetched only where
-//! the secret is used.
+//! `shoal acquire secret`. The value is fetched only where the secret is used.
 use anyhow::Result;
 
 use super::acquisition::{Finish, obtain};
@@ -11,7 +10,7 @@ use crate::client::leases;
 use shoal_protocol::secrets::{SecretCatalog, SecretGrant, SecretRequest};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Exit 2 means a pending or denied approval; a queued request returns only
+/// Exit 2 means a pending or denied approval. A queued request returns only
 /// once approved or denied.
 pub(super) async fn acquire(
     ctx: &Context,

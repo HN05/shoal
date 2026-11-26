@@ -1,5 +1,4 @@
-//! A PR merge: merging a PR on the forge, now or once its checks pass, or
-//! withdrawing its automatic merge.
+//! Merging a PR on the forge.
 use anyhow::Result;
 
 use crate::{
@@ -12,9 +11,6 @@ use crate::{
     protocol::RepoTarget,
 };
 
-/// Merge the PR `item` names in the `target` repository, or the space's
-/// linked one, as `args` ask, unless the user declines a merge the daemon
-/// warns about; `--yes` merges whatever it warns about.
 pub(super) async fn merge(
     ctx: &Context,
     target: RepoTarget,
@@ -39,7 +35,6 @@ pub(super) async fn merge(
     items::report(ctx, &item, outcome)
 }
 
-/// The merge `args` ask for, or the withdrawal of an automatic merge.
 pub(super) fn action(args: &MergeArgs) -> (Action, &'static str) {
     let (method, message, delete_branch) = (args.method, args.message.clone(), args.delete_branch);
     if args.cancel_auto {

@@ -1,7 +1,6 @@
-//! The bare `shoal` picker, which `shoal inbox` and `shoal list` also open
-//! on a terminal: a list per view that Tab cycles, reloading its rows from
-//! `shoal internal menu-rows`. Each view binds only the keys that mean
-//! something there. A selection plus key becomes an ordinary [`Command`].
+//! The bare `shoal` picker, which `shoal inbox` and `shoal list` also open on a
+//! terminal. Tab cycles its views, each reloading its rows from `shoal internal
+//! menu-rows`. A row and key become an ordinary [`Command`].
 mod execute;
 mod keys;
 mod linked;
@@ -68,8 +67,6 @@ async fn current_items(ctx: &Context, entries: &Entries) -> Result<Option<String
     Ok(has_items.then(|| format!("'{}", current.name)))
 }
 
-/// The view to open and its rows: `start`, or the first available view
-/// with rows.
 async fn first_view(
     ctx: &Context,
     start: Option<View>,
@@ -124,8 +121,6 @@ pub(super) fn print_next(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-/// What the picker chose: a command to run, or the exit code of an action
-/// it finished itself.
 pub(super) enum Choice {
     Run(Box<Command>),
     Done(i32),

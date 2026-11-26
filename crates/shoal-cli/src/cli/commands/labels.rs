@@ -1,6 +1,4 @@
-//! `shoal repo labels`: the labels of the workspace's repository, or another
-//! one, as the forge lists them, so agents can pick the ones its scheme asks
-//! for.
+//! `shoal repo labels`.
 use anyhow::Result;
 
 use crate::{
@@ -19,8 +17,6 @@ pub(super) async fn labels(ctx: &Context, repository: RepositoryArgs) -> Result<
     ctx.show(&labels, |labels| render(labels))?;
     Ok(0)
 }
-/// One line per label: its name, description, and whether it excludes the
-/// other labels of its scope.
 fn render(labels: &[Label]) {
     if labels.is_empty() {
         outln!("No labels");

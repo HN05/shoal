@@ -1,6 +1,4 @@
-//! A space's status: what the daemon reports and the sessions the CLI finds,
-//! or another joined machine's status of its space, or what that machine
-//! last reported while it is offline.
+//! `shoal status` of a space.
 mod render;
 mod reported;
 
@@ -70,10 +68,9 @@ pub(in crate::cli::commands) async fn status(
     Ok(0)
 }
 
-/// The space this runs in; none outside every space, or without a daemon,
-/// which could not say which workspace the current directory is in. A
-/// daemon whose request slots are full refuses that lookup but still
-/// answers its status, which tells why, so a failed lookup is none too.
+/// None outside every space, or without a daemon. A daemon whose request slots
+/// are full refuses that lookup but still answers its status, which tells why,
+/// so a failed lookup is none too.
 async fn space_here(ctx: &Context) -> Result<Option<SpaceSelector>> {
     if crate::cli::client::status(&ctx.paths).await?.is_none() {
         return Ok(None);
@@ -87,9 +84,7 @@ async fn space_here(ctx: &Context) -> Result<Option<SpaceSelector>> {
     }
 }
 
-/// `status` with the sessions its terminal hosts keep and where its
-/// agents' transcripts are, which another machine that runs the space
-/// keeps there.
+/// Another machine that runs the space keeps its sessions and transcripts.
 async fn status_view(ctx: &Context, status: SpaceStatus) -> StatusView {
     if status.machine.is_some() {
         return StatusView {
@@ -116,8 +111,6 @@ async fn status_view(ctx: &Context, status: SpaceStatus) -> StatusView {
     }
 }
 
-/// What `found` lists, or why it could not, which status shows in place of
-/// the list.
 fn listed<T>(found: Result<Vec<T>>) -> (Vec<T>, Option<String>) {
     match found {
         Ok(found) => (found, None),
@@ -125,8 +118,6 @@ fn listed<T>(found: Result<Vec<T>>) -> (Vec<T>, Option<String>) {
     }
 }
 
-/// The agent sessions of `space`, in the hosts its settings enable and at
-/// the places the daemon recorded it running in.
 async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<crate::terminal::Session>> {
     let target = match space {
         SpaceDetail::Workspace(status) => {

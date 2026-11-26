@@ -1,5 +1,5 @@
-//! Showing reviews: `review ls`, `view review`, `watch review`, and the
-//! latest review `shoal view` adds after a workspace's linked items.
+//! `review ls`, `view review`, `watch review`, and the latest review `shoal
+//! view` shows.
 use anyhow::Result;
 
 use crate::client::reviews;
@@ -46,8 +46,6 @@ pub(in crate::cli::commands) async fn list(
     Ok(0)
 }
 
-/// `shoal view review [ID]`: one review in full, by default the workspace's
-/// latest.
 pub(in crate::cli::commands) async fn view(
     ctx: &Context,
     id: Option<ReviewId>,
@@ -59,10 +57,8 @@ pub(in crate::cli::commands) async fn view(
     Ok(0)
 }
 
-/// `shoal watch review [ID]`: wait until the review, by default the
-/// workspace's latest, is neither queued nor running, then show it. The wait
-/// outlasts a daemon restart, and an upgrade's protocol change continues it
-/// from the installed binary.
+/// The wait outlasts a daemon restart, and an upgrade's protocol change
+/// continues it from the installed binary.
 pub(in crate::cli::commands) async fn watch(
     ctx: &Context,
     id: Option<ReviewId>,
@@ -78,8 +74,7 @@ pub(in crate::cli::commands) async fn watch(
     Ok(0)
 }
 
-/// The workspace's newest review for `shoal view`, if it has one; a lookup
-/// that fails leaves it out.
+/// A lookup that fails leaves it out.
 pub(in crate::cli::commands) async fn latest(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -90,7 +85,6 @@ pub(in crate::cli::commands) async fn latest(
         .ok()
 }
 
-/// The workspace a request without a review ID names.
 async fn selected(
     ctx: &Context,
     id: Option<ReviewId>,
@@ -135,7 +129,6 @@ fn render_list(reviews: &[Review], json: bool) {
     }
 }
 
-/// One review in full.
 pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
     let heading = format!("Review {} of {}", review.id, review.workspace);
     outln!("{}", palette.paint(Style::Heading, heading));
@@ -212,8 +205,6 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
     }
 }
 
-/// A finding's thread: its number, severity, place and outcome, its title,
-/// then each post.
 fn render_thread(thread: &Thread, palette: Palette) {
     let severity = thread.finding.and_then(|finding| finding.severity);
     let style = match severity {

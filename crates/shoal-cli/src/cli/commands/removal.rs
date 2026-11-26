@@ -10,12 +10,10 @@ use crate::{
     removal::SpaceRemovalCheck,
 };
 
-/// Refuse a space that a batch, named by its `(noun, verb)`, could not
-/// finish with: one whose worktree is in another lifecycle operation, which
-/// the removal check leaves to the removal itself, or one whose removal
-/// closes this terminal's tab, ending the batch before the others. A
-/// preparing workspace without commands is one whose setup never started,
-/// which removal takes.
+/// Refuse a space a batch, named by its `(noun, verb)`, could not finish with:
+/// one whose worktree is in another lifecycle operation, or one whose removal
+/// closes this terminal's tab and so ends the batch. A preparing workspace
+/// without commands never started setup, and removal takes it.
 pub(in crate::cli::commands) async fn ensure_batch_removable(
     ctx: &Context,
     check: &SpaceRemovalCheck,
@@ -31,9 +29,6 @@ pub(in crate::cli::commands) async fn ensure_batch_removable(
     Ok(())
 }
 
-/// Run `removal`, which removes `space`, after finding where the shell goes
-/// when the directory of its worktree disappears under it, and send it
-/// there.
 pub(in crate::cli::commands) async fn leaving<T>(
     ctx: &Context,
     space: &Space,

@@ -1,6 +1,4 @@
-//! `shoal thread`: open a thread, forward or resolve one, and list them.
-//! Posting in a thread goes through `shoal send`, reading one through
-//! `shoal view thread`, and following one through `shoal link thread`.
+//! `shoal thread`.
 use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result, bail, ensure};
 
@@ -35,9 +33,7 @@ pub(in crate::cli) use posting::{Posting, post, post_in_chat};
 pub(in crate::cli) use render::summary;
 pub(super) use switching::{Switch, add, remove, switch};
 
-/// The daemon takes a scoped process's posts as its space's; this refuses
-/// a descendant that cleared its scope token, which it would take for the
-/// user.
+/// The daemon would take a process that cleared its scope token for the user.
 fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     ensure!(
         crate::env::is_scoped() || !crate::process::scoped::inherits_scope(&ctx.paths.state),
@@ -46,9 +42,7 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-/// The space this process acts as: its own chat, which a session Shoal did
-/// not start names without a scope token, else the one its scope gives it,
-/// or the user. It refuses a process that cleared its scope token.
+/// A session Shoal did not start names its own chat without a scope token.
 async fn acting_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
     refuse_workspace_processes(ctx)?;
     match super::alerts::in_own_space() {
@@ -57,7 +51,6 @@ async fn acting_space(ctx: &Context) -> Result<Option<SpaceSelector>> {
     }
 }
 
-/// What `shoal thread open` opens a thread with, as given.
 pub(super) struct Opening {
     pub(super) name: String,
     pub(super) code: Vec<CodeArg>,
@@ -66,8 +59,6 @@ pub(super) struct Opening {
 }
 
 impl Opening {
-    /// The opening the daemon takes: the body read, the code's paths made
-    /// absolute.
     fn read(self) -> Result<ThreadOpening> {
         Ok(ThreadOpening {
             name: self.name,
@@ -78,10 +69,7 @@ impl Opening {
     }
 }
 
-/// Open a thread of `kind`, with what is `given`, with the space `space`
-/// names, else with the caller's coordinator or the user; from the user's
-/// terminal with the current or a picked space. Without a kind, it joins
-/// the caller's pending review of that space.
+/// Without a kind, it joins the caller's pending review of that space.
 pub(super) async fn open(
     ctx: &Context,
     given: Opening,
@@ -117,8 +105,6 @@ pub(super) async fn open(
     Ok(0)
 }
 
-/// The places in code `code` names, their paths made absolute against the
-/// current directory.
 fn code_refs(code: Vec<CodeArg>) -> Result<Vec<NewCodeRef>> {
     let here = std::env::current_dir().context("read the current directory")?;
     Ok((code.into_iter())
@@ -130,8 +116,6 @@ fn code_refs(code: Vec<CodeArg>) -> Result<Vec<NewCodeRef>> {
         .collect())
 }
 
-/// Give the thread `number` to the space `space` names, else pass it up,
-/// staying linked to it unless `unlink`.
 pub(super) async fn forward(
     ctx: &Context,
     number: ThreadNumber,
@@ -158,7 +142,6 @@ pub(super) async fn forward(
     Ok(0)
 }
 
-/// Resolve the thread `number` as `resolving` says, or reopen it.
 pub(super) async fn resolve(
     ctx: &Context,
     number: ThreadNumber,
@@ -174,8 +157,6 @@ pub(super) async fn resolve(
     Ok(0)
 }
 
-/// What `shoal thread resolve` records: an outcome with its data, or
-/// reopening the thread with `undo`.
 pub(super) fn resolving(
     outcome: Option<OutcomeKind>,
     data: OutcomeData,
@@ -195,14 +176,10 @@ pub(super) fn resolving(
     })
 }
 
-/// Whether `items` select a thread: `link thread 3.2 related`.
 pub(super) fn selects_thread(items: &RelationArgs) -> bool {
     items.args.first().is_some_and(|word| word == "thread")
 }
 
-/// Link the thread `items` names, whose new posts then reach the space,
-/// or unlink it; a link's relation is `related`, which unlinking may leave
-/// out.
 pub(super) async fn link(ctx: &Context, items: RelationArgs, linked: bool) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
     let number = linked_thread(&items.args, linked)?;
@@ -219,8 +196,6 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs, linked: bool) -> Re
     Ok(0)
 }
 
-/// The thread `thread <S.N> related` names, which `unlink` takes without
-/// its relation.
 fn linked_thread(args: &[String], linked: bool) -> Result<ItemNumber> {
     let (number, relation) = match args {
         [_, number, relation] => (number, Some(relation)),
@@ -235,9 +210,7 @@ fn linked_thread(args: &[String], linked: bool) -> Result<ItemNumber> {
     number.parse()
 }
 
-/// What opening a thread of `kind` sends for the space a picker picks as
-/// its holder; its name and opener decide nothing of which spaces it
-/// reaches.
+/// Its name and opener decide nothing of which spaces it reaches.
 pub(super) fn opening(kind: Option<ThreadKind>) -> Acting {
     Acting::request(move |to| threads::open(ThreadOpening::default(), kind, Some(to), None))
 }

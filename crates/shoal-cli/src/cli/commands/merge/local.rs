@@ -1,5 +1,4 @@
-//! A local merge: the operation that merges a workspace's branch into the
-//! default branch.
+//! A local merge of a workspace's branch into the default branch.
 use anyhow::Result;
 
 use crate::{
@@ -10,11 +9,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Merge `workspace`'s branch into the default branch by the method and
-/// with the message `args` give. Their `--push` or `--no-push` overrides
-/// `[merge] push` of the machine that merges, and `--yes` skips the
-/// confirmation a merge asks for when it pushes or brings the default
-/// branch sensitive files it changed too.
 pub(super) async fn merge(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -38,13 +32,9 @@ pub(super) async fn merge(
     Ok(0)
 }
 
-/// Ask before merging `workspace`, showing what the merge does, when it
-/// asks before it pushes, or when it brings the default branch sensitive
-/// files it changed too; return what the user confirmed, if asked. The
-/// daemon checks the merge first, so a merge it refuses or the user
-/// declines changes nothing. An agent's merge asks about its push through
-/// its approval request instead, which names the files its `--yes` passed
-/// over.
+/// The daemon checks the merge first, so a merge it refuses or the user
+/// declines changes nothing. An agent's merge asks about its push through its
+/// approval request instead.
 async fn confirm_merge(
     ctx: &Context,
     workspace: &SpaceSelector,

@@ -1,5 +1,3 @@
-//! Dispatch repository commands to their workflows.
-
 mod configuration;
 mod elsewhere;
 mod listing;

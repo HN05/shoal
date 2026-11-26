@@ -1,6 +1,4 @@
-//! `shoal files` lists the files attached to a workspace or chat, or on a
-//! terminal opens a picker over them; `add` attaches more without a message
-//! and `rm` deletes them. Under a chat's agent they act on its chat.
+//! `shoal files`.
 use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 use shoal_protocol::model::ByKind;
@@ -16,7 +14,6 @@ use shoal_protocol::space_names::SpaceSelector;
 
 mod menu;
 
-/// How `shoal files` shows the files of a space.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Listing {
     /// A picker on a terminal, otherwise a list.
@@ -27,7 +24,6 @@ pub(super) enum Listing {
     Paths,
 }
 
-/// Show the files of the workspace or chat as `listing` asks.
 pub(super) async fn list(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -62,8 +58,7 @@ pub(super) async fn list(
     Ok(0)
 }
 
-/// Attach copies of `files` to the workspace or chat, checking each before
-/// a workspace is picked.
+/// Each file is checked before a workspace is picked.
 pub(super) async fn add(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -85,10 +80,8 @@ pub(super) async fn add(
     Ok(0)
 }
 
-/// Delete the files of the workspace or chat `filter` selects, only those
-/// with one of `names` and the records `ids` when there are any, or of every
-/// workspace without a running agent or command. Asks first for every
-/// workspace, or one where an agent or command runs, unless `yes`.
+/// Asks first for every workspace, or for one where an agent or command runs,
+/// unless `yes`.
 pub(super) async fn remove(
     ctx: &Context,
     filter: SpaceFilter,
@@ -146,8 +139,6 @@ async fn check_selected(
     Ok(())
 }
 
-/// What deleting the files of `space`, a workspace or chat, or of every
-/// workspace, asks the user to confirm, if anything.
 async fn confirmation(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<String>> {
     let Some(space) = space else {
         return Ok(Some(
@@ -161,8 +152,6 @@ async fn confirmation(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Op
         .map(|name| format!("An agent or command runs in {name}. Delete its attached files")))
 }
 
-/// The name of the workspace where an agent or command runs, or of the
-/// running chat, that `selector` names.
 async fn running_space(ctx: &Context, selector: &SpaceSelector) -> Result<Option<String>> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     Ok(
@@ -176,8 +165,6 @@ async fn running_space(ctx: &Context, selector: &SpaceSelector) -> Result<Option
     )
 }
 
-/// The file's name, title, size, how it came, when, read at `now`, when a
-/// removed workspace's file is deleted, and where Shoal's copy is.
 fn cells(file: &AttachedFile, now: crate::time::UnixTime) -> [ui::Cell; 7] {
     let expiry = file
         .expires_at
@@ -204,18 +191,15 @@ fn source_label(source: FileSource) -> &'static str {
     }
 }
 
-/// What listing a space's files sends for the space a picker picks.
 pub(super) fn showing() -> Acting {
     Acting::request(crate::client::files::list)
 }
 
-/// What adding files sends for the space a picker picks; the files decide
-/// nothing of which spaces it reaches.
+/// The files decide nothing of which spaces it reaches.
 pub(super) fn adding() -> Acting {
     Acting::request(|space| crate::client::files::add(space, Vec::new()))
 }
 
-/// What removing files sends for the space a picker picks.
 pub(super) fn removing() -> Acting {
     Acting::request(|space| crate::client::files::remove(Some(space), Vec::new(), Vec::new()))
 }

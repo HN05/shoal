@@ -1,4 +1,4 @@
-//! User-level skill delivery; no daemon, repository, or agent process is needed.
+//! `shoal skill`. It needs no daemon, repository or agent process.
 use crate::paths::PathsExt;
 mod record;
 
@@ -27,10 +27,8 @@ use crate::{
 };
 use record::{Entry, Record};
 
-/// Bundled skills by name.
 const SKILLS: [(&str, &str); 1] = [("shoal", include_str!("skill/shoal.md"))];
 
-/// Each bundled skill's name and the contents this version installs.
 type Contents = Vec<(&'static str, String)>;
 
 pub(super) fn run(
@@ -164,13 +162,10 @@ pub(super) fn refresh_installed(state: &Path, json_output: bool) {
     }
 }
 
-/// Whether any configured skill directory holds a Shoal skill, which
-/// `refresh_installed` keeps current.
 pub(super) fn installed_anywhere() -> Result<bool> {
     any_holds_shoal_skills(installed_directories()?)
 }
 
-/// Whether one of `directories` holds a Shoal skill, as `refresh` finds them.
 fn any_holds_shoal_skills(directories: impl IntoIterator<Item = PathBuf>) -> Result<bool> {
     let bundled = skill_contents();
     for directory in directories {
@@ -190,7 +185,6 @@ fn installed_directories() -> Result<BTreeSet<PathBuf>> {
     Ok(directories.into_values().flatten().collect())
 }
 
-/// The bundled skills, as this version installs them.
 fn skill_contents() -> Contents {
     SKILLS
         .iter()
@@ -208,7 +202,6 @@ enum Mode {
     Refresh,
 }
 
-/// What an install does with a skill the user changed.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Changed {
     Keep,
@@ -218,7 +211,6 @@ enum Changed {
 
 #[derive(Debug, Default)]
 struct Outcome {
-    /// Bundled skills installed as this version provides them.
     installed: Vec<&'static str>,
     /// Skills left as the user changed them: on install every one, on refresh
     /// those found changed by this call.
@@ -250,7 +242,6 @@ fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> R
     Ok(installation.outcome)
 }
 
-/// One skill directory's record as a refresh updates it, and what it reports.
 struct Installation<'a> {
     directory: &'a Path,
     mode: Mode,
@@ -326,7 +317,6 @@ impl Installation<'_> {
         Ok(())
     }
 
-    /// Write the record when it differs from the one `loaded` from disk.
     fn save(&self, loaded: Option<&Record>) -> Result<()> {
         if loaded == Some(&self.record) {
             return Ok(());
@@ -337,7 +327,6 @@ impl Installation<'_> {
     }
 }
 
-/// Whether an install replaces the changed skill at `path`.
 fn replace_changed(mode: Mode, name: &str, path: &Path, contents: &str) -> Result<bool> {
     match mode {
         Mode::Install(Changed::Replace) => Ok(true),
@@ -352,7 +341,6 @@ fn replace_changed(mode: Mode, name: &str, path: &Path, contents: &str) -> Resul
     }
 }
 
-/// Print how `contents` would change the installed skill at `path`.
 fn show_diff(path: &Path, contents: &str) -> Result<()> {
     let mut diff = Command::new(Tool::Diff.program())
         .args(["-u", "-L"])
@@ -394,7 +382,6 @@ fn holds_shoal_skills(
     Ok(false)
 }
 
-/// Whether `path` is a directory itself, not a link to one, or is absent.
 fn real_directory(path: &Path) -> Result<bool> {
     match fs::symlink_metadata(path) {
         Ok(metadata) => Ok(metadata.is_dir()),
@@ -413,7 +400,6 @@ enum Found {
 }
 
 impl Found {
-    /// What the file at `path` holds against `expected`, this version.
     fn read(path: &Path, expected: &Entry) -> Result<Self> {
         // A concurrent refresh may already have written this version.
         Ok(if expected.matches(path)? {

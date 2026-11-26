@@ -1,4 +1,4 @@
-//! CLI access to the holds that keep spaces from cleanup.
+//! `shoal acquire hold`, `shoal leases hold` and `shoal release hold`.
 use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 
@@ -16,8 +16,8 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Exit 2 means a pending or denied approval: a scoped process holding its
-/// own space asks its coordinator or the user first.
+/// Exit 2 means a pending or denied approval: a scoped process that holds its
+/// own space asks first.
 pub(super) async fn acquire(
     ctx: &Context,
     space: SpaceSelector,
@@ -57,8 +57,6 @@ pub(super) async fn release(
     Ok(0)
 }
 
-/// The holds of the space `filter` selects, or of every space, the
-/// workspaces then the chats.
 pub(super) async fn list(ctx: &Context, filter: SpaceFilter) -> Result<i32> {
     let Some(space) = ui::select_space_filter(ctx, filter, &listing()).await? else {
         let spaces = crate::client::spaces::list(&ctx.paths).await?;
@@ -129,7 +127,6 @@ fn render(holds: &[SpaceHold]) {
     }
 }
 
-/// What listing a space's holds sends for the space a picker picks.
 pub(super) fn listing() -> Acting {
     Acting::request(crate::client::leases::holds)
 }

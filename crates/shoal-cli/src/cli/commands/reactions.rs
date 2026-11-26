@@ -1,6 +1,4 @@
-//! `shoal forge reactions`: the reactions the forge of the workspace's
-//! repository, or another one, allows, so clients can offer them before
-//! reacting.
+//! `shoal forge reactions`.
 use anyhow::Result;
 
 use crate::{
@@ -19,7 +17,6 @@ pub(super) async fn reactions(ctx: &Context, repository: RepositoryArgs) -> Resu
     Ok(0)
 }
 
-/// One line per reaction, then whether the forge accepts others.
 fn render(reactions: &AllowedReactions) {
     if reactions.names.is_empty() {
         outln!("No reactions");

@@ -4,9 +4,6 @@ use anyhow::Result;
 
 use crate::{cli::context::Context, config::permissions::PermissionsConfig};
 
-/// Refuse `given` where this scoped process does not hold it for an action
-/// in the registered repository `repository`; the user, without a scope,
-/// gives any.
 pub(super) async fn ensure_held(
     ctx: &Context,
     repository: Option<crate::repository::Selector>,

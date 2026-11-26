@@ -10,7 +10,6 @@ use crate::{
     client::output::inbox::{Item, Need},
 };
 
-/// The statuses of another machine's space that need the user.
 const NEEDS_USER: [ListStatus; 5] = [
     ListStatus::NeedsInput,
     ListStatus::Blocked,
@@ -19,10 +18,6 @@ const NEEDS_USER: [ListStatus; 5] = [
     ListStatus::Ready,
 ];
 
-/// The threads that wait for the user, then the approval requests the user
-/// decides, then
-/// the statuses that need the user, of the other machines' spaces in `view`
-/// that `keeps` keeps.
 pub(super) fn items(view: Option<&HubView>, keeps: impl Fn(&Listed) -> bool) -> Vec<Item> {
     let spaces: Vec<&Listed> = (view.into_iter())
         .flat_map(|view| &view.directory.spaces)
@@ -55,7 +50,6 @@ pub(super) fn items(view: Option<&HubView>, keeps: impl Fn(&Listed) -> bool) -> 
     threads.chain(approvals).chain(statuses).collect()
 }
 
-/// What kind of item `need` is, with a thread's or request's number.
 pub(super) fn kind(need: &Need) -> Cell {
     match need {
         Need::Thread(thread) => (format!("thread {}", thread.number), Some(Style::Warning)),
@@ -64,8 +58,6 @@ pub(super) fn kind(need: &Need) -> Cell {
     }
 }
 
-/// What the row of `remote`'s `need` says: the thread, the access
-/// requested and why, or its agent's status line.
 pub(super) fn text(remote: &Listed, need: &Need) -> String {
     match need {
         Need::Thread(thread) => thread.one_line(),

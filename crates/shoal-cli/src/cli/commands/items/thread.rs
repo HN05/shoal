@@ -1,4 +1,4 @@
-//! `shoal pr reply`, `resolve` and `unresolve`: changes to a review thread.
+//! `shoal pr reply`, `resolve` and `unresolve`.
 use anyhow::{Context as _, Result, ensure};
 
 use super::{content::read_body, item_target};
@@ -15,7 +15,6 @@ use crate::{
     },
 };
 
-/// A reply in the thread of `comment`, which needs a body.
 pub(super) fn reply(comment: CommentId, body: BodyArgs) -> Result<Action> {
     let reply = read_body(body)?.context("a reply needs --body or --body-file")?;
     Ok(thread(comment, Some(reply), None))

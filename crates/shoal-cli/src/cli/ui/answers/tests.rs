@@ -1,6 +1,5 @@
 use super::*;
 
-/// Small, Medium and Large, by value and label.
 fn sizes() -> Vec<(String, String)> {
     ["Small", "Medium", "Large"]
         .into_iter()

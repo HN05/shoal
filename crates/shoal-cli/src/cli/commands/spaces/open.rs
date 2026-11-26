@@ -1,4 +1,4 @@
-//! `shoal open`: handing a space to a desktop app.
+//! `shoal open`.
 use crate::cli::ui::Acting;
 use std::ffi::OsString;
 
@@ -17,8 +17,6 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Hand the named space, else the current directory's or a picked one, to
-/// the named desktop app, else the one [`default_app`] gives.
 pub(in crate::cli::commands) async fn open(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -48,8 +46,6 @@ pub(in crate::cli::commands) async fn open(
     shoal_workers::launch::hand_off(&ctx.paths, &space, repository.as_ref(), app, args).await
 }
 
-/// The registered repository `space` belongs to; none for a chat without
-/// one.
 async fn repository(ctx: &Context, space: &Space) -> Result<Option<Repository>> {
     let Some(id) = &space.repository_id else {
         return Ok(None);
@@ -61,8 +57,6 @@ async fn repository(ctx: &Context, space: &Space) -> Result<Option<Repository>> 
     Ok(Some(repository))
 }
 
-/// The app `shoal open` opens in space `id` without `--app`: its
-/// `app.default`, else the only one installed, else one the user picks.
 async fn default_app(ctx: &Context, id: &SpaceId) -> Result<DesktopApp> {
     let target = ConfigTarget::Space(SpaceSelector::id(id));
     let settings = shoal_workers::settings::of(&ctx.paths, target).await?;
@@ -72,8 +66,6 @@ async fn default_app(ctx: &Context, id: &SpaceId) -> Result<DesktopApp> {
     }
 }
 
-/// The only desktop app installed, else one the user picks among those
-/// installed.
 fn choose(ctx: &Context) -> Result<DesktopApp> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let installed: Vec<_> = (DesktopApp::ALL.iter().copied())
@@ -95,8 +87,6 @@ fn choose(ctx: &Context) -> Result<DesktopApp> {
     }
 }
 
-/// What opening a space in an app sends for the space a picker picks, on
-/// this machine, where the app runs.
 pub(in crate::cli::commands) fn opening() -> Acting {
     Acting::here(crate::client::spaces::enter)
 }

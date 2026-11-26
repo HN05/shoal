@@ -1,8 +1,7 @@
-//! The request each command sends for the space it acts on, which its
-//! picker and completion judge spaces by. Every command declares it in a
-//! match with no default arm: one that names a space but declares none
-//! picks only to read in a space's context, and completion offers it every
-//! space.
+//! The request each command sends for the space it acts on, by which its picker
+//! and completion judge spaces. Every command declares it in a match with no
+//! default arm. A command that names a space but declares none picks only to
+//! read in that space's context, and completion offers it every space.
 use crate::cli::{Command, ui::Acting};
 
 mod approvals;

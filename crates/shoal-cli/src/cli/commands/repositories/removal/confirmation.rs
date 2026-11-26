@@ -1,6 +1,4 @@
-//! What `shoal repo rm` asks the user to confirm: each machine's
-//! repository, with the spaces its removal deletes there and the work of
-//! their own they lose.
+//! What `shoal repo rm` asks the user to confirm.
 use anyhow::Result;
 use shoal_protocol::model::{RepositoryRemovalPreview, SpaceWork, WorktreeWork};
 
@@ -43,8 +41,6 @@ pub(super) fn briefly(targets: &[Target]) -> String {
     format!("Delete repository {}", named.join(", "))
 }
 
-/// What removing `target` deletes, as this machine knows it, with why its
-/// spaces could not be read, `error`.
 fn unread(target: &Target, error: &anyhow::Error) -> String {
     let named = match target {
         Target::Here(local) => format!(
@@ -63,8 +59,6 @@ fn unread(target: &Target, error: &anyhow::Error) -> String {
     format!("{named}\nSpaces: not listed: {error:#}")
 }
 
-/// What `preview` deletes on the machine `machine` names, none for this
-/// one.
 fn block(preview: &RepositoryRemovalPreview, machine: Option<&str>) -> String {
     let repository = &preview.repository;
     let on = machine
@@ -82,7 +76,6 @@ fn block(preview: &RepositoryRemovalPreview, machine: Option<&str>) -> String {
     lines.join("\n")
 }
 
-/// A space that removal deletes, with the work of its own it loses.
 fn space_line(space: &SpaceWork) -> String {
     let named = format!("{} {}", space.number, space.space.name);
     let lost = match (space.space.kind().has_worktree(), space.work) {
@@ -96,7 +89,6 @@ fn space_line(space: &SpaceWork) -> String {
     }
 }
 
-/// What `work` loses, one entry per kind.
 fn lost(work: WorktreeWork) -> Vec<String> {
     let mut lost = Vec::new();
     if work.dirty {

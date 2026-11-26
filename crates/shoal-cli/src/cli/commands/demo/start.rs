@@ -1,6 +1,4 @@
-//! `shoal demo start`: choosing the demo, replacing a running one of its
-//! name, placing its worker in a terminal host and waiting until it records
-//! that it runs.
+//! `shoal demo start`.
 use shoal_workers::hosting;
 use std::{collections::BTreeMap, ffi::OsString, time::Duration};
 
@@ -22,7 +20,6 @@ use crate::{
 use shoal_protocol::demos::{Demo, Launch, Preset, Progress, Running};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The name an ad hoc demo takes when the agent gives none.
 const DEFAULT_NAME: &str = "demo";
 /// How often a start checks that a replaced demo ended and its worker
 /// recorded the new one.
@@ -30,7 +27,6 @@ const START_POLL: Duration = Duration::from_millis(100);
 /// A hang guard for a demo that never ends or a worker that never records it.
 const START_LIMIT: Duration = Duration::from_secs(120);
 
-/// What `shoal demo start` replaces in the configured demo.
 pub(super) struct Overrides {
     pub preset: Option<Preset>,
     pub scheme: Option<shoal_protocol::demos::Scheme>,
@@ -57,7 +53,6 @@ impl Overrides {
     }
 }
 
-/// A demo ready to start: its name, definition and command.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct Chosen {
     pub name: String,
@@ -133,8 +128,6 @@ pub(super) async fn replace(ctx: &Context, workspace: &Workspace, name: &str) ->
     Ok(())
 }
 
-/// The demo `name` and the command after `--` select: a command names an
-/// ad hoc demo, otherwise `name` or the only configured demo is the one.
 fn choose(
     configured: &BTreeMap<String, Demo>,
     name: Option<String>,
@@ -207,7 +200,6 @@ impl Chosen {
     }
 }
 
-/// Start the demo's worker in a terminal host and return what it records.
 async fn place(
     ctx: &Context,
     settings: &crate::config::Effective,
@@ -252,7 +244,6 @@ async fn place(
     Ok(launch(&place))
 }
 
-/// Wait until the worker has recorded `launch`, which shows its command runs.
 async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> Result<Running> {
     let deadline = tokio::time::Instant::now() + START_LIMIT;
     loop {
@@ -273,7 +264,6 @@ async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> 
     }
 }
 
-/// Why the demo did not start, from the end of what its place shows.
 async fn not_started(launch: &Launch) -> anyhow::Error {
     let screen = hosting::demo_screen(launch).await.unwrap_or_default();
     anyhow::anyhow!(
@@ -285,8 +275,6 @@ async fn not_started(launch: &Launch) -> anyhow::Error {
     )
 }
 
-/// What starting a demo sends for the workspace a picker picks: its
-/// command's run there, on this machine.
 pub(super) fn starting() -> Acting {
     Acting::here(crate::client::executions::command_run)
 }

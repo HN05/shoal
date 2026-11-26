@@ -1,5 +1,4 @@
-//! `shoal thread list` and `shoal view thread`: choose a thread on a
-//! terminal, read it, and reply when it waits for the user; or print them.
+//! `shoal thread list` and `shoal view thread`.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
     item_numbers::ItemNumber,
@@ -18,8 +17,6 @@ use crate::{
     client::threads,
 };
 
-/// List the threads of `space`, else the caller's, in `state`: a picker on
-/// a terminal unless `print`, else the list.
 pub(in crate::cli::commands) async fn list(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -45,15 +42,11 @@ pub(in crate::cli::commands) async fn list(
     Ok(0)
 }
 
-/// Show the thread `number`, offering a reply on a terminal when it waits
-/// for the user.
 pub(in crate::cli::commands) async fn view(ctx: &Context, number: ThreadNumber) -> Result<i32> {
     let thread = threads::show(&ctx.paths, number).await?;
     read(ctx, thread).await
 }
 
-/// Show `thread`, and on a terminal read the user's reply when it waits
-/// for them.
 pub(in crate::cli::commands) async fn read(ctx: &Context, thread: Thread) -> Result<i32> {
     if ctx.interactive_output() && thread.waits_for_user() && !crate::env::is_scoped() {
         return reply(ctx, thread).await;
@@ -72,8 +65,6 @@ pub(super) fn pick(ctx: &Context, threads: Vec<Thread>) -> Result<Thread> {
         .context("picker returned an unknown thread")
 }
 
-/// One aligned row per thread, as the inbox shows it: its number, its
-/// space, its name cut to fit the picker, and where it stands.
 fn picker_rows(threads: &[Thread]) -> Entries {
     let cells = threads
         .iter()
@@ -95,8 +86,6 @@ fn picker_rows(threads: &[Thread]) -> Entries {
         .collect()
 }
 
-/// Show `thread` and post the user's reply: an action of the other side's
-/// latest surface, picked with the values it takes, or a reply in words.
 /// Ctrl-C or end of input cancels.
 async fn reply(ctx: &Context, thread: Thread) -> Result<i32> {
     eprintln!("{}", render::details(&thread, Palette::stderr(ctx.json)));
@@ -122,9 +111,6 @@ async fn reply(ctx: &Context, thread: Thread) -> Result<i32> {
     Ok(0)
 }
 
-/// The post the user answers in `thread`, the other side's latest surface,
-/// when it offers actions: its ID, its author, text and surface as the
-/// picker's header, and its actions.
 fn answerable(thread: &Thread) -> Option<(i64, String, Vec<SurfaceAction>)> {
     let other = thread.last_turn()?.side?;
     let post = thread.surface_from(other)?;
@@ -163,7 +149,6 @@ pub(super) fn header(lines: impl Iterator<Item = String>, number: ItemNumber) ->
     shown.join("\n")
 }
 
-/// Post `text` in the thread `number` as the user.
 async fn post_words(ctx: &Context, number: ThreadNumber, text: String) -> Result<Thread> {
     let post = NewPost {
         text,

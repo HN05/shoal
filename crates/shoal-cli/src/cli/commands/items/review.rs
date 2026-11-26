@@ -1,5 +1,4 @@
-//! `shoal pr review`: a review from its verdict, body and line comments,
-//! given as arguments or a JSON array.
+//! `shoal pr review`.
 use std::{io::Read as _, path::Path};
 
 use anyhow::{Context as _, Result, bail};
@@ -13,7 +12,6 @@ use crate::{
     },
 };
 
-/// The review `args` describe, and what to report once it is submitted.
 pub(super) fn review(args: ReviewArgs) -> Result<(Action, &'static str)> {
     let verdict = verdict(&args.verdict);
     let mut comments = line_comments(&args.lines, Side::New)?;
@@ -46,7 +44,6 @@ fn verdict(flags: &VerdictArgs) -> ReviewVerdict {
     }
 }
 
-/// The comments of `PATH:LINE BODY` argument pairs on `side`.
 fn line_comments(pairs: &[String], side: Side) -> Result<Vec<LineComment>> {
     let (pairs, _) = pairs.as_chunks::<2>();
     pairs
@@ -68,8 +65,6 @@ fn line_comments(pairs: &[String], side: Side) -> Result<Vec<LineComment>> {
         .collect()
 }
 
-/// The comments of the JSON array in the file at `path`, or on standard
-/// input for `-`.
 fn comments_file(path: &Path) -> Result<Vec<LineComment>> {
     let text = if path == Path::new("-") {
         let mut text = String::new();

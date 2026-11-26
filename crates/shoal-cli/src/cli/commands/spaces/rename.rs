@@ -1,5 +1,4 @@
-//! `shoal rename`: rename a workspace or a chat, a picked one with what the
-//! user types, or ask its agent to choose.
+//! `shoal rename`.
 use anyhow::{Result, ensure};
 use shoal_workers::hosting;
 
@@ -17,11 +16,8 @@ use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::status::StatusAnswer;
 
-/// What `shoal rename --request` asks a space's agent.
 const NAME_REQUEST: &str = "The user asks you to rename this space: name the work as it stands now in a few words with `shoal rename \"<name>\"`.";
 
-/// Rename the space `space` selects, else the space this runs in or a
-/// picked one.
 pub(in crate::cli::commands) async fn rename(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -33,22 +29,19 @@ pub(in crate::cli::commands) async fn rename(
     rename_space(ctx, space, name).await
 }
 
-/// Rename a picked workspace or chat with what the user types next.
 pub(in crate::cli::commands) async fn rename_picked(ctx: &Context) -> Result<i32> {
     let space = ui::pick_any_space(ctx, &renaming()).await?;
     let name = ask_name(ctx).await?;
     rename_space(ctx, space, name).await
 }
 
-/// What renaming a space sends, for its pickers; the name, which may be
-/// typed once the space is picked, decides nothing of which spaces the
-/// rename reaches.
+/// The name, which may be typed once the space is picked, decides nothing of
+/// which spaces the rename reaches.
 pub(in crate::cli::commands) fn renaming() -> Acting {
     let name = SpaceName::from(String::from("name"));
     Acting::request(move |space| crate::client::spaces::rename_space(space, name.clone()))
 }
 
-/// What asking a space's agent to name its space sends, for its pickers.
 pub(in crate::cli::commands) fn asking() -> Acting {
     Acting::request(|space| {
         let to = shoal_protocol::protocol::AlertTarget::Space { space };
@@ -56,8 +49,6 @@ pub(in crate::cli::commands) fn asking() -> Acting {
     })
 }
 
-/// Give the space `space` selects the name `name`, and show it on the
-/// places that still show its previous one.
 async fn rename_space(ctx: &Context, space: SpaceSelector, name: SpaceName) -> Result<i32> {
     let renamed = (crate::client::spaces::rename_space(space, name))
         .send(&ctx.paths)
@@ -80,9 +71,6 @@ async fn rename_space(ctx: &Context, space: SpaceSelector, name: SpaceName) -> R
     Ok(0)
 }
 
-/// Show the renamed space's label on the places its agents run in and those
-/// Shoal created for it, where they still show the label its previous name
-/// gave them.
 async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
     let RenamedSpace {
         space,
@@ -96,8 +84,6 @@ async fn relabel(ctx: &Context, renamed: &RenamedSpace) -> Result<()> {
     Ok(())
 }
 
-/// The places that show a space's label: those its agents run in and
-/// those Shoal created for it, each once.
 fn shown_places(places: SpacePlaces) -> Vec<Origin> {
     let agents = (places.executions.into_iter()).filter(|execution| execution.agent.is_some());
     let running = agents.filter_map(|execution| execution.origin);
@@ -110,7 +96,6 @@ fn shown_places(places: SpacePlaces) -> Vec<Origin> {
     shown
 }
 
-/// Ask for a space's new name until it is one a space can have.
 async fn ask_name(ctx: &Context) -> Result<SpaceName> {
     ui::input_until(
         ctx,
@@ -121,10 +106,7 @@ async fn ask_name(ctx: &Context) -> Result<SpaceName> {
     .await
 }
 
-/// Ask the running agent of the space `space` selects, else the one this
-/// runs in or a picked one, to choose its name, through the alert
-/// `shoal send` queues. Without an agent the alert would wait
-/// unread, so that is refused.
+/// Without an agent the alert would wait unread, so that is refused.
 pub(in crate::cli::commands) async fn request_name(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -149,8 +131,6 @@ pub(in crate::cli::commands) async fn request_name(
     Ok(0)
 }
 
-/// The space `rename --request` asks, by its ID, with whether an agent runs
-/// or sleeps there to ask.
 struct AskedSpace {
     selector: SpaceSelector,
     label: String,
@@ -158,9 +138,7 @@ struct AskedSpace {
     running: bool,
 }
 
-/// The space `selector` selects, on whichever machine runs it, as
-/// `rename --request` asks it: as its machine reports it, or while that
-/// machine is offline, as it last reported it.
+/// While its machine is offline, as that machine last reported it.
 async fn asked_space(ctx: &Context, selector: &SpaceSelector) -> Result<AskedSpace> {
     let status = crate::client::spaces::status(selector.clone())
         .send(&ctx.paths)
@@ -187,9 +165,6 @@ async fn asked_space(ctx: &Context, selector: &SpaceSelector) -> Result<AskedSpa
     })
 }
 
-/// The space `space` names, else the current workspace or the chat this runs
-/// in, else the current checkout's only running chat, else the current
-/// workspace or a picked space.
 async fn chosen_space(
     ctx: &Context,
     space: Option<SpaceSelector>,

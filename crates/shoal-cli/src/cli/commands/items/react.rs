@@ -1,10 +1,9 @@
-//! `shoal pr react` and `shoal issue react`: a reaction to add or remove.
+//! `shoal pr react` and `shoal issue react`.
 use crate::{
     cli::args::changes::ReactArgs,
     forge::items::{action::Action, reaction::ReactionChange},
 };
 
-/// The reaction change `args` describe, and what to report once it is made.
 pub(super) fn react(args: ReactArgs) -> (Action, &'static str) {
     let outcome = if args.remove {
         "Reaction removed"

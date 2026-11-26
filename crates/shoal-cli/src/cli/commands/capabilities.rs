@@ -1,6 +1,4 @@
-//! `shoal forge capabilities`: what the forge of the workspace's repository, or
-//! another one, supports, so agents can check before they ask for something it
-//! lacks. Where a forge's versions differ, the server is asked.
+//! `shoal forge capabilities`.
 use anyhow::Result;
 
 use crate::{
@@ -19,8 +17,6 @@ pub(super) async fn capabilities(ctx: &Context, repository: RepositoryArgs) -> R
     Ok(0)
 }
 
-/// The forge's name, then one line per capability: its name, whether the
-/// forge has it, and what to do instead when it does not.
 fn render(capabilities: &Capabilities) {
     outln!("Forge: {}", capabilities.forge);
     let width = capabilities

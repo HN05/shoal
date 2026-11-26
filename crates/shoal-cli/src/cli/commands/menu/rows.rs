@@ -35,7 +35,6 @@ const ALERTS_SHOWN: u32 = 50;
 /// What a row stands for, by the picker id it is chosen with: an inbox
 /// item with its space's ID, a workspace, or the entry that adds one.
 pub(super) enum Row {
-    /// A thread by its number, of a workspace or chat.
     Thread {
         number: ItemNumber,
         space: SpaceId,
@@ -49,30 +48,23 @@ pub(super) enum Row {
     },
     NeedsInput(SpaceId),
     Failed(SpaceId),
-    /// A blocked workspace or chat, whose status shows what blocks it.
     Blocked(SpaceId),
     /// A workspace or chat whose agent is asleep, which attaching wakes.
     Asleep(SpaceId),
-    /// A mark of a workspace or chat, on its item or on itself.
     Ready {
         space: SpaceId,
         url: Option<crate::forge::items::reference::ItemRef>,
     },
-    /// A running demo, by its name.
     Demo {
         workspace: SpaceId,
         name: String,
     },
-    /// A worktree no workspace owns, by its path.
     Untracked(PathBuf),
-    /// Automatic cleanup failing other than in a workspace.
     Cleanup,
-    /// A repository whose default branch stopped syncing, by its ID.
     SyncFailed(RepositoryId),
     /// Another joined machine's space, whose status the row shows.
     Elsewhere(SpaceId),
     Workspace(SpaceId),
-    /// A notification, by the ID of its space, if any.
     Alert(String),
     Add,
 }
@@ -203,7 +195,6 @@ impl Row {
         })
     }
 
-    /// The workspace or chat the row belongs to, which keys act on.
     pub(super) fn space(&self) -> Option<SpaceSelector> {
         match self {
             Self::Thread { space, .. }
@@ -253,7 +244,6 @@ fn decode_path(hex: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(std::ffi::OsString::from_vec(bytes)))
 }
 
-/// The rows `view` lists for a caller with this scope.
 pub(super) async fn rows(ctx: &Context, view: View, scoping: Scoping) -> Result<Entries> {
     match view {
         View::Inbox => inbox_rows(ctx).await,
@@ -284,8 +274,6 @@ async fn alert_rows(ctx: &Context) -> Result<Entries> {
         .collect())
 }
 
-/// One aligned row per alert: when, its space, and the text,
-/// dimmed once read and cut to fit the picker.
 fn alert_labels(notifications: &[Alert]) -> Vec<String> {
     let now = crate::time::UnixTime::now();
     let cells = notifications
@@ -308,7 +296,6 @@ fn alert_labels(notifications: &[Alert]) -> Vec<String> {
     ui::aligned_to(cells, Palette::picker(), limit)
 }
 
-/// Mark the unread ones of `notifications` read.
 async fn mark_read(ctx: &Context, notifications: &[Alert]) -> Result<()> {
     let unread: Vec<Alert> = (notifications.iter())
         .filter(|notification| !notification.read)
@@ -320,7 +307,6 @@ async fn mark_read(ctx: &Context, notifications: &[Alert]) -> Result<()> {
     alerts::mark_shown_read(&ctx.paths, &unread).await
 }
 
-/// One row per item that needs the user.
 async fn inbox_rows(ctx: &Context) -> Result<Entries> {
     let filter = ListFilter::resolve(ctx, None, Vec::new()).await?;
     let inbox = Inbox::request(ctx, &filter).await?;
@@ -363,7 +349,6 @@ async fn space_rows(ctx: &Context, scoping: Scoping) -> Result<Entries> {
     Ok(entries)
 }
 
-/// A row per other joined machine's space, which shows its status.
 async fn elsewhere_rows(ctx: &Context, palette: Palette) -> Entries {
     let Some(view) = crate::cli::everywhere::elsewhere(ctx, "the other machines' spaces").await
     else {

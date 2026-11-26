@@ -9,9 +9,8 @@ use crate::{
 };
 
 pub(super) trait Finish<T> {
-    /// Domain handlers supply their successful payload and what busy
-    /// capacity adds to the refusal; approval rendering, refusal codes and
-    /// exit status are shared by every acquisition.
+    /// Every acquisition shares how approvals, refusal codes and exit status
+    /// show; its caller supplies the payload and what busy capacity adds.
     fn finish(
         self,
         ctx: &Context,

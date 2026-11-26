@@ -1,9 +1,8 @@
-//! `shoal hub update`: the latest release on the hub.
+//! `shoal hub update`.
 use anyhow::Result;
 
 use crate::cli::{context::Context, output::Style};
 
-/// Install the latest release on the hub.
 pub(super) async fn update(ctx: &Context) -> Result<i32> {
     let updated = ctx
         .progress("Updating the hub", crate::client::hub::update(&ctx.paths))

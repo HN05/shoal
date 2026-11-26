@@ -1,11 +1,9 @@
-//! Lease commands: the request each sends for the space it acts on.
 use crate::cli::{
     args::resources::{HistoryKind, LeaseKind, ResourcesCommand},
     commands::{catalog, containers, holds, leases, ports, resources, simulators},
     ui::Acting,
 };
 
-/// What a lease command sends for the space it acts on.
 pub(super) fn acting(command: &ResourcesCommand) -> Option<Acting> {
     Some(match command {
         ResourcesCommand::Acquire { kind, .. } => leases::acquiring(kind),

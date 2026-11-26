@@ -1,11 +1,8 @@
-//! Repository and forge commands, which name a repository, not a space.
 use crate::cli::{
     args::repository::{ForgeCommand, RepoCommand, RepositoryCommand},
     ui::Acting,
 };
 
-/// What a repository or forge command sends for the space it acts on:
-/// none.
 pub(super) fn acting(command: &RepositoryCommand) -> Option<Acting> {
     match command {
         RepositoryCommand::Repo {

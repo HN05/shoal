@@ -1,7 +1,4 @@
-//! `shoal log`: a space's log, or Shoal's outside a space, oldest first, a
-//! line for each entry with its local time, in Shoal's the space it belongs
-//! to, a label and its details, under a heading for each date; `--json`
-//! prints each entry as one JSON line.
+//! `shoal log`.
 use anyhow::Result;
 
 use crate::{
@@ -57,8 +54,7 @@ pub(super) async fn run(ctx: &Context, args: LogArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// Print the log's newest entries, then each new one, until interrupted. A
-/// snapshot after a daemon restart prints only what is new.
+/// A snapshot after a daemon restart prints only what is new.
 async fn follow_log(ctx: &Context, topic: LogTopic, printer: &mut Printer<'_>) -> Result<i32> {
     let mut subscription = Subscription::follow_log(ctx.paths.clone(), topic).await?;
     loop {
@@ -79,14 +75,12 @@ async fn follow_log(ctx: &Context, topic: LogTopic, printer: &mut Printer<'_>) -
 /// exceeds.
 const SPACE_WIDTH: usize = 24;
 
-/// Prints entries in order, with a date heading where the date changes.
 struct Printer<'a> {
     ctx: &'a Context,
     /// Whether lines name their space, as in Shoal's log.
     spaces: bool,
     palette: Palette,
     date: Option<String>,
-    /// The newest entry printed.
     last: Option<shoal_protocol::events::EventCursor>,
 }
 
@@ -101,7 +95,6 @@ impl<'a> Printer<'a> {
         }
     }
 
-    /// Print `entry` when it is newer than every entry printed.
     fn print_new(&mut self, entry: &LogEntry) -> Result<()> {
         if self.last.is_some_and(|last| entry.id() <= last) {
             return Ok(());
@@ -130,9 +123,8 @@ impl<'a> Printer<'a> {
     }
 }
 
-/// The line of `entry` at `time`: the `space` it belongs to and its label,
-/// each padded to a fixed width, so lines printed apart still align, and its
-/// details.
+/// Space and label are padded to a fixed width, so lines printed apart still
+/// align.
 fn line(time: &str, space: Option<&str>, entry: &LogEntry, palette: Palette) -> String {
     let (label, details) = entries::describe(entry);
     let label = format!("{label:<width$}", width = entries::LABEL_WIDTH);

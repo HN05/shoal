@@ -1,4 +1,4 @@
-//! CLI requests and rendering for cooperative resources.
+//! `shoal acquire resource` and the resource listing.
 use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 
@@ -17,7 +17,7 @@ use crate::client::output::{acquisition::NotAcquired, overviews::WorkspaceOvervi
 use shoal_protocol::resources::{Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Exit 2 means no compatible capacity or a pending or denied approval; a
+/// Exit 2 means no compatible capacity or a pending or denied approval. A
 /// queued request returns only once acquired or denied.
 pub(super) async fn acquire(
     ctx: &Context,
@@ -173,8 +173,6 @@ pub(super) fn render_catalog(catalog: &Catalog, palette: Palette) {
     }
 }
 
-/// Choose a configured pool with `members` for the workspace, standing in
-/// for the command's `argument`.
 pub(super) async fn pick_pool(
     ctx: &Context,
     workspace: &SpaceSelector,
@@ -272,8 +270,6 @@ pub(super) fn render_overview(overview: &Overview, palette: Palette) {
     }
 }
 
-/// What listing a workspace's resource leases sends for the workspace a
-/// picker picks.
 pub(super) fn listing() -> Acting {
     Acting::request(crate::client::leases::resources)
 }

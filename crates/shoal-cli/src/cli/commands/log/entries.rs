@@ -1,4 +1,4 @@
-//! What a log line says of an entry: a short label and its details.
+//! What a log line says of an entry.
 use crate::model::EventCause;
 use crate::{
     forge::{items::link::LinkKind, updates::UpdateKind},
@@ -14,7 +14,6 @@ use shoal_protocol::{
 /// The width labels are padded to: the longest one's.
 pub(super) const LABEL_WIDTH: usize = "Approval requested".len();
 
-/// The label and details of `entry`.
 pub(super) fn describe(entry: &LogEntry) -> (String, String) {
     match entry {
         LogEntry::Event(event) => event_line(&event.details),
@@ -29,7 +28,6 @@ pub(super) fn describe(entry: &LogEntry) -> (String, String) {
     }
 }
 
-/// The name of the space `entry` belongs to, or `Shoal` for Shoal's own.
 pub(super) fn space(entry: &LogEntry) -> String {
     match entry {
         LogEntry::Event(event) => event.details.name.to_string(),
@@ -52,8 +50,6 @@ fn shoal_line(event: &ShoalEventDetails) -> (String, String) {
     (label.to_owned(), details.unwrap_or_default())
 }
 
-/// The spaces a cleanup run removed, and its `error` when another step
-/// failed.
 fn removed(event: &ShoalEventDetails, error: Option<String>) -> String {
     let names: Vec<_> = event.removed.iter().map(ToString::to_string).collect();
     let names = names.join(", ");
@@ -136,7 +132,6 @@ fn progress(event: &EventDetails) -> String {
     }
 }
 
-/// A blocker's cause, the step it blocks, its reason, and what cleared it.
 fn blocker(event: &EventDetails) -> String {
     let Some(event) = &event.blocker else {
         return String::new();
@@ -152,8 +147,6 @@ fn blocker(event: &EventDetails) -> String {
     text
 }
 
-/// The agent a chat started with, where a workspace started, and the space
-/// either is below.
 fn created(event: &EventDetails) -> String {
     let base = match event.base_workspace.clone().flatten() {
         Some(base) => base.branch.map(|branch| branch.to_string()),
@@ -172,8 +165,6 @@ fn created(event: &EventDetails) -> String {
     parts.join(", ")
 }
 
-/// What the space became: a chat, or a workspace on its branch at its path;
-/// or the agent tool its work went from, and the one it went to.
 fn converted(event: &EventDetails) -> String {
     if let Some(handoff) = &event.handoff {
         return format!(
@@ -194,8 +185,6 @@ fn converted(event: &EventDetails) -> String {
     }
 }
 
-/// One side of a handoff between agent tools: the agent, with its session
-/// when it reported one.
 fn handed_over(side: &shoal_protocol::transcripts::HandedOverSession) -> String {
     match &side.session {
         Some(session) => format!("{} session {session}", side.agent),
@@ -203,7 +192,6 @@ fn handed_over(side: &shoal_protocol::transcripts::HandedOverSession) -> String 
     }
 }
 
-/// The space that took an absorbed space's work, and by what merge.
 fn absorbed_into(event: &EventDetails) -> String {
     let Some(absorb) = &event.absorb else {
         return String::new();
@@ -214,7 +202,6 @@ fn absorbed_into(event: &EventDetails) -> String {
     }
 }
 
-/// The space a space absorbed, and what it took over from it.
 fn took_over(event: &EventDetails) -> String {
     let Some(absorb) = &event.absorb else {
         return String::new();
@@ -238,12 +225,10 @@ fn took_over(event: &EventDetails) -> String {
     parts.join(", ")
 }
 
-/// A space's new name.
 fn renamed(event: &EventDetails) -> String {
     event.name.to_string()
 }
 
-/// A branch or tag without its `refs/` prefix.
 fn short_ref(reference: &str) -> String {
     ["refs/heads/", "refs/tags/", "refs/remotes/"]
         .iter()
@@ -277,7 +262,6 @@ fn agent(event: &EventDetails) -> String {
     (event.agent.as_ref()).map_or_else(String::new, |agent| agent.name.to_string())
 }
 
-/// The started agent, with what made the launch its start carries out.
 fn started(event: &EventDetails) -> String {
     match event.agent.as_ref().and_then(|agent| agent.source.as_ref()) {
         Some(source) => format!("{}, {source}", agent(event)),
@@ -299,7 +283,6 @@ fn exit(event: &EventDetails) -> String {
     }
 }
 
-/// The marked item, or nothing for a mark of the space itself.
 fn review(event: &EventDetails) -> String {
     let url = event
         .review
@@ -320,7 +303,6 @@ fn link(event: &EventDetails) -> (String, String) {
     (label, format!("{} {}", reference(&link.url), link.relation))
 }
 
-/// Shoal's change to an item, by the action's past form where it has one.
 fn item_changed(event: &EventDetails) -> (String, String) {
     let Some(item) = &event.item else {
         return ("Item changed".into(), String::new());
@@ -347,8 +329,6 @@ fn item_changed(event: &EventDetails) -> (String, String) {
     (format!("{kind} {done}"), reference)
 }
 
-/// An item's closing, merging or reopening on its forge, or with every
-/// event other activity.
 fn item_activity(event: &EventDetails) -> (String, String) {
     let Some(activity) = &event.item_activity else {
         return ("Item activity".into(), String::new());
@@ -385,8 +365,6 @@ fn reference(url: &str) -> String {
     }
 }
 
-/// The thread's number and name, then who posted what, whom it went to,
-/// or how it was resolved.
 fn thread(event: &EventDetails) -> String {
     let Some(thread) = &event.thread else {
         return String::new();
@@ -428,8 +406,6 @@ fn gate(event: &EventDetails) -> String {
     )
 }
 
-/// The numbers of the alerts sent, by which their sender withdraws them,
-/// and their text.
 fn alert(event: &EventDetails) -> String {
     let Some(alert) = &event.alert else {
         return String::new();
@@ -450,7 +426,6 @@ fn child(event: &EventDetails) -> String {
     }
 }
 
-/// The job Shoal ended, its run, and the processes it stopped first.
 fn job(event: &EventDetails) -> String {
     let Some(job) = &event.job else {
         return String::new();

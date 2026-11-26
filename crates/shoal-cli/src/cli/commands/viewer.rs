@@ -1,9 +1,8 @@
-//! `shoal attach` of a space on another joined machine, and `shoal demo` of
-//! a terminal demo there: that machine shows the session or the demo on a
-//! terminal of its own, which this one shows in raw mode, sending it every
-//! key and each new size, so the host's own detach key detaches. A dropped
-//! link leaves the session or demo running there; this terminal says so and
-//! attaches again to it once the machine answers, until Ctrl-C.
+//! `shoal attach` and terminal `shoal demo` on another joined machine. That
+//! machine shows the session or demo on a terminal of its own, which this one
+//! shows in raw mode, sending every key and each new size, so the host's own
+//! detach key detaches. After a dropped link it attaches again once the machine
+//! answers, until Ctrl-C.
 use std::{
     io::{Read as _, Write as _},
     time::Duration,
@@ -35,10 +34,8 @@ use crate::{
 const FIRST_WAIT: Duration = Duration::from_secs(1);
 const LONGEST_WAIT: Duration = Duration::from_secs(30);
 
-/// The key that stops attaching again.
 const CTRL_C: u8 = 0x03;
 
-/// What this terminal views on another machine.
 pub(in crate::cli::commands) enum Viewed {
     /// A session of a space, as an attach there chooses it.
     Session { space: SpaceId, viewer: Viewer },
@@ -51,8 +48,6 @@ pub(in crate::cli::commands) enum Viewed {
 }
 
 impl Viewed {
-    /// A session of `space`, the one `session` names when given, viewed
-    /// from this terminal.
     pub(in crate::cli::commands) async fn session(space: SpaceId, session: Option<String>) -> Self {
         let viewer = Viewer {
             session,
@@ -62,7 +57,6 @@ impl Viewed {
         Self::Session { space, viewer }
     }
 
-    /// `space`'s terminal demo `name`, viewed from this terminal.
     pub(in crate::cli::commands) async fn demo(space: SpaceId, name: String) -> Self {
         let terminal = this_terminal().await;
         Self::Demo {
@@ -72,7 +66,6 @@ impl Viewed {
         }
     }
 
-    /// Open what this views.
     async fn open(&self, paths: &CommandPaths) -> Result<(Screen, Keys)> {
         match self {
             Self::Session { space, viewer } => {
@@ -92,9 +85,7 @@ impl Viewed {
         }
     }
 
-    /// View again what the link to `machine` dropped, as `reported` says
-    /// it, without waking or restoring an agent a second time; names what
-    /// keeps running there.
+    /// It neither wakes nor restores an agent a second time.
     fn again(&mut self, reported: &Reported, machine: &str) -> Result<String> {
         match self {
             Self::Session { viewer, .. } => {
@@ -109,7 +100,6 @@ impl Viewed {
     }
 }
 
-/// How an attach on another machine ended.
 pub(in crate::cli::commands) struct Ended {
     /// The attach's exit code, which this one exits with.
     pub code: i32,
@@ -117,9 +107,8 @@ pub(in crate::cli::commands) struct Ended {
     pub open: bool,
 }
 
-/// Show `viewed`, which runs on `machine`, in this terminal, and end as the
-/// attach or demo there does. A signal that ends this process, such as
-/// SIGTERM, ends the attach, leaving the terminal as it found it.
+/// A signal that ends this process, such as SIGTERM, ends the attach, leaving
+/// the terminal as it found it.
 pub(in crate::cli::commands) async fn view(
     ctx: &Context,
     viewed: Viewed,
@@ -135,8 +124,6 @@ pub(in crate::cli::commands) async fn view(
     Ok(attached)
 }
 
-/// Attach to `viewed` on `machine`, again after each dropped link, until
-/// the attach there exits.
 async fn keep_attached(ctx: &Context, mut viewed: Viewed, machine: &str) -> Result<Ended> {
     let mut keys = typed_keys();
     let mut resizes = signal(SignalKind::window_change()).context("watch the terminal's size")?;
@@ -197,7 +184,6 @@ impl Termination {
         ))
     }
 
-    /// The name of the first signal that comes.
     async fn signalled(&mut self) -> &'static str {
         let arrivals = self.0.iter_mut().map(|(name, signal)| {
             Box::pin(async move {
@@ -209,14 +195,12 @@ impl Termination {
     }
 }
 
-/// What a connection to the attach's machine carries while it lasts.
 struct Shown<'a> {
     keys: &'a mut mpsc::UnboundedReceiver<Vec<u8>>,
     resizes: &'a mut Signal,
     reported: &'a mut Reported,
 }
 
-/// What the attach on the other machine said of its session.
 #[derive(Default)]
 struct Reported {
     /// The session it chose, once it says.
@@ -226,10 +210,8 @@ struct Reported {
 }
 
 impl Shown<'_> {
-    /// Show what `screen` brings and send typed keys and new sizes on
-    /// `input`, until the attach exits, giving its code, or the connection
-    /// drops, giving none. Keys go on apart from the screen, so a paste the
-    /// other machine takes slowly never stops what this terminal shows.
+    /// Keys go on apart from the screen, so a paste the other machine takes
+    /// slowly never stops what this terminal shows.
     async fn show(self, screen: Screen, input: Keys) -> Result<Option<i32>> {
         tokio::select! {
             shown = show_screen(screen, self.reported) => shown,
@@ -238,9 +220,6 @@ impl Shown<'_> {
     }
 }
 
-/// Show what `screen` brings, keeping what it says of the attach's session
-/// in `reported`, until the attach exits, giving its code, or the
-/// connection drops, giving none.
 async fn show_screen(mut screen: Screen, reported: &mut Reported) -> Result<Option<i32>> {
     loop {
         match screen.next().await {
@@ -253,9 +232,6 @@ async fn show_screen(mut screen: Screen, reported: &mut Reported) -> Result<Opti
     }
 }
 
-/// Send the keys typed here and each new size of this terminal on
-/// `input`, until the connection drops; fails once the terminal's input
-/// ends.
 async fn type_keys(
     mut input: Keys,
     keys: &mut mpsc::UnboundedReceiver<Vec<u8>>,
@@ -299,8 +275,6 @@ fn typed_keys() -> mpsc::UnboundedReceiver<Vec<u8>> {
     receiver
 }
 
-/// Wait `wait` before attaching again, failing once Ctrl-C is typed;
-/// other keys go nowhere meanwhile.
 async fn stop_on_ctrl_c(
     keys: &mut mpsc::UnboundedReceiver<Vec<u8>>,
     wait: Duration,
@@ -322,18 +296,14 @@ async fn ctrl_c(keys: &mut mpsc::UnboundedReceiver<Vec<u8>>) {
     }
 }
 
-/// Whether `error`, from asking to attach again, means the machine, the
-/// hub or this daemon cannot be reached yet.
 fn lost(error: &anyhow::Error) -> bool {
     connection::machine_unreachable(error)
         || connection::is_unreachable(error)
         || connection::stream_closed(error)
 }
 
-/// Say on its own line that the link to `machine` dropped while `running`
-/// keeps running there.
-/// The host's client there can no longer switch off the input modes it
-/// turned on here, such as mouse tracking, so this terminal does.
+/// The host's client there can no longer switch off the input modes it turned
+/// on here, such as mouse tracking, so this terminal does.
 fn lost_notice(machine: &str, running: &str) {
     show_bytes(
         format!(
@@ -350,7 +320,6 @@ fn show_bytes(bytes: &[u8]) -> Result<()> {
     Ok(stdout.flush()?)
 }
 
-/// This terminal as another machine makes the one it shows a place on.
 async fn this_terminal() -> Terminal {
     Terminal {
         size: terminal_size(),
@@ -359,14 +328,11 @@ async fn this_terminal() -> Terminal {
     }
 }
 
-/// This terminal's size; none off a terminal.
 fn terminal_size() -> Option<TerminalSize> {
     let (rows, columns) = shoal_core::execution::terminal_size(std::io::stdout())?;
     Some(TerminalSize { rows, columns })
 }
 
-/// This machine's apps that show the sessions of a host's servers on
-/// several machines, with the label each reports.
 async fn viewer_apps() -> Vec<ViewerApp> {
     let mut apps = Vec::new();
     for host in crate::terminal::hosts() {

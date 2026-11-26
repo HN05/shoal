@@ -1,5 +1,4 @@
-//! `shoal priority`: set how much a space's work matters, which ranks its
-//! queued work ahead of everything else.
+//! `shoal priority`.
 use anyhow::Result;
 
 use crate::{
@@ -12,7 +11,6 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_schedule::priority::Priority;
 
-/// Set `value` on the space `space` names, else the current one.
 pub(super) async fn run(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -27,8 +25,6 @@ pub(super) async fn run(
     Ok(0)
 }
 
-/// What setting `value` as a space's priority sends for the space a
-/// picker picks.
 pub(super) fn setting(value: Priority) -> Acting {
     Acting::request(move |space| priority::set(space, value))
 }

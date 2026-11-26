@@ -1,6 +1,5 @@
-//! `shoal diff` of a workspace on another joined machine: that machine's
-//! Git writes the diff, and this one's decides its colour and pager, as for
-//! `git diff` run here.
+//! `shoal diff` of a workspace on another joined machine: that machine's Git
+//! writes the diff, and this one's decides its colour and pager.
 use std::{
     io::{IsTerminal as _, Write as _},
     path::Path,
@@ -19,8 +18,6 @@ use tokio::{
 
 use crate::{cli::context::Context, git};
 
-/// Show the diff of `workspace`, which another machine has, and exit with
-/// its Git's exit code.
 pub(super) async fn diff(ctx: &Context, workspace: SpaceSelector) -> Result<i32> {
     let here = std::env::current_dir().context("read the current directory")?;
     let terminal = std::io::stdout().is_terminal();
@@ -45,8 +42,6 @@ pub(super) async fn diff(ctx: &Context, workspace: SpaceSelector) -> Result<i32>
     }
 }
 
-/// How this machine's Git in `here` shows a diff on standard output, a
-/// terminal when `terminal`.
 async fn display(here: &Path, terminal: bool) -> Result<DiffDisplay> {
     let columns = match terminal {
         true => shoal_core::execution::terminal_width(std::io::stdout()),
@@ -58,7 +53,6 @@ async fn display(here: &Path, terminal: bool) -> Result<DiffDisplay> {
     })
 }
 
-/// Where the diff goes: standard output, or the pager Git would start.
 enum Output {
     Stdout(std::io::Stdout),
     Pager(Box<Child>, ChildStdin),
@@ -83,7 +77,6 @@ impl Output {
         Ok(Self::Pager(Box::new(child), input))
     }
 
-    /// Write `bytes`; `false` once a pager quit.
     async fn write(&mut self, bytes: &[u8]) -> Result<bool> {
         let written = match self {
             Self::Stdout(stdout) => stdout.write_all(bytes),
@@ -96,7 +89,6 @@ impl Output {
         }
     }
 
-    /// End the output, waiting for a pager to quit.
     async fn close(self) -> Result<()> {
         match self {
             Self::Stdout(mut stdout) => Ok(stdout.flush()?),

@@ -1,5 +1,4 @@
-//! Asking before a merge that brings a target sensitive files it changed
-//! too, as the daemon recorded them.
+//! Asking before a merge that brings its target sensitive files it changed too.
 use anyhow::{Result, ensure};
 
 use crate::{
@@ -8,9 +7,7 @@ use crate::{
     protocol::RepoTarget,
 };
 
-/// Ask whether to merge the PR `item` names in the `target` repository, or
-/// the linked one, despite its warning, unless it has none, and return what
-/// the user confirmed, which the merge must still warn about.
+/// Return what the user confirmed, which the merge must still warn about.
 pub(in crate::cli::commands) async fn confirm_pull(
     ctx: &Context,
     target: &RepoTarget,

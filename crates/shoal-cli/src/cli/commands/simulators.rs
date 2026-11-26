@@ -1,4 +1,4 @@
-//! CLI simulator requests, retry policy, and audit rendering.
+//! `shoal acquire sim` and the simulator listing.
 use crate::cli::ui::Acting;
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
@@ -94,7 +94,7 @@ pub(super) async fn history(
     Ok(0)
 }
 
-/// Exit 2 means the simulator is busy or awaiting approval; a queued request
+/// Exit 2 means the simulator is busy or awaiting approval. A queued request
 /// returns only once acquired or denied.
 pub(super) async fn acquire(
     ctx: &Context,
@@ -192,8 +192,6 @@ fn render_history_entry(entry: &AuditEntry) {
     }
 }
 
-/// What listing a workspace's simulators, or their history, sends for the
-/// workspace a picker picks.
 pub(super) fn listing() -> Acting {
     Acting::request(|space| crate::client::leases::simulators(Some(space)))
 }

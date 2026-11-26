@@ -1,6 +1,4 @@
-//! `shoal refresh`: bring a workspace up to date with what it was made
-//! from, rerunning setup where the daemon says its files replaced what setup
-//! wrote.
+//! `shoal refresh`.
 use anyhow::{Result, bail};
 
 use crate::{
@@ -44,7 +42,6 @@ pub(in crate::cli::commands) async fn refresh(
     Ok(0)
 }
 
-/// What the refresh did, in one line.
 fn summary(refreshed: &Refreshed) -> String {
     let (name, target) = (&refreshed.workspace.name, &refreshed.target);
     if refreshed.up_to_date {
@@ -57,7 +54,6 @@ fn summary(refreshed: &Refreshed) -> String {
     }
 }
 
-/// What refreshing a workspace sends for the workspace a picker picks.
 pub(super) fn refreshing() -> Acting {
     Acting::request(crate::client::workspaces::refresh)
 }

@@ -1,5 +1,4 @@
-//! CLI workflows that act on any space, a workspace or a chat; all state
-//! mutations go through the daemon.
+//! Commands that act on any space, a workspace or a chat.
 mod done;
 mod list;
 mod open;

@@ -1,4 +1,5 @@
-//! `shoal internal events`: the integration stream that never consumes user notifications.
+//! `shoal internal events`: the integration stream, which never marks the
+//! user's alerts read.
 use crate::{
     cli::context::Context,
     client::events::Events,

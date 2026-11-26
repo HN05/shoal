@@ -1,4 +1,4 @@
-//! Moving the shell into a workspace.
+//! `shoal cd`.
 use anyhow::Result;
 
 use crate::cli::{
@@ -26,7 +26,6 @@ pub(in crate::cli::commands) async fn cd(
     Ok(0)
 }
 
-/// Report the destination and ask the shell wrapper to change directory.
 fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
     let directory = Directory {
         path: path.to_owned(),
@@ -35,8 +34,7 @@ fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
     shell::navigate(ctx, path)
 }
 
-/// What entering a workspace sends for the workspace a picker picks, whose
-/// directory only this machine has.
+/// Only this machine has the workspace's directory.
 pub(super) fn entering() -> Acting {
     Acting::here(crate::client::spaces::enter)
 }

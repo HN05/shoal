@@ -1,4 +1,4 @@
-//! CLI requests for a workspace's service containers, and their rendering.
+//! `shoal acquire containers` and their listing.
 use crate::cli::ui::Acting;
 use anyhow::Result;
 
@@ -17,8 +17,8 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use super::workspace_overviews;
 
-/// Start the workspace's containers. Exit 2 means a port they reserve was
-/// not: it waits for approval, or its preferred port is taken.
+/// Exit 2 means a port the containers reserve was not reserved: it waits for
+/// approval, or its preferred port is taken.
 pub(super) async fn acquire(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -115,8 +115,6 @@ pub(super) fn render_catalog(catalog: &ContainerCatalog, palette: Palette) {
     }
 }
 
-/// The project with its state and who acquired it, then a line per service
-/// with the ports it published.
 fn describe(containers: &Containers, palette: Palette) -> String {
     let project = &containers.project;
     let mut lines = vec![format!(
@@ -152,8 +150,6 @@ fn describe(containers: &Containers, palette: Palette) -> String {
     lines.join("\n")
 }
 
-/// What listing a workspace's containers sends for the workspace a picker
-/// picks.
 pub(super) fn listing() -> Acting {
     Acting::request(|space| crate::client::leases::containers(Some(space)))
 }

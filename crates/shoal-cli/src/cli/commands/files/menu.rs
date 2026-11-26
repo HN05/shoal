@@ -1,5 +1,4 @@
-//! The picker `shoal files` opens on a terminal: a space's files, and a
-//! row that adds one, where a key binding chooses what to do.
+//! The picker `shoal files` opens on a terminal.
 
 use std::{
     io::Write as _,
@@ -39,7 +38,6 @@ const BINDINGS: &[(Key, &str, FileAction)] = &[
     (Key::Ctrl('d'), "delete", FileAction::Delete),
 ];
 
-/// Pick one of the space's `files`, or the add row, and act on it.
 pub(super) async fn choose(
     ctx: &Context,
     space: SpaceSelector,
@@ -68,7 +66,6 @@ pub(super) async fn choose(
     }
 }
 
-/// One row per file, by its record, cut to fit the picker, then the add row.
 fn entries(files: &[AttachedFile]) -> ui::Entries {
     let now = crate::time::UnixTime::now();
     let rows = files.iter().map(|file| cells(file, now)).collect();
@@ -94,8 +91,7 @@ fn resolve_action(action: FileAction, id: &str) -> Result<FileAction> {
     Ok(FileAction::Add)
 }
 
-/// Print the file's text, read on the machine that keeps it; other files
-/// would garble the terminal.
+/// Only text prints: other files would garble the terminal.
 async fn print(ctx: &Context, file: &AttachedFile) -> Result<i32> {
     let bytes = read(ctx, file).await?.to_end().await?;
     let text = String::from_utf8(bytes).ok().with_context(|| {
@@ -108,9 +104,8 @@ async fn print(ctx: &Context, file: &AttachedFile) -> Result<i32> {
     Ok(0)
 }
 
-/// Open the file in the application the desktop chooses for it, and print
-/// its path, also for a terminal elsewhere: its copy, or one fetched here
-/// from the machine that keeps it; workspace processes cannot.
+/// Open the file in the application the desktop chooses for it, and print its
+/// path. Workspace processes cannot.
 async fn open(ctx: &Context, file: &AttachedFile) -> Result<i32> {
     ensure!(
         !crate::process::scoped::inherits_scope(&ctx.paths.state),
@@ -125,7 +120,6 @@ async fn open(ctx: &Context, file: &AttachedFile) -> Result<i32> {
     Ok(0)
 }
 
-/// The file's bytes, as the machine that keeps it reads them.
 async fn read(ctx: &Context, file: &AttachedFile) -> Result<FileRead> {
     let space = SpaceSelector::id(&file.space.id);
     crate::client::files::read(&ctx.paths, space, file.id).await
@@ -160,7 +154,6 @@ async fn write_whole(path: &Path, mut read: FileRead) -> Result<()> {
     fetched_copies::stamp(path).with_context(|| format!("stamp {}", path.display()))
 }
 
-/// The path of the file's copy, which this machine keeps.
 fn kept_here(file: &AttachedFile) -> Result<&std::path::Path> {
     file.path()
         .with_context(|| format!("{} is kept {}", file.name, file.copy.label()))

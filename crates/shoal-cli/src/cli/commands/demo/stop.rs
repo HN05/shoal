@@ -47,7 +47,6 @@ pub(super) async fn stop_named(
     demos::stop(&ctx.paths, SpaceSelector::id(&workspace.id), name).await
 }
 
-/// What stopping a demo reads of the workspace a picker picks.
 pub(super) fn stopping() -> Acting {
     Acting::request(crate::client::workspaces::inspect)
 }

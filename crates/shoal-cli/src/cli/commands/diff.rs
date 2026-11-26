@@ -1,4 +1,4 @@
-//! `shoal diff`: a workspace's diff against its base.
+//! `shoal diff`.
 mod elsewhere;
 
 use std::{ffi::OsString, path::Path};
@@ -40,10 +40,8 @@ pub(in crate::cli::commands) async fn diff(
     .await
 }
 
-/// Run the diff `command` in the worktree at `path`, which the daemon
-/// verified, as a plain process, for a chat, which reads a workspace without
-/// running anything there as the workspace's: no tracked execution counts it
-/// as the workspace's use.
+/// A chat reads a workspace without running anything there as the workspace's,
+/// so no tracked execution counts the diff as its use.
 fn diff_untracked(path: &Path, command: &[OsString]) -> Result<i32> {
     let status = std::process::Command::new(&command[0])
         .args(&command[1..])
@@ -53,9 +51,8 @@ fn diff_untracked(path: &Path, command: &[OsString]) -> Result<i32> {
     Ok(execution::exit_code(status))
 }
 
-/// What diffing a workspace first sends for the workspace a picker picks:
-/// a read of the base it diffs against, which another machine's
-/// workspace's machine answers.
+/// A read of the base it diffs against, which another machine's workspace's
+/// machine answers.
 pub(super) fn reading() -> Acting {
     Acting::request(crate::client::diffs::diff_base)
 }

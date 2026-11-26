@@ -1,12 +1,10 @@
-//! `shoal config install` and `shoal config reset`: installing a packaged
-//! config.
+//! `shoal config install` and `shoal config reset`.
 use crate::config_file::ConfigExt;
 use anyhow::Result;
 
 use crate::cli::{commands::configuration, context::Context, ui};
 use crate::client::output::daemon::ConfigInstalled;
 
-/// The named packaged config, else one chosen from the packaged configs.
 pub(in crate::cli::commands) fn packaged_config(
     ctx: &Context,
     name: Option<String>,
@@ -27,7 +25,6 @@ pub(in crate::cli::commands) fn packaged_config(
     }
 }
 
-/// Install the packaged config `name`, or the default one for `None`.
 pub(in crate::cli::commands) async fn install_config(
     ctx: &Context,
     name: Option<String>,

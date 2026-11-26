@@ -1,5 +1,4 @@
-//! `shoal pr open` and `shoal issue open`: push and open or find a PR, or open
-//! an issue, and report what the repository's approval rules made of it.
+//! `shoal pr open` and `shoal issue open`.
 use crate::cli::ui::Acting;
 use anyhow::Result;
 
@@ -51,8 +50,6 @@ pub(super) async fn open_pr(
     Ok(0)
 }
 
-/// Push the workspace's branch and open or find its PR, in an operation
-/// the daemon starts.
 pub(super) async fn publish(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -117,7 +114,6 @@ pub(super) fn print_warnings(opened: &Opened) {
     }
 }
 
-/// What a new PR is opened with, its files checked and its body read.
 pub(super) fn pull_options(pull: OpenPullArgs) -> Result<PullOptions> {
     let (body, attachments) = read_content(pull.body, pull.files)?;
     Ok(PullOptions {
@@ -133,9 +129,8 @@ pub(super) fn pull_options(pull: OpenPullArgs) -> Result<PullOptions> {
     })
 }
 
-/// What opening a PR sends for the workspace a picker picks: an operation
-/// that pushes from its worktree on this machine; how the PR opens decides
-/// nothing of which workspaces it reaches.
+/// An operation that pushes from the worktree on this machine. How the PR opens
+/// decides nothing of which workspaces it reaches.
 pub(in crate::cli::commands) fn opening_pull() -> Acting {
     Acting::request(|workspace| {
         let spec = OperationSpec::OpenPull {
@@ -146,8 +141,7 @@ pub(in crate::cli::commands) fn opening_pull() -> Acting {
     })
 }
 
-/// What opening an issue sends in the context of the space a picker
-/// picks; the issue decides nothing of which spaces it reaches.
+/// The issue decides nothing of which spaces it reaches.
 pub(in crate::cli::commands) fn opening_issue() -> Acting {
     super::in_context(|target| crate::client::items::open_issue(target, NewIssue::default(), false))
 }

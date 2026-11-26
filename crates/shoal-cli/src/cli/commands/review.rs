@@ -1,6 +1,4 @@
-//! `shoal review`: run local reviews of workspaces and PRs, write your own,
-//! list and cancel them; their findings and comments are threads, which
-//! `shoal thread` resolves.
+//! `shoal review`.
 use crate::cli::ui::Acting;
 use anyhow::Result;
 
@@ -50,7 +48,6 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
     }
 }
 
-/// What the review `command` sends for the space a picker picks.
 pub(super) fn acting(command: &ReviewCommand) -> Acting {
     match command {
         ReviewCommand::Run {
@@ -70,19 +67,15 @@ pub(super) fn acting(command: &ReviewCommand) -> Acting {
     }
 }
 
-/// What showing a space's reviews sends for the space a picker picks.
 fn showing() -> Acting {
     Acting::request(|space| crate::client::reviews::show(Some(space), None))
 }
 
-/// A space a review command acts on.
 enum Space {
     Chat(Box<Chat>),
     Workspace(SpaceSelector),
 }
 
-/// The space `space` names, else the current workspace or the chat this
-/// runs in, else one the user picks.
 async fn select(ctx: &Context, space: Option<SpaceSelector>) -> Result<Space> {
     let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory(&showing())).await?;
     let found = crate::client::spaces::present_space(&ctx.paths, &selected).await?;
@@ -106,8 +99,8 @@ async fn chat(ctx: &Context, space: Option<&SpaceSelector>) -> Result<Option<Cha
     Ok(found.and_then(|space| space.into_chat().ok()))
 }
 
-/// A chat's reviews: those of its linked PRs, which run in the workspaces
-/// that own their head branches, newest first.
+/// The reviews of a chat's linked PRs run in the workspaces that own their head
+/// branches.
 async fn chat_reviews(ctx: &Context, chat: &Chat) -> Result<Vec<Review>> {
     let repository = chat.repository_id.clone().map(Into::into);
     let reviews = crate::client::reviews::list(None, repository)

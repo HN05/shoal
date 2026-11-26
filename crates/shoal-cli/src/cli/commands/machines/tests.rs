@@ -2,7 +2,6 @@ use shoal_protocol::time::UnixTime;
 
 use super::*;
 
-/// A request the hub holds for the machine `machine` until `expires_at`.
 fn held(machine: &str, expires_at: i64) -> Queued {
     Queued {
         machine: machine.to_owned().into(),

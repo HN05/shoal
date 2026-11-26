@@ -1,6 +1,4 @@
-//! `shoal branch ls` and `shoal branch delete`: the branches on the forge
-//! of the space's repository, or another one, with what decides whether
-//! each can go, and deleting them.
+//! `shoal branch ls` and `shoal branch delete`.
 use anyhow::Result;
 
 use crate::cli::{
@@ -63,8 +61,6 @@ pub(super) async fn delete(
     Ok(0)
 }
 
-/// One aligned line per branch: its name, commit, the commit's day, whether
-/// the default branch has its changes, then what else keeps it.
 fn render(listed: &[ListedBranch]) {
     if listed.is_empty() {
         outln!("No branches");

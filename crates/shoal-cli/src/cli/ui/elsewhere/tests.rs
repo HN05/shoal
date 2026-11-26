@@ -39,7 +39,6 @@ fn entries(judged: &[(&str, Offer)]) -> Entries {
     )
 }
 
-/// The IDs of `entries`, in order.
 fn ids(entries: Entries) -> Vec<String> {
     entries.into_iter().map(|(id, _)| id).collect()
 }

@@ -1,4 +1,3 @@
-//! Service commands: the request each sends for the space it acts on.
 use crate::cli::{
     args::{
         hub::HubCommand,
@@ -8,8 +7,7 @@ use crate::cli::{
     ui::Acting,
 };
 
-/// What a service command sends for the workspace it names; only showing
-/// a workspace's configuration picks one.
+/// Only showing a workspace's configuration picks a workspace.
 pub(super) fn acting(command: &Service) -> Option<Acting> {
     match command {
         Service::Config {

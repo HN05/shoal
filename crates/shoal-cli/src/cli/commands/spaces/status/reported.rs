@@ -1,5 +1,5 @@
-//! The status of a space whose machine is offline: what that machine last
-//! reported of it to the hub.
+//! The status of a space whose machine is offline, as that machine last
+//! reported it.
 use anyhow::Result;
 use shoal_protocol::{status::ReportedStatus, time::UnixTime};
 
@@ -10,7 +10,6 @@ use crate::cli::{
     output::{Palette, Style},
 };
 
-/// Show `reported`, what an offline machine last reported of its space.
 pub(super) fn show(ctx: &Context, reported: &ReportedStatus) -> Result<()> {
     let palette = Palette::stdout(ctx.json);
     ctx.show(reported, |reported| render(reported, palette))

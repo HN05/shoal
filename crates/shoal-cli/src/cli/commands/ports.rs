@@ -1,4 +1,4 @@
-//! CLI port reservations and interactive conflict suggestions.
+//! `shoal acquire port` and the port listing.
 use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 
@@ -17,8 +17,7 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use super::workspace_overviews;
 
-/// Acquire a port, offering the daemon's suggestion when the preferred port
-/// is taken. Exit 2 means nothing was reserved.
+/// Exit 2 means nothing was reserved.
 pub(super) async fn acquire(
     ctx: &Context,
     workspace: SpaceSelector,
@@ -113,7 +112,6 @@ pub(super) async fn overview(ctx: &Context, filter: SpaceFilter) -> Result<i32> 
     Ok(0)
 }
 
-/// Choose a configured port of the workspace's repository.
 pub(super) async fn pick_configured(ctx: &Context, workspace: &SpaceSelector) -> Result<String> {
     let catalog = fetch_catalog(ctx, workspace).await?;
     ensure!(
@@ -176,7 +174,6 @@ pub(super) fn render_catalog(catalog: &PortCatalog, palette: Palette) {
     }
 }
 
-/// What listing a workspace's ports sends for the workspace a picker picks.
 pub(super) fn listing() -> Acting {
     Acting::request(crate::client::leases::ports)
 }

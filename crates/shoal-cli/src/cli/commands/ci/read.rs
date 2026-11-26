@@ -1,5 +1,4 @@
-//! `shoal view ci` and `shoal ci ls`: read CI runs with their jobs and the
-//! logs of failed ones.
+//! `shoal view ci` and `shoal ci ls`.
 use anyhow::{Context as _, Result};
 
 use crate::{
@@ -25,8 +24,6 @@ use shoal_forge::ci::run_view::validate_filter;
 use shoal_protocol::protocol::RunsOf;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Show the run `items` selects after `ci` with the log tails of its failed
-/// jobs, only the log of `job`, or open it in the browser.
 pub(in crate::cli::commands) async fn view(
     ctx: &Context,
     items: ItemArgs,
@@ -58,14 +55,12 @@ pub(in crate::cli::commands) async fn view(
     Ok(0)
 }
 
-/// Open the run in the browser, by its URL the forge reports.
 async fn open(ctx: &Context, target: RepoTarget, run: ItemInput) -> Result<i32> {
     items_view::may_open_browser(ctx)?;
     let run = crate::client::ci::run(target, run).send(&ctx.paths).await?;
     items_view::open_urls(ctx, vec![run.url])
 }
 
-/// The newest runs `filter` selects, or those on the head of the PR `pr`.
 pub(super) async fn list(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -119,7 +114,6 @@ pub(in crate::cli::commands) fn render_run(view: &RunView, relations: &[Relation
     }
 }
 
-/// One line per run: its state or result, workflow, branch and URL.
 fn render_runs(runs: &Vec<Run>) {
     if runs.is_empty() {
         outln!("No runs");

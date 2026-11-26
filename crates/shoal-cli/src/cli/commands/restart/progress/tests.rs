@@ -17,7 +17,6 @@ fn space(name: &str) -> Target {
     )))
 }
 
-/// The space `name` of the other machine `machine`.
 fn elsewhere(name: &str, machine: &str) -> Target {
     let member = serde_json::from_value(serde_json::json!({
         "id": machine, "kind": "machine", "name": machine, "joined_at": 0,

@@ -1,4 +1,3 @@
-//! Viewing one of the issues and PRs a space links.
 use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::model::ByKind;
 
@@ -14,8 +13,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// View one of the issues and PRs the space `workspace` names links, or
-/// open it in the browser, as chosen.
 pub(super) async fn view_command(ctx: &Context, space: Option<SpaceSelector>) -> Result<Command> {
     let space = space.context("select a space to view its issues and PRs")?;
     let (items, kind) = linked_items(ctx, &space).await?;
@@ -37,10 +34,8 @@ pub(super) async fn view_command(ctx: &Context, space: Option<SpaceSelector>) ->
     })))
 }
 
-/// The issues and PRs the space `space` links in its own repository, the
-/// only ones `shoal view` reads for it: a workspace's worktree's, or a chat's
-/// registered checkout's, and none for a chat without a repository, which
-/// links nothing; with the space's kind.
+/// Only the items a space links in its own repository, the ones `shoal view`
+/// reads for it. A chat without a repository links none.
 async fn linked_items(
     ctx: &Context,
     space: &SpaceSelector,

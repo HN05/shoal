@@ -1,4 +1,4 @@
-//! Waiting for item updates across daemon restarts.
+//! `shoal watch`, which waits across daemon restarts.
 use std::{ffi::OsString, time::Duration};
 
 use anyhow::Result;
@@ -62,10 +62,9 @@ pub(in crate::cli::commands) async fn watch_items(
     Ok(0)
 }
 
-/// This watch's arguments continuing its wait in `space` until `deadline`, as
-/// the installed release does after an upgrade restarted the daemon. A wait
-/// an earlier release handed over names its workspace the earlier way, which
-/// the space replaces.
+/// The installed release continues the wait after an upgrade restarted the
+/// daemon. A wait an earlier release handed over names its workspace the
+/// earlier way, which the space replaces.
 fn resume_watch_arguments(space: &SpaceSelector, deadline: Option<Instant>) -> Vec<OsString> {
     use crate::installed::arguments::{arguments, replace_option, with_flag, without_option};
     let resumed = without_option(arguments(), "--workspace");

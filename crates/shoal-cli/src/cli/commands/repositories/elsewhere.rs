@@ -1,5 +1,4 @@
-//! The repositories the other joined machines register, as the hub lists
-//! them, which lists and removal show after this machine's.
+//! The repositories the other joined machines register.
 use anyhow::{Context as _, Result};
 use shoal_client::output::repositories::RepositoryElsewhere;
 use shoal_protocol::hub::directory::HubView;
@@ -28,7 +27,6 @@ pub(super) async fn registered_or_left_out(
     })
 }
 
-/// The repositories `view` lists, by machine name, then name.
 fn of(view: &HubView) -> Vec<RepositoryElsewhere> {
     let directory = &view.directory;
     let mut listed: Vec<RepositoryElsewhere> = (directory.repositories.iter())

@@ -1,7 +1,5 @@
-//! Space commands: the request each sends for the space it acts on.
 use crate::cli::{args::space::SpaceCommand, commands::spaces, ui::Acting};
 
-/// What a space command sends for the space it acts on.
 pub(super) fn acting(command: &SpaceCommand) -> Option<Acting> {
     Some(match command {
         SpaceCommand::Open { .. } => spaces::opening(),

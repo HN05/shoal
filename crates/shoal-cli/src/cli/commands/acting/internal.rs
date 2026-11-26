@@ -1,8 +1,6 @@
-//! Internal commands: the request each sends for the space it acts on.
 use crate::cli::{args::internal::InternalCommand, commands::environment, ui::Acting};
 
-/// What an internal command sends for the space it names; only exporting
-/// a space's environment picks one.
+/// Only exporting a space's environment picks a space.
 pub(super) fn acting(command: &InternalCommand) -> Option<Acting> {
     match command {
         InternalCommand::Env { revoke, .. } => Some(environment::exporting(revoke.clone())),

@@ -71,7 +71,6 @@ async fn unverified_workspace_at(ctx: &Context, path: &Path) -> Result<Option<Wo
         .then_some(workspace))
 }
 
-/// Refuse a `--repo` other than the repository `workspace` is recorded in.
 async fn ensure_recorded_repository(
     ctx: &Context,
     workspace: &Workspace,

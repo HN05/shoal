@@ -1,5 +1,4 @@
-//! `shoal daemon install`: setting up the OS service, and noting a missing
-//! terminal host, shell setup or agent skill.
+//! `shoal daemon install`.
 use crate::config_file::ConfigExt;
 use std::path::PathBuf;
 
@@ -45,9 +44,10 @@ pub(super) async fn install(
         }
         Ok(None) => false,
         Err(error) if error.is::<shoal_protocol::connection::ProtocolMismatch>() => {
-            // Use the service manager without speaking the incompatible protocol.
-            // stop checks the installed state directory and waits for the socket
-            // to become unreachable before install can replace the definition.
+            // Use the service manager without speaking the incompatible
+            // protocol. Stop checks the installed state directory and waits for
+            // the socket to become unreachable before install can replace the
+            // definition.
             ensure!(
                 service::file(&ctx.paths, platform).is_file(),
                 "daemon protocol mismatch and no installed service; stop the foreground daemon, then rerun `shoal daemon install`"
@@ -110,8 +110,6 @@ pub(super) async fn install(
     Ok(0)
 }
 
-/// The terminal hosts this machine has, against the default host the
-/// global config names.
 struct TerminalHosts {
     installed: Vec<HostName>,
     /// The global `terminal.default_host`, unknown while the config does not

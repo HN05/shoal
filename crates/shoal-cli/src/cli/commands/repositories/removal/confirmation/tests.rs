@@ -2,7 +2,6 @@ use serde_json::json;
 
 use super::*;
 
-/// The preview of `app` with `spaces`.
 fn preview(spaces: serde_json::Value) -> RepositoryRemovalPreview {
     serde_json::from_value(json!({
         "repository": {

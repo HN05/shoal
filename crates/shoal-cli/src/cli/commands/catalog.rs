@@ -1,4 +1,4 @@
-//! What each lease kind offers: its configuration and available inventory.
+//! `shoal catalog`: what each lease kind offers.
 use crate::cli::ui::Acting;
 use anyhow::Result;
 
@@ -81,8 +81,6 @@ fn render_catalog(catalog: &Catalog, palette: Palette) {
     secrets::render_catalog(&catalog.secrets, palette);
 }
 
-/// What reading a workspace's catalog sends for the workspace a picker
-/// picks.
 pub(super) fn reading() -> Acting {
     Acting::request(crate::client::leases::port_catalog)
 }

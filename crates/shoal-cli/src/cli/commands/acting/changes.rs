@@ -1,5 +1,3 @@
-//! Change, branch, review, PR, issue and CI commands: the request each
-//! sends for the space it acts on.
 use crate::cli::{
     args::{
         changes::{BranchCommand, ChangesCommand, IssueCommand, PrCommand},
@@ -9,7 +7,6 @@ use crate::cli::{
     ui::Acting,
 };
 
-/// What a change command sends for the space it acts on.
 pub(super) fn acting(command: &ChangesCommand) -> Option<Acting> {
     match command {
         ChangesCommand::Branch { command } => branch(command),
@@ -36,8 +33,7 @@ fn branch(command: &BranchCommand) -> Option<Acting> {
     }
 }
 
-/// A PR command's request; one that acts on a PR reads it in the context
-/// of the space it names.
+/// A command that acts on a PR reads it in the context of the space it names.
 fn pr(command: &PrCommand) -> Option<Acting> {
     match command {
         PrCommand::Open { .. } => Some(items::opening_pull()),
@@ -57,8 +53,8 @@ fn pr(command: &PrCommand) -> Option<Acting> {
     }
 }
 
-/// An issue command's request; one that acts on an issue reads it in the
-/// context of the space it names.
+/// A command that acts on an issue reads it in the context of the space it
+/// names.
 fn issue(command: &IssueCommand) -> Option<Acting> {
     match command {
         IssueCommand::Open { .. } => Some(items::opening_issue()),
@@ -71,7 +67,6 @@ fn issue(command: &IssueCommand) -> Option<Acting> {
     }
 }
 
-/// CI commands act on runs in the context of the space they name.
 fn ci(command: &CiCommand) -> Option<Acting> {
     match command {
         CiCommand::Ls(_)

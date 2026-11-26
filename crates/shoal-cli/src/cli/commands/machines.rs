@@ -1,5 +1,4 @@
-//! The requests for other joined machines' spaces that the hub holds while
-//! their machine is offline.
+//! Reporting the requests the hub holds for offline machines.
 use anyhow::Result;
 use shoal_protocol::hub::routing::Queued;
 
@@ -25,8 +24,6 @@ pub(super) fn queued_each(ctx: &Context, queued: &[Queued], noun: &str) -> Resul
     Ok(())
 }
 
-/// Each machine of `queued` once, with the request the hub drops first
-/// there, and how many it holds.
 fn per_machine(queued: &[Queued]) -> Vec<(&Queued, usize)> {
     let mut machines: Vec<(&Queued, usize)> = Vec::new();
     for held in queued {

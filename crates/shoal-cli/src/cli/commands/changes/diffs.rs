@@ -1,5 +1,4 @@
-//! `shoal diff --thread`: the changes agents made for a thread, or those
-//! since one of its posts, as a unified diff without context.
+//! `shoal diff --thread`.
 use anyhow::Result;
 use shoal_protocol::{changes::ChangeDiff, protocol::ChangeFilter, threads::ThreadNumber};
 
@@ -11,8 +10,6 @@ use crate::{
     client::changes,
 };
 
-/// Print the changes of the thread `thread`, made since its post `since`
-/// with one.
 pub(in crate::cli::commands) async fn thread(
     ctx: &Context,
     thread: ThreadNumber,
@@ -63,7 +60,6 @@ fn lines(diffs: &[ChangeDiff], palette: Palette) -> Vec<String> {
     lines
 }
 
-/// A line of a hunk, coloured by what it does.
 fn painted(line: &str, palette: Palette) -> String {
     let style = match line.as_bytes().first() {
         Some(b'@') => Style::Muted,

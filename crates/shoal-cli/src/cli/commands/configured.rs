@@ -1,6 +1,5 @@
-//! `shoal run <name>`: configured commands use the same workspace selection
-//! and wrapper as arbitrary commands. Agents are not commands; `shoal start`
-//! starts them.
+//! `shoal run <name>`: configured commands take the same workspace selection
+//! and wrapper as arbitrary commands.
 use shoal_ids::space_ids::SpaceId;
 use std::ffi::{OsStr, OsString};
 
@@ -55,8 +54,6 @@ async fn listing_layers(ctx: &Context, workspace: Option<SpaceSelector>) -> Resu
     current_layers(ctx).await
 }
 
-/// The repository layers of the current workspace; none without a running
-/// daemon or a current workspace.
 async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
     let workspaces = running_workspaces(ctx).await?;
     let Some(workspace) = current_workspace(&workspaces)? else {
@@ -69,12 +66,10 @@ async fn workspace_layers(ctx: &Context, workspace: SpaceSelector) -> Result<Con
     crate::client::config::config_layers(&ctx.paths, ConfigTarget::Space(workspace.clone())).await
 }
 
-/// The configuration that defines a command for one run.
 enum Definition {
     /// The global configuration: the named or current workspace runs it, else
     /// the one picked.
     Global(Option<SpaceSelector>),
-    /// The named or current workspace's configuration.
     Workspace(SpaceId),
     /// Only these other workspaces define it; the user picks one.
     Elsewhere(Vec<Workspace>),
@@ -117,7 +112,6 @@ fn defined_globally(ctx: &Context, name: &str) -> Result<bool> {
         .contains_key(name))
 }
 
-/// The daemon's workspaces; none without a running daemon.
 async fn running_workspaces(ctx: &Context) -> Result<Vec<Workspace>> {
     match crate::client::spaces::list(&ctx.paths)
         .await
@@ -164,7 +158,6 @@ async fn defines(ctx: &Context, workspace: &SpaceId, name: &str) -> Result<bool>
         .contains_key(name))
 }
 
-/// Those of `workspaces` whose repository configuration defines `name`.
 async fn defining_workspaces(
     ctx: &Context,
     workspaces: Vec<Workspace>,
@@ -190,7 +183,6 @@ pub(crate) async fn run(
     run_defined(ctx, name, definition, args).await
 }
 
-/// Runs `name` in a workspace whose configuration `definition` found it in.
 async fn run_defined(
     ctx: &Context,
     name: &str,

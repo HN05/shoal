@@ -1,4 +1,4 @@
-//! Resolve issue context before workspace creation and agent launch.
+//! Finding the repository and issue a command acts on.
 use anyhow::{Result, ensure};
 
 use crate::{
@@ -18,7 +18,6 @@ use crate::{
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The explicit alternative for commands that accept `--repo` or a forge URL.
 pub(super) const REPO_OR_URL: &str = "pass --repo <repository> or a forge URL";
 
 /// The registered repository of the current checkout or workspace, otherwise
@@ -54,13 +53,11 @@ pub(super) async fn current_repository_id(
     Ok(repository::at_root(&root, repos, &workspaces).cloned())
 }
 
-/// The registered repository whose checkout the current directory is in.
 pub(super) async fn current_checkout(repos: &[Repository]) -> Result<Option<&Repository>> {
     let root = current_root().await?;
     Ok(repos.iter().find(|repo| Some(&repo.path) == root.as_ref()))
 }
 
-/// The root of the worktree the current directory is in, if it still exists.
 async fn current_root() -> Result<Option<std::path::PathBuf>> {
     let Some(cwd) = ui::current_directory()? else {
         return Ok(None);
@@ -161,8 +158,6 @@ pub(in crate::cli) struct Issue {
 }
 
 impl Issue {
-    /// The branch of the issue, as [`crate::launches::workspace::issue_branch`]
-    /// names it.
     pub fn branch_name(&self) -> String {
         crate::launches::workspace::issue_branch(self.number, &self.title)
     }

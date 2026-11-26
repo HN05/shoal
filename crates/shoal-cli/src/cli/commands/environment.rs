@@ -1,5 +1,5 @@
-//! `shoal internal env`: a space's environment, with a scope token of its
-//! own, for processes started outside Shoal, and revoking that token.
+//! `shoal internal env`: a space's environment, with a scope token of its own,
+//! for processes started outside Shoal.
 use anyhow::Result;
 
 use crate::cli::{
@@ -35,8 +35,7 @@ async fn revoke_scope(ctx: &Context, space: SpaceSelector, token: ScopeToken) ->
     )
 }
 
-/// Print the space's variables and a new scope token for it, issued only
-/// once its environment could be read.
+/// The token is issued only once the environment could be read.
 async fn export(ctx: &Context, space: SpaceSelector) -> Result<()> {
     let inherited = std::env::var_os("PATH");
     let mut values =
@@ -52,8 +51,6 @@ async fn export(ctx: &Context, space: SpaceSelector) -> Result<()> {
     })
 }
 
-/// What exporting a space's environment sends for the space a picker
-/// picks, or revoking the scope token `revoke` an export issued.
 pub(super) fn exporting(revoke: Option<ScopeToken>) -> Acting {
     match revoke {
         Some(token) => {
