@@ -330,7 +330,8 @@ chat's place until [`shoal setup`](setup.md) repairs the setup. A worktree
 that cannot be made gives the chat back.
 
 The workspace's mode is `--mode`, `worker` by default. Its permissions are
-the ones given to the chat's agent.
+that mode's. Each `--permission` given to the chat's agent still applies over
+them.
 
 These chats are refused:
 
