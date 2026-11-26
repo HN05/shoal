@@ -174,7 +174,6 @@ fn marked<'a>(
         .filter(move |p| !others.run(p.pid))
 }
 
-/// The PIDs of `processes`, separated by `separator`.
 fn pids(processes: &[process::Identity], separator: &str) -> String {
     let pids: Vec<_> = processes.iter().map(|p| p.pid.to_string()).collect();
     pids.join(separator)

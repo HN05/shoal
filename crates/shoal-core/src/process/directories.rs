@@ -2,7 +2,6 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
-/// A process and the directory it works in.
 pub(crate) struct WorkingDirectory {
     pub(crate) pid: u32,
     /// Its command name, as the kernel records it.

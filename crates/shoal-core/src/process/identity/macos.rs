@@ -340,7 +340,6 @@ pub(super) fn arguments(pid: u32) -> Option<Vec<Vec<u8>>> {
     Some(split_procargs(&procargs).ok()?.arguments)
 }
 
-/// `pid`'s `KERN_PROCARGS2` record.
 fn procargs(pid: u32) -> Result<Vec<u8>> {
     // Inventories read every process's record, so each thread keeps one
     // buffer of the largest size a record can take rather than allocating
@@ -374,7 +373,6 @@ fn procargs(pid: u32) -> Result<Vec<u8>> {
     })
 }
 
-/// A process's arguments and environment.
 struct ProcArgs {
     arguments: Vec<Vec<u8>>,
     environment: Vec<Vec<u8>>,
@@ -410,7 +408,6 @@ fn after_nuls(bytes: &[u8]) -> &[u8] {
     &bytes[bytes.iter().take_while(|b| **b == 0).count()..]
 }
 
-/// How long `pid` has run, `None` once it has exited.
 pub(super) fn elapsed(pid: u32) -> Result<Option<Duration>> {
     let Some(info) = bsd_info(pid, false)? else {
         return Ok(None);
@@ -425,7 +422,6 @@ pub(super) fn elapsed(pid: u32) -> Result<Option<Duration>> {
     ))
 }
 
-/// The device of `pid`'s controlling terminal, `None` without one.
 pub(super) fn terminal(pid: u32) -> Result<Option<PathBuf>> {
     Ok(bsd_info(pid, false)?.and_then(|info| device_path(info.bsd.e_tdev)))
 }

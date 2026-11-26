@@ -13,13 +13,11 @@ pub struct Memory {
 }
 
 impl Memory {
-    /// The share of the memory in use, in percent.
     pub fn used_percent(self) -> f64 {
         let used = self.total.saturating_sub(self.available);
         used as f64 * 100.0 / self.total.max(1) as f64
     }
 
-    /// Whether at least `percent` of the memory is in use.
     fn used_at_least(self, percent: u8) -> bool {
         u128::from(self.available) * 100
             <= u128::from(self.total) * u128::from(100u8.saturating_sub(percent))
@@ -325,7 +323,6 @@ fn machine(_levels: &MemoryLevels) -> Result<MemoryReading> {
     })
 }
 
-/// The machine's RAM in bytes.
 #[cfg(target_os = "macos")]
 pub fn ram() -> Result<u64> {
     sysctl(c"hw.memsize")
@@ -358,7 +355,6 @@ fn native_level() -> Result<libc::c_int> {
     Ok(level)
 }
 
-/// The integer the sysctl `name` holds.
 #[cfg(target_os = "macos")]
 fn sysctl<T: Default>(name: &std::ffi::CStr) -> Result<T> {
     let mut value = T::default();

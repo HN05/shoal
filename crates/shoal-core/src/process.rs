@@ -23,12 +23,10 @@ use std::{path::Path, time::Duration};
 /// process runs in the directory to end before it counts them.
 const OWN_GIT_END: Duration = Duration::from_secs(60);
 
-/// Automatic cleanup treats every process using the directory as activity.
 pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
     in_directory_except(root, &[]).await
 }
 
-/// The processes using the directory besides those of `excluded`.
 pub(crate) async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<String>> {
     DirectoryUsers::default()
         .in_directory_except(root, excluded)

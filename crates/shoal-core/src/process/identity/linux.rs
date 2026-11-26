@@ -234,7 +234,6 @@ fn split_command_line(bytes: &[u8]) -> Vec<Vec<u8>> {
     bytes.split(|b| *b == 0).map(<[u8]>::to_vec).collect()
 }
 
-/// How long `pid` has run, `None` once it has exited.
 pub(super) fn elapsed(pid: u32) -> Result<Option<Duration>> {
     let Some(fields) = live_stat(pid)? else {
         return Ok(None);
@@ -264,7 +263,6 @@ fn elapsed_since(started: u64, ticks_per_second: u64, uptime: Duration) -> Durat
     ))
 }
 
-/// The device of `pid`'s controlling terminal, `None` without one.
 pub(super) fn terminal(pid: u32) -> Result<Option<PathBuf>> {
     let Some(fields) = live_stat(pid)? else {
         return Ok(None);
@@ -319,7 +317,6 @@ fn live_stat(pid: u32) -> Result<Option<Vec<String>>> {
     Ok(Some(fields.into_iter().map(str::to_owned).collect()))
 }
 
-/// The system configuration value `name`.
 pub(in crate::process) fn sysconf(name: libc::c_int) -> Result<u64> {
     // SAFETY: sysconf reads a configuration value and has no other effects.
     let value = unsafe { libc::sysconf(name) };

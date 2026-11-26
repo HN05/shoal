@@ -137,7 +137,6 @@ fn unified(groups: &str) -> Option<&str> {
     groups.lines().find_map(|line| line.strip_prefix("0::/"))
 }
 
-/// The processes of the control group `scope`.
 pub fn scope_processes(scope: &Path) -> Result<Vec<u32>> {
     let listed = std::fs::read_to_string(scope.join("cgroup.procs"))
         .with_context(|| format!("list the processes of {}", scope.display()))?;

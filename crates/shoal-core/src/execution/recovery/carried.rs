@@ -109,7 +109,6 @@ pub fn continued(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Carried
     load(&carried_path(paths, space_id, id)).unwrap_or_default()
 }
 
-/// The sessions the space's executions carry.
 pub(super) fn sessions(paths: &Paths, space_id: &SpaceId) -> Vec<AgentSessionId> {
     let Ok(entries) = std::fs::read_dir(paths.space_state(space_id)) else {
         return Vec::new();
@@ -125,7 +124,6 @@ pub(super) fn sessions(paths: &Paths, space_id: &SpaceId) -> Vec<AgentSessionId>
         .collect()
 }
 
-/// Forget what an ended execution carried.
 pub(super) fn forget(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Result<()> {
     consume(&carried_path(paths, space_id, id))
 }

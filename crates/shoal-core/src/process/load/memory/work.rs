@@ -10,7 +10,6 @@ use super::{Memory, Stall};
 /// The user's limit on Shoal's work, with what the daemon samples of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorkLimit {
-    /// The limit in bytes.
     pub limit: u64,
     /// What the daemon's latest usage sample counts, `None` without a
     /// current one.

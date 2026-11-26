@@ -1,6 +1,5 @@
-//! Tracked executions as the daemon and the wrapper share them: launching
-//! one detached, its recovery records, and the terminal it hands its
-//! command. The wrapper itself is `shoal-workers`'.
+//! Tracked executions: launching one detached, its recovery records, and the
+//! terminal it hands its command.
 mod copy_ignored;
 mod detached;
 pub mod recovery;

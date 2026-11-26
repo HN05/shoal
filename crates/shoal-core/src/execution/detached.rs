@@ -45,9 +45,7 @@ pub async fn launch_detached(
 /// How the wrapper of a detached execution starts.
 #[derive(Default)]
 pub struct Wrapper<'a> {
-    /// Inherited variables removed from its environment.
     pub clear: &'a [&'a str],
-    /// Variables added to its environment.
     pub env: &'a [(&'a str, String)],
 }
 

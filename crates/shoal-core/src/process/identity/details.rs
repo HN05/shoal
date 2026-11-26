@@ -29,7 +29,6 @@ pub(crate) fn own_command_lines() -> Result<Vec<CommandLine>> {
         .collect())
 }
 
-/// The arguments `pid` runs with.
 pub(crate) fn arguments(pid: u32) -> Option<Vec<OsString>> {
     let arguments = platform::arguments(valid(pid)?)?;
     Some(arguments.into_iter().map(OsString::from_vec).collect())
@@ -45,17 +44,14 @@ pub(crate) fn variable(pid: u32, name: &str) -> Option<OsString> {
         .map(OsString::from_vec)
 }
 
-/// How long `pid` has run.
 pub(crate) fn elapsed(pid: u32) -> Result<Option<Duration>> {
     valid(pid).map_or(Ok(None), platform::elapsed)
 }
 
-/// The device of `pid`'s controlling terminal.
 pub(crate) fn terminal(pid: u32) -> Result<Option<PathBuf>> {
     valid(pid).map_or(Ok(None), platform::terminal)
 }
 
-/// The foreground process group of `pid`'s controlling terminal.
 pub(crate) fn foreground_group(pid: u32) -> Result<Option<u32>> {
     valid(pid).map_or(Ok(None), platform::foreground_group)
 }

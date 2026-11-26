@@ -1,4 +1,6 @@
-//! Restore commands omit the original task and remain available after wrapper exit.
+//! What lets Shoal restore a stopped agent: its recovery record, last
+//! sessions and restore requests. A restore command omits the original task
+//! and outlives the wrapper.
 use crate::config::permissions::PermissionChange;
 use crate::paths::StateFiles;
 use shoal_ids::execution_ids::ExecutionId;
@@ -499,7 +501,6 @@ pub fn restore_requests(
     Ok(requests)
 }
 
-/// Forget the restore request of the agent stopped as `id`.
 pub fn forget_restore_request(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Result<()> {
     consume(&request_path(paths, space_id, id))
 }
@@ -659,7 +660,6 @@ pub fn save_session(
     Ok(true)
 }
 
-/// The session the hooks of execution `id` last reported.
 fn reported_session(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> Option<AgentSessionId> {
     std::fs::read_to_string(session_path(paths, space_id, id))
         .ok()
@@ -717,7 +717,6 @@ pub trait LastSessionExt: Sized {
         turn: Option<AgentState>,
     ) -> Result<()>;
 
-    /// Save this as one of the space's last sessions.
     fn write(&self, paths: &Paths, space_id: &SpaceId) -> Result<()>;
 
     /// Read the last session saved at `path`, `None` once it is consumed.
@@ -726,7 +725,6 @@ pub trait LastSessionExt: Sized {
     /// The space's last sessions; an unreadable one is left out.
     fn all(paths: &Paths, space_id: &SpaceId) -> Result<Vec<Self>>;
 
-    /// Forget every last session of the space.
     fn forget_all(paths: &Paths, space_id: &SpaceId) -> Result<()>;
 }
 
@@ -968,7 +966,6 @@ impl<'a> ClaimedChange<'a> {
         })
     }
 
-    /// Make `change` to the permissions each was given.
     pub fn make(self, change: &PermissionChange) -> Result<()> {
         let agents = self.saved.iter().flat_map(|saved| &saved.agents);
         let sessions = self.saved.iter().flat_map(|saved| &saved.sessions);
@@ -1007,7 +1004,6 @@ pub fn change_permission(
     change_permissions(&[saved], change)
 }
 
-/// Save `saved` again at `path`, where a stopped agent's file is.
 fn rewrite(path: &Path, saved: &impl Serialize) -> Result<()> {
     crate::fsutil::atomic::replace_atomically(
         path,

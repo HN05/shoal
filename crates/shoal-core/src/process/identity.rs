@@ -72,7 +72,6 @@ pub trait IdentityExt {
     /// record does not name its boot may run in this one.
     fn of_earlier_boot(&self) -> bool;
 
-    /// This identity as recorded in `boot`.
     #[cfg(any(test, feature = "test-support"))]
     fn recorded_in(self, boot: &str) -> Self;
 }
@@ -318,7 +317,6 @@ enum Image {
     Ended,
 }
 
-/// How [`Identity`]s compare by age.
 pub(crate) trait IdentityAge {
     /// A process born before the wrapper cannot be one of its descendants.
     fn not_older_than(&self, wrapper: &Identity) -> bool;
@@ -510,7 +508,6 @@ fn lineage_descendants(
     descendants_of(HashSet::from([root]), lineages, left)
 }
 
-/// [`lineage_descendants`] of every one of `roots`.
 fn descendants_of(
     roots: HashSet<u64>,
     mut lineages: Vec<Lineage>,
