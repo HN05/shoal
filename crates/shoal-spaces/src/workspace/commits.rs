@@ -1,6 +1,5 @@
 //! Workspaces at a commit: worktrees at a detached HEAD with no branch of
-//! their own, created from a revision or a PR's head. Removal goes the way
-//! of any workspace's.
+//! their own. See `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::forge::numbers::PullNumber;
@@ -30,18 +29,15 @@ use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 use tokio::sync::OwnedMutexGuard;
 
-/// The commit a workspace at a commit starts at, what it was made for, and
-/// the directory and name it derives from them.
 pub(super) struct Start {
     pub(super) at: StartingCommit,
     directory: String,
     name: SpaceName,
-    /// The ref its diff compares with; none compares with `at`.
+    /// None compares with `at`.
     diff_ref: Option<String>,
 }
 
-/// The workspace of a CI job, recorded before its worktree is checked out
-/// at the job's commit, with its repository's Git gate.
+/// Recorded before its worktree is checked out at the job's commit.
 pub struct RecordedJobWorkspace {
     repo: Repository,
     workspace: Workspace,
@@ -54,8 +50,7 @@ impl RecordedJobWorkspace {
     }
 }
 
-/// The ID a new workspace's record takes, a new one unless a restore keeps
-/// its own, and the space it goes below, or none at the top.
+/// A new ID unless a restore keeps its own. No parent puts it at the top.
 #[derive(Default)]
 pub struct NewRecord {
     pub id: Option<SpaceId>,
@@ -63,11 +58,9 @@ pub struct NewRecord {
 }
 
 impl Spaces {
-    /// Create a workspace at the commit `start` names in `repository` for
-    /// `caller`: a child of the space `parent`, by ID, or without one a
-    /// top-level workspace of the user's, with the priority its options
-    /// ask for, at most the caller's own. It runs setup like any workspace
-    /// unless the caller skips it.
+    /// Without a parent, a top-level workspace of the user's. The priority
+    /// is at most the caller's own. Setup runs as for any workspace unless
+    /// the caller skips it.
     pub async fn create_commit_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -91,8 +84,6 @@ impl Spaces {
         Ok(workspace)
     }
 
-    /// Create the workspace `new` describes at the commit `start` names in
-    /// `repository`.
     async fn create_at_commit_start(
         &self,
         daemon: &dyn Daemon,
@@ -104,7 +95,7 @@ impl Spaces {
             return (self.create_copy(daemon, repository, &source, super::CopyPlace::Commit, new))
                 .await;
         }
-        // Checked before resolving the start, which may fetch: a scoped
+        // Check before resolving the start, which may fetch: a scoped
         // process reaches only its own repository.
         self.ensure_parent_repository(daemon, &repository, new.parent.as_ref())
             .await?;
@@ -112,11 +103,9 @@ impl Spaces {
         self.create_at_start(daemon, &repo, start, new, git).await
     }
 
-    /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
-    /// the one made for or linked to the PR, moved to `head` when the PR's
-    /// head moved, so there is at most one per PR, or else a new one as
-    /// `new` says, below the space it names or a top-level one of the
-    /// user's. A scoped `caller` takes over no workspace outside its scope.
+    /// Reuses the workspace made for or linked to the PR, moved to `head`
+    /// when the PR's head moved, so there is at most one per PR. A scoped
+    /// `caller` takes over no workspace outside its scope.
     pub async fn open_pull_head(
         &self,
         daemon: &dyn Daemon,
@@ -136,7 +125,7 @@ impl Spaces {
             if let Some(base) = head.base {
                 self.record_diff_ref(&workspace.id, base).await?;
             }
-            // Its last opener owns it, as a reopened branch's does; a
+            // Its last opener owns it, as a reopened branch's does. A
             // workspace's child stays its parent's.
             let workspace = match workspace.parent {
                 Some(parent) if parent.kind() == SpaceKind::Workspace => {
@@ -159,9 +148,8 @@ impl Spaces {
         })
     }
 
-    /// Create a workspace at `start` in `repo` under its Git gate `git`, as
-    /// [`Self::create_commit_workspace`] does, below the space `new` names;
-    /// a pending one's worktree waits in its record for its preparation.
+    /// Runs under the Git gate `git`. A pending workspace's worktree waits in
+    /// its record for its preparation.
     async fn create_at_start(
         &self,
         daemon: &dyn Daemon,
@@ -175,8 +163,8 @@ impl Spaces {
         }: NewWorkspace<'_>,
         git: OwnedMutexGuard<()>,
     ) -> Result<Workspace> {
-        // Recorded below its parent, a workspace or a chat, with its
-        // record, so one whose creation fails is still there.
+        // Recorded with its parent, so one whose creation fails is still
+        // there.
         let start = self.resolve_start(repo, start).await?;
         let head = start.at.commit.clone();
         let name = match &options.name {
@@ -201,11 +189,10 @@ impl Spaces {
             .await
     }
 
-    /// Record the workspace a CI job runs in, in `directory` and named
-    /// after the job: at `commit`, fetched
-    /// from the ref `reference` `origin` serves it under, or else by
-    /// itself, made for nothing, so no PR reuses it, and disposable, without
-    /// setup. [`Self::check_out_job_workspace`] creates its worktree.
+    /// Fetches `commit` under `reference` from `origin`, else by itself.
+    /// The workspace is made for nothing, so no PR reuses it, and is
+    /// disposable, without setup. [`Self::check_out_job_workspace`] creates
+    /// its worktree.
     pub async fn record_job_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -248,8 +235,7 @@ impl Spaces {
         })
     }
 
-    /// Check out the worktree of the `recorded` job workspace at its commit;
-    /// the seed clone still happens. One that fails stays `failed`.
+    /// The seed clone still happens. One that fails stays `failed`.
     pub async fn check_out_job_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -264,8 +250,6 @@ impl Spaces {
             .await
     }
 
-    /// The workspace at a commit of `repository_id` made for PR `number` or
-    /// linked to it at `url`.
     pub async fn pull_workspace(
         &self,
         repository_id: &RepositoryId,
@@ -281,8 +265,7 @@ impl Spaces {
         }))
     }
 
-    /// Move `workspace`, whose repository's Git gate the caller holds, to
-    /// the PR head `head` and record it as its starting commit, unless it is
+    /// The caller holds the Git gate. Does nothing when the workspace is
     /// there already. The lifecycle reservation excludes removal, restores
     /// and new commands meanwhile.
     async fn move_to_pull_head(
@@ -311,9 +294,8 @@ impl Spaces {
         result
     }
 
-    /// Move the reserved `workspace`, which started at `start`, to the PR
-    /// head `head`. One running commands, or with commits or changes of its
-    /// own, is refused, as a branch workspace that diverged from its PR is.
+    /// Refuses a workspace running commands, or with commits or changes of
+    /// its own, as a branch workspace that diverged from its PR is refused.
     async fn replace_pull_head(
         &self,
         daemon: &dyn Daemon,
@@ -339,10 +321,9 @@ impl Spaces {
         self.move_to_start(workspace, fetched.at.commit).await
     }
 
-    /// Move the workspace `id` of a job, before the job's first step, to
-    /// `commit`, fetched from `origin` under `reference` when given, unless
-    /// its checkout is there already. The
-    /// lifecycle reservation excludes removal meanwhile.
+    /// Runs before the job's first step. Fetches from `origin` under
+    /// `reference` when given. Does nothing when the checkout is there
+    /// already. The lifecycle reservation excludes removal meanwhile.
     pub async fn move_job_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -365,8 +346,7 @@ impl Spaces {
         result
     }
 
-    /// Move the reserved job `workspace`, once its worktree is proven its
-    /// own, to `commit`, unless its checkout is there already.
+    /// Requires the worktree proven as the workspace's own.
     async fn move_reserved_job_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -383,9 +363,7 @@ impl Spaces {
         self.move_to_start(workspace, commit.to_owned()).await
     }
 
-    /// Check out `commit` in the reserved workspace at a commit, whose
-    /// repository's Git gate the caller holds, and record it as where the
-    /// workspace starts.
+    /// The caller holds the repository's Git gate.
     pub(super) async fn move_to_start(
         &self,
         workspace: &Workspace,
@@ -395,8 +373,7 @@ impl Spaces {
         self.record_starting_commit(&workspace.id, commit).await
     }
 
-    /// Record `commit` as where the workspace `id` started, which is also
-    /// what its diff compares with.
+    /// The diff compares with it too.
     async fn record_starting_commit(&self, id: &SpaceId, commit: CommitId) -> Result<()> {
         let id = id.to_owned();
         self.store
@@ -410,8 +387,7 @@ impl Spaces {
             .await
     }
 
-    /// Record `reference` as what the workspace `id`'s diff compares with,
-    /// such as the base branch a PR now targets.
+    /// Such as the base branch a PR now targets.
     async fn record_diff_ref(&self, id: &SpaceId, reference: String) -> Result<()> {
         let id = id.to_owned();
         self.store
@@ -425,9 +401,8 @@ impl Spaces {
             .await
     }
 
-    /// Open the removed workspace at a commit `removed` again, without a
-    /// branch, at its removed HEAD with the unsaved files its checkpoint
-    /// keeps; it keeps the commit it started `at`.
+    /// Without a branch, at the removed HEAD with the unsaved files its
+    /// checkpoint keeps. It keeps the commit it started `at`.
     pub async fn restore_commit_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -462,11 +437,8 @@ impl Spaces {
             .await
     }
 
-    /// Record a new workspace at a commit in a directory named after
-    /// `directory`, with `name`, which started `at`, whose diff compares
-    /// with `diff_ref`, else with `at`, as `new` places it, with the
-    /// `pending` worktree its creation creates. The caller holds the
-    /// repository's Git gate.
+    /// The diff compares with `diff_ref`, else with `at`. The caller holds
+    /// the repository's Git gate.
     async fn record_commit_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -497,8 +469,7 @@ impl Spaces {
             .await
     }
 
-    /// Check out `head` and configure the worktree with a restore's `files`
-    /// written into it.
+    /// Writes a restore's `files` into the worktree.
     pub(super) async fn materialize_commit_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -512,8 +483,6 @@ impl Spaces {
             .await
     }
 
-    /// Resolve `start` in `repo`: the commit, what it was made for and the
-    /// name it gives the workspace.
     async fn resolve_start(&self, repo: &Repository, start: CommitStart) -> Result<Start> {
         match start {
             CommitStart::Revision(base) => self.resolve_revision(repo, base.as_deref()).await,
@@ -522,9 +491,9 @@ impl Spaces {
         }
     }
 
-    /// Resolve a revision as a branch workspace's `--base` resolves, fetching
-    /// a remote branch it names; a tag or commit that does not resolve makes
-    /// `origin` fetch with its tags once before trying again.
+    /// Resolves as a branch workspace's `--base` does, fetching a remote
+    /// branch it names. A tag or commit that does not resolve makes `origin`
+    /// fetch with its tags once before trying again.
     pub(super) async fn resolve_revision(
         &self,
         repo: &Repository,
@@ -546,8 +515,8 @@ impl Spaces {
     }
 }
 
-/// `reference` while `repo` still has it; a deleted one, such as a merged
-/// PR's base branch, leaves the diff comparing with the starting commit.
+/// A deleted ref, such as a merged PR's base branch, leaves the diff
+/// comparing with the starting commit.
 async fn surviving_ref(repo: &Repository, reference: Option<&str>) -> Result<Option<String>> {
     let Some(reference) = reference else {
         return Ok(None);
@@ -557,9 +526,8 @@ async fn surviving_ref(repo: &Repository, reference: Option<&str>) -> Result<Opt
         .then(|| reference.to_owned()))
 }
 
-/// Fetch `commit` into `repo` unless it has it: with the ref `reference`
-/// `origin` serves it under, which may have moved past it since, and else
-/// by itself.
+/// Fetches with `reference`, which may have moved past `commit` since, and
+/// else by itself.
 async fn fetch_job_commit(
     repo: &Repository,
     commit: &CommitId,
@@ -589,8 +557,7 @@ async fn fetch_job_commit(
     Ok(())
 }
 
-/// A PR's `head`, fetched from `origin` and checked to be the commit the
-/// forge reported.
+/// Checks that the fetched head is the commit the forge reported.
 pub(super) async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
     let fetched = git::fetch::reference(&repo.path, "origin", &head.reference).await?;
     anyhow::ensure!(
@@ -609,12 +576,10 @@ pub(super) async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Star
     })
 }
 
-/// What a revision that resolved to `commit` names: a tag by its name, a
-/// branch as `base` gave it, or the default branch when `base` named none,
-/// with the workspace named after the tag, or the branch at the short
-/// commit, such as `main at 84d4405`, in a directory such as
-/// `main-84d4405`; a bare commit is made for nothing and named by its short
-/// commit.
+/// A tag is named by its name. A branch, or the default branch when `base`
+/// named none, is named as the branch at the short commit, such as `main at
+/// 84d4405`, in a directory such as `main-84d4405`. A bare commit is made
+/// for nothing and named by its short commit.
 fn named_start(commit: CommitId, base: Option<&str>, reference: &str) -> Start {
     let short = commit.abbreviated(7).to_owned();
     let branch = reference.strip_prefix(git::LOCAL_REFS).or_else(|| {

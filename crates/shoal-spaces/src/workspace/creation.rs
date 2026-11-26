@@ -1,5 +1,5 @@
-//! Worktree creation: recording a new workspace and creating, configuring
-//! and settling its worktree.
+//! Recording a new workspace, and creating, configuring and settling its
+//! worktree.
 
 use super::super::{
     restore, tree,
@@ -25,51 +25,46 @@ use shoal_protocol::space_names::SpaceName;
 use shoal_refs::{BranchName, CommitId};
 use tokio::sync::OwnedMutexGuard;
 
-/// Where a new workspace goes, its Git profile, and what it leaves out.
 #[derive(Debug, Default)]
 pub struct NewWorkspace<'a> {
     pub git_profile: Option<&'a str>,
     pub path: Option<std::path::PathBuf>,
     pub options: CreationOptions,
-    /// The space it goes below, a chat or a workspace, recorded with it so
-    /// that one whose creation fails is still there.
+    /// The space it goes below, a chat or a workspace. It is recorded with
+    /// the workspace, so one whose creation fails is still below it.
     pub parent: Option<SpaceId>,
     /// The chat it replaces, taking its ID, number, name and place in the
     /// tree, instead of going below `parent`.
     pub converts: Option<crate::conversions::Converting>,
-    /// Its new branch takes exactly the requested name, which a taken name
-    /// refuses instead of suffixing.
+    /// The new branch takes exactly the requested name: a taken name refuses
+    /// instead of getting a suffix.
     pub exact_branch: bool,
     /// The ID it keeps, as a restored space does; a new one otherwise.
     pub id: Option<SpaceId>,
-    /// Its worktree is left to its preparation, which creates it through
-    /// [`Manager::create_pending_worktree`], so the record returns before
-    /// Git runs; otherwise the creation creates it as a preparation would.
+    /// Leaves the worktree to the preparation, which creates it through
+    /// [`crate::Spaces::create_pending_worktree`], so the record returns
+    /// before Git runs. Otherwise the creation creates it as a preparation
+    /// would.
     pub pending: bool,
-    /// The commit keeping the unsaved files its new branch starts with, as
-    /// a copy another joined machine carried here does.
+    /// The commit that keeps the unsaved files the new branch starts with,
+    /// as a copy another joined machine carried here does.
     pub files: Option<CommitId>,
 }
 
-/// A worktree Git created and Shoal configured, which settling seeds.
 pub(super) struct Configured {
-    /// Whether setup is still needed.
     pub needs_setup: bool,
-    /// The worktree's settings, under which it starts from the seed build,
-    /// or `None` for a worktree that takes no seed.
+    /// The settings under which the worktree starts from the seed build.
+    /// `None` for a worktree that takes no seed.
     pub seed: Option<crate::config::Effective>,
 }
 
 pub enum WorkspaceSource {
-    /// A new branch from an optional base ref, split from an optional parent
-    /// workspace.
     New {
         base: Option<String>,
         parent: Option<SpaceId>,
     },
-    /// An existing branch, with an optional base ref overriding the default
-    /// branch, and the removal checkpoint a restore opens it at, whose
-    /// unsaved files it writes into it.
+    /// A restore opens it at its removal checkpoint and writes the unsaved
+    /// files the checkpoint keeps into it.
     Existing {
         branch: crate::git::existing_branch::Branch,
         base: Option<String>,
@@ -78,8 +73,6 @@ pub enum WorkspaceSource {
 }
 
 impl Spaces {
-    /// Create the workspace `name` of the repository on a new branch from
-    /// `base`, where and as `new` says.
     pub async fn create_workspace_with(
         &self,
         daemon: &dyn Daemon,
@@ -107,10 +100,8 @@ impl Spaces {
         .await
     }
 
-    /// Check what creating or opening a workspace would refuse in its request
-    /// without creating anything: the repository, the new `branch` or the
-    /// `existing` one, and the new-worktree options. A missing branch is the
-    /// one the caller has yet to choose.
+    /// Checks without creating anything. A missing branch is one the caller
+    /// has yet to choose.
     pub async fn check_creation(
         &self,
         daemon: &dyn Daemon,
@@ -164,9 +155,7 @@ impl Spaces {
             .await
     }
 
-    /// Create the workspace `name` on `branch` from `source`, where and as
-    /// `new` says, under the repository's Git gate `git`, which settling
-    /// releases.
+    /// Runs under the repository's Git gate `git`, which settling releases.
     #[allow(
         clippy::too_many_arguments,
         reason = "what the workspace is created from and with, beside the daemon"
@@ -249,11 +238,10 @@ impl Spaces {
             .await
     }
 
-    /// Settle the creation of the recorded `workspace`, whose worktree was
-    /// `materialized` under the repository's Git gate `git`: release the
-    /// gate, start a configured worktree from the seed build, then record
-    /// how creation went, and once it went well release the carried commits
-    /// its plan kept. Removal and setup wait for it to end.
+    /// Releases the Git gate, starts a configured worktree from the seed
+    /// build, then records how creation went. Once it went well, releases
+    /// the carried commits its plan kept. Removal and setup wait for it to
+    /// end.
     pub(super) async fn settle_creation(
         &self,
         daemon: &dyn Daemon,
@@ -271,9 +259,9 @@ impl Spaces {
         Ok(created)
     }
 
-    /// Hold the creation gate of the new `workspace` in place of the
-    /// repository's Git gate `git`, so other starts' Git operations need not
-    /// wait for its seed clone while removal and setup still do.
+    /// Replaces the repository's Git gate `git`, so other starts' Git
+    /// operations need not wait for the seed clone while removal and setup
+    /// still do.
     pub(super) async fn hold_creation(
         &self,
         workspace: &Workspace,
@@ -284,8 +272,7 @@ impl Spaces {
         creation
     }
 
-    /// Start the `materialized` worktree of `workspace` from the seed build
-    /// when it takes one, returning whether setup is still needed.
+    /// Returns whether setup is still needed.
     pub(super) async fn seed_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -300,8 +287,7 @@ impl Spaces {
         Ok(configured.needs_setup)
     }
 
-    /// Record how materializing the recorded `workspace` went: ready, or
-    /// preparing while it needs setup, or failed.
+    /// Ready, preparing while it needs setup, or failed.
     pub(super) async fn record_creation(
         &self,
         workspace: &Workspace,
@@ -328,12 +314,12 @@ impl Spaces {
         self.workspace_by_id(&workspace.id).await
     }
 
-    /// Record a new workspace, stacked on the workspace that owns `base_branch`
-    /// and below `parent`, with the `pending` worktree it is still to get, or
-    /// none for a worktree it adopts,
-    /// refusing a parent chat being removed, which takes no new workspace,
-    /// and a directory Shoal chose, when `chosen`, whose name another
-    /// workspace took meanwhile. Returns the record with the number it took.
+    /// Stacks the workspace on the workspace that owns `base_branch`.
+    /// `pending` is the worktree it is still to get, or none for a worktree
+    /// it adopts. Refuses a parent chat being removed, which takes no new
+    /// workspace, and, when `chosen`, a directory Shoal chose whose name
+    /// another workspace took meanwhile. Returns the record with the number
+    /// it took.
     pub(super) async fn insert_workspace(
         &self,
         record: Workspace,
@@ -351,9 +337,8 @@ impl Spaces {
             .await
     }
 
-    /// Record a new workspace as [`Self::insert_workspace`] does, below a
-    /// parent or in place of the chat it converts, as `inserted` says, with
-    /// the worktree it is still to get.
+    /// `inserted` says whether it goes below a parent or in place of the
+    /// chat it converts.
     async fn insert_workspace_as(
         &self,
         record: Workspace,
@@ -465,8 +450,7 @@ impl Spaces {
             .await
     }
 
-    /// Create and configure the worktree. A restore's `files` go in before
-    /// the workspace can be used.
+    /// A restore's `files` go in before the workspace can be used.
     pub(super) async fn materialize_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -494,8 +478,8 @@ impl Spaces {
             .await
     }
 
-    /// Record the new worktree's identity, write a restore's files into it,
-    /// then apply its Git profile, leaving the seed build to settling.
+    /// Records the worktree's identity, writes a restore's files into it,
+    /// then applies its Git profile. Settling does the seed build.
     pub(super) async fn configure_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -519,7 +503,6 @@ impl Spaces {
         })
     }
 
-    /// Select the effective base for the source branch.
     async fn resolve_worktree_base(
         &self,
         repo: &Repository,
@@ -551,9 +534,8 @@ impl Spaces {
         }
     }
 
-    /// Select a new branch's base: the local default branch as the
-    /// background sync left it, or a named base, fetching a remote branch it
-    /// names.
+    /// The local default branch as the background sync left it, or a named
+    /// base, fetching a remote branch it names.
     pub(super) async fn new_branch_base(
         &self,
         repo: &Repository,
@@ -566,8 +548,9 @@ impl Spaces {
             return Ok(git::local_ref(&default));
         };
         let remotes = git::remote_names(&repo.path).await?;
-        // An explicit ref remains an escape hatch when remote default-branch
-        // discovery is unavailable; only a remote branch it names is fetched.
+        // An explicit ref stays an escape hatch when remote default-branch
+        // discovery is unavailable. Only a remote branch it names is
+        // fetched.
         let lookup = DefaultBranchLookup::Cached;
         if let Ok(default) =
             crate::git::default_branch::locate_among(&repo.path, &remotes, lookup).await
@@ -588,7 +571,7 @@ impl Spaces {
         Ok(base.to_owned())
     }
 
-    /// Record the base before Git creates the worktree.
+    /// Records the base before Git creates the worktree.
     pub(super) async fn record_worktree_base(
         &self,
         repo: &Repository,
@@ -647,24 +630,18 @@ impl Spaces {
     }
 }
 
-/// How a new workspace is recorded: where its record goes, whether Shoal
-/// chose its directory, and the worktree it is still to get, if any.
 struct Inserted {
     placement: Placement,
     chosen: bool,
     pending: Option<PendingWorktree>,
 }
 
-/// Where a new workspace's record goes.
 enum Placement {
-    /// Below the space it names, or at the top.
     Below(Option<SpaceId>),
-    /// In place of the chat it converts.
     Replacing(Box<crate::conversions::Converting>),
 }
 
-/// Refuse a disposable workspace on the `existing` branch, which its removal
-/// would delete although the user had it before.
+/// Its removal would delete a branch the user had before.
 fn ensure_disposable_new(disposable: bool, existing: Option<&str>) -> Result<()> {
     match (disposable, existing) {
         (true, Some(branch)) => {
@@ -674,9 +651,8 @@ fn ensure_disposable_new(disposable: bool, existing: Option<&str>) -> Result<()>
     }
 }
 
-/// Whether creating the worktree of `workspace` on a new branch has to
-/// create its branch: it has one, which no earlier try cut short created.
-/// The record reserved its name, which no branch had then.
+/// True when the workspace has a branch that no earlier, cut-short try
+/// created. The record reserved its name, which no branch had then.
 pub(super) async fn creates_branch(repo: &Repository, workspace: &Workspace) -> Result<bool> {
     match workspace.branch() {
         Some(branch) => Ok(!git::ref_exists(&repo.path, &git::local_ref(branch)).await?),
@@ -684,10 +660,8 @@ pub(super) async fn creates_branch(repo: &Repository, workspace: &Workspace) -> 
     }
 }
 
-/// Whether creating the worktree of `workspace` at `head`, whose files it
-/// copies there, has to create its branch, as [`creates_branch`] says,
-/// refusing the branch an earlier try created at another commit, which
-/// those files would not fit.
+/// As [`creates_branch`] says, but refuses a branch an earlier try created
+/// at another commit, which the copied files would not fit.
 pub(super) async fn creates_branch_at(
     repo: &Repository,
     workspace: &Workspace,
@@ -705,8 +679,8 @@ pub(super) async fn creates_branch_at(
     Ok(creates)
 }
 
-/// The commit and full ref name `shoal diff` records for a workspace base;
-/// a base that names no ref, such as a commit, records no ref.
+/// The commit and full ref name `shoal diff` records for a workspace base.
+/// A base that names no ref, such as a commit, records no ref.
 pub(super) async fn recorded_base(
     repo: &crate::model::Repository,
     base: &str,
@@ -719,7 +693,6 @@ pub(super) async fn recorded_base(
     ))
 }
 
-/// The branch a creation request's base belongs to.
 enum BaseSource<'a> {
     New,
     Opened(&'a git::existing_branch::Branch),
@@ -728,9 +701,9 @@ enum BaseSource<'a> {
     Unsettled,
 }
 
-/// Refuse a base creation could not use for `source`. Opening a remote branch
-/// fetches and creates it before resolving the base, which may name it in any
-/// form, so only creation can check that base.
+/// Opening a remote branch fetches and creates it before resolving the
+/// base, which may name it in any form, so only creation can check that
+/// base.
 async fn check_base(
     repo: &crate::model::Repository,
     base: &str,
@@ -748,7 +721,7 @@ async fn check_base(
 }
 
 /// A new branch first fetches a remote branch base, which the remote must
-/// have; any other base must resolve here.
+/// have. Any other base must resolve here.
 async fn check_new_branch_base(repo: &crate::model::Repository, base: &str) -> Result<()> {
     if let Some((remote, branch)) = git::remote_branch(&repo.path, base).await? {
         ensure!(
@@ -768,7 +741,7 @@ async fn check_local_base(repo: &crate::model::Repository, base: &str) -> Result
     Ok(())
 }
 
-/// Existing worktrees use a live local default ref, or their opening commit.
+/// A live local default ref, or the commit the worktree opened at.
 pub async fn existing_base(repo: &crate::model::Repository, branch: &BranchName) -> Result<String> {
     if let Ok(name) =
         crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await

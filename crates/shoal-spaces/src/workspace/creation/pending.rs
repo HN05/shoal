@@ -1,6 +1,5 @@
-//! Pending worktrees: how a recorded workspace that has no worktree yet
-//! gets one, which its preparation, or the creation that recorded it,
-//! creates.
+//! Pending worktrees: how a recorded workspace without a worktree yet gets
+//! one, which its preparation or the creation that recorded it creates.
 
 use super::{Configured, WorkspaceSource, stack};
 use crate::Spaces;
@@ -24,27 +23,23 @@ use shoal_refs::{BranchName, CommitId};
 use std::path::PathBuf;
 use tokio::sync::OwnedMutexGuard;
 
-/// How the worktree of a recorded workspace that has none yet is created,
-/// as its record's `pending_plan` keeps it until it is.
+/// The record's `pending_plan` keeps it until the worktree exists.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct PendingWorktree {
     source: PendingSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     git_profile: Option<String>,
-    /// The mode the converted chat's agent runs in, which the settings of
-    /// its new worktree must define before the workspace is ready.
+    /// The mode the converted chat's agent runs in. The settings of the new
+    /// worktree must define it before the workspace is ready.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     mode: Option<ModeName>,
 }
 
-/// What a pending worktree checks out: a branch, as [`WorkspaceSource`]
-/// names it, a commit, a copy's files, a removed workspace's checkpoint or
-/// the files of a worktree outside Shoal.
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum PendingSource {
-    /// A new branch from `base`, with the unsaved files the commit `files`
-    /// keeps, as a copy another joined machine carried here starts with.
+    /// `files` keeps the unsaved files the branch starts with, as a copy
+    /// another joined machine carried here does.
     New {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base: Option<String>,
@@ -58,31 +53,26 @@ enum PendingSource {
     },
     /// Detached at `head`, as a workspace at a commit is.
     Commit { head: CommitId },
-    /// A copy of the files the live or removed workspace `workspace` has,
-    /// or its checkpoint `checkpoint` keeps, read when it is created.
+    /// The files are read when the worktree is created.
     Copy {
         workspace: SpaceId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         checkpoint: Option<CheckpointNumber>,
     },
     /// The restored workspace's own branch, or a detached HEAD for one at a
-    /// commit, at the HEAD of its removal checkpoint `checkpoint`, which
-    /// keeps the restored workspace's ID, with the unsaved files it keeps;
-    /// a branch's diff compares with `base`.
+    /// commit, at the HEAD of its removal checkpoint, with the unsaved files
+    /// the checkpoint keeps. The checkpoint keeps the restored workspace's
+    /// ID. A branch's diff compares with `base`.
     Restore {
         checkpoint: CheckpointNumber,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base: Option<String>,
     },
-    /// A new branch at the HEAD of the linked worktree at `path`, which
-    /// Shoal does not own, with a copy of its files, as `shoal adopt
-    /// --copy` makes it.
+    /// A new branch at the HEAD of a linked worktree Shoal does not own,
+    /// with a copy of its files, as `shoal adopt --copy` makes it.
     Outside { path: PathBuf },
 }
 
-/// How a pending worktree is created: checked out on a branch or at a
-/// commit, with the unsaved files a restore writes into it, or as a copy of
-/// another workspace's or an outside worktree's files.
 enum Creation {
     Branch(WorkspaceSource, Option<RestoredFiles>),
     Commit(CommitId, Option<RestoredFiles>),
@@ -91,9 +81,8 @@ enum Creation {
 }
 
 impl PendingWorktree {
-    /// The worktree `source` creates with `git_profile`, a new branch with
-    /// the unsaved files the commit `files` keeps, for an agent in `mode`
-    /// when it converts a chat.
+    /// `files` keeps the unsaved files a new branch starts with. `mode` is
+    /// set when the worktree converts a chat.
     pub(super) fn of(
         (source, files): (WorkspaceSource, Option<CommitId>),
         git_profile: Option<&str>,
@@ -120,13 +109,12 @@ impl PendingWorktree {
         }
     }
 
-    /// The worktree of a workspace at a commit, detached at `head`.
     pub(in crate::workspace) fn commit(head: CommitId) -> Self {
         Self::from_source(PendingSource::Commit { head })
     }
 
     /// The worktree of a restored workspace at a commit, at the HEAD of its
-    /// removal checkpoint `checkpoint` with the unsaved files it keeps.
+    /// removal checkpoint, with the unsaved files it keeps.
     pub(in crate::workspace) fn restore(checkpoint: CheckpointNumber) -> Self {
         Self::from_source(PendingSource::Restore {
             checkpoint,
@@ -134,13 +122,10 @@ impl PendingWorktree {
         })
     }
 
-    /// A copy of the files of the linked worktree at `path`.
     pub(in crate::workspace) fn outside(path: PathBuf) -> Self {
         Self::from_source(PendingSource::Outside { path })
     }
 
-    /// A copy of the files the workspace `workspace` has, or its
-    /// `checkpoint` keeps, with `git_profile`.
     pub(in crate::workspace) fn copy(
         workspace: SpaceId,
         checkpoint: Option<CheckpointNumber>,
@@ -158,8 +143,7 @@ impl PendingWorktree {
         }
     }
 
-    /// The revisions creating this worktree starts from or compares with:
-    /// its base, or the commit it is detached at, and the commit keeping
+    /// Its base, or the commit it is detached at, and the commit that keeps
     /// the unsaved files it starts with.
     fn revisions(&self) -> Vec<&str> {
         match &self.source {
@@ -185,11 +169,10 @@ impl PendingWorktree {
 }
 
 impl Spaces {
-    /// Create the pending worktree of the workspace `id` on `base`, the
-    /// branch of the done work its agent waited for, recording the
-    /// workspace that owns it as its base, as a start on `--base` does, in
-    /// one transaction under the gates of any base change. One that names a
-    /// base of its own or opens an existing branch keeps it.
+    /// `base` is the branch of the done work the agent waited for. Records
+    /// the workspace that owns it as the base, as a start on `--base` does,
+    /// in one transaction under the gates of any base change. A workspace
+    /// that names a base of its own or opens an existing branch keeps it.
     pub async fn build_pending_on(&self, id: &SpaceId, base: BranchName) -> Result<()> {
         let owner = self.branch_owner(id, &base).await?;
         let _gate = self.gates.lock_prs(owner.iter().chain([id])).await;
@@ -199,8 +182,7 @@ impl Spaces {
             .await
     }
 
-    /// Create the worktree the recorded `workspace` is still to get, as its
-    /// preparation does first, and record how creation went.
+    /// Records how creation went.
     pub async fn create_pending_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -216,11 +198,9 @@ impl Spaces {
             .await
     }
 
-    /// Create the worktree of the recorded `workspace` of `repo` as its
-    /// pending worktree says, under the repository's Git gate `git`, which
-    /// settling releases, and record how creation went. One that fails
-    /// leaves the workspace failed with its pending worktree, which a
-    /// retried preparation creates.
+    /// Runs under the repository's Git gate `git`, which settling releases.
+    /// A failure leaves the workspace failed with its pending worktree,
+    /// which a retried preparation creates.
     pub(in crate::workspace) async fn create_recorded_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -283,9 +263,8 @@ impl Spaces {
             .await
     }
 
-    /// The `configured` worktree of `workspace` once its settings define the
-    /// `mode` of a converted chat's agent, which a workspace that is not
-    /// ready yet refuses before anything uses it.
+    /// Refuses, before anything uses the worktree, settings that do not
+    /// define the `mode` of a converted chat's agent.
     async fn with_mode(
         &self,
         daemon: &dyn Daemon,
@@ -301,9 +280,8 @@ impl Spaces {
         }
     }
 
-    /// The `workspace` of `repo` with the admin directory of the worktree an
-    /// earlier try left recorded, once what an add it cut short left is
-    /// gone, and how its worktree is created from `source`.
+    /// Records the admin directory an earlier try left, once what a cut-short
+    /// add left is gone.
     async fn prepared_creation(
         &self,
         repo: &Repository,
@@ -317,8 +295,7 @@ impl Spaces {
         Ok((workspace, creation))
     }
 
-    /// How the worktree of `workspace` that `source` describes is created,
-    /// reading a restore's checkpoint again.
+    /// Reads a restore's checkpoint again.
     async fn creation(&self, workspace: &Workspace, source: PendingSource) -> Result<Creation> {
         Ok(match source {
             PendingSource::New { base, files } => {
@@ -348,10 +325,8 @@ impl Spaces {
         })
     }
 
-    /// How the restored `workspace` is created at the HEAD of its removal
-    /// checkpoint `number`, with the unsaved files it keeps: on its own
-    /// branch, which its restore readied, with its diff comparing with
-    /// `base`, or detached.
+    /// On its own branch, which its restore readied, with its diff comparing
+    /// with `base`, or detached.
     async fn restore_creation(
         &self,
         workspace: &Workspace,
@@ -386,10 +361,9 @@ impl Spaces {
         })
     }
 
-    /// Configure the worktree an earlier creation of `workspace` left once
-    /// it verifies as the one Git created for it, still on its recorded
-    /// branch or detached, writing a restore's `files` into it again once a
-    /// checkpoint keeps what it holds.
+    /// Configures it once it verifies as the one Git created for it, still
+    /// on its recorded branch or detached. Writes a restore's `files` into
+    /// it again once a checkpoint keeps what it holds.
     async fn reconfigure_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -408,11 +382,9 @@ impl Spaces {
             .await
     }
 
-    /// Verify the worktree an earlier creation of `workspace` left as the
-    /// one Git created for it, still on its recorded branch or detached,
-    /// and keep what it holds in a checkpoint before a retry writes files
-    /// into it again, refusing a Git operation under way there and what a
-    /// checkpoint cannot keep.
+    /// Verifies it as the one Git created for it, still on its recorded
+    /// branch or detached. Refuses a Git operation under way there and what
+    /// a checkpoint cannot keep.
     pub(in crate::workspace) async fn keep_before_retry(
         &self,
         daemon: &dyn Daemon,
@@ -442,9 +414,9 @@ impl Spaces {
         Ok(())
     }
 
-    /// The pending worktree of `workspace`, which goes back to preparing
-    /// for its creation, refusing a workspace that has its worktree or
-    /// that another operation, such as a removal, holds.
+    /// The workspace goes back to preparing for the creation. Refuses one
+    /// that has its worktree or that another operation, such as a removal,
+    /// holds.
     async fn claim_pending_worktree(&self, workspace: &Workspace) -> Result<PendingWorktree> {
         let (id, name) = (workspace.id.clone(), workspace.name.clone());
         let plan = self
@@ -470,8 +442,7 @@ impl Spaces {
     }
 }
 
-/// The revisions the pending worktrees of `repository`'s workspaces start
-/// from or compare with, as their plans name them.
+/// As their plans name them.
 pub fn pending_revisions(
     tx: &rusqlite::Transaction<'_>,
     repository: &RepositoryId,
@@ -489,10 +460,10 @@ pub fn pending_revisions(
     Ok(revisions)
 }
 
-/// [`Manager::build_pending_on`] in `tx`, with `owner` the workspace that
-/// owns `base`, if any, whose PR gate and that of `id` the caller holds.
-/// An owner that came to build on the workspace `id` meanwhile is no base
-/// of it, which would make a cycle, though the worktree still holds its
+/// [`crate::Spaces::build_pending_on`] in `tx`. `owner` is the workspace
+/// that owns `base`, if any. The caller holds its PR gate and that of `id`.
+/// An owner that came to build on the workspace `id` meanwhile is not made
+/// its base, which would make a cycle, though the worktree still holds its
 /// work.
 pub fn build_pending_in(
     tx: &rusqlite::Transaction<'_>,
@@ -525,9 +496,7 @@ pub fn build_pending_in(
     }
 }
 
-/// The unsaved files the commit `files` keeps, which a new branch at
-/// `base` starts with, none where it is that base; a commit without a base
-/// it names is refused.
+/// None where `files` is `base` itself. Refuses a commit without a base.
 fn carried_files(base: Option<&str>, files: Option<CommitId>) -> Result<Option<RestoredFiles>> {
     let Some(snapshot) = files.filter(|files| base != Some(files.as_str())) else {
         return Ok(None);
