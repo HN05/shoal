@@ -18,7 +18,6 @@ test-support = ["dep:gix-index"]
 aes-gcm = "0.11"
 anyhow.workspace = true
 base64.workspace = true
-clap = { workspace = true, features = ["derive", "env", "string"] }
 crypto_box = { version = "0.9", features = ["std"] }
 crypto_secretbox = { version = "0.1", features = ["std"] }
 form_urlencoded = "1"
@@ -32,11 +31,9 @@ ignore = "0.4"
 jiff = "1"
 libc.workspace = true
 plist = "1"
-rusqlite = { workspace = true, features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
-shoal-config-derive.workspace = true
 shoal-forge.workspace = true
 shoal-forge-types = { workspace = true, features = ["clap", "rusqlite"] }
 shoal-protocol = { workspace = true, features = ["clap", "rusqlite"] }

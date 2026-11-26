@@ -2823,7 +2823,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml",
- "uuid",
 ]
 
 [[package]]
@@ -2866,7 +2865,6 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "base64",
- "clap",
  "crypto_box",
  "crypto_secretbox",
  "form_urlencoded",
@@ -2879,11 +2877,9 @@ dependencies = [
  "jiff 1.0.0",
  "libc",
  "plist",
- "rusqlite",
  "serde",
  "serde_json",
  "sha2",
- "shoal-config-derive",
  "shoal-forge",
  "shoal-forge-types",
  "shoal-ids",
@@ -2906,20 +2902,12 @@ version = "0.21.1"
 dependencies = [
  "anyhow",
  "base64",
- "form_urlencoded",
  "fs2",
  "futures-util",
- "hmac",
- "http-body-util",
- "hyper",
- "hyper-util",
  "libc",
- "ring",
  "rusqlite",
- "rustls",
  "serde",
  "serde_json",
- "sha2",
  "shoal-agents",
  "shoal-apps",
  "shoal-coordination",
@@ -2943,11 +2931,7 @@ dependencies = [
  "shoal-store",
  "tempfile",
  "tokio",
- "tokio-tungstenite",
- "toml",
- "toml_edit",
  "uuid",
- "webpki-roots",
 ]
 
 [[package]]
@@ -3061,7 +3045,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-tungstenite",
- "uuid",
  "webpki-roots",
 ]
 
@@ -3203,7 +3186,6 @@ dependencies = [
  "shoal-core",
  "shoal-daemon-base",
  "shoal-forge",
- "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",
  "shoal-refs",

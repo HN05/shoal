@@ -25,7 +25,6 @@ serde_json.workspace = true
 shoal-core.workspace = true
 shoal-daemon-base.workspace = true
 shoal-forge.workspace = true
-shoal-forge-types.workspace = true
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs.workspace = true
