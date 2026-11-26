@@ -682,3 +682,16 @@ fn data_and_answers_take_newlines_whatever_their_keys() {
     let answer = checked.resolve("save", values(&[("name", json!("Grace\nHopper"))]));
     assert_eq!(answer.unwrap()["name"], json!("Grace\nHopper"));
 }
+
+#[test]
+fn data_may_hold_a_catalog_id_key() {
+    let shop = surface(
+        json!([
+            {"id": "root", "component": "Button", "child": "label",
+             "action": {"event": {"name": "buy", "context": {"catalogId": "products"}}}},
+            {"id": "label", "component": "Text", "text": "Buy"},
+        ]),
+        json!({"catalogId": "products"}),
+    );
+    shop.checked(&[]).unwrap();
+}

@@ -295,17 +295,21 @@ pub(super) fn plain(text: &str, newlines: bool) -> bool {
         .any(|c| c.is_control() && !(newlines && c == '\n'))
 }
 
-/// The first catalog other than the basic one that `value` names anywhere,
-/// as a surface's `catalogId`, a component's `@catalogId` or a function
-/// call's `catalogId`.
+/// The first catalog other than the basic one that `value` names, as a
+/// surface's `catalogId`, a component's `@catalogId` or a function call's
+/// `catalogId`; data, a context or metadata names none, whatever its keys.
 fn other_catalog(value: &Value) -> Option<&str> {
+    const PAYLOAD: &[&str] = &["dataModel", "context", "metadata", "@metadata"];
     match value {
         Value::Object(fields) => {
             let own = ["catalogId", "@catalogId"]
                 .into_iter()
                 .filter_map(|key| fields.get(key)?.as_str())
                 .find(|id| *id != CATALOG_ID);
-            own.or_else(|| fields.values().find_map(other_catalog))
+            let below = (fields.iter())
+                .filter(|(key, _)| !PAYLOAD.contains(&key.as_str()))
+                .find_map(|(_, value)| other_catalog(value));
+            own.or(below)
         }
         Value::Array(values) => values.iter().find_map(other_catalog),
         _ => None,
