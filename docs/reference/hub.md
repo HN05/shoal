@@ -231,7 +231,8 @@ Every other machine registers a shared repository as `shoal repo add <url>`
 would, matched by origin:
 
 - Where it has no repository of that origin, the machine clones it at once in
-  the background, under its own `root_dir` and under the same name.
+  the background, under its own `root_dir`. The clone takes the same name
+  where no repository there has that name, and otherwise one from its URL.
 - A repository of that origin the machine already has, whatever its name,
   keeps that registration and becomes shared.
 - A [`shoal contribute`](repo.md#contributions) clone that becomes shared is
