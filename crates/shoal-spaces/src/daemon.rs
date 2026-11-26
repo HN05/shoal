@@ -718,6 +718,8 @@ pub trait Hub: Send + Sync {
     /// The hub keeps a package of a space whose machine is offline.
     fn kept_package<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<KeptPackage>>>;
 
+    /// Waits, for a bounded time, until the hub took this machine's report of
+    /// the space, so other machines find it there.
     fn listed<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()>;
 
     /// The hub name, else the host name.
