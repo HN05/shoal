@@ -174,12 +174,18 @@ pub(crate) fn wait_for_tab(fixture: &Fixture, before: usize) {
 
 /// The `herdr` calls made so far, once there is one: a start whose agent
 /// the queue starts in the background opens its tab once the queue does.
+/// The fake creates its log before it writes a call, so only whole lines
+/// count.
 pub(crate) fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
     let calls = fixture.root.path().join("herdr-calls");
-    support::wait::wait_for("a herdr call", || fs::read_to_string(&calls).ok())
-        .lines()
-        .map(|line| serde_json::from_str(line).unwrap())
-        .collect()
+    support::wait::wait_for("a herdr call", || {
+        fs::read_to_string(&calls)
+            .ok()
+            .filter(|text| text.ends_with('\n'))
+    })
+    .lines()
+    .map(|line| serde_json::from_str(line).unwrap())
+    .collect()
 }
 
 #[test]
