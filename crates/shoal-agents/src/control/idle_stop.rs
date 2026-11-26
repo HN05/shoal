@@ -159,11 +159,11 @@ impl Agents {
         }
     }
 
-    /// Stop the `chosen` agents still idle in the turn they were chosen in,
-    /// unless the user interacted since or `turns` found work in flight outside
-    /// their process group; a blocked space's agent stops all the same. A
-    /// blocked agent's stop notifies no one, since its space's blocking already
-    /// did.
+    /// Stop the `chosen` agents that `turns` still shows idle, with no work in
+    /// flight outside their process group, in the turn they were chosen in. One
+    /// the user interacted with since stays running, unless its space is
+    /// blocked. A blocked agent's stop notifies no one, since its space's
+    /// blocking already did.
     pub async fn stop_idle(
         &self,
         daemon: &dyn Daemon,

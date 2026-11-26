@@ -1,7 +1,7 @@
 //! Retrying a turn an API failure ended. `docs/design/agents.md` says when a
 //! retry runs. The retry is persisted, so it outlasts a daemon restart and the
 //! agent's sleep, and knows no agent: any report of a failed turn schedules
-//! one.
+//! one, or tells of a turn Shoal does not retry.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};
