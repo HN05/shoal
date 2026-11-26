@@ -21,8 +21,7 @@ use shoal_protocol::{
     links::{issue, pr::Registration},
 };
 
-/// What a space records about its links and work, which its status shows
-/// with their state on the forge.
+/// Its status shows them with their state on the forge.
 pub struct SpaceRecords {
     pub issues: Vec<issue::Registration>,
     pub pr_cleanup: Option<Registration>,
@@ -30,8 +29,7 @@ pub struct SpaceRecords {
 }
 
 impl Spaces {
-    /// The status of the workspace or chat, running or stopped, `selector`
-    /// names: a workspace's adds what needs its worktree.
+    /// A workspace's adds what needs its worktree.
     pub async fn space_status(
         &self,
         daemon: &dyn Daemon,
@@ -71,8 +69,8 @@ impl Spaces {
         })
     }
 
-    /// The effective permissions of `space` in its own repository, or for a
-    /// chat without one in the global config.
+    /// In the space's own repository, or for a chat without one in the
+    /// global config.
     async fn status_permissions(&self, daemon: &dyn Daemon, space: &Space) -> Result<Permissions> {
         (daemon
             .coordination()
@@ -80,9 +78,8 @@ impl Spaces {
         .await
     }
 
-    /// What the status of `space` shows for its kind, and the directory
-    /// whose origin names its forge: the workspace's worktree or the chat's
-    /// checkout.
+    /// Also returns the directory whose origin names its forge: the
+    /// workspace's worktree or the chat's checkout.
     async fn space_detail(
         &self,
         daemon: &dyn Daemon,
@@ -106,7 +103,6 @@ impl Spaces {
         })
     }
 
-    /// What awaits the user about `space`.
     async fn attention(&self, daemon: &dyn Daemon, space: &SpaceDetail) -> Result<Attention> {
         let unread_notifications = self.notifications.unread_of_space(space.id()).await?;
         let waiting_threads = self.waiting_threads(daemon, space.id()).await?;
@@ -123,8 +119,8 @@ impl Spaces {
             .await
     }
 
-    /// The retry of the turn an API failure ended for the agent of the space
-    /// `id`, and the request its proxy waits to retry.
+    /// The retry of the turn an API failure ended, and the request the
+    /// agent's proxy waits to retry.
     async fn agent_retries(
         &self,
         daemon: &dyn Daemon,
@@ -138,7 +134,6 @@ impl Spaces {
         Ok((turn_retry, daemon.proxy_retry(&executions)))
     }
 
-    /// What the space `id` records about its links and work.
     pub async fn space_records(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<SpaceRecords> {
         Ok(SpaceRecords {
             issues: daemon.issue_registrations(id).await?,
@@ -147,8 +142,7 @@ impl Spaces {
         })
     }
 
-    /// The state of the watched PRs and assigned issues in `records`, looked
-    /// up on the forge of `origin`'s remote.
+    /// Looked up on the forge of `origin`'s remote.
     async fn linked_states(
         &self,
         daemon: &dyn Daemon,
@@ -167,8 +161,7 @@ impl Spaces {
     }
 }
 
-/// Add to `asleep`, the asleep agent of the space `id`, the leases it keeps;
-/// a status that cannot read them shows none.
+/// A status that cannot read the leases shows none.
 async fn add_kept_leases(daemon: &dyn Daemon, id: &SpaceId, asleep: Option<&mut Asleep>) {
     let Some(asleep) = asleep else {
         return;

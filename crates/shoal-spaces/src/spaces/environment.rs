@@ -1,5 +1,5 @@
 //! The variables a space gives the processes an external caller starts in
-//! it, without the scope token, which [`super::scopes`] issues on its own.
+//! it. The scope token is left out: [`super::scopes`] issues it on its own.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::{
@@ -12,11 +12,10 @@ use shoal_protocol::space_names::SpaceSelector;
 use std::{collections::BTreeMap, ffi::OsString};
 
 impl Spaces {
-    /// The variables a process of the space `selector` names runs with:
-    /// the space, the state directory, its temporary directory and its
-    /// configured `[env]`, and for a workspace, whose worktree must be
-    /// ready and verified, its worktree's and ports, as its executions get
-    /// them.
+    /// The space, the state directory, its temporary directory and its
+    /// configured `[env]`. A workspace, whose worktree must be ready and
+    /// verified, adds its worktree's variables and ports, as its executions
+    /// get them.
     pub async fn space_environment(
         &self,
         daemon: &dyn Daemon,
@@ -81,7 +80,7 @@ impl Spaces {
     }
 }
 
-/// `values` as JSON carries them, refusing one that is not UTF-8.
+/// Refuses a value that is not UTF-8.
 fn exported(values: BTreeMap<String, OsString>) -> Result<BTreeMap<String, String>> {
     values
         .into_iter()

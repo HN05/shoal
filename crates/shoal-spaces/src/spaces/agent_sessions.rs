@@ -1,5 +1,5 @@
-//! Which spaces have an agent session to attach to, where the terminal
-//! hosts of this machine keep them.
+//! Which spaces have an agent session to attach to, where this machine's
+//! terminal hosts keep them.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::collections::{HashMap, HashSet};
@@ -9,11 +9,11 @@ use shoal_ids::space_ids::SpaceId;
 use crate::{config::Effective, log, model::Space, sessions::Origin};
 
 impl Spaces {
-    /// The IDs of `spaces` with an agent session, counting the places their
-    /// connected agents were recorded in, including one Shoal stopped whose
-    /// wrapper waits to restore it, which attaching resumes, and those Shoal
-    /// created for them, such as a session left at its shell after a failed
-    /// launch. A record the daemon cannot read counts as no session.
+    /// Counts the places their connected agents were recorded in, including
+    /// one Shoal stopped whose wrapper waits to restore it, which attaching
+    /// resumes, and those Shoal created for them, such as a session left at
+    /// its shell after a failed launch. A record the daemon cannot read
+    /// counts as no session.
     pub async fn session_spaces(&self, daemon: &dyn Daemon, spaces: &[Space]) -> HashSet<SpaceId> {
         let agents = (daemon.running_agents().await).unwrap_or_else(|error| {
             log!("agents unreadable for their sessions: {error:#}");
@@ -31,9 +31,8 @@ impl Spaces {
         owners
     }
 
-    /// The settings of each of `spaces` that owns one of `places`, which
-    /// say which hosts to ask about them; one whose settings cannot be read
-    /// is left out.
+    /// The settings say which hosts to ask. A space whose settings cannot be
+    /// read is left out.
     async fn place_settings(
         &self,
         daemon: &dyn Daemon,

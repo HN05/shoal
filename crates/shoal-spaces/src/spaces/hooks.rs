@@ -1,5 +1,4 @@
-//! The hooks that follow a space's agent, a workspace's or a chat's, which
-//! run where that agent works.
+//! The hooks that follow a space's agent, which run where that agent works.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -16,8 +15,7 @@ use crate::{
 };
 
 impl Spaces {
-    /// Run `hooks.post_agent_exit` where the agent of `space` worked, unless
-    /// a removal has the space, which runs its own hooks.
+    /// Skips a space a removal has, which runs its own hooks.
     pub async fn run_agent_exit_hook(
         &self,
         daemon: &dyn Daemon,
@@ -47,8 +45,6 @@ impl Spaces {
         (self.run_space_hook(daemon, hook, space, &settings, &command)).await
     }
 
-    /// Whether the space `id` is a chat or a ready workspace that no
-    /// removal holds.
     async fn agent_exit_space_ready(&self, id: &SpaceId) -> anyhow::Result<bool> {
         if self.space_removals.reserved(id) {
             return Ok(false);
@@ -66,14 +62,13 @@ impl Spaces {
             .await
     }
 
-    /// The hook of `kind` that `settings` configure, in where the agent of
-    /// `space` works.
+    /// Resolved where the agent of `space` works.
     pub fn space_hook(space: &Space, kind: HookKind, settings: &Effective) -> Option<PathBuf> {
         (kind.command(settings)).map(|path| space.workdir.path().join(path))
     }
 
-    /// Run `hook`'s `command` in `space` with what `[env]` adds: its
-    /// repository's, or the global config's for a space without one.
+    /// `[env]` comes from the space's repository, or the global config for a
+    /// space without one.
     pub async fn run_space_hook(
         &self,
         daemon: &dyn Daemon,

@@ -1,9 +1,6 @@
 //! Packages of spaces that keep running here under their own IDs, as the
-//! hub keeps an intermittent machine's: a space as its removal would record
-//! it now, with its agents, which continue their sessions where the package
-//! is imported, a workspace at a new checkpoint. The state a package holds
-//! tells whether its space changed since: a workspace's HEAD and files, its
-//! agents' session files and its records.
+//! hub keeps an intermittent machine's. The state a package holds tells
+//! whether its space changed since. See `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::{path::PathBuf, time::UNIX_EPOCH};
@@ -19,8 +16,7 @@ use crate::{
 };
 
 impl Spaces {
-    /// Write a package of `space`, which keeps running here, under its own
-    /// ID, without the spaces below it, to the new file `file`.
+    /// Leaves out the spaces below. `file` must be new.
     pub async fn write_kept_package(
         &self,
         daemon: &dyn Daemon,
@@ -34,9 +30,8 @@ impl Spaces {
         self.write_prepared(daemon, prepared, file).await
     }
 
-    /// What a package of `space` taken now would hold, as a digest that
-    /// changes with it: a workspace's HEAD and files, the size and time of
-    /// each of its agents' session files, and its records.
+    /// A digest of a workspace's HEAD and files, the size and time of each
+    /// of its agents' session files, and its records.
     pub async fn package_state(&self, daemon: &dyn Daemon, space: &Space) -> Result<String> {
         let files = match space.worktree() {
             Some(worktree) => Some(crate::git::checkpoint::files_state(&worktree.path).await?),
@@ -51,8 +46,6 @@ impl Spaces {
         Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
     }
 
-    /// The path, size and modification time of each file of the sessions
-    /// the agents of `space` reported.
     async fn session_file_states(
         &self,
         daemon: &dyn Daemon,
@@ -82,10 +75,9 @@ impl Spaces {
         .map_err(Into::into)
     }
 
-    /// What the package of `space` keeps of its records: its name, mode,
-    /// permissions, links, ready marks, holds, progress, wake timer and
-    /// parent, a workspace's branch, what it builds on and its pending
-    /// review, its open threads and its queued work.
+    /// Its name, mode, permissions, links, ready marks, holds, progress, wake
+    /// timer and parent, a workspace's branch, what it builds on and its
+    /// pending review, its open threads and its queued work.
     pub async fn record_state(
         &self,
         daemon: &dyn Daemon,
@@ -94,7 +86,7 @@ impl Spaces {
         let threads: Vec<_> = (daemon.coordination().open_threads().await?.into_iter())
             .filter(|thread| thread.space_id == space.id)
             .collect();
-        // Without its place in the queue, which other spaces' work moves.
+        // Leave out its place in the queue, which other spaces' work moves.
         let queued: Vec<_> = (daemon
             .coordination()
             .visible_queue(daemon)
@@ -123,8 +115,7 @@ impl Spaces {
     }
 }
 
-/// The path, size and modification time of each of `sources`' files, as
-/// they are now.
+/// As they are now.
 fn file_states(sources: &[SessionSource]) -> Vec<serde_json::Value> {
     (sources.iter())
         .map(|source| {

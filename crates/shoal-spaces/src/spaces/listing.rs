@@ -1,5 +1,5 @@
-//! Reading spaces of both kinds as one listing: every space, or those at
-//! or below one, each read in one transaction.
+//! Listing spaces of both kinds: every space, or those at or below one,
+//! each read in one transaction.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -11,14 +11,14 @@ use crate::{
 };
 
 impl Spaces {
-    /// Every space: the workspaces by name, then the chats in start order.
+    /// The workspaces by name, then the chats in start order.
     pub async fn present_spaces(&self, daemon: &dyn Daemon) -> Result<Vec<Space>> {
         self.spaces_within(daemon, None).await
     }
 
-    /// The space `root` and every space below it, or every space without
-    /// `root`: the workspaces by name, then the chats in start order, then
-    /// those of this machine below `root` through spaces on other machines.
+    /// Every space without `root`. The workspaces by name, then the chats in
+    /// start order, then those of this machine below `root` through spaces
+    /// on other machines.
     pub async fn spaces_within(
         &self,
         daemon: &dyn Daemon,
@@ -33,8 +33,7 @@ impl Spaces {
         Ok(spaces)
     }
 
-    /// The space `root` and every space below it through this machine's
-    /// spaces, or every space without `root`.
+    /// Walks only through this machine's spaces.
     async fn local_spaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Space>> {
         let (root, owner) = (root.cloned(), self.root_dir_owner());
         let records = self.records.clone();
@@ -52,9 +51,8 @@ impl Spaces {
             .collect())
     }
 
-    /// The spaces `caller` sees, as listing them shows them: with what each
-    /// workspace's processes use, the turn state of the coordinator that
-    /// does its work and the job the runner runs there.
+    /// With what each workspace's processes use, the turn state of the
+    /// coordinator that does its work, and the job the runner runs there.
     pub async fn listed_spaces(
         &self,
         daemon: &dyn Daemon,
@@ -67,8 +65,7 @@ impl Spaces {
         Ok(spaces)
     }
 
-    /// Fill in what the processes of each workspace among `spaces` use,
-    /// from the latest sample.
+    /// From the latest sample.
     fn load_usage(&self, spaces: &mut [Space]) {
         for (id, worktree) in worktrees_mut(spaces) {
             worktree.usage = self.workspace_usage(id);
@@ -76,7 +73,6 @@ impl Spaces {
     }
 }
 
-/// The ID and worktree of each workspace among `spaces`.
 pub fn worktrees_mut(spaces: &mut [Space]) -> impl Iterator<Item = (&SpaceId, &mut Worktree)> {
     spaces
         .iter_mut()

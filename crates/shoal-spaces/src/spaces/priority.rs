@@ -11,7 +11,7 @@ use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{priority::Prioritized, space_names::SpaceSelector};
 use shoal_schedule::priority::Priority;
 
-/// The priority of the space `id`: the one set on it, else the default.
+/// The one set on it, else the default.
 pub fn current(db: &Connection, id: &SpaceId) -> Result<Priority> {
     let set: Option<Priority> = db
         .query_row(
@@ -23,7 +23,6 @@ pub fn current(db: &Connection, id: &SpaceId) -> Result<Priority> {
     Ok(set.unwrap_or_default())
 }
 
-/// Set `priority` on the space `id`.
 pub fn set(db: &Connection, id: &SpaceId, priority: Priority) -> Result<()> {
     db.execute(
         "INSERT INTO space_priority(space_id,priority) VALUES (?1,?2)
@@ -34,8 +33,7 @@ pub fn set(db: &Connection, id: &SpaceId, priority: Priority) -> Result<()> {
 }
 
 impl Spaces {
-    /// Set `priority` on the space `selector` names for `caller`, whose
-    /// scope reaches it.
+    /// The caller's scope reaches the space.
     pub async fn set_priority(
         &self,
         daemon: &dyn Daemon,
@@ -52,18 +50,16 @@ impl Spaces {
         })
     }
 
-    /// The priority of the space `id`.
     pub async fn space_priority(&self, id: &SpaceId) -> Result<Priority> {
         let id = id.clone();
         self.store.read(move |tx| current(tx, &id)).await
     }
 
-    /// The priority `caller` gives a space it creates or ranks, asking for
-    /// `priority`: what it asks, or with none the default. A caller whose
-    /// scope has a root of its own gives at most its own space's, as it
-    /// gives only permissions it holds, so asking for more is refused and
-    /// asking for none gives its own when that is lower; the user and a
-    /// master session give any.
+    /// What `priority` asks, or with none the default. A caller whose scope
+    /// has a root of its own gives at most its own space's, as it gives only
+    /// permissions it holds: asking for more is refused, and asking for none
+    /// gives its own when that is lower. The user and a master session give
+    /// any.
     pub async fn given_priority(
         &self,
         daemon: &dyn Daemon,
@@ -90,9 +86,8 @@ impl Spaces {
         }
     }
 
-    /// The priority the launch `request` ranks with while queued, until
-    /// its workspace's issue is read: the highest the labels of that issue
-    /// map to under `[priority.labels]` of its `repository`.
+    /// Until the workspace's issue is read: the highest priority the labels
+    /// of that issue map to under `[priority.labels]` of `repository`.
     pub async fn launch_priority(
         &self,
         daemon: &dyn Daemon,
@@ -107,7 +102,6 @@ impl Spaces {
         Ok(settings.priority.of_labels(labels))
     }
 
-    /// Set `priority`, when given, on the space `id`.
     pub async fn give_priority(&self, id: &SpaceId, priority: Option<Priority>) -> Result<()> {
         let Some(priority) = priority else {
             return Ok(());

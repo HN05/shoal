@@ -12,9 +12,7 @@ use crate::{
 };
 
 impl Spaces {
-    /// The spaces among `among` that link an issue, PR or CI run, or the
-    /// workspaces among them that hold a lease on a resource, in their
-    /// order there.
+    /// Only workspaces hold a resource lease. Keeps the order of `among`.
     pub async fn find_spaces(&self, target: &SpaceTarget, among: Vec<Space>) -> Result<Vec<Space>> {
         let within: Vec<SpaceId> = among.iter().map(|space| space.id.clone()).collect();
         let ids = match target {
