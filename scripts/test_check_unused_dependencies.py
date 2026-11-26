@@ -56,6 +56,14 @@ class CheckUnusedDependenciesTests(unittest.TestCase):
                   "fn f() { proxy::hmac::sign(); }\n")
         self.assertEqual(self.unnamed(source, "hyper", "ring", "hmac"), ["hmac", "hyper", "ring"])
 
+    def test_a_use_group_names_the_roots_of_its_paths_alone(self):
+        source = ("use {anyhow as errors, ::serde::{Serialize, de::Error}};\n"
+                  "pub(crate) use crate::{ring::Key, hmac::{self, Mac}};\n"
+                  "// Callers use this to sign;\n"
+                  "fn f() -> errors::Result<()> { libc::getpid(); }\n")
+        self.assertEqual(self.unnamed(source, "anyhow", "serde", "ring", "hmac", "libc"),
+                         ["hmac", "ring"])
+
     def test_a_dependency_is_named_by_its_crate_name_or_its_rename(self):
         self.write("crates/core/tests/forge.rs", "use shoal_forge::Forge;\nfn f() { gx::open(); }\n")
         found = self.problems(package("core", "crates/core",

@@ -3,7 +3,8 @@ name, unless its manifest lists it under `[package.metadata.shoal]`, as
 AGENTS.md, under Crates, says.
 
 A source names a dependency by a path that starts with its crate name, such
-as `hyper::Request`, or by `use` or `extern crate`."""
+as `hyper::Request`, by a `use` whose tree has it at its root, or by
+`extern crate`."""
 import re
 import sys
 from pathlib import Path
@@ -11,6 +12,9 @@ from pathlib import Path
 from affected_packages import Workspace, cargo_metadata
 
 METADATA_KEY = "unnamed-dependencies"
+# A `use` declaration, which rustfmt starts on a line of its own; anchoring it
+# there keeps prose such as "callers use this" from reading as one.
+USE = re.compile(r"^[ \t]*(?:pub(?:\([^)]*\))?\s+)?use\s+([^;]*);", re.MULTILINE)
 
 
 def crate_name(dependency):
@@ -20,8 +24,33 @@ def crate_name(dependency):
 
 def names(source, crate):
     """Whether Rust *source* names *crate*."""
-    return re.search(rf"(?<!\w)(?<!\w::){crate}\s*::|\b(?:use|extern\s+crate)\s+{crate}\b",
-                     source) is not None
+    if any(crate in use_roots(tree) for tree in USE.findall(source)):
+        return True
+    return re.search(rf"(?<!\w)(?<!\w::){crate}\s*::|\bextern\s+crate\s+{crate}\b",
+                     USE.sub("", source)) is not None
+
+
+def use_roots(tree):
+    """The first segment of each path in the `use` *tree*: `serde` and
+    `anyhow` for `{serde::Serialize, anyhow as errors}`, `crate` for
+    `crate::{ring::Key}`."""
+    tree = tree.strip().removeprefix("::").lstrip()
+    if not tree.startswith("{"):
+        first = re.match(r"(?:r#)?(\w+)", tree)
+        return {first.group(1)} if first else set()
+    return {root for item in group_items(tree[1:tree.rfind("}")]) for root in use_roots(item)}
+
+
+def group_items(group):
+    """The comma-separated items of a `use` group's inside, splitting only
+    at its own depth."""
+    items, depth, start = [], 0, 0
+    for index, character in enumerate(group):
+        depth += {"{": 1, "}": -1}.get(character, 0)
+        if character == "," and depth == 0:
+            items.append(group[start:index])
+            start = index + 1
+    return items + [group[start:]]
 
 
 def unnamed_dependencies(dependencies, sources, allowed):
