@@ -1025,6 +1025,20 @@ fn an_input_in_an_empty_list_is_no_input() {
         json!({"items": [], "shared": "all"}),
     );
     assert!(empty.action("save").unwrap().inputs.is_empty());
+    // Nor one in a list over absolute data inside an empty list.
+    let nested = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["groups", "save"]},
+            {"id": "groups", "component": "List", "children": {"componentId": "group", "path": "/groups"}},
+            {"id": "group", "component": "List", "children": {"componentId": "name", "path": "/items"}},
+            {"id": "name", "component": "TextField", "label": "Name", "value": {"@path": "name"}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save", "context": {"first": {"@path": "/items/0/name"}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"groups": [], "items": [{"name": "Ada"}]}),
+    );
+    assert!(nested.action("save").unwrap().inputs.is_empty());
 }
 
 #[test]

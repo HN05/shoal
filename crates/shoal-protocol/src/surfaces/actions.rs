@@ -346,7 +346,8 @@ impl Surface {
             .is_some_and(|bound| bound.starts_with('/'));
         let lists = self.lists_above(component);
         // A list over absolute data repeats the same items in every item
-        // of the lists around it, so the scope starts afresh there.
+        // of the lists around it, so its path, not theirs, names the
+        // input's item.
         let fresh = (lists.iter())
             .rposition(|list| {
                 list.template()
@@ -354,7 +355,7 @@ impl Surface {
             })
             .unwrap_or(0);
         let mut scope = String::new();
-        for (at, list) in lists.iter().enumerate().skip(fresh) {
+        for (at, list) in lists.iter().enumerate() {
             let items = scoped(&scope, list.template()?.1);
             let within = |path: &str| {
                 let item = path
@@ -364,7 +365,9 @@ impl Surface {
                     .next()?;
                 item.parse::<usize>().ok().map(|_| item.to_owned())
             };
-            let item = match absolute {
+            // A list outside the last over absolute data holds the input
+            // in each of its items, which must have one.
+            let item = match absolute || at < fresh {
                 true => (around.get(at))
                     .filter(|(id, _)| *id == list.id)
                     .map_or(0, |(_, item)| *item)
