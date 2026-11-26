@@ -310,9 +310,11 @@ The agent:
 2. starts an agent for each with `shoal start --issue`, so each reports to it
    and takes the mode its labels call for, the sub-issues whose plan is settled
    first;
-3. holds an agent with `--add-blocker` where its work builds on another's;
+3. holds an agent with `--add-blocker` where its work builds on another's
+   done work, and starts one that needs another's work merged once that
+   sub-issue closes;
 4. starts a plan chat for a sub-issue that needs a plan once the work it
-   builds on is done, alerts you when the chat runs, and starts the
+   builds on is done, alerts you when the chat starts, and starts the
    implementing agent once the plan is settled;
 5. answers its children's threads and approvals, passes on what it cannot
    decide, and tells you when a PR waits for you;

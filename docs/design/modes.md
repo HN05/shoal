@@ -181,14 +181,16 @@ its child and reports to it, and the sub-issue's label decides its mode, as
 for any start.
 
 It orders the sub-issues with blockers. The forge's recorded blockers already
-hold an agent. For a dependency only the text states, the agent adds an issue
-as the blocker when the work needs the other merged, or the other's space when
-it can build on that branch before it merges.
+hold an agent. For a dependency only the text states, the agent adds the other
+sub-issue or its space as a blocker. A blocker clears once that work is done,
+so the agent stacks on its branch before it merges. Work that needs the other
+merged starts only once the other sub-issue closes.
 
 It starts the sub-issues whose plan is settled first. A sub-issue that needs a
 plan waits until the work it builds on is done, since its plan then reads the
-code as it is. Its plan chat opens in the background, so the agent alerts the
-user once it runs. Once the plan is settled, the agent starts the
+code as it is. A chat takes no blockers, so the agent waits for that work
+before it starts the plan chat. The chat opens in the background, so the agent
+alerts the user once it starts. Once the plan is settled, the agent starts the
 implementation.
 
 It does none of the code work. It answers or passes on its children's threads
