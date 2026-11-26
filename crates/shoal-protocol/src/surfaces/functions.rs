@@ -219,7 +219,7 @@ fn ecmascript(pattern: &str) -> String {
     let mut characters = pattern.chars().peekable();
     while let Some(character) = characters.next() {
         let spelled = match character {
-            '\\' => escape(characters.next(), false),
+            '\\' => escape(&mut characters, false),
             '[' => class(&mut characters),
             '.' => "[^\\n\\r\\x{2028}\\x{2029}]".to_owned(),
             other => other.to_string(),
@@ -233,7 +233,7 @@ fn ecmascript(pattern: &str) -> String {
 /// matches nothing, and `[^]`, which matches anything, as ECMAScript reads
 /// them, and its members escaped where Rust would read `[`, `&&`, `--` or
 /// `~~` as a nested class or a set operation.
-fn class(characters: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+fn class(characters: &mut Characters<'_>) -> String {
     let negated = characters.next_if_eq(&'^').is_some();
     if characters.next_if_eq(&']').is_some() {
         let matched = if negated {
@@ -251,7 +251,7 @@ fn class(characters: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
                 spelled.push(']');
                 return spelled;
             }
-            '\\' => spelled.push_str(&escape(characters.next(), true)),
+            '\\' => spelled.push_str(&escape(characters, true)),
             '[' | '&' | '~' => spelled.push_str(&format!("\\{character}")),
             '-' if previous == Some('-') => spelled.push_str("\\-"),
             other => spelled.push(other),
@@ -261,22 +261,57 @@ fn class(characters: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
     spelled
 }
 
-/// What the escape of `escaped` means in ECMAScript, spelled for Rust,
-/// `in_class` where a character class holds it.
-fn escape(escaped: Option<char>, in_class: bool) -> String {
+/// The characters of a pattern, read one after another.
+type Characters<'a> = std::iter::Peekable<std::str::Chars<'a>>;
+
+/// What the escape whose `\\` `characters` follow means in ECMAScript,
+/// spelled for Rust, `in_class` where a character class holds it: a class
+/// as ECMAScript reads it, or a character as its code point.
+fn escape(characters: &mut Characters<'_>, in_class: bool) -> String {
+    let Some(escaped) = characters.next() else {
+        return "\\\\".to_owned();
+    };
+    let code = |point: u32| format!("\\x{{{point:X}}}");
     match escaped {
-        Some('d') => "[0-9]".to_owned(),
-        Some('D') => "[^0-9]".to_owned(),
-        Some('w') => WORD.to_owned(),
-        Some('W') => "[^A-Za-z0-9_]".to_owned(),
-        Some('s') => format!("[{SPACE}]"),
-        Some('S') => format!("[^{SPACE}]"),
-        Some('b') if in_class => "\\x08".to_owned(),
-        Some('b') => format!("(?:(?<={WORD})(?!{WORD})|(?<!{WORD})(?={WORD}))"),
-        Some('B') => format!("(?:(?<={WORD})(?={WORD})|(?<!{WORD})(?!{WORD}))"),
-        Some(escaped) => format!("\\{escaped}"),
-        None => "\\\\".to_owned(),
+        'd' => "[0-9]".to_owned(),
+        'D' => "[^0-9]".to_owned(),
+        'w' => WORD.to_owned(),
+        'W' => "[^A-Za-z0-9_]".to_owned(),
+        's' => format!("[{SPACE}]"),
+        'S' => format!("[^{SPACE}]"),
+        'b' if in_class => code(0x08),
+        'b' => format!("(?:(?<={WORD})(?!{WORD})|(?<!{WORD})(?={WORD}))"),
+        'B' => format!("(?:(?<={WORD})(?={WORD})|(?<!{WORD})(?!{WORD}))"),
+        't' => code(0x09),
+        'n' => code(0x0A),
+        'v' => code(0x0B),
+        'f' => code(0x0C),
+        'r' => code(0x0D),
+        '0' => code(0),
+        'c' => match characters.next_if(char::is_ascii_alphabetic) {
+            Some(letter) => code(u32::from(letter) % 32),
+            None => "\\\\c".to_owned(),
+        },
+        'x' => hex(characters, 2).map_or_else(|| "x".to_owned(), code),
+        'u' if characters.next_if_eq(&'{').is_some() => {
+            let digits: String = std::iter::from_fn(|| characters.next_if(|c| *c != '}')).collect();
+            characters.next_if_eq(&'}');
+            u32::from_str_radix(&digits, 16).map_or_else(|_| format!("u{{{digits}}}"), code)
+        }
+        'u' => hex(characters, 4).map_or_else(|| "u".to_owned(), code),
+        other => format!("\\{other}"),
     }
+}
+
+/// The number the next `digits` hex digits of `characters` spell, none
+/// where fewer follow, which ECMAScript reads as the escaped letter.
+fn hex(characters: &mut Characters<'_>, digits: usize) -> Option<u32> {
+    let ahead: String = characters.clone().take(digits).collect();
+    let number = (ahead.len() == digits && ahead.chars().all(|c| c.is_ascii_hexdigit()))
+        .then(|| u32::from_str_radix(&ahead, 16).ok())
+        .flatten()?;
+    characters.nth(digits - 1);
+    Some(number)
 }
 
 /// Most code points a `regex` check's pattern may hold, as the dialect

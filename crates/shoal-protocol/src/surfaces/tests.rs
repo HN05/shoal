@@ -749,6 +749,9 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
     let unspaced = pattern(r"^\S+$");
     assert!(answer(&unspaced, "a\u{FEFF}b").is_err());
     answer(&pattern(r"^[\s\d]+$"), "1 2").unwrap();
+    // A character escape means its code point, in a class or out of one.
+    assert!(answer(&pattern(r"^[^\cJ]+$"), "a\nb").is_err());
+    answer(&pattern(r"^\x41\u0042\u{43}[\u{44}\x45]\0?$"), "ABCD").unwrap();
     // A class holds its members as ECMAScript reads them.
     assert!(answer(&pattern(r"^[^a&&b]+$"), "a").is_err());
     answer(&pattern(r"^[[~]+$"), "[~").unwrap();
