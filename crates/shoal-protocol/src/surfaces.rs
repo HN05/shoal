@@ -275,6 +275,16 @@ fn binding(value: &Value) -> Option<&str> {
     value.get("@path")?.as_str()
 }
 
+/// The array index a JSON pointer's `segment` names, as JSON pointers read
+/// one: digits without a leading zero, or `0`.
+fn array_index(segment: &str) -> Option<usize> {
+    let digits = segment.bytes().all(|byte| byte.is_ascii_digit());
+    let canonical = segment == "0" || !segment.starts_with('0');
+    (digits && canonical)
+        .then(|| segment.parse().ok())
+        .flatten()
+}
+
 /// `path` read under `base`: as it is when absolute, else below `base`.
 fn scoped(base: &str, path: &str) -> String {
     match path.starts_with('/') {

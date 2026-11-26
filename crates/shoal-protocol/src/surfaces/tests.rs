@@ -1320,6 +1320,16 @@ fn a_number_field_may_stay_empty_where_a_slider_may_not() {
 }
 
 #[test]
+fn an_answer_s_value_is_entered_only_where_a_pointer_reads_it() {
+    // A pointer reads no array item by an index with a leading zero.
+    let padded = entering("/people/00/name", json!({"people": [{"name": "Grace"}]}));
+    let refused = (padded.resolve("save", values(&[("name", json!("Ada"))])))
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("/people/00/name cannot hold"), "{refused}");
+}
+
+#[test]
 fn an_answer_s_value_that_other_data_blocks_is_refused() {
     let blocked = entering("/person/name", json!({"person": "Grace"}));
     let refused = blocked

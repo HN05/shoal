@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::{Map, Value};
 
-use super::{Component, Placed, Surface, binding, dates::Dates, scoped};
+use super::{Component, Placed, Surface, array_index, binding, dates::Dates, scoped};
 
 /// An action a surface offers.
 #[derive(Debug, Clone, PartialEq)]
@@ -232,7 +232,7 @@ impl Surface {
         let mut at = (body.entry("dataModel")).or_insert(Value::Null);
         for field in path.split('/').skip(1) {
             let field = field.replace("~1", "/").replace("~0", "~");
-            let index = field.parse::<usize>().ok();
+            let index = array_index(&field);
             if at.is_null() {
                 *at = match index {
                     Some(_) => Value::Array(Vec::new()),
@@ -363,7 +363,7 @@ impl Surface {
                     .strip_prefix('/')?
                     .split('/')
                     .next()?;
-                item.parse::<usize>().ok().map(|_| item.to_owned())
+                array_index(item).map(|_| item.to_owned())
             };
             // A list outside the last over absolute data holds the input
             // in each of its items, which must have one.
@@ -379,7 +379,7 @@ impl Surface {
                 .data(&items)
                 .and_then(Value::as_array)
                 .map_or(0, Vec::len);
-            if item.parse::<usize>().ok()? >= count {
+            if array_index(&item)? >= count {
                 return None;
             }
             scope = format!("{items}/{item}");
