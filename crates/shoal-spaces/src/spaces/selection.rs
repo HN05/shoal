@@ -1,6 +1,5 @@
 //! Resolving the space a request names, by its number or ID, over
-//! workspaces and chats alike, and refusing the other kind where a request
-//! needs one.
+//! workspaces and chats alike.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::EventCause;
@@ -19,7 +18,7 @@ use crate::{
 use shoal_protocol::{model::Located, space_names::SpaceSelector};
 
 impl Spaces {
-    /// The workspace or chat, running or stopped, `selector` names.
+    /// Running or stopped.
     pub async fn space(&self, selector: &SpaceSelector) -> Result<Space> {
         let owned = selector.clone();
         let found = self.store.run(move |db| selected(db, &owned)).await?;
@@ -35,18 +34,15 @@ impl Spaces {
         }
     }
 
-    /// Whether a workspace or chat here, running or stopped, is the one
-    /// `selector` names.
     pub async fn holds_space(&self, selector: &SpaceSelector) -> Result<bool> {
         let owned = selector.clone();
         let found = self.store.read(move |db| selected(db, &owned)).await?;
         Ok(found.is_some())
     }
 
-    /// The refusal of a request for the space `selector` names, which does
-    /// not exist here, as another joined machine's may: one selected by
-    /// the ID of a removed space says it was removed, with its repository
-    /// where that took it, while the journal keeps the removal.
+    /// Another joined machine may have it. A space selected by the ID of a
+    /// removed space is said to be removed, with its repository where that
+    /// took it, while the journal keeps the removal.
     pub async fn missing_space(&self, selector: &SpaceSelector) -> anyhow::Error {
         let removal = match selector.given_id().cloned() {
             Some(id) => self.store.run(move |db| events::removal(db, &id)).await,
@@ -60,8 +56,7 @@ impl Spaces {
         Refusal::absent(selector, message).into()
     }
 
-    /// The workspace or chat, running or stopped, with the ID `id`, while
-    /// it exists.
+    /// Running or stopped. None once it is gone.
     pub async fn find_space(&self, id: &SpaceId) -> Result<Option<Space>> {
         let owned = id.to_owned();
         let kind = self
@@ -75,7 +70,6 @@ impl Spaces {
         })
     }
 
-    /// The ID of the space `selector` names, when it names one.
     pub async fn space_id(&self, selector: Option<&SpaceSelector>) -> Result<Option<SpaceId>> {
         Ok(match selector {
             Some(selector) => Some(self.space(selector).await?.id.clone()),
@@ -83,8 +77,6 @@ impl Spaces {
         })
     }
 
-    /// The ID of the space `selector` names, as [`Self::space_anywhere`]
-    /// finds it.
     pub async fn space_id_anywhere(
         &self,
         daemon: &dyn Daemon,
@@ -93,12 +85,11 @@ impl Spaces {
         Ok(self.space_anywhere(daemon, selector).await?.id().clone())
     }
 
-    /// The space `selector` names: one here, else one another joined
-    /// machine runs, as the hub lists it. One neither has is refused as
-    /// this machine refuses it, naming it as absent. The daemon's own
-    /// operations reach a space through it once the caller's reach was
-    /// checked; a request's own target is found with
-    /// [`Self::locate_space`], among the spaces its caller sees.
+    /// One here, else one another joined machine runs, as the hub lists it.
+    /// One neither has is refused as absent. The daemon's own operations
+    /// reach a space through this once the caller's reach was checked. A
+    /// request's own target is found with [`Self::locate_space`], among the
+    /// spaces its caller sees.
     pub async fn space_anywhere(
         &self,
         daemon: &dyn Daemon,
@@ -117,7 +108,6 @@ impl Spaces {
         }
     }
 
-    /// The workspace or chat, running or stopped, with the ID `id`.
     pub async fn space_by_id(&self, id: &SpaceId) -> Result<Space> {
         match self.find_space(id).await? {
             Some(space) => Ok(space),
@@ -125,9 +115,8 @@ impl Spaces {
         }
     }
 
-    /// The workspace with the ID `id`, which is never read as a name,
-    /// refusing a chat as [`Self::workspace`] does and a removed workspace
-    /// as [`Self::space`] does.
+    /// Never reads `id` as a name. Refuses a chat as [`Self::workspace`]
+    /// does, and a removed workspace as [`Self::space`] does.
     pub async fn workspace_by_id(&self, id: &SpaceId) -> Result<Workspace> {
         if let Some(workspace) = self.find_workspace(id).await? {
             return Ok(workspace);
@@ -136,7 +125,6 @@ impl Spaces {
             .map_err(|chat| other_kind(&chat, SpaceKind::Workspace))
     }
 
-    /// Whether a workspace or chat, running or stopped, has the ID `id`.
     pub async fn space_exists(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
@@ -144,14 +132,13 @@ impl Spaces {
             .await
     }
 
-    /// The workspace `selector` names, refusing a chat.
+    /// Refuses a chat.
     pub async fn workspace(&self, selector: &SpaceSelector) -> Result<Workspace> {
         (self.space(selector).await?.into_workspace())
             .map_err(|chat| other_kind(&chat, SpaceKind::Workspace))
     }
 
-    /// The chat, running or stopped, `selector` names, refusing a
-    /// workspace.
+    /// Refuses a workspace.
     #[cfg(any(test, feature = "test-support"))]
     pub async fn chat(&self, selector: &SpaceSelector) -> Result<crate::model::Chat> {
         (self.space(selector).await?.into_chat())
@@ -159,7 +146,6 @@ impl Spaces {
     }
 }
 
-/// What `removal` of a space did, for a request that names it.
 fn removed(removal: &EventDetails) -> String {
     let (id, name) = (&removal.space_id, &removal.name);
     match (removal.cause, &removal.repository_id) {
@@ -170,7 +156,6 @@ fn removed(removal: &EventDetails) -> String {
     }
 }
 
-/// The kind and ID of the space `selector` names.
 pub fn selected(db: &Connection, selector: &SpaceSelector) -> Result<Option<(SpaceKind, SpaceId)>> {
     let (id, number) = match selector {
         SpaceSelector::Number(number) => (None, Some(*number)),

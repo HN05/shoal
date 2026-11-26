@@ -1,5 +1,4 @@
-//! Announcing a space's removal: the notice that a cleanup removed it, or
-//! the notice and journal record that it retained it.
+//! Announcing that a cleanup removed or retained a space.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::EventCause;
@@ -15,15 +14,12 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 
-/// A space a cleanup removed or retained.
 #[derive(Debug, Clone, Copy)]
 pub struct Announced<'a> {
-    /// What notices call it.
     pub kind: SpaceKind,
     pub id: &'a SpaceId,
     pub name: &'a SpaceName,
-    /// Whether it has a worktree; notices of a space without one name its
-    /// kind.
+    /// Notices of a space without a worktree name its kind.
     pub worktree: bool,
 }
 
@@ -61,8 +57,8 @@ impl<'a> From<&'a SpaceRef> for Announced<'a> {
 }
 
 impl Announced<'_> {
-    /// The notice that `cleanup` removed the space, which says how to
-    /// restore it, unless the cleanup forgot it without a removal record.
+    /// Says how to restore the space, unless the cleanup forgot it without a
+    /// removal record.
     pub fn removal_notice(self, cleanup: Cleanup<'_>) -> String {
         let removal = match self.worktree {
             true => cleanup.removal(),
@@ -75,19 +71,16 @@ impl Announced<'_> {
     }
 }
 
-/// The cleanup that removed or retained a space.
 #[derive(Debug, Clone, Copy)]
 pub enum Cleanup<'a> {
     Idle,
     Merged,
-    /// Disk space cleanup, with the state of the filesystem it frees.
+    /// With the state of the filesystem it frees.
     DiskSpace(&'a str),
-    /// Cleanup after the space's own completion.
     Completion,
     /// Cleanup after the completion of the ancestor named.
     AncestorCompletion(&'a str),
-    /// PR cleanup, after every watched PR merged or the user acknowledged
-    /// the merge.
+    /// After every watched PR merged or the user acknowledged the merge.
     Pr {
         acknowledged: bool,
     },
@@ -99,7 +92,7 @@ pub enum Cleanup<'a> {
 }
 
 impl Cleanup<'_> {
-    /// The cleanup, as the subject of its notices.
+    /// As the subject of its notices.
     fn name(self) -> String {
         match self {
             Self::Idle => "idle cleanup".to_owned(),
@@ -115,7 +108,6 @@ impl Cleanup<'_> {
         }
     }
 
-    /// What the cleanup did to a space it removed.
     fn removal(self) -> String {
         match self {
             Self::Idle | Self::Merged => format!("removed by {}", self.name()),
@@ -135,8 +127,6 @@ impl Cleanup<'_> {
         }
     }
 
-    /// The cause the journal records for the space `id` the cleanup
-    /// retained.
     async fn cause(self, daemon: &dyn Daemon, id: &SpaceId) -> Result<EventCause> {
         Ok(match self {
             Self::Idle => EventCause::Idle,
@@ -152,10 +142,9 @@ impl Cleanup<'_> {
 }
 
 impl Spaces {
-    /// Tell the user that `cleanup` removed `space`, or, when `removal`
-    /// failed, that it retained it, which the space's journal records.
-    /// The notice goes out even when recording fails, whose error is
-    /// returned.
+    /// When `removal` failed, says it retained the space, which the journal
+    /// records. The notice goes out even when recording fails, whose error
+    /// is returned.
     pub async fn announce_removal<T>(
         &self,
         daemon: &dyn Daemon,
@@ -167,7 +156,8 @@ impl Spaces {
         let about = About::space(space.name, space.id);
         let Err(error) = removal else {
             log!("{} removed {} {}", cleanup.name(), space.kind, space.name);
-            // A parent's removal, which may be the user's, names the spaces below it.
+            // A parent's removal, which may be the user's, names the spaces
+            // below it.
             if !matches!(cleanup, Cleanup::Parent(_)) {
                 self.cleanup_removals.push(space.name);
             }
@@ -193,7 +183,6 @@ impl Spaces {
         recorded
     }
 
-    /// Record in the journal that `cleanup` retained `space` with `error`.
     async fn record_retention(
         &self,
         daemon: &dyn Daemon,

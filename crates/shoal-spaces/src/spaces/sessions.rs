@@ -1,6 +1,5 @@
-//! A space's agent and the sessions its agents reported, which clients find
-//! the files of; the daemon never reads them. Its executions and their
-//! saved sessions record them for every space, whatever its kind.
+//! A space's agent and the sessions its agents reported, whose files
+//! clients find. The daemon never reads them.
 use crate::Spaces;
 use crate::daemon::{Daemon, Records};
 use crate::execution::recovery::LastSessionExt;
@@ -21,8 +20,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::transcripts::{ReportedSession, SpaceSessions};
 
 impl Spaces {
-    /// The sessions the agents of the workspace or chat `selector` names
-    /// reported, with the tools its settings give them and the environments
+    /// With the tools the space's settings give them and the environments
     /// its repository's agents ran with.
     pub async fn space_sessions(
         &self,
@@ -51,10 +49,10 @@ impl Spaces {
         })
     }
 
-    /// The agent of the space `id`, named as `--agent` names it: the one
-    /// its execution runs, else the one it saved last, stopped or as a last
-    /// session, else the one its queued launch starts; none for a space
-    /// whose saved sessions were discarded and that waits for no launch.
+    /// Named as `--agent` names it: the one its execution runs, else the one
+    /// it saved last, stopped or as a last session, else the one its queued
+    /// launch starts. None for a space whose saved sessions were discarded
+    /// and that waits for no launch.
     pub async fn agent_of(&self, id: &SpaceId) -> Result<Option<Agent>> {
         let (space, records) = (id.to_owned(), self.records.clone());
         let stored = (self.store)
@@ -63,9 +61,8 @@ impl Spaces {
         self.agent_from(id, stored)
     }
 
-    /// [`Self::agent_of`] the space `id`, of whose agent the store records
-    /// `stored`; only a space whose execution runs no agent reads what it
-    /// saved.
+    /// [`Self::agent_of`] from what the store records. Only a space whose
+    /// execution runs no agent reads what it saved.
     pub fn agent_from(&self, id: &SpaceId, stored: StoredAgents) -> Result<Option<Agent>> {
         let agent = match stored.running {
             Some(running) => Some(running),
@@ -74,10 +71,9 @@ impl Spaces {
         Ok(agent.map(|agent| agent.normalized()))
     }
 
-    /// The sessions the agents of the space `id` reported, each once, those
-    /// running now first: the session each of its agent executions last
-    /// reported, then those of its stopped agents and last sessions, each
-    /// with the session a handoff made it continue from.
+    /// Each once, those running now first: the session each agent execution
+    /// last reported, then those of its stopped agents and last sessions,
+    /// each with the session a handoff made it continue from.
     pub async fn reported_sessions(&self, id: &SpaceId) -> Result<Vec<ReportedSession>> {
         let mut sessions = self.execution_sessions(id).await?;
         sessions.extend(stopped_sessions(&self.paths, id)?);
@@ -97,8 +93,7 @@ impl Spaces {
             .collect())
     }
 
-    /// The session each of the agent executions of the space `id`
-    /// continues, those that run their agent first.
+    /// Those that run their agent first.
     async fn execution_sessions(&self, id: &SpaceId) -> Result<Vec<ReportedSession>> {
         let mut executions = self.workspace_executions(id).await?;
         executions.sort_by_key(|execution| !runs_agent(execution));
@@ -117,14 +112,12 @@ impl Spaces {
     }
 }
 
-/// What the store records of a space's agent: the one its execution runs
-/// and the one its queued launch starts.
+/// The one its execution runs and the one its queued launch starts.
 pub struct StoredAgents {
     running: Option<Agent>,
     queued: Option<Agent>,
 }
 
-/// What the store records of the agent of the space `id`.
 pub fn stored_agents(db: &Connection, records: &dyn Records, id: &SpaceId) -> Result<StoredAgents> {
     Ok(StoredAgents {
         running: crate::executions::newest_agent(db, id)?,
@@ -132,14 +125,12 @@ pub fn stored_agents(db: &Connection, records: &dyn Records, id: &SpaceId) -> Re
     })
 }
 
-/// The agent the space `space_id` saved last.
 fn saved_agent(paths: &Paths, space_id: &SpaceId) -> Result<Option<Agent>> {
     Ok(newest_saved(paths, space_id)?.map(|saved| saved.agent))
 }
 
-/// The agent the space `space_id` saved last, with its session, the
-/// execution it ran as and where it ran: its newest stopped agent, else its
-/// newest last session.
+/// With its session, the execution it ran as and where it ran: the newest
+/// stopped agent, else the newest last session.
 pub fn newest_saved(paths: &Paths, space_id: &SpaceId) -> Result<Option<Leaving>> {
     let stopped = recovery::stopped_agents(paths, space_id)?;
     let newest = (stopped.into_iter()).max_by_key(|stopped| stopped.stopped_at);
@@ -161,7 +152,6 @@ pub fn newest_saved(paths: &Paths, space_id: &SpaceId) -> Result<Option<Leaving>
     }))
 }
 
-/// The sessions of the space's stopped agents.
 fn stopped_sessions(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ReportedSession>> {
     Ok(recovery::stopped_agents(paths, space_id)?
         .into_iter()
@@ -177,7 +167,7 @@ fn stopped_sessions(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ReportedSes
         .collect())
 }
 
-/// The sessions of the agents that exited, the space's last sessions.
+/// The agents that exited are the space's last sessions.
 fn last_sessions(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ReportedSession>> {
     Ok(LastSession::all(paths, space_id)?
         .into_iter()
@@ -193,7 +183,6 @@ fn last_sessions(paths: &Paths, space_id: &SpaceId) -> Result<Vec<ReportedSessio
         .collect())
 }
 
-/// Whether `execution`'s wrapper runs its agent now.
 fn runs_agent(execution: &crate::model::Execution) -> bool {
     execution.state == ExecutionState::Running && execution.child.is_some()
 }

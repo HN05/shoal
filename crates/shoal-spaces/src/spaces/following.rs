@@ -1,9 +1,7 @@
 //! Following a space's agent session: the bytes of its files where its tool
 //! keeps them, everything so far and then what the tool appends, copied
-//! unread as an export copies them. A follow that names no session follows
-//! the space's current one, going on in each new one its agents report. A
-//! client that follows again, as after a daemon restart, says where it read
-//! each file to, and the follow goes on from there.
+//! unread. A client that follows again, as after a daemon restart, says
+//! where it read each file to, and the follow goes on from there.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::{
@@ -32,30 +30,27 @@ use crate::{
     refusal::{Reason, Refusal},
 };
 
-/// How often a follow looks for what its session's files gained.
 const POLL: Duration = Duration::from_millis(500);
 
-/// The most bytes of a file one frame carries: what fits in a frame in
-/// base64, with room for the rest of the frame and the file's path.
+/// What fits in a frame in base64, with room for the rest of the frame and
+/// the file's path.
 pub const CHUNK: usize = (MAX_FRAME - (8 << 10)) / 4 * 3;
 
-/// A session to follow, of a space here.
 pub struct Following {
     space: SpaceId,
-    /// Whether the follow named it, so that it stays with it.
+    /// A named session stays the one followed. Without one, the follow goes
+    /// on in each new session the space's agents report.
     named: bool,
     session: FollowedSession,
     store: &'static dyn Store,
     environments: Arc<Environments>,
-    /// Where the client read each of its files to.
     read: HashMap<PathBuf, ReadTo>,
 }
 
 impl Spaces {
-    /// The session `session` of an agent of the space `selector` names, or
-    /// without one its current session, which a follow follows from where
-    /// `from` says the client read each file to; refused for a session its
-    /// agents never reported, so a follow reads no other session's files.
+    /// Without `session`, the space's current one. `from` says where the
+    /// client read each file to. Refuses a session the space's agents never
+    /// reported, so a follow reads no other session's files.
     pub async fn session_to_follow(
         &self,
         daemon: &dyn Daemon,
@@ -102,12 +97,11 @@ impl Spaces {
         })
     }
 
-    /// Send `following`'s session, then its files' bytes as they grow,
-    /// until the client hangs up, the scope token it came with, `scope`,
-    /// stops acting for a caller, its files cannot be read, or a daemon
-    /// restart closes the follow. It reads nothing more once the token
-    /// stops acting, so a client that paused reading gets no byte read
-    /// after that.
+    /// Sends the session, then its files' bytes as they grow. Stops when the
+    /// client hangs up, the scope token `scope` stops acting for a caller,
+    /// the files cannot be read, or a daemon restart closes the follow. It
+    /// reads nothing more once the token stops acting, so a client that
+    /// paused reading gets no byte read after that.
     pub async fn follow_session(
         &self,
         daemon: &dyn Daemon,
@@ -139,8 +133,7 @@ impl Spaces {
         }
     }
 
-    /// Send `following`'s session, then its files' bytes as they grow, to
-    /// `client` until it hangs up, which `reader` tells.
+    /// Runs until the client hangs up, which `reader` tells.
     async fn keep_following(
         &self,
         daemon: &dyn Daemon,
@@ -167,9 +160,8 @@ impl Spaces {
         }
     }
 
-    /// The space's current session, of whichever of its agents, where a
-    /// follow that named none goes on in it, once it is another than the
-    /// one it follows.
+    /// A follow that named no session goes on in it once it is another than
+    /// the one it follows.
     async fn next_following(
         &self,
         daemon: &dyn Daemon,
@@ -194,12 +186,10 @@ impl Spaces {
     }
 }
 
-/// Why a follow stops before its client hangs up.
 #[derive(Debug)]
 pub enum Stopped {
     /// A daemon restart holds operations off.
     Restarting,
-    /// The follow's scope token no longer acts for a caller.
     Revoked,
     /// The session's files could not be looked for or read.
     Unreadable(anyhow::Error),
@@ -217,8 +207,7 @@ impl std::fmt::Display for Stopped {
 
 impl std::error::Error for Stopped {}
 
-/// Where a follow writes: its client's connection, for the scope token
-/// the follow came with.
+/// The client's connection, for the scope token the follow came with.
 pub struct Client<'a> {
     pub daemon: &'a dyn Daemon,
     pub writer: OwnedWriteHalf,
@@ -227,9 +216,9 @@ pub struct Client<'a> {
 }
 
 impl Client<'_> {
-    /// Send `body` under a daemon operation of its own, so a follow holds
-    /// off a restart only while it writes; [`Stopped::Restarting`] once a
-    /// restart holds operations off.
+    /// Sends under a daemon operation of its own, so a follow holds off a
+    /// restart only while it writes. [`Stopped::Restarting`] once a restart
+    /// holds operations off.
     pub async fn send(&mut self, body: Body) -> Result<()> {
         let Some(_operation) = self.daemon.spaces().gates.try_operation() else {
             return Err(Stopped::Restarting.into());
@@ -237,8 +226,8 @@ impl Client<'_> {
         protocol::write(&mut self.writer, &Response::new(self.id, body)).await
     }
 
-    /// Go on only while the follow's scope token acts for a caller, so
-    /// that the follow reads more for it; [`Stopped::Revoked`] once not.
+    /// A follow reads more only while its scope token acts for a caller.
+    /// [`Stopped::Revoked`] once it does not.
     async fn ensure_scoped(&self) -> Result<()> {
         match self
             .daemon
@@ -251,14 +240,11 @@ impl Client<'_> {
         }
     }
 
-    /// End the follow, whose scope token no longer acts for a caller.
     async fn refuse_scope(&mut self) -> Result<()> {
         let body = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
         self.send(body).await
     }
 
-    /// End the follow, whose session's files could not be looked for or
-    /// read, for `error`.
     async fn fail(&mut self, error: &anyhow::Error) -> Result<()> {
         let message = format!("could not follow the session's files: {error:#}");
         self.send(Body::error(ErrorCode::OperationFailed, message))
@@ -266,8 +252,7 @@ impl Client<'_> {
     }
 }
 
-/// Send what the files of `following`'s session gained since its offsets,
-/// keeping where each now ends.
+/// Keeps where each file now ends.
 async fn send_gained(client: &mut Client<'_>, following: &mut Following) -> Result<()> {
     let found = locate(following).await;
     let Some(found) = found.map_err(Stopped::Unreadable)? else {
@@ -280,8 +265,7 @@ async fn send_gained(client: &mut Client<'_>, following: &mut Following) -> Resu
     Ok(())
 }
 
-/// Where the files of `following`'s session are now, none while its tool
-/// has written none.
+/// None while the tool has written none.
 async fn locate(following: &Following) -> Result<Option<transcripts::Found>> {
     let (store, environments) = (following.store, following.environments.clone());
     let session = following.session.session.session.clone();
@@ -292,13 +276,12 @@ async fn locate(following: &Following) -> Result<Option<transcripts::Found>> {
     .context("look for the session's files")?
 }
 
-/// Send what the session's file `file`, at `path`, gained since `read`
-/// says the follow read it to, keeping where it now ends, checking the
-/// follow's scope token before each read. A file that is gone, as one its
-/// tool replaced, may come back, so it waits; one that cannot be read
-/// otherwise ends the follow. A file written anew, shorter, comes again
-/// from offset 0 as a reset, and one the follow reads for the first time
-/// comes even when it is empty, so the client learns it was emptied.
+/// Keeps where the file now ends, and checks the follow's scope token
+/// before each read. A file that is gone, as one its tool replaced, may come
+/// back, so the follow waits. One that cannot be read otherwise ends the
+/// follow. A file written anew, shorter, comes again from offset 0 as a
+/// reset. One the follow reads for the first time comes even when it is
+/// empty, so the client learns it was emptied.
 pub async fn send_file_gained(
     client: &mut Client<'_>,
     path: &Path,
@@ -341,22 +324,19 @@ pub async fn send_file_gained(
     }
 }
 
-/// What a read of a session file gained.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Gained {
-    /// Where its bytes start.
     pub offset: u64,
     /// The file's length when they were read.
     pub size: u64,
     pub bytes: Vec<u8>,
-    /// Whether the file was written anew, shorter than `seen` says it was
-    /// read, so that it comes again from 0.
+    /// The file was written anew, shorter than `seen` says it was read, so
+    /// it comes again from 0.
     pub rewritten: bool,
 }
 
-/// Up to [`CHUNK`] bytes of `path` from where `seen` says it was read to,
-/// or from 0 where it is now shorter than it was then, as a file its tool
-/// wrote again.
+/// Up to [`CHUNK`] bytes from where `seen` says it was read to, or from 0
+/// where the file is now shorter, as one its tool wrote again.
 pub fn read_from(path: &Path, seen: ReadTo) -> std::io::Result<Gained> {
     let mut file = std::fs::File::open(path)?;
     let size = file.metadata()?.len();
