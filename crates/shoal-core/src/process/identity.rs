@@ -297,6 +297,16 @@ fn listed() -> Result<Vec<Listed>> {
     listed.retain(|process| process.pid > 1 && process.pid != std::process::id());
     Ok(listed)
 }
+/// `root` and this user's live processes below it, from one listing; none
+/// once `root` has ended.
+pub(crate) fn tree(root: u32) -> Result<HashSet<u32>> {
+    let rows = list_same_user()?;
+    if !rows.iter().any(|(pid, _, _)| *pid == root) {
+        return Ok(HashSet::new());
+    }
+    Ok(descendants(HashSet::from([root]), &rows))
+}
+
 /// Whether the live process `identity` works inside `directory`. One whose
 /// working directory cannot be read, or that has exited, does not.
 pub(crate) fn works_in(identity: &Identity, directory: &std::path::Path) -> Result<bool> {

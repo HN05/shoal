@@ -23,6 +23,43 @@ impl Reading {
     }
 }
 
+/// The bytes of memory `root` and the processes below it hold now, each as
+/// [`read`] reads it with what it swapped out; none once they ended. A run's
+/// peak thus counts its swapped pages at full size, as a scope's does.
+pub fn tree_memory(root: u32) -> Result<u64> {
+    let mut memory = 0u64;
+    for pid in super::identity::tree(root)? {
+        if let Some(reading) = read(pid)? {
+            memory = (memory.saturating_add(reading.memory)).saturating_add(swapped(pid));
+        }
+    }
+    Ok(memory)
+}
+
+/// The bytes `pid` swapped out, none where that cannot be read.
+#[cfg(target_os = "linux")]
+fn swapped(pid: u32) -> u64 {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status"));
+    status.ok().and_then(|status| vm_swap(&status)).unwrap_or(0)
+}
+
+/// The `VmSwap` line of a process's status, in bytes.
+#[cfg(target_os = "linux")]
+fn vm_swap(status: &str) -> Option<u64> {
+    let line = status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmSwap:"))?;
+    let kib: u64 = line.trim().strip_suffix("kB")?.trim().parse().ok()?;
+    kib.checked_mul(1024)
+}
+
+/// Nothing: the physical footprint [`read`] reads on macOS already counts
+/// compressed and swapped pages.
+#[cfg(not(target_os = "linux"))]
+fn swapped(_: u32) -> u64 {
+    0
+}
+
 #[cfg(target_os = "linux")]
 pub fn read(pid: u32) -> Result<Option<Reading>> {
     let Some(stat) = super::identity::read_process_stat(&format!("/proc/{pid}/stat"))? else {
