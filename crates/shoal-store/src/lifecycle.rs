@@ -1,6 +1,5 @@
-//! Where a workspace's lifecycle stands: the transient state a lifecycle
-//! operation holds it in, which excludes every other, and how many times
-//! that state has changed.
+//! Where a workspace's lifecycle stands. A lifecycle operation holds the
+//! workspace in a transient state, which excludes every other operation.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use shoal_ids::space_ids::SpaceId;
@@ -11,7 +10,6 @@ use shoal_protocol::state::WorkspaceState;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Generation(i64);
 
-/// Where a workspace's lifecycle stands.
 pub struct Lifecycle {
     pub state: WorkspaceState,
     pub generation: Generation,

@@ -1,6 +1,5 @@
-//! The handoffs of spaces' work from one agent tool to another: the spaces
-//! record each as it happens, and the session report of the new tool's
-//! agent completes it, which journals it.
+//! The handoffs of a space's work from one agent tool to another. The new
+//! agent's first session report completes a handoff and journals it.
 use std::collections::HashMap;
 
 use anyhow::Result;

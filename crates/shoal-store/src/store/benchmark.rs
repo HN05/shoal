@@ -82,7 +82,7 @@ impl Backend {
         match self {
             Self::Fresh(path) => {
                 let path = path.clone();
-                // Opening/closing and scheduling match the original Store::run.
+                // Opening, closing and scheduling match `Store::run`.
                 let metrics = setup_metrics;
                 tokio::task::spawn_blocking(move || {
                     let mut db = connect(&path, &metrics).unwrap();

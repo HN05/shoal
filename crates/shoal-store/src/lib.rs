@@ -1,5 +1,5 @@
-//! SQLite persistence: the store and its transactions, schema migrations,
-//! and the row mappers and guards every subsystem shares.
+//! The daemon's SQLite store, its schema and migrations, and the record
+//! functions every subsystem shares.
 pub mod agent_handoffs;
 mod executions;
 mod guards;

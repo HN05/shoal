@@ -1,5 +1,5 @@
-//! The executions spaces record, read whole by their mapper, and what the
-//! subsystems that track agents read of them.
+//! The executions spaces record, and the reads of them that the subsystems
+//! tracking agents share.
 use std::collections::HashMap;
 
 use anyhow::Result;

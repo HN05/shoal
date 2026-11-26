@@ -1,17 +1,16 @@
 //! Schema migrations: the version this build writes and the steps that
-//! bring an older database to it, apart from the rest of the store, so that
-//! two changes adding a migration both change this file.
+//! bring an older database to it. They live apart from the rest of the
+//! store so that two changes that each add a migration conflict here.
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
 mod post_surfaces;
 
-/// Schema version written by this build; older databases are migrated on open.
+/// The schema version this build writes.
 pub const SCHEMA_VERSION: i64 = 301;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
-/// starts from. Raising it to a later release's deletes the migrations at or
-/// below it with their tests and replaces the fixture they start from.
+/// starts from. Raising it also replaces the fixture the tests start from.
 const FLOOR: i64 = 295;
 
 /// The release that wrote [`FLOOR`], which brings an older database to it.
@@ -56,11 +55,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
 /// references it.
 const REBUILDS: &[i64] = &[];
 
-/// The schema the migrations up to [`SCHEMA_VERSION`] make, which a new
-/// database takes in one step: SQLite checks the whole schema on every
-/// `ALTER TABLE`, so applying each migration in turn takes a new database a
-/// good part of a second on a busy machine. The tests check that it is what
-/// the migrations make, and say how to write it anew.
+/// The schema the migrations up to [`SCHEMA_VERSION`] make. A new database
+/// takes it in one step: SQLite checks the whole schema on every
+/// `ALTER TABLE`, so applying each migration in turn takes a good part of a
+/// second on a busy machine. The tests check that it matches the
+/// migrations, and say how to write it anew.
 const SCHEMA: &str = include_str!("migrations/schema.sql");
 
 pub(super) fn migrate(db: &mut Connection) -> Result<()> {

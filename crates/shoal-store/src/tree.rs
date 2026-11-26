@@ -1,9 +1,6 @@
-//! The one walk up and the one walk down the tree of spaces in
-//! `space_parents`, which every subsystem that follows the tree takes in its
-//! own transactions, with whether a space on the way has an agent, and the
-//! reads of the tree more than one subsystem shares: the spaces above and
-//! below a space, and its coordinator and the others above it that decide
-//! what it passes up.
+//! The walks of the tree of spaces in `space_parents`, and the reads of it
+//! that more than one subsystem shares. Every subsystem that follows the
+//! tree builds its queries on these walks.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
@@ -15,12 +12,11 @@ use shoal_protocol::model::{RefPart, SpaceKind, SpaceRef};
 pub struct TrackedAgents(Vec<SpaceId>);
 
 impl TrackedAgents {
-    /// The spaces `agents` names as those whose agent the daemon tracks.
     pub fn of(agents: &[SpaceId]) -> Self {
         Self(agents.to_vec())
     }
 
-    /// The parameter `has_agent` reads.
+    /// The JSON array of IDs that [`runs_agent`] reads as `?2`.
     pub fn parameter(&self) -> String {
         serde_json::Value::from(self.0.iter().map(SpaceId::as_str).collect::<Vec<_>>()).to_string()
     }
@@ -108,8 +104,7 @@ pub fn subtree(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The spaces above the space `id` with an agent, which may decide what it
-/// passes up, nearest first.
+/// The spaces above the space `id` that have an agent, nearest first.
 pub fn spaces_above(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(

@@ -1,18 +1,15 @@
-//! What every record function's SQL shares: whether a query finds a row,
-//! and the JSON a text column holds.
+//! The SQL helpers every record function shares.
 use anyhow::Result;
 use rusqlite::{Connection, Params, Row};
 use serde::{Serialize, de::DeserializeOwned};
 use shoal_core::config::permissions::PermissionsConfig;
 
-/// Whether the supplied SELECT query returns any rows.
 pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db
         .prepare_cached(&format!("SELECT EXISTS({sql})"))?
         .query_row(params, |row| row.get(0))?)
 }
 
-/// Serialize an optional value for a JSON text column.
 pub fn json_text<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
     value
         .map(serde_json::to_string)

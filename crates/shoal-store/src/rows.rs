@@ -1,5 +1,4 @@
-//! The repository and workspace row mappers every subsystem reads records
-//! with, and the columns they read.
+//! The repository and workspace row mappers, and the columns they read.
 use std::path::PathBuf;
 
 use rusqlite::Row;

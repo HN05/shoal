@@ -1,7 +1,4 @@
-//! The checks a change makes in its transaction before it goes ahead: that
-//! a new workspace's path is free, that no rename or repository move is
-//! unfinished, that the repository is not being removed, and that the
-//! workspace is ready.
+//! The checks a change makes in its transaction before it goes ahead.
 use std::path::Path;
 
 use anyhow::{Result, ensure};
@@ -98,10 +95,9 @@ pub fn require_ready(db: &Connection, workspace_id: &SpaceId) -> Result<()> {
     }
 }
 
-/// The refusal of the workspace numbered `number`, `id`, named `name`, in
-/// `state`, by a request that needs it ready, naming what to do about it.
-/// The daemon's check of a request's workspace and each recheck in a
-/// transaction refuse with it alike.
+/// The refusal of a request that needs the workspace ready, naming what to
+/// do about it. The daemon's first check and each recheck in a transaction
+/// both refuse with it, so the two read alike.
 pub fn not_ready(
     number: SpaceNumber,
     id: &SpaceId,

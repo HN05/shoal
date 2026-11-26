@@ -1,7 +1,6 @@
-//! The preparation of migration 301, which rewrites the choices thread
-//! posts offered into the surfaces `shoal send --choice` builds, and each
-//! pick of one, by a post or by resolving the thread, into an answer to it,
-//! in the thread tables and in the requests and summaries the hub keeps.
+//! The preparation of migration 301. It rewrites the choices thread posts
+//! offered into surfaces, and each pick of one into an answer, both in the
+//! thread tables and in what the hub keeps.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use serde_json::{Map, Value, json};
@@ -73,12 +72,11 @@ fn answer_picks(db: &Connection) -> Result<()> {
 }
 
 /// Give each thread resolved as answered with a choice a post that picks
-/// it, from whoever resolved it, on their side, when it was resolved: an
-/// answer to the latest post that offered choices, from either side, as
-/// the pick was checked against, with the choice's text. The resolver is the holder when the
-/// holder resolved it, the user holding it or its holding space, and else
-/// the opener. The space's journal, which recorded the resolution then,
-/// records neither the post nor the outcome without the choice.
+/// it, dated when it was resolved. The post answers the latest post that
+/// offered choices, from either side, since the pick was checked against
+/// that one. It comes from whoever resolved the thread, on the holder's
+/// side when the holder did, and else on the opener's. The journal records neither the new
+/// post nor the changed outcome: it recorded the resolution when it happened.
 fn answer_resolved_picks(db: &Connection) -> Result<()> {
     let mut resolving = db.prepare(
         "WITH resolved AS (SELECT id,resolved_by,resolver_id,resolved_at,
