@@ -1,6 +1,4 @@
-//! The upstream the proxy forwards to: a scheme and authority, a path
-//! prefix that comes before each request's own path, and the key it may
-//! take in place of the agent's own credentials.
+//! The upstream the proxy forwards to.
 use anyhow::{Context, Result, ensure};
 use hyper::{Uri, header::HeaderValue};
 
