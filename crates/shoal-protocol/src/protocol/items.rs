@@ -308,7 +308,30 @@ impl ItemMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::PrWait { .. } | Self::WatchItems { .. } => Lifetime::Resumed,
-            _ => Lifetime::Reply,
+            Self::LinkItem { .. }
+            | Self::RelinkSpace { .. }
+            | Self::UnlinkItems { .. }
+            | Self::SetPr { .. }
+            | Self::OpenPull { .. }
+            | Self::RevertPull { .. }
+            | Self::MergedPull { .. }
+            | Self::OpenIssue { .. }
+            | Self::MergeWarning { .. }
+            | Self::ItemAction { .. }
+            | Self::ListItems { .. }
+            | Self::Labels { .. }
+            | Self::Reviewers { .. }
+            | Self::ViewItems { .. }
+            | Self::ForgeApi { .. }
+            | Self::ForgeDownload { .. }
+            | Self::Capabilities { .. }
+            | Self::Reactions { .. }
+            | Self::ReviewThread { .. }
+            | Self::NumberKind { .. }
+            | Self::IssueDetails { .. }
+            | Self::IssueBlockers { .. }
+            | Self::PullRequest { .. }
+            | Self::SelectItems { .. } => Lifetime::Reply,
         }
     }
 }

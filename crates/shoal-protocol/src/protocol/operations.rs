@@ -138,7 +138,12 @@ impl OperationMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::FollowOperation { .. } | Self::StartMove { .. } => Lifetime::Open,
-            _ => Lifetime::Reply,
+            Self::StartOperation { .. }
+            | Self::CancelOperation { .. }
+            | Self::StartWorkspace { .. }
+            | Self::StartCreation { .. }
+            | Self::StartChild { .. }
+            | Self::ReportProgress { .. } => Lifetime::Reply,
         }
     }
 }

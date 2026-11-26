@@ -36,7 +36,9 @@ impl DemoMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::OpenDemoStream { .. } => Lifetime::Open,
-            _ => Lifetime::Reply,
+            Self::ListDemos { .. } | Self::DemoProgress { .. } | Self::StopDemos { .. } => {
+                Lifetime::Reply
+            }
         }
     }
 }

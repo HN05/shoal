@@ -1,5 +1,8 @@
 //! Newline-delimited JSON over the daemon's Unix socket. Bump [`VERSION`]
 //! whenever a request, response, or event changes shape or spelling.
+// Every arm names its variants, so each classifier decides a new request
+// method or policy variant.
+#![deny(clippy::wildcard_enum_match_arm)]
 mod agents;
 mod alerts;
 mod approvals;

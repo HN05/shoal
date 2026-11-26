@@ -115,7 +115,46 @@ impl Operation {
             | Self::Conversion(ConversionMethod::ConvertToWorkspace { env, .. }) => *env = None,
             // A process of this machine, which that machine has none of.
             Self::Removal(RemovalMethod::StopProcesses { requester, .. }) => *requester = None,
-            _ => {}
+            Self::Daemon(_)
+            | Self::Repository(_)
+            | Self::Workspace(_)
+            | Self::Space(_)
+            | Self::Place(_)
+            | Self::Permission(_)
+            | Self::Config(_)
+            | Self::Diff(_)
+            | Self::Merging(_)
+            | Self::Removal(_)
+            | Self::Recovery(_)
+            | Self::Execution(_)
+            | Self::Assignment(_)
+            | Self::Agent(_)
+            | Self::Chat(_)
+            | Self::Conversion(_)
+            | Self::Launch(_)
+            | Self::Queue(_)
+            | Self::Hold(_)
+            | Self::Demo(_)
+            | Self::File(_)
+            | Self::Item(_)
+            | Self::Ci(_)
+            | Self::Branch(_)
+            | Self::Alert(_)
+            | Self::Operations(_)
+            | Self::Thread(_)
+            | Self::Change(_)
+            | Self::Review(_)
+            | Self::Approval(_)
+            | Self::Port(_)
+            | Self::Secret(_)
+            | Self::Resource(_)
+            | Self::Simulator(_)
+            | Self::Container(_)
+            | Self::Subscription(_)
+            | Self::Trigger(_)
+            | Self::Hub(_)
+            | Self::App(_)
+            | Self::Machine(_) => {}
         }
     }
 
@@ -128,7 +167,46 @@ impl Operation {
                 ApprovalMethod::DecideApproval { shown, .. }
                 | ApprovalMethod::EscalateApproval { shown, .. },
             ) => shown.is_none(),
-            _ => false,
+            Self::Daemon(_)
+            | Self::Repository(_)
+            | Self::Workspace(_)
+            | Self::Space(_)
+            | Self::Place(_)
+            | Self::Permission(_)
+            | Self::Config(_)
+            | Self::Diff(_)
+            | Self::Merging(_)
+            | Self::Removal(_)
+            | Self::Recovery(_)
+            | Self::Execution(_)
+            | Self::Assignment(_)
+            | Self::Agent(_)
+            | Self::Chat(_)
+            | Self::Conversion(_)
+            | Self::Launch(_)
+            | Self::Queue(_)
+            | Self::Hold(_)
+            | Self::Demo(_)
+            | Self::File(_)
+            | Self::Item(_)
+            | Self::Ci(_)
+            | Self::Branch(_)
+            | Self::Alert(_)
+            | Self::Operations(_)
+            | Self::Thread(_)
+            | Self::Change(_)
+            | Self::Review(_)
+            | Self::Approval(_)
+            | Self::Port(_)
+            | Self::Secret(_)
+            | Self::Resource(_)
+            | Self::Simulator(_)
+            | Self::Container(_)
+            | Self::Subscription(_)
+            | Self::Trigger(_)
+            | Self::Hub(_)
+            | Self::App(_)
+            | Self::Machine(_) => false,
         }
     }
 
@@ -145,7 +223,46 @@ impl Operation {
                 ApprovalMethod::DecideApproval { number, shown, .. }
                 | ApprovalMethod::EscalateApproval { number, shown, .. },
             ) if shown.is_none() => *shown = approval(number),
-            _ => {}
+            Self::Daemon(_)
+            | Self::Repository(_)
+            | Self::Workspace(_)
+            | Self::Space(_)
+            | Self::Place(_)
+            | Self::Permission(_)
+            | Self::Config(_)
+            | Self::Diff(_)
+            | Self::Merging(_)
+            | Self::Removal(_)
+            | Self::Recovery(_)
+            | Self::Execution(_)
+            | Self::Assignment(_)
+            | Self::Agent(_)
+            | Self::Chat(_)
+            | Self::Conversion(_)
+            | Self::Launch(_)
+            | Self::Queue(_)
+            | Self::Hold(_)
+            | Self::Demo(_)
+            | Self::File(_)
+            | Self::Item(_)
+            | Self::Ci(_)
+            | Self::Branch(_)
+            | Self::Alert(_)
+            | Self::Operations(_)
+            | Self::Thread(_)
+            | Self::Change(_)
+            | Self::Review(_)
+            | Self::Approval(_)
+            | Self::Port(_)
+            | Self::Secret(_)
+            | Self::Resource(_)
+            | Self::Simulator(_)
+            | Self::Container(_)
+            | Self::Subscription(_)
+            | Self::Trigger(_)
+            | Self::Hub(_)
+            | Self::App(_)
+            | Self::Machine(_) => {}
         }
     }
 
@@ -264,7 +381,45 @@ impl Operation {
             Some(Target::Space(_) | Target::Item(_) | Target::Acting(_)) => None,
             None => match self {
                 Self::Operations(method) => method.kept(),
-                _ => None,
+                Self::Daemon(_)
+                | Self::Repository(_)
+                | Self::Workspace(_)
+                | Self::Space(_)
+                | Self::Place(_)
+                | Self::Permission(_)
+                | Self::Config(_)
+                | Self::Diff(_)
+                | Self::Merging(_)
+                | Self::Removal(_)
+                | Self::Recovery(_)
+                | Self::Execution(_)
+                | Self::Assignment(_)
+                | Self::Agent(_)
+                | Self::Chat(_)
+                | Self::Conversion(_)
+                | Self::Launch(_)
+                | Self::Queue(_)
+                | Self::Hold(_)
+                | Self::Demo(_)
+                | Self::File(_)
+                | Self::Item(_)
+                | Self::Ci(_)
+                | Self::Branch(_)
+                | Self::Alert(_)
+                | Self::Thread(_)
+                | Self::Change(_)
+                | Self::Review(_)
+                | Self::Approval(_)
+                | Self::Port(_)
+                | Self::Secret(_)
+                | Self::Resource(_)
+                | Self::Simulator(_)
+                | Self::Container(_)
+                | Self::Subscription(_)
+                | Self::Trigger(_)
+                | Self::Hub(_)
+                | Self::App(_)
+                | Self::Machine(_) => None,
             },
         }
     }
@@ -281,7 +436,10 @@ pub fn attaches_files(method: &serde_json::Value) -> bool {
             files || attaches_files(value)
         }),
         serde_json::Value::Array(items) => items.iter().any(attaches_files),
-        _ => false,
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_) => false,
     }
 }
 

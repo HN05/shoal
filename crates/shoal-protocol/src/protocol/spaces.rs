@@ -137,7 +137,20 @@ impl SpaceMethod {
             Self::WatchSpaceEvents { .. }
             | Self::FollowSession { .. }
             | Self::AttachSession { .. } => Lifetime::Open,
-            _ => Lifetime::Reply,
+            Self::ListSpaces
+            | Self::JudgeSpaces { .. }
+            | Self::ListSpacesEverywhere { .. }
+            | Self::FindSpaces { .. }
+            | Self::LocateSpace { .. }
+            | Self::SelectSpaces { .. }
+            | Self::RenameSpace { .. }
+            | Self::IssueScope { .. }
+            | Self::RevokeScope { .. }
+            | Self::SpaceEnvironment { .. }
+            | Self::SpaceStatus { .. }
+            | Self::EnterSpace { .. }
+            | Self::SpaceSessions { .. }
+            | Self::SpaceLog { .. } => Lifetime::Reply,
         }
     }
 

@@ -66,7 +66,14 @@ impl Work {
     /// Whether `work` refuses an exit that waits only when nothing but
     /// requests and background passes runs, which end soon on their own.
     pub fn refuses_idle_exit(work: &[Self]) -> bool {
-        work.iter().any(|work| !matches!(work, Self::Other))
+        work.iter().any(Self::refuses_idle)
+    }
+
+    fn refuses_idle(&self) -> bool {
+        match self {
+            Self::Other => false,
+            Self::Workspace { .. } | Self::Operation { .. } | Self::Command { .. } => true,
+        }
     }
 
     /// Add each piece of `work` to `listed` that it does not list yet.

@@ -73,7 +73,13 @@ impl HubMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::ServePlacement => Lifetime::Open,
-            _ => Lifetime::Reply,
+            Self::PairHub
+            | Self::JoinHub { .. }
+            | Self::LeaveHub
+            | Self::HubMembers
+            | Self::UpdateHub
+            | Self::RevokeHubMember { .. }
+            | Self::AnswerPlacement { .. } => Lifetime::Reply,
         }
     }
 

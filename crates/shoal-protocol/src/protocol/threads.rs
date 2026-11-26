@@ -171,7 +171,23 @@ impl ThreadMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::AwaitPost { .. } => Lifetime::Resumed,
-            _ => Lifetime::Reply,
+            Self::OpenThread { .. }
+            | Self::OpenComment { .. }
+            | Self::CloseOpened { .. }
+            | Self::ReopenOpened { .. }
+            | Self::Post { .. }
+            | Self::PostInChat { .. }
+            | Self::RepliedInChat { .. }
+            | Self::ForwardThread { .. }
+            | Self::ResolveThread { .. }
+            | Self::ListThreads { .. }
+            | Self::ShowThread { .. }
+            | Self::LinkThread { .. }
+            | Self::UnlinkThread { .. }
+            | Self::SwitchThread { .. }
+            | Self::CurrentThread { .. }
+            | Self::AddChanges { .. }
+            | Self::RemoveChanges { .. } => Lifetime::Reply,
         }
     }
 }

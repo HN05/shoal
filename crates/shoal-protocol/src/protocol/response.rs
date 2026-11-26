@@ -140,24 +140,31 @@ impl ErrorCode {
     /// is every failure without a more specific code, and a refusal's message
     /// states the refusal.
     fn in_message(&self) -> bool {
-        matches!(
-            self,
+        match self {
             Self::OperationFailed
-                | Self::StoppedAgent
-                | Self::NotFound
-                | Self::NameTaken
-                | Self::NotReady
-                | Self::UnsavedWork
-                | Self::ApprovalDenied
-                | Self::SetupFailed
-                | Self::HookFailed
-                | Self::PushFailed
-                | Self::NotImported
-                | Self::MachineUnreachable
-                | Self::StaleRevision
-                | Self::Unconfirmed
-                | Self::MoveInProgress
-        )
+            | Self::StoppedAgent
+            | Self::NotFound
+            | Self::NameTaken
+            | Self::NotReady
+            | Self::UnsavedWork
+            | Self::ApprovalDenied
+            | Self::SetupFailed
+            | Self::HookFailed
+            | Self::PushFailed
+            | Self::NotImported
+            | Self::MachineUnreachable
+            | Self::StaleRevision
+            | Self::Unconfirmed
+            | Self::MoveInProgress => true,
+            Self::InvalidRequest
+            | Self::ProtocolMismatch
+            | Self::ScopeDenied
+            | Self::ExecutionFailed
+            | Self::UnprovenStop
+            | Self::Exiting
+            | Self::Starting
+            | Self::Unknown(_) => false,
+        }
     }
 }
 
@@ -497,6 +504,10 @@ paged_bodies!(
 impl TryFrom<Body> for () {
     type Error = anyhow::Error;
 
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "every body but `Ok` is unexpected here"
+    )]
     fn try_from(body: Body) -> Result<Self> {
         match body {
             Body::Ok => Ok(()),
@@ -528,6 +539,10 @@ impl Body {
     /// The answer as a machine other than `machine`, which answered it,
     /// reads it: the attached files it lists are kept there, so it names
     /// that machine where it named their copies' paths.
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "only a body that lists attached files names where they are kept"
+    )]
     pub fn files_kept_on(&mut self, machine: &str) {
         match self {
             Self::AttachedFiles(files) => {
@@ -551,6 +566,10 @@ impl Body {
     }
 
     /// The body a response's joined pieces of JSON make, or this body.
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "only pieces join into another body"
+    )]
     pub fn joined(self) -> Result<Self> {
         match self {
             Self::Piece(text) => {
@@ -571,6 +590,10 @@ impl Body {
         }
     }
 
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "only an error, an undecided approval or a queued request fails"
+    )]
     pub fn into_result(self) -> Result<Self> {
         match self {
             Self::Error { code, message } => Err(RemoteError { code, message }.into()),

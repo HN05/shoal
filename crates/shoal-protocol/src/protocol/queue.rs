@@ -114,7 +114,18 @@ impl QueueMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::QueueHold { .. } => Lifetime::Resumed,
-            _ => Lifetime::Reply,
+            Self::QueueAgent { .. }
+            | Self::ListQueue
+            | Self::QueuedPlan { .. }
+            | Self::OpenStart { .. }
+            | Self::QueueRemove { .. }
+            | Self::QueueStart { .. }
+            | Self::QueueClaim { .. }
+            | Self::StartedLaunch { .. }
+            | Self::QueueAttach { .. }
+            | Self::QueueFail { .. }
+            | Self::QueueRetry { .. }
+            | Self::SetPriority { .. } => Lifetime::Reply,
         }
     }
 }

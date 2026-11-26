@@ -155,7 +155,48 @@ pub fn name_of(spelled: serde_json::Result<serde_json::Value>) -> String {
 impl Operation {
     /// Daemon administration, which must reach a daemon of any release.
     pub fn controls_daemon(&self) -> bool {
-        matches!(self, Self::Daemon(_))
+        match self {
+            Self::Daemon(_) => true,
+            Self::Repository(_)
+            | Self::Workspace(_)
+            | Self::Space(_)
+            | Self::Place(_)
+            | Self::Permission(_)
+            | Self::Config(_)
+            | Self::Diff(_)
+            | Self::Merging(_)
+            | Self::Removal(_)
+            | Self::Recovery(_)
+            | Self::Execution(_)
+            | Self::Assignment(_)
+            | Self::Agent(_)
+            | Self::Chat(_)
+            | Self::Conversion(_)
+            | Self::Launch(_)
+            | Self::Queue(_)
+            | Self::Hold(_)
+            | Self::Demo(_)
+            | Self::File(_)
+            | Self::Item(_)
+            | Self::Ci(_)
+            | Self::Branch(_)
+            | Self::Alert(_)
+            | Self::Operations(_)
+            | Self::Thread(_)
+            | Self::Change(_)
+            | Self::Review(_)
+            | Self::Approval(_)
+            | Self::Port(_)
+            | Self::Secret(_)
+            | Self::Resource(_)
+            | Self::Simulator(_)
+            | Self::Container(_)
+            | Self::Subscription(_)
+            | Self::Trigger(_)
+            | Self::Hub(_)
+            | Self::App(_)
+            | Self::Machine(_) => false,
+        }
     }
 
     pub fn lifetime(&self) -> Lifetime {

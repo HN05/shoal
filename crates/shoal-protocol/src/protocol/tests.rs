@@ -73,7 +73,20 @@ fn daemon_error_codes_preserve_wire_spellings() {
             | ErrorCode::SetupFailed
             | ErrorCode::HookFailed
             | ErrorCode::PushFailed => "failed".to_owned(),
-            _ => format!("{spelling}: failed"),
+            ErrorCode::InvalidRequest
+            | ErrorCode::ProtocolMismatch
+            | ErrorCode::ScopeDenied
+            | ErrorCode::ExecutionFailed
+            | ErrorCode::UnprovenStop
+            | ErrorCode::StoppedAgent
+            | ErrorCode::Exiting
+            | ErrorCode::Starting
+            | ErrorCode::NotImported
+            | ErrorCode::MachineUnreachable
+            | ErrorCode::StaleRevision
+            | ErrorCode::Unconfirmed
+            | ErrorCode::MoveInProgress
+            | ErrorCode::Unknown(_) => format!("{spelling}: failed"),
         };
         assert_eq!(error.to_string(), display);
     }

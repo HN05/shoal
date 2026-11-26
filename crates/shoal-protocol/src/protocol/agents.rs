@@ -278,7 +278,32 @@ impl AgentMethod {
             Self::AwaitAgentWake { .. } | Self::WaitAgentUpdates { .. } => Lifetime::Resumed,
             // A restart waits for requests of the wrapper it restores.
             Self::RestartAgent { .. } => Lifetime::Open,
-            _ => Lifetime::Reply,
+            Self::SetAgentState { .. }
+            | Self::SetProgress { .. }
+            | Self::Progress { .. }
+            | Self::Sleep { .. }
+            | Self::StartWokenTurn { .. }
+            | Self::ReportTurnFailure { .. }
+            | Self::ReportSubagent { .. }
+            | Self::ReportSubagentRequest { .. }
+            | Self::ReportWakeEnd { .. }
+            | Self::ReportProxyRetry { .. }
+            | Self::ReportUpstreamReset { .. }
+            | Self::ReportUpstreamLimit { .. }
+            | Self::ReportUpstreamAnswered { .. }
+            | Self::ReportInput { .. }
+            | Self::ReportTyping { .. }
+            | Self::ReportAttach { .. }
+            | Self::ListAgents
+            | Self::SpaceAgents { .. }
+            | Self::InterruptTurn { .. }
+            | Self::CancelRestart { .. }
+            | Self::ResumeAgent { .. }
+            | Self::AgentSession { .. }
+            | Self::AgentUpdates { .. }
+            | Self::UpdatesWaiting { .. }
+            | Self::GitCredential { .. }
+            | Self::AcknowledgePrUpdates { .. } => Lifetime::Reply,
         }
     }
 }

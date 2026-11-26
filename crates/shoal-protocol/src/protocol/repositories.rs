@@ -122,7 +122,23 @@ impl RepositoryMethod {
             Self::HoldContribution { .. } => Lifetime::Resumed,
             // It takes the bundle the caller writes.
             Self::ReceiveCommits { .. } => Lifetime::Open,
-            _ => Lifetime::Reply,
+            Self::ListRepositories
+            | Self::RepositoriesElsewhere
+            | Self::RegisterRepository { .. }
+            | Self::RenameRepository { .. }
+            | Self::ShareRepository { .. }
+            | Self::LocalConfigPath { .. }
+            | Self::EditLocalConfig { .. }
+            | Self::RemoveRepository { .. }
+            | Self::PreviewRepositoryRemoval { .. }
+            | Self::PlanRepositoryMoves { .. }
+            | Self::MoveRepositories { .. }
+            | Self::SyncRepository { .. }
+            | Self::FailingSyncs
+            | Self::ListBranches { .. }
+            | Self::KeptBranches { .. }
+            | Self::DeleteKeptBranches { .. }
+            | Self::KeepRepositoryAgentEnvironment { .. } => Lifetime::Reply,
         }
     }
 }

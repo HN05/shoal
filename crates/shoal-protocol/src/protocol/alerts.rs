@@ -71,7 +71,12 @@ impl AlertMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::WatchAlerts { .. } => Lifetime::Open,
-            _ => Lifetime::Reply,
+            Self::ListAlerts { .. }
+            | Self::MarkAlertsRead { .. }
+            | Self::ClearAlerts
+            | Self::SendAlert { .. }
+            | Self::AlertInChat { .. }
+            | Self::WithdrawAlert { .. } => Lifetime::Reply,
         }
     }
 }
