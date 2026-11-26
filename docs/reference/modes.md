@@ -1,15 +1,16 @@
 # Modes and permissions
 
 This file says how modes, rules and permissions shape what an agent is told and
-may do.
+may do. [Modes and guidance](../design/modes.md) and
+[permissions](../design/permissions.md) give the reasons.
 
-A mode decides what an agent is told and the kind of space it starts in;
-[`[modes.<name>]` and `[rules.<name>]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) configure
-them. A mode's rules join the agent's system text, which a workspace agent
-restored with its built-in resume arguments receives again (a configured
-`resume_command` is the user's own and gets none), and its instructions follow
-the agent's subject in its first message, never again on a restore; a mode
-without a repository starts a [chat without a repository](chats.md#master-session).
+## Modes
+
+A mode decides what an agent is told and the kind of space it starts in.
+[`[modes.<name>]` and `[rules.<name>]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules)
+configure modes and the rules they list. A mode without a repository starts a
+[chat without a repository](chats.md#master-session).
+
 Shoal ships these modes:
 
 | Mode | Kind | Rules | Instructions | Focus | Idle wake |
@@ -19,217 +20,326 @@ Shoal ships these modes:
 | `plan` | chat | `work`, `chat` | [settle the issue's plan](../../crates/shoal-core/src/config/modes/plan.md) | `true` | unset |
 | `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../../crates/shoal-core/src/config/rules/orchestrate.md) | none | `true` | unset |
 
-The built-in `setup` mode is apart from these: [`repo setup` and `config
-setup`](config.md#set-up-config) start it, and a space records it as its mode. It takes
-the kind, reach, rules and permissions of `worker` in a workspace and of
-`orchestrate` in a chat without a repository, as config sets them, and [its own
-instructions](../../crates/shoal-core/src/config/modes/setup.md) after its subject.
-Its agent waits for the user, so Shoal never wakes it while it is idle. Config
-cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
-errors that ask for another name, and `shoal start --mode setup` is refused.
+Shoal also ships these rules:
 
-`shoal start` starts every new agent, in the mode `-m`/`--mode` names, and in the
-kind of space the mode names; with `--in`, the mode's kind decides whether the
-agent is the workspace's own or a chat in its worktree, and a mode without a
-repository is refused. A flag the mode's kind of space cannot use is refused.
-`worker` always starts in a workspace, and config that gives it another kind
-is refused. Without `--mode`, a terminal offers the modes in a picker with the
-kind of space each starts in, and without one the start takes `worker`, which
-the picker lists first.
-`--permission KEY=VALUE`, repeatable, gives that agent a
-[permission](#mode-permissions) whatever its mode allows. The picker opens once the start has checked the arguments it was given, and offers
-only the modes of the kind of space they ask for, a workspace for a branch,
-`--base` or another flag only a workspace takes, and only
-modes in a repository when they name a repository or issue or ask for a kind
-of space; when only one fits, the start takes it without asking. A start
-on an issue or PR carrying a mode's `label` takes that mode, with or without a
-terminal, among the modes that fit its other arguments, as a
-[trigger](triggers.md)'s launch without a mode does; one carrying the
-labels of several opens the picker on a terminal and is refused without one. A
-new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
-latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
-`shoal status` names it, and the rows of `shoal list`, `shoal inbox`, the
-queue and the menu name a mode other than `worker` for a workspace or `chat`
-for a chat in a column of its own. The built-in [`work` rule](../../crates/shoal-core/src/config/rules/work.md)
-holds the practices of Shoal's workflow. A user's own modes may list it or
-leave it out, and a `rules/work.md` or `[rules.work]` replaces or extends it as
-for any rule. `review` holds the style of a [local review](reviews.md#local-reviews), and
-`orchestrate` what a master session does; the `worker` and `chat` rules have no
-text of their own.
+- [`work`](../../crates/shoal-core/src/config/rules/work.md) holds the
+  practices of Shoal's workflow. A user's own modes may list it or leave it
+  out. A `rules/work.md` file or a `[rules.work]` table replaces or extends it,
+  as for any rule.
+- `review` holds the style of a [local review](#local-review-instructions).
+- `orchestrate` says what a master session does.
+- `worker` and `chat` have no text of their own.
+
+## The setup mode
+
+[`repo setup` and `config setup`](config.md#set-up-config) start an agent in
+the built-in `setup` mode. The space records `setup` as its mode.
+
+The setup mode takes the kind, reach, rules and permissions that config gives
+another mode:
+
+- in a workspace, those of `worker`;
+- in a chat without a repository, those of `orchestrate`.
+
+It then adds [its own instructions](../../crates/shoal-core/src/config/modes/setup.md)
+after its subject. Its agent waits for you, so Shoal never wakes it while it is
+idle.
+
+Config cannot change the setup mode. A `[modes.setup]` table in any layer is an
+error that asks for another name, and so is a `modes/setup.md` file.
+`shoal start --mode setup` is refused.
+
+## Start in a mode
+
+`shoal start` starts every new agent, in the mode `-m`/`--mode` names. The mode
+alone decides the kind of space the agent starts in. A flag that kind of space
+cannot use is refused. `worker` always starts in a workspace, and config that
+gives it another kind is refused.
+
+With `--in`, the mode's kind decides the agent's role in the existing
+workspace. A mode that starts in a workspace starts the workspace's own agent.
+A mode that starts in a chat starts a chat in its worktree. A mode without a
+repository is refused.
+
+`--permission KEY=VALUE` gives the new agent a permission, as
+[giving permissions](#give-an-agent-permissions) says.
+
+### Without `--mode`
+
+A start on an issue or PR that carries a mode's `label` takes that mode, with
+or without a terminal. It chooses among the modes that fit its other arguments.
+A [trigger](triggers.md)'s launch without a mode chooses the same way. An item
+that carries the labels of several modes opens the picker on a terminal, and is
+refused without one.
+
+Otherwise a terminal offers the modes in a picker, with the kind of space each
+starts in. Without a terminal the start takes `worker`, which the picker lists
+first.
+
+The picker opens once the start has checked the arguments it was given. It
+offers only the modes those arguments fit:
+
+- only modes of the kind of space they ask for, such as a workspace for a
+  branch, `--base` or another flag only a workspace takes;
+- only modes in a repository when they name a repository or an issue, or ask
+  for a kind of space.
+
+When only one mode fits, the start takes it without asking.
+
+### The recorded mode
+
+A space records the mode its agent started in. A workspace records the mode of
+its latest agent. Restores and restarts keep the mode. A new agent in an
+existing space may start in another mode, but a running agent's mode never
+changes.
+
+`shoal status` names the mode, and `--json` gives it as `mode`. The rows of
+`shoal list`, `shoal inbox`, the queue and the menu show it in a column of its
+own when it is not the kind's usual one: `worker` for a workspace, `chat` for a
+chat.
+
+## What an agent is told
+
+An agent receives, in this order:
+
+1. the [`shoal` skill](install.md#agent-skill), which describes Shoal's
+   commands;
+2. the facts of its space;
+3. the space rules;
+4. its mode's rules;
+5. its subject, followed by its mode's instructions.
+
+The facts and the space rules make up Shoal's guidance. Every agent's system
+text starts with it, in any mode, and no layer replaces or suppresses it.
+
+- The [facts](../../crates/shoal-core/src/config/templates/facts/) describe the
+  kind of space the agent runs in, such as a workspace or a chat in the
+  checkout. They state no practices.
+- The [space rules](../../crates/shoal-core/src/config/templates/space_rules.md)
+  hold the practices Shoal's own mechanics depend on, such as loading the
+  `shoal` skill before any other action.
+
+The mode's rules follow the guidance in the system text.
+
+A launch's first message is its subject: an issue, or the prompt it was given.
+The subject reads the same in every mode, and the mode's instructions follow
+it. A launch without a subject has no first message.
+
+### Restores
+
+A workspace agent restored with its built-in resume arguments receives its
+system text again. A configured `resume_command` is your own and receives
+none. The mode's instructions come only in the first message, never again on a
+restore.
+
+### Placeholders
+
+Rules and instructions take the
+[placeholders](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#placeholders)
+of the space and its subject. `{updates}` says how the agent receives issue and
+PR activity:
+
+- its hooks deliver it, for Claude Code, and for a workspace's Codex in a place
+  of a host that types into its places, such as a zmx session;
+- otherwise the agent runs `shoal watch pr`.
+
+### How each tool receives it
+
+- Claude receives the system text as `--append-system-prompt`.
+- Codex CLI receives it as a `developer_instructions` config override.
+- Happy Codex receives it before its first prompt, through Happy's delivery
+  path. Without a subject it receives it as the first message.
+- Desktop handoffs receive neither the system text nor the first message.
+
+Shoal keeps the prompt arguments you give.
+
+### Text in files
 
 Mode instructions and rule text may also live in
-[Markdown files](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules), and a repository's text joins the
-global text. `config show` reports the combined text and the
-highest layer that configured it, with the file that layer read it from, and
-warns for each layer whose rule repeats the opening of a space's facts; the
-daemon alerts about it in the global config when it starts or reloads its
-config. Texts are read at launch without a daemon restart.
+[Markdown files](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#text-in-markdown-files).
+A repository's text joins the global text.
+[`config show`](config.md#inspect-effective-configuration) shows the combined
+text and where it comes from.
 
-An agent is told, in order: the [`shoal` skill](install.md#agent-skill),
-which describes Shoal's commands; the facts of its space; the space rules; its
-mode's rules; and its subject with its mode's instructions. Every agent's system
-text, in any mode, starts with Shoal's guidance: the facts of the kind of space
-it runs in, a [workspace](../../crates/shoal-core/src/config/templates/facts/workspace.md), a
-[chat in the checkout](../../crates/shoal-core/src/config/templates/facts/checkout_chat.md),
-a [chat in a workspace's worktree](../../crates/shoal-core/src/config/templates/facts/workspace_chat.md)
-or a [chat without a repository](../../crates/shoal-core/src/config/templates/facts/root_chat.md),
-which describe the space and state no practices; then the
-[space rules](../../crates/shoal-core/src/config/templates/space_rules.md), to load the
-`shoal` skill, or read what `shoal skill` prints, before any other action, to run `shoal done` only when it has no
-further work to do and it and its work are completely finished, to name its space with `shoal rename`, and,
-when a call that combines a `shoal` command with other commands is refused, to
-run the `shoal` command on its own before treating the action as refused. Its
-mode's rules follow. No layer replaces or suppresses the guidance. A launch's first
-message is its subject, an issue or the prompt it was given, worded the same in
-every mode, followed by its mode's instructions; without a subject it has no
-first message. Rules and instructions take the
-[placeholders](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules) of the space and its subject;
-`{updates}` says how the agent receives issue and PR activity, delivered by its
-hooks for Claude Code, and for a workspace's Codex in a place of a host that
-types into its places, such as a zmx session, otherwise by running
-`shoal watch pr`. Claude receives the system text as `--append-system-prompt`, Codex CLI
-as a `developer_instructions` config override, and Happy Codex before its first
-prompt through Happy's delivery path (or as the first message when there is no
-subject). Desktop handoffs receive neither. User prompt arguments are preserved.
+## Local review instructions
+
+A [local review](reviews.md#local-reviews)'s instructions start with the fixed
+part of the [review template](../../crates/shoal-core/src/config/templates/review.md).
+It holds the review's task, its read-only rules, the commands that write the
+review and how to treat history. No layer replaces it. The `review` rule's text
+follows it.
+
+These placeholders expand in both:
+
+- `{workspace}` and `{branch}` of the reviewed workspace;
+- `{path}`, the review's checkout;
+- `{base}`, the commit the review compares against.
 
 ## Mode permissions
 
-[`[permissions]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#permissions) and `[modes.<name>.permissions]` set
-what a mode's agents may do, under the keys the sections on
-[issues and PRs](approvals.md#approval-for-agent-issues-and-prs),
-[pushes](approvals.md#approval-for-agent-pushes), [merges](branches.md#approval-of-an-agents-merge),
-[forge API requests](issues.md#forge-api-requests) and [actions](#permitted-actions)
-describe.
+[`[permissions]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#permissions)
+and `[modes.<name>.permissions]` set what a mode's agents may do. The keys
+govern [issues and PRs](approvals.md#approval-for-agent-issues-and-prs),
+[pushes](approvals.md#approval-for-agent-pushes),
+[merges](branches.md#approval-of-an-agents-merge),
+[forge API requests](issues.md#forge-api-requests) and other
+[actions](#permitted-actions).
 
-Each space has its own permissions. A top-level space has those of its
-agent's mode; a space below another has, for each key, the narrower of its
-mode's and its parent's effective value, so a child gets no more than its
-parent on its own. A key the `--permission` given to its agent sets takes that
-value instead, narrower or wider. A space whose agent has not started, such as
-one `shoal create` created, has `[permissions]` and the keys' defaults, capped
-by its parent the same way.
+Each space has its own permissions:
+
+- A top-level space has those of its agent's mode.
+- A space below another has, for each key, the narrower of its mode's value
+  and its parent's effective value. A child so gets no more than its parent
+  from its mode.
+- A key [given](#give-an-agent-permissions) to its agent takes the given value
+  instead, narrower or wider.
+- A space whose agent has not started, such as one `shoal create` created, has
+  `[permissions]` and the keys' defaults. Its parent caps them the same way.
+
 A chat without a repository resolves its mode's keys in the config of the
-repository the action is in, and in the global config otherwise. Shoal
-computes the permissions at each check from the current config, the recorded
-modes and the tree, so a config change reaches running agents and the spaces
-below them; only the hold on an agent's plain `git push` follows the `push`
-permission it launched with, which a restart renews. A check uses the
-permissions of the space that acts, so a parent acting on a space below it
-acts under its own. `shoal status` lists a space's permissions, each with
-`mode`, `given` or `parent` for where it comes from; `--json` gives them
-as `permissions`, each key with its `value` and `from`.
+repository the action is in. Outside a repository it resolves them in the
+global config.
+
+Shoal computes the permissions at each check from the current config, the
+recorded modes and the tree. A config change so reaches running agents and the
+spaces below them. One exception: the hold on an agent's plain `git push`
+follows the `push` permission the agent launched with. A restart renews it.
+
+A check uses the permissions of the space that acts. A parent that acts on a
+space below it acts under its own.
+
+`shoal status` lists a space's permissions, each with where its value comes
+from: `mode`, `given` or `parent`. `--json` gives them as `permissions`, each
+key with its `value` and `from`.
+
+### Give an agent permissions
 
 `shoal start --permission KEY=VALUE`, repeatable, gives the new agent a
-permission whatever its mode or the space above it allows, such as a parent
-giving a child less than it has itself, or the user giving a worker more than
-its mode:
+permission whatever its mode or the space above it allows. A parent may give a
+child less than it has, and you may give a worker more than its mode:
 
 ```sh
 shoal start my-project --branch fix-login --permission push=propose --permission merge=propose
 shoal start my-project --branch release --permission merge=direct
 ```
 
-Whoever gives a value must hold it: the user, from a terminal without a
-scope, holds every permission, while a space's agent gives only up to its own
-space's effective value for each key, and a value above that is refused
-before anything is created. Shoal records the given permissions with the
-agent's mode, on its execution, queue entry, workspace or chat, and a restore
-or restart keeps them; `shoal resume` and `shoal restart` take `--permission`
-too, which sets the keys it names, `KEY=mode` dropping one, and keeps the
-rest. A dropped key takes the value its space has without one, which a space's
-agent must hold too. Nothing changes them while the agent runs. `shoal status --json`
-gives the recorded ones as `narrowing`, beside the effective `permissions`,
-where a given key's `from` is `given`.
+The giver must hold the value it gives. You, from a terminal without a scope,
+hold every permission. A space's agent gives each key only up to its own
+space's effective value. A value above that is refused before anything is
+created.
+
+Shoal records the given permissions with the agent's mode: on its execution,
+queue entry, workspace or chat. Restores and restarts keep them, and nothing
+changes them while the agent runs. `shoal status --json` gives them as
+`narrowing`, beside the effective `permissions`, where a given key's `from` is
+`given`.
+
+`shoal resume` and `shoal restart` take `--permission` too. It sets the keys
+it names and keeps the rest. `KEY=mode` drops a given key, which then takes the
+value its space has without one. The giver must hold that value too.
 
 ## Permitted actions
 
-A key that governs an action lets a scoped process take it at once with
-`"direct"`, as the user would, and refuses it with `"deny"`, citing the
-permission. With `"propose"` the action becomes an
-[approval request](approvals.md#approval-requests) bound to what it does,
-such as the command with its arguments. Once the
-request is approved, the same action proceeds once under every other check,
-and taking it again asks again; an approved command's own requests take
-what the same key governs without asking again. `ci_approve` governs
-approving CI runs that wait for approval, and `pr_review` approving and
-requesting changes on PRs, bound to the PR's head commit and the review's
-text; `triggers` governs pausing, resuming and running a
-[trigger](triggers.md), bound to the trigger and the action, and a scoped
-process changes a trigger in config only where it is `"direct"`, since a
-trigger starts top-level spaces as you; `decide`, which is
-`"deny"` or `"direct"`, governs deciding the requests of the spaces below as
-you would; `notifications`, also `"deny"` or `"direct"`, governs reading, clearing and watching your
-alerts, Shoal's own log, and the untracked worktrees, cleanup errors
-and failing syncs the inbox lists; `user_holds` governs
-releasing the user's holds and removing a space the user holds, or holds
-one below; `daemon` governs installing,
-starting, stopping and restarting the daemon, `shoal update` and `shoal hub
-update`, which a
-scoped process takes only while a daemon of the same Shoal answers to decide
-it; `limits`
-starting agents regardless of `max_heavy_agents` and memory, with `--now`,
-`--focus`, `queue start` or the queue picker's start; `admin`
-governs the rest of administering Shoal, its config, repositories and
-cleanup, and repairing, adopting and moving workspaces, except moving them
-to a joined machine, in the caller's own repository where the action names
-one. A scoped process changes
-Shoal's config only key by key, setting a permission only to a value its
-space holds and removing none, since that could hand it more; it never
-replaces the config, and runs `config setup` and `repo setup` as `admin`
-allows. A removed workspace it restores opens below its own space.
+A key that governs an action takes one of these values:
 
-A [local review](reviews.md#local-reviews)'s instructions start with the fixed part of the
-[review template](../../crates/shoal-core/src/config/templates/review.md), its task,
-read-only rules, the commands that write the review and treatment of history, which no layer
-replaces, followed by the `review` rule's text. `{workspace}`, `{branch}`,
-`{path}`, the review's checkout, and `{base}`, the commit it compares against,
-expand in them.
+- `"direct"` lets a scoped process take the action at once, as you would.
+- `"deny"` refuses the action, citing the permission.
+- `"propose"` turns the action into an
+  [approval request](approvals.md#approval-requests) bound to what it does,
+  such as the command with its arguments.
+
+Once the request is approved, the same action proceeds once, under every other
+check. Taking it again asks again. The approved command's own requests take
+what the same key governs without asking again.
+
+The [configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#permissions)
+says which actions each key governs. Some keys bind their requests to more, or
+apply only under a condition:
+
+- `pr_review` binds the PR's head commit and the review's text.
+- `triggers` binds the [trigger](triggers.md) and the action.
+- `limits` covers `--now`, `--focus`, `queue start` and the queue picker's
+  start.
+- `daemon` lets a scoped process take its action only while a daemon of the
+  same Shoal answers to decide it.
+- `admin` covers an action in the caller's own repository where the action
+  names one. A [move](move.md) to a joined machine takes no `admin`.
+
+A scoped process changes Shoal's config only key by key. It sets a permission
+only to a value its space holds, and removes none, since that could hand it
+more. It never replaces the config. It runs `config setup` and `repo setup` as
+`admin` allows. A removed workspace it restores opens below its own space.
 
 ## Planning issues
 
-`shoal start --mode plan --issue [ISSUE]` starts a [chat](chats.md) that settles
-an issue's plan with you before anyone implements it. Without an issue, a
-picker offers the open issues carrying the `plan` mode's
+`shoal start --mode plan --issue [ISSUE]` starts a [chat](chats.md) that
+settles an issue's plan with you before anyone implements it. Without an issue,
+a picker offers the open issues that carry the `plan` mode's
 [`label`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules).
-The agent checks the issue against the default branch, talks the open points
-through with you in the chat, then rewrites the issue's body with a Plan
-section, since an implementing agent receives only the body, swaps its mode's
-label for that of the mode that should carry out the plan, where modes have
-labels, and opens follow-up issues for work the plan splits off. You start an
-agent on it when you want one, with `shoal start --issue`, which takes the
-mode its labels call for.
+
+The agent:
+
+1. checks the issue against the default branch;
+2. talks the open points through with you in the chat;
+3. rewrites the issue's body with a Plan section, since an implementing agent
+   receives only the body;
+4. swaps its mode's label for that of the mode that should carry out the plan,
+   where modes have labels;
+5. opens follow-up issues for work the plan splits off.
+
+You start an agent on the issue when you want one. `shoal start --issue` takes
+the mode its labels call for.
 
 ## Scoped workspace commands
 
-PR watches, merge acknowledgements, `send`, `alert list`, `thread`,
-`ready`, `stop --processes`, `stop --leftovers`, `internal agent-state` and
-`internal turn-failed` are own-workspace scope exceptions.
-Processes carrying a Shoal scope token are confined to their own worktree:
-`status`, inspect, execute, `diff`, `setup`, and resources. They may read
-effective configuration for their own workspace and their space's repository,
-and make the daemon reread it with `config reload`, but cannot change
-configuration.
-They `merge` only with [approval](branches.md#approval-of-an-agents-merge) and cannot
-reach spaces outside their scope, create spaces other than below the spaces
-their scope reaches, remove spaces other than those below theirs without holds, read
-alerts, or administer repositories or the daemon service; nested commands
-keep the scope. A command whose ancestor carries scope for the same state directory
-gets the CLI's scoped refusals even after the token is removed from its
-environment. Scope is cooperative and does not restrict direct filesystem or
-Git operations.
+A process that carries a Shoal scope token is confined to its own worktree for
+`status`, inspect, execute, `diff`, `setup` and resources. It may still run
+these on its own workspace: PR watches, merge acknowledgements, `send`,
+`alert list`, `thread`, `ready`, `stop --processes`, `stop --leftovers`,
+`internal agent-state` and `internal turn-failed`.
 
-`shoal internal env [space] --json` returns an object mapping environment variable names
-to strings for a workspace or a chat: the same space identity as tracked
-executions, `SHOAL_STATE_DIR`, its `TMPDIR` and a fresh `SHOAL_SCOPE_TOKEN`, with
-no `SHOAL_EXECUTION_ID`. A workspace, whose worktree must be ready and verified,
-adds its worktree's variables and current port exports, and the
-[`[env]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#environment) variables join them as
-they join tracked executions and lifecycle hooks. `{workspace}` there is the
-last part of `{path}`, which never changes. Desktop handoffs may reuse an existing process and do
-not receive these variables.
+A scoped process reads the effective configuration of its own workspace and
+its space's repository. It makes the daemon reread it with `config reload`, but
+cannot change it.
+
+A scoped process cannot:
+
+- `merge` without [approval](branches.md#approval-of-an-agents-merge);
+- reach spaces outside its scope;
+- create spaces other than below the spaces its scope reaches;
+- remove spaces other than those below its own without holds;
+- read alerts;
+- administer repositories or the daemon service.
+
+Nested commands keep the scope. A command whose ancestor carries scope for the
+same state directory gets the CLI's scoped refusals even after the token is
+removed from its environment. Scope is cooperative: it does not restrict
+direct filesystem or Git operations.
+
+## Export a space's environment
+
+`shoal internal env [space] --json` returns the environment for a process your
+app starts in a workspace or a chat. It is an object that maps each variable's
+name to a string:
+
+- the same space identity as a tracked execution, without
+  `SHOAL_EXECUTION_ID`;
+- `SHOAL_STATE_DIR` and the space's `TMPDIR`;
+- a fresh `SHOAL_SCOPE_TOKEN`;
+- for a workspace, its worktree's variables and current port exports. The
+  worktree must be ready and verified.
+- the [`[env]`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#environment)
+  variables, as they join tracked executions and lifecycle hooks. `{workspace}`
+  there is the last part of `{path}`, which never changes.
+
+Add the returned variables to the processes your app starts. Desktop handoffs
+may reuse an existing process and do not receive them.
+
 A scoped process exports and revokes tokens for any space its scope reaches.
-Add the returned variables to the processes your app starts.
-Each exported token survives daemon restarts until `shoal internal env [space] --revoke
-<token>` or the space's removal; revoking one leaves other tokens valid.
-Running processes retain their port snapshot. These processes are untracked, the
-token provides no cleanup protection, and removing the workspace stops them.
+An exported token survives daemon restarts until
+`shoal internal env [space] --revoke <token>` or the space's removal. Revoking
+one leaves other tokens valid.
+
+Running processes keep the port snapshot they started with. They are
+untracked, and the token gives no cleanup protection. Removing the workspace
+stops them.

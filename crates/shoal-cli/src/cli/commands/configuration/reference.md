@@ -596,7 +596,7 @@ text = "Follow repository instructions in {workspace} at {path}."
 ```
 
 A mode decides what an agent is told and the kind of space it starts in.
-[Modes and rules](../../../../../../docs/reference/modes.md) lists the modes
+[Modes](../../../../../../docs/reference/modes.md#modes) lists the modes
 and rules Shoal ships. `worker` always starts in a workspace, and the built-in
 `setup` mode cannot be configured.
 
@@ -696,8 +696,8 @@ Each key governs these actions:
 - `push`: pushes to the repository's remotes, by `shoal pr open` or
   `git push`, and deleting branches on the forge with `shoal branch delete`.
 - `api_writes`: `shoal forge api` requests other than reads.
-- `daemon`: installing, starting, stopping and restarting the daemon, and
-  `shoal update`.
+- `daemon`: installing, starting, stopping and restarting the daemon,
+  `shoal update` and `shoal hub update`.
 - `limits`: starting agents regardless of `max_heavy_agents` and memory.
 - `user_holds`: releasing your holds, and removing the spaces you hold.
 - `notifications`: reading your alerts, Shoal's own log and the inbox's
@@ -1132,7 +1132,7 @@ leaves one unset that uses `{repo}` or a cache.
 Names are ASCII identifiers, and `SHOAL_*` names are reserved. Values are
 strings without NUL; an empty string sets an empty value. Reserved port
 variables take precedence. See
-[scoped workspace commands](../../../../../../docs/reference/modes.md#scoped-workspace-commands).
+[export a space's environment](../../../../../../docs/reference/modes.md#export-a-spaces-environment).
 
 ### Shared caches
 

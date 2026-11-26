@@ -99,7 +99,7 @@ reviewer's output.
 
 ### What the reviewer reads
 
-The [`review` rule](modes.md) gives the instructions. Each review also receives
+The [`review` rule](modes.md#local-review-instructions) gives the instructions. Each review also receives
 the workspace's earlier reviews as context. Each earlier review comes with the
 threads of its findings, each with its posts and outcome. A finding resolved
 `fixed` also lists the files that the changes

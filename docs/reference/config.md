@@ -7,7 +7,7 @@ describes the files, their layers and every option.
 ## Set up config
 
 `repo setup` and `config setup` start an agent that writes config with you. It
-runs in the built-in [`setup` mode](modes.md). The agent studies how the
+runs in the built-in [`setup` mode](modes.md#the-setup-mode). The agent studies how the
 project or machine is used and works out which settings would help. It asks
 you about each setting before it writes it, and writes only what you agree to.
 It reads the options from `shoal config reference`.
@@ -72,6 +72,11 @@ shoal config show --repo my-project
 `config show [workspace]` prints every effective repository setting and the
 layer that set it, such as `shared config` for the shared file. A named table,
 such as commands or ports, shows one entry per name.
+
+For a mode's instructions and a rule's text, it shows the combined text, the
+highest layer that configured it and the file that layer read. It warns about
+each layer whose rule repeats the opening of a space's facts. The daemon alerts
+about such a rule in the global config when it starts or reloads its config.
 
 Without a workspace, it shows the current workspace's settings. Outside a
 workspace, it shows those of the registered checkout you are in, and otherwise

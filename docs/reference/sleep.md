@@ -138,7 +138,7 @@ Updates wake an agent, and idle wakes back them up. Shoal sends an
 [alert](alerts.md) to an agent that has stayed [idle](agents.md#agent-state)
 as long as its mode's
 [`idle_wake_minutes`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#modes-and-rules).
-[Modes and permissions](modes.md) gives the value each built-in mode sets. A
+[Modes](modes.md#modes) gives the value each built-in mode sets. A
 `worker` agent idle for 60 minutes gets this alert:
 
 > You have been idle for 60 minutes. Continue your work if any remains;
