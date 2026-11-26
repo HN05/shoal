@@ -1,6 +1,6 @@
 //! What holds a launch's agent: the spaces, queued agents and issues the
-//! launch names, and the issues its forge records as blocking the issue
-//! the agent works on.
+//! launch names, and the issues its forge records as blocking the issue the
+//! agent works on.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -18,8 +18,8 @@ use crate::{
 };
 
 impl Spaces {
-    /// What `named` names in `repository`, an issue by its URL, refused
-    /// when the repository has no such workspace, queued agent or issue.
+    /// An issue is named by its URL. Refused when the repository has no such
+    /// workspace, queued agent or issue.
     pub(super) async fn named_blockers(
         &self,
         daemon: &dyn Daemon,
@@ -45,7 +45,7 @@ impl Spaces {
         Ok(blockers)
     }
 
-    /// The issue `input` names in the repository of `context`, by its URL.
+    /// By its URL.
     async fn selected_issue(
         &self,
         daemon: &dyn Daemon,
@@ -66,8 +66,7 @@ impl Spaces {
         ))
     }
 
-    /// The open issues the forge records as blocking `issue` of
-    /// `repository`. A forge that cannot list them, such as a repository
+    /// Open ones only. A forge that cannot list them, such as a repository
     /// with blocking issues turned off, leaves them out.
     pub(super) async fn forge_blockers(
         &self,
@@ -88,8 +87,8 @@ impl Spaces {
         }
     }
 
-    /// Where a launch's forge reads in `repository` run for `caller`: in its
-    /// own space when that is of the repository, else in the checkout.
+    /// In the caller's own space when that is of the repository, else in the
+    /// checkout.
     pub async fn launch_read_context(
         &self,
         repository: &RepositoryId,

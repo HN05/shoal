@@ -1,7 +1,6 @@
-//! The agent a new space's start queues there and what else follows its
-//! recording: the agent resolved under the settings where the space goes,
-//! working on the start's issue, and refused before anything is recorded
-//! where the caller may not give it what it asks for.
+//! The agent a new space's start queues and what else follows its
+//! recording. The caller may not give the agent what its own space does not
+//! hold.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_protocol::progress::Blocker;
@@ -21,36 +20,31 @@ use crate::{
     scope::Caller,
 };
 
-/// What follows a new space's recording, in the caller's environment
-/// `env`, with its agent as a request names it or, by default, as the
-/// daemon resolved it.
+/// In the caller's environment `env`. The agent is as a request names it or,
+/// by default, as the daemon resolved it.
 pub struct Preparing<L = QueuedLaunch> {
-    /// The issue number or URL a request names, which its start reads
-    /// open before the space is recorded.
+    /// The start reads it open before the space is recorded.
     pub issue: Option<ItemInput>,
     pub pr: Option<ItemInput>,
     pub agent: Option<Box<L>>,
-    /// The agent the caller starts itself once setup succeeds, which waits
-    /// in the queue should setup fail.
+    /// The agent the caller starts itself once setup succeeds. It waits in
+    /// the queue should setup fail.
     pub waiting: Option<Box<QueuedLaunch>>,
-    /// The starting queue entry of the launch the start carries out, which
-    /// the opened workspace takes before its preparation starts.
+    /// The opened workspace takes it before its preparation starts.
     pub queue_entry: Option<QueueEntryId>,
-    /// What `agent` waits for besides the preparation, which waits for it
-    /// too before it creates a new worktree, then creates it on the branch
-    /// of the done blocker that holds the others' work.
+    /// What `agent` waits for besides the preparation. The preparation waits
+    /// for it too before it creates a new worktree, then creates it on the
+    /// branch of the done blocker that holds the others' work.
     pub blockers: Vec<Blocker>,
-    /// Whether nothing follows the preparation, which then also waits
-    /// before it creates a new worktree while disk protection holds back
-    /// new starts.
+    /// Nothing follows the preparation, which then also waits before it
+    /// creates a new worktree while disk protection holds back new starts.
     pub unfollowed: bool,
     pub env: Option<BTreeMap<String, String>>,
 }
 
 impl Preparing<LaunchRequest> {
-    /// This preparation with its agent resolved, and the agent the caller
-    /// starts itself checked, under the `settings` they launch with in a
-    /// space of the kind `place` says, read only when the start has either.
+    /// Resolves under the `settings` a space of the kind `place` says
+    /// launches with, read only when the start has an agent.
     pub(super) async fn resolved(
         self,
         place: (SpaceKind, bool),
@@ -91,22 +85,19 @@ impl Preparing<LaunchRequest> {
 }
 
 impl Preparing {
-    /// Whether the preparation of `workspace` may wait before it creates
-    /// the new worktree: for what its agent waits for, or, with nothing
-    /// following it, for disk space.
+    /// For what its agent waits for, or, with nothing following it, for disk
+    /// space.
     pub(super) fn may_wait(&self, workspace: &Workspace) -> bool {
         workspace.checkout.is_pending() && (!self.blockers.is_empty() || self.unfollowed)
     }
 
-    /// Queue its agent on the start's `issue`, which prompts it, with the
-    /// task it names passed on beside it.
+    /// The issue prompts it, with the task it names passed on beside it.
     pub(super) fn work_on(&mut self, issue: Option<&StartIssue>) {
         if let (Some(agent), Some(issue)) = (&mut self.agent, issue) {
             agent.issue.get_or_insert_with(|| LaunchIssue::from(issue));
         }
     }
 
-    /// The mode its agent starts in.
     pub(super) fn mode(&self) -> Option<ModeName> {
         let agent = self.agent.as_ref()?;
         Some((agent.mode.clone()).unwrap_or(ModeName::DEFAULT))
@@ -114,8 +105,6 @@ impl Preparing {
 }
 
 impl Spaces {
-    /// `preparing` with its agent resolved under the settings of a space at
-    /// `home` in `repository` below `parent`.
     pub(super) async fn resolve_start_agent(
         &self,
         daemon: &dyn Daemon,
@@ -133,11 +122,9 @@ impl Spaces {
         .await
     }
 
-    /// Refuse the scoped `caller` the agent `preparing` queues in a new
-    /// space of `kind` in `repository`, before the start records anything,
-    /// where it gives the agent permissions the caller does not hold, or
-    /// starts it regardless of the limits beyond what the caller's `limits`
-    /// permission allows.
+    /// Runs before the start records anything. Refuses permissions the caller
+    /// does not hold, and starting regardless of the limits beyond what its
+    /// `limits` permission allows.
     pub(super) async fn authorize_start_agent(
         &self,
         daemon: &dyn Daemon,
@@ -163,10 +150,9 @@ impl Spaces {
         .await
     }
 
-    /// Refuse the scoped `caller` the agent `preparing` queues in the
-    /// `space` a start recorded where it would start with a permission the
-    /// caller does not hold: one it is given, or the value a key a reopened
-    /// workspace's agent was given and this one leaves out falls back to.
+    /// Refuses a permission the caller does not hold: one the agent is
+    /// given, or the value a key falls back to that a reopened workspace's
+    /// agent was given and this one leaves out.
     pub(super) async fn ensure_start_agent_held(
         &self,
         daemon: &dyn Daemon,

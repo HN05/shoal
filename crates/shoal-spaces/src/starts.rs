@@ -1,12 +1,6 @@
 //! Starting a new space through one sequence, whatever its kind and
-//! whoever starts it, a launch, `StartWorkspace` or `StartChild`: its agent
-//! resolved under the settings where it goes, its name, the checks before
-//! anything is recorded, the space recorded at its home, which decides its
-//! kind, linked to the issue it starts on, its agent queued, and the
-//! preparation of a workspace, the only step that depends on the kind,
-//! which creates a new branch's worktree first, unless it waits for the
-//! work its agent waits for or for disk space, and whose failure the
-//! start's coordinator or the user hears of.
+//! whoever starts it. Only a workspace's preparation depends on the kind.
+//! See `docs/design/spaces.md`.
 mod agent;
 mod failures;
 mod home;
@@ -41,9 +35,8 @@ use crate::{
     scope::{Caller, ScopeRefusal},
 };
 
-/// A new space as a start describes it: where it goes, what it is named
-/// and below which space, the issue it starts on, and what follows its
-/// recording.
+/// Where it goes, its name and parent, the issue it starts on, and what
+/// follows its recording.
 pub struct SpaceStart<'a> {
     pub home: Home<'a>,
     pub new: NewSpace,
@@ -54,8 +47,6 @@ pub struct SpaceStart<'a> {
     pub unplaceable: Option<String>,
 }
 
-/// What a start names a new space, below which space it goes, and the
-/// priority it asks for it.
 #[derive(Default)]
 pub struct NewSpace {
     pub name: Option<SpaceName>,
@@ -63,9 +54,8 @@ pub struct NewSpace {
     pub priority: Option<Priority>,
 }
 
-/// A space a start recorded and began: as the start left it, with its
-/// agent's queue entry, what linking its issue warned of, and how its agent
-/// starts.
+/// As the start left it, with its agent's queue entry, what linking its
+/// issue warned of, and how its agent starts.
 pub struct StartedSpace {
     pub space: Space,
     pub entry: Option<Box<QueueEntry>>,
@@ -74,7 +64,6 @@ pub struct StartedSpace {
 }
 
 impl StartedSpace {
-    /// The launch of the agent this start queued.
     pub fn launched(self) -> Launched {
         Launched {
             space: Box::new(self.space),
@@ -86,7 +75,7 @@ impl StartedSpace {
         }
     }
 
-    /// The workspace this start opened, with the operation preparing it.
+    /// With the operation preparing it.
     pub fn into_workspace(self) -> Result<StartedWorkspace> {
         let Started::Preparing { operation, reused } = self.started else {
             bail!("the start began no workspace");
@@ -104,7 +93,6 @@ impl StartedSpace {
 }
 
 impl Spaces {
-    /// Record the space `start` describes for `caller` and begin it.
     pub async fn start_space(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -144,9 +132,9 @@ impl Spaces {
             .await
     }
 
-    /// Refuse a start of a space of `kind` in `repository` before anything
-    /// is recorded where `caller` may not queue its agent as `preparing`
-    /// says, or the work the agent waits for cannot hold it.
+    /// Refuses before anything is recorded where `caller` may not queue the
+    /// agent as `preparing` says, or the work the agent waits for cannot
+    /// hold it.
     async fn check_start(
         &self,
         daemon: &dyn Daemon,
@@ -168,9 +156,8 @@ impl Spaces {
         }
     }
 
-    /// Begin the `recorded` space for `caller`: link it to `issue`, queue
-    /// the agent `preparing` names there, which waits for its preparation,
-    /// and start preparing a workspace.
+    /// Links it to `issue`, queues the agent, which waits for the
+    /// preparation, and starts preparing a workspace.
     pub async fn begin_recorded(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -200,9 +187,8 @@ impl Spaces {
         })
     }
 
-    /// Refuse the scoped `caller` the agent `preparing` names where it
-    /// replaces the stopped agent of the reopened `space` and the caller may
-    /// not discard that agent.
+    /// Only where the agent replaces the stopped agent of the reopened
+    /// `space` and the caller may not discard that agent.
     async fn ensure_start_may_replace(
         &self,
         daemon: &dyn Daemon,
@@ -219,8 +205,7 @@ impl Spaces {
         ScopeRefusal::of(allowed)
     }
 
-    /// Open the workspace `opening` names in `repository`, a new one or
-    /// the one on its branch or PR head, and start preparing it.
+    /// A new one, or the one on its branch or PR head.
     pub async fn start_workspace(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -249,9 +234,7 @@ impl Spaces {
             .into_workspace()
     }
 
-    /// Create the child `child` of the space `parent`, a workspace or a
-    /// chat, on its base or a copy, leaving out what its options say, and
-    /// start preparing it.
+    /// On its base or a copy, leaving out what its options say.
     pub async fn start_child(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -283,8 +266,6 @@ impl Spaces {
             .into_workspace()
     }
 
-    /// The open issue `issue` names in `repository`, which a request's
-    /// start begins on.
     async fn read_start_issue(
         &self,
         daemon: &dyn Daemon,

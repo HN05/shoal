@@ -1,6 +1,5 @@
 //! The mode a launch that names none takes from the labels of the issue or
-//! PR it names, as [`launches::labels`] decides it among the modes it may
-//! start in, with the item read from the forge as its caller reads it.
+//! PR it names, with the item read from the forge as its caller reads it.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -11,9 +10,8 @@ use crate::scope::Caller;
 use shoal_core::launches::{self, labels};
 
 impl Spaces {
-    /// The mode the labels of the issue or PR `launch` names call for, as
-    /// [`Self::labelled_launch_mode`] decides it, once the spaces it names
-    /// are named by ID, for a client that settles the rest of the start.
+    /// Names the spaces the launch names by ID first, for a client that
+    /// settles the rest of the start.
     pub async fn launch_labelled_mode(
         &self,
         daemon: &dyn Daemon,
@@ -24,10 +22,10 @@ impl Spaces {
         self.labelled_launch_mode(daemon, &launch, caller).await
     }
 
-    /// The mode the labels of the PR `launch` names, else of the issue,
-    /// call for among the [`labels::labelled`] modes it may start in for
-    /// `caller`; unlabelled without such an item, a mode with a label it
-    /// may take or a registered repository to read the item in.
+    /// The labels of the PR, else of the issue, choose among the
+    /// [`labels::labelled`] modes it may start in. Unlabelled without such an
+    /// item, a mode with a label it may take, or a registered repository to
+    /// read the item in.
     pub async fn labelled_launch_mode(
         &self,
         daemon: &dyn Daemon,
@@ -56,9 +54,8 @@ impl Spaces {
         )
     }
 
-    /// What `launch` starts on in `repository`, the PR it names, else the
-    /// issue, as refusals name it, with its labels, read as `caller` reads
-    /// it; none where it names neither.
+    /// The PR it names, else the issue, as refusals name it, read as
+    /// `caller` reads it. None where it names neither.
     async fn launch_item_labels(
         &self,
         daemon: &dyn Daemon,

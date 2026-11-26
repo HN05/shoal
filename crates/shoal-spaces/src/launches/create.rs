@@ -1,7 +1,6 @@
-//! A workspace a start creates without starting an agent there, as
-//! `shoal create` asks: placed as a launch's new workspace is, from what
-//! its launch names, or the existing workspace that has the branch it
-//! names, reopened.
+//! A workspace a start creates without an agent, as `shoal create` asks:
+//! placed as a launch's new workspace is, or the existing workspace that has
+//! the branch it names, reopened.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::{collections::BTreeMap, sync::Arc};
@@ -23,10 +22,9 @@ use crate::{
 use shoal_core::launches;
 
 impl Spaces {
-    /// Create the workspace `launch` describes for `caller`, starting no
-    /// agent there, a new one below the space the launch names, else
-    /// below `below`, and start preparing it with `env`. Only a parent the
-    /// launch names refuses the existing workspace of the branch it names.
+    /// A new workspace goes below the space the launch names, else below
+    /// `below`. Only a parent the launch names refuses the existing
+    /// workspace of the branch it names.
     pub async fn create_placed_workspace(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -72,8 +70,8 @@ impl Spaces {
         Ok(started)
     }
 
-    /// Name the repository of the space `launch` goes below, else that of
-    /// `below`, where a child goes, when the launch names none.
+    /// Used when the launch names no repository: that of the space it goes
+    /// below, else that of `below`, where a child goes.
     async fn default_repository(
         &self,
         daemon: &dyn Daemon,
@@ -89,8 +87,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// The placement that reopens the existing workspace `worker` names as
-    /// the one its launch starts in.
     async fn reopened_placement(&self, worker: &Launch) -> Result<Placement> {
         let Some(SpaceChoice::Space(selector)) = &worker.in_workspace else {
             bail!("the launch names no workspace");
@@ -113,8 +109,7 @@ impl Spaces {
     }
 }
 
-/// Whether `placement` reopens a recorded workspace, which keeps its
-/// place.
+/// A reopened workspace keeps its place.
 fn reopens(placement: &Placement) -> bool {
     matches!(
         &placement.home,
@@ -122,8 +117,7 @@ fn reopens(placement: &Placement) -> bool {
     )
 }
 
-/// Refuse what `launch` names that only an agent's start takes: a
-/// creation starts none.
+/// Refuses what only an agent's start takes: a creation starts none.
 fn ensure_creates(launch: &Launch) -> Result<()> {
     let agent_flags = [
         ("--agent", launch.agent.is_some()),

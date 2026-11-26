@@ -1,7 +1,5 @@
-//! Where a new space goes, which decides its kind: a chat in a checkout, a
-//! workspace's worktree or `root_dir`, or a workspace a start opens or a
-//! child a space creates. The settings its agent resolves under, the name it takes
-//! when nothing names it, and the step that records it there.
+//! Where a new space goes, which decides its kind, and the step that records
+//! it there.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, ensure};
@@ -24,25 +22,18 @@ use crate::{
     },
 };
 
-/// Where a new space goes.
 pub enum Home<'a> {
-    /// A chat in a registered repository's checkout.
     Checkout(RepositoryId),
     /// A chat in the worktree of a ready workspace, in its repository.
     Worktree(SpaceSelector),
-    /// A chat without a repository, in `root_dir`.
     Root,
-    /// The workspace a start opens in a repository: a new one, or the one
-    /// on its branch, its PR head or the record it names.
+    /// A new workspace, or the one on its branch, its PR head or the record
+    /// it names.
     Opening(Selector, Box<Opening<'a>>),
-    /// The child workspace a space creates in a repository below it,
-    /// parent, with its worktree.
+    /// The child workspace a space creates below it, with its worktree.
     Child(RepositoryId, Child),
 }
 
-/// What a workspace a start opens is: where it starts, from what base,
-/// where and with what Git profile, below which space, and what it leaves
-/// out.
 pub struct Opening<'a> {
     pub start: WorkspaceStart,
     pub base: Option<String>,
@@ -50,8 +41,8 @@ pub struct Opening<'a> {
     pub parent: Option<SpaceId>,
 }
 
-/// The child a space creates: on the new branch `name` from `base`, or a
-/// copy of `copy`, on `name` or a branch named after the copied one's.
+/// On the new branch `name` from `base`, or a copy of `copy`, on `name` or a
+/// branch named after the copied one's.
 pub struct Child {
     pub name: Option<String>,
     pub copy: Option<CopySource>,
@@ -59,9 +50,8 @@ pub struct Child {
     pub options: CreationOptions,
 }
 
-/// A space a start recorded at its home: new, or `reused` where the start
-/// reopened a workspace, and whether its agent waits for the preparation
-/// that follows, as a new workspace's does.
+/// `reused` where the start reopened a workspace. Also says whether its
+/// agent waits for the preparation that follows, as a new workspace's does.
 pub struct Recorded {
     pub space: Space,
     pub reused: bool,
@@ -69,7 +59,6 @@ pub struct Recorded {
 }
 
 impl Home<'_> {
-    /// The kind of space that goes here.
     pub(super) fn kind(&self) -> SpaceKind {
         match self {
             Self::Checkout(_) | Self::Worktree(_) | Self::Root => SpaceKind::Chat,
@@ -79,7 +68,6 @@ impl Home<'_> {
 }
 
 impl Spaces {
-    /// The repository of the space that goes at `home`, if any.
     pub async fn home_repository(
         &self,
         daemon: &dyn Daemon,
@@ -95,11 +83,10 @@ impl Spaces {
         })
     }
 
-    /// The settings the agent of a space at `home` in `repository` launches
-    /// with: those of the workspace an opening names, its worktree's file
-    /// included, or of the parent a child goes below, else the repository's,
-    /// and for a chat without a repository the global config's, with the
-    /// mode files beside it.
+    /// Those of the workspace an opening names, its worktree's file
+    /// included, or of the parent a child goes below, else the
+    /// repository's. For a chat without a repository the global config's.
+    /// With the mode files beside them.
     pub(super) async fn home_settings(
         &self,
         daemon: &dyn Daemon,
@@ -127,8 +114,7 @@ impl Spaces {
         }
     }
 
-    /// The name of a space in `mode` at `home` that nothing names: a
-    /// chat's after where it runs; a workspace takes its branch's.
+    /// A chat's is after where it runs; a workspace takes its branch's.
     pub(super) async fn home_name(
         &self,
         daemon: &dyn Daemon,
@@ -155,9 +141,8 @@ impl Spaces {
         Ok(Some(SpaceName::derive(&name, "chat")))
     }
 
-    /// Record the space `new` describes at `home`, whose `agent` a chat
-    /// records with it, refusing a chat without one. A scoped `caller`
-    /// takes over no workspace outside its scope.
+    /// A chat records `agent` with it, and is refused without one. A scoped
+    /// `caller` takes over no workspace outside its scope.
     pub(super) async fn record_space(
         &self,
         daemon: &dyn Daemon,
@@ -192,9 +177,7 @@ impl Spaces {
         }
     }
 
-    /// Record the chat that goes at `home`, named `name`, below `parent`,
-    /// which must take a chat of its repository, with the `agent` it
-    /// starts with.
+    /// The parent must take a chat of its repository.
     async fn record_home_chat(
         &self,
         daemon: &dyn Daemon,
@@ -229,8 +212,6 @@ impl Spaces {
         })
     }
 
-    /// Create the child `child` describes below the space `parent`, in
-    /// `repository`.
     async fn record_child(
         &self,
         daemon: &dyn Daemon,
@@ -259,11 +240,10 @@ impl Spaces {
         (self.create_copy(daemon, repository, &copy, CopyPlace::Branch(name), new)).await
     }
 
-    /// Record the workspace `opening` names in `repository` below `parent`
-    /// on a new branch, or on its existing branch, whose worktree its
-    /// preparation creates, or open the one on that branch or its PR head,
-    /// or the recorded one it names, which keeps its place. A scoped
-    /// `caller` takes over no workspace outside its subtree.
+    /// A new or existing branch gets a worktree its preparation creates. A
+    /// workspace on that branch or its PR head, or the recorded one it
+    /// names, is opened instead and keeps its place. A scoped `caller` takes
+    /// over no workspace outside its subtree.
     async fn open_for_start(
         &self,
         daemon: &dyn Daemon,

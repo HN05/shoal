@@ -1,5 +1,4 @@
-//! What resolving a launch reads of the daemon's state, which
-//! [`crate::launches`] decides over.
+//! What resolving a launch reads of the daemon's state.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -9,9 +8,8 @@ use crate::{model::Workspace, scope::Caller};
 use shoal_core::launches::{LaunchState, SpaceRepository};
 
 impl Spaces {
-    /// What resolving `launch` reads for `caller`: the registered
-    /// repositories, the workspaces it sees and the repository of the space
-    /// it goes below.
+    /// The registered repositories, the workspaces `caller` sees and the
+    /// repository of the space the launch goes below.
     pub(super) async fn launch_state(
         &self,
         daemon: &dyn Daemon,
@@ -29,7 +27,6 @@ impl Spaces {
         })
     }
 
-    /// The workspaces `caller` sees.
     pub(super) async fn launch_workspaces(
         &self,
         daemon: &dyn Daemon,
@@ -41,9 +38,7 @@ impl Spaces {
             .collect())
     }
 
-    /// Refuse what opening the existing branch `existing` in the repository
-    /// `repository` names would refuse, such as a local branch of its name
-    /// that does not track it.
+    /// Such as a local branch of its name that does not track it.
     pub(super) async fn check_opens(
         &self,
         daemon: &dyn Daemon,

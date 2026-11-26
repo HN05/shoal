@@ -1,9 +1,7 @@
 //! A new workspace's preparation that waits before it creates the worktree:
-//! for the blockers of the launch waiting to open the workspace, on whose
-//! done branch the worktree is then created, and for disk space while disk
-//! protection holds back new starts. The daemon records it with the
-//! workspace, says what it waits for, and starts it once that allows, in
-//! the scope of the space that started the workspace.
+//! for the blockers of the launch waiting to open the workspace, and for
+//! disk space while protection holds back new starts. See
+//! `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::{Daemon, Records};
 use std::{collections::BTreeMap, sync::Arc};
@@ -20,16 +18,13 @@ use crate::{
     {blockers::Readiness, log, scope::Caller, workspace::build_pending_in},
 };
 
-/// A new workspace's preparation as its start leaves it: the `steps` it
-/// runs in `env`, for the agent of a launch waiting to open the workspace
-/// when `for_agent`.
+/// `for_agent` when a launch's agent waits to open the workspace.
 pub(super) struct PreparationStart {
     pub steps: Preparation,
     pub env: Option<BTreeMap<String, String>>,
     pub for_agent: bool,
 }
 
-/// Whether a waiting preparation may start.
 enum Gate {
     /// It may, creating the worktree on `base`, the branch of a done
     /// blocker, when one leaves it.
@@ -39,15 +34,13 @@ enum Gate {
     Closed(PreparationWait),
 }
 
-/// A recorded waiting preparation.
 struct Waiting {
     workspace: SpaceId,
     for_agent: bool,
     waits: PreparationWait,
 }
 
-/// A waiting preparation claimed to start: what it runs, in what
-/// environment, and the space in whose scope it runs.
+/// Also holds the space in whose scope it runs.
 struct Claimed {
     steps: Preparation,
     env: Option<BTreeMap<String, String>>,
@@ -55,11 +48,8 @@ struct Claimed {
 }
 
 impl Spaces {
-    /// Hold back the preparation `start` of the new `workspace`, which
-    /// `caller` started, while what it waits for does not allow it,
-    /// recording it waiting and returning whether it does. One that may
-    /// start creates its worktree on the branch of a done blocker that
-    /// leaves one.
+    /// Records it waiting, and returns whether it does. One that may start
+    /// creates its worktree on the branch of a done blocker that leaves one.
     pub(super) async fn hold_preparation(
         &self,
         daemon: &dyn Daemon,
@@ -85,9 +75,8 @@ impl Spaces {
         }
     }
 
-    /// Start each waiting preparation that what it waits for now allows,
-    /// and record what each other one waits for now. None starts while an
-    /// exit holds back new work.
+    /// Records what each other one waits for now. None starts while an exit
+    /// holds back new work.
     pub async fn start_waiting_preparations(&self, daemon: &Arc<dyn Daemon>) -> Result<()> {
         if self.gates.exiting().is_some() {
             return Ok(());
@@ -101,10 +90,10 @@ impl Spaces {
         Ok(())
     }
 
-    /// Refuse an explicit preparation of the workspace `spec` prepares, as
-    /// `shoal setup` starts one, while that workspace's own preparation
-    /// waits for work or disk space, which starts it once that clears; one
-    /// that waits for its stopped agent waits no longer.
+    /// Refuses an explicit preparation, as `shoal setup` starts one, while
+    /// the workspace's own preparation waits for work or disk space, which
+    /// starts it once that clears. One that waits for its stopped agent
+    /// waits no longer.
     pub async fn admit_explicit_preparation(&self, spec: &OperationSpec) -> Result<()> {
         let OperationSpec::Prepare { workspace, .. } = spec else {
             return Ok(());
@@ -124,10 +113,8 @@ impl Spaces {
         }
     }
 
-    /// Whether the preparation of the workspace `id`, for the agent of a
-    /// launch waiting to open it when `for_agent`, may start: once that
-    /// launch's blockers are done and disk space allows. One whose launch
-    /// was cancelled waits for an explicit preparation.
+    /// Once the waiting launch's blockers are done and disk space allows.
+    /// One whose launch was cancelled waits for an explicit preparation.
     async fn preparation_gate(
         &self,
         daemon: &dyn Daemon,
@@ -148,8 +135,7 @@ impl Spaces {
         }
     }
 
-    /// Start the `waiting` preparation once it may start, or else record
-    /// what it waits for now when that changed.
+    /// Otherwise records what it waits for now, when that changed.
     async fn advance_waiting(&self, daemon: &Arc<dyn Daemon>, waiting: Waiting) -> Result<()> {
         let Waiting {
             workspace,
@@ -173,10 +159,9 @@ impl Spaces {
         }
     }
 
-    /// Start the waiting preparation of the workspace `id`, creating its
-    /// worktree on `base` when given. A preparation that cannot start fails
-    /// as one that ran would, which its start's coordinator or the user
-    /// hears of.
+    /// Creates the worktree on `base` when given. A preparation that cannot
+    /// start fails as one that ran would, which its start's coordinator or
+    /// the user hears of.
     pub async fn release_preparation(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -204,11 +189,10 @@ impl Spaces {
         }
     }
 
-    /// Take the waiting preparation of the workspace `id` out of its record
-    /// to start it, creating its worktree on `base` when given, with the
-    /// workspace that owns it as its base, in one transaction under the
-    /// gates of a base change. A base it cannot take, such as one that
-    /// builds on it, ends the wait all the same, so the release fails once.
+    /// Records the workspace that owns `base` as its base, in one
+    /// transaction under the gates of a base change. A base it cannot take,
+    /// such as one that builds on it, ends the wait all the same, so the
+    /// release fails once.
     async fn claim_release(&self, id: &SpaceId, base: Option<String>) -> Result<Option<Claimed>> {
         let base = base.map(BranchName::from);
         let owner = match &base {
@@ -233,8 +217,7 @@ impl Spaces {
         claimed
     }
 
-    /// Record the preparation `start` of the workspace `id`, in the scope
-    /// of the space `scope`, waiting for what `waits` says.
+    /// Runs in the scope of the space `scope`.
     async fn record_waiting_preparation(
         &self,
         id: &SpaceId,
@@ -260,9 +243,8 @@ impl Spaces {
             .await
     }
 
-    /// Record that the waiting preparation of the workspace `id`, which
-    /// waited for `was`, now waits for `now`, unless what it waits for
-    /// changed since, as a stop that cancelled its agent changes it.
+    /// Does nothing when what it waits for changed since, as a stop that
+    /// cancelled its agent changes it.
     pub async fn note_preparation_wait(
         &self,
         id: &SpaceId,
@@ -282,8 +264,6 @@ impl Spaces {
     }
 }
 
-/// What the waiting preparation of the workspace `id` waits for, if one
-/// does.
 pub fn preparation_waits(
     db: &rusqlite::Connection,
     id: &SpaceId,
@@ -297,9 +277,8 @@ pub fn preparation_waits(
         .transpose()?)
 }
 
-/// Record that the waiting preparation of the workspace `id`, if one
-/// waits, is stopped, as a stop or cancelling its agent's launch leaves
-/// it, until an explicit preparation runs it.
+/// As a stop or cancelling its agent's launch leaves it, until an explicit
+/// preparation runs it.
 pub fn note_stopped(db: &rusqlite::Connection, id: &SpaceId) -> Result<()> {
     db.execute(
         "UPDATE waiting_preparations SET waits=?2 WHERE workspace_id=?1",
@@ -308,12 +287,10 @@ pub fn note_stopped(db: &rusqlite::Connection, id: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// [`PreparationWait::Stopped`] as its record keeps it.
 fn stopped() -> Result<String> {
     Ok(serde_json::to_string(&PreparationWait::Stopped)?)
 }
 
-/// Every waiting preparation.
 fn waiting_preparations(db: &mut rusqlite::Connection) -> Result<Vec<Waiting>> {
     let rows = db
         .prepare("SELECT workspace_id,for_agent,waits FROM waiting_preparations")?
@@ -336,8 +313,7 @@ fn waiting_preparations(db: &mut rusqlite::Connection) -> Result<Vec<Waiting>> {
         .collect()
 }
 
-/// End the wait of the preparation of the workspace `id`, for one that
-/// starts another way.
+/// For one that starts another way.
 fn end_wait(db: &mut rusqlite::Connection, id: &SpaceId) -> Result<()> {
     db.execute(
         "DELETE FROM waiting_preparations WHERE workspace_id=?1",
@@ -346,10 +322,9 @@ fn end_wait(db: &mut rusqlite::Connection, id: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// Take the waiting preparation of the workspace `id` out of its record to
-/// start it, if it still waits, unstopped, and, where it waits for an
-/// agent, the launch of that agent still waits to open the workspace: a
-/// stop since its gate was read keeps it waiting.
+/// Only while it still waits, unstopped, and, where it waits for an agent,
+/// that agent's launch still waits to open the workspace: a stop since its
+/// gate was read keeps it waiting.
 fn claim_waiting(
     db: &rusqlite::Connection,
     records: &dyn Records,

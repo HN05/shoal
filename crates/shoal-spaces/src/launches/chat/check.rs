@@ -1,7 +1,5 @@
-//! What checking a launch's new chat before a start's pickers refuses:
-//! the chat settled as its start settles it, with an issue a picker has
-//! yet to choose left open, the workspace whose worktree it runs in being
-//! ready there, and the parent it goes below.
+//! Checking a launch's new chat before a start's pickers: settled as its
+//! start settles it, with an issue a picker has yet to choose left open.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -14,10 +12,8 @@ use crate::{
 };
 
 impl Spaces {
-    /// Refuse what starting the new chat `launch` names in `shape` for
-    /// `caller` would refuse, settled as [`Self::chat_placement`] settles
-    /// it, with an issue a picker has yet to choose left open; returns the
-    /// workspace whose worktree it runs in, if any.
+    /// Settles as [`Self::chat_placement`] does. Returns the workspace whose
+    /// worktree the chat runs in, if any.
     pub(in crate::launches) async fn check_chat_placement(
         &self,
         daemon: &dyn Daemon,

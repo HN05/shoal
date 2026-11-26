@@ -9,16 +9,15 @@ use shoal_protocol::space_names::SpaceSelector;
 
 use crate::{protocol::CopySource, scope::Caller, start_plan::CopyCreation};
 
-/// What a launch copies, and the repository of the copied workspace.
 pub(in crate::launches) struct Copied {
     pub creation: CopyCreation,
     pub repository: RepositoryId,
 }
 
 impl Spaces {
-    /// What `launch` copies: the workspace `--copy` names by number or ID,
-    /// else the one the start was made in, live, or removed for a copy of
-    /// one of its checkpoints; `None` when it asks for no copy.
+    /// The workspace `--copy` names by number or ID, else the one the start
+    /// was made in: live, or removed for a copy of one of its checkpoints.
+    /// `None` when it asks for no copy.
     pub(in crate::launches) async fn launch_copy(
         &self,
         daemon: &dyn Daemon,
@@ -67,8 +66,7 @@ impl Spaces {
         }))
     }
 
-    /// The ID of the removed workspace `selector` selects by ID, of its
-    /// repository, and its branch or else its name.
+    /// Its ID, its repository, and its branch or else its name.
     async fn removed_copy(
         &self,
         daemon: &dyn Daemon,
