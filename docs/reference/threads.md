@@ -128,6 +128,7 @@ Shoal refuses a surface that:
 - takes more than 32 KiB,
 - breaks A2UI's schema, or uses a component type the catalog lacks,
 - refers to a component it lacks, or has no `root`,
+- names a component in two places, or names `root`, so it is no tree,
 - has two buttons that dispatch the same action,
 - holds a control character, or a newline in a name.
 

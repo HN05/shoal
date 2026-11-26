@@ -95,6 +95,9 @@ impl Surface {
             if let Some((template, path)) = component.template() {
                 let list = scoped(&scope, path);
                 let count = (self.data(&list).and_then(Value::as_array)).map_or(0, Vec::len);
+                // Queue no more items than could still be placed.
+                let room = MAX_PLACED.saturating_sub(order.len() + next.len() + below.len());
+                let count = count.min(room);
                 below.extend((0..count).map(|n| {
                     let item = [items.clone(), vec![n]].concat();
                     (template, format!("{list}/{n}"), item)

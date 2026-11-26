@@ -1,7 +1,7 @@
 //! What Shoal checks of a surface when a post brings one: that it is one
 //! static surface of the pinned spec and catalog, whose references name
 //! its own components and whose images name the post's attached files.
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, bail, ensure};
 use serde_json::Value;
@@ -95,7 +95,9 @@ impl Surface {
     }
 
     /// Refuse a repeated id, a surface without the `root` its rendering
-    /// starts at, and a reference to a component it lacks.
+    /// starts at, a reference to a component it lacks, and a component
+    /// named in two places or `root` named at all, which keeps the
+    /// surface a tree.
     fn check_ids(&self) -> Result<()> {
         let mut ids = BTreeSet::new();
         for component in self.components() {
@@ -109,14 +111,25 @@ impl Surface {
             ids.contains("root"),
             "the surface has no component root, where its rendering starts"
         );
+        let mut parents = BTreeMap::new();
         for component in self.components() {
-            if let Some(missing) = (component.references().into_iter()).find(|id| !ids.contains(id))
-            {
-                bail!(
-                    "component {} names component {missing}, which the surface lacks",
+            for child in component.references() {
+                ensure!(
+                    ids.contains(child),
+                    "component {} names component {child}, which the surface lacks",
                     component.id
                 );
+                if let Some(first) = parents.insert(child, component.id) {
+                    bail!(
+                        "component {child} is named by {first} and {}; a component has one \
+                         place in the surface, so give each place a component of its own",
+                        component.id
+                    );
+                }
             }
+        }
+        if let Some(parent) = parents.get("root") {
+            bail!("component {parent} names root, where the surface starts");
         }
         Ok(())
     }

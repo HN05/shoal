@@ -589,3 +589,38 @@ fn a_date_input_in_a_list_item_reads_its_bounds_there() {
     assert!(answer("2026-11-30").is_err());
     answer("2026-12-01").unwrap();
 }
+
+#[test]
+fn a_component_named_in_two_places_or_a_named_root_is_refused() {
+    let shared = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["open", "closed"]},
+            {"id": "open", "component": "List", "children": {"componentId": "row", "path": "/open"}},
+            {"id": "closed", "component": "List", "children": {"componentId": "row", "path": "/closed"}},
+            {"id": "row", "component": "Text", "text": {"@path": "title"}},
+        ]),
+        json!({"open": [], "closed": []}),
+    );
+    assert!(refusal(shared, &[]).contains("named by open and closed"));
+    let looping = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "inner", "path": "/items"}},
+            {"id": "inner", "component": "List", "children": {"componentId": "root", "path": "/items"}},
+        ]),
+        json!({"items": [1, 2, 3]}),
+    );
+    assert!(refusal(looping, &[]).contains("names root"));
+}
+
+#[test]
+fn placing_a_list_that_repeats_itself_stays_within_its_bound() {
+    let items: Vec<Value> = (0..2000).map(|item| json!({"id": item})).collect();
+    let looping = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "inner", "path": "/items"}},
+            {"id": "inner", "component": "List", "children": {"componentId": "root", "path": "/items"}},
+        ]),
+        json!({ "items": items }),
+    );
+    assert!(looping.placed().len() <= MAX_PLACED);
+}
