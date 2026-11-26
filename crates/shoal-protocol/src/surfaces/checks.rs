@@ -203,6 +203,34 @@ impl Surface {
                  the post; attach it with --attach and name it by its file name"
             );
         }
+        self.check_shown_images(attached)
+    }
+
+    /// Refuse an image the text of a placed `Text` shows as Shoal works it
+    /// out, its data read and formatted, that names no file in `attached`:
+    /// what a renderer shows, whatever the source spells.
+    fn check_shown_images(&self, attached: &[&str]) -> Result<()> {
+        for placed in self.placed() {
+            let component = placed.component;
+            let shown = (component.kind == "Text")
+                .then(|| self.known_text(component.get("text")?, &placed.scope))
+                .flatten();
+            let Some(shown) = shown else {
+                continue;
+            };
+            let images = markdown::images(&shown);
+            if let Some(image) = images
+                .iter()
+                .find(|image| !attached.contains(&image.target.as_str()))
+            {
+                bail!(
+                    "component {} shows the image {}, which names no file attached to the \
+                     post; attach it with --attach and name it by its file name",
+                    component.id,
+                    image.target
+                );
+            }
+        }
         Ok(())
     }
 }

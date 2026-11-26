@@ -591,6 +591,12 @@ fn images_a_text_function_takes_are_checked_too() {
         json!({"obj": {"![x](https://example.com/x.png)": "ok"}}),
     );
     assert!(refusal(keyed, &[]).contains("image https://example.com/x.png"));
+    // So does an image that only serializing bound data unescapes.
+    let serialized = surface(
+        json!([{"id": "root", "component": "Text", "text": {"@path": "/obj"}}]),
+        json!({"obj": {"x": "\\![x](https://example.com/x.png)"}}),
+    );
+    assert!(refusal(serialized, &[]).contains("image https://example.com/x.png"));
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
             "args": {"value": "Hello ${/name}"}}}]),
