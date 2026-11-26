@@ -91,7 +91,8 @@ impl Surface {
 
     /// Its components in the order they render: from the root, depth
     /// first, a list's template once for each item of its data, each once
-    /// in a scope, and at most [`MAX_PLACED`] of them.
+    /// in the items of the lists that repeat it, and at most
+    /// [`MAX_PLACED`] of them.
     fn placed(&self) -> Vec<Placed<'_>> {
         let mut order = Vec::new();
         let mut seen = BTreeSet::new();
@@ -100,7 +101,7 @@ impl Surface {
             let Some(component) = self.component(id) else {
                 continue;
             };
-            if order.len() >= MAX_PLACED || !seen.insert((id, scope.clone())) {
+            if order.len() >= MAX_PLACED || !seen.insert((id, scope.clone(), items.clone())) {
                 continue;
             }
             let mut below: Vec<(&str, String, Vec<usize>)> = (component.references())

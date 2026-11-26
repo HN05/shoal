@@ -600,6 +600,14 @@ fn nested_list_items_give_their_buttons_ids_of_their_own() {
         .map(|action| action.id)
         .collect();
     assert_eq!(ids, ["done#1.1", "done#2.1", "done#2.2"]);
+    // An inner list over absolute data repeats in each outer item.
+    let mut shared = nested.clone();
+    shared.0["createSurface"]["components"][1]["children"]["path"] = json!("/tasks");
+    shared.0["createSurface"]["dataModel"]["tasks"] = json!([{"id": 4}]);
+    let ids: Vec<String> = (shared.actions().into_iter())
+        .map(|action| action.id)
+        .collect();
+    assert_eq!(ids, ["done#1.1", "done#2.1"]);
     let resolved = nested.resolve("done#2.1", serde_json::Map::new()).unwrap();
     assert_eq!(Value::Object(resolved), json!({"task": 2}));
     let mut marked = form();
