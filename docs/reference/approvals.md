@@ -19,11 +19,11 @@ and the resource settings decide which leases do. Requests cover:
 
 Unscoped callers act without a request.
 
-A command that needs approval exits 2 with JSON `code: "approval_pending"` and
-the request. Once the request is denied, the command returns
-`"approval_denied"`. After approval, the same command proceeds. A proposal is
-the exception: `issue open` and `pr open` exit 0 with `proposed`, and the agent
-goes on with its work.
+A command that needs approval exits 2 at once, with JSON
+`code: "approval_pending"` and the request. Run it again once the request is
+decided. After approval, it proceeds. After denial, it returns
+`"approval_denied"`. A proposal is the exception: `issue open` and `pr open`
+exit 0 with `proposed`, and the agent goes on with its work.
 
 Each request has a [number](threads.md#numbers) `S.N`, as threads have.
 
@@ -444,8 +444,8 @@ coordinator as one line.
 ## Resource approvals
 
 [`requires_approval`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#approvals)
-on a resource, port, simulator or secret makes a scoped acquisition an approval
-request. `approval_lifetime` says how long the approval lasts. With
+on a resource, port, simulator or tool-scoped secret makes a scoped acquisition
+an approval request. `approval_lifetime` says how long the approval lasts. With
 `"workspace"`, the approved grant stays for later acquisitions, and
 `shoal approvals` lists it.
 
@@ -465,11 +465,11 @@ Changed effective settings cannot reuse a grant.
 
 ### Acquire with approval
 
-An agent runs the usual acquire command with `--reason`. The command waits for
-the decision as [any request](#approval-requests) does. `--queue` waits for the
-decision and for capacity, and stops on denial.
+An agent runs the usual acquire command with `--reason`. The command returns
+at once, as [any request](#approval-requests) does, and the agent acquires
+again after the decision. `--queue` instead waits for the decision and for
+capacity, and stops on denial.
 
-Approval reserves no capacity: acquire again after the decision. Retrying with
-the same name keeps the request. Changing its settings or reason needs a
-release first. Release cancels a pending or denied request, even without a
-lease.
+Approval reserves no capacity. Retrying with the same name keeps the request.
+Changing its settings or reason needs a release first. Release cancels a
+pending or denied request, even without a lease.
