@@ -1,4 +1,4 @@
-//! Grace periods of unattended removals, persisted so restarts keep them.
+//! Grace periods of unattended removals, stored so that restarts keep them.
 use crate::Spaces;
 use anyhow::Result;
 use rusqlite::OptionalExtension;
@@ -8,8 +8,8 @@ use std::time::Duration;
 use crate::time::UnixTime;
 
 impl Spaces {
-    /// When the space's grace period ends, starting it now when none runs,
-    /// and recording that this pass still wants to remove it.
+    /// Starts the grace period now when none runs, and records that this
+    /// pass still wants to remove the space.
     pub async fn claim_grace(&self, id: &SpaceId, grace: Duration) -> Result<UnixTime> {
         self.claim(
             "INSERT INTO cleanup_grace(space_id, cleanup_at, claimed) VALUES (?1, ?2, 1)
@@ -35,7 +35,7 @@ impl Spaces {
             .await
     }
 
-    /// When automatic cleanup removes the space, while its grace period runs.
+    /// None while no grace period runs.
     pub async fn cleanup_at(&self, id: &SpaceId) -> Result<Option<UnixTime>> {
         let id = id.to_owned();
         self.store
@@ -51,7 +51,7 @@ impl Spaces {
             .await
     }
 
-    /// Start a sweep pass: each removal attempt in it claims its grace period again.
+    /// Each removal attempt in the pass claims its grace period again.
     pub async fn begin_grace_pass(&self) -> Result<()> {
         self.store
             .run(|db| {
@@ -61,8 +61,8 @@ impl Spaces {
             .await
     }
 
-    /// End the grace periods no attempt in this pass claimed: those
-    /// spaces stopped qualifying, so a later attempt starts a new one.
+    /// Those spaces stopped qualifying, so a later attempt starts a new
+    /// grace period.
     pub async fn end_unclaimed_grace(&self) -> Result<()> {
         self.store
             .run(|db| {

@@ -1,6 +1,6 @@
 //! How a background loop of passes, such as automatic cleanup's or idle
-//! sleep's, is doing: whether its passes fail, in which workspaces, or have
-//! stalled, and telling the user once when they start failing.
+//! sleep's, is doing, and telling the user once when its passes start
+//! failing.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::space_ids::SpaceId;
@@ -17,26 +17,26 @@ use crate::{
 };
 use shoal_daemon_base::failures::SweepFailures;
 
-/// A pass normally finishes within seconds; none for this long means the
+/// A pass normally finishes within seconds, so none for this long means the
 /// loop is stuck or has stopped.
 pub const STALLED_AFTER: Duration = Duration::from_secs(10 * 60);
 
-/// The outcome of recent passes: Shoal's status reports a failing or stalled
-/// loop, and workspace status the workspace's own failures.
+/// Shoal's status reports a failing or stalled loop, and workspace status
+/// the workspace's own failures.
 pub struct Health {
-    /// The loop's name, as messages start with it.
+    /// Messages start with it.
     pub name: &'static str,
     pub started: Moment,
     pub finished: Option<Moment>,
     /// Consecutive passes with failures that concern no workspace.
     pub failure: Option<Failure>,
-    /// Each workspace's consecutive passes with failures, by its ID.
+    /// By workspace ID.
     pub workspaces: HashMap<SpaceId, Failure>,
 }
 
-/// A point in time measured both ways: the monotonic clock excludes sleep, so
-/// a Mac waking up does not look like a stalled loop, and the wall-clock time
-/// is what messages show.
+/// A point in time measured both ways: the monotonic clock excludes sleep,
+/// so a Mac waking up does not look like a stalled loop, and messages show
+/// the wall-clock time.
 #[derive(Clone, Copy)]
 pub struct Moment {
     pub at: Instant,
@@ -52,7 +52,6 @@ impl Moment {
     }
 }
 
-/// Consecutive failed passes.
 pub struct Failure {
     pub since: UnixTime,
     pub passes: u64,
@@ -61,7 +60,6 @@ pub struct Failure {
 }
 
 impl Failure {
-    /// The failure after another pass that failed with `error` at `now`.
     fn continued(previous: Option<Self>, now: Moment, error: String) -> Self {
         let mut failure = previous.unwrap_or(Failure {
             since: now.unix,
@@ -84,21 +82,17 @@ impl Failure {
     }
 }
 
-/// A failure the user has not been told about yet.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Unreported {
-    /// The ID and name of the workspace it concerns, if any.
     pub workspace: Option<(SpaceId, SpaceName)>,
     pub error: String,
 }
 
-/// [`Health`] as the loop records it and status reads it; each operation
-/// holds the lock only while it runs.
+/// Each operation holds the lock only while it runs.
 #[derive(Default)]
 pub struct CleanupHealth(std::sync::Mutex<Health>);
 
 impl CleanupHealth {
-    /// The health of the loop `name`.
     pub fn of(name: &'static str) -> Self {
         Self(std::sync::Mutex::new(Health::named(name)))
     }
@@ -123,8 +117,6 @@ impl CleanupHealth {
         self.lock().record(now, result)
     }
 
-    /// The user was told about the current failure of the workspace `id`,
-    /// or of none.
     fn failure_notified(&self, id: Option<&str>) {
         let mut health = self.lock();
         let failure = match id {
@@ -157,8 +149,7 @@ impl Health {
         }
     }
 
-    /// A short description of a loop that fails other than in a workspace,
-    /// or has stalled.
+    /// None unless the loop fails other than in a workspace, or has stalled.
     pub fn problem(&self, now: Instant) -> Option<String> {
         if let Some(failure) = &self.failure {
             Some(failure.describe(self.name))
@@ -172,7 +163,6 @@ impl Health {
         }
     }
 
-    /// A short description of the failures in the workspace `id`.
     pub fn workspace_problem(&self, id: &SpaceId) -> Option<String> {
         (self.workspaces.get(id)).map(|failure| failure.describe(self.name))
     }
@@ -196,8 +186,7 @@ impl Health {
         }
     }
 
-    /// Record a finished pass; returns the failures to tell the user about
-    /// that have not been reported yet.
+    /// Returns the failures not reported to the user yet.
     pub fn record(&mut self, now: Moment, result: &Result<(), SweepFailures>) -> Vec<Unreported> {
         self.finished = Some(now);
         let none = SweepFailures::default();
@@ -229,37 +218,28 @@ impl Health {
 }
 
 impl Spaces {
-    /// Why automatic cleanup or idle sleep is not working other than in a
-    /// workspace, if one is not.
     pub fn cleanup_problem(&self) -> Option<String> {
         let now = Instant::now();
         (self.cleanup_health.problem(now)).or_else(|| self.idle_sleep_health.problem(now))
     }
 
-    /// Why automatic cleanup or idle sleep fails in the workspace `id`, if
-    /// one does.
     pub fn workspace_cleanup_problem(&self, id: &SpaceId) -> Option<String> {
         (self.cleanup_health.workspace_problem(id))
             .or_else(|| self.idle_sleep_health.workspace_problem(id))
     }
 
-    /// Record a finished cleanup sweep with `result`, as [`Self::record_pass`]
-    /// does.
     pub async fn record_sweep(&self, daemon: &dyn Daemon, result: Result<(), SweepFailures>) {
         self.record_pass(daemon, &self.cleanup_health, result).await;
     }
 
-    /// Record a finished idle sleep pass with `result`, as
-    /// [`Self::record_pass`] does.
     pub async fn record_idle_sleep(&self, daemon: &dyn Daemon, result: Result<(), SweepFailures>) {
         self.record_pass(daemon, &self.idle_sleep_health, result)
             .await;
     }
 
-    /// Record a finished pass of the loop `health` follows, notifying the
-    /// user when its passes start failing, about the workspace each failure
-    /// concerns. A notification that cannot be recorded, as when the disk is
-    /// full, is retried on the next pass.
+    /// Notifies the user when the passes start failing, about the workspace
+    /// each failure concerns. A notification that cannot be recorded, as
+    /// when the disk is full, is retried on the next pass.
     async fn record_pass(
         &self,
         daemon: &dyn Daemon,

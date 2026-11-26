@@ -1,4 +1,4 @@
-//! Deletion of branches that removal kept once a remote or the default branch
+//! Deleting the branches removal kept once a remote or the default branch
 //! has their commits too. Nothing is lost, so nobody is told.
 use crate::daemon::Daemon;
 use shoal_ids::repository_ids::RepositoryId;
@@ -12,17 +12,15 @@ use crate::{git::RemoteHead, log};
 /// Ask a repository's remotes for their branches at most this often.
 const HEADS_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
-/// What the kept-branch sweep remembers between passes.
 #[derive(Default)]
 pub struct State {
-    /// The branches each repository's remotes advertised, and when.
     heads: HashMap<RepositoryId, (Instant, Vec<RemoteHead>)>,
 }
 
 impl State {
-    /// The branches the repository's remotes advertise, asking them again
-    /// once the last answer is older than [`HEADS_INTERVAL`]. `None` when a
-    /// remote cannot answer, since a missing answer proves nothing.
+    /// Asks again once the last answer is older than [`HEADS_INTERVAL`].
+    /// `None` when a remote cannot answer, since a missing answer proves
+    /// nothing.
     async fn advertised(
         &mut self,
         daemon: &dyn Daemon,
@@ -51,8 +49,7 @@ impl State {
     }
 }
 
-/// One pass over every repository with kept branches; a failure in one does
-/// not skip the others.
+/// A failure in one repository does not skip the others.
 pub async fn sweep(daemon: &dyn Daemon, state: &mut State) -> Result<()> {
     let mut failed = Vec::new();
     for repository_id in daemon.spaces().kept_branch_repositories().await? {
@@ -64,9 +61,9 @@ pub async fn sweep(daemon: &dyn Daemon, state: &mut State) -> Result<()> {
                 continue;
             }
         }
-        // Squash and rebase merges show only on the fetched default branch;
-        // any other evidence comes from what the remotes advertise now, never
-        // from remote-tracking refs, which may be stale or unmapped.
+        // Squash and rebase merges show only on the fetched default branch.
+        // Any other evidence comes from what the remotes advertise now,
+        // never from remote-tracking refs, which may be stale or unmapped.
         if !daemon.default_branch_fresh(&repository_id).await {
             continue;
         }
@@ -85,8 +82,8 @@ pub async fn sweep(daemon: &dyn Daemon, state: &mut State) -> Result<()> {
     Ok(())
 }
 
-/// Whether the repository's checkout, where its kept branches' Git runs,
-/// answers, as [`Manager::sweep_skips`] tells.
+/// The kept branches' Git runs in the checkout. [`Manager::sweep_skips`]
+/// tells whether it answers.
 async fn checkout_answers(daemon: &dyn Daemon, repository_id: &RepositoryId) -> Result<bool> {
     let repo = daemon
         .repository(crate::repository::Selector::from(repository_id))

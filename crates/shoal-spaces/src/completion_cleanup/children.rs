@@ -8,7 +8,6 @@ use shoal_protocol::space_names::SpaceName;
 
 use crate::model::Space;
 
-/// A space above another whose completion with cleanup stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompletedAncestor {
     pub id: SpaceId,
@@ -16,8 +15,7 @@ pub struct CompletedAncestor {
 }
 
 impl Spaces {
-    /// The nearest space above the space `id` whose completion with cleanup
-    /// stands, which takes the space.
+    /// The nearest such space above, which takes the space.
     pub async fn completed_ancestor(
         &self,
         daemon: &dyn Daemon,
@@ -38,11 +36,11 @@ impl Spaces {
         Ok(None)
     }
 
-    /// Whether `space` is marked done with cleanup, as recorded and, where it
-    /// has a worktree, at the worktree's current HEAD. A HEAD that cannot be
-    /// read, as off its branch or in a directory whose file access stalled,
-    /// is not that HEAD; the read runs under `FileAccess::checked`, so a
-    /// stall holds it no longer than file access may take.
+    /// Where the space has a worktree, the completion must be at its
+    /// current HEAD. A HEAD that cannot be read, as off its branch or where
+    /// file access stalled, is not that HEAD. The read runs under
+    /// `FileAccess::checked`, so a stall holds it no longer than file access
+    /// may take.
     pub async fn completion_stands(&self, daemon: &dyn Daemon, space: &Space) -> Result<bool> {
         let Some(completion) = self.completion(&space.id).await? else {
             return Ok(false);

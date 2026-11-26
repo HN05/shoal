@@ -1,9 +1,7 @@
-//! Removal of spaces whose work merged into the default branch once nothing
-//! has used them for the configured idle period, whether or not their
-//! assignment was marked done. Idle time comes from recorded activity, the
-//! agent's last stop and a worktree's file change times, so it survives
-//! daemon restarts. A space without a worktree has no branch, so it goes
-//! once nothing has used it for that period.
+//! Removing spaces whose work merged into the default branch once nothing
+//! has used them for the configured idle period. Idle time comes from
+//! recorded activity, the agent's last stop and a worktree's file change
+//! times, so it survives daemon restarts.
 use crate::daemon::Daemon;
 use crate::model::EventCause;
 use shoal_ids::space_ids::SpaceId;
@@ -25,41 +23,37 @@ use crate::{
     {lifecycle::not_ready, spaces::removal_notices::Cleanup},
 };
 
-/// Retry an unchanged workspace whose removal failed after this long.
 pub const RETRY_AFTER: Duration = Duration::from_secs(60 * 60);
 
-/// What merged cleanup remembers between passes.
 #[derive(Default)]
 pub struct State {
-    /// The signals of workspaces whose removal failed, and when: retried once
-    /// HEAD or recorded activity changes or after [`RETRY_AFTER`], so a
-    /// passing failure does not keep them. A file change makes the workspace
-    /// wait for its idle period again.
+    /// The signals of workspaces whose removal failed, and when. They are
+    /// retried once HEAD or recorded activity changes or after
+    /// [`RETRY_AFTER`], so a passing failure does not keep them. A file
+    /// change makes the workspace wait for its idle period again.
     pub retained: HashMap<SpaceId, (u64, Instant)>,
     /// The newest file change each workspace's last walk saw, no later than
-    /// that walk. Change times only move forward, so until
-    /// the idle period passes that change, another walk could only find the
-    /// workspace in use; a modification time set into the future does not
-    /// defer walks past it.
+    /// that walk. Change times only move forward, so until the idle period
+    /// passes that change, another walk could only find the workspace in
+    /// use. A modification time set into the future does not defer walks
+    /// past it.
     pub changed: HashMap<SpaceId, UnixTime>,
 }
 
 impl State {
-    /// Whether a failed removal of this unchanged workspace is too recent to retry.
     pub fn waits(&self, id: &SpaceId, signals: u64) -> bool {
         self.retained
             .get(id)
             .is_some_and(|(retained, at)| *retained == signals && at.elapsed() < RETRY_AFTER)
     }
 
-    /// Whether the last walk saw a file change after `deadline`.
     pub fn changed_after(&self, id: &SpaceId, deadline: UnixTime) -> bool {
         self.changed
             .get(id)
             .is_some_and(|changed| *changed > deadline)
     }
 
-    /// Remember the newest change a walk at `now` saw, no later than the walk.
+    /// Clamps the change to the walk's time.
     fn remember_change(&mut self, id: &SpaceId, changed: UnixTime, now: UnixTime) {
         self.changed.insert(id.to_owned(), changed.min(now));
     }
@@ -71,13 +65,12 @@ impl State {
     }
 }
 
-/// One pass over every space, reading the processes in each worktree from
-/// `users`; a failure in one does not skip the others.
+/// Reads the processes in each worktree from `users`. A failure in one
+/// space does not skip the others.
 pub async fn sweep(daemon: &dyn Daemon, state: &mut State, users: &DirectoryUsers) -> Result<()> {
     sweep_at(daemon, state, UnixTime::now(), users).await
 }
 
-/// A pass as of `now`.
 pub async fn sweep_at(
     daemon: &dyn Daemon,
     state: &mut State,
@@ -136,10 +129,9 @@ async fn sweep_space(
     .await
 }
 
-/// The snapshot of a merged space idle for its configured period, or
-/// `None`. Cheap checks come first: recorded activity and the change time the
-/// last walk saw, then Git and process state and the failed-removal backoff,
-/// and only then one walk of the worktree's files.
+/// Cheap checks come first: recorded activity and the change time the last
+/// walk saw, then Git and process state and the failed-removal backoff, and
+/// only then one walk of the worktree's files.
 async fn idle_candidate(
     daemon: &dyn Daemon,
     state: &mut State,
@@ -177,8 +169,8 @@ async fn idle_candidate(
     Ok((tree.changed <= deadline).then_some(snapshot))
 }
 
-/// The time after which any use keeps the space as of `now`, or `None`
-/// when merged cleanup is disabled for it or its last use already keeps it.
+/// `None` when merged cleanup is disabled for the space or its last use
+/// already keeps it.
 async fn idle_deadline(
     daemon: &dyn Daemon,
     space: &Space,
@@ -193,8 +185,7 @@ async fn idle_deadline(
     Ok((used.is_some_and(|used| used <= deadline)).then_some(deadline))
 }
 
-/// One walk of the files of `space`, whose worktree's newest change also
-/// covers its Git state; none for a space without one.
+/// None for a space without a worktree.
 async fn walk(space: &Space) -> Result<Tree> {
     let Some(workspace) = space.worktree() else {
         return Ok(Tree::EMPTY);
@@ -204,8 +195,8 @@ async fn walk(space: &Space) -> Result<Tree> {
     tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref())).await?
 }
 
-/// One walk of the worktree, whose newest change also covers the
-/// per-worktree Git state that commits, checkouts and staging update.
+/// The newest change also covers the per-worktree Git state that commits,
+/// checkouts and staging update.
 pub fn walk_with_git_state(root: &Path, git_dir: Option<&Path>) -> Result<Tree> {
     let mut tree = super::walk(root)?;
     let state: Vec<PathBuf> = git_dir

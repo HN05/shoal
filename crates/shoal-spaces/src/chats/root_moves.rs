@@ -1,8 +1,7 @@
-//! The files of the chats without a repository, which `shoal repo move`
-//! moves into the directory that holds the repositories once it is done:
-//! the temporary directory, attached files and kept session files of each
-//! such chat, running, stopped or removed, whose records then name the configured root, which
-//! is that directory or links to it.
+//! Moving the files of the chats without a repository when `shoal repo
+//! move` moves the directory that holds the repositories: each chat's
+//! temporary directory, attached files and kept session files, running,
+//! stopped or removed.
 use crate::Spaces;
 use std::path::{Path, PathBuf};
 
@@ -16,10 +15,8 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 
 impl Spaces {
-    /// The directories in `root` that keep the temporary directories,
-    /// attached files and kept session files of the chats without a
-    /// repository, which move with the chats, and the packages imported
-    /// for them, where they are this Shoal's; all leave the root.
+    /// Includes the packages imported for those chats, where they are this
+    /// Shoal's. All of them leave the root.
     pub fn outside_dirs(&self, root: &Path) -> Vec<PathBuf> {
         let owner = self.root_dir_owner();
         let tmp = tmp_dirs::Layout::outside_repositories(root, &owner);
@@ -34,10 +31,9 @@ impl Spaces {
             .collect()
     }
 
-    /// The chats without a repository, running, stopped or removed, whose
-    /// files or records a move to `root_dir`, which names or links to
-    /// `destination`, changes, refusing one that runs unless `running` has
-    /// the caller stop it first.
+    /// The chats whose files or records a move to `root_dir`, which names or
+    /// links to `destination`, changes. Refuses a running one unless
+    /// `running` has the caller stop it first.
     pub async fn outside_chats_moving(
         &self,
         root_dir: &Path,
@@ -61,9 +57,7 @@ impl Spaces {
         Ok(moving)
     }
 
-    /// Refuse while an import reads a package into a root a move of
-    /// `chats` to `root_dir`, which names or links to `destination`,
-    /// leaves.
+    /// Refuses while an import reads a package into a root the move leaves.
     async fn ensure_no_import_left(
         &self,
         chats: &[OutsideChat],
@@ -77,7 +71,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// Every chat without a repository, running, stopped or removed.
     async fn outside_chats(&self) -> Result<Vec<OutsideChat>> {
         let configured = self.config.current().root_dir(&self.paths)?;
         let owner = self.root_dir_owner();
@@ -104,9 +97,7 @@ impl Spaces {
         Ok(chats)
     }
 
-    /// The ID, name and recorded `root_dir` of each chat without a
-    /// repository, running or stopped, or removed with a removal record or
-    /// attached files.
+    /// Includes a removed chat with a removal record or attached files.
     async fn outside_homes(&self) -> Result<Vec<(SpaceId, SpaceName, Option<PathBuf>)>> {
         let mut homes: Vec<(SpaceId, SpaceName, Option<PathBuf>)> = Vec::new();
         let live = (self.chats().await?.into_iter())
@@ -127,12 +118,12 @@ impl Spaces {
         Ok(homes)
     }
 
-    /// Move the files of each of `chats` into `destination`, the directory
-    /// the root `root_dir` names or links to once the move is done, and
-    /// record that each runs there from now on, then delete what is left in
-    /// the roots they left, `root_dir` itself among them while it is not
-    /// `destination` yet. Refused while an import reads a package into one
-    /// of those roots; the caller holds the gate of those chats' files.
+    /// `destination` is the directory `root_dir` names or links to once the
+    /// move is done. Records that each chat runs there from now on, then
+    /// deletes what is left in the roots they left, `root_dir` among them
+    /// while it is not `destination` yet. Refused while an import reads a
+    /// package into one of those roots. The caller holds the gate of those
+    /// chats' files.
     pub async fn move_outside_chats(
         &self,
         chats: Vec<OutsideChat>,
@@ -159,8 +150,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// Move the files of `chats` into `destination` and record that each
-    /// runs in `root_dir`, as [`Self::move_outside_chats`] does.
     async fn move_chat_files(
         &self,
         chats: Vec<OutsideChat>,
@@ -200,8 +189,6 @@ impl Spaces {
     }
 }
 
-/// Whether a move to `root_dir`, which names or links to `destination`,
-/// changes where `chat` runs or keeps its files.
 fn moves(chat: &OutsideChat, root_dir: &Path, destination: &Path) -> bool {
     chat.root_dir != root_dir
         || elsewhere(&chat.tmp, destination).is_some()
@@ -209,7 +196,6 @@ fn moves(chat: &OutsideChat, root_dir: &Path, destination: &Path) -> bool {
         || elsewhere(&chat.sessions, destination).is_some()
 }
 
-/// The `root_dir` the files of `chat` are in now, resolved.
 fn source_root(chat: &OutsideChat) -> Option<PathBuf> {
     let directory = (chat.tmp.as_ref())
         .or(chat.files.as_ref())
@@ -217,9 +203,8 @@ fn source_root(chat: &OutsideChat) -> Option<PathBuf> {
     Some(directory.parent()?.parent()?.to_owned())
 }
 
-/// The roots a move of `chats` to `root_dir`, which names or links to
-/// `destination`, leaves: those their files are in, and `root_dir` itself
-/// while it is not `destination` yet.
+/// The roots their files are in, and `root_dir` itself while it is not
+/// `destination` yet.
 fn roots_left(chats: &[OutsideChat], root_dir: &Path, destination: &Path) -> Vec<PathBuf> {
     let mut left: Vec<PathBuf> = (chats.iter())
         .filter_map(source_root)
@@ -231,12 +216,11 @@ fn roots_left(chats: &[OutsideChat], root_dir: &Path, destination: &Path) -> Vec
     left
 }
 
-/// `directory`, when it is not in `destination`.
 fn elsewhere<'a>(directory: &'a Option<PathBuf>, destination: &Path) -> Option<&'a Path> {
     (directory.as_deref()).filter(|directory| !directory.starts_with(destination))
 }
 
-/// Move the directory `source` onto the new, empty one `destination`.
+/// `destination` must be new and empty.
 async fn move_into(source: &Path, destination: PathBuf) -> Result<()> {
     if fsutil::copy::move_directory(source, &destination).await? == fsutil::copy::Moved::Copied {
         crate::shoal_dirs::remove_dir(source)?;
@@ -244,8 +228,6 @@ async fn move_into(source: &Path, destination: PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// The ID, name and `root_dir` of each removed chat without a repository
-/// whose attached files are kept.
 fn outside_file_homes(
     db: &rusqlite::Connection,
 ) -> Result<Vec<(SpaceId, SpaceName, Option<PathBuf>)>> {
@@ -261,9 +243,8 @@ fn outside_file_homes(
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Record that the chat without a repository `id` runs in `root_dir`, with
-/// its attached files there: its record, its removal record and the paths
-/// of its attached files, which named the root it ran in before.
+/// Rewrites the chat's record, its removal record and the paths of its
+/// attached files, which named the root it ran in before.
 fn rehome(tx: &rusqlite::Transaction<'_>, id: &SpaceId, root_dir: &Path) -> Result<()> {
     tx.execute(
         "UPDATE chats SET root_dir=?2 WHERE id=?1",

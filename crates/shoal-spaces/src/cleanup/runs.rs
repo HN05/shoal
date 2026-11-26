@@ -1,12 +1,12 @@
-//! Shoal's log of automatic cleanup: each pass after spaces were removed,
-//! naming them, or that failed in a new way.
+//! Shoal's log of automatic cleanup: each pass that removed spaces, naming
+//! them, or that failed in a new way.
 use crate::Spaces;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::events::{ShoalEventDetails, ShoalEventKind};
 use shoal_protocol::space_names::SpaceName;
 
-/// The spaces automatic cleanup removed since the log last recorded a pass.
+/// The spaces removed since the log last recorded a pass.
 #[derive(Default)]
 pub struct Removed(Mutex<Vec<SpaceName>>);
 
@@ -15,7 +15,6 @@ impl Removed {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Automatic cleanup removed the space `name`.
     pub fn push(&self, name: &SpaceName) {
         self.lock().push(name.clone());
     }
@@ -26,9 +25,8 @@ impl Removed {
 }
 
 impl Spaces {
-    /// Record the pass that just ended in Shoal's log when spaces were
-    /// removed since the last, or with `failed`, its failures, when they
-    /// differ from the pass before.
+    /// Records the pass only when spaces were removed since the last one, or
+    /// when its failures differ from the pass before.
     pub async fn record_cleanup_run(&self, failed: Option<String>) {
         let removed = self.cleanup_removals.take();
         if removed.is_empty() && failed.is_none() {

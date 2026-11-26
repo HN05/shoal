@@ -1,5 +1,5 @@
-//! Which linked PRs a ready mark may cover: open ones, whose head on the
-//! forge a workspace's PR must share with its HEAD.
+//! Which linked PRs a ready mark may cover: open ones, and for a workspace
+//! only those whose head on the forge is its HEAD.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::forge::items::reference::ItemRef;
@@ -14,7 +14,6 @@ use crate::{
 };
 use shoal_forge::items::item::ItemRequests;
 
-/// The linked PRs a mark covers that cannot be marked.
 #[derive(Default)]
 pub(super) struct Pulls {
     pub(super) skipped: Vec<SkippedPr>,
@@ -29,9 +28,9 @@ impl Pulls {
 }
 
 impl Spaces {
-    /// Read each linked PR the marks of `kind`, or the `explicit` item,
-    /// cover from the forge, and skip those that are not open or, given the
-    /// workspace's `head`, whose head on the forge is another commit.
+    /// Reads each covered PR from the forge, and skips one that is not open
+    /// or, given the workspace's `head`, whose head on the forge is another
+    /// commit.
     pub(super) async fn markable_pulls(
         &self,
         daemon: &dyn Daemon,
@@ -60,8 +59,7 @@ impl Spaces {
         Ok(pulls)
     }
 
-    /// The linked PRs the marks of `kind`, or the `explicit` item, cover; an
-    /// unlinked one is left for marking to refuse.
+    /// Leaves an unlinked one for marking to refuse.
     async fn covered_pulls(
         &self,
         space: &Space,
