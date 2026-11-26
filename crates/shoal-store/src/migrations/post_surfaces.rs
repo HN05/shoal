@@ -70,17 +70,23 @@ fn answer_picks(db: &Connection) -> Result<()> {
 }
 
 /// Give each thread resolved as answered with a choice a post that picks
-/// it, from its opener, who resolved it, when it was resolved: an answer to
-/// the latest post that offered choices, with the choice's text. The
-/// space's journal, which recorded the resolution then, records neither
-/// the post nor the outcome without the choice.
+/// it, from whoever resolved it, on their side, when it was resolved: an
+/// answer to the latest post that offered choices, the other side's where
+/// it has one, with the choice's text. The resolver is the holder when the
+/// holder resolved it, the user holding it or its holding space, and else
+/// the opener. The space's journal, which recorded the resolution then,
+/// records neither the post nor the outcome without the choice.
 fn answer_resolved_picks(db: &Connection) -> Result<()> {
     let mut resolving = db.prepare(
-        "SELECT t.id,t.resolved_by,t.resolver_id,t.resolved_at,
-                json_extract(t.outcome,'$.choice'),o.id,o.choices
-            FROM threads t JOIN thread_posts o ON o.id=(SELECT id FROM thread_posts
-                WHERE thread_id=t.id AND choices!='[]' ORDER BY id DESC LIMIT 1)
-            WHERE json_extract(t.outcome,'$.choice') IS NOT NULL",
+        "WITH resolved AS (SELECT id,resolved_by,resolver_id,resolved_at,
+                json_extract(outcome,'$.choice') AS choice,
+                CASE WHEN (resolved_by='user' AND holder_id IS NULL)
+                        OR (resolved_by='space' AND resolver_id IS holder_id)
+                    THEN 'holder' ELSE 'opener' END AS side
+                FROM threads WHERE json_extract(outcome,'$.choice') IS NOT NULL)
+        SELECT r.id,r.resolved_by,r.resolver_id,r.resolved_at,r.choice,r.side,o.id,o.choices
+            FROM resolved r JOIN thread_posts o ON o.id=(SELECT id FROM thread_posts
+                WHERE thread_id=r.id AND choices!='[]' ORDER BY side IS r.side, id DESC LIMIT 1)",
     )?;
     let resolved = resolving
         .query_map([], |row| {
@@ -90,8 +96,9 @@ fn answer_resolved_picks(db: &Connection) -> Result<()> {
                 resolver: row.get(2)?,
                 at: row.get(3)?,
                 choice: row.get(4)?,
-                offer: row.get(5)?,
-                choices: row.get(6)?,
+                side: row.get(5)?,
+                offer: row.get(6)?,
+                choices: row.get(7)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -109,13 +116,14 @@ fn answer_resolved_picks(db: &Connection) -> Result<()> {
 }
 
 /// A thread resolved as answered with the choice `choice` of the post
-/// `offer`.
+/// `offer`, from its side `side`.
 struct ResolvedPick {
     thread: i64,
     by: String,
     resolver: Option<String>,
     at: i64,
     choice: i64,
+    side: String,
     offer: i64,
     choices: String,
 }
@@ -129,10 +137,11 @@ impl ResolvedPick {
             .unwrap_or_else(|| self.choice.to_string());
         db.execute(
             "INSERT INTO thread_posts(thread_id,created_at,side,sender,sender_id,text,answer)
-                VALUES (?1,?2,'opener',?3,?4,?5,?6)",
+                VALUES (?1,?2,?3,?4,?5,?6,?7)",
             params![
                 self.thread,
                 self.at,
+                self.side,
                 self.by,
                 self.resolver,
                 text,

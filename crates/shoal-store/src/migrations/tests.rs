@@ -327,6 +327,37 @@ fn picks_become_answers_to_the_other_side_s_choices() -> Result<()> {
 }
 
 #[test]
+fn a_holder_s_resolving_pick_becomes_the_holder_s_answer() -> Result<()> {
+    let mut db = at_floor()?;
+    // An agent asks the user, who holds the thread and resolves it.
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+        INSERT INTO spaces(id,kind,repository_id,name) VALUES ('agent','chat','repo','asker');
+        INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
+                opener_id,outcome,resolved_by,resolved_at)
+            VALUES (1,'agent',1,1,'question','Which database?',1,'space','agent',
+                '{\"outcome\":\"answered\",\"choice\":2}','user',9);
+        INSERT INTO thread_posts(id,thread_id,created_at,side,sender,sender_id,text,choices)
+            VALUES (1,1,2,'opener','space','agent','Which?','[\"Postgres\",\"SQLite\"]');",
+    )?;
+    migrate(&mut db)?;
+    let (id, side, sender, text): (i64, String, String, String) = db.query_row(
+        "SELECT id,side,sender,text FROM thread_posts ORDER BY id DESC LIMIT 1",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    assert_eq!(
+        (side.as_str(), sender.as_str(), text.as_str()),
+        ("holder", "user", "SQLite")
+    );
+    assert_eq!(
+        interaction(&db, id)?.1,
+        Some(serde_json::json!({"post": 1, "action": "2"}))
+    );
+    Ok(())
+}
+
+#[test]
 fn a_resolution_s_pick_becomes_the_opener_s_answer_before_it() -> Result<()> {
     let mut db = at_floor()?;
     thread_with_picks(&db)?;
