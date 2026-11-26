@@ -218,7 +218,7 @@ pub struct CreateArgs {
     /// runs in, else none.
     #[arg(long, value_name = "SPACE")]
     pub parent: Option<SpaceSelector>,
-    /// Its name, free text of at most 40 characters; defaults to the linked
+    /// Its name, free text at most 40 columns wide; defaults to the linked
     /// issue's or PR's title, else its branch.
     #[arg(long)]
     pub name: Option<shoal_protocol::space_names::SpaceName>,
@@ -367,7 +367,7 @@ pub struct StartArgs {
     /// forge records as blocking it.
     #[arg(long, value_name = "BLOCKER", conflicts_with_all = ["now", "focus"])]
     pub add_blocker: Vec<String>,
-    /// The new space's name, free text of at most 40 characters; defaults
+    /// The new space's name, free text at most 40 columns wide; defaults
     /// to the linked issue's or PR's title, else a workspace's branch, or
     /// for a chat "<repo> <mode>", or "<workspace name> chat" with --in.
     #[arg(long)]

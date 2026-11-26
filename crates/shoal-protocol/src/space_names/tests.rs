@@ -2,7 +2,7 @@ use super::*;
 use shoal_ids::space_ids::SpaceId;
 
 #[test]
-fn a_set_name_is_one_line_of_at_most_forty_characters() {
+fn a_set_name_is_one_line_of_at_most_forty_columns() {
     let parse = |text: &str| SpaceName::parse(text).map(|name| name.to_string());
     assert_eq!(
         parse("  Plan:  summary with\u{a0}shoal done ").unwrap(),
@@ -12,6 +12,9 @@ fn a_set_name_is_one_line_of_at_most_forty_characters() {
         assert_eq!(parse(valid).unwrap(), valid);
     }
     assert_eq!(parse(&"é".repeat(40)).unwrap().chars().count(), 40);
+    assert_eq!(parse(&"漢".repeat(20)).unwrap().chars().count(), 20);
+    let longest = "\u{E0001}".repeat(MAX_SPACE_NAME_BYTES / 4);
+    assert_eq!(parse(&longest).unwrap().len(), MAX_SPACE_NAME_BYTES);
     for invalid in [
         "",
         "   ",
@@ -21,6 +24,8 @@ fn a_set_name_is_one_line_of_at_most_forty_characters() {
         "right\u{202E}left",
         "isolate\u{2066}",
         &"é".repeat(41),
+        &"漢".repeat(21),
+        &format!("a{}", "\u{301}".repeat(80)),
     ] {
         assert!(parse(invalid).is_err(), "{invalid:?}");
     }
@@ -35,6 +40,7 @@ fn a_derived_name_drops_what_a_set_one_refuses_and_is_cut_with_an_ellipsis() {
     let long = derive(&format!("{} tail", "word ".repeat(10)));
     assert_eq!(long.chars().count(), 40);
     assert!(long.ends_with("word…"), "{long}");
+    assert_eq!(derive(&"漢".repeat(30)), format!("{}…", "漢".repeat(19)));
 }
 
 #[test]

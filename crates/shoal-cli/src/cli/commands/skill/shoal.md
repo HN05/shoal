@@ -304,8 +304,8 @@ Scoped callers read them as their `notifications` permission allows.
 
 ## Space name
 
-`shoal rename "<name>"` names the space's work, in free text of at most 40
-characters. Lists, and the tabs and windows Shoal opens for the space, show
+`shoal rename "<name>"` names the space's work, in free text at most 40
+columns wide. Lists, and the tabs and windows Shoal opens for the space, show
 the name. The branch and the worktree directory keep their own names.
 
 ## Progress

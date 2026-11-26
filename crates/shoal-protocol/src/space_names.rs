@@ -6,12 +6,17 @@ use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 
 use crate::validate::MAX_NAME_LEN;
 
-/// The most characters a space's name holds, so it fits a tab whatever its
-/// script.
-pub const MAX_SPACE_NAME_LEN: usize = 40;
+/// The most terminal columns a space's name takes, so it fits a tab whatever
+/// its script.
+pub const MAX_SPACE_NAME_WIDTH: usize = 40;
 
-/// A space's name: the one label people read, a single line of 1–40
-/// characters without control characters or bidirectional overrides, with
+/// The most bytes a space's name holds, which bounds the records that carry
+/// it however many combining marks it has.
+pub const MAX_SPACE_NAME_BYTES: usize = 160;
+
+/// A space's name: the one label people read, a single line within
+/// [`MAX_SPACE_NAME_WIDTH`] and [`MAX_SPACE_NAME_BYTES`], without control
+/// characters or bidirectional overrides, with
 /// no leading or trailing whitespace and single spaces inside. It never
 /// selects a space and nothing is built from it, so names may repeat. A
 /// name a record holds reads as it was stored, whatever rule it predates.
@@ -31,8 +36,8 @@ impl SpaceName {
         let name = collapsed(value);
         ensure!(!name.is_empty(), "a space's name cannot be empty");
         ensure!(
-            name.chars().count() <= MAX_SPACE_NAME_LEN,
-            "a space's name is at most {MAX_SPACE_NAME_LEN} characters"
+            shoal_text::width(&name) <= MAX_SPACE_NAME_WIDTH && name.len() <= MAX_SPACE_NAME_BYTES,
+            "a space's name is at most {MAX_SPACE_NAME_WIDTH} columns wide, a wide character counting as two"
         );
         Ok(Self(name))
     }
@@ -49,7 +54,8 @@ impl SpaceName {
             name if name.is_empty() => fallback.to_owned(),
             name => name,
         };
-        Self(shortened(name))
+        let name = shoal_text::cut_width(name, MAX_SPACE_NAME_WIDTH);
+        Self(shoal_text::cut_bytes(name, MAX_SPACE_NAME_BYTES))
     }
 
     /// The name as [`Self::parse`] reads it, refusing one a request sent
@@ -74,15 +80,6 @@ fn forbidden(c: char) -> bool {
 /// one space.
 fn collapsed(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// `name`, or cut to the limit ending with `…` when it is longer.
-fn shortened(name: String) -> String {
-    if name.chars().count() <= MAX_SPACE_NAME_LEN {
-        return name;
-    }
-    let kept: String = name.chars().take(MAX_SPACE_NAME_LEN - 1).collect();
-    format!("{}…", kept.trim_end())
 }
 
 /// The name of a directory or terminal session made from `text`, such as a

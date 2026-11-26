@@ -91,7 +91,7 @@ pub enum SpaceCommand {
     Rename {
         /// The space's number or ID.
         space: Option<SpaceSelector>,
-        /// Free text of 1–40 characters on one line; names may repeat.
+        /// Free text on one line, at most 40 columns wide; names may repeat.
         name: Option<String>,
         /// Ask the space's agent to choose the name; a single argument then
         /// names the space.

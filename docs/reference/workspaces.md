@@ -186,10 +186,11 @@ location has the same setup, ownership and cleanup rules as the default one.
 ## Space names
 
 A space's name is the label that lists, tabs and notices show. It is one line
-of 1–40 printable characters. Shoal trims whitespace around it and collapses
-inner runs to one space. It refuses control characters, bidirectional
-overrides, and a longer name someone sets; a name Shoal derives is cut to 40
-characters ending with `…`. A name never selects a space and names no file,
+of printable characters at most 40 terminal columns wide, where a wide
+character such as a CJK ideograph or an emoji takes two, and at most 160
+bytes. Shoal trims whitespace around it and collapses inner runs to one space.
+It refuses control characters, bidirectional overrides, and a longer name
+someone sets; a name Shoal derives is cut to fit, ending with `…`. A name never selects a space and names no file,
 directory, variable, session or branch, so names may repeat and renaming one
 moves nothing.
 

@@ -178,7 +178,7 @@ async fn a_rename_keeps_a_full_thread_within_one_response() {
             break;
         }
     }
-    let renamed = SpaceName::parse(&"w".repeat(shoal_protocol::space_names::MAX_SPACE_NAME_LEN));
+    let renamed = SpaceName::parse(&"w".repeat(shoal_protocol::space_names::MAX_SPACE_NAME_WIDTH));
     (manager
         .spaces
         .rename_space(&SpaceSelector::id(&tree.beside.id), &renamed.unwrap()))
