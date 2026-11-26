@@ -26,7 +26,7 @@ pub struct SharedArea {
     pub spaces: Vec<String>,
 }
 
-/// How close an entry's work is to finished. `docs/design/queue.md` defines
+/// How close an entry's work is to finished. `docs/reference/queue.md` defines
 /// each tier. The variants keep their order: a later tier starts first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
