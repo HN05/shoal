@@ -1,6 +1,5 @@
-//! Writing an entry, where a request fits in one frame and an entry need
-//! not: the daemon takes the write's bytes as the frames the client sends
-//! after it, once the write is checked before its bytes come.
+//! Writing an entry. A request fits in one frame and an entry need not, so
+//! the client sends the bytes as frames after the write is checked.
 use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::{
     apps::{

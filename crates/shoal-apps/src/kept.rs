@@ -1,5 +1,5 @@
-//! The entries this daemon keeps: reading them, and changing them as one
-//! store transaction each, which wakes the watches of the app's entries.
+//! The entries this daemon keeps. Each change is one store transaction and
+//! wakes the watches of the entries.
 use anyhow::Result;
 use shoal_protocol::apps::{
     AppName,

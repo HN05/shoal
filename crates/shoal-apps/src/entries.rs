@@ -1,6 +1,5 @@
-//! The store's record of the entries apps keep on this daemon: reading
-//! them, and changing one only from the revision its writer read, within
-//! the limits of `[machine.app_store]`.
+//! The store's record of app entries. A change applies only from the
+//! revision its writer read.
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension as _, Row, Transaction, params};
 use shoal_core::config::machine::AppStore;

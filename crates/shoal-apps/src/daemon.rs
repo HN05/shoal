@@ -1,5 +1,4 @@
-//! What apps need of the rest of the daemon, which implements it: the
-//! config layers of the repository or space an app reads its settings for.
+//! What apps need of the rest of the daemon.
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use shoal_protocol::protocol::ConfigTarget;

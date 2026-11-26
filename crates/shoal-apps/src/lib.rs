@@ -1,11 +1,5 @@
-//! What apps built on Shoal, such as Quay, keep in it: the settings the
-//! user gives each in its `[apps.<name>]` tables, which the daemon resolves
-//! and hands to the app unread, and the app store, the entries each app
-//! writes under keys of its own, which the daemon keeps in its store, reads
-//! out and watches for the app, never reading their bytes. [`Apps`] holds
-//! what the app store keeps in memory and offers its operations; what it
-//! needs of the rest of the daemon is the interface in [`daemon`]. The
-//! daemon answers its requests on its socket and the hub link.
+//! The settings and the app store of apps built on Shoal, as
+//! `docs/design/apps.md` describes them.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -26,7 +20,6 @@ pub use link::frames;
 pub use watch::{Watched, Watcher};
 pub use writes::{Writing, ask_bytes};
 
-/// The apps' service, which `Manager` holds.
 pub struct Apps {
     store: Store,
     config: Arc<ConfigState>,

@@ -1,6 +1,5 @@
 //! A stand-in for the rest of the daemon, which the tests of apps build the
-//! service over: a temporary store, a global config a test publishes, and
-//! one repository whose local config a test gives.
+//! service over.
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;

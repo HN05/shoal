@@ -1,6 +1,4 @@
-//! Watching an app's entries: those under a key prefix as they are, then
-//! each change of them, comparing again after each change of the entries
-//! this daemon keeps, until whoever watches goes.
+//! Watching an app's entries under a key prefix.
 use std::collections::BTreeMap;
 
 use anyhow::Result;

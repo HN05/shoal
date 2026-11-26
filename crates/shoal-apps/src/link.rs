@@ -1,7 +1,5 @@
-//! The app store's answers to the members of a hub. The hub keeps the
-//! entries the user's machines and devices share, and each paired device's
-//! own, and answers a member's request of them with the frames its socket
-//! would answer its own callers with.
+//! The hub's answers to its members' app store requests, as the frames its
+//! socket would answer its own callers with.
 use anyhow::Result;
 use shoal_protocol::{
     apps::store::EntryPiece,
