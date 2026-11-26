@@ -21,7 +21,8 @@ streaming, while Shoal decides which job runs when: it lists the jobs waiting
 for its labels as agent queue entries, admits them with agents, and claims a
 job only once admitted, so until then any other runner may take it. GitHub
 has no handle and no label that keeps a runner to one job, so its runner may
-take another job its labels match; a job-started hook holds a job of another
+take another job its labels match, and it writes its credentials and work
+into its installation, so each job runs a copy of it; a job-started hook holds a job of another
 run until its workspace is at that run's commit, so a check never reports on
 another commit. Polling finds jobs, which works without the webhook listener
 and the tunnel it needs; it runs every ten seconds while a job could start and every minute

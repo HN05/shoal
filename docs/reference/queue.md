@@ -30,13 +30,13 @@ memory and disk leave room below the
 [`[machine.overload.warning]`](load.md) memory and disk
 thresholds, which [`load`](load.md) sets. CPU holds back no
 agent, since more work on a busy CPU only runs slower; only a
-[CI job](ci.md#runner) beside running ones waits for it. A new agent mostly
+[CI job](ci.md#job-admission) beside running ones waits for it. A new agent mostly
 reads files at first and compiles later, so for its first three minutes it
 counts at the memory a settled agent uses: the average resident memory of the
 workspaces of the agents that have run longer, at the latest usage sample, at
 least 1 GiB, or 2 GiB before any has. A start must fit the memory left below
 the warning threshold once every such warming agent uses what it is expected
-to and every running [CI job](ci.md#runner) what it has yet to use, and none starts
+to and every running [CI job](ci.md#job-admission) what it has yet to use, and none starts
 while memory stall is past its warning level.
 With no agent running, one starts whatever memory and disk read. Critical
 memory, including stall past its stop level before it has held, disk below `machine.overload.disk.stop_free_gib`, or a failed memory

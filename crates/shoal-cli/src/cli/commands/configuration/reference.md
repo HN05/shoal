@@ -1366,7 +1366,15 @@ labels = ["shoal"]    # shoal-<os>-<arch> is always added
 permit = "builds"     # Optional: a resource pool each job holds one permit from
 ```
 
-See [runner](../../../../../../docs/reference/ci.md#runner).
+- `labels` names the `runs-on` labels whose jobs the runner takes. The runner
+  also takes `shoal-<os>-<arch>`, such as `shoal-linux-x86_64` or
+  `shoal-macos-arm64`.
+- `permit` names a [resource pool](#resource-pools). Each job waits for a free
+  permit and holds one while it runs.
+
+The daemon applies a change to `[runner]` in the local config at once, and in
+the other files within a minute. See
+[runner](../../../../../../docs/reference/ci.md#runner).
 
 ## Cleanup
 

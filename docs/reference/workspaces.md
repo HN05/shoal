@@ -460,7 +460,7 @@ Status shows:
   conflicts, each CI check's result, and a review state from each reviewer's
   latest approval or change request. A check is `waiting` while no runner has
   taken its job, where the forge tells that apart. The CI runs on an open PR's
-  head that [wait for approval](ci.md) are in `waiting_runs`;
+  head that [wait for approval](ci.md#runs-that-wait-for-approval) are in `waiting_runs`;
 - the opened and related items;
 - the [threads](threads.md) the space opened that wait for their holder, in
   `waiting_threads`;

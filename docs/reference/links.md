@@ -36,7 +36,7 @@ item.
 
 A number resolves against the space's `origin`. `link`, `unlink` and `watch`
 take an issue's or PR's URL only of that repository. A run's URL may name
-another repository, where [CI](ci.md) says who may act.
+another repository, where [CI](ci.md#another-repository) says who may act.
 
 ### Relations
 
@@ -129,7 +129,7 @@ JSON lists these assignments under `links.assignees`.
 ### CI runs
 
 A run is linked only as opened or related. Its workflow is its title.
-[`shoal ci run`](ci.md) links the run it starts as opened.
+[`shoal ci run`](ci.md#start-a-run) links the run it starts as opened.
 
 `shoal watch` follows a linked run until it finishes. The run stays linked
 until it is unlinked or the space is removed. A linked run has no completion or
@@ -193,7 +193,7 @@ shoal view --web               # open the items in the browser
 relation it is linked under. A kind or an item narrows it, as in
 [Select items](#select-items). An issue's or PR's URL may also name another
 repository's item, which shows without failed job logs. `shoal view ci` shows a
-run, as [CI](ci.md) says, and linked runs show the same way.
+run, as [CI](ci.md#view-a-run) says, and linked runs show the same way.
 
 Outside a workspace or chat, `view` shows the item a number or URL names. It
 reads the repository of the registered checkout it runs in, or the one `--repo`

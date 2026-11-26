@@ -104,7 +104,8 @@ A paused machine admits no new work, as under `finish`. Every agent stops as
 included, the spaces with something to do go to other connected machines, as
 under [`handover`](#handing-work-over).
 
-The CI jobs the machine runs end and run again elsewhere, as a sleep ends them.
+The CI jobs the machine runs end and run again elsewhere, as a
+[sleep](ci.md#cut-off-by-sleep-or-shutdown) ends them.
 Its running reviews wait in the queue again, and its demos stop.
 
 A `handed_over` alert names where each space went, or why it stayed: the

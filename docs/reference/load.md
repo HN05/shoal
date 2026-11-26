@@ -119,7 +119,7 @@ and how to clear it, or to lift the limit with `memory_limit = "none"`.
 The wrapper reads its command's scope every second while it runs and once as
 it ends: how many processes the kernel's OOM killer killed there, and the
 most memory the scope held, counted as the slice's is. A CI job's peak raises
-the memory its [cost](ci.md#runner) counts, and its kills add a `job_ended` entry
+the memory its [cost](ci.md#job-admission) counts, and its kills add a `job_ended` entry
 to its workspace's [log](log.md) naming them, such as a build's compiler
 killed for memory. An agent's kills show in its `agent_exited` or
 `agent_stopped` entry, as `oom_kills`, and in the alert its exit sends. A

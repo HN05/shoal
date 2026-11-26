@@ -44,7 +44,7 @@ A space's log shows these events of the space:
 - the blockers added to it, removed or cleared;
 - the spaces created and removed below it, and its changes of parent;
 - an absorb: into which space and by what merge, or what the space took over;
-- a [CI job](ci.md#runner) Shoal ended, with the processes it stopped;
+- a [CI job](ci.md#how-a-job-ends) Shoal ended, with the processes it stopped;
 - a merge it watched for which no CI run of the default branch started.
 
 ## Every event
