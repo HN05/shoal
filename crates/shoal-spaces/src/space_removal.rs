@@ -167,8 +167,8 @@ impl Spaces {
         // it while the removal goes on.
         let reservation = self.space_removals.reserve(id)?;
         // A hook of the space rechecks the reservation once it holds the
-        // space's resource guard, so taking the guard waits out a running
-        // hook.
+        // space's resource guard. Taking the guard refuses the removal while
+        // a hook runs.
         drop(self.gates.resource_guard(id, GuardMode::Shared)?);
         ensure!(
             !removal.refuses_holds() || !self.user_holds(id).await?,

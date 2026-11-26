@@ -579,7 +579,8 @@ pub trait Repositories: Send + Sync {
 
     fn forget_rejected_config(&self, id: &SpaceId);
 
-    /// Waits until the repository is available.
+    /// Takes the Git gate, then refuses the repository while a removal or
+    /// move of it is under way or unfinished.
     fn lock_repository(
         &self,
         selector: Selector,

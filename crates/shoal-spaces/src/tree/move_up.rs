@@ -36,7 +36,7 @@ impl Spaces {
     }
 }
 
-/// Waits until no removal `held` reserves the space or either parent: a
+/// Refuses while a removal `held` reserves the space or either parent: a
 /// removal that listed the spaces below one of them would otherwise miss
 /// it.
 fn move_up(tx: &Transaction<'_>, id: &SpaceId, held: &[Removing; 2]) -> Result<Option<SpaceRef>> {

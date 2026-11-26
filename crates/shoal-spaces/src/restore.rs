@@ -390,8 +390,9 @@ impl Spaces {
 
     /// The recorded parent while it exists and takes the space, as a start
     /// places a child, or runs on another joined machine. Otherwise none,
-    /// with a warning naming the parent, or a refusal for a scoped `caller`,
-    /// which restores only below itself.
+    /// with a warning naming the parent. A scoped `caller` restores only
+    /// below the recorded parent, within its scope, so it gets a refusal
+    /// instead.
     pub async fn restored_parent(
         &self,
         daemon: &dyn Daemon,

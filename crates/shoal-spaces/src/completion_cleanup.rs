@@ -109,9 +109,9 @@ impl Spaces {
             .await
     }
 
-    /// Waits for the grace period, and leaves the space while something
-    /// keeps it or spaces below it remain, which go first under the same
-    /// completion.
+    /// Removes only once the grace period ends. Leaves the space while
+    /// something keeps it or spaces below it remain, which go first under
+    /// the same completion.
     async fn sweep_under_completed(
         &self,
         daemon: &dyn Daemon,
