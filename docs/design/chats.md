@@ -192,7 +192,7 @@ by path.
 A workspace has one editing agent, its own. A chat in its worktree reads and
 does not edit. Its instructions say so. Nothing stops it from editing files,
 since Shoal does not yet restrict the filesystem, as
-[Overview](overview.md#filesystem-restrictions-decided-policy-not-implemented)
+[Filesystem restrictions](overview.md#filesystem-restrictions)
 says.
 
 The daemon keeps the workspace's own agent one. It refuses to queue a launch in

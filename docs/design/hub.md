@@ -64,8 +64,8 @@ one.
 ## Versions
 
 The hub and its members run exactly the same release, since the protocol
-keeps [no compatibility promise](overview.md). The hub refuses a member of
-another release. It reads only the protocol and version of the member's first
+keeps [no compatibility promise](overview.md#protocol). The hub refuses a
+member of another release. It reads only the protocol and version of the member's first
 request. Its refusal carries its own version, signed over the member's nonce.
 The hub records an alert naming the update, and the refused member keeps
 working on its own.

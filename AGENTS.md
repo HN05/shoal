@@ -5,7 +5,7 @@ repository. Read all of it before you start, in as many reads as it takes: the
 rules under Committing decide when work is done.
 
 `docs/design/` states Shoal's product decisions, one file per subsystem, and
-`docs/design/overview.md` its purpose, architecture and implementation order.
+`docs/design/overview.md` its purpose, architecture and the work that remains.
 Read the files that cover your change. When behavior changes, update them, and
 tell decisions apart from proposals.
 

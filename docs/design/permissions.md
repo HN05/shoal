@@ -8,8 +8,8 @@ permissions of spaces, proposals and push requests.
 Workspace commands and every chat's agent inherit a daemon-validated scope
 token. A chat's token lasts as long as the chat. Only the user's own terminal is
 unscoped. [spaces.md](spaces.md) says which spaces a scope reaches through the
-tree. Scope is cooperative: it is no
-boundary against a hostile process of the same user.
+tree. Scope is cooperative, as
+[Scope is cooperative](overview.md#scope-is-cooperative) says.
 
 Nested executions keep scope, and the CLI refuses scoped operations to a process
 whose ancestor carries scope for the same state directory, so removing the token
