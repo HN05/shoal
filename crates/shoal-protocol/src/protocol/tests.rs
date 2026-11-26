@@ -475,7 +475,7 @@ fn stream_payloads_and_acknowledgements_preserve_remote_errors() {
 mod requests;
 
 #[tokio::test]
-async fn a_thread_too_large_for_a_frame_arrives_in_pages_that_join() {
+async fn a_thread_too_large_for_a_frame_arrives_in_pieces_that_join() {
     let choices: Vec<String> = (1..=20).map(|number| format!("choice {number}")).collect();
     let post = |id: i64| {
         serde_json::json!({"id": id, "created_at": 0, "side": "holder", "sender": "space",
@@ -499,6 +499,21 @@ async fn a_thread_too_large_for_a_frame_arrives_in_pages_that_join() {
     let joined = read_response(&mut reader).await.unwrap();
     let Body::SpaceThread(joined) = joined.body else {
         panic!("not a thread");
+    };
+    assert_eq!(*joined, thread);
+
+    // A subscription's record of it arrives the same way.
+    let record = crate::subscriptions::records::Record::Thread(Box::new(thread.clone()));
+    let response = Response::new(10, Body::RecordChanged(record));
+    let mut wire = Vec::new();
+    for frame in response.frames().unwrap() {
+        write(&mut wire, &frame).await.unwrap();
+    }
+    let mut responses = Responses::new(wire.as_slice());
+    let Body::RecordChanged(crate::subscriptions::records::Record::Thread(joined)) =
+        responses.next().await.unwrap().body
+    else {
+        panic!("not a thread's record");
     };
     assert_eq!(*joined, thread);
 }

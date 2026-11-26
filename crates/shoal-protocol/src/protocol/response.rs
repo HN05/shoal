@@ -1,7 +1,7 @@
 //! The response envelope, its bodies and the errors they carry.
 use super::{
     DaemonStatus, DownloadPiece, Exited, MAX_FRAME, ReviewPiece, VERSION, ViewPiece,
-    WaitingUpdates, WokenTurn, Work, chats, frame_pages, operations,
+    WaitingUpdates, WokenTurn, Work, chats, frame_pages, operations, text_pieces,
 };
 use crate::alerts::Alert;
 use crate::events::EventItem;
@@ -15,7 +15,7 @@ use crate::resources::{Overview, ResourceLease};
 use crate::sim::{AuditEntry, Simulator, SimulatorCatalog};
 use crate::status::Inspection;
 use crate::status::SpaceStatus;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,25 +41,41 @@ impl Response {
     }
 
     /// The frames that send this response: itself, or the pages of a list
-    /// too large for one frame, each but the last marked [`Self::more`].
+    /// too large for one frame, or else pieces of its body's JSON, each but
+    /// the last marked [`Self::more`].
     pub fn frames(self) -> Result<Vec<Self>> {
         if serde_json::to_vec(&self)?.len() < MAX_FRAME {
             return Ok(vec![self]);
         }
-        let mut frames: Vec<_> = self
-            .body
-            .pages()?
-            .into_iter()
-            .map(|body| Self {
-                more: true,
-                ..Self::new(self.id, body)
-            })
-            .collect();
+        let id = self.id;
+        let text = serde_json::to_string(&self.body)?;
+        let page = |body| Self {
+            more: true,
+            ..Self::new(id, body)
+        };
+        let mut frames: Vec<_> = self.body.pages()?.into_iter().map(page).collect();
+        if !fits(&frames)? {
+            frames = text_pieces(&text)
+                .into_iter()
+                .map(Body::Piece)
+                .map(page)
+                .collect();
+        }
         if let Some(last) = frames.last_mut() {
             last.more = false;
         }
         Ok(frames)
     }
+}
+
+/// Whether every one of `frames` fits in a frame.
+fn fits(frames: &[Response]) -> Result<bool> {
+    for frame in frames {
+        if serde_json::to_vec(frame)?.len() >= MAX_FRAME {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 shoal_states::open_enum! {
@@ -160,6 +176,9 @@ macro_rules! response_bodies {
             /// The daemon still prepares what the request asked for, as it
             /// sends while it registers an execution.
             Keepalive,
+            /// A piece of the JSON of a body too large for one frame even
+            /// in pages, such as a thread; a response's pieces join into it.
+            Piece(String),
             $($variant($payload),)*
         }
 
@@ -171,6 +190,7 @@ macro_rules! response_bodies {
                     Self::Busy { .. } => "Busy",
                     Self::Undecided(_) => "Undecided",
                     Self::Keepalive => "Keepalive",
+                    Self::Piece(_) => "Piece",
                     $(Self::$variant(_) => stringify!($variant),)*
                 }
             }
@@ -394,22 +414,18 @@ response_bodies! {
     RecordRemoved(crate::subscriptions::records::RecordKey),
 }
 
-// The lists a response sends in pages when they do not fit in one frame;
-// a thread sends its posts so too.
+// The lists a response sends in pages when they do not fit in one frame.
 macro_rules! paged_bodies {
     ($($variant:ident),* $(,)?) => {
         impl Body {
             /// This body in pages that each fit in a frame: a list's items,
-            /// or a thread's posts, in order; any other body whole.
+            /// in order; any other body whole.
             pub fn pages(self) -> Result<Vec<Self>> {
                 Ok(match self {
                     $(Self::$variant(items) => frame_pages(items)?
                         .into_iter()
                         .map(Self::$variant)
                         .collect(),)*
-                    Self::SpaceThread(thread) => (thread.pages()?.into_iter())
-                        .map(|page| Self::SpaceThread(Box::new(page)))
-                        .collect(),
                     body => vec![body],
                 })
             }
@@ -418,7 +434,7 @@ macro_rules! paged_bodies {
             pub fn extend(&mut self, page: Self) -> Result<()> {
                 match (self, page) {
                     $((Self::$variant(items), Self::$variant(more)) => items.extend(more),)*
-                    (Self::SpaceThread(thread), Self::SpaceThread(page)) => thread.extend(*page),
+                    (Self::Piece(text), Self::Piece(more)) => text.push_str(&more),
                     (body, page) => anyhow::bail!(
                         "a {} response cannot continue with {}",
                         body.variant_name(),
@@ -531,6 +547,16 @@ impl Body {
                 (listing.threads.iter_mut()).for_each(|thread| thread.files_kept_on(machine));
             }
             _ => {}
+        }
+    }
+
+    /// The body a response's joined pieces of JSON make, or this body.
+    pub fn joined(self) -> Result<Self> {
+        match self {
+            Self::Piece(text) => {
+                serde_json::from_str(&text).context("invalid pieces of a protocol message")
+            }
+            body => Ok(body),
         }
     }
 

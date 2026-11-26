@@ -3,22 +3,22 @@ use crate::protocol::MAX_FRAME;
 use shoal_protocol::config::repo::Lifetime;
 
 #[tokio::test]
-async fn an_oversized_reply_is_answered_with_an_error_saying_so() {
+async fn an_oversized_reply_arrives_in_pieces_that_join() {
     let (mut writer, reader) = tokio::io::duplex(4 * MAX_FRAME);
-    let env = [("VALUE".to_owned(), "x".repeat(MAX_FRAME))].into();
-    let error = reply(&mut writer, 7, Body::SpaceEnvironment(env))
+    let env: std::collections::BTreeMap<String, String> =
+        [("VALUE".to_owned(), "x".repeat(MAX_FRAME))].into();
+    reply(&mut writer, 7, Body::SpaceEnvironment(env.clone()))
         .await
-        .unwrap_err();
-    assert!(error.is::<protocol::FrameTooLarge>(), "{error:#}");
+        .unwrap();
     drop(writer);
-    let response: Response = protocol::read(&mut tokio::io::BufReader::new(reader))
+    let response = protocol::read_response(&mut tokio::io::BufReader::new(reader))
         .await
         .unwrap();
     assert_eq!(response.id, 7);
-    let Body::Error { code, .. } = response.body else {
-        panic!("expected an error reply");
+    let Body::SpaceEnvironment(joined) = response.body else {
+        panic!("expected the environment");
     };
-    assert_eq!(code, ErrorCode::OperationFailed);
+    assert_eq!(joined, env);
 }
 
 #[test]

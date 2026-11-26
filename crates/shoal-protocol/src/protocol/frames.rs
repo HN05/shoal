@@ -48,6 +48,7 @@ pub async fn read_response(
         response.body.extend(page.body)?;
         response.more = page.more;
     }
+    response.body = response.body.joined()?;
     Ok(response)
 }
 
@@ -89,6 +90,7 @@ impl<R: AsyncRead + Unpin> Responses<R> {
             response.body.extend(page.body)?;
             response.more = page.more;
             if !response.more {
+                response.body = response.body.joined()?;
                 return Ok(response);
             }
             self.joined = Some(response);
@@ -124,18 +126,13 @@ impl<R: AsyncRead + Unpin> Responses<R> {
 /// `items` in pages that each fit in a frame with room for the envelope,
 /// in order. There is always a first page, empty when `items` is.
 pub fn frame_pages<T: Serialize>(items: Vec<T>) -> Result<Vec<Vec<T>>> {
-    pages_within(items, MAX_FRAME - 1024)
-}
-
-/// `items` in pages of at most `page_bytes` of JSON each, in order, but for
-/// an item larger than that alone. There is always a first page.
-pub fn pages_within<T: Serialize>(items: Vec<T>, page_bytes: usize) -> Result<Vec<Vec<T>>> {
+    const PAGE_BYTES: usize = MAX_FRAME - 1024;
     let mut pages = vec![Vec::new()];
     let mut bytes = 0;
     for item in items {
         let size = serde_json::to_vec(&item)?.len() + 1;
         let page = pages.last_mut().expect("pages start with one");
-        if bytes + size > page_bytes && !page.is_empty() {
+        if bytes + size > PAGE_BYTES && !page.is_empty() {
             pages.push(Vec::new());
             bytes = 0;
         }
