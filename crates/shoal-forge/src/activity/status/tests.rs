@@ -1,7 +1,7 @@
 use shoal_time::UnixTime;
 
 use super::*;
-use shoal_forge_types::activity::status::PrState;
+use shoal_forge_types::items::item::ItemState;
 
 #[test]
 fn rate_limited_checks_are_reported_as_unread() {
@@ -15,7 +15,7 @@ fn rate_limited_checks_are_reported_as_unread() {
     };
     let mut status = PrStatus::new(
         "https://forge.example/team/repo/pulls/1".parse().unwrap(),
-        Some(PrState::Open),
+        Some(ItemState::Open),
     );
     status.record_snapshot(snapshot);
     assert!(status.checks.is_empty());

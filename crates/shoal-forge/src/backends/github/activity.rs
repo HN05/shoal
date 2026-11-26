@@ -24,7 +24,7 @@ use crate::{
 use shoal_forge_types::{
     ForgeRepo,
     activity::{
-        status::{PrState, PrStatus},
+        status::PrStatus,
         view::{Details, Review},
     },
     ci::check_state::CheckState,
@@ -140,7 +140,7 @@ async fn pr_status(
         open_checks(repo, account, &pull),
         reviews(repo, account, number),
     );
-    let mut status = PrStatus::new(pull_ref.clone(), Some(PrState::from(pull.item.state)));
+    let mut status = PrStatus::new(pull_ref.clone(), Some(pull.item.state));
     if let Some(checks) = checks {
         let mut snapshot = Snapshot::default();
         snapshot.record_keyed_checks(&pull, checks);

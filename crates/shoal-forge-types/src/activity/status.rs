@@ -8,22 +8,6 @@ use crate::{
     items::item::ItemState,
 };
 
-shoal_states::states!(PrState {
-    Open => "open",
-    Merged => "merged",
-    Closed => "closed",
-});
-
-impl From<ItemState> for PrState {
-    fn from(state: ItemState) -> Self {
-        match state {
-            ItemState::Open => Self::Open,
-            ItemState::Merged => Self::Merged,
-            ItemState::Closed => Self::Closed,
-        }
-    }
-}
-
 shoal_states::states!(ReviewState {
     Unreviewed => "none",
     Commented => "commented",
@@ -36,7 +20,7 @@ shoal_states::states!(ReviewState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrStatus {
     pub url: crate::items::reference::ItemRef,
-    pub state: Option<PrState>,
+    pub state: Option<ItemState>,
     /// Unknown while the forge computes mergeability, and for drafts and closed PRs.
     pub merge_conflicts: Option<bool>,
     pub checks: Vec<CheckResult>,
@@ -60,7 +44,7 @@ pub struct CheckResult {
 }
 
 impl PrStatus {
-    pub fn new(url: crate::items::reference::ItemRef, state: Option<PrState>) -> Self {
+    pub fn new(url: crate::items::reference::ItemRef, state: Option<ItemState>) -> Self {
         Self {
             url,
             state,

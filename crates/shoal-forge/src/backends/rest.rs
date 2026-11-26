@@ -21,7 +21,7 @@ use crate::{
 };
 use shoal_forge_types::{
     ForgeRepo,
-    activity::status::{PrState, PrStatus},
+    activity::status::PrStatus,
     items::{
         item::{Current, Item, ItemState},
         link::ItemKind,
@@ -134,7 +134,7 @@ pub(crate) async fn pr_status(
             open_checks(reads, repo, account, &pull),
             reads.verdicts(repo, account, number),
         );
-        let mut status = PrStatus::new(pull_ref.clone(), Some(PrState::from(pull.item.state)));
+        let mut status = PrStatus::new(pull_ref.clone(), Some(pull.item.state));
         if let Some(checks) = checks {
             let mut snapshot = Snapshot::default();
             snapshot.record_checks(&pull, checks);
