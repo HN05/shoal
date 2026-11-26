@@ -85,28 +85,6 @@ pub enum CoordinationCommand {
         #[command(subcommand)]
         command: AlertCommand,
     },
-    /// The agent hook of an earlier release, which agents it started still
-    /// run until they restart: `shoal internal deliver`.
-    #[command(hide = true)]
-    Messages {
-        #[arg(long, required = true)]
-        hook: bool,
-    },
-    /// The alert stream of an earlier release, which a follower it started
-    /// continues with after an upgrade: `shoal alert list --follow`.
-    #[command(hide = true)]
-    Alerts {
-        #[arg(long, required = true)]
-        follow: bool,
-        #[arg(long)]
-        keep_unread: bool,
-        #[arg(long)]
-        resume: Option<shoal_protocol::alerts::AlertCursor>,
-        /// Kept from the listing the follower started as, which a follow
-        /// does not read.
-        #[arg(long)]
-        limit: Option<u32>,
-    },
     /// List, add or delete the files attached to a space, a workspace or
     /// chat: sent to its agents with a message, added, or handed back with
     /// done.

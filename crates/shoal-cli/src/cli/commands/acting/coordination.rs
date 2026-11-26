@@ -35,17 +35,14 @@ pub(super) fn acting(command: &CoordinationCommand) -> Option<Acting> {
         CoordinationCommand::Priority { priority, .. } => priority::setting(*priority),
         CoordinationCommand::Done { undo: true, .. } => spaces::undoing(),
         CoordinationCommand::Done { .. } => spaces::marking(),
-        // Changes, alerts and messages are the caller's own or picked by
-        // number.
+        // Changes and alerts are the caller's own or picked by number.
         CoordinationCommand::Changes {
             command: None | Some(ChangeCommand::Claim { .. } | ChangeCommand::Unclaim { .. }),
             ..
         }
         | CoordinationCommand::Alert {
             command: AlertCommand::List(_) | AlertCommand::Withdraw { .. } | AlertCommand::Clear,
-        }
-        | CoordinationCommand::Messages { .. }
-        | CoordinationCommand::Alerts { .. } => return None,
+        } => return None,
     })
 }
 

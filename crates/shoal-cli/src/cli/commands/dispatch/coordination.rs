@@ -85,14 +85,6 @@ pub(in crate::cli::commands) async fn run(
         CoordinationCommand::Alert {
             command: AlertCommand::Clear,
         } => alerts::clear(&ctx).await,
-        CoordinationCommand::Messages { hook: _ } => {
-            shoal_workers::agent_hooks::delivery::deliver(&ctx.paths).await
-        }
-        CoordinationCommand::Alerts {
-            keep_unread,
-            resume,
-            ..
-        } => alerts::follow(&ctx, keep_unread, resume.unwrap_or_default()).await,
         CoordinationCommand::Files {
             command: Some(FilesCommand::Add { files, space }),
             ..

@@ -169,7 +169,7 @@ pub(super) async fn withdraw(ctx: &Context, id: i64, space: Option<SpaceSelector
 /// The daemon marks each alert read as it delivers it unless `keep_unread`. On
 /// a terminal, each alert is also raised as a terminal notification, so the
 /// emulator can show it while another window has focus.
-pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: AlertCursor) -> Result<i32> {
+async fn follow(ctx: &Context, keep_unread: bool, after: AlertCursor) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
     let executable = Executable::current();
     let mut watch = Watch::start(&ctx.paths, keep_unread, after).await?;
