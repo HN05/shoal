@@ -308,7 +308,8 @@ fn parsed(text: &str) -> Option<serde_json::Number> {
 }
 
 /// `given`, one option's value or a list of them, as the selection of the
-/// input `key`, which offers `options` and takes several when `multiple`.
+/// input `key`, which offers `options` and takes several when `multiple`;
+/// empty text, as `--value KEY=` gives it, selects none.
 fn selection(
     key: &str,
     given: Value,
@@ -317,6 +318,7 @@ fn selection(
 ) -> Result<Value> {
     let picked: Vec<Value> = match given {
         Value::Array(picked) => picked,
+        Value::String(text) if text.is_empty() => Vec::new(),
         single => vec![single],
     };
     ensure!(

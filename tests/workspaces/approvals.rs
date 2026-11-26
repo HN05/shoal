@@ -509,6 +509,22 @@ fn thread_picker_answers_an_options_input_with_none() {
         serde_json::json!({"tags": []}),
         "{answer}"
     );
+
+    // From the command line, an empty value selects none too.
+    let question = ask(
+        &fixture,
+        "asker",
+        "Tags again?",
+        &["Which tags now?", "--ui", form.to_str().unwrap()],
+    );
+    let id = question["number"].as_str().unwrap().to_owned();
+    fixture.ok(&["send", &id, "--action", "tag", "--value", "tags="]);
+    let answer = latest(&fixture, &id);
+    assert_eq!(
+        answer["answer"]["values"],
+        serde_json::json!({"tags": []}),
+        "{answer}"
+    );
 }
 
 #[test]

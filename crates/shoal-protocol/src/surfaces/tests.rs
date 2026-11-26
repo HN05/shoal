@@ -224,6 +224,11 @@ fn an_answer_is_refused_for_what_the_surface_does_not_take() {
     assert!(refused("submit", &[("colour", json!("red"))]).contains("it takes name, size"));
     assert!(refused("submit", &[("size", json!("xl"))]).contains("not \"xl\""));
     assert!(refused("submit", &[("size", json!(["s", "l"]))]).contains("takes one of"));
+    // Empty text, as `--value size=` gives it, selects no option.
+    let cleared = form()
+        .resolve("submit", values(&[("size", json!(""))]))
+        .unwrap();
+    assert_eq!(cleared["size"], json!([]));
 }
 
 #[test]

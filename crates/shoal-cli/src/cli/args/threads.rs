@@ -176,7 +176,7 @@ pub struct PostArgs {
     #[arg(long, value_name = "ID")]
     pub action: Option<String>,
     /// A value the action takes, such as name=Ada; repeat a key to select
-    /// several options.
+    /// several options, or leave it empty, as tags=, to select none.
     #[arg(long = "value", value_name = "KEY=VALUE", requires = "action", value_parser = parse_value)]
     pub values: Vec<(String, String)>,
     /// A file, or its lines as PATH:FIRST-LAST, in a worktree your scope
