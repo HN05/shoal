@@ -1,10 +1,5 @@
-//! Where a new space starts among the machines joined to a hub: the
-//! policy that ranks the connected machines from a snapshot the hub builds
-//! of the start and each machine's latest report, each with the reason it
-//! comes where it does, and names the machines it leaves out and why.
-//! Nothing here reads the hub's or a daemon's state; the machine a policy
-//! puts first creates the space, and its own queue and admission then
-//! decide when its agent starts.
+//! The machine a hub places a new space on. `docs/design/hub.md` says what
+//! placement decides and what it leaves to each machine's queue.
 use serde::{Deserialize, Serialize};
 use shoal_ids::member_ids::MemberId;
 use shoal_states::states;
@@ -20,21 +15,14 @@ states! {
     /// names no machine.
     #[derive(Default)]
     Policy {
-        /// The caller's machine, always.
         Local => "local",
-        /// Lasting work on `always_on` machines with room, else the
-        /// caller's machine.
         #[default]
         Balanced => "balanced",
-        /// The app registered as the placer, else `balanced`.
         External => "external",
     }
 }
 
-/// An order of the machines a start may go to, read from a snapshot alone.
 pub trait Placer {
-    /// Where the start of `snapshot` goes: the machines in order of
-    /// preference, and those it leaves out.
     fn place(&self, snapshot: &Snapshot) -> Placement;
 }
 
@@ -54,7 +42,6 @@ impl Placement {
     }
 }
 
-/// A machine a start may go to, with why it comes where it does.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Placed {
     pub machine: MemberId,

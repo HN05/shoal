@@ -324,7 +324,12 @@ to place by; the hub places from the latest report, not a live query, and keeps
 it in memory alone. `balanced` sends lasting work to `always_on` machines with
 room and otherwise keeps it on the caller's machine, beside its parent and
 unpushed work; it never clones a repository onto a machine, which stays with
-`--machine`. `external` lets an app on the hub's machine take the decision over,
+`--machine`. An `always_on` caller with room keeps the start, beside its
+parent. Among the other `always_on` machines, a heavy start goes where a heavy
+agent is admitted now, with the most spare memory. A light start goes where it
+takes the least from heavy agents, since dynamic admission gives them the same
+memory: first a machine that runs no heavy agents, then one where no heavy work
+waits, then the one where the least waits. `external` lets an app on the hub's machine take the decision over,
 registered as the placer, while a start waits at most two seconds for it and
 otherwise places by `balanced`. Placement never moves a space after it is
 created; rebalancing running work is a move. Browser sessions are a later step.

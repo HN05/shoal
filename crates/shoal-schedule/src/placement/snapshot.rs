@@ -1,5 +1,4 @@
-//! What a placement policy reads: the start to place and each connected
-//! machine as the hub last heard of it.
+//! What a placement policy reads, as the hub builds it.
 use serde::{Deserialize, Serialize};
 use shoal_ids::member_ids::MemberId;
 use shoal_time::UnixTime;
@@ -88,11 +87,8 @@ pub struct Capacity {
 }
 
 impl Request {
-    /// Why the start cannot go to `machine`, none when it can: a machine
-    /// its user paused or walked away from admits nothing new, the caller's
-    /// machine has its repository, where the start found it, and another
-    /// one needs it registered, unless the start needs none, and every
-    /// machine needs its agent tool.
+    /// Why the start cannot go to `machine`, none when it can. The caller's
+    /// machine needs no registered repository: the start found it there.
     pub fn unfit(&self, machine: &Machine) -> Option<SkippedBy> {
         let caller = machine.id == self.caller;
         let capacity = machine.capacity.as_ref();
@@ -111,8 +107,6 @@ impl Request {
 }
 
 impl Machine {
-    /// Whether it has registered the repository of `origin`; every machine
-    /// has what a start without one needs.
     pub fn has_repository(&self, origin: Option<&str>) -> bool {
         let Some(origin) = origin else {
             return true;
@@ -122,7 +116,6 @@ impl Machine {
             .any(|registered| registered == origin)
     }
 
-    /// Whether it has installed the agent tool `agent`.
     pub fn has_agent(&self, agent: &str) -> bool {
         self.agents.iter().any(|installed| installed == agent)
     }
