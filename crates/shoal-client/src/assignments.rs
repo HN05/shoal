@@ -1,5 +1,4 @@
-//! A space's assignment: marking it done or ready for review, and
-//! discarding the stopped agent it leaves.
+//! Requests about a space's assignment and the stopped agents it leaves.
 use anyhow::Result;
 use shoal_protocol::assignments::Done;
 
@@ -15,12 +14,10 @@ use shoal_protocol::{
     protocol::AssignmentMethod,
 };
 
-/// Mark `space`'s assignment done as `done` describes.
 pub fn mark_done(space: SpaceSelector, done: Done) -> Prepared<Completion> {
     Prepared::new(AssignmentMethod::MarkDone { space, done })
 }
 
-/// Withdraw `space`'s completion.
 pub fn undo_done(space: SpaceSelector) -> Prepared<Completion> {
     Prepared::new(AssignmentMethod::UndoDone { space })
 }
@@ -56,10 +53,10 @@ pub async fn discard_stopped_agent(
     request(daemon, method).await
 }
 
-/// Make `change` to the permissions each of the stopped `agents` and saved
-/// `chats` was given, which its restore runs under, and the launch waiting
-/// for the failed setup of each of the `launches` workspaces; the daemon
-/// changes none when it refuses one.
+/// Applies `change` to the permissions that each of the stopped `agents`,
+/// the saved `chats` and the launches waiting for the failed setup of the
+/// `launches` workspaces was given. The daemon changes none when it refuses
+/// one.
 pub async fn change_stopped_permissions(
     daemon: &impl Daemon,
     agents: Vec<shoal_protocol::protocol::SavedAgent>,

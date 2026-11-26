@@ -1,7 +1,4 @@
-//! Demos: named commands Shoal keeps running in a workspace so the user can
-//! try a change, usually from another machine over SSH. A repository names
-//! them in `[demos.NAME]`; a preset says how a demo reaches the user, and the
-//! repository always supplies the command.
+//! Requests about a workspace's demos, and the streams to a running one.
 use shoal_protocol::attaching::Terminal;
 use shoal_protocol::demos::{Kind, Progress, Running};
 

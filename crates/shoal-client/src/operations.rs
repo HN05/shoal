@@ -1,6 +1,5 @@
-//! Following an operation, work the daemon runs in a worker of its own, such
-//! as preparing a workspace it created: its progress as it comes, then how it
-//! ended. The CLI follows its operations the same way.
+//! Following an operation, work the daemon runs in a worker of its own: its
+//! progress as it comes, then how it ended.
 use std::collections::BTreeMap;
 
 use anyhow::Result;
@@ -119,7 +118,6 @@ pub fn start_request(
     })
 }
 
-/// Cancel `operation`.
 pub async fn cancel(daemon: &impl Daemon, operation: OperationRef) -> Result<()> {
     connection::request(daemon, OperationMethod::CancelOperation { operation }).await
 }

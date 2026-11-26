@@ -1,5 +1,5 @@
-//! Places: where a space's executions run, and the places of terminal
-//! hosts Shoal created for spaces, which it closes once they are removed.
+//! Requests about the places a space's executions run in, and those Shoal
+//! created for spaces.
 use shoal_ids::space_ids::SpaceId;
 
 use anyhow::Result;

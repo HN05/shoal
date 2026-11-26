@@ -1,6 +1,4 @@
-//! Diffs: a workspace's diff on whichever machine has it, as that
-//! machine's Git writes it, for a caller whose own Git colours and pages
-//! it, the commit it counts from, and its conflicts with another branch.
+//! A workspace's diff and conflicts, read on whichever machine has it.
 use anyhow::Result;
 use shoal_protocol::{
     diffs::{DiffDisplay, DiffOutput},

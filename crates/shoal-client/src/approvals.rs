@@ -1,5 +1,5 @@
-//! Approval requests: what a workspace's agent asks the user, or a coordinating
-//! agent, to allow.
+//! Requests about approval requests, which a space's agent makes to the
+//! user or its coordinator.
 use shoal_protocol::approvals::{ApprovalRequest, ProposalDecision, PushSpecification};
 
 use std::collections::BTreeMap;
@@ -23,7 +23,6 @@ pub async fn list(
     request(daemon, ApprovalMethod::ListApprovals { space }).await
 }
 
-/// The request `number`.
 pub async fn show(daemon: &impl Daemon, number: ItemNumber) -> Result<Box<ApprovalRequest>> {
     request(daemon, ApprovalMethod::ShowApproval { number }).await
 }
@@ -65,7 +64,6 @@ pub async fn escalate(
     request(daemon, method).await
 }
 
-/// Withdraw `space`'s pending request `number`.
 pub async fn withdraw(
     daemon: &impl Daemon,
     space: SpaceSelector,
@@ -74,12 +72,11 @@ pub async fn withdraw(
     request(daemon, ApprovalMethod::WithdrawApproval { space, number }).await
 }
 
-/// Let this process take `action`, which the permission `key` governs, in
-/// the registered repository `repository` names, as its space's permission
-/// allows: at once, once approved, or not at all,
-/// failing with the approval request it waits for. An approval returns the
-/// scope token the process sends its requests with from then on, which take
-/// the actions `key` governs without asking again.
+/// Lets this process take `action`, which the permission `key` governs, in
+/// `repository`, as its space's permission allows: at once, once approved,
+/// or not at all. While approval is pending, it fails with the request.
+/// An approval returns a scope token for the process's later requests,
+/// which take the actions `key` governs without asking again.
 pub async fn authorize(
     daemon: &impl Daemon,
     key: PermissionKey,

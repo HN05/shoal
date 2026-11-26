@@ -24,9 +24,7 @@ pub struct StoppedCommands {
     pub machine: Option<String>,
 }
 
-/// The restores a resume queued, the commands it reported, the spaces
-/// reopened for it, the interrupted turns it continued and the spaces it
-/// failed for.
+/// What a resume did.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Queued {
     pub queued: Vec<QueueEntry>,

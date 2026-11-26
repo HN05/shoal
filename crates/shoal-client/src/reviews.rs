@@ -1,5 +1,4 @@
-//! Local reviews: a one-shot, read-only reviewer's run over a workspace's
-//! committed HEAD or a PR, whose findings are `review` threads.
+//! Requests about local reviews, run by a reviewer agent or by the caller.
 use shoal_protocol::reviews::{Review, ReviewId, ReviewTarget};
 
 use anyhow::{Context, Result};
@@ -12,7 +11,6 @@ use shoal_protocol::{
     repository::Selector,
 };
 
-/// Queue a review of `target` in `workspace` by `agent` with `model`.
 pub fn run(
     workspace: SpaceSelector,
     target: ReviewTarget,
@@ -108,9 +106,8 @@ pub async fn check_pr_gate(daemon: &impl Daemon, workspace: SpaceSelector) -> Re
     request(daemon, ReviewMethod::CheckPrGate { workspace }).await
 }
 
-/// What a review request returns, a review or a listing of them,
-/// reassembled from the pieces of JSON the daemon sends it in.
-/// A review request built before it is sent, whose answer comes in pieces.
+/// A review request built before it is sent. Its answer, a review or a
+/// listing of them, comes in pieces of JSON.
 pub struct PreparedReview<T> {
     method: ReviewMethod,
     answer: std::marker::PhantomData<fn() -> T>,
@@ -126,7 +123,6 @@ impl<T> PreparedReview<T> {
 }
 
 impl<T: serde::de::DeserializeOwned> PreparedReview<T> {
-    /// Send it, with its answer.
     pub async fn send(self, daemon: &impl Daemon) -> Result<T> {
         reassembled(daemon, self.method).await
     }

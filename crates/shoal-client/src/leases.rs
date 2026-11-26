@@ -1,5 +1,4 @@
-//! Leases a workspace holds: acquiring, releasing and listing its ports,
-//! simulators, containers, resource permits, secret grants and holds.
+//! Acquiring, releasing and listing the leases a space holds.
 use std::time::Duration;
 
 use anyhow::Result;
@@ -137,7 +136,6 @@ pub enum PortAcquisition {
     Suggested(PortSuggestion),
 }
 
-/// Reserve the port `name` for `workspace`.
 pub fn acquire_port(
     workspace: SpaceSelector,
     name: String,
@@ -163,12 +161,10 @@ impl TryFrom<Body> for PortAcquisition {
     }
 }
 
-/// Release the port `name` of `workspace`.
 pub fn release_port(workspace: SpaceSelector, name: String) -> Prepared<()> {
     Prepared::new(PortMethod::PortRelease { workspace, name })
 }
 
-/// The ports `workspace` reserved.
 pub fn ports(workspace: SpaceSelector) -> Prepared<PortOverview> {
     Prepared::new(PortMethod::PortOverview { workspace })
 }
@@ -178,7 +174,6 @@ pub fn port_catalog(workspace: SpaceSelector) -> Prepared<PortCatalog> {
     Prepared::new(PortMethod::PortCatalog { workspace })
 }
 
-/// Lease a simulator for `workspace` as `request` asks.
 pub fn acquire_simulator(
     workspace: SpaceSelector,
     request: SimRequest,
@@ -186,7 +181,6 @@ pub fn acquire_simulator(
     Prepared::new(SimulatorMethod::SimAcquire { workspace, request })
 }
 
-/// Release the simulator lease `name` of `workspace`.
 pub fn release_simulator(workspace: SpaceSelector, name: String) -> Prepared<()> {
     Prepared::new(SimulatorMethod::SimRelease { workspace, name })
 }
@@ -299,7 +293,6 @@ pub async fn container_catalog(
     request(daemon, ContainerMethod::ContainerCatalog { workspace }).await
 }
 
-/// Lease a permit of a resource pool for `workspace` as `request` asks.
 pub fn acquire_resource(
     workspace: SpaceSelector,
     request: ResourceRequest,
@@ -307,7 +300,6 @@ pub fn acquire_resource(
     Prepared::new(ResourceMethod::ResourceAcquire { workspace, request })
 }
 
-/// Release the lease `name` of `pool` that `workspace` holds.
 pub fn release_resource(workspace: SpaceSelector, pool: String, name: String) -> Prepared<()> {
     Prepared::new(ResourceMethod::ResourceRelease {
         workspace,
@@ -321,12 +313,10 @@ pub fn resources(workspace: SpaceSelector) -> Prepared<Overview> {
     Prepared::new(ResourceMethod::ResourceOverview { workspace })
 }
 
-/// The resource pools `workspace`'s configuration defines.
 pub async fn resource_catalog(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Catalog> {
     request(daemon, ResourceMethod::ResourceCatalog { workspace }).await
 }
 
-/// Ask for the secret `name` for `workspace` as `request` asks.
 pub fn acquire_secret(
     workspace: SpaceSelector,
     name: String,
@@ -339,12 +329,10 @@ pub fn acquire_secret(
     })
 }
 
-/// Give up the grant of the secret `name` that `workspace` holds.
 pub fn release_secret(workspace: SpaceSelector, name: String) -> Prepared<()> {
     Prepared::new(SecretMethod::SecretRelease { workspace, name })
 }
 
-/// The secrets `workspace`'s configuration defines.
 pub async fn secret_catalog(
     daemon: &impl Daemon,
     workspace: SpaceSelector,
@@ -352,7 +340,7 @@ pub async fn secret_catalog(
     request(daemon, SecretMethod::SecretCatalog { workspace }).await
 }
 
-/// Hold `space` against cleanup as `name`, for `reason`.
+/// Holds `space` against cleanup.
 pub fn acquire_hold(
     space: SpaceSelector,
     name: String,
@@ -365,12 +353,10 @@ pub fn acquire_hold(
     })
 }
 
-/// Release the hold `name` on `space`.
 pub fn release_hold(space: SpaceSelector, name: String) -> Prepared<()> {
     Prepared::new(HoldMethod::HoldRelease { space, name })
 }
 
-/// The holds on `space`.
 pub fn holds(space: SpaceSelector) -> Prepared<Vec<SpaceHold>> {
     Prepared::new(HoldMethod::HoldList { space })
 }

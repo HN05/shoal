@@ -1,5 +1,4 @@
-//! Spaces of either kind: finding, listing and naming them, where each
-//! runs, its status and environment, and its scope tokens.
+//! Requests about spaces of either kind.
 use anyhow::Result;
 
 use crate::connection::{Daemon, Prepared, pages, request};
@@ -12,14 +11,12 @@ use shoal_protocol::{
 };
 use std::collections::BTreeMap;
 
-/// The workspaces and chats, running or stopped, visible to this caller;
-/// the daemon filters scoped requests.
+/// The spaces the caller sees, running or stopped.
 pub async fn list(daemon: &impl Daemon) -> Result<Spaces> {
     let spaces: Vec<Space> = request(daemon, SpaceMethod::ListSpaces).await?;
     Ok(Spaces(spaces))
 }
 
-/// The workspace or chat `selector` names, by number, ID or name.
 pub async fn present_space(
     daemon: &impl Daemon,
     selector: &SpaceSelector,
@@ -36,10 +33,9 @@ pub async fn everywhere(daemon: &impl Daemon, here: bool) -> Result<Everywhere> 
 }
 
 /// How `acting`, the request a picker offers spaces for, judges each space
-/// the caller sees on every machine, by the daemon of the machine it runs
-/// on, with the other machines' spaces as [`everywhere`] lists them; none
-/// of those when it stays on this one. This machine's, which the picker
-/// lists itself, are judged but not listed.
+/// the caller sees, each by the daemon of the machine it runs on. Returns
+/// the other machines' spaces as [`everywhere`] lists them. This machine's
+/// spaces are judged but not listed, since the picker lists them itself.
 pub async fn offered(daemon: &impl Daemon, acting: Operation) -> Result<Everywhere> {
     let acting = Some(Box::new(acting));
     let method = SpaceMethod::ListSpacesEverywhere {
@@ -103,7 +99,6 @@ pub async fn environment(
     shoal_protocol::env::export_configured(values, inherited)
 }
 
-/// Give the workspace or chat `space` the name `name`.
 pub fn rename_space(space: SpaceSelector, name: SpaceName) -> Prepared<RenamedSpace> {
     Prepared::new(SpaceMethod::RenameSpace { space, name })
 }
@@ -115,7 +110,6 @@ pub async fn locate(daemon: &impl Daemon, space: SpaceSelector) -> Result<Locate
     Ok(*located)
 }
 
-/// The spaces `target` selects.
 pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Vec<Space>> {
     request(daemon, SpaceMethod::FindSpaces { target }).await
 }

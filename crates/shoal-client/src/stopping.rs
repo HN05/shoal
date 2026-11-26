@@ -1,5 +1,4 @@
-//! Stopping what runs in a space: its agents and commands, which a stop
-//! keeps to restore, and its untracked processes.
+//! Stopping what runs in a space.
 use anyhow::Result;
 
 use crate::connection::{Daemon, Prepared, request};

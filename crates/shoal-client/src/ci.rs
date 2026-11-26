@@ -1,5 +1,4 @@
-//! CI on a space's forge: listing, starting, rerunning, cancelling and
-//! approving runs and checks, and reading check logs.
+//! Requests about CI runs and checks on a space's forge.
 use crate::forge::items::reference::ItemInput;
 use std::collections::BTreeMap;
 
@@ -27,7 +26,6 @@ pub fn runs(target: RepoTarget, of: RunsOf, filter: RunFilter) -> PreparedPages<
     PreparedPages::new(CiMethod::ListCiRuns { target, of, filter })
 }
 
-/// The run `run` names.
 pub fn run(target: RepoTarget, run: ItemInput) -> Prepared<Run> {
     Prepared::new(CiMethod::ViewCiRun { target, run })
 }

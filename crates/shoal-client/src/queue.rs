@@ -1,5 +1,5 @@
-//! The agent queue: admitting launches under `max_heavy_agents`, the entries
-//! waiting, and the hold that keeps a starting entry's slot.
+//! Requests about the agent queue, and the hold that keeps a starting
+//! entry's slot.
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::queue::WorkerStart;
 use std::time::Duration;
@@ -36,7 +36,6 @@ pub async fn start_agent(daemon: &impl Daemon, start: WorkerStart) -> Result<Que
     request(daemon, method).await
 }
 
-/// Every queued entry.
 pub async fn entries(daemon: &impl Daemon) -> Result<Vec<QueueEntry>> {
     request(daemon, QueueMethod::ListQueue).await
 }

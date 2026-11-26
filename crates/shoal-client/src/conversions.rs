@@ -1,6 +1,4 @@
-//! Converting a chat into a workspace, which the daemon then prepares in an
-//! operation, a workspace into a chat, and a space's work to another agent
-//! tool: the requests of [`ConversionMethod`].
+//! Converting a space to the other kind, or its work to another agent tool.
 use std::collections::BTreeMap;
 
 use crate::connection::Prepared;
@@ -15,11 +13,9 @@ use shoal_protocol::{
 
 /// The workspace a chat becomes.
 pub struct NewWorkspace {
-    /// The chat.
     pub chat: SpaceSelector,
     /// The branch the workspace works on, an existing one or a new one.
     pub branch: String,
-    /// The issue to link, by number or URL.
     pub issue: Option<crate::forge::items::reference::ItemInput>,
     /// The branch a new branch starts from.
     pub base: Option<String>,
@@ -30,8 +26,6 @@ pub struct NewWorkspace {
     pub agent: AgentChange,
 }
 
-/// Turn a chat into the workspace `new` describes and start preparing it
-/// with `env`.
 pub fn to_workspace(
     new: NewWorkspace,
     env: BTreeMap<String, String>,

@@ -1,5 +1,5 @@
-//! Alerts: one-way notices to the user or a space's agent, from the user, a
-//! space or Shoal.
+//! Requests about alerts, the one-way notices to the user or a space's
+//! agent.
 use shoal_protocol::alerts::{Alert, AlertCursor, Cleared, Sent};
 
 use std::collections::BTreeMap;
@@ -127,7 +127,6 @@ impl Watch {
         &self.delivered
     }
 
-    /// The next alert, once it comes.
     pub async fn next(&mut self, daemon: &impl Daemon) -> Result<Alert> {
         loop {
             let response: Response = match protocol::read_buffered(&mut self.stream).await {

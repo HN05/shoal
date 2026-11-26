@@ -1,5 +1,4 @@
-//! Permissions: the effective permissions of a space, and of an agent's
-//! launch in a workspace.
+//! Reading the effective permissions of a space or a launch.
 use anyhow::Result;
 
 use crate::connection::{Daemon, request};

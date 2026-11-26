@@ -1,6 +1,4 @@
-//! Workspaces: creating, adopting and inspecting them, their branches and
-//! bases, and the Git state the daemon reads and changes in their
-//! worktrees.
+//! Requests about workspaces and the Git state of their worktrees.
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::status::Inspection;
 use std::{collections::BTreeMap, path::PathBuf};
@@ -60,7 +58,6 @@ pub async fn adopt(
     request(daemon, method).await
 }
 
-/// Rename `workspace`'s branch to `branch`.
 pub fn rename_branch(workspace: SpaceSelector, branch: String) -> Prepared<Workspace> {
     Prepared::new(WorkspaceMethod::RenameBranch { workspace, branch })
 }

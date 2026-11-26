@@ -1,8 +1,6 @@
-//! Apps built on Shoal: the settings the user gives each in its
-//! `[apps.<name>]` tables, and the entries each keeps in the app store.
-//! A write names the revision it replaces, and [`stale`] tells its refusal
-//! once another change took the entry past it; a [`Watch`] follows the
-//! entries under a key prefix as they change.
+//! The settings and app store entries of apps built on Shoal. A write names
+//! the revision it replaces, and [`stale`] tells its refusal once another
+//! change took the entry past it.
 use anyhow::Result;
 use shoal_protocol::{
     apps::{
@@ -28,7 +26,6 @@ pub async fn config(
     request(daemon, AppMethod::ReadAppConfig { app, target }).await
 }
 
-/// The entry of `app` in `scope` under `key`, with its bytes.
 pub async fn read(
     daemon: &impl Daemon,
     app: AppName,
@@ -180,7 +177,6 @@ impl<D: Daemon> Watch<D> {
     }
 }
 
-/// Watch `watched` on a new connection and read the whole snapshot.
 async fn watch(
     daemon: &impl Daemon,
     (app, scope, prefix): &(AppName, AppScope, KeyPrefix),

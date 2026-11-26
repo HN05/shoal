@@ -1,5 +1,4 @@
-//! Agents' changes: the hunks Shoal records as the agents it runs change
-//! the files of their worktrees, who made each and the thread it is for.
+//! Requests about the changes Shoal records as agents edit their worktrees.
 use anyhow::Result;
 use shoal_protocol::{
     changes::{Change, ChangeDiff, ChangeNumber, ToolChange},

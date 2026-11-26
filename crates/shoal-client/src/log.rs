@@ -1,6 +1,4 @@
-//! A space's log, the important events in the life of a workspace or chat,
-//! and Shoal's, every space's with Shoal's own, as the daemon's event
-//! journal holds them.
+//! Reading a space's log, or Shoal's.
 use anyhow::Result;
 use shoal_protocol::log::{LogEntry, LogFilter};
 

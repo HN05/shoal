@@ -1,6 +1,4 @@
-//! What `shoal view` reads through the daemon: issues and PRs as the forge
-//! reports them, with failed checks' logs, and CI runs with their jobs and
-//! failed jobs' logs, in the order they were selected.
+//! What `shoal view` reads from the forge through the daemon.
 use crate::forge::items::reference::ItemInput;
 use anyhow::Result;
 use shoal_protocol::views::Viewed;

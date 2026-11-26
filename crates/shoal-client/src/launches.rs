@@ -1,7 +1,4 @@
-//! Agent launches: the request that starts an agent as a launch asks, and
-//! the one that checks a launch of a new workspace before a picker asks,
-//! and those that read the modes it may start in and the one its item's
-//! labels call for.
+//! Requests that start an agent, and the checks a start makes first.
 use anyhow::Result;
 use shoal_protocol::config::modes::ModeShapes;
 use shoal_protocol::protocol::LaunchMethod;
@@ -56,10 +53,9 @@ pub async fn labelled_mode(daemon: &impl Daemon, launch: Launch) -> Result<Label
     request(daemon, LaunchMethod::LabelledMode { launch }).await
 }
 
-/// Have this machine register the repository of the space `launch` goes
-/// below, which another machine runs in a repository this one has not
-/// registered, before the start settles anything else there, refusing
-/// first what the launch would refuse there.
+/// Has this machine register the repository of the space `launch` goes
+/// below, which another machine runs. Refuses first what the launch would
+/// refuse here.
 pub async fn take_parent_repository(daemon: &impl Daemon, launch: Launch) -> Result<()> {
     let launch = Box::new(launch);
     request::<()>(daemon, LaunchMethod::TakeParentRepository { launch }).await

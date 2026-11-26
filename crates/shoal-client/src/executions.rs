@@ -1,6 +1,4 @@
-//! Tracked executions: what they run, where their executable came from, the
-//! agents Shoal stopped or that exited with a session to resume, and the
-//! retries of their failed turns.
+//! Requests a tracked execution makes about its own run.
 use crate::connection::{Daemon, Prepared, request};
 use shoal_protocol::{
     executions::ExecutionKind, processes::Identity, protocol::ExecutionMethod,

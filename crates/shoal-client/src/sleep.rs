@@ -1,6 +1,4 @@
-//! Whether Shoal wakes a space's agent for having stayed idle: an agent
-//! that is waiting for something sleeps, until its next turn or for good,
-//! and may set a timer that wakes it at a time.
+//! Setting whether a space's agent sleeps.
 use shoal_protocol::sleep::{Slept, WakeTimer};
 
 use crate::connection::Prepared;

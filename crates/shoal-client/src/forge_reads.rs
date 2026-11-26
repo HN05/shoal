@@ -1,6 +1,5 @@
 //! What a space or a registered checkout reads from its forge through the
-//! daemon, which chooses the account: the agent account for a workspace
-//! process or a chat's agent, the user's own logins otherwise.
+//! daemon, which chooses the account.
 use crate::forge::items::reference::ItemInput;
 use anyhow::{Context, Result};
 use shoal_protocol::progress::Blocker;
@@ -55,17 +54,14 @@ pub async fn forge_download(
     DownloadPiece::join(pieces)
 }
 
-/// What the forge of the `target` repository supports.
 pub async fn capabilities(daemon: &impl Daemon, target: RepoTarget) -> Result<Capabilities> {
     request(daemon, ItemMethod::Capabilities { target }).await
 }
 
-/// The reactions the forge of the `target` repository allows.
 pub async fn reactions(daemon: &impl Daemon, target: RepoTarget) -> Result<AllowedReactions> {
     request(daemon, ItemMethod::Reactions { target }).await
 }
 
-/// The labels of the `target` repository.
 pub async fn labels(daemon: &impl Daemon, target: RepoTarget) -> Result<Vec<Label>> {
     pages(daemon, ItemMethod::Labels { target }).await
 }

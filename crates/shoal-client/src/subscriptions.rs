@@ -1,7 +1,5 @@
-//! Subscriptions: a snapshot of the records of some topics, then their
-//! changes, on a connection of their own. A daemon restart closes the
-//! connection; the subscription subscribes again and reports the new
-//! snapshot as a resync.
+//! Subscriptions to the records of some topics: a snapshot, then their
+//! changes.
 use shoal_protocol::subscriptions::Update;
 use shoal_protocol::subscriptions::records::{Record, Topic};
 
@@ -83,7 +81,6 @@ impl<D: Daemon> Subscription<D> {
     }
 }
 
-/// Subscribe on a new connection and read the whole snapshot.
 async fn subscribe(
     daemon: &impl Daemon,
     topics: &[Topic],

@@ -1,5 +1,4 @@
-//! Merging: how `shoal merge` merges a space's work, and what a local merge
-//! of a workspace's branch would do.
+//! How `shoal merge` would merge a space's work.
 use anyhow::Result;
 
 use crate::connection::{Daemon, Prepared, request};

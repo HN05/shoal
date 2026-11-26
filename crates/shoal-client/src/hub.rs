@@ -1,7 +1,5 @@
-//! The hub: pairing codes, joining and leaving it, its machines and devices,
-//! the placer an app registers as, and the relay that carries a member's
-//! link to this machine's daemon over a command's standard input and
-//! output.
+//! Requests about the hub, and the relay that carries a member's link to
+//! this machine's daemon.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
     hub::{HubUpdate, Left, Membership, Overview, Revoked, pairing::Pairing, placement::Asked},
@@ -31,7 +29,6 @@ pub async fn leave(daemon: &impl Daemon) -> Result<Left> {
     request(daemon, HubMethod::LeaveHub).await
 }
 
-/// Install the latest release on the hub.
 pub async fn update(daemon: &impl Daemon) -> Result<HubUpdate> {
     request(daemon, HubMethod::UpdateHub).await
 }

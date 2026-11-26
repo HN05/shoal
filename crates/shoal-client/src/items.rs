@@ -1,5 +1,5 @@
-//! Changing a space's issues and PRs on its forge: linking them, opening,
-//! reverting and acting on them, and waiting for their activity.
+//! Changing a space's issues and PRs on its forge, and waiting for their
+//! activity.
 use anyhow::Result;
 use tokio::time::Instant;
 
@@ -81,11 +81,11 @@ pub fn watch(
     })
 }
 
-/// The next activity on the items of `space` that `selection` selects, an
-/// item of the registered `repository` for a chat without a repository,
-/// waiting across daemon restarts until `deadline`, when the updates come
-/// back timed out; `restarted` says the daemon restarted before the wait
-/// began. Waiting acknowledges nothing.
+/// The next activity on the items of `space` that `selection` selects,
+/// waiting across daemon restarts until `deadline`. A chat without a
+/// repository selects an item of the registered `repository`. `restarted`
+/// says the daemon restarted before the wait began. Waiting acknowledges
+/// nothing.
 pub async fn await_updates(
     daemon: &impl Daemon,
     space: &SpaceSelector,

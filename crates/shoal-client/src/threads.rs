@@ -33,9 +33,6 @@ pub fn open(
     })
 }
 
-/// Add `post` with `attachments`, pointing at the places in code `code`
-/// and the changes `changes`, to the thread `thread`, acting as the space
-/// `from`.
 pub async fn post(
     daemon: &impl Daemon,
     thread: ThreadNumber,
@@ -114,8 +111,6 @@ pub async fn forward(
     Ok(*request::<Box<Thread>>(daemon, method).await?)
 }
 
-/// Resolve the thread `thread` as `resolving` says, acting as the space
-/// `from`.
 pub async fn resolve(
     daemon: &impl Daemon,
     thread: ThreadNumber,
@@ -154,7 +149,6 @@ pub async fn for_user(daemon: &impl Daemon) -> Result<Listing> {
     request(daemon, method).await
 }
 
-/// The thread `thread`.
 pub async fn show(daemon: &impl Daemon, thread: ThreadNumber) -> Result<Thread> {
     Ok(*request::<Box<Thread>>(daemon, ThreadMethod::ShowThread { thread }).await?)
 }
@@ -234,7 +228,6 @@ pub async fn add_changes(
     request(daemon, method).await
 }
 
-/// Take the changes `changes` out of the thread `thread`.
 pub async fn remove_changes(
     daemon: &impl Daemon,
     thread: ThreadNumber,

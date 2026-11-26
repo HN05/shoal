@@ -1,5 +1,4 @@
-//! Files attached to a workspace or chat: Shoal's copies and how they came,
-//! and their bytes from whichever machine keeps them.
+//! Requests about the files attached to a space.
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -10,12 +9,10 @@ use tokio::{io::BufReader, net::UnixStream};
 
 use crate::connection::{Daemon, PreparedPages, open_buffered, request};
 
-/// The files attached to `space`.
 pub fn list(space: SpaceSelector) -> PreparedPages<AttachedFile> {
     PreparedPages::new(FileMethod::ListFiles { space })
 }
 
-/// Attach copies of `files` to `space`.
 pub fn add(space: SpaceSelector, files: Vec<NewFile>) -> PreparedPages<AttachedFile> {
     PreparedPages::new(FileMethod::AddFiles { space, files })
 }

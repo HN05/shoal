@@ -1,5 +1,4 @@
-//! The agents running in a space: the state and turns their hooks report,
-//! the user's interrupts, and the sessions they run.
+//! Requests about the agents running in a space.
 use anyhow::Result;
 use shoal_protocol::agents::GitCredential;
 
@@ -119,8 +118,6 @@ pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
     request(daemon, AgentMethod::ListAgents).await
 }
 
-/// Restart the agent of `space` as `restart` says, answering with what the
-/// daemon did: restarted it, took the restart for later or skipped it.
 pub fn restart(space: SpaceSelector, restart: AgentRestart) -> Prepared<RestartOutcome> {
     Prepared::new(AgentMethod::RestartAgent { space, restart })
 }
@@ -131,9 +128,6 @@ pub fn cancel_restart(space: SpaceSelector) -> Prepared<Option<AgentRestart>> {
     Prepared::new(AgentMethod::CancelRestart { space })
 }
 
-/// Resume the agent of `space` as `resume` says, answering with what the
-/// daemon did: continued its turn, queued or started its restores, reported
-/// its stopped commands or found nothing to resume.
 pub fn resume(space: SpaceSelector, resume: AgentResume) -> Prepared<ResumeOutcome> {
     Prepared::new(AgentMethod::ResumeAgent { space, resume })
 }

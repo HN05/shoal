@@ -1,6 +1,4 @@
-//! Triggers: `[triggers.NAME]` config that starts agents when an event
-//! source fires. Clients list them with their runtime state, and pause,
-//! resume and run them.
+//! Listing, pausing and running triggers.
 use anyhow::Result;
 use shoal_protocol::protocol::{ItemContext, TriggerMethod};
 use shoal_protocol::triggers::{Fired, TriggerStatus, WebhookRequest};

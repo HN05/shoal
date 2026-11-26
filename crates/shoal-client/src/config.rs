@@ -1,6 +1,5 @@
-//! Config: the repository layers of the config of a space or a repository,
-//! which the caller resolves under the global files it reads, and the
-//! values of settings it cannot read itself.
+//! The repository config layers of a space or a repository, which the
+//! caller resolves itself, and the values it cannot read itself.
 use anyhow::Result;
 use serde::de::DeserializeOwned;
 

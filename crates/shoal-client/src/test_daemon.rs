@@ -1,6 +1,5 @@
-//! Connections to a [`TestDaemon`], as the user and as a workspace's agent,
-//! for the tests of what apps send through them, with the requests and
-//! readings several of them share.
+//! Connections to a [`TestDaemon`], and the helpers this crate's tests
+//! share.
 use shoal_daemon::test_daemon::TestDaemon;
 use shoal_protocol::{
     model::{QueueEntry, Workspace},

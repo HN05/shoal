@@ -1,6 +1,4 @@
-//! Registered repositories: registering, renaming, moving and removing
-//! them, their checkouts' sync, branches and local configuration, and the
-//! agent configs Shoal keeps for them.
+//! Requests about registered repositories and what Shoal keeps for them.
 use shoal_ids::repository_ids::RepositoryId;
 use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 
@@ -22,7 +20,6 @@ use shoal_protocol::{
 /// Hold a contribution again this soon after the daemon closes its hold.
 const HOLD_RETRY: Duration = Duration::from_secs(1);
 
-/// The registered repositories.
 pub async fn list(daemon: &impl Daemon) -> Result<Vec<Repository>> {
     request(daemon, RepositoryMethod::ListRepositories).await
 }
@@ -106,8 +103,6 @@ pub async fn rename(
     .await
 }
 
-/// Share `repository` with the other machines of the hub, or stop sharing
-/// it.
 pub async fn share(daemon: &impl Daemon, repository: Selector, shared: bool) -> Result<Repository> {
     request(
         daemon,
@@ -158,7 +153,6 @@ pub async fn plan_moves(
     .await
 }
 
-/// Move every repository into the configured root.
 pub async fn move_all(daemon: &impl Daemon, regular_dir: bool) -> Result<Vec<MovedRepository>> {
     request(daemon, RepositoryMethod::MoveRepositories { regular_dir }).await
 }
@@ -173,7 +167,6 @@ pub async fn failing_syncs(daemon: &impl Daemon) -> Result<Vec<CheckoutSync>> {
     pages(daemon, RepositoryMethod::FailingSyncs).await
 }
 
-/// `repository`'s local and remote branches.
 pub async fn branches(daemon: &impl Daemon, repository: Selector) -> Result<Vec<Branch>> {
     request(daemon, RepositoryMethod::ListBranches { repository }).await
 }
@@ -200,7 +193,6 @@ pub async fn local_config_path(daemon: &impl Daemon, repository: Selector) -> Re
     request(daemon, RepositoryMethod::LocalConfigPath { repository }).await
 }
 
-/// Apply `changes` to `repository`'s local configuration file.
 pub async fn edit_local_config(
     daemon: &impl Daemon,
     repository: Selector,

@@ -1,5 +1,4 @@
-//! What commands that act on running agents print: `shoal stop`, `shoal
-//! restart` and the turn commands.
+//! What the commands that stop, restart and interrupt agents print.
 use serde::{Deserialize, Serialize};
 use shoal_protocol::space_names::SpaceName;
 

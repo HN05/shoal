@@ -1,5 +1,4 @@
-//! The branches on the forge of a space's repository, or another one:
-//! listing them with what decides whether each can go, and deleting them.
+//! Listing and deleting the branches on a repository's forge.
 use anyhow::Result;
 
 use crate::connection::{Daemon, PreparedPages, pages};

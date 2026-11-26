@@ -1,5 +1,4 @@
-//! What removing a space would discard, whether the caller lets it, and
-//! what the removal did.
+//! Removing, absorbing and restoring spaces.
 use anyhow::{Context as _, Result};
 use shoal_protocol::removal::{RemovalResult, SpaceRemovalCheck, UnsavedWork};
 
@@ -13,8 +12,6 @@ use shoal_protocol::{
     transfer::Carrying,
 };
 
-/// What removing the workspace or chat `space` would do, with its
-/// worktree's changes when `include_changes`.
 pub fn check(space: SpaceSelector, include_changes: bool) -> Prepared<Box<SpaceRemovalCheck>> {
     Prepared::new(RemovalMethod::CheckRemoval {
         space,
@@ -95,7 +92,6 @@ pub async fn taken_records(
     request(daemon, RemovalMethod::TakenRecords { space, carrying }).await
 }
 
-/// Open the removed `space` again from its record.
 pub async fn restore(daemon: &impl Daemon, space: SpaceSelector) -> Result<RestoredSpace> {
     request(daemon, RemovalMethod::RestoreSpace { space }).await
 }

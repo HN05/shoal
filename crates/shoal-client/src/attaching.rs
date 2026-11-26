@@ -1,8 +1,6 @@
-//! Attaching a terminal on this machine, or a device's, to an agent's
-//! session on whichever machine its space runs, which runs Shoal's attach
-//! on a terminal of its own for it: what that terminal shows comes back as
-//! frames, and the viewer's keys and size go there. A terminal demo's
-//! stream carries the same frames.
+//! Attaching a terminal to an agent's session on whichever machine its
+//! space runs. What the session's terminal shows comes back as frames, and
+//! the viewer's keys and size go there.
 use anyhow::Result;
 use shoal_protocol::{
     attaching::{FromSession, ToSession, Viewer},
