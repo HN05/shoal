@@ -107,7 +107,6 @@ on its own, by the [scoped workspace commands](modes.md#scoped-workspace-command
 rules. It runs none of the commands that need a worktree. It also:
 
 - opens workspaces and chats only below its chat and in its repository,
-- renames only its own chat,
 - decides the requests routed to it only with a grant,
 - opens issues only where its [permissions](modes.md#mode-permissions) let it
   open them directly.
