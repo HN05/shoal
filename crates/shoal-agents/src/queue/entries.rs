@@ -1,6 +1,5 @@
-//! Operations on one entry: adding a launch, listing entries, and a starting
-//! entry's way from its reservation to the agent that takes its slot or its
-//! failure.
+//! Operations on one queue entry, from its admission to the agent that takes
+//! its slot, or its failure.
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
 use std::collections::{HashMap, HashSet};
@@ -277,10 +276,10 @@ impl Agents {
             .await
     }
 
-    /// Hold the queue gate for an agent taking over `entry`'s slot, refusing
-    /// an entry no longer starting, whose start a stop or completion
-    /// cancelled, and returning one to the queue while the system shuts
-    /// down or the machine sleeps, or once a stop, reload or unsafe reading withdrew the healthy
+    /// Hold the queue gate for an agent taking over `entry`'s slot. Refuses an
+    /// entry no longer starting, whose start a stop or completion cancelled.
+    /// Returns one to the queue while the system shuts down or the machine
+    /// sleeps, or once a stop, reload or unsafe reading withdrew the healthy
     /// readings that admitted it. The guard keeps cancellation out until the
     /// agent has taken the slot.
     pub async fn reserve_queue_entry(
@@ -458,10 +457,10 @@ impl Agents {
             .await
     }
 
-    /// End a starting entry that cannot start its agent and say why: a
-    /// launch in a recorded space stays there as a failed entry, whatever
-    /// its kind, which `shoal resume` queues again. An entry that already
-    /// ended, such as with its removed space, has no slot left to free.
+    /// End a starting entry that cannot start its agent and say why. A launch
+    /// in a recorded space stays there as a failed entry, which `shoal resume`
+    /// queues again. An entry that already ended, such as with its removed
+    /// space, has no slot left to free.
     pub async fn fail_queue_entry(
         &self,
         daemon: &dyn Daemon,
@@ -511,11 +510,10 @@ impl Agents {
     }
 
     /// The agent a queued launch started takes over the slot its entry kept,
-    /// and what made the launch. Only that launch's agent names the entry,
-    /// so another agent registering in the same workspace leaves it
-    /// starting. The workspace is recorded as the one the launch started in
-    /// as the entry goes, so a client that no longer finds the entry finds
-    /// it.
+    /// and what made the launch. Only that launch's agent names the entry, so
+    /// another agent registering in the same workspace leaves it starting. The
+    /// workspace is recorded as the one the launch started in as the entry
+    /// goes, so a client that no longer finds the entry finds the workspace.
     pub async fn consume_queue_entry(
         &self,
         id: &QueueEntryId,

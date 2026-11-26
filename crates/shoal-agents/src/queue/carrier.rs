@@ -1,7 +1,5 @@
-//! Who carries out an admitted restore: the stopped agent's wrapper, which
-//! waits over its link, or the daemon, which starts the agent in a new
-//! place once no wrapper is left. Admission decides what a restore waits
-//! for alike for both.
+//! Who carries out an admitted restore: the stopped agent's waiting wrapper, or
+//! the daemon once no wrapper is left.
 use shoal_ids::execution_ids::ExecutionId;
 use std::collections::HashSet;
 

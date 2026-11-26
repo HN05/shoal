@@ -1,9 +1,6 @@
 //! What wakes a queued restore, decided from its agent's recovery record
-//! whatever carries it out: nothing blocking the space for an agent stopped
-//! because its space was blocked, an update for one stopped between turns,
-//! which has nothing to do until then, sustained healthy readings for one
-//! load or disk space stopped mid-turn, and a free slot for any other, or
-//! for one `shoal resume` asked for.
+//! whatever carries the restore out. `docs/design/queue.md` says what each kind
+//! of stop waits for.
 use crate::execution::recovery::RecordExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -126,11 +123,10 @@ impl Stopped {
 }
 
 impl Agents {
-    /// The executions of the workspace whose agent, stopped between turns
-    /// with every process, waits in the queue for an update, for its
-    /// waiting wrapper or for the daemon to start it, while none is recorded
-    /// for it and neither a timer nor a turn retry will wake it. Disk space
-    /// may still hold back one that is, which has work all the same. An
+    /// The executions of the workspace whose agent, stopped between turns with
+    /// every process, waits in the queue for an update while none is recorded
+    /// for it and neither a timer nor a turn retry will wake it. Disk space may
+    /// still hold back one that has an update, which has work all the same. An
     /// agent stopped because its space is blocked is not idle.
     pub async fn idle_restores(
         &self,
@@ -171,11 +167,10 @@ impl Agents {
     }
 
     /// What the queued restore of `execution` in the space `id` waits for,
-    /// whatever carries it out: a slot once `shoal resume` asked for it, no
-    /// longer `automatic`, otherwise what its recovery record says. An
-    /// update is due only while free disk space has recovered as for any
-    /// other restore, since disk protection stops agents that start below
-    /// it.
+    /// whatever carries it out: a slot once `shoal resume` asked for it,
+    /// otherwise what its recovery record says. An update is due only once free
+    /// disk space has recovered, since disk protection stops agents that start
+    /// below it.
     pub async fn restore_wake(
         &self,
         daemon: &dyn Daemon,
@@ -196,9 +191,7 @@ impl Agents {
     }
 
     /// Whether the restore of `execution`, stopped between turns in
-    /// `workspace_id`, is due: once nothing blocks the space for an agent
-    /// stopped because it was blocked, else once an update waits for it,
-    /// and while free disk space allows restoring it.
+    /// `workspace_id`, is due by its record, and free disk space allows it.
     pub async fn restore_due(
         &self,
         daemon: &dyn Daemon,

@@ -1,6 +1,6 @@
-//! What `shoal queue` does to a waiting entry: start it now or cancel it,
-//! and the cancelling of the launches a stopped workspace waits for. Each holds the queue gate, so dispatch cannot start
-//! the entry meanwhile.
+//! What `shoal queue` does to a waiting entry: start it now or cancel it. Each
+//! operation holds the queue gate, so dispatch cannot start the entry
+//! meanwhile.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::{HashMap, HashSet};
@@ -82,10 +82,10 @@ impl Agents {
             .map(Some)
     }
 
-    /// Start the waiting restore of `execution` now, regardless of the
-    /// limits, as its waiting wrapper asks when the user wakes the agent in
-    /// its place, or nothing once it starts or leaves the queue; `false`
-    /// while the agent still stops, before its wrapper waits over its link.
+    /// Start the waiting restore of `execution` now, regardless of the limits,
+    /// as its waiting wrapper asks when the user wakes the agent in its place.
+    /// Does nothing once it starts or leaves the queue. Returns `false` while
+    /// the agent still stops, before its wrapper waits over its link.
     pub async fn wake_waiting_restore(
         &self,
         daemon: &dyn Daemon,
@@ -246,10 +246,10 @@ impl Agents {
     }
 
     /// [`Self::cancel_waiting_launches`] while the preparation of
-    /// `workspace_id` waits, in one transaction with that check, so its
-    /// release, which needs the launch it waits for, and this cancellation
-    /// exclude each other, recording that it now waits for its stopped
-    /// agent; `None` once the preparation no longer waits.
+    /// `workspace_id` waits, recording that it now waits for its stopped agent.
+    /// The check and the cancellation share one transaction, so they exclude
+    /// the preparation's release, which needs the launch it waits for. `None`
+    /// once the preparation no longer waits.
     pub async fn cancel_launches_while_preparation_waits(
         &self,
         daemon: &dyn Daemon,

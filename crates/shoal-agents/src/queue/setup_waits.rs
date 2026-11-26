@@ -1,8 +1,4 @@
-//! The launches waiting for the setup of a workspace: starting a launch
-//! whose start asked for it at once when its preparation releases it,
-//! returning a start whose preparation left none waiting to the queue,
-//! finding the one waiting for a workspace's, and changing the permissions
-//! its plan starts its agent with before a retried setup lets it start.
+//! The launches waiting for the setup of a workspace.
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::collections::HashSet;
 
@@ -91,11 +87,10 @@ impl Agents {
             .await
     }
 
-    /// Give each launch `waiting` names, waiting for a failed setup, and
-    /// each failed launch `failed` names the permissions beside it, in its
-    /// plan, which its agent starts under, and in the entry the queue
-    /// shows, in one transaction, refusing them all when one no longer
-    /// waits to open its workspace or to be restored.
+    /// Give the permissions beside it to each launch `waiting` names and each
+    /// failed launch `failed` names, in its plan and in the entry the queue
+    /// shows, in one transaction. Refuses them all when one no longer waits to
+    /// open its workspace or to be restored.
     pub async fn give_launches(
         &self,
         waiting: Vec<(QueueEntryId, PermissionsConfig)>,

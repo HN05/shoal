@@ -1,8 +1,5 @@
-//! Launches whose start failed: each stays on the space it was to start
-//! its agent in as a failed entry, which nothing admits and which keeps no
-//! space from cleanup, listed with its error until `shoal resume` queues
-//! it again as it was, a new launch in the space replaces it, or the space
-//! goes with it.
+//! Launches whose start failed. Each stays on its space as a failed entry until
+//! `shoal resume` queues it again, a new launch replaces it or the space goes.
 use std::collections::HashMap;
 
 use anyhow::{Context as _, Result};

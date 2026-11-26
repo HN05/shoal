@@ -1,11 +1,5 @@
-//! Restores of stopped agents and last sessions that the daemon starts, as
-//! it starts launches in existing workspaces: `shoal resume` queues them, so
-//! does a signal that ended an agent's session, through a request beside its
-//! record, and the daemon takes over one whose waiting wrapper is gone. Each
-//! waits as its agent's record says and leaves the queue once its
-//! agent registers, or while waiting once what it restores is gone, as after
-//! `shoal restore --now` or `--discard-agent`. A restart's restore starts at once, in
-//! the slot its agent kept.
+//! Restores of stopped agents and last sessions that the daemon starts, rather
+//! than a waiting wrapper. `docs/design/queue.md` says what each waits for.
 use crate::execution::recovery::LastSessionExt;
 use crate::execution::recovery::RecordExt;
 use shoal_ids::execution_ids::ExecutionId;
@@ -59,9 +53,8 @@ struct Restore {
     agent: crate::agent::Agent,
     execution: ExecutionId,
     env: String,
-    /// Why Shoal put the agent to sleep and what wakes it, when Shoal queued
-    /// it on its own rather than `shoal resume`, so an agent stopped between
-    /// turns waits for an update.
+    /// Why Shoal put the agent to sleep and what wakes it, when Shoal queued it
+    /// on its own rather than `shoal resume`.
     asleep: Option<Asleep>,
     /// Queued, or starting at once.
     state: QueueState,
@@ -86,7 +79,6 @@ impl Restore {
         })
     }
 
-    /// Whether Shoal queued it on its own.
     fn automatic(&self) -> bool {
         self.asleep.is_some()
     }
@@ -101,11 +93,11 @@ impl Restore {
     }
 }
 
-/// Record `restore` behind the work already waiting, unless its execution
-/// already has one, which a resume keeps in place and makes no longer
-/// automatic; one that starts at once refuses it. Its space must be a ready
-/// workspace or a chat, and its execution ended, since a recorded one runs
-/// or is unresolved, unless its wrapper waits to restore it.
+/// Record `restore` behind the work already waiting. A restore already recorded
+/// for its execution keeps its place, and a resume makes it no longer
+/// automatic; a restore that starts at once refuses it. Its space must be a
+/// ready workspace or a chat. Its execution must have ended, since a recorded
+/// one runs or is unresolved, unless its wrapper waits to restore it.
 fn insert(tx: &rusqlite::Transaction<'_>, records: &dyn Records, restore: &Restore) -> Result<()> {
     if !records.space_is_chat(tx, &restore.target.id)? {
         shoal_store::require_ready(tx, &restore.target.id)
@@ -332,11 +324,8 @@ fn resolved_restores(
         .collect()
 }
 
-/// Why the agent whose stop saved `record` is asleep and what wakes it, for
-/// a restore Shoal queues on its own: once nothing blocks its space for an
-/// agent stopped because it was blocked, else, for one stopped between
-/// turns, once what its reason waits for comes, else once the queue starts
-/// it.
+/// Why the agent whose stop saved `record` is asleep and what wakes it, for a
+/// restore Shoal queues on its own.
 fn asleep(record: &recovery::Record) -> Asleep {
     let reason = record.stop_reason.as_deref();
     let between_turns = record.between_turns() || reason == Some(crate::control::BLOCKED_REASON);
@@ -433,13 +422,11 @@ impl Agents {
             .await
     }
 
-    /// Queue the restore of the agent stopped as `execution` in
-    /// `workspace`, starting it at once when `now`, and return its entry; an
-    /// agent of a blocked space first reads what still blocks it.
-    /// Asking for it says the work is not finished, so it withdraws the
-    /// workspace's completion, whichever wrapper restores the agent; only
-    /// once the queue's gate is released, since recording a completion takes
-    /// that gate under the workspace's PR gate.
+    /// Queue the restore of the agent stopped as `execution` in `workspace`,
+    /// starting it at once when `now`, and return its entry. Asking for it
+    /// withdraws the workspace's completion, since the work is not finished.
+    /// That waits until the queue's gate is released, since recording a
+    /// completion takes that gate under the workspace's PR gate.
     async fn add_stopped_restore(
         &self,
         daemon: &dyn Daemon,
@@ -519,12 +506,8 @@ impl Agents {
     }
 
     /// Queue the restore of `agent`, stopped as `execution` in `workspace`,
-    /// whose wrapper exited with `code` after its restore was admitted but
-    /// before the agent started, as one whose binary an upgrade removed may.
-    /// Shoal queues it on its own, so an agent stopped between turns waits
-    /// for an update, while one load stopped, which healthy readings
-    /// admitted already, waits only for a free slot; the daemon starts it
-    /// where the agent ran. Returns whether it
+    /// whose wrapper exited after its restore was admitted but before the agent
+    /// started, as one whose binary an upgrade removed may. Returns whether it
     /// is queued; otherwise its record stays for `shoal resume`.
     pub async fn queue_failed_restore(
         &self,
@@ -614,11 +597,9 @@ impl Agents {
     }
 
     /// Hand the restores whose waiting wrapper is gone to the daemon, which
-    /// starts each agent in a new place, where its record says it ran, as it
-    /// does a requested restore. A wrapper is gone once its execution has
-    /// ended, so none reattaches; a restore whose record is gone, as once its
-    /// agent restored, is forgotten, and one whose record cannot be read
-    /// waits.
+    /// starts each agent where its record says it ran. A wrapper is gone once
+    /// its execution has ended. A restore whose record is gone is forgotten,
+    /// and one whose record cannot be read waits.
     pub async fn adopt_orphaned_restores(&self) -> Result<()> {
         let orphaned = self.store.run(|db| orphaned_restores(db)).await?;
         for (space, execution) in orphaned {
@@ -705,10 +686,10 @@ impl Agents {
 
     /// Cancel the restores of `workspace_id`'s stopped agents, requested,
     /// waiting or admitted, and the restarts that would start one in a new
-    /// wrapper, which stay stopped until `shoal resume`. The queue gate keeps
-    /// dispatch from queueing a request meanwhile, and a restart from
-    /// recording its restore, and a restore whose agent already registered
-    /// has left the queue.
+    /// wrapper. Those agents stay stopped until `shoal resume`. The queue gate
+    /// keeps dispatch from queueing a request meanwhile, and a restart from
+    /// recording its restore. A restore whose agent already registered has left
+    /// the queue.
     pub async fn cancel_stopped_restores(
         &self,
         daemon: &dyn Daemon,

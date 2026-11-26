@@ -1,9 +1,5 @@
-//! Opening the space of a starting launch for the agent its caller runs
-//! there now, the last step of every queued start, whoever runs it: a
-//! workspace must still be its ready, verified worktree, its launch's entry
-//! takes it, its branch is brought up to date as an admitted agent's is,
-//! and the PR its start names is linked. A chat, which its entry took when
-//! it was recorded, needs none of it.
+//! Opening the space of a starting launch for the agent its caller runs there
+//! now, the last step of every queued start.
 use anyhow::{Context as _, Result};
 
 use crate::Agents;

@@ -1,6 +1,5 @@
-//! Launches their caller runs itself, in its terminal or process, which
-//! the queue keeps for the caller while they wait: the caller holds one
-//! meanwhile and claims it once its workspace's preparation ends.
+//! Launches their caller runs itself, which the queue keeps for the caller
+//! while they wait.
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
@@ -13,10 +12,10 @@ use shoal_ids::queue_entry_ids::QueueEntryId;
 
 impl Agents {
     /// Start the launch `id`, which its caller held while its workspace was
-    /// prepared, in the caller: at once when its start asked for that and
-    /// nothing blocks it any longer, else when the limits admit it now. One
-    /// already starting for the caller stays so, and one the limits do not
-    /// admit waits for the queue, which starts it once the caller lets go.
+    /// prepared, in the caller. It starts at once when its start asked for that
+    /// and nothing blocks it any longer, else when the limits admit it now. One
+    /// the limits do not admit waits for the queue, which starts it once the
+    /// caller lets go.
     pub async fn queue_claim(&self, daemon: &dyn Daemon, id: &QueueEntryId) -> Result<QueueEntry> {
         let _gate = self.agent_queue.lock_admission().await;
         // The caller holds it now, and once it lets go the queue takes it.

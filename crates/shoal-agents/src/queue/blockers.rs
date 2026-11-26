@@ -1,11 +1,5 @@
-//! What blocks a queued launch. A launch starts once every workspace blocking
-//! it is done at its current HEAD, every chat blocking it is done, either
-//! removed, every launch has opened its
-//! workspace, which then stands in for it, every issue has closed or is
-//! done in a workspace of the repository that links it, and the existing
-//! workspace it opens, if its setup had failed, has passed a post-setup hook
-//! since. It builds on the branch of the done blocker that contains the
-//! others.
+//! What blocks a queued launch, and when each blocker clears.
+//! `docs/design/queue.md` gives the rules.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::progress::Blocker;

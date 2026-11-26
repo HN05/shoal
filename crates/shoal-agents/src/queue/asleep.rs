@@ -1,7 +1,6 @@
-//! Whether a space's agent is asleep: Shoal stopped it and queued its
-//! restore on its own, so it comes back without `shoal resume`. The restore
-//! the daemon starts keeps why and what wakes it; one a waiting wrapper
-//! carries out reads both from the agent's recorded stop.
+//! Whether a space's agent is asleep: Shoal stopped it and queued its restore
+//! on its own. The restore the daemon starts keeps why and what wakes it; a
+//! waiting wrapper's restore reads both from the agent's recorded stop.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 

@@ -1,5 +1,4 @@
-//! The queue's rows: reading the waiting ones and entries, and recording
-//! launches and the restores waiting wrappers carry out.
+//! The queue's rows.
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
@@ -129,10 +128,9 @@ impl From<QueueRequest> for LaunchRequest {
     }
 }
 
-/// End the starting launches that created or opened `workspace`, whose
-/// setup failed, freeing their slots: the launch left waiting for its setup
-/// takes their place, whether or not their caller is still there to end
-/// them.
+/// End the starting launches that created or opened `workspace` whose setup
+/// failed, freeing their slots, whether or not their caller is still there to
+/// end them. The launch left waiting for its setup takes their place.
 fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<()> {
     tx.execute(
         "DELETE FROM agent_queue WHERE ?1 IN (space_id,opens_workspace_id)
@@ -143,10 +141,9 @@ fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Res
 }
 
 /// Whether an agent of `workspace`'s own waits in the queue or starts there.
-/// The starting launches whose setup failed there do not count: the launch
-/// left waiting for that setup takes their place, and any other is refused
-/// until the workspace is ready. Nor does an asleep agent's restore while it
-/// waits, which counts as its stopped agent.
+/// The starting launches whose setup failed there do not count, since the
+/// launch left waiting for that setup takes their place. Nor does an asleep
+/// agent's waiting restore, which counts as its stopped agent.
 pub fn queues_agent_in(
     tx: &rusqlite::Transaction<'_>,
     records: &dyn Records,
@@ -299,15 +296,14 @@ pub fn insert_launch(
     Ok(())
 }
 
-/// Refuse `launch` unless its repository already queues no launch in the
-/// same workspace and is not being removed; names repeat, so they tell no
-/// two launches apart. A launch in a workspace needs it ready in the same
-/// transaction, or failed in its setup for one that waits its turn, which
-/// then waits for a preparation there to get past its post-setup hook, and
-/// one a space queued needs that space present and not being removed:
-/// removal reserves the space before its final checks, so the launch either
-/// precedes them, which keeps the space, or is refused here. Returns
-/// whether it waits for the workspace's setup.
+/// Refuse `launch` while its repository queues another launch in the same
+/// workspace or is being removed. Names repeat, so they tell no two launches
+/// apart. A launch in a workspace needs it ready in the same transaction, or
+/// failed in its setup for one that waits its turn. A launch a space queued
+/// needs that space present and not being removed: removal reserves the space
+/// before its final checks, so the launch either precedes them, which keeps the
+/// space, or is refused here. Returns whether it waits for the workspace's
+/// setup.
 pub fn ensure_recordable(
     tx: &rusqlite::Transaction<'_>,
     records: &dyn Records,

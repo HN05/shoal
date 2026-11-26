@@ -1,6 +1,5 @@
-//! Queuing the worker of an existing workspace in one request, as an app
-//! and `shoal start` queue one in a ready workspace, or the agent of a new
-//! space with its record, to start once its preparation, if any, lets it.
+//! Queuing the agent of an existing workspace, or of a new space with its
+//! record, in one request.
 use anyhow::{Context as _, Result};
 use shoal_protocol::progress::Blocker;
 
@@ -48,12 +47,10 @@ impl Agents {
     }
 
     /// Queue `launch` in the `space` a start recorded, linking `pr` as it
-    /// starts, once `blockers` are done. Where it `awaits_preparation`, as
-    /// in a new workspace, it waits until the preparation gets past the
-    /// post-setup hook, then starts as the queue admits it or, for one that
-    /// starts now, at once regardless of the limits; elsewhere it queues as
-    /// in any ready space. One its caller runs `here` is left to the caller
-    /// once admitted, and kept for it while it waits.
+    /// starts, once `blockers` are done. Where it `awaits_preparation`, as in a
+    /// new workspace, it waits until the preparation gets past the post-setup
+    /// hook. One its caller runs `here` is left to the caller once admitted,
+    /// and kept for it while it waits.
     pub async fn queue_start_agent(
         &self,
         daemon: &dyn Daemon,
