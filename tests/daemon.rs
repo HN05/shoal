@@ -425,7 +425,8 @@ impl IncompatibleDaemon {
                     let response = json!({
                         "type": "status",
                         "data": {"pid": 123, "version": "0.0.0", "uptime_secs": 1,
-                                 "managed": false, "unread_notifications": 0}
+                                 "managed": false, "unread_notifications": 0,
+                                 "work_memory": {"source": "load"}}
                     });
                     support::fake_daemon::write_reply(&stream, &request, response);
                 } else {
@@ -1071,6 +1072,7 @@ fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing
                         "managed": false,
                         "unread_notifications": 0,
                         "cleanup_error": "Automatic cleanup failed",
+                        "work_memory": {"source": "load"},
                     });
                     let reply = json!({"type": "status", "data": status});
                     support::fake_daemon::write_reply(&stream, &request, reply);

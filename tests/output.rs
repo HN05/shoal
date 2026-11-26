@@ -470,7 +470,7 @@ fn a_program_reads_json_output_with_the_librarys_types() {
 fn status_shows_a_busy_daemon_s_own_status_when_it_refuses_the_space_lookup() {
     let status = serde_json::json!({"type": "status", "data": {
         "pid": 7, "version": "test", "uptime_secs": 1, "managed": false,
-        "unread_notifications": 0}});
+        "unread_notifications": 0, "work_memory": {"source": "load"}}});
     let busy = serde_json::json!({"type": "error", "data": {
         "code": "operation_failed", "message": "the daemon is busy"}});
     let (output, _) = run_with_replies(
