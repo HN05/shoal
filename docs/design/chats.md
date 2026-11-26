@@ -135,3 +135,5 @@ repository counts as its own, so its forge actions take the repository they
 act in and their permissions as that repository's config resolves them, and
 its proposals belong to that repository; it links nothing, since its links would name no one
 repository.
+In a repository that is not registered, it opens an issue only directly,
+since a proposal belongs to a registered repository.
