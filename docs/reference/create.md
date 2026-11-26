@@ -399,6 +399,8 @@ copy of a checkpoint. `list --json` and `status --json` give `copied_from`,
 with:
 
 - `workspace`: its `id`, `name` and `branch`, or null once it is removed;
-- `checkpoint`;
-- `starting_checkpoint`, with that checkpoint's `head` and `commit`;
+- `checkpoint`, the copied checkpoint's number, for a copy of a checkpoint;
+- `starting_checkpoint`, the number of the copy's starting checkpoint;
+- `head` and `commit`, that starting checkpoint's HEAD and the commit that
+  keeps its files;
 - `index`, the tree of the index the copy started with.
