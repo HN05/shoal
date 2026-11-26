@@ -222,21 +222,26 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
 /// Stop work for each stop the sampling thread hands over, telling it
 /// whether anything stopped. A stop waits for the runtime and the operation
 /// gate, so it acts on the pressure the latest sample found, and stops
-/// nothing once a sample found none, as after protection was disabled.
+/// nothing once a sample found none, or once a reload changed protection
+/// since that sample.
 async fn stop_work(
     agents: &Agents,
     daemon: &dyn Daemon,
     mut stops: mpsc::Receiver<Pressure>,
-    pressing: watch::Receiver<Option<Pressure>>,
+    pressing: watch::Receiver<Option<sampler::Pressing>>,
     outcomes: std::sync::mpsc::Sender<bool>,
 ) {
     while stops.recv().await.is_some() {
         let stopped = {
             let _operation = agents.gates.operation().await;
-            let pressure = *pressing.borrow();
-            match pressure {
-                Some(pressure) => agents.stop_for_overload(daemon, pressure).await,
-                None => false,
+            let pressing = pressing.borrow().clone();
+            match pressing {
+                Some(pressing)
+                    if !protection_changed(&pressing.config, &agents.config.current()) =>
+                {
+                    agents.stop_for_overload(daemon, pressing.pressure).await
+                }
+                _ => false,
             }
         };
         if outcomes.send(stopped).is_err() {

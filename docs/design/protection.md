@@ -31,7 +31,7 @@ is starved too, and a decision that waited on store reads came too late. It
 hands over one stop at a time and, once that stop has stopped something,
 waits out the cooldown with fresh windows. A stop that waited for the runtime
 acts on the pressure the latest sample found, and stops nothing once a sample
-found none, as after a calm reading or a reload that disabled protection. While memory is pressed it logs
+found none, or once a reload changed protection since that sample. While memory is pressed it logs
 the readings it decides on, rate-limited, so the daemon log traces an
 incident. Protection stops
 work in one stop order, by what a stop loses, which `shoal-schedule` computes

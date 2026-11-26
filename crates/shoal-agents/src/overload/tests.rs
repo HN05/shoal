@@ -320,9 +320,14 @@ async fn job_admission_reads_the_cpu_only_while_it_applies() {
     );
 }
 
-/// Hand `stop_work` one stop while the latest sample found `pressing`,
-/// returning whether it stopped anything.
-async fn stop_handed_over(fixture: &Fixture, pressing: Option<Pressure>) -> bool {
+/// Hand `stop_work` one stop while the latest sample found memory
+/// pressure under `measured`, or none, returning whether it stopped
+/// anything.
+async fn stop_handed_over(fixture: &Fixture, measured: Option<crate::config::Config>) -> bool {
+    let pressing = measured.map(|config| sampler::Pressing {
+        pressure: Pressure::Memory,
+        config: Arc::new(config),
+    });
     let (stops_in, stops) = mpsc::channel(1);
     let (_pressing_in, pressing) = watch::channel(pressing);
     let (outcomes, outcome) = std::sync::mpsc::channel();
@@ -339,8 +344,18 @@ async fn a_stop_no_later_sample_holds_stops_nothing() {
     // An asleep agent's running lease is what memory pressure stops here.
     let leases = &fixture.daemon.asleep_leases;
     leases.store(1, Ordering::SeqCst);
+    let config = |memory: bool| {
+        let mut config = crate::config::Config::default();
+        config.machine.overload.memory.enabled = memory;
+        config
+    };
+    fixture.agents.config.publish(config(true));
     assert!(!stop_handed_over(&fixture, None).await);
+    // A reload that disabled protection before any later sample.
+    fixture.agents.config.publish(config(false));
+    assert!(!stop_handed_over(&fixture, Some(config(true))).await);
     assert_eq!(leases.load(Ordering::SeqCst), 1);
-    assert!(stop_handed_over(&fixture, Some(Pressure::Memory)).await);
+    fixture.agents.config.publish(config(true));
+    assert!(stop_handed_over(&fixture, Some(config(true))).await);
     assert_eq!(leases.load(Ordering::SeqCst), 0);
 }

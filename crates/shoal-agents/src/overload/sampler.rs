@@ -33,9 +33,16 @@ pub(super) struct Handoff {
     pub(super) stops: mpsc::Receiver<Pressure>,
     /// The pressure the latest sample found, which a stop handed over
     /// earlier must still find before it stops anything.
-    pub(super) pressing: watch::Receiver<Option<Pressure>>,
+    pub(super) pressing: watch::Receiver<Option<Pressing>>,
     /// Whether each stop stopped anything.
     pub(super) outcomes: std_mpsc::Sender<bool>,
+}
+
+/// Pressure a sample found, with the config it measured it under.
+#[derive(Clone)]
+pub(super) struct Pressing {
+    pub(super) pressure: Pressure,
+    pub(super) config: Arc<Config>,
 }
 
 /// Start the sampling thread on the machine's clock.
@@ -77,7 +84,7 @@ pub(super) struct Sampler {
     pressure_log: PressureLog,
     warnings: mpsc::Sender<Warned>,
     stops: mpsc::Sender<Pressure>,
-    pressing: watch::Sender<Option<Pressure>>,
+    pressing: watch::Sender<Option<Pressing>>,
     outcomes: std_mpsc::Receiver<bool>,
     /// A stop handed over awaits its outcome, so no other is handed over.
     stopping: bool,
@@ -218,7 +225,11 @@ impl Sampler {
         if !warnings.is_empty() {
             let _ = self.warnings.try_send((now, warnings));
         }
-        self.pressing.send_replace(pressure);
+        self.pressing
+            .send_replace(pressure.map(|pressure| Pressing {
+                pressure,
+                config: self.config.clone(),
+            }));
         if let Some(pressure) = pressure
             && !self.stopping
         {

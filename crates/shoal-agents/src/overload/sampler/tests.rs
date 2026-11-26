@@ -250,11 +250,18 @@ async fn calm_readings_and_disabled_protection_withdraw_the_pressure() {
     let start = Instant::now();
     let second = Duration::from_secs(1);
     sampler.decide(start, readings(CRITICAL));
-    assert_eq!(*handoff.pressing.borrow(), Some(Pressure::Memory));
+    assert_eq!(
+        handoff
+            .pressing
+            .borrow()
+            .as_ref()
+            .map(|pressing| pressing.pressure),
+        Some(Pressure::Memory)
+    );
     sampler.decide(start + second, readings(CALM));
-    assert_eq!(*handoff.pressing.borrow(), None);
+    assert!(handoff.pressing.borrow().is_none());
     sampler.decide(start + second * 2, readings(CRITICAL));
     fixture.configure(PROTECTIONS_OFF);
     sampler.sample(start + second * 3);
-    assert_eq!(*handoff.pressing.borrow(), None);
+    assert!(handoff.pressing.borrow().is_none());
 }

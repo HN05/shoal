@@ -652,7 +652,8 @@ instead of the PR delivery guidance below.
   A late sample ends no memory stall window; only a reading below the stop
   level does. The monitor samples and decides on an OS thread of its own,
   before any store read or write, and hands stops and warnings to the async
-  side, which stops work only while the latest sample still finds pressure. Memory in use counts RAM and swap on disk, never zram.
+  side, which stops work only while the latest sample still finds pressure
+  under the protection config now in effect. Memory in use counts RAM and swap on disk, never zram.
   Below each enabled protection's stop threshold, `[machine.overload.warning]` queues an
   alert for every workspace with a running agent, at most once per signal
   and workspace per repeat interval; warnings never stop, clean up or notify.
