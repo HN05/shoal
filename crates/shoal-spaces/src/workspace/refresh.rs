@@ -160,9 +160,9 @@ impl Spaces {
         Ok(())
     }
 
-    /// Does nothing when the copy has what it started with. Returns whether
-    /// it copied. Work of the copy's own refuses it, naming `fresh`, which
-    /// makes a fresh copy.
+    /// Does nothing while the source still has what the copy started with.
+    /// Returns whether it copied. Work of the copy's own refuses it, naming
+    /// `fresh`, which makes a fresh copy.
     async fn copy_source_again(
         &self,
         daemon: &dyn Daemon,
