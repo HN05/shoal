@@ -313,8 +313,8 @@ The agent:
 3. holds an agent with `--add-blocker` where its work builds on another's
    done work, and starts one that needs another's work merged once that
    sub-issue closes;
-4. starts a plan chat for a sub-issue that needs a plan once the work it
-   builds on is done, alerts you when the chat starts, and starts the
+4. starts a plan chat for a sub-issue that needs a plan once the sub-issues
+   it builds on are closed, alerts you when the chat starts, and starts the
    implementing agent once the plan is settled;
 5. answers its children's threads and approvals, passes on what it cannot
    decide, and tells you when a PR waits for you;

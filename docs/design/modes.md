@@ -187,9 +187,9 @@ so the agent stacks on its branch before it merges. Work that needs the other
 merged starts only once the other sub-issue closes.
 
 It starts the sub-issues whose plan is settled first. A sub-issue that needs a
-plan waits until the work it builds on is done, since its plan then reads the
-code as it is. A chat takes no blockers, so the agent waits for that work
-before it starts the plan chat. The chat opens in the background, so the agent
+plan waits until the sub-issues it builds on close. A plan chat checks the
+issue against the default branch, which then holds that work. A chat takes no
+blockers, so the agent waits for them before it starts the plan chat. The chat opens in the background, so the agent
 alerts the user once it starts. Once the plan is settled, the agent starts the
 implementation.
 

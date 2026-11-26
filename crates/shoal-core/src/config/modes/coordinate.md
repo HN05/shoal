@@ -11,10 +11,11 @@ another's only by what the text says, hold its agent with
 work is done, on that work's branch, before it merges. Start one that needs
 the other's work merged only once the other sub-issue is closed.
 
-Leave a sub-issue that needs a plan until the work it builds on is done, then
-start its plan chat with `shoal start --mode plan --issue <number>`. A chat
-takes no blockers, so wait for that work yourself. A chat you start opens in
-the background, so once it is started, alert the user with
+Leave a sub-issue that needs a plan until the sub-issues it builds on are
+closed, so that its plan reads their code on the default branch, then start its
+plan chat with `shoal start --mode plan --issue <number>`. A chat takes no
+blockers, so wait for them yourself. A chat you start opens in the background,
+so once it is started, alert the user with
 `shoal send "<text>"`, naming the issue and `shoal attach <space>`. Once its
 plan is settled and the issue relabelled, start the agent that implements it.
 
