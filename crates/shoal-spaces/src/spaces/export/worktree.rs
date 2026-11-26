@@ -1,6 +1,5 @@
-//! The worktree step of a package: what exporting, copying and moving a
-//! workspace do with the worktree it owns, which a chat, working in a place
-//! it does not own, has nothing of.
+//! What exporting, copying and moving do with a workspace's worktree. A
+//! chat works in a place it does not own and has none.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context, Result, ensure};
@@ -15,9 +14,9 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// The checkpoint a copy of `space` holds: a workspace's checkpoint
-    /// `number`, or a new one, refusing one that could not keep the
-    /// uncommitted files; none for a chat, which refuses a number.
+    /// A workspace's checkpoint `number`, or a new one. Refuses one that
+    /// could not keep the uncommitted files. None for a chat, which refuses
+    /// a number.
     pub(super) async fn copy_checkpoint(
         &self,
         daemon: &dyn Daemon,
@@ -48,9 +47,8 @@ impl Spaces {
         Ok(Some(checkpoint))
     }
 
-    /// The checkpoint a move of `space`, whose agents stopped, holds: a new
-    /// one of a workspace, refusing one that could not keep the uncommitted
-    /// files; none for a chat.
+    /// A new checkpoint of a workspace, whose agents stopped. Refuses one that
+    /// could not keep the uncommitted files. None for a chat.
     pub(super) async fn move_checkpoint(
         &self,
         daemon: &dyn Daemon,
@@ -69,10 +67,9 @@ impl Spaces {
         Ok(Some(checkpoint))
     }
 
-    /// Consent to delete what ending the moved `space` here deletes: for a
-    /// workspace still unchanged since its checkpoint `exported`, which the
-    /// other machine now has, what that checkpoint keeps, taking the spaces
-    /// below that `unsaved` names; for a chat, which owns no files,
+    /// For a workspace still unchanged since its checkpoint `exported`, which
+    /// the other machine now has: what that checkpoint keeps, taking the
+    /// spaces below that `unsaved` names. For a chat, which owns no files,
     /// `unsaved` itself.
     pub(super) async fn moved_work(
         &self,
@@ -92,9 +89,8 @@ impl Spaces {
         Ok(checkpointed_work(&checkpoint, unsaved.children()))
     }
 
-    /// Refuse to end the moved `space`, carried by another, once it is a
-    /// workspace that changed since its checkpoint in `exported`, which the
-    /// other machine now has.
+    /// Refuses a carried workspace that changed since its checkpoint in
+    /// `exported`, which the other machine now has.
     pub(super) async fn ensure_moved_unchanged(
         &self,
         daemon: &dyn Daemon,
@@ -110,8 +106,7 @@ impl Spaces {
         }
     }
 
-    /// Refuse to end the moved `workspace` once it changed since its
-    /// checkpoint in `exported`, which the other machine now has.
+    /// The other machine now has the checkpoint in `exported`.
     pub async fn ensure_moved_workspace_unchanged(
         &self,
         daemon: &dyn Daemon,
@@ -125,8 +120,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// The checkpoint `exported` of `workspace`, refusing to end it once it
-    /// differs from it, as after a commit made here since its export.
+    /// Refuses once the workspace differs from it, as after a commit made
+    /// here since the export.
     async fn ensure_unchanged_since_export(
         &self,
         daemon: &dyn Daemon,
@@ -143,9 +138,8 @@ impl Spaces {
     }
 }
 
-/// Refuse to package `space` when it is a disposable workspace: the package
-/// is built from its removal record, which a disposable workspace's removal
-/// does not keep.
+/// Refuses a disposable workspace: the package is built from its removal
+/// record, which a disposable workspace's removal does not keep.
 pub(super) fn ensure_packable(space: &Space) -> Result<()> {
     let disposable = space.worktree().is_some_and(|worktree| worktree.disposable);
     ensure!(
@@ -156,8 +150,6 @@ pub(super) fn ensure_packable(space: &Space) -> Result<()> {
     Ok(())
 }
 
-/// Refuse to package the workspace `removed` records when its removal could
-/// not keep its uncommitted files.
 pub(super) fn ensure_files_kept(removed: &RemovedSpace) -> Result<()> {
     let omitted = (removed.workspace()).is_some_and(|kept| kept.checkpoint.files_omitted);
     ensure!(
@@ -168,10 +160,9 @@ pub(super) fn ensure_files_kept(removed: &RemovedSpace) -> Result<()> {
     Ok(())
 }
 
-/// Consent to delete what `checkpoint` keeps, which the other machine
-/// imported: its unsaved files, including those the agents wrote as they
-/// stopped after the caller's check, and the commits of its detached HEAD,
-/// taking only the spaces below that `children` names.
+/// The checkpoint's unsaved files include those the agents wrote as they
+/// stopped after the caller's check, and the commits of its detached HEAD.
+/// Takes only the spaces below that `children` names.
 pub(super) fn checkpointed_work(
     checkpoint: &Checkpoint,
     children: Option<&[SpaceId]>,

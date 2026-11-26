@@ -1,7 +1,5 @@
-//! Copies of spaces that keep running: a space with its agents and the
-//! sessions they reported, a workspace at a checkpoint, with copies of the
-//! spaces below it that the package carries, which `shoal restore --from`
-//! opens as new spaces whose agents start from forks.
+//! Copies of spaces that keep running, which `shoal restore --from` opens
+//! as new spaces whose agents start from forks.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::EventCause;
@@ -19,11 +17,9 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// Write a copy of the space `selector` names, with copies of the
-    /// spaces below it that `carrying` carries, for another Shoal to the
-    /// new file `file`, leaving them running here: a workspace at its
-    /// checkpoint `checkpoint`, or at a new one, and those below at new
-    /// ones.
+    /// Leaves them running here. A workspace is copied at its checkpoint
+    /// `checkpoint`, or at a new one, and those below at new ones. `file`
+    /// must be new.
     pub async fn copy_space(
         &self,
         daemon: &dyn Daemon,
@@ -40,8 +36,7 @@ impl Spaces {
         self.write_prepared(daemon, copied, file).await
     }
 
-    /// The workspace or running chat `selector` names, refusing a removed
-    /// space, which runs nothing to keep.
+    /// Refuses a removed space, which runs nothing to keep.
     pub(super) async fn running_space(&self, selector: &SpaceSelector) -> Result<Space> {
         let error = match self.space(selector).await {
             Ok(space) => return Ok(space),
@@ -62,11 +57,8 @@ impl Spaces {
         }
     }
 
-    /// A copy of `space` with copies of the spaces below it that
-    /// `carrying` carries, as [`Self::record_now`] records each: the
-    /// space at its checkpoint `number`, or at a new one, and those below
-    /// at new ones. An earlier checkpoint marks the sessions as newer than
-    /// its files.
+    /// Records each as [`Self::record_now`] does. An earlier checkpoint marks
+    /// the sessions as newer than its files.
     async fn prepare_copy(
         &self,
         daemon: &dyn Daemon,
@@ -92,9 +84,9 @@ impl Spaces {
         Ok(prepared)
     }
 
-    /// The record of `space`, which keeps running, as its removal would
-    /// record it now, with its agents and the sessions they reported: a
-    /// workspace at its checkpoint `number`, or at a new one.
+    /// As its removal would record it now, with its agents and the sessions
+    /// they reported. A workspace is at its checkpoint `number`, or at a new
+    /// one.
     pub(super) async fn record_now(
         &self,
         daemon: &dyn Daemon,
@@ -106,14 +98,13 @@ impl Spaces {
             .present_removal_record(daemon, &space.id, checkpoint, EventCause::Manual)
             .await?;
         record.agents = self.agents_now(&space.id).await?;
-        // Its sessions' files are where its agents keep them, which the
-        // package carries from there.
+        // The package carries its sessions' files from where its agents keep
+        // them.
         record.session_files = Vec::new();
         Ok(record)
     }
 
-    /// The agents of the space `id`, each with the session it continues:
-    /// those stopped, then those its executions run.
+    /// Those stopped first, then those its executions run.
     pub(super) async fn agents_now(&self, id: &SpaceId) -> Result<Vec<StoppedAgent>> {
         let mut agents = recovery::stopped_agents(&self.paths, id)?;
         let now = UnixTime::now();
@@ -135,9 +126,7 @@ impl Spaces {
     }
 }
 
-/// The record a package keeps of the agent `execution` runs, with the
-/// session it continues as `carried`; `None` for an execution without an
-/// agent.
+/// `None` for an execution without an agent.
 fn running_record(execution: &Execution, carried: recovery::carried::Carried) -> Option<Record> {
     Some(
         carried.kept_in(Record {
