@@ -1,7 +1,7 @@
 //! The journal of events, which `docs/design/daemon.md` describes.
 
 use crate::model::EventCause;
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 use shoal_ids::execution_ids::ExecutionId;
@@ -14,6 +14,8 @@ pub use shoal_protocol::events::{
     FileEvent, FileEventDetails, JobEndedEvent, JournaledSpaceEvent, ShoalEvent, ShoalEventDetails,
     ShoalEventKind, SpaceEvent, StoppedProcess,
 };
+use shoal_protocol::events::{ItemActivityEvent, ItemActivityUpdate, ItemEvent, LinkEvent};
+use shoal_store::journal;
 
 /// A journal row as stored: file events carry the space's identity in
 /// place of its fields, and Shoal's own events no space.
@@ -144,23 +146,39 @@ fn events_after(db: &Connection, cursor: EventCursor, limit: u32) -> Result<Vec<
 pub fn record(
     db: &Connection,
     id: &SpaceId,
-    kind: EventKind,
+    event: SpaceEvent,
     cause: EventCause,
     error: Option<&str>,
 ) -> Result<()> {
     // Repeated cleanup failures are unchanged state, even when notifications are read.
-    db.execute(
-        "INSERT INTO space_events(space_id,record)
-             SELECT id, json_set(record,'$.kind',?2,'$.cause',?3,'$.error',?4)
-             FROM space_event_records WHERE id=?1 AND NOT EXISTS (
-                 SELECT 1 FROM space_events WHERE id=(
-                     SELECT MAX(id) FROM space_events WHERE space_id=?1
-                 ) AND json_extract(record,'$.kind')=?2 AND json_extract(record,'$.cause')=?3
-                     AND json_extract(record,'$.error') IS ?4
-             )",
-        params![id, kind, cause, error],
-    )?;
-    Ok(())
+    let repeated = newest_event(db, id)?.is_some_and(|newest| {
+        newest.kind() == event.kind()
+            && newest.cause == Some(cause)
+            && newest.error.as_deref() == error
+    });
+    if repeated {
+        return Ok(());
+    }
+    journal::append_caused(db, id, event, Some(cause), error)
+}
+
+/// The newest event of the space `id`; none when the newest is a file's.
+fn newest_event(db: &Connection, id: &SpaceId) -> Result<Option<EventDetails>> {
+    let newest: Option<(EventCursor, UnixTime, String)> = db
+        .query_row(
+            "SELECT id,created_at,record FROM space_events WHERE space_id=?1
+                 ORDER BY id DESC LIMIT 1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    let Some((cursor, created_at, record)) = newest else {
+        return Ok(None);
+    };
+    Ok(match decode(cursor, created_at, &record)? {
+        EventItem::Event(event) => Some(event.details),
+        _ => None,
+    })
 }
 
 /// Leave the workspace `id`, whose removal for `cause` failed with `error`,
@@ -176,7 +194,7 @@ pub fn retain(
         "UPDATE workspaces SET state=?2,error=?3 WHERE id=?1",
         params![id, state, error],
     )?;
-    record(db, id, EventKind::Retained, cause, Some(error))
+    record(db, id, SpaceEvent::Retained, cause, Some(error))
 }
 
 /// Record a link mutation in the transaction that changes its association.
@@ -188,19 +206,17 @@ pub fn record_link(
     kind: impl Into<crate::forge::items::link::LinkKind>,
     url: &str,
 ) -> Result<()> {
-    let kind = kind.into();
-    ensure!(matches!(
-        event_kind,
-        EventKind::Linked | EventKind::Unlinked
-    ));
-    db.execute(
-        "INSERT INTO space_events(space_id,record)
-             SELECT id, json_set(record,'$.kind',?2,
-                 '$.link',json_object('kind',?3,'url',?4,'relation',?5))
-             FROM space_event_records WHERE id=?1",
-        params![id, event_kind, kind, url, relation],
-    )?;
-    Ok(())
+    let link = Box::new(LinkEvent {
+        kind: kind.into(),
+        url: url.to_owned(),
+        relation,
+    });
+    let event = match event_kind {
+        EventKind::Linked => SpaceEvent::Linked { link },
+        EventKind::Unlinked => SpaceEvent::Unlinked { link },
+        other => bail!("{other} records no link"),
+    };
+    journal::append(db, id, event)
 }
 
 /// Record a change Shoal made to one of the space's issues or PRs.
@@ -211,15 +227,12 @@ pub fn record_item(
     url: &str,
     action: crate::forge::items::change::ItemChange,
 ) -> Result<()> {
-    let kind = kind.into();
-    db.execute(
-        "INSERT INTO space_events(space_id,record)
-             SELECT id, json_set(record,'$.kind',?2,
-                 '$.item',json_object('kind',?3,'url',?4,'action',?5))
-             FROM space_event_records WHERE id=?1",
-        params![id, EventKind::ItemChanged, kind, url, action],
-    )?;
-    Ok(())
+    let item = Box::new(ItemEvent {
+        kind: kind.into(),
+        url: url.to_owned(),
+        action,
+    });
+    journal::append(db, id, SpaceEvent::ItemChanged { item })
 }
 
 /// Record activity observed on an issue or PR by the background poller.
@@ -230,39 +243,15 @@ pub fn record_item_activity(
     url: &str,
     update: &crate::forge::updates::Update,
 ) -> Result<()> {
-    db.execute(
-        "INSERT INTO space_events(space_id,record)
-             SELECT id, json_set(record,'$.kind',?2,
-                 '$.item_activity',json_object('kind',?3,'url',?4,
-                     'update',json_object('kind',?5,'message',?6)))
-             FROM space_event_records WHERE id=?1",
-        params![
-            id,
-            EventKind::ItemActivity,
-            kind,
-            url,
-            update.kind,
-            update.message
-        ],
-    )?;
-    Ok(())
-}
-
-/// Record `kind` for the space `id`, with `payload` as its field `field`.
-fn record_with(
-    db: &Connection,
-    id: &SpaceId,
-    kind: EventKind,
-    field: &str,
-    payload: &impl serde::Serialize,
-) -> Result<()> {
-    db.execute(
-        "INSERT INTO space_events(space_id,record)
-             SELECT id, json_set(record,'$.kind',?2,'$.'||?3,json(?4))
-             FROM space_event_records WHERE id=?1",
-        params![id, kind, field, serde_json::to_string(payload)?],
-    )?;
-    Ok(())
+    let item_activity = Box::new(ItemActivityEvent {
+        kind,
+        url: url.to_owned(),
+        update: ItemActivityUpdate {
+            kind: update.kind,
+            message: update.message.clone(),
+        },
+    });
+    journal::append(db, id, SpaceEvent::ItemActivity { item_activity })
 }
 
 /// Record that no CI run of the default branch started for `merge`, which
@@ -272,7 +261,8 @@ pub fn record_no_merge_runs(
     id: &SpaceId,
     merge: &shoal_protocol::events::MergeEvent,
 ) -> Result<()> {
-    record_with(db, id, EventKind::NoMergeRuns, "merge", merge)
+    let merge = Box::new(merge.clone());
+    journal::append(db, id, SpaceEvent::NoMergeRuns { merge })
 }
 
 /// Record the new `progress` of the space `id`.
@@ -281,7 +271,8 @@ pub fn record_progress(
     id: &SpaceId,
     progress: &shoal_protocol::progress::Progress,
 ) -> Result<()> {
-    record_with(db, id, EventKind::ProgressChanged, "progress", progress)
+    let progress = Box::new(progress.clone());
+    journal::append(db, id, SpaceEvent::ProgressChanged { progress })
 }
 
 /// Record that a blocker of the space `id` was added, removed or cleared.
@@ -291,11 +282,14 @@ pub fn record_blocker(
     kind: EventKind,
     blocker: &shoal_protocol::events::BlockerEvent,
 ) -> Result<()> {
-    ensure!(matches!(
-        kind,
-        EventKind::BlockerAdded | EventKind::BlockerRemoved | EventKind::BlockerCleared
-    ));
-    record_with(db, id, kind, "blocker", blocker)
+    let blocker = Box::new(blocker.clone());
+    let event = match kind {
+        EventKind::BlockerAdded => SpaceEvent::BlockerAdded { blocker },
+        EventKind::BlockerRemoved => SpaceEvent::BlockerRemoved { blocker },
+        EventKind::BlockerCleared => SpaceEvent::BlockerCleared { blocker },
+        other => bail!("{other} records no blocker"),
+    };
+    journal::append(db, id, event)
 }
 
 /// Record one side of an absorb for the space `id`: that it was absorbed,
@@ -306,25 +300,30 @@ pub fn record_absorb(
     kind: EventKind,
     absorb: &shoal_protocol::events::AbsorbEvent,
 ) -> Result<()> {
-    ensure!(matches!(
-        kind,
-        EventKind::Absorbed | EventKind::AbsorbedSpace
-    ));
-    record_with(db, id, kind, "absorb", absorb)
+    let absorb = Box::new(absorb.clone());
+    let event = match kind {
+        EventKind::Absorbed => SpaceEvent::Absorbed { absorb },
+        EventKind::AbsorbedSpace => SpaceEvent::AbsorbedSpace { absorb },
+        other => bail!("{other} records no absorb"),
+    };
+    journal::append(db, id, event)
 }
 
 /// Record that the agent of the space `id` started, stopped or exited. An
 /// execution's agent ends once: a stop that saved it for a restore, then its
 /// wrapper's end, records one stop.
-fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: &AgentEvent) -> Result<()> {
-    ensure!(matches!(
-        kind,
-        EventKind::AgentStarted | EventKind::AgentStopped | EventKind::AgentExited
-    ));
+fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: AgentEvent) -> Result<()> {
     if kind != EventKind::AgentStarted && agent_ended(db, id, agent.execution_id.as_ref())? {
         return Ok(());
     }
-    record_with(db, id, kind, "agent", agent)
+    let agent = Box::new(agent);
+    let event = match kind {
+        EventKind::AgentStarted => SpaceEvent::AgentStarted { agent },
+        EventKind::AgentStopped => SpaceEvent::AgentStopped { agent },
+        EventKind::AgentExited => SpaceEvent::AgentExited { agent },
+        other => bail!("{other} records no agent"),
+    };
+    journal::append(db, id, event)
 }
 
 /// When the agent of the space `id` last stopped or exited, as its log
@@ -392,17 +391,18 @@ pub fn record_approval(
     kind: EventKind,
     request: &shoal_protocol::approvals::ApprovalRequest,
 ) -> Result<()> {
-    ensure!(matches!(
-        kind,
-        EventKind::ApprovalRequested | EventKind::ApprovalDecided
-    ));
-    let approval = ApprovalEvent {
+    let approval = Box::new(ApprovalEvent {
         number: request.number,
         target: request.target.to_string(),
         subject: request.subject(),
         status: request.status,
+    });
+    let event = match kind {
+        EventKind::ApprovalRequested => SpaceEvent::ApprovalRequested { approval },
+        EventKind::ApprovalDecided => SpaceEvent::ApprovalDecided { approval },
+        other => bail!("{other} records no approval"),
     };
-    record_with(db, &request.space_id, kind, "approval", &approval)
+    journal::append(db, &request.space_id, event)
 }
 
 /// Record the gate's verdict on the request's space's request, in the
@@ -412,7 +412,8 @@ pub fn record_gate(
     request: &shoal_protocol::approvals::ApprovalRequest,
     gate: &shoal_protocol::events::GateEvent,
 ) -> Result<()> {
-    record_with(db, &request.space_id, EventKind::GateDecided, "gate", gate)
+    let gate = Box::new(gate.clone());
+    journal::append(db, &request.space_id, SpaceEvent::GateDecided { gate })
 }
 
 /// Record an agent's start, stop or exit in the space `id`'s log; a
@@ -421,7 +422,7 @@ pub fn record_gate(
 pub async fn record_agent(store: &Store, id: &SpaceId, kind: EventKind, agent: AgentEvent) {
     let space = id.clone();
     let recorded = store
-        .run(move |db| insert_agent(db, &space, kind, &agent))
+        .run(move |db| insert_agent(db, &space, kind, agent))
         .await;
     if let Err(error) = recorded {
         log!("agent event of {id} not recorded: {error:#}");
@@ -456,7 +457,7 @@ pub async fn record_alert(store: &Store, id: &SpaceId, message: String, alerts: 
     let recorded = store
         .run(move |db| {
             let alert = AlertEvent { message, alerts };
-            record_with(db, &space, EventKind::AlertSent, "alert", &alert)
+            journal::append(db, &space, SpaceEvent::AlertSent { alert })
         })
         .await;
     if let Err(error) = recorded {
@@ -469,7 +470,10 @@ pub async fn record_alert(store: &Store, id: &SpaceId, message: String, alerts: 
 pub async fn record_job_ended(store: &Store, id: &SpaceId, job: JobEndedEvent) {
     let space = id.clone();
     let recorded = store
-        .run(move |db| record_with(db, &space, EventKind::JobEnded, "job", &job))
+        .run(move |db| {
+            let job = Box::new(job);
+            journal::append(db, &space, SpaceEvent::JobEnded { job })
+        })
         .await;
     if let Err(error) = recorded {
         log!("job end of {id} not recorded: {error:#}");
@@ -529,18 +533,13 @@ pub async fn record_removal_start(store: &Store, id: &SpaceId, cause: EventCause
     let id = id.to_owned();
     store
         .write(move |tx| {
-            let retry = super::store::exists(
-                tx,
-                "SELECT 1 FROM space_events WHERE id=(
-                     SELECT MAX(id) FROM space_events WHERE space_id=?1
-                 ) AND json_extract(record,'$.kind')=?2
-                     AND json_extract(record,'$.cause')=?3",
-                params![id, EventKind::Retained, cause],
-            )?;
+            let retry = newest_event(tx, &id)?.is_some_and(|newest| {
+                newest.kind() == EventKind::Retained && newest.cause == Some(cause)
+            });
             if retry {
                 return Ok(());
             }
-            record(tx, &id, EventKind::RemovalStarted, cause, None)
+            record(tx, &id, SpaceEvent::RemovalStarted, cause, None)
         })
         .await
 }
@@ -556,7 +555,7 @@ pub async fn record_retained(
     let id = id.to_owned();
     let error = format!("{error:#}");
     store
-        .run(move |db| record(db, &id, EventKind::Retained, cause, Some(&error)))
+        .run(move |db| record(db, &id, SpaceEvent::Retained, cause, Some(&error)))
         .await
 }
 

@@ -46,8 +46,8 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
                      VALUES ('w','workspace','r','worker');
                  COMMIT;",
             )?;
-            for (kind, agent) in &recorded {
-                insert_agent(db, &SpaceId::from("w"), *kind, agent)?;
+            for (kind, agent) in recorded {
+                insert_agent(db, &SpaceId::from("w"), kind, agent)?;
             }
             Ok(())
         })
@@ -286,5 +286,107 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
             "{record}"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn each_writer_s_events_decode_and_round_trip() -> Result<()> {
+    use serde_json::json;
+    let db = shoal_store::test_support::migrated()?;
+    db.execute_batch(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
+         BEGIN;
+         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
+            VALUES ('w','/work','worker','ready','abc','/admin');
+         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
+         COMMIT;",
+    )?;
+    let id = SpaceId::from("w");
+    let url = "https://forge.example/team/repo/pulls/12";
+    let blocker = serde_json::from_value(json!({
+        "kind": "issue", "target": url, "name": url, "reason": "waits", "step": "Build",
+    }))?;
+    let absorb = serde_json::from_value(json!({
+        "space": {"id": "c", "name": "child", "kind": "chat"}, "links": [url],
+    }))?;
+    let progress = serde_json::from_value(json!({
+        "status": "Reproduced", "steps": [{"name": "Build", "done": true}],
+        "current": null, "updated_at": 1,
+    }))?;
+    let merge = serde_json::from_value(json!({
+        "pr": url, "commit": "0123456789abcdef0123456789abcdef01234567",
+    }))?;
+    let update = crate::forge::updates::Update {
+        url: url.into(),
+        kind: crate::forge::updates::UpdateKind::Comment,
+        message: "A comment".into(),
+        delivery: String::new(),
+        check: None,
+        workspace: None,
+    };
+    let agent = AgentEvent {
+        source: None,
+        name: "claude".into(),
+        execution_id: Some("e".into()),
+        exit_code: Some(1),
+        oom_kills: 2,
+    };
+    record(
+        &db,
+        &id,
+        SpaceEvent::Retained,
+        EventCause::Idle,
+        Some("busy"),
+    )?;
+    record_link(
+        &db,
+        &id,
+        EventKind::Linked,
+        crate::model::Relation::Assigned,
+        crate::forge::items::link::LinkKind::Pr,
+        url,
+    )?;
+    record_item(
+        &db,
+        &id,
+        crate::forge::items::link::LinkKind::Pr,
+        url,
+        ItemChange::Merge,
+    )?;
+    let pr = crate::forge::items::link::LinkKind::Pr;
+    record_item_activity(&db, &id, pr, url, &update)?;
+    record_blocker(&db, &id, EventKind::BlockerCleared, &blocker)?;
+    record_absorb(&db, &id, EventKind::AbsorbedSpace, &absorb)?;
+    record_progress(&db, &id, &progress)?;
+    record_no_merge_runs(&db, &id, &merge)?;
+    insert_agent(&db, &id, EventKind::AgentExited, agent)?;
+
+    let mut statement = db.prepare("SELECT record FROM space_events ORDER BY id")?;
+    let records = statement
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut kinds = Vec::new();
+    for text in records {
+        let stored: serde_json::Value = serde_json::from_str(&text)?;
+        let details: EventDetails = serde_json::from_value(stored.clone())?;
+        assert_eq!(serde_json::to_value(&details)?, stored);
+        kinds.push(details.kind());
+    }
+    assert_eq!(
+        kinds,
+        [
+            EventKind::Created,
+            EventKind::Ready,
+            EventKind::Retained,
+            EventKind::Linked,
+            EventKind::ItemChanged,
+            EventKind::ItemActivity,
+            EventKind::BlockerCleared,
+            EventKind::AbsorbedSpace,
+            EventKind::ProgressChanged,
+            EventKind::NoMergeRuns,
+            EventKind::AgentExited,
+        ]
+    );
     Ok(())
 }

@@ -422,7 +422,7 @@ impl Spaces {
                 crate::events::record(
                     tx,
                     &id,
-                    crate::events::EventKind::Restored,
+                    crate::events::SpaceEvent::Restored,
                     crate::model::EventCause::Manual,
                     None,
                 )?;

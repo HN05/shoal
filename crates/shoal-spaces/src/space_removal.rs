@@ -379,7 +379,7 @@ fn delete_record(
         super::tree::children(tx, id)?.is_empty(),
         "spaces were opened below it during removal; retaining it"
     );
-    events::record(tx, id, events::EventKind::Removed, cause, None)?;
+    events::record(tx, id, events::SpaceEvent::Removed, cause, None)?;
     let notification = records.hand_alerts_to_user(tx, id)?;
     workspace_files::keep_removed(tx, id, expires_at)?;
     // In the same transaction, so no request is left with a removed decider.

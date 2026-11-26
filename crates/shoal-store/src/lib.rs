@@ -3,6 +3,7 @@
 pub mod agent_handoffs;
 mod executions;
 mod guards;
+pub mod journal;
 pub mod lifecycle;
 mod migrations;
 mod ports;

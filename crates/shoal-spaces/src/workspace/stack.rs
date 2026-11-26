@@ -15,7 +15,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use crate::{
     git,
     model::{Workspace, WorkspaceRef},
-    {events::EventKind, store},
+    {events::SpaceEvent, store},
 };
 
 impl Spaces {
@@ -149,18 +149,9 @@ pub fn stack_on(
 }
 
 pub fn record_base_changed(db: &Connection, id: &SpaceId, cause: EventCause) -> Result<()> {
-    db.execute(
-        "INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-            '$.kind',?2,'$.cause',?3,
-            '$.base_workspace',json((SELECT json_object('id',base.id,'name',base_space.name,
-                    'branch',base.branch)
-                FROM workspaces base JOIN spaces base_space USING(id)
-                WHERE base.id=stacked.base_workspace_id))
-        ) FROM space_event_records JOIN workspaces stacked USING(id)
-        WHERE id=?1 AND space_kind='workspace'",
-        params![id, EventKind::BaseChanged, cause],
-    )?;
-    Ok(())
+    let base_workspace = store::journal::base_of(db, id)?;
+    let event = SpaceEvent::BaseChanged { base_workspace };
+    store::journal::append_caused(db, id, event, Some(cause), None)
 }
 
 /// By number or ID, else by branch.
