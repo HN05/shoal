@@ -133,6 +133,8 @@ seed's modification times on tracked files its commit left unchanged, and on
 the directories holding them where it changed no path inside, since
 mtime-based tools otherwise treat every freshly checked-out file as new, and
 Cargo's `rerun-if-changed` on a directory reads the directory's own time.
+It does so only when it cloned an output: beside outputs the worktree already
+had, older times could hide changed sources.
 Clones of a file still cost time per file, so on btrfs each output is a
 subvolume, whose snapshot takes the same time for any number of files: a freeze
 turns a plain output directory into one, once a probe shows Shoal can remove the
