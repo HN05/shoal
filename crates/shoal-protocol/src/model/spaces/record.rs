@@ -12,9 +12,8 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use std::path::{Path, PathBuf};
 
-/// A space as it exists, a workspace or a chat, running or stopped: what
-/// every space has, and `part`, what only its kind has. JSON gives its
-/// record with its `kind`.
+/// A space, running or stopped: what every space has, and `part`, what only
+/// its kind has. Its JSON names the kind in `kind`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Space<P = SpacePart> {
     pub id: SpaceId,

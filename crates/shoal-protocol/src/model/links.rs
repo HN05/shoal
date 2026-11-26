@@ -34,9 +34,8 @@ shoal_states::states!(
 );
 
 /// The forge assignee an assigned issue stands for: the user's own login,
-/// with whether Shoal added it, which it then takes back once no space links
-/// the issue, or the agent account, which an agent's assignment stands for
-/// while an agent works the issue and Shoal never records as added.
+/// with whether Shoal added it, or the agent account. Shoal takes back a
+/// login it added once no space links the issue.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct IssueAssignee {
     pub url: ItemRef,

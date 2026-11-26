@@ -47,9 +47,8 @@ pub enum CleanupReason {
     Simulators,
     /// Its containers may run: its project is not stopped.
     Containers,
-    /// No agent of its own works there, as none has started in the
-    /// workspace or the chat's stopped, and the agent of the coordinator
-    /// that does its work runs.
+    /// No agent of its own works there, and the coordinator's agent, which
+    /// does its work, runs.
     ParentAgentRunning,
     MissingDirectory,
     Dirty,

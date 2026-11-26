@@ -7,19 +7,18 @@ use std::collections::BTreeSet;
 /// How a space's agent resumes, as `shoal resume` asks for it.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentResume {
-    /// Only what restoring these executions takes, as `--execution` picks
-    /// one or a move stopped them: their stopped agents and last sessions
-    /// with the space's stopped commands, which they receive, or without
-    /// any, only their commands; without continuing an interrupted turn or
-    /// a failed launch. Empty for everything the space saved.
+    /// Resume only these executions, as `--execution` picks one or a move
+    /// stopped them, with the space's stopped commands. It continues no
+    /// interrupted turn or failed launch. Empty resumes everything the space
+    /// saved.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub executions: BTreeSet<ExecutionId>,
     /// Start at once, regardless of the agent limits.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
-    /// The resume names this space alone, so a last session, which holds
-    /// no heavy slot, continues at once, for a scoped caller only where its
-    /// `limits` permission lets it start past the limits without asking.
+    /// The resume names this space alone, so a last session, which holds no
+    /// heavy slot, continues at once. A scoped caller needs a `limits`
+    /// permission that starts past the limits without asking.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub alone: bool,
     /// What it changes in the permissions the agent was given.

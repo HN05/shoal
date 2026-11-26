@@ -139,10 +139,7 @@ impl QueueEntry {
     }
 }
 
-/// What stopping a workspace did: the agent launches waiting to start in it
-/// that it removed from the queue, how many untracked processes it stopped
-/// and whether it saved work for `shoal resume`, or for a CI job's workspace
-/// the run it asked the forge to cancel, whose runner then stops the job.
+/// What stopping a workspace did.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StoppedSpace {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -153,9 +150,9 @@ pub struct StoppedSpace {
     pub cancelled_run: Option<String>,
 }
 
-/// An agent launch in a recorded space, a workspace or a chat, to admit or
-/// queue. The plan is JSON in the format of the binary's
-/// `start_plan::QueuedStart`, which the `queue-start` worker reads back.
+/// An agent launch in a recorded space to admit or queue. The plan is JSON
+/// in the format of `shoal-core`'s `start_plan::QueuedStart`, which the
+/// `queue-start` worker reads back.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
     pub name: SpaceName,

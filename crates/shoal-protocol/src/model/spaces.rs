@@ -8,9 +8,7 @@ use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::BranchName;
 
-/// Where the space a request names runs, as the daemon finds it within the
-/// caller's scope: here, with its record, or on another joined machine, as
-/// the hub lists it.
+/// Where the space a request names runs, among those the caller sees.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Located {
@@ -30,11 +28,9 @@ impl Located {
     }
 }
 
-/// The spaces the caller sees on every machine: this machine's, and the
-/// other joined machines' as the hub lists them, none on a machine in no
-/// hub, or why the hub could not be asked; with how the request a picker
-/// offers them for judges each, by the machine it runs on, where that
-/// machine could be asked.
+/// The spaces the caller sees on every machine, with how the request a
+/// picker offers them for judges each. Without a hub there are only this
+/// machine's.
 #[derive(Debug, Default)]
 pub struct Everywhere {
     pub here: Spaces,
@@ -43,9 +39,8 @@ pub struct Everywhere {
     pub offers: std::collections::HashMap<SpaceId, Offer>,
 }
 
-/// How the request a picker offers spaces for judges one of them, as the
-/// daemon of the machine it runs on decides with the check the request
-/// declares.
+/// How the request a picker offers spaces for judges one of them. The
+/// daemon of the space's machine decides it with the request's own check.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "offer", rename_all = "snake_case")]
 pub enum Offer {

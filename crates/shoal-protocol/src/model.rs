@@ -1,4 +1,4 @@
-//! Records shared by the daemon, its SQLite store, and CLI output.
+//! The records the daemon keeps and the protocol carries.
 mod agents;
 mod chats;
 mod checkpoints;
