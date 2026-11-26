@@ -110,12 +110,13 @@ impl Agents {
         }
     }
 
-    /// Decide, holding the decisions, what becomes of `restart` of the agent
-    /// of `space`, which `asked_by` asks for and which supersedes the
-    /// restart recorded for it: skip it, record it until the agent's turn
-    /// ends, record it in the line, either answering at once, since a long
-    /// wait is the daemon's to keep, begin it now or with the restart under
-    /// way, or record it until the agent that restart started runs.
+    /// Decide what becomes of `restart` of the agent of `space`, which
+    /// `asked_by` asks for and which supersedes the restart recorded for it,
+    /// while holding the decisions. It may skip the restart, record it until
+    /// the agent's turn ends or in the line, begin it now or with the restart
+    /// under way, or record it until the agent that restart started runs. A
+    /// recorded restart answers at once, since a long wait is the daemon's to
+    /// keep.
     async fn decide_restart(
         &self,
         space: &Space,
@@ -225,12 +226,12 @@ impl Agents {
         Ok(())
     }
 
-    /// Begin `recorded`, the restart of the agent of its space, which runs
-    /// as `execution`, recorded as begun first, so a daemon that exits
-    /// before the agent's restore applies its options leaves them to the
-    /// wrapper that reattaches, with the generation the record took; one
-    /// that does not begin is forgotten again. The user's restart is their
-    /// interaction with the agent.
+    /// Begin `recorded`, the restart of the agent of its space, which runs as
+    /// `execution`. It is recorded as begun first, with the generation the
+    /// record took, so a daemon that exits before the agent's restore applies
+    /// its options leaves them to the wrapper that reattaches. One that does
+    /// not begin is forgotten again. The user's restart is their interaction
+    /// with the agent.
     async fn restart_now(
         &self,
         execution: &ExecutionId,

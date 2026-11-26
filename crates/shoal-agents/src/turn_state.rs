@@ -249,13 +249,12 @@ impl Agents {
         }
     }
 
-    /// Record the state reported from `execution`, which clears it when its
-    /// record goes, and the agent `session` it reports for resuming it, as
-    /// its hook `made` the report, from when it counts, as one that arrives
-    /// late does. A report with `turn_end` ends a turn, as
-    /// [`Self::end_turn`] records it. Repeating the current report writes
-    /// nothing, since hooks repeat it after every tool call, and a repeated
-    /// state keeps its start.
+    /// Record the state reported from `execution`, which goes with the
+    /// execution's record, and the agent `session` it reports for resuming it.
+    /// `made` is when the hook made the report, from which a late report
+    /// counts. A report with `turn_end` ends a turn, as [`Self::end_turn`]
+    /// records it. Repeating the current report writes nothing, since hooks
+    /// repeat it after every tool call, and a repeated state keeps its start.
     #[allow(
         clippy::too_many_arguments,
         reason = "the fields of the state report, beside the daemon"
@@ -787,13 +786,12 @@ fn takes_report(db: &Connection, records: &dyn Records, id: &SpaceId) -> Result<
         || shoal_store::exists(db, "SELECT 1 FROM executions WHERE space_id=?1", [id])?)
 }
 
-/// Write `report` over the space's last one, keeping a repeated state's
-/// start: an idle agent's prompt cache expires as a turn just ended says,
-/// keeps its expiry while the same execution stays idle, and has none
-/// otherwise. A report that `starts` a turn counts it in the space's turn
-/// generation, which a new state continues from the space's last count. An
-/// interrupt stays with the execution whose turn it ended.
-/// Whether anything changed.
+/// Write `report` over the space's last one, keeping a repeated state's start.
+/// An idle agent's prompt cache expires as a turn just ended says, keeps its
+/// expiry while the same execution stays idle, and has none otherwise. A report
+/// that `starts` a turn counts it in the space's turn generation. An interrupt
+/// stays with the execution whose turn it ended. Returns whether anything
+/// changed.
 fn write_state(db: &Connection, report: &Report, starts: bool) -> Result<bool> {
     let changed = db.execute(
         "INSERT INTO space_agent_state

@@ -143,21 +143,19 @@ impl Agents {
         (self.stop_for_shutdown_of(daemon, Shutdown::System, window)).await;
     }
 
-    /// Stop the spaces `shoal stop --all` stops, each wrapper saving its
-    /// agent before the stop and requesting restores that need no user,
-    /// which the stop keeps with those already waiting, and leaving CI jobs
-    /// running unless `shutdown` ends them, each alone, to rerun. Hold the
-    /// agent queue until a system shutdown is cancelled, so nothing starts
-    /// again before it.
+    /// Stop the spaces `shoal stop --all` stops. Each wrapper saves its agent
+    /// before the stop and requests the restores that need no user, which the
+    /// stop keeps with those already waiting. CI jobs keep running unless
+    /// `shutdown` ends them, each alone, to rerun. The agent queue stays held
+    /// until a system shutdown is cancelled, so nothing starts again before it.
+    ///
     /// Then, on a machine joined to a hub, hand every space over to the
-    /// machines the hub places them on, sending what fits in `window`, but
-    /// those an earlier hand-over sent, which run elsewhere already. The
-    /// user learns where each space went and what to continue. An update
-    /// waits for the stop. Once a stop before a shutdown finished, later
-    /// ones wait for it and leave the work alone; a hand-over once the user
-    /// walked away or before a sleep leaves a later shutdown its stop, and
-    /// one that comes during its hand-over.
-    /// Returns the spaces stopped.
+    /// machines the hub places them on, sending what fits in `window`, except
+    /// those an earlier hand-over sent. The user learns where each space went
+    /// and what to continue. An update waits for the stop. Once a stop before a
+    /// shutdown finished, later ones wait for it and leave the work alone. A
+    /// hand-over after a walk-away or before a sleep still leaves a later
+    /// shutdown its stop. Returns the spaces stopped.
     pub async fn stop_for_shutdown_of(
         &self,
         daemon: &dyn Daemon,

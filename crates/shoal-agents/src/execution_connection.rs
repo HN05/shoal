@@ -239,13 +239,13 @@ pub async fn reattach(
     .await
 }
 
-/// Relay controls and events after `response`, unless the caller already
-/// sent it, until the wrapper reports completion or disconnects, then record
-/// the outcome. A wrapper reattaches only while its child runs with the
-/// daemon's acknowledgement or while it waits to restore its agent, so the
-/// registration's `operation` holds back a daemon update until the child
-/// runs, as does an overload stop, or a reattachment while waiting, until the
-/// agent is restored. Otherwise a running execution does not; recording its
+/// Relay controls and events after `response`, unless the caller already sent
+/// it, until the wrapper reports completion or disconnects, then record the
+/// outcome. A wrapper reattaches only while its child runs with the daemon's
+/// acknowledgement or while it waits to restore its agent. So the
+/// registration's `operation` holds back a daemon update until the child runs,
+/// and an overload stop or a reattachment while waiting holds it back until the
+/// agent is restored. A running execution holds back no update; recording its
 /// changes takes the guard again.
 async fn serve(
     stream: UnixStream,

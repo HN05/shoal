@@ -93,14 +93,14 @@ fn spread() -> f64 {
     (uuid::Uuid::new_v4().as_u128() % 1_000_000) as f64 / 1_000_000.0
 }
 
-/// Record the turn `failed` ended in `execution` as its space's
-/// retry: the next attempt after a delivered one, the first for a new
-/// execution or a change between usage limits and transient failures, and the
-/// same one when the failure is reported again before it is due. A delivered
-/// retry lasts only until the turn it started ends, so a failure while it
-/// stands is that turn's, though a restore runs it in a new execution. An
-/// attempt waits past the [`known_reset`], read in the same transaction as
-/// a report of the proxy's, so neither can slip between.
+/// Record the turn `failed` ended in `execution` as its space's retry. It is
+/// the next attempt after a delivered one, the first for a new execution or a
+/// change between usage limits and transient failures, and the same one when
+/// the failure is reported again before it is due. A delivered retry lasts only
+/// until the turn it started ends, so a failure while it stands is that turn's,
+/// though a restore runs it in a new execution. An attempt waits past the
+/// [`known_reset`], read in the same transaction as a report of the proxy's, so
+/// neither can slip between.
 fn record_failure(
     tx: &Transaction<'_>,
     space_id: &SpaceId,

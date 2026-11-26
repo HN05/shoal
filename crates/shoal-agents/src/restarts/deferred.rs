@@ -132,10 +132,10 @@ impl Agents {
 
     /// Begin the restart recorded for the space `id`, with the requests that
     /// wait for it, holding the decisions so no request decides on the space
-    /// meanwhile; none once nothing is recorded, while the daemon carries it
-    /// out already or began it, while the turn it waits for goes on, as a
-    /// newer request may record after the line took the space, or while the
-    /// agent is still to run after the restart under way.
+    /// meanwhile. Begins none when nothing is recorded, when the daemon carries
+    /// it out already or began it, while the turn it waits for goes on, or
+    /// while the agent is still to run after the restart under way. A newer
+    /// request may record after the line took the space.
     async fn begin_recorded_restart(
         &self,
         daemon: &dyn Daemon,

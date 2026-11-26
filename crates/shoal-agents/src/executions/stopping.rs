@@ -127,15 +127,13 @@ enum Keep {
 }
 
 impl Agents {
-    /// The spaces `shoal stop --all` stops: the settled spaces with a
-    /// running execution or a stopped agent whose restore is requested or
-    /// queued, and the workspaces a waiting launch opens when the stop
-    /// cancels `launches`, and then too those whose preparation waits
-    /// unstopped, with an agent or none.
-    /// The queue gate keeps restores and launches from moving between the
-    /// queue and their agents meanwhile, and executions are read before
-    /// requests, which an agent a signal stops saves before its execution
-    /// ends.
+    /// The spaces `shoal stop --all` stops: the settled spaces with a running
+    /// execution or a stopped agent whose restore is requested or queued. When
+    /// the stop cancels `launches`, also the workspaces a waiting launch opens,
+    /// and those whose preparation waits unstopped. The queue gate keeps
+    /// restores and launches from moving between the queue and their agents
+    /// meanwhile. Executions are read before requests, since an agent a signal
+    /// stops saves its request before its execution ends.
     pub async fn stop_targets(
         &self,
         daemon: &dyn Daemon,
@@ -204,12 +202,12 @@ impl Agents {
         }
     }
 
-    /// Stop as [`Manager::stop_space`] does at the user's request, then
-    /// keep the stopped agents as last sessions, which stay down until
-    /// something resumes them. With `acknowledge_unproven`, executions whose
-    /// launch identity was never recorded count as ended once nothing of them
-    /// is visible, because the caller confirmed it. Returns the waiting
-    /// launches it cancelled as `launches` says. A CI job's workspace cancels the job's
+    /// Stop as [`Manager::stop_space`] does at the user's request, then keep
+    /// the stopped agents as last sessions, which stay down until something
+    /// resumes them. With `acknowledge_unproven`, executions whose launch
+    /// identity was never recorded count as ended once nothing of them is
+    /// visible, because the caller confirmed it. Returns the waiting launches
+    /// it cancelled as `launches` says. A CI job's workspace cancels the job's
     /// run on the forge instead, whose runner then stops it.
     pub async fn stop_space_manually(
         &self,
@@ -248,8 +246,8 @@ impl Agents {
 
     /// Stop `selector`'s space as `shoal stop` asks: its agents and commands,
     /// as [`Self::stop_space_manually`] does, then its untracked processes
-    /// where `stop` says, reporting whether the stop saved work for `shoal
-    /// restore`. A CI job's workspace has its run cancelled instead.
+    /// where `stop` says, reporting whether the stop saved work for
+    /// `shoal restore`. A CI job's workspace has its run cancelled instead.
     pub async fn stop_space_at_request(
         &self,
         daemon: &dyn Daemon,
@@ -477,11 +475,12 @@ impl Agents {
     }
 
     /// Before the daemon exits, ask every connected execution to stop. Wrappers
-    /// that can reattach detach instead and keep their commands running or
-    /// their wait for an agent's restore; the rest stop as `shoal stop` does, so a restart leaves resumable records
-    /// instead of disconnected executions. Requests already accepted cannot
-    /// register afterwards, and wrappers that miss the bound are left for the
-    /// startup audit. Returns the spaces of the executions that stopped.
+    /// that can reattach detach instead, keeping their commands running or
+    /// their wait for an agent's restore. The rest stop as `shoal stop` does,
+    /// so a restart leaves resumable records instead of disconnected
+    /// executions. Requests already accepted cannot register afterwards, and
+    /// wrappers that miss the bound are left for the startup audit. Returns the
+    /// spaces of the executions that stopped.
     pub async fn stop_for_shutdown(&self) -> HashSet<SpaceId> {
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         let stopping = self

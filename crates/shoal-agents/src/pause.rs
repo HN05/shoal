@@ -32,8 +32,8 @@ impl Agents {
     }
 
     /// Pause this machine, so it admits nothing new, keeping since when an
-    /// earlier pause stands: since when it is paused, and the stop of its
-    /// work to run, which refuses an unpause from now on until it ends;
+    /// earlier pause stands. Returns since when it is paused and the stop of
+    /// its work to run, which refuses an unpause until it ends. The stop is
     /// none while an earlier pause's stop runs, which this one leaves to it.
     pub async fn pause(&self) -> Result<(UnixTime, Option<PauseStop>)> {
         let stop = self.pause_stop.clone().try_lock_owned();

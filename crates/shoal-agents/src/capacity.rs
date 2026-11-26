@@ -366,11 +366,12 @@ fn sample_disk(
         .flatten()
 }
 
-/// What measured memory and disk leave for one more start beside `agents`,
-/// which a start fits when its memory stays below what is left under the
-/// warning threshold once every warming agent uses what it is expected to
-/// and every job what it has yet to use. Critical or unavailable memory and disk readings leave none;
-/// an idle machine, where nothing runs or starts, always starts one.
+/// What measured memory and disk leave for one more start beside `agents`. A
+/// start fits when its memory stays below what is left under the warning
+/// threshold once every warming agent uses what it is expected to and every job
+/// what it has yet to use. Critical or unavailable memory and disk readings
+/// leave none. An idle machine, where nothing runs or starts, always starts
+/// one.
 pub fn room(sample: HostSample, agents: Agents, settings: &Overload) -> Room {
     if blocked(sample, settings) {
         return Room::Held(HeldBy::Reading);
