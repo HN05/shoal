@@ -129,8 +129,10 @@ combine.
 
 ### Built-in defaults
 
-The key defaults propose the actions a parent can judge and deny the rest.
-The user keeps an action by setting its key to `"propose"` or `"deny"`.
+By default, an agent opens issues and PRs in its own repository and pushes at
+once. Of the actions only the user could otherwise take, the key defaults
+propose those a parent can judge and deny the rest. The user keeps an action
+by setting its key to `"propose"` or `"deny"`.
 
 Modes that coordinate open and decide their children's issues in other
 repositories, so they hold that key at `"direct"`. A master session does what
