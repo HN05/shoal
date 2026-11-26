@@ -2,240 +2,400 @@
 
 This file covers `shoal-repositories`: registered repositories and their
 directories, contributions, seed builds, presets and shared caches.
+[Repositories](../reference/repo.md) says what the `repo` commands and
+`shoal contribute` do, and [setup](../reference/setup.md) how seeds, presets,
+shared caches and temporary directories work; this file gives the reasons.
 
-Every repository owns `~/shoal/<name>/` (`machine.root_dir`): its workspaces
-default to it and a URL clone lives there as `.checkout`, a name no
-workspace can take, so worktrees are grouped per repository, never nested in a
-checkout, and outside the state directory; a root inside either, or inside a
-recorded repository directory, is refused.
-On macOS a root Shoal creates links to `<parent>/.<name>.noindex`, which holds
-its contents: Spotlight ignores `.metadata_never_index` below a volume root and
-its privacy list needs root, so only a skipped name keeps build output out of
-the index, and the link keeps `root_dir` the same on every system. An existing
-root is used as found; only `repo move` changes it, by default to the link,
-or back to a regular directory with `--regular-dir`.
+## Repository directories
+
+Every repository owns a directory in `machine.root_dir`. Its workspaces go
+there by default, and a URL clone lives there as `.checkout`, a name no
+workspace can take. So worktrees are grouped per repository, never nested in a
+checkout, and lie outside the state directory. A root inside the state
+directory, a checkout or a recorded repository directory is refused.
+
+Repository roots and explicit workspace paths resolve existing symlinks and
+lexical `..` before their boundary checks and creation, even when trailing
+components are missing. The checks thus see the directory that creation
+writes.
+
+The daemon reserves each directory atomically and never reuses it. Cleanup
+owns a worktree, never its parent.
+
+An explicit workspace path changes where one creation goes. The repository
+directory stays as it was. A checkout registered in place at
+`~/shoal/<name>/<anything>` adopts that directory.
+
+### Spotlight on macOS
+
+On macOS, a root that Shoal creates is a link to `<parent>/.<name>.noindex`,
+which holds its contents. Spotlight skips a directory by that name. It ignores
+`.metadata_never_index` below a volume root, and its privacy list needs root,
+so only the name keeps build output out of the index. The link keeps
+`root_dir` the same path on every system.
+
+Shoal uses an existing root as it finds it. Only `repo move` changes it.
+
+## Registration
+
+Registration is idempotent. It matches a registration by normalized origin
+URL, then by canonical path. It never fetches.
+
+Each repository has a stable ID apart from its display name, so a rename
+changes no record that refers to it. A selector keeps the caller's argument
+beside its canonical path. [Select a repository](../reference/repo.md#select-a-repository)
+says which match wins.
+
+## File access that waits
+
+### Writing a new directory
+
 Before registration, workspace creation or an export writes a directory, the
-daemon creates a file there itself under a time limit: its file access can
-differ from the terminal's, and on macOS opening a file on a volume it lacks
-access to can wait for a permission prompt no one sees.
-File access in a worktree can wait without end: while macOS waits for an
-answer to a privacy prompt, whichever process it is for, every new process that
-opens a file in the protected location waits until the prompt is answered or the
-kernel interrupts it (`Interrupted system call`), so each Git the daemon starts
-does. Shoal cannot end the wait, only keep it from holding up unrelated work,
-and does not depend on where the worktree is or which permission it waits on.
-The daemon's own reads in a worktree, such as its ownership marker or whether
-it exists, can wait too, and no time limit interrupts a read waiting in the
-kernel, so requests and sweeps read worktree files on the blocking pool, where
-a read holds no runtime thread and a check's time limit ends the wait for it.
-The startup audit, its recheck, the sweep's branch observation and cleanup
-checks, the Git reads of `shoal status`, and the reads of a checkout's or
-worktree's config file, which every command that resolves its settings, such
-as `shoal attach`, waits on, check a worktree within 30 seconds, a status
-reporting what it could not read; one that runs out or is interrupted
-records the directory holding the worktree as stalled, which the daemon reports
-once as an alert and in Shoal's `status` until a check there finishes. A check
-can also run that long under heavy memory pressure with no prompt waiting, so
-the report says the check timed out and, only on macOS, names a prompt as a
-possible cause. The directory comes from the path alone, since reading the filesystem could stall
-too, and groups a repository's workspaces, which a prompt for their location
-holds together.
-Those checks skip a stalled directory until 20 seconds after its last check, and
-while another check rechecks it, so each sweep rechecks it once; the sweep's
-cleanup phases skip a workspace or checkout in a stalled directory, reading its
-HEAD themselves when a recheck is due, since none may be left there that branch
-observation can read; an unattended removal, deleted-worktree cleanup included,
-is refused while a workspace below it is in a stalled directory, and PR cleanup
-skips a base while one stacked on it is. Listings read
-HEAD for review marks within three seconds in all and skip stalled directories,
-leaving staleness unknown, so `shoal attach` and `shoal list` answer from the
-daemon's state. Repository pickers start Git only to tell apart repositories
-that share a name, reading their origins at once within three seconds, and
-label one whose origin they cannot read by its recorded source.
-Repository roots and explicit workspace paths resolve existing symlinks and lexical
-`..` before boundary checks and creation, even when trailing components are missing.
-An explicit workspace path overrides the destination for one creation, without
-changing the repository directory; reject existing paths and overlaps with state,
-checkouts, workspaces, or other repositories' directories. Cleanup owns the worktree,
-never its parent. Directories are reserved atomically and never reused; an
-in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
-`--path` clones elsewhere. A repository directory moves only whole, into a new
-`root_dir`, while nothing runs or uses it: its workspaces are reserved and the
-move is recorded before anything moves, then the records switch and Git's
-worktree links are repaired, so a stopped daemon finishes a completed move and
-rolls back an incomplete one, deleting only directories with their recorded identity. Checkouts and workspaces outside it stay.
-`repo move` stops the commands and agents running there as `shoal stop`
-does and queues the agents' restores after the move, whose trust entries the
-daemon carries to the new paths: a stop keeps sessions, which resume by ID from
-any directory. The
-chats without a repository, which run in `root_dir`, go with the root: their
-agents stop the same way, their temporary directories, attached files and kept session files move
-into the directory that holds the repositories, and their records name the
-configured root, which is that directory or links to it, so a root that
-becomes a link is empty once they have moved. Registration is idempotent by normalized origin URL,
-then canonical path, never fetches, and keeps a stable UUID separate from the
-display name. Repository selectors preserve the caller's argument alongside its
-canonical path. IDs and sources win before path lookup; a registered name survives
-unrelated path collisions, while a name and path matching different registrations
-require disambiguation.
-`repo rm` binds confirmation to each machine's resolved registration, by
-the ID that machine gives it, and shows its source, checkout path and the
-spaces it deletes there with the work they lose. After verifying the checkout's identity and
-boundaries, it deletes the checkout recursively, then removes the repository
-directory only when that directory is empty. It removes every workspace through
-the shared removal path, refuses external worktrees and dangerous paths, and
-persists its progress. Until an interrupted `repo rm` is retried, the
-repository takes no new workspace.
-Each workspace and chat gets its own temporary directory as `TMPDIR`, in the
-repository directory's `.tmp` under its ID, or `root_dir`'s for a chat without a
-repository, which the daemon marks with its state directory so another daemon
-sharing `root_dir` leaves it alone. The ID never changes or comes back
-like a name. Outside the worktree it neither dirties it nor enters checkpoints,
-and its path stays short enough for the Unix sockets tools create in it on
-macOS. It is created only once its record exists and deleted with it, by
-the removal of its space; the cleanup sweep
-deletes any without a record, with the directories in it the owner may not
-write, since nothing there is worth keeping. The
-post-remove hook runs after it is gone and keeps the inherited `TMPDIR`.
-A contribution is a URL clone registered for work in a repository the user does
-not maintain. `origin` stays the repository itself, so issues, PRs and syncs use
-it; when the user's login cannot push there, the user's fork, created or reused,
-becomes the `fork` remote and `remote.pushDefault`, which Git, `pr open` and
-cleanup all honour. It goes through `repo rm`'s path once nothing of it has been
-left for the unattended grace period: no running `contribute`, whose daemon
-connection holds it in memory from its registration until the command ends,
-resuming on a new one after a restart, while every contribution counts as held
-for the first minute the daemon runs, no
-workspace, queued agent, chat, pending
-issue proposal, kept branch or borrowed resource, nothing `shoal resume` could
-use, no files a removed space keeps, and no work in its checkout that the remotes' advertised branches and tags
-lack. The final
-check records the removal in the same transaction, under the gates creation
-takes, and queue and chat records refuse a repository being removed. Removal
-never deletes the fork: Shoal does not record whether it created it, deleting a
-forge repository cannot be undone, and the fork may hold the only copy of a
-PR's branch. An existing registration is never turned into one.
+daemon creates a file there itself, under a time limit. The daemon's file
+access can differ from the terminal's. On macOS, opening a file on a volume
+the daemon lacks access to can wait for a permission prompt no one sees.
 
-A repository's `[setup.seed]` keeps one build of its local default branch that new
-worktrees start from, instead of sharing build directories between live
-workspaces: a shared directory serialises or corrupts concurrent builds, while a
-copy-on-write clone costs no space until a branch rewrites a file and needs no
-tool support. The daemon owns a locked, detached seed worktree in the repository
-directory, builds it when the branch moves and freezes the configured outputs as
-a snapshot, so a running build never reaches a workspace. A clone of a large
-build tree takes minutes, so creation clones after its Git operations, outside
-the repository Git gate, and the workspace is neither ready nor set up until the
-clone ends. The daemon also keeps one spare clone of the snapshot ready:
-creation moves it into the new worktree, a background task clones the next, and
-creation clones only when no spare is ready. Clones read the snapshot under a
-shared lock of the seed's own, which a swap or deletion of the snapshot takes
-exclusively, so starts and the refill clone at the same time and only taking the
-spare is exclusive. A new snapshot is cloned and the old one deleted outside the
-Git gate, which it takes only to swap them. Creation restores the
-seed's modification times on tracked files its commit left unchanged, and on
-the directories holding them where it changed no path inside, since
-mtime-based tools otherwise treat every freshly checked-out file as new, and
-Cargo's `rerun-if-changed` on a directory reads the directory's own time.
-It does so only when it cloned an output: beside outputs the worktree already
-had, older times could hide changed sources.
-Clones of a file still cost time per file, so on btrfs each output is a
-subvolume, whose snapshot takes the same time for any number of files: a freeze
-turns a plain output directory into one, once a probe shows Shoal can remove the
-subvolumes it makes, and removal destroys them before deleting the rest. Other
-filesystems use reflinks or APFS clones; ZFS datasets and APFS snapshots cover
-more than one directory, so neither serves. Platforms without clones skip the
-seed rather than copy. Seeds are best effort:
-failures notify and never fail creation, and builds and spare clones wait under
-host pressure so they never add load an agent would feel.
-A repository's `presets` name the build tools it uses, and each sets up what
-that tool needs to stop repeating work across workspaces, so common stacks need
-no script. Tools whose build outputs survive a move into another path get a
-seed: Cargo, whose seed covers it better than a shared compiler cache such as
-sccache, which needs another tool and gives up incremental builds, and the Node
-package managers. Cargo's seed also runs `cargo test`, which builds a proc-macro
-member with other settings than `cargo build --all-targets` does, `cargo
-check`, which makes the dependency builds `cargo clippy` uses too, and `cargo
-clippy`: Cargo keeps clippy's builds of the workspace crates apart from
-`cargo check`'s, so without its own step every workspace type-checks them from
-scratch for clippy. Clippy's lint arguments are rustc options, and rustc
-discards incremental state built under other options, so the seed passes none
-and serves clippy runs that fail on warnings through Cargo's `build.warnings`
-instead; a step without them also denies nothing, so a default branch with
-warnings still seeds. A failure of the clippy step alone still freezes the
-snapshot and notifies, since its outputs serve only clippy runs and clippy is an
-optional component a toolchain can lack; a timeout or cancellation there fails
-the build as in any step.
-Cargo never deletes the outputs of a unit whose hash changed, which
-releases, lockfile and toolchain updates and crate moves do, so the seed
-`target` would keep every earlier build and each freeze, spare and clone would
-copy them. The Cargo seed therefore runs `cargo clean --workspace` first, which
-keeps third-party units, when its toolchain, settings or a file those hashes
-read has changed since the snapshot's build, and only then: most refreshes
-rebuild a few crates incrementally, while one that changes unit hashes rebuilds
-most of the workspace anyway.
+### Waits in a worktree
+
+File access in a worktree can wait without end. While macOS waits for an
+answer to a privacy prompt, for any process, every new process that opens a
+file in the protected location waits too. It waits until someone answers the
+prompt or the kernel interrupts it with `Interrupted system call`. Each Git
+the daemon starts there waits the same way.
+
+Shoal cannot end the wait. It keeps the wait from holding up unrelated work,
+wherever the worktree is and whichever permission it waits on.
+
+The daemon's own reads in a worktree can wait too, such as reading its
+ownership marker or whether it exists. No time limit interrupts a read that
+waits in the kernel. So requests and sweeps read worktree files on the
+blocking pool, where a read holds no runtime thread and a check's time limit
+ends the wait for it.
+
+### Stalled directories
+
+The daemon's checks of a worktree run under a time limit and report what they
+could not read. They include the startup audit and its recheck, the sweep's
+branch observation and cleanup checks, the Git reads of `shoal status`, and
+the reads of a checkout's or worktree's config file, which every command that
+resolves settings waits on.
+
+A check that runs out of time or is interrupted marks the directory that
+holds the worktree as stalled. The daemon reports it once as an alert, and in
+`shoal status` until a check there finishes. Heavy memory pressure can slow a
+check that much with no prompt waiting. So the report says the check timed
+out, and names a prompt as a possible cause only on macOS.
+
+The stalled directory comes from the path alone, since reading the filesystem
+could stall too. It groups a repository's workspaces, which a prompt for their
+location holds up together.
+
+Checks skip a stalled directory until a recheck is due, and while another
+check rechecks it. So each sweep rechecks it once. Work that must not act on
+what it cannot read waits for the directory:
+
+- The sweep's cleanup phases skip a workspace or checkout in a stalled
+  directory. When a recheck is due, they read its HEAD themselves, since
+  branch observation left nothing there for them to read.
+- An unattended removal, deleted-worktree cleanup included, is refused while
+  a workspace below it is in a stalled directory.
+- PR cleanup skips a base while a workspace stacked on it is in one.
+
+### Listings and pickers
+
+Listings read HEAD for review marks under one short limit for the whole list,
+and skip stalled directories, leaving staleness unknown. So `shoal attach` and
+`shoal list` answer from the daemon's state.
+
+Repository pickers start Git only to tell apart repositories that share a
+name. They read those origins at once, under a short limit. A repository whose
+origin they cannot read shows its recorded source.
+
+## Moving the root
+
+A repository directory moves only whole, into a new `root_dir`, while nothing
+runs in it or uses it. Checkouts and workspaces outside it stay where they
+are.
+
+The daemon reserves the directory's workspaces and records the move before
+anything moves. Then it switches the records and repairs Git's worktree links.
+So a daemon that stopped during a move finishes it once the directory has
+arrived, and rolls it back otherwise. A rollback deletes only directories that
+carry their recorded identity.
+
+`repo move` stops the commands and agents running there as `shoal stop` does.
+It queues the agents' restores for after the move, since a stop keeps
+sessions, which resume by ID from any directory. The daemon carries the
+agents' trust entries to the new paths.
+
+### Chats without a repository
+
+The chats without a repository run in `root_dir`, so they go with the root.
+Their agents stop the same way. Their temporary directories, attached files and
+kept session files move into the directory that holds the repositories. Their
+records name the configured root, which is that directory or links to it. So
+a root that becomes a link is empty once they have moved.
+
+## Removing a repository
+
+`repo rm` binds its confirmation to each machine's resolved registration, by
+the ID that machine gives it. So a confirmation never removes a repository the
+user did not see listed.
+
+The removal verifies the checkout's identity and boundaries before it deletes
+the checkout. It removes the repository directory only once that is empty. It
+removes every workspace through the shared removal path. It persists its
+progress, and until a retry finishes an interrupted removal, the repository
+takes no new workspace.
+
+## Contributions
+
+A contribution is a URL clone registered for work in a repository the user
+does not maintain. `origin` stays the repository itself, so issues, PRs and
+syncs use it. When the user's login cannot push there, the user's fork becomes
+the `fork` remote and `remote.pushDefault`. Git, `pr open` and cleanup all
+honour that setting.
+
+An existing registration never becomes a contribution, since its checkout is
+the user's own.
+
+### Removal
+
+Cleanup removes a contribution through `repo rm`'s path once nothing of it has
+been left for the unattended grace period.
+[Remove a contribution](../reference/repo.md#remove-a-contribution) lists
+what counts. It keeps anything a later command could use and any work the
+remotes lack, since no one confirms the removal.
+
+A running `shoal contribute` holds its contribution through its daemon
+connection, in memory, from registration until the command ends. A command
+whose daemon restarted holds it again on its new connection. So every
+contribution counts as held for the first minute the daemon runs.
+
+The final check records the removal in the same transaction, under the gates
+that workspace creation takes. Queue and chat records refuse a repository
+being removed. So nothing new starts in it once the check passes.
+
+Removal never deletes the fork. Shoal does not record whether it created it.
+Deleting a forge repository cannot be undone, and the fork may hold the only
+copy of a PR's branch.
+
+## Temporary directories
+
+Each workspace and chat gets its own temporary directory as `TMPDIR`. It lies
+outside the worktree, so it neither dirties the worktree nor enters
+checkpoints. It is named by the space's ID, which never changes or comes back
+as a name can. Its path stays short enough for the Unix sockets that tools
+create in it on macOS.
+
+The directory of a chat without a repository lies in `root_dir`'s `.tmp`. The
+daemon marks that `.tmp` with its state directory, so another daemon sharing
+`root_dir` leaves it alone.
+
+The directory exists only while its space's record does. The daemon creates
+it once the record exists, and the removal of the space deletes it. The
+cleanup sweep deletes any directory without a record, with the directories in
+it that the owner may not write, since nothing there is worth keeping. The
+post-remove hook runs after the directory is gone, so it keeps the inherited
+`TMPDIR`.
+
+## Seed builds
+
+A repository's `[setup.seed]` keeps one build of its local default branch that
+new worktrees start from. Live workspaces share no build directory: a shared
+directory serialises or corrupts concurrent builds. A copy-on-write clone
+costs no space until a branch rewrites a file, and needs no support from the
+build tool.
+
+The daemon owns a locked, detached seed worktree in the repository directory.
+It builds there when the branch moves, then freezes the configured outputs as
+a snapshot. So a running build never reaches a workspace.
+
+### Cloning into a new workspace
+
+A clone of a large build tree takes minutes. So creation clones after its Git
+operations, outside the repository's Git gate. The workspace is neither ready
+nor set up until the clone ends.
+
+The daemon keeps one spare clone of the snapshot ready. Creation moves it into
+the new worktree, and a background task clones the next. Creation clones
+itself only when no spare is ready.
+
+Clones read the snapshot under the seed's own lock, shared. A swap or deletion
+of the snapshot takes it exclusively. So creations and the refill clone at the
+same time, and only taking the spare is exclusive. The daemon clones a new
+snapshot and deletes the old one outside the Git gate, which it takes only to
+swap them.
+
+### Modification times
+
+Tools that compare modification times treat every freshly checked-out file as
+new. So creation gives the seed's modification times to the tracked files its
+commit left unchanged. It does the same for the directories holding them in
+which it changed no path, since Cargo's `rerun-if-changed` on a directory
+reads the directory's own time.
+
+Creation does so only when it cloned an output. Beside outputs the worktree
+already had, older times could hide changed sources.
+
+### Clones and subvolumes
+
+A clone still costs time per file. So on btrfs each output is a subvolume,
+whose snapshot takes the same time for any number of files. A freeze turns a
+plain output directory into one, once a probe shows that Shoal can remove the
+subvolumes it makes. Removal destroys them before it deletes the rest.
+
+Other filesystems use reflinks or APFS clones. ZFS datasets and APFS snapshots
+cover more than one directory, so neither serves. A platform without clones
+skips the seed rather than copy it.
+
+### Best effort
+
+A seed is best effort. Its failures notify and never fail creation. Builds and
+spare clones wait while the host is under pressure, so they never add load an
+agent would feel.
+
+## Build tool presets
+
+A repository's `presets` name the build tools it uses. Each preset sets up
+what its tool needs to stop repeating work across workspaces, so common stacks
+need no script.
+
+A tool whose build outputs survive a move into another path gets a seed. A
+preset's seed runs the default branch's own build code, as
+`setup.seed.command` would. A tool whose cache already serves every checkout
+gets only what makes the cache's keys independent of the workspace path, or one
+cache where each checkout would keep its own.
+
+### Cargo's seed
+
+Cargo gets a seed rather than a shared compiler cache such as sccache. A
+shared cache needs another tool and gives up incremental builds.
+
+The seed builds what each common command needs, since Cargo builds each with
+its own settings. `cargo test` builds a proc-macro member with other settings
+than `cargo build --all-targets` does. `cargo check` makes the dependency
+builds that `cargo clippy` uses too. Cargo keeps clippy's builds of the
+workspace crates apart from `cargo check`'s, so without its own step every
+workspace would type-check them from scratch for clippy.
+
+Clippy's lint arguments are rustc options, and rustc discards incremental
+state built under other options. So the seed passes none, and serves clippy
+runs that fail on warnings through Cargo's `build.warnings` instead. A step
+without lint arguments also denies nothing, so a default branch with warnings
+still seeds.
+
+A failure of the clippy step alone still freezes the snapshot and notifies.
+Its outputs serve only clippy runs, and clippy is an optional component that a
+toolchain can lack. A timeout or cancellation there fails the build, as in any
+step.
+
+### Cargo's clean builds
+
+Cargo never deletes the outputs of a unit whose hash changed. Releases,
+lockfile and toolchain updates and crate moves change those hashes. So the
+seed `target` would keep every earlier build, and each freeze, spare and clone
+would copy them.
+
+The seed therefore runs `cargo clean --workspace` first when something those
+hashes read has changed since the snapshot's build, and only then. It keeps
+third-party units. Most refreshes rebuild a few crates incrementally, while
+one that changes unit hashes rebuilds most of the workspace anyway.
+
+### Cargo's wrappers
+
 A seed serves the workspace crates only if their incremental state survives
-the move, but rustc reuses it only under the same compiler options, which
-include the working directory, and reuses generated code only for the same
-output directory. So the Cargo preset runs the workspace's own crates through
-a wrapper that adds `-Zremap-cwd-prefix=.` and passes the output directory
-relative to the workspace root. Cargo's `trim-paths` does not help: its flags
-name each package's directory. Stable rustc takes the unstable flag only for
-the crates `RUSTC_BOOTSTRAP` names, so for a rustc that refuses it the wrapper
-names each crate it builds and allows it no unstable features; a nightly rustc
-gets only the flag, so crates keep the features they enable. Dependencies,
-which Cargo builds without the wrapper, and Cargo's target queries, whose
-printed cfgs a grant would change, stay as the toolchain builds them, and the
-wrapper drops the flag for a rustc that no longer takes it. `cargo clippy`
-replaces the workspace wrapper with `clippy-driver`, so the preset also sets
-`RUSTC_WRAPPER`, which Cargo runs before `clippy-driver` for the workspace
-crates and before rustc for everything else, to a second script that hands
-only `clippy-driver` runs to the workspace wrapper. That replaces a user's own
-`RUSTC_WRAPPER` or `build.rustc-wrapper`, such as sccache, whose work the seed
-already covers; one set in `[env]` wins, as every
-variable there does, and clippy then runs without the mapping. CI runners set `CI`, under which
-Cargo leaves incremental compilation off and so misses the seed's builds of
-the workspace crates, so the preset gives Shoal runner jobs
-`CARGO_INCREMENTAL=1`, the only setting that overrides `CI`, and not agent
-workspaces, where it would make release builds incremental too. It reaches
-the steps through the runner's own environment, which a workflow's `env`
-replaces on both forges, while Forgejo's `runner.envs` would replace that
-`env` and GitHub's `GITHUB_ENV` would override it. Preset seeds run the default branch's own build code, as
-`setup.seed.command` would. Tools whose caches already serve every checkout get only what
-makes their cache keys independent of the workspace path, or one cache where
-each checkout keeps its own: Go trims paths, ccache takes the workspace as its
-base directory, Zig shares its local cache, and Xcode, whose DerivedData records absolute paths so no seed survives the move,
-shares one compilation cache with the workspace and DerivedData paths mapped
-out of its keys. Xcode also needs one package checkout per set of resolved
-pins, which only an `xcodebuild` argument can choose, so the preset puts a
-wrapper first on workspace processes' PATH. These presets trade real source
-paths in debug info and stack traces for the shared cache, which is why they
-are opt-in. Neither shrinks a workspace's own build directory: Xcode copies
-cached results into each DerivedData. That folder lies outside the worktree,
-keyed by the project's path, so the preset makes removal delete it and disk
-space cleanup delete what earlier removals left; Xcode rebuilds it on demand.
-Package checkouts are shared by pins rather than owned by a worktree, so only
-those nothing pins go, and only after a day unused, since a build that resolves
-packages rewrites its pins while it runs. Xcode trims the compilation cache
-itself, by default to half the space available to it.
+the move. rustc reuses that state only under the same compiler options, which
+include the working directory. It reuses generated code only for the same
+output directory. So the preset runs the workspace's own crates through a
+wrapper that maps the working directory to `.` and passes the output directory
+relative to the workspace root. Cargo's `trim-paths` does not help, since its
+flags name each package's directory.
+
+The mapping is an unstable flag. Stable rustc takes it only for the crates
+`RUSTC_BOOTSTRAP` names. So the wrapper names each crate it builds there and
+allows it no unstable features, while a nightly rustc gets only the flag, and
+crates keep the features they enable.
+
+Dependencies and Cargo's target queries stay as the toolchain builds them.
+Cargo builds dependencies without the wrapper. A grant would change the cfgs
+that target queries print. The wrapper drops the flag for a rustc that no
+longer takes it.
+
+`cargo clippy` replaces the workspace wrapper with `clippy-driver`. So the
+preset also sets `RUSTC_WRAPPER`, which Cargo runs before `clippy-driver` for
+the workspace crates and before rustc for everything else. A second script
+there hands only the `clippy-driver` runs to the workspace wrapper.
+
+That replaces a user's own `RUSTC_WRAPPER` or `build.rustc-wrapper`, such as
+sccache, whose work the seed already covers. One set in `[env]` wins, as every
+variable there does, and clippy then runs without the mapping.
+
+### Cargo in CI runners
+
+CI runners set `CI`, under which Cargo leaves incremental compilation off. It
+then misses the seed's builds of the workspace crates. So the preset gives
+Shoal [runner](runner.md) jobs `CARGO_INCREMENTAL=1`, the only setting that
+overrides `CI`. Agent workspaces do not get it, since it would make their
+release builds incremental too.
+
+The setting reaches the steps through the runner's own environment. A
+workflow's `env` replaces that on both forges, so a workflow can still turn
+it off. Forgejo's `runner.envs` would replace that `env`, and GitHub's
+`GITHUB_ENV` would override it.
+
+### Caches independent of the path
+
+Go trims paths. ccache takes the workspace as its base directory. Zig shares
+its local cache.
+
+Xcode's DerivedData records absolute paths, so no seed survives the move.
+Xcode instead shares one compilation cache, with the workspace and DerivedData
+paths mapped out of its keys. Xcode also needs one package checkout per set of
+resolved pins, which only an `xcodebuild` argument can choose. So the preset
+puts a wrapper first on the `PATH` of workspace processes.
+
+These presets trade real source paths in debug info and stack traces for the
+shared cache. That is why they are opt-in.
+
+### Xcode's own directories
+
+The shared cache does not shrink a workspace's own build directory, since
+Xcode copies cached results into each DerivedData. That folder lies outside
+the worktree, keyed by the project's path. So the preset makes removal delete
+it, and disk space cleanup delete what earlier removals left. Xcode rebuilds
+it on demand.
+
+Package checkouts are shared by pins rather than owned by a worktree. So only
+those nothing pins go, and only after a day unused, since a build that
+resolves packages rewrites its pins while it runs.
+
+Xcode trims the compilation cache itself.
+
+## MCP servers
 
 A preset also brings the MCP servers its tool's agents use, as `xcode` brings
-Xcode's bridge, and `[mcp.NAME]` adds, changes or turns off servers by name in
-every layer, as `[env]` does a preset's variables. Shoal gives each workspace
-and chat agent its repository's servers in the agent's own syntax, beside the
-servers the user's config names, so a server only some repositories need
-belongs to their config rather than to the user's, which every session starts.
-Shoal never edits the agent's own config to do it, and an agent whose
-integration has no such syntax starts none.
+Xcode's bridge. `[mcp.NAME]` adds, changes or turns off servers by name in
+every layer, as `[env]` does for a preset's variables.
 
-Tool caches whose tools lock or address entries by content, such as `GOCACHE` or
-sccache's directory, are the exception: `[caches.NAME]` with `scope = "shared"`
-gives a repository one directory per cache, and `[env]` maps it to the tool's
-variable with `{cache.NAME}`, so workspaces stop repeating downloads and
-compilation. The scope is explicit because a cache shared by live workspaces is
-only safe for such tools. A cache is disposable, so `cleanup caches` and disk
-space cleanup empty it, but only while no tracked execution or seed build of the
-repository runs; registering an execution prepares the directories in the
-transaction that records it, so emptying under the store's write lock cannot
+Shoal gives each workspace and chat agent its repository's servers in the
+agent's own syntax, beside the servers in the user's own config. So a server
+that only some repositories need belongs to their config, rather than to the
+user's, which every session starts. Shoal never edits the agent's own config
+to do it. An agent whose integration has no such syntax starts none.
+
+## Shared caches
+
+A tool that locks its cache entries or addresses them by content, such as
+`GOCACHE` or sccache's directory, can share one cache between live workspaces.
+`[caches.NAME]` gives a repository one directory per cache, so workspaces stop
+repeating downloads and compilation. The scope is explicit, since a cache that
+live workspaces share is safe only for such tools.
+
+A cache is disposable, so `shoal cleanup caches` and disk space cleanup empty
+it. They do so only while no tracked execution or seed build of the
+repository runs. Registering an execution prepares the directories in the
+transaction that records it. So emptying under the store's write lock cannot
 race a start.
 
 ## The crate's boundary
