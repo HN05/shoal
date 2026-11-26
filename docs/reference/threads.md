@@ -172,7 +172,8 @@ the values given entered into it, as a renderer sends it. An input's bounds,
 such as an end date's earliest, read that data too. Shoal runs `@index`,
 `formatString` over data paths, the checks `required`, `length`, `numeric`,
 `email` and `regex`, and `and`, `or` and `not` itself, in a context, a check,
-a bound and the text it shows. A check it cannot run passes. It records any other function call in a context as written, since its
+a bound and the text it shows. A check it cannot run passes, and one whose
+value is missing or of the wrong kind, such as text no number spells, fails. It records any other function call in a context as written, since its
 result depends on the renderer, such as its locale or clock, and a bound it
 gives bounds nothing. It treats the same way calls nested more than four deep
 and a `formatString` whose text would outgrow 8 KiB.

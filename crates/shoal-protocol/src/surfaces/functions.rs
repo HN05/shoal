@@ -17,7 +17,8 @@ impl Surface {
     /// What `call`, placed in `scope`, gives where Shoal runs it: a call
     /// of `@index` or `formatString` as [`Self::indexed`] and
     /// [`Self::formatted`] give it, and a check's or logical function's
-    /// boolean; none for a call only a renderer runs,
+    /// boolean, false where a check's value is known but of the wrong kind,
+    /// such as text no number spells; none for a call only a renderer runs,
     /// a value that is no call, or calls nested deeper than
     /// [`MAX_NESTED_CALLS`], which Shoal leaves to a renderer too.
     pub(super) fn called(&self, call: &Value, scope: &str) -> Option<Value> {
@@ -25,26 +26,26 @@ impl Surface {
             return None;
         }
         let arg = |name: &str| call.get("args")?.get(name);
-        let given = |name: &str| self.dynamic(arg(name)?, scope);
+        let given = |name: &str| self.known(arg(name)?, scope);
         let number = |name: &str| arg(name).and_then(Value::as_f64);
+        let text = |name: &str| given(name).map(|value| value.as_str().map(str::to_owned));
+        let check = |passes: Option<bool>| Some(Value::Bool(passes.unwrap_or(false)));
         match call.get("@call").and_then(Value::as_str)? {
             "@index" => self.indexed(call, scope),
             "formatString" => self.formatted(call, scope).map(Value::String),
-            "required" => Some(Value::Bool(
-                given("value").is_some_and(|value| filled(&value)),
-            )),
+            "required" => Some(Value::Bool(filled(&given("value")?))),
             "length" => {
-                let length = given("value")?.as_str()?.chars().count() as f64;
-                Some(Value::Bool(within(length, number("min"), number("max"))))
+                check(text("value")?.map(|value| {
+                    within(value.chars().count() as f64, number("min"), number("max"))
+                }))
             }
-            "numeric" => {
-                let value = numeric(&given("value")?)?;
-                Some(Value::Bool(within(value, number("min"), number("max"))))
-            }
-            "email" => Some(Value::Bool(email(given("value")?.as_str()?))),
+            "numeric" => check(
+                numeric(&given("value")?).map(|value| within(value, number("min"), number("max"))),
+            ),
+            "email" => check(text("value")?.map(|value| email(&value))),
             "regex" => {
                 let pattern = regex(arg("pattern")?.as_str()?)?;
-                Some(Value::Bool(pattern.is_match(given("value")?.as_str()?)))
+                check(text("value")?.map(|value| pattern.is_match(&value)))
             }
             "and" => self.logical(arg("values")?, scope, |values| {
                 values.iter().all(|value| *value)
@@ -52,16 +53,27 @@ impl Surface {
             "or" => self.logical(arg("values")?, scope, |values| {
                 values.iter().any(|value| *value)
             }),
-            "not" => Some(Value::Bool(!given("value")?.as_bool()?)),
+            "not" => Some(Value::Bool(!truth(&given("value")?)?)),
             _ => None,
         }
     }
 
-    /// What `combine` makes of the booleans `values` give in `scope`; none
-    /// where one of them is no boolean Shoal can work out.
+    /// What the argument `value` gives in `scope` where Shoal can work it
+    /// out: [`Self::dynamic`]'s value, with missing data as null; none for
+    /// a call only a renderer runs.
+    pub(super) fn known(&self, value: &Value, scope: &str) -> Option<Value> {
+        match value.get("@call") {
+            Some(_) => self.called(value, scope),
+            None => Some(self.value(value, scope).cloned().unwrap_or(Value::Null)),
+        }
+    }
+
+    /// What `combine` makes of the booleans `values` give in `scope`, each
+    /// as [`truth`] reads it; none where one of them is none Shoal can work
+    /// out.
     fn logical(&self, values: &Value, scope: &str, combine: fn(&[bool]) -> bool) -> Option<Value> {
         let values: Option<Vec<bool>> = (values.as_array()?.iter())
-            .map(|value| self.dynamic(value, scope)?.as_bool())
+            .map(|value| truth(&self.known(value, scope)?))
             .collect();
         Some(Value::Bool(combine(&values?)))
     }
@@ -109,6 +121,18 @@ impl Surface {
         }
         text.push(rest)?;
         Some(text.0)
+    }
+}
+
+/// The boolean `value` stands for, as a check's condition or a logical
+/// function reads it: itself, a validation result's `valid`, or false for
+/// null; none for anything else.
+pub(super) fn truth(value: &Value) -> Option<bool> {
+    match value {
+        Value::Bool(value) => Some(*value),
+        Value::Object(result) => result.get("valid")?.as_bool(),
+        Value::Null => Some(false),
+        _ => None,
     }
 }
 

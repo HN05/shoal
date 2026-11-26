@@ -4,7 +4,7 @@
 use anyhow::{Result, bail};
 use serde_json::Value;
 
-use super::{Component, Surface, SurfaceAction};
+use super::{Component, Surface, SurfaceAction, functions::truth};
 
 impl Surface {
     /// Refuse `action` where a check of its button, or of an input it
@@ -29,11 +29,7 @@ impl Surface {
     fn failed_check(&self, component: Component<'_>, scope: &str) -> Option<String> {
         let rules = component.get("@checks")?.as_array()?;
         rules.iter().find_map(|rule| {
-            let passes = match self.dynamic(rule.get("condition")?, scope)? {
-                Value::Bool(passes) => passes,
-                Value::Object(result) => result.get("valid")?.as_bool()?,
-                _ => return None,
-            };
+            let passes = truth(&self.known(rule.get("condition")?, scope)?)?;
             let message = rule.get("message").and_then(Value::as_str);
             (!passes).then(|| message.unwrap_or("a check fails").to_owned())
         })

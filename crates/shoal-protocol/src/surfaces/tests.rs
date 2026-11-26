@@ -684,6 +684,36 @@ fn an_answer_that_fails_its_checks_is_refused() {
 }
 
 #[test]
+fn a_check_fails_on_known_data_of_the_wrong_kind_and_reads_validation_results() {
+    let count = json!({"@path": "/count"});
+    let checked = |rule: Value, data: Value| {
+        surface(
+            json!([
+                {"id": "root", "component": "Column", "children": ["count", "go"]},
+                {"id": "count", "component": "TextField", "label": "Count", "value": count,
+                 "@checks": [{"condition": rule}]},
+                {"id": "go", "component": "Button", "child": "go-label",
+                 "action": {"event": {"name": "go", "context": {"count": count}}}},
+                {"id": "go-label", "component": "Text", "text": "Go"},
+            ]),
+            data,
+        )
+    };
+    let numeric = json!({"@call": "numeric", "args": {"value": count, "min": 1}});
+    let form = checked(numeric, json!({"count": ""}));
+    let answer =
+        |surface: &Surface, value: &str| surface.resolve("go", values(&[("count", json!(value))]));
+    assert!(answer(&form, "abc").is_err());
+    answer(&form, "3").unwrap();
+    // A validation result counts as its validity inside a logical function.
+    let and = json!({"@call": "and", "args": {"values": [{"@path": "/check"}, true]}});
+    let not = json!({"@call": "not", "args": {"value": {"@path": "/check"}}});
+    let invalid = json!({"count": "", "check": {"valid": false}});
+    assert!(answer(&checked(and, invalid.clone()), "3").is_err());
+    answer(&checked(not, invalid), "3").unwrap();
+}
+
+#[test]
 fn a_date_and_time_may_write_its_t_and_z_lowercase() {
     let meeting = surface(
         json!([
