@@ -81,6 +81,20 @@ pub enum QueueMethod {
         #[serde(default, skip_serializing_if = "RetryStart::is_queued")]
         start: RetryStart,
     },
+    /// Long-lived: admit a run of the `shoal run` command `command` in
+    /// `space`, at the memory its earlier runs estimate, which it holds
+    /// until the connection ends. The daemon answers, then sends
+    /// [`AdmissionFrame`](crate::runs::AdmissionFrame)s and reads
+    /// [`RunReport`](crate::runs::RunReport)s. `now` admits it at once,
+    /// whatever the limits.
+    AdmitCommand {
+        space: SpaceSelector,
+        command: crate::runs::CommandKey,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        now: bool,
+        #[serde(default)]
+        admit_as: crate::runs::AdmitAs,
+    },
     /// Set `priority` on the space, which ranks its queued work; a scoped
     /// caller gives at most its own space's.
     SetPriority {
@@ -126,6 +140,7 @@ impl QueueMethod {
             | Self::QueueFail { .. }
             | Self::QueueRetry { .. }
             | Self::SetPriority { .. } => Lifetime::Reply,
+            Self::AdmitCommand { .. } => Lifetime::Open,
         }
     }
 }
@@ -144,7 +159,8 @@ impl QueueMethod {
             | Self::QueueAttach { .. }
             | Self::QueueFail { .. }
             | Self::QueueRetry { .. }
-            | Self::SetPriority { .. } => false,
+            | Self::SetPriority { .. }
+            | Self::AdmitCommand { .. } => false,
         }
     }
 }
@@ -166,14 +182,17 @@ impl QueueMethod {
             | Self::QueueHold { .. }
             | Self::QueueAttach { .. }
             | Self::QueueFail { .. }
-            | Self::QueueRetry { .. } => Forwarding::Never,
+            | Self::QueueRetry { .. }
+            | Self::AdmitCommand { .. } => Forwarding::Never,
         }
     }
 
     pub fn target(&self) -> Option<Target<'_>> {
         match self {
             Self::QueueAgent { workspace, .. } => Some(Target::Space(workspace)),
-            Self::SetPriority { space, .. } => Some(Target::Space(space)),
+            Self::SetPriority { space, .. } | Self::AdmitCommand { space, .. } => {
+                Some(Target::Space(space))
+            }
             // It names the space its entry's start opened.
             Self::QueueAttach { .. }
             | Self::ListQueue

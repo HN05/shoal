@@ -33,3 +33,34 @@ async fn starting_waits_for_a_hold_the_daemon_closed_unanswered() -> Result<()> 
     let _hold = bounded(starting).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn an_admission_keeps_a_frame_that_came_with_its_reply() -> Result<()> {
+    use tokio::io::AsyncWriteExt as _;
+    let temp = tempfile::tempdir_in("/tmp")?;
+    let paths = Paths::for_test(temp.path());
+    paths.prepare()?;
+    let listener = UnixListener::bind(&paths.socket)?;
+    let daemon = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        let mut sent = Vec::new();
+        protocol::write(&mut sent, &Response::new(request.id, Body::Ok)).await?;
+        protocol::write(&mut sent, &AdmissionFrame::Admitted).await?;
+        stream.write_all(&sent).await?;
+        Ok::<_, anyhow::Error>(stream)
+    });
+    let command = CommandKey::Named("test".into());
+    let space = SpaceSelector::id(&"w".into());
+    let mut admission = bounded(CommandAdmission::request(
+        &paths,
+        space,
+        command,
+        false,
+        AdmitAs::New,
+    ))
+    .await?;
+    let _stream = bounded(daemon).await??;
+    assert_eq!(bounded(admission.frame()).await?, AdmissionFrame::Admitted);
+    Ok(())
+}

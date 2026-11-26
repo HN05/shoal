@@ -1,5 +1,5 @@
-//! Requests about the agent queue, and the hold that keeps a starting
-//! entry's slot.
+//! Requests about the agent queue, the hold that keeps a starting entry's
+//! slot, and a `shoal run` command's admission.
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::queue::WorkerStart;
 use std::time::Duration;
@@ -7,12 +7,16 @@ use std::time::Duration;
 use anyhow::Result;
 use tokio::{io::AsyncReadExt as _, sync::oneshot};
 
-use crate::connection::{Daemon, open, request, stream_closed};
+use crate::connection::{Daemon, open, open_split, request, stream_closed};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{
     model::{QueueEntry, QueuedPlan},
     protocol::QueueMethod,
+    runs::{AdmissionFrame, AdmitAs, CommandKey, RunReport},
 };
+
+/// How long the daemon may take to answer a command's admission request.
+const ADMISSION_REPLY: Duration = Duration::from_secs(60);
 
 /// Reconnect a hold this soon after the daemon restarts.
 const HOLD_RETRY: Duration = Duration::from_secs(1);
@@ -157,6 +161,69 @@ impl Drop for Hold {
     fn drop(&mut self) {
         self.0.abort();
     }
+}
+
+/// A `shoal run` command's admission, from its request until the command
+/// ends and the connection with it.
+pub struct CommandAdmission {
+    frames: tokio::sync::mpsc::Receiver<Result<AdmissionFrame>>,
+    writer: tokio::net::unix::OwnedWriteHalf,
+}
+
+impl CommandAdmission {
+    /// Ask to run `command` in `space`, as `admit_as` says, at once with
+    /// `now`.
+    pub async fn request(
+        daemon: &impl Daemon,
+        space: SpaceSelector,
+        command: CommandKey,
+        now: bool,
+        admit_as: AdmitAs,
+    ) -> Result<Self> {
+        let method = QueueMethod::AdmitCommand {
+            space,
+            command,
+            now,
+            admit_as,
+        };
+        let (reader, writer, body) = open_split(daemon, method, ADMISSION_REPLY).await?;
+        body.into_result()?;
+        Ok(Self {
+            frames: admission_frames(reader),
+            writer,
+        })
+    }
+
+    /// The daemon's next frame. Cancelling it, as `tokio::select!` does,
+    /// loses none.
+    pub async fn frame(&mut self) -> Result<AdmissionFrame> {
+        self.frames
+            .recv()
+            .await
+            .unwrap_or_else(|| Err(anyhow::anyhow!("the daemon closed the admission")))
+    }
+
+    /// Tell the daemon `report`.
+    pub async fn report(&mut self, report: RunReport) -> Result<()> {
+        shoal_protocol::protocol::write(&mut self.writer, &report).await
+    }
+}
+
+/// The frames the daemon sends on `reader`, until it fails or hangs up.
+fn admission_frames(
+    mut reader: tokio::io::BufReader<tokio::net::unix::OwnedReadHalf>,
+) -> tokio::sync::mpsc::Receiver<Result<AdmissionFrame>> {
+    let (sender, receiver) = tokio::sync::mpsc::channel(4);
+    tokio::spawn(async move {
+        loop {
+            let frame = shoal_protocol::protocol::read_buffered(&mut reader).await;
+            let failed = frame.is_err();
+            if sender.send(frame).await.is_err() || failed {
+                break;
+            }
+        }
+    });
+    receiver
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ pub mod blockers;
 pub mod carrier;
 pub mod chats;
 pub mod claims;
+pub mod commands;
 pub mod dispatch;
 pub mod entries;
 pub mod expiry;

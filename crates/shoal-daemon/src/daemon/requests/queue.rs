@@ -13,6 +13,7 @@ use super::super::{
 };
 use crate::protocol::{Body, QueueMethod};
 use crate::state::QueueKind;
+use shoal_agents::queue::commands::{CommandRequest, admit_command};
 use shoal_protocol::protocol::RetryStart;
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -26,6 +27,24 @@ pub(super) async fn handle(
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
                 queued_starts::hold(stream, request_id, manager.agents.clone(), entry, guard)
+            }));
+        }
+        QueueMethod::AdmitCommand {
+            space,
+            command,
+            now,
+            admit_as,
+        } => {
+            let manager = manager.clone();
+            let request = CommandRequest {
+                space,
+                command,
+                now,
+                admit_as,
+            };
+            return Ok(Answer::connection(move |stream, request_id, guard| {
+                let agents = manager.agents.clone();
+                admit_command(stream, request_id, agents, manager, request, guard)
             }));
         }
         QueueMethod::QueueAgent {
@@ -121,7 +140,7 @@ impl Checked for QueueMethod {
     fn target_check(&self) -> Option<TargetCheck> {
         match self {
             Self::SetPriority { .. } => Some(TargetCheck::Space),
-            Self::QueueAgent { .. } => Some(TargetCheck::Workspace),
+            Self::QueueAgent { .. } | Self::AdmitCommand { .. } => Some(TargetCheck::Workspace),
             Self::ListQueue
             | Self::QueuedPlan { .. }
             | Self::OpenStart { .. }
@@ -147,6 +166,22 @@ impl Scoped for QueueMethod {
             // Each answer confines the entries to those below the caller.
             QueueMethod::ListQueue | QueueMethod::QueueRemove { .. } => None,
             QueueMethod::SetPriority { space, .. } => Some(space),
+            QueueMethod::AdmitCommand {
+                space,
+                command,
+                now,
+                ..
+            } => {
+                if *now {
+                    let repository = manager.spaces.space(space).await?.repository_id;
+                    let start = format!("run {command} now");
+                    (manager
+                        .coordination
+                        .authorize_beyond_limits(manager, caller, start, repository))
+                    .await?;
+                }
+                Some(space)
+            }
             QueueMethod::QueueAgent {
                 workspace, launch, ..
             } => {

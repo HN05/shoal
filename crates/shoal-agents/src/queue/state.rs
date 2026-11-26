@@ -77,9 +77,9 @@ struct OneShot {
     after_stop: bool,
     /// When admission let it start, which it holds until it ends.
     admitted: watch::Sender<Option<Instant>>,
-    /// Stops the run for protection, until it is used or the run cannot be
-    /// stopped.
-    stop: Option<Box<dyn FnOnce() + Send + Sync>>,
+    /// Stops the run for protection, which names why, until it is used or
+    /// the run cannot be stopped.
+    stop: Option<StopRun>,
 }
 
 /// What a one-shot run runs, which decides how admission weighs it and
@@ -130,6 +130,9 @@ pub struct AdmittedOneShot {
     pub running_for: Duration,
     pub using: u64,
 }
+
+/// What stops a one-shot run, given why.
+type StopRun = Box<dyn FnOnce(&str) + Send + Sync>;
 
 /// Which admitted one-shot runs protection stops.
 pub enum OneShotStop {
@@ -328,7 +331,7 @@ impl AgentQueue {
         stop: impl FnOnce() + Send + Sync + 'static,
     ) -> OneShotAdmission<'_> {
         let review = (Some(serving), OneShotWork::Review);
-        self.request(repository, review, after_stop, stop)
+        self.request(repository, review, after_stop, move |_: &str| stop())
     }
 
     /// Ask for admission in `repository` for a command or seed build,
@@ -340,7 +343,7 @@ impl AgentQueue {
         serving: Option<Serving>,
         measured: Measured,
         after_stop: bool,
-        stop: impl FnOnce() + Send + Sync + 'static,
+        stop: impl FnOnce(&str) + Send + Sync + 'static,
     ) -> OneShotAdmission<'_> {
         let run = (serving, OneShotWork::Measured(measured));
         self.request(repository, run, after_stop, stop)
@@ -351,7 +354,7 @@ impl AgentQueue {
         repository: &RepositoryId,
         (serving, work): (Option<Serving>, OneShotWork),
         after_stop: bool,
-        stop: impl FnOnce() + Send + Sync + 'static,
+        stop: impl FnOnce(&str) + Send + Sync + 'static,
     ) -> OneShotAdmission<'_> {
         let (admitted, waiting) = watch::channel(None);
         let mut oneshots = self.oneshots.lock().unwrap();
@@ -382,7 +385,7 @@ impl AgentQueue {
     /// Hold an admission in `repository` until the daemon restarts, for a run a
     /// stopped daemon left whose processes could not be proven stopped.
     pub fn hold_oneshot(&self, repository: &RepositoryId) {
-        let admission = self.request(repository, (None, OneShotWork::Review), false, || {});
+        let admission = self.request(repository, (None, OneShotWork::Review), false, |_| {});
         if let Some(run) = self.oneshots.lock().unwrap().runs.get(&admission.number) {
             run.admitted.send_replace(Some(Instant::now()));
         }
@@ -425,7 +428,7 @@ impl AgentQueue {
         }
         for run in &mut stoppable {
             if let Some(stop) = run.stop.take() {
-                stop();
+                stop("");
             }
         }
         stoppable.len()
@@ -466,16 +469,16 @@ impl AgentQueue {
             .collect()
     }
 
-    /// Stop the admitted command or seed build `id` for protection,
-    /// returning whether it was there to stop.
-    pub fn stop_measured(&self, id: &QueueEntryId) -> bool {
+    /// Stop the admitted command or seed build `id` for protection, which
+    /// names its `reason`, returning whether it was there to stop.
+    pub fn stop_measured(&self, id: &QueueEntryId, reason: &str) -> bool {
         let Some(number) = oneshot_number(id) else {
             return false;
         };
         let stop = (self.oneshots.lock().unwrap().runs.get_mut(&number))
             .filter(|run| run.admitted.borrow().is_some())
             .and_then(|run| run.stop.take());
-        stop.map(|stop| stop()).is_some()
+        stop.map(|stop| stop(reason)).is_some()
     }
 
     /// Admit the one-shot request with queue ID `id`; false when
