@@ -1,7 +1,5 @@
-//! What each space's processes use, a workspace's or a chat's, sampled on a
-//! fixed cadence, and at once when a workspace's containers start, from the
-//! processes carrying its identity, with what its containers use, and the
-//! memory of the one-shot agent runs, which belong to no space.
+//! What each space's processes and containers use, sampled on a fixed
+//! cadence, and the memory of one-shot agent runs, which belong to no space.
 use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
@@ -26,33 +24,31 @@ pub const SAMPLE_INTERVAL: Duration = Duration::from_secs(10);
 /// How late a sample may be before the sampler counts as stalled.
 pub const STALE: Duration = Duration::from_secs(30);
 /// How long a sample waits for the containers' reading. A sample's time is
-/// its processes' reading, before that wait, so it is recorded up to one
-/// wait later, and the next one up to an interval and a wait after that.
+/// its processes' reading, taken before that wait, so it is recorded up to
+/// one wait later, and the next one up to an interval and a wait after that.
 pub const CONTAINER_READ_LIMIT: Duration = Duration::from_secs(8);
 const _: () = assert!(
     2 * CONTAINER_READ_LIMIT.as_secs() + SAMPLE_INTERVAL.as_secs() < STALE.as_secs(),
     "a runtime that always times out would let every sample go stale"
 );
 
-/// What the containers of each workspace whose project may run use, or why
-/// its runtime could not say.
+/// The usage of each workspace whose project may run, or why its runtime
+/// could not say.
 pub type ContainerReadings = Result<Vec<(SpaceId, Result<ContainerUsage>)>>;
 
-/// Every workspace process with its workspace and reading at one time.
 pub struct Sample {
     pub time: Instant,
     pub processes: HashMap<Identity, (SpaceId, Reading)>,
     /// Processes that exited but whose parent has not reaped them, so their
     /// time has not reached it yet. They use no memory and are not counted.
     pub unreaped: HashSet<Identity>,
-    /// Processes running in the work slice, whose memory the slice reads.
+    /// Processes in the work slice, whose memory the slice reads.
     pub in_work_slice: HashSet<Identity>,
-    /// The memory of the one-shot agent runs' processes, such as reviewers,
-    /// which belong to no space, and what of it is in the work slice.
+    /// One-shot agent runs, such as reviewers, belong to no space.
     pub oneshots: Oneshots,
 }
 
-/// The memory, in bytes, of one-shot agent runs' processes.
+/// In bytes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Oneshots {
     pub memory: u64,
@@ -60,8 +56,7 @@ pub struct Oneshots {
 }
 
 impl Oneshots {
-    /// The memory of the processes `found` and whether each runs in the
-    /// work slice, read by `reading`; one gone meanwhile counts none.
+    /// A process gone meanwhile counts no memory.
     pub fn read(
         found: &[Identity],
         reading: impl Fn(u32) -> Result<Option<Reading>>,
@@ -82,7 +77,7 @@ impl Oneshots {
 }
 
 impl Sample {
-    /// Mark the processes in the work slice, which `holds` tells by PID.
+    /// `holds` tells the work slice's processes by PID.
     pub fn mark_work_slice(&mut self, holds: impl Fn(u32) -> bool) {
         self.in_work_slice = (self.processes.keys())
             .filter(|identity| holds(identity.pid))
@@ -90,7 +85,6 @@ impl Sample {
             .collect();
     }
 
-    /// The memory of its processes in the work slice.
     fn in_work_slice_memory(&self) -> u64 {
         (self.in_work_slice.iter())
             .filter(|identity| !self.unreaped.contains(*identity))
@@ -105,15 +99,15 @@ impl Sample {
 pub struct WorkspaceUsages {
     latest: Option<Sample>,
     usage: HashMap<SpaceId, WorkspaceUsage>,
-    /// Counted time of ended processes, per live ancestor that may reap
-    /// them, that its reaped time does not show yet: a parent read just
+    /// Counted time of ended processes that their reaper's reaped time does
+    /// not show yet, per live ancestor that may reap them. A parent read just
     /// before it reaped a child gone by its own read shows the child's time
     /// one sample later.
     pending: HashMap<Identity, Vec<Counted>>,
-    /// The workspaces whose containers could not be read last time, whose
+    /// The workspaces whose containers could not be read last time. Each
     /// failure is logged once until a reading succeeds.
     unread_containers: HashSet<SpaceId>,
-    /// No container could be read last time, which is logged once too.
+    /// No container could be read last time. This is logged once too.
     containers_unreadable: bool,
     /// The latest sample read every project's containers it tried, so its
     /// memory holds all of theirs.
@@ -121,10 +115,9 @@ pub struct WorkspaceUsages {
 }
 
 impl WorkspaceUsages {
-    /// Add a sample with what the workspaces' containers used meanwhile. A
-    /// failed or late one forgets the previous sample, so no CPU use spans a
-    /// gap in what was measured. Returns why its containers could not all
-    /// be read, when they could not.
+    /// A failed or late sample forgets the previous one, so no CPU use spans
+    /// a gap in what was measured. Returns why the containers could not all
+    /// be read.
     pub fn record(
         &mut self,
         sample: Result<Sample>,
@@ -143,7 +136,8 @@ impl WorkspaceUsages {
                 (!self.containers_complete).then(|| missed.join("; "))
             }
             Err(error) => {
-                // Once per gap: a platform without readings would repeat it forever.
+                // Log once per gap: a platform without readings would repeat
+                // it forever.
                 if self.latest.take().is_some() {
                     log!("workspace usage: {error:#}");
                 }
@@ -153,9 +147,9 @@ impl WorkspaceUsages {
         }
     }
 
-    /// The containers' usage that was read, logging each workspace's failure
-    /// once: a runtime that cannot be read leaves its workspaces' usage as
-    /// their processes'. With it, why each reading failed and what clears it.
+    /// Logs each workspace's failure once. A runtime that cannot be read
+    /// leaves its workspaces' usage as their processes'. Also returns why
+    /// each reading failed and what clears it.
     fn read_containers(
         &mut self,
         readings: ContainerReadings,
@@ -195,8 +189,8 @@ impl WorkspaceUsages {
         (read, missed)
     }
 
-    /// The processes of the latest sample, which the next one follows until
-    /// their parents reap them.
+    /// The next sample follows these processes until their parents reap
+    /// them.
     pub fn tracked(&self) -> Vec<(SpaceId, Identity)> {
         self.latest.as_ref().map_or_else(Vec::new, |latest| {
             latest
@@ -207,10 +201,9 @@ impl WorkspaceUsages {
         })
     }
 
-    /// The memory every space's processes and containers held at the latest
-    /// sample, and what of it ran outside the work slice, while sampling has
-    /// not stalled; none when a container's reading failed, since the
-    /// sample then misses what those containers hold.
+    /// Includes what ran outside the work slice. None once sampling stalled,
+    /// and when a container's reading failed, since the sample then misses
+    /// what those containers hold.
     pub fn memory(&self, now: Instant) -> Option<SampledWork> {
         let latest = self.latest.as_ref()?;
         if now.duration_since(latest.time) > STALE || !self.containers_complete {
@@ -228,8 +221,8 @@ impl WorkspaceUsages {
         })
     }
 
-    /// The latest usage of the workspace `id`, while it has processes or
-    /// containers and sampling has not stalled.
+    /// None while the workspace has no processes or containers, or once
+    /// sampling stalled.
     pub fn get(&self, id: &SpaceId, now: Instant) -> Option<WorkspaceUsage> {
         let latest = self.latest.as_ref()?;
         if now.duration_since(latest.time) > STALE {
@@ -239,8 +232,8 @@ impl WorkspaceUsages {
     }
 }
 
-/// CPU nanoseconds an ended process had counted, waiting to be found in
-/// the reaped time of an ancestor.
+/// CPU nanoseconds an ended process had counted, waiting to be found in the
+/// reaped time of an ancestor.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Counted {
     pub nanoseconds: u64,
@@ -248,17 +241,16 @@ pub struct Counted {
     /// reaches the ancestor only through parents that ended too may have
     /// been orphaned to init instead.
     pub direct: bool,
-    /// It waited a sample already; a reaping that late is not expected.
+    /// It waited a sample already: a reaping that late is not expected.
     pub carried: bool,
 }
 
-/// Each workspace's processes and memory in `current`, with the CPU they
-/// used since `previous`. A process that started since counts all its time,
-/// and one that exited counts until its parent reaps it. One that is gone
-/// since counted its time already, which its nearest ancestor still in its
-/// workspace may have reaped: what that ancestor's reaped time shows of it
-/// is not counted again, and what it does not show yet stays `pending` for
-/// one sample.
+/// A process that started since `previous` counts all its time, and one
+/// that exited counts until its parent reaps it. A process gone since
+/// counted its time already, and its nearest ancestor still in its
+/// workspace may have reaped it: what that ancestor's reaped time shows of
+/// it is not counted again, and what it does not show yet stays `pending`
+/// for one sample.
 pub fn usage(
     previous: Option<&Sample>,
     current: &Sample,
@@ -312,8 +304,8 @@ pub fn usage(
     usage
 }
 
-/// Add each workspace's `containers` to its processes' `usage`, with their
-/// CPU once the processes' is `measured` over two samples.
+/// The containers' CPU counts only once the processes' is `measured` over
+/// two samples.
 fn add_containers(
     usage: &mut HashMap<SpaceId, WorkspaceUsage>,
     containers: Vec<(SpaceId, ContainerUsage)>,
@@ -330,9 +322,9 @@ fn add_containers(
 
 /// How much of `counted` a reaper's reaped time, grown by `reaped`, shows,
 /// and what may still show next sample. A direct child is certainly in it,
-/// as far as it reaches; a deeper descendant only when it fits whole in
-/// what the direct children leave, since otherwise its ended parent did not
-/// reap it.
+/// as far as it reaches. A deeper descendant is in it only when it fits
+/// whole in what the direct children leave; otherwise its ended parent did
+/// not reap it.
 pub fn reconcile(reaped: u64, mut counted: Vec<Counted>) -> (u64, Vec<Counted>) {
     counted.sort_by_key(|counted| !counted.direct);
     let mut left = reaped;
@@ -355,10 +347,9 @@ pub fn reconcile(reaped: u64, mut counted: Vec<Counted>) -> (u64, Vec<Counted>) 
     (reaped - left, waiting)
 }
 
-/// What each process gone since `previous` had counted, with what was
-/// `pending` for it, per live process in `current` that may have reaped
-/// it: its nearest ancestor in the same workspace, reached through
-/// ancestors gone too.
+/// Routes what each gone process had counted, with what was `pending` for
+/// it, to the live process that may have reaped it: its nearest ancestor in
+/// the same workspace, reached through ancestors gone too.
 fn routed_to_reapers(
     previous: &Sample,
     current: &Sample,
@@ -389,7 +380,8 @@ fn routed_to_reapers(
             direct,
             carried: false,
         });
-        // What it awaited from its own children reaches the reaper through it.
+        // What it awaited from its own children reaches the reaper through
+        // it.
         counted.extend(
             pending
                 .get(identity)
@@ -404,16 +396,16 @@ fn routed_to_reapers(
     routed
 }
 
-/// The `live` ancestor in `workspace` of an ended process whose parent was
-/// `parent`, reached through `ended` ancestors and their parents, and
-/// whether it is the parent itself.
+/// Reaches the live ancestor through `ended` ancestors and their parents,
+/// and says whether it is the parent itself.
 fn reaper<'a>(
     live: &HashMap<(&SpaceId, u32), &'a Identity>,
     ended: &HashMap<(&SpaceId, u32), u32>,
     workspace: &SpaceId,
     mut parent: u32,
 ) -> Option<(&'a Identity, bool)> {
-    // Each step reaches another ended process, unless a reused PID makes a cycle.
+    // Each step reaches another ended process, unless a reused PID makes a
+    // cycle.
     for step in 0..=ended.len() {
         if let Some(identity) = live.get(&(workspace, parent)) {
             return Some((identity, step == 0));
@@ -423,9 +415,8 @@ fn reaper<'a>(
     None
 }
 
-/// Every space's processes, and those of `tracked` that have exited
-/// unreaped, whose environment no scan can read, with what the one-shot
-/// agent runs' processes hold.
+/// Also reads the processes of `tracked` that exited unreaped, whose
+/// environment no scan can read.
 pub async fn sample(
     store: &crate::Store,
     tracked: Vec<(SpaceId, Identity)>,
@@ -467,11 +458,10 @@ pub fn state(identity: &Identity) -> Result<State> {
     })
 }
 
-/// The readings of the processes the scan `found` and of those it `missed`,
-/// each kept by the `state` its process is in once every reading is taken:
-/// a child reaped after its own reading may show in its parent's, so it
-/// counts as gone and its time as its reaper's. One that exits after the
-/// scan is still followed until reaped, but a missed process counts only
+/// Keeps each reading by the `state` its process is in once every reading is
+/// taken: a child reaped after its own reading may show in its parent's, so
+/// it counts as gone and its time as its reaper's. A process that exits
+/// after the scan is followed until reaped. A missed process counts only
 /// while unreaped, since one still running no longer carries the identity.
 pub fn read(
     found: Vec<(SpaceId, Identity)>,

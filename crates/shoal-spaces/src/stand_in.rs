@@ -1,9 +1,6 @@
 //! A stand-in for the rest of the daemon, which the spaces' tests build the
-//! service over: a home with its state directory under a temporary
-//! directory, the global config a test gives, the Git repositories a test
-//! registers, read with their files' config, the agents a test runs, which
-//! it records as running, and no links, hub, CI jobs, reviews, leases or
-//! demos, whose records read as empty.
+//! service over. It has no links, hub, CI jobs, reviews, leases or demos,
+//! whose records read as empty.
 #![allow(clippy::too_many_lines, reason = "one stand-in per interface method")]
 
 use shoal_daemon_base::forge_access::ForgeAccess;
@@ -94,11 +91,10 @@ use shoal_core::launches::SpaceRepository;
 pub(crate) use shoal_core::test_support::*;
 
 /// Keeps Git from creating a linked worktree of a repository until it
-/// drops, which makes the directory of the worktrees' admin directories
+/// drops: it makes the directory of the worktrees' admin directories
 /// read-only, so a creation fails after its record exists.
 pub(crate) struct BlockedWorktrees(PathBuf);
 
-/// Block worktrees of the repository checked out at `checkout`.
 pub(crate) fn block_worktrees(checkout: &Path) -> BlockedWorktrees {
     use std::os::unix::fs::PermissionsExt;
     let directory = checkout.join(".git/worktrees");
@@ -115,10 +111,8 @@ impl Drop for BlockedWorktrees {
     }
 }
 
-/// What the stand-in leaves to a daemon with the subsystem it lacks.
 pub(crate) const NOT_HERE: &str = "the spaces' stand-in has no such subsystem";
 
-/// The service over a stand-in daemon.
 pub(crate) struct Fixture {
     pub(crate) root: tempfile::TempDir,
     pub(crate) daemon: Arc<StandIn>,
@@ -129,7 +123,6 @@ impl Fixture {
         Self::with_config("[cleanup]\ngrace_minutes = 0\n").await
     }
 
-    /// The service under the global config `text`.
     pub(crate) async fn with_config(text: &str) -> Self {
         let root = tempfile::tempdir_in("/tmp").unwrap();
         let paths = Paths::for_test(root.path());
@@ -142,8 +135,8 @@ impl Fixture {
         Self { root, daemon }
     }
 
-    /// The service a daemon that restarts builds over the same state,
-    /// knowing only what it recorded there.
+    /// The service a restarted daemon builds over the same state, knowing
+    /// only what it recorded there.
     pub(crate) async fn reopen(self) -> Self {
         let (paths, config) = (self.daemon.paths.clone(), self.daemon.config.clone());
         self.daemon.store.shutdown().await;
@@ -162,13 +155,11 @@ impl Fixture {
         Arc::new(StandIn::open(paths, config).await)
     }
 
-    /// The daemon handle the service's spawning operations take.
     pub(crate) fn daemon(&self) -> Arc<dyn Daemon> {
         self.daemon.clone()
     }
 
-    /// Register a new repository `name` in the fixture's root, checked out
-    /// on `main` with one commit.
+    /// Checked out on `main` with one commit.
     pub(crate) async fn repository(&self, name: &str) -> Repository {
         let checkout = repository(self.root.path(), name);
         (self.register_repository(checkout.to_str().unwrap().into(), None, None))
@@ -180,20 +171,18 @@ impl Fixture {
 impl Deref for Fixture {
     type Target = StandIn;
 
-    /// The stand-in daemon, which the service's operations take.
     fn deref(&self) -> &StandIn {
         &self.daemon
     }
 }
 
-/// Make `text` the global config, as editing it and reloading does.
+/// As editing the global config and reloading does.
 pub(crate) async fn configure(fixture: &Fixture, text: &str) {
     shoal_core::test_support::write_global_config(&fixture.paths, text);
     let config = shoal_core::test_support::global_config(text);
     fixture.config.publish(config);
 }
 
-/// The rest of the daemon, with the service it holds.
 pub(crate) struct StandIn {
     pub(crate) spaces: Spaces,
     pub(crate) coordination: Coordination,
@@ -203,9 +192,8 @@ pub(crate) struct StandIn {
     pub(crate) gates: Arc<Gates>,
     /// Held while an agent is admitted, which the stand-in never does.
     admissions: tokio::sync::Mutex<()>,
-    /// The spaces whose places a removal closed, in order.
+    /// In the order the removals closed them.
     pub(crate) closed_places: std::sync::Mutex<Vec<SpaceId>>,
-    /// The agents tests run.
     agents: Arc<RunningAgents>,
 }
 
@@ -221,7 +209,7 @@ impl StandIn {
             coordination: CoordinationRecords(removing.clone()),
             agents: agents.clone(),
         });
-        // Workers are fakes, which no test here drives.
+        // Workers are fakes: no test here drives them.
         let operations =
             shoal_daemon_base::operations::Operations::new(paths.clone(), gates.clone());
         let operations = Arc::new(operations);
@@ -265,7 +253,7 @@ impl StandIn {
         }
     }
 
-    /// Register the checkout at `path` under its directory's name.
+    /// Registers the checkout under its directory's name.
     async fn register(&self, path: &Path) -> Result<Repository> {
         let path = std::fs::canonicalize(path)?;
         let name = path.file_name().context("a named checkout")?;
@@ -303,7 +291,6 @@ impl StandIn {
         Ok(repository)
     }
 
-    /// The registered repository `selector` names.
     pub(crate) async fn find_repository(
         &self,
         selector: impl Into<Selector>,
@@ -314,8 +301,6 @@ impl StandIn {
             .clone())
     }
 
-    /// The layers of `repository`'s local config over the file at
-    /// `worktree`, when given.
     async fn layers(
         &self,
         repository: Option<&RepositoryId>,
@@ -341,8 +326,8 @@ impl StandIn {
         })
     }
 
-    /// The layers of `space`: a workspace's with the file in its worktree,
-    /// any other's with the file in its repository's checkout.
+    /// A workspace reads the file in its worktree; any other space reads the
+    /// file in its repository's checkout.
     async fn space_layers(
         &self,
         space: &Space,
@@ -375,8 +360,7 @@ impl shoal_daemon_base::notifications::Coordinators for StandIn {
 }
 
 impl StandIn {
-    /// The log of the space `selector` names by its ID, which a removed
-    /// space keeps.
+    /// Selects by ID, so it reads a removed space's log too.
     pub(crate) async fn space_log(
         &self,
         selector: &SpaceSelector,
@@ -390,8 +374,7 @@ impl StandIn {
         crate::events::space_log::read(&self.store, id, filter, limit).await
     }
 
-    /// Have the space `id` ask its coordinator, or else the user, `text` in
-    /// a new question.
+    /// Opens a new question to the space's coordinator, or else the user.
     pub(crate) async fn ask(&self, id: &SpaceId, text: &str) -> Thread {
         use shoal_protocol::threads::{NewPost, ThreadKind, ThreadNumber, ThreadOpening};
         let caller = Caller::of_space(id.clone());
@@ -422,7 +405,7 @@ impl StandIn {
         .unwrap()
     }
 
-    /// Have the user reply `text` in the thread `number`, as its holder.
+    /// The user replies as the thread's holder.
     pub(crate) async fn answer(
         &self,
         number: shoal_protocol::item_numbers::ItemNumber,
@@ -446,9 +429,9 @@ impl StandIn {
         .unwrap()
     }
 
-    /// One pass of the daemon's cleanup sweep: the spaces' own steps, in
-    /// the order the daemon's `cleanup::sweep` runs them among the other
-    /// subsystems', which a change there repeats here.
+    /// One pass of the daemon's cleanup sweep: the spaces' own steps, in the
+    /// order the daemon's `cleanup::sweep` runs them. A change there repeats
+    /// here.
     pub(crate) async fn sweep(
         &self,
         timers: &mut crate::cleanup::Timers,
@@ -487,7 +470,7 @@ impl StandIn {
         failed.into_result()
     }
 
-    /// The messages of the user's completion notices, the oldest first.
+    /// Oldest first.
     pub(crate) async fn done_notices(&self) -> Vec<String> {
         let notifications = self.spaces.notifications.list(false, 100).await.unwrap();
         (notifications.into_iter())
@@ -496,7 +479,7 @@ impl StandIn {
             .collect()
     }
 
-    /// Register the checkout `source` names, as `shoal repo add` does.
+    /// As `shoal repo add` does.
     pub(crate) async fn register_repository(
         &self,
         source: Selector,
@@ -506,7 +489,7 @@ impl StandIn {
         Repositories::register_repository(self, source, name, clone_path).await
     }
 
-    /// Write the local config of the repository `id`, or delete it.
+    /// Deletes it when `text` is `None`.
     pub(crate) async fn write_local_config(
         &self,
         id: &RepositoryId,
@@ -530,7 +513,7 @@ impl StandIn {
         Ok(path)
     }
 
-    /// The events of every space, the oldest first.
+    /// Oldest first.
     pub(crate) async fn space_events(
         &self,
         after: Option<crate::events::EventCursor>,
@@ -540,8 +523,6 @@ impl StandIn {
         Ok(items)
     }
 
-    /// Create the workspace `name` of `repository` on a new branch from
-    /// `base`, with an optional Git profile and path.
     pub(crate) async fn create_workspace(
         &self,
         repository: impl Into<Selector>,
@@ -560,8 +541,7 @@ impl StandIn {
             .await
     }
 
-    /// Record the chat `name` in `mode`, of `repository` or without one,
-    /// below `parent`, as a start records it before its agent runs.
+    /// Records the chat as a start does before its agent runs.
     pub(crate) async fn chat(
         &self,
         name: &str,
@@ -584,14 +564,13 @@ impl StandIn {
             .unwrap()
     }
 
-    /// Run `claude` in the space `id`, as [`Self::run_named_agent`] does.
     pub(crate) async fn run_agent(&self, id: &SpaceId) -> ExecutionId {
         self.run_named_agent(id, "claude").await
     }
 
-    /// Run the agent `agent` in the space `id`, recorded as the execution
-    /// the agents record it as, which the stand-in reports as its agent
-    /// until [`Self::end_agent`]; the execution it runs as.
+    /// Records the agent as the execution the agents would record it as.
+    /// The stand-in reports it as the space's agent until
+    /// [`Self::end_agent`].
     pub(crate) async fn run_named_agent(&self, id: &SpaceId, agent: &str) -> ExecutionId {
         let execution = ExecutionId::generate();
         let (recorded, space, name) = (execution.clone(), id.clone(), agent.to_owned());
@@ -614,8 +593,7 @@ impl StandIn {
         execution
     }
 
-    /// End the agent `execution` runs, whose record goes as its end deletes
-    /// it.
+    /// Deletes the execution's record as the agent's end does.
     pub(crate) async fn end_agent(&self, execution: &ExecutionId) {
         self.agents.0.lock().unwrap().remove(execution);
         let recorded = execution.clone();
@@ -627,17 +605,15 @@ impl StandIn {
         .unwrap();
     }
 
-    /// Have the one agent that runs in the space `id` report `session`, as
-    /// its hooks report the session it continues.
+    /// As an agent's hooks report the session it continues.
     pub(crate) fn report_session(&self, id: &SpaceId, session: &str) {
         let [(_, execution)] = self.agents.executions(Some(id)).try_into().unwrap();
         let session = session.into();
         crate::execution::recovery::save_session(&self.paths, id, &execution, &session).unwrap();
     }
 
-    /// Move the space `selector` names, with the spaces `carrying` takes,
-    /// to the new file `file`, as `shoal move -o` does, with `unsaved` the
-    /// work its end may delete.
+    /// As `shoal move -o` does. `file` must not exist, and `unsaved` is the
+    /// work the move's end may delete.
     pub(crate) async fn move_to_file(
         &self,
         selector: &SpaceSelector,
@@ -669,8 +645,8 @@ impl StandIn {
         Ok((exported, removal))
     }
 
-    /// Import the package `bytes` as `shoal restore --from` asks the daemon
-    /// to, into `repository` or the one with its origin.
+    /// As `shoal restore --from` does, into `repository` or the one with
+    /// the package's origin.
     pub(crate) async fn import_file(
         &self,
         repository: Option<&Repository>,
@@ -689,7 +665,6 @@ impl StandIn {
         (self.spaces.import_package(self, &import, input, None)).await
     }
 
-    /// Have the agent of the space `id` report `state`.
     pub(crate) fn report(&self, id: &SpaceId, state: shoal_protocol::state::AgentState) {
         let mut ran = self.agents.0.lock().unwrap();
         for ran in (ran.values_mut()).filter(|ran| ran.space == *id) {
@@ -697,8 +672,8 @@ impl StandIn {
         }
     }
 
-    /// Record the chat `name` in the worktree of the workspace `workspace`
-    /// names, as a start in it records it before its agent runs.
+    /// Records the chat as a start in the workspace does before its agent
+    /// runs.
     pub(crate) async fn chat_in(&self, workspace: &SpaceSelector, name: &str) -> Result<Chat> {
         let new = crate::chats::NewChat {
             priority: None,
@@ -712,8 +687,7 @@ impl StandIn {
         (self.spaces.start_new_chat(self, None, Some(workspace), new)).await
     }
 
-    /// Open the removed workspace `selector` names again for the user, as
-    /// `shoal resume` does.
+    /// As `shoal resume` does.
     pub(crate) async fn restore_workspace(
         &self,
         selector: &SpaceSelector,
@@ -724,9 +698,9 @@ impl StandIn {
         }
     }
 
-    /// The selector of the space named `name`, as tests name the spaces
-    /// they make: a workspace, a chat, else a removed workspace, by its ID,
-    /// since a name never selects one. A name no space has selects nothing.
+    /// Finds a workspace, then a chat, then a removed workspace by its ID,
+    /// since a name never selects a space. A name no space has selects
+    /// nothing.
     pub(crate) async fn named(&self, name: &str) -> SpaceSelector {
         let spaces = self.spaces.present_spaces(self).await.unwrap();
         let removed = self.spaces.removed_workspaces().await.unwrap();
@@ -743,7 +717,6 @@ impl StandIn {
     }
 }
 
-/// Every registered repository.
 fn repositories(db: &Connection) -> Result<Vec<Repository>> {
     Ok(db
         .prepare(&format!(
@@ -754,21 +727,18 @@ fn repositories(db: &Connection) -> Result<Vec<Repository>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// What the stand-in records of a space beside the spaces' own records:
-/// nothing, but the removals the service holds and the holds approvals
-/// place.
+/// Records nothing beside the spaces' own records but the removals the
+/// service holds and the holds approvals place.
 struct StandInRecords {
     coordination: CoordinationRecords,
     agents: Arc<RunningAgents>,
 }
 
-/// The agents a test runs in its spaces, by the execution each runs as,
-/// which the stand-in reports where the daemon reports the agents it
-/// tracks.
+/// The agents a test runs, by the execution each runs as. The stand-in
+/// reports them where the daemon reports the agents it tracks.
 #[derive(Default)]
 pub(crate) struct RunningAgents(std::sync::Mutex<BTreeMap<ExecutionId, Ran>>);
 
-/// An agent a test runs.
 #[derive(Clone)]
 struct Ran {
     space: SpaceId,
@@ -777,7 +747,6 @@ struct Ran {
 }
 
 impl RunningAgents {
-    /// The executions of the agents that run in `space`, or in every space.
     fn executions(&self, space: Option<&SpaceId>) -> Vec<(SpaceId, ExecutionId)> {
         let ran = self.0.lock().unwrap();
         (ran.iter())
@@ -786,19 +755,16 @@ impl RunningAgents {
             .collect()
     }
 
-    /// The agent that runs as `execution`.
     fn ran(&self, execution: &ExecutionId) -> Option<Ran> {
         self.0.lock().unwrap().get(execution).cloned()
     }
 
-    /// The state the agent of `space` last reported.
     fn state(&self, space: &SpaceId) -> Option<shoal_protocol::state::AgentState> {
         let ran = self.0.lock().unwrap();
         (ran.values()).find(|ran| ran.space == *space)?.state
     }
 }
 
-/// What coordination reads and writes in its own transactions.
 struct CoordinationRecords(Removing);
 
 impl shoal_coordination::daemon::Records for CoordinationRecords {
@@ -993,7 +959,7 @@ impl Links for StandIn {
         Box::pin(async { Ok(Default::default()) })
     }
 
-    /// The local merge, as no space here links a PR.
+    /// Always the local merge: no space here links a PR.
     fn merge_path<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<MergePath>> {
         Box::pin(async { Ok(MergePath::Local) })
     }
@@ -1396,8 +1362,8 @@ impl Repositories for StandIn {
         Box::pin(async { Ok(()) })
     }
 
-    /// Fresh: the stand-in fetches nothing, so a checkout holds what its
-    /// test put there.
+    /// The stand-in fetches nothing, so a checkout holds what its test put
+    /// there.
     fn default_branch_fresh<'a>(&'a self, _: &'a RepositoryId) -> BoxFuture<'a, bool> {
         Box::pin(async { true })
     }
@@ -1431,7 +1397,7 @@ impl Repositories for StandIn {
         Box::pin(async { Default::default() })
     }
 
-    /// The configured `root_dir`, which it creates.
+    /// Creates the configured `root_dir`.
     fn prepare_chat_root(&self) -> BoxFuture<'_, Result<PathBuf>> {
         Box::pin(async {
             let root = self.config.current().root_dir(&self.paths)?;
