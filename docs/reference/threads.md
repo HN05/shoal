@@ -158,14 +158,15 @@ Shoal never reads text as an action.
 
 Shoal refuses:
 
-- an action the surface lacks, and a value it does not take or its input
-  refuses,
+- an action the surface lacks, and a value it does not take, its input
+  refuses or the data model has no place for, such as a field of text,
 - an answer from a participant, or to your own side's surface,
 - an answer to a surface older than that side's latest, naming the current
   post.
 
-The post records the action's whole context: the values given, and the data
-model's for the rest.
+The post records the action's whole context, read from the data model with
+the values given entered into it, as a renderer sends it. An input's bounds,
+such as an end date's earliest, read that data too.
 
 ### Surfaces as text
 

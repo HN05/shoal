@@ -164,7 +164,7 @@ impl Surface {
         for (key, given) in values {
             let input = action.input(&key);
             let accepted = input.kind.accept(&key, given)?;
-            entered.enter(&input.path, accepted);
+            entered.enter(&input.path, accepted)?;
         }
         Ok(entered.dispatched(&action))
     }
@@ -177,7 +177,7 @@ impl Surface {
         for (key, given) in values {
             let input = action.input(key);
             let value = (input.kind.accept(key, given.clone())).unwrap_or_else(|_| given.clone());
-            entered.enter(&input.path, value);
+            let _ = entered.enter(&input.path, value);
         }
         entered
     }
@@ -199,33 +199,38 @@ impl Surface {
     }
 
     /// Write `value` into the data model at the JSON pointer `path`, as a
-    /// renderer's input does: in place, or creating the model and the
-    /// objects above it where they are missing.
-    fn enter(&mut self, path: &str, value: Value) {
-        let Some(body) = self
-            .0
-            .get_mut("createSurface")
+    /// renderer's input does: in place, creating the model and what holds
+    /// the value where it is missing or null, an array's item by its index
+    /// and else an object's field, and an array's next item. Refused where
+    /// other data stands in the way, such as text where the path names a
+    /// field of it, or an item past an array's next.
+    fn enter(&mut self, path: &str, value: Value) -> Result<()> {
+        let body = (self.0.get_mut("createSurface"))
             .and_then(Value::as_object_mut)
-        else {
-            return;
-        };
-        let mut at = (body.entry("dataModel")).or_insert_with(|| Value::Object(Map::new()));
+            .context("a surface holds a createSurface object")?;
+        let mut at = (body.entry("dataModel")).or_insert(Value::Null);
         for field in path.split('/').skip(1) {
             let field = field.replace("~1", "/").replace("~0", "~");
-            at = match at {
-                Value::Array(items) => {
-                    match field.parse::<usize>().ok().and_then(|n| items.get_mut(n)) {
-                        Some(item) => item,
-                        None => return,
+            let index = field.parse::<usize>().ok();
+            if at.is_null() {
+                *at = match index {
+                    Some(_) => Value::Array(Vec::new()),
+                    None => Value::Object(Map::new()),
+                };
+            }
+            at = match (at, index) {
+                (Value::Array(items), Some(index)) if index <= items.len() => {
+                    if index == items.len() {
+                        items.push(Value::Null);
                     }
+                    &mut items[index]
                 }
-                Value::Object(fields) => fields
-                    .entry(field)
-                    .or_insert_with(|| Value::Object(Map::new())),
-                _ => return,
+                (Value::Object(fields), _) => fields.entry(field).or_insert(Value::Null),
+                _ => bail!("the data at {path} cannot hold the value entered"),
             };
         }
         *at = value;
+        Ok(())
     }
 
     /// The action of `placed`, a button that dispatches an agent event.

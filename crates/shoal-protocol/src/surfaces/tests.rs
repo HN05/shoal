@@ -915,6 +915,45 @@ fn every_binding_of_an_answer_reads_the_values_it_enters() {
     );
 }
 
+/// A surface whose one text field enters `path`, with `data`.
+fn entering(path: &str, data: Value) -> Surface {
+    surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["name", "save"]},
+            {"id": "name", "component": "TextField", "label": "Name", "value": {"@path": path}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save", "context": {"name": {"@path": path}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        data,
+    )
+}
+
+#[test]
+fn an_answer_s_value_is_entered_where_null_or_an_empty_list_stands() {
+    for (path, data) in [
+        ("/person/name", json!({"person": null})),
+        ("/people/0/name", json!({"people": []})),
+    ] {
+        let resolved = entering(path, data)
+            .resolve("save", values(&[("name", json!("Ada"))]))
+            .unwrap();
+        assert_eq!(Value::Object(resolved), json!({"name": "Ada"}), "{path}");
+    }
+}
+
+#[test]
+fn an_answer_s_value_that_other_data_blocks_is_refused() {
+    let blocked = entering("/person/name", json!({"person": "Grace"}));
+    let refused = blocked
+        .resolve("save", values(&[("name", json!("Ada"))]))
+        .unwrap_err();
+    assert!(
+        format!("{refused:#}").contains("/person/name"),
+        "{refused:#}"
+    );
+}
+
 #[test]
 fn a_button_in_a_list_over_absolute_data_keeps_its_outer_item_s_bounds() {
     let booking = surface(
