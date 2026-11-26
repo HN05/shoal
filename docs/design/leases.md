@@ -52,6 +52,7 @@ pool and member capacity in one transaction; rwlock members allow unlimited read
 writer, default to write, and require release to change mode. Definition drift
 blocks new claims but never revokes permits. `kind = "repo"` resources name a registered repository, or a remote URL matching
 one, and return its checkout's path with cooperative read access; readers share one slot.
+A URL keeps tracked config independent of each machine's registration names.
 The lease binds its repository ID and path, including for approval, survives
 restart, and prevents repository deletion while borrowed by another repository's
 workspace. Release and workspace cleanup only drop the lease; they never modify
@@ -105,7 +106,10 @@ stops or removes a project it recorded, stopped on release with its volumes
 kept, and taken down in the shared removal path. Each call reads the file,
 with the workspace's ports in their variables, while the worktree has it, as
 podman-compose needs; a stop or removal that fails with it runs again by the
-project's name, so a deleted worktree or a broken file never keeps a project. One setup starts for
+project's name, so a deleted worktree or a broken file never keeps a project.
+A project that is not stopped keeps its workspace from cleanup, since a failed
+`up` can leave some services running. Chats have no containers, since they run
+nothing on the machine. One setup starts for
 the workspace's own agent stays the user's until that agent starts and takes
 it over. Ports, holds and secret grants keep their own lifetimes. User scripts own integrations
 with the underlying resources.

@@ -449,6 +449,7 @@ These keep a workspace from idle cleanup:
 - directory users, shells included,
 - dirty or unpushed work,
 - simulator leases,
+- containers that are not stopped,
 - permits,
 - holds,
 - open [threads](threads.md),

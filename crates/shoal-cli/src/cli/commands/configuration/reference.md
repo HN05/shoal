@@ -337,7 +337,7 @@ requires_approval = false
 approval_lifetime = "lease"
 ```
 
-See [simulators](../../../../../../docs/reference/resources.md#simulators-macos),
+See [simulators](../../../../../../docs/reference/resources.md#simulators),
 [simulator preferences](#simulator-preferences) and [approvals](#approvals).
 
 ### Webhooks
@@ -1254,7 +1254,7 @@ take those names.
   `SHOAL_PORT_<NAME>`.
 - `on_conflict = "auto"` takes a free port instead of suggesting one.
 
-See [port reservations](../../../../../../docs/reference/resources.md#port-reservations)
+See [ports](../../../../../../docs/reference/resources.md#ports)
 and [approvals](#approvals).
 
 ## Issues, PRs and merges
@@ -1450,7 +1450,7 @@ its workspaces. A repository cannot redefine a global name.
 
 Names are lowercase letters, digits, `_` or `-`, start with a letter, and have
 at most 64 characters. See
-[cooperative resource pools](../../../../../../docs/reference/resources.md#cooperative-resource-pools)
+[resource pools](../../../../../../docs/reference/resources.md#resource-pools)
 and [approvals](#approvals).
 
 ### Related repositories
@@ -1463,7 +1463,7 @@ repo = "saldoir-server"        # Registered name or ID, or a remote URL
 
 A resource of kind `repo` is a registered repository that a workspace may
 read. Its capacity must be 1. See
-[related repository paths](../../../../../../docs/reference/resources.md#related-repository-paths).
+[related repositories](../../../../../../docs/reference/resources.md#related-repositories).
 
 ### Simulator preferences
 

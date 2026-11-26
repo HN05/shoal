@@ -19,14 +19,14 @@ A demo's preset sets up how it reaches the user:
 | `web` | A `server` for a page you open in a browser. Opening prints `http://localhost:<port>`, or `https://` with `scheme = "https"`. |
 | `simulator` | Leases the workspace's `default` simulator and passes its UDID as `SHOAL_SIM_UDID`. The command installs and launches the app and follows its log. Opening brings the device forward in Simulator, or starts the demo's [viewer](#simulator-viewer) over SSH and from another machine. |
 
-A demo's `ports` are [port reservations](resources.md#port-reservations) that
+A demo's `ports` are [port reservations](resources.md#ports) that
 Shoal makes before the demo starts. When a configured port is in use, Shoal
 reserves another free one.
 
 A `simulator` demo leases its device as `shoal acquire sim` does, and
 `--queue` waits for one. It takes over a lease an agent acquired, which then
 ends with the demo. A lease the user acquired keeps
-[its own rules](resources.md#leases).
+[its own rules](resources.md#who-holds-a-lease).
 
 ## Start a demo
 
