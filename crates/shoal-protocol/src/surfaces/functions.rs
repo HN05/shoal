@@ -14,20 +14,56 @@ impl Surface {
         self.called(entry, scope).unwrap_or_else(|| entry.clone())
     }
 
-    /// What `call`, placed in `scope`, gives where Shoal runs it, a call
+    /// What `call`, placed in `scope`, gives where Shoal runs it: a call
     /// of `@index` or `formatString` as [`Self::indexed`] and
-    /// [`Self::formatted`] give it; none for a call only a renderer runs,
+    /// [`Self::formatted`] give it, and a check's or logical function's
+    /// boolean; none for a call only a renderer runs,
     /// a value that is no call, or calls nested deeper than
     /// [`MAX_NESTED_CALLS`], which Shoal leaves to a renderer too.
     pub(super) fn called(&self, call: &Value, scope: &str) -> Option<Value> {
         if nesting(call) > MAX_NESTED_CALLS {
             return None;
         }
+        let arg = |name: &str| call.get("args")?.get(name);
+        let given = |name: &str| self.dynamic(arg(name)?, scope);
+        let number = |name: &str| arg(name).and_then(Value::as_f64);
         match call.get("@call").and_then(Value::as_str)? {
             "@index" => self.indexed(call, scope),
             "formatString" => self.formatted(call, scope).map(Value::String),
+            "required" => Some(Value::Bool(
+                given("value").is_some_and(|value| filled(&value)),
+            )),
+            "length" => {
+                let length = given("value")?.as_str()?.chars().count() as f64;
+                Some(Value::Bool(within(length, number("min"), number("max"))))
+            }
+            "numeric" => {
+                let value = numeric(&given("value")?)?;
+                Some(Value::Bool(within(value, number("min"), number("max"))))
+            }
+            "email" => Some(Value::Bool(email(given("value")?.as_str()?))),
+            "regex" => {
+                let pattern = regex(arg("pattern")?.as_str()?)?;
+                Some(Value::Bool(pattern.is_match(given("value")?.as_str()?)))
+            }
+            "and" => self.logical(arg("values")?, scope, |values| {
+                values.iter().all(|value| *value)
+            }),
+            "or" => self.logical(arg("values")?, scope, |values| {
+                values.iter().any(|value| *value)
+            }),
+            "not" => Some(Value::Bool(!given("value")?.as_bool()?)),
             _ => None,
         }
+    }
+
+    /// What `combine` makes of the booleans `values` give in `scope`; none
+    /// where one of them is no boolean Shoal can work out.
+    fn logical(&self, values: &Value, scope: &str, combine: fn(&[bool]) -> bool) -> Option<Value> {
+        let values: Option<Vec<bool>> = (values.as_array()?.iter())
+            .map(|value| self.dynamic(value, scope)?.as_bool())
+            .collect();
+        Some(Value::Bool(combine(&values?)))
     }
 
     /// The item's index a call of `@index` gives: the innermost list's
@@ -75,6 +111,60 @@ impl Surface {
         Some(text.0)
     }
 }
+
+/// Whether `value` is set and not empty, as `required` checks.
+fn filled(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::String(text) => !text.is_empty(),
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(fields) => !fields.is_empty(),
+        Value::Bool(_) | Value::Number(_) => true,
+    }
+}
+
+/// Whether `value` lies within `min` and `max`, each where given.
+fn within(value: f64, min: Option<f64>, max: Option<f64>) -> bool {
+    min.is_none_or(|min| value >= min) && max.is_none_or(|max| value <= max)
+}
+
+/// The number `value` is or spells.
+fn numeric(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(number) => number.as_f64(),
+        Value::String(text) => text.trim().parse().ok(),
+        _ => None,
+    }
+}
+
+/// Whether `text` is an email address: a local part and a domain of dotted
+/// labels around one `@`, with no whitespace.
+fn email(text: &str) -> bool {
+    let Some((local, domain)) = text.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.contains('@')
+        && !text.chars().any(char::is_whitespace)
+        && domain.contains('.')
+        && domain.split('.').all(|label| !label.is_empty())
+}
+
+/// `pattern` as a regular expression of the A2UI dialect, none where it
+/// is longer than the dialect allows or Shoal cannot compile it.
+fn regex(pattern: &str) -> Option<regex::Regex> {
+    if pattern.chars().count() > MAX_PATTERN_CHARS {
+        return None;
+    }
+    regex::RegexBuilder::new(pattern)
+        .size_limit(1 << 20)
+        .build()
+        .ok()
+}
+
+/// Most code points a `regex` check's pattern may hold, as the dialect
+/// allows.
+const MAX_PATTERN_CHARS: usize = 256;
 
 /// Most calls Shoal runs nested in one another, such as a `formatString`
 /// whose value is another. Each level of a template that interpolates

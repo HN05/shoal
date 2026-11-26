@@ -3137,6 +3137,7 @@ dependencies = [
  "imara-diff",
  "jsonschema",
  "pulldown-cmark",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

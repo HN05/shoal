@@ -36,6 +36,10 @@ pub struct Input {
     pub initial: Option<Value>,
     /// The absolute data path its component enters.
     pub path: String,
+    /// The component that enters it, and the scope it is placed in, where
+    /// its checks read.
+    pub(super) component: String,
+    pub(super) scope: String,
 }
 
 /// What an input takes, as the component bound to its data enters it.
@@ -138,7 +142,8 @@ impl Surface {
     /// entries as written, and bound ones read from the data model with
     /// the values entered. A value is refused unless the action takes it
     /// and its input accepts it, with the bounds the other values give it,
-    /// such as an end date's earliest, which a start date binds.
+    /// such as an end date's earliest, which a start date binds; the answer
+    /// is refused where a check fails, as [`Self::check_answer`] says.
     pub fn resolve(&self, id: &str, values: Map<String, Value>) -> Result<Map<String, Value>> {
         ensure!(
             super::checks::plain(id, false),
@@ -171,6 +176,7 @@ impl Surface {
             let accepted = input.kind.accept(&key, given)?;
             entered.enter(&input.path, accepted)?;
         }
+        entered.check_answer(&action)?;
         Ok(entered.dispatched(&action))
     }
 
@@ -301,6 +307,8 @@ impl Surface {
                     kind: self.entry(&input)?,
                     initial: self.data(&path).cloned(),
                     path,
+                    component: input.component.id.to_owned(),
+                    scope: input.scope,
                 };
                 Some((at, input))
             })

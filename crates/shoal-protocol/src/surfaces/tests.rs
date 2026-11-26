@@ -643,6 +643,47 @@ fn nested_list_items_give_their_buttons_ids_of_their_own() {
 }
 
 #[test]
+fn an_answer_that_fails_its_checks_is_refused() {
+    let check = |call: &str, args: Value| json!({"condition": {"@call": call, "args": args}});
+    let name = json!({"@path": "/name"});
+    let form = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["name", "agreed", "send"]},
+            {"id": "name", "component": "TextField", "label": "Name", "value": name,
+             "@checks": [
+                 {"condition": {"@call": "required", "args": {"value": name}},
+                  "message": "Name is required."},
+                 check("length", json!({"value": name, "max": 8})),
+                 check("regex", json!({"value": name, "pattern": "^[A-Z]"})),
+             ]},
+            {"id": "agreed", "component": "CheckBox", "label": "Agree", "value": {"@path": "/agreed"}},
+            {"id": "send", "component": "Button", "child": "send-label",
+             "@checks": [{"condition": {"@call": "and", "args": {"values": [
+                 {"@path": "/agreed"}, {"@call": "not", "args": {"value": false}}]}}},
+                 check("formatDate", json!({"value": "x", "format": "yyyy"}))],
+             "action": {"event": {"name": "send",
+                 "context": {"name": name, "agreed": {"@path": "/agreed"}}}}},
+            {"id": "send-label", "component": "Text", "text": "Send"},
+        ]),
+        json!({"name": "", "agreed": false}),
+    );
+    let answer = |name: &str, agreed: bool| {
+        form.resolve(
+            "send",
+            values(&[("name", json!(name)), ("agreed", json!(agreed))]),
+        )
+    };
+    let refused = answer("", true).unwrap_err().to_string();
+    assert!(refused.contains("Name is required."), "{refused}");
+    assert!(answer("Adalovelace", true).is_err());
+    assert!(answer("ada", true).is_err());
+    // The button's own check reads the entered data too.
+    assert!(answer("Ada", false).is_err());
+    // A check only a renderer runs passes.
+    answer("Ada", true).unwrap();
+}
+
+#[test]
 fn a_date_and_time_may_write_its_t_and_z_lowercase() {
     let meeting = surface(
         json!([

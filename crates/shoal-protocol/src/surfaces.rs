@@ -16,6 +16,7 @@ mod markdown;
 mod schema;
 mod shorthand;
 mod text;
+mod validation;
 
 pub use actions::{Input, InputKind, SurfaceAction};
 pub use dates::{DateForm, Dates};

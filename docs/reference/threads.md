@@ -161,15 +161,18 @@ Shoal refuses:
 
 - an action the surface lacks, and a value it does not take, its input
   refuses or the data model has no place for, such as a field of text,
+- an answer that fails a check of its button or of an input it takes, which
+  a renderer would disable or flag, naming the check's message,
 - an answer from a participant, or to your own side's surface,
 - an answer to a surface older than that side's latest, naming the current
   post.
 
 The post records the action's whole context, read from the data model with
 the values given entered into it, as a renderer sends it. An input's bounds,
-such as an end date's earliest, read that data too. Shoal runs `@index` and
-`formatString` over data paths itself, in a context, a bound and the text it
-shows. It records any other function call in a context as written, since its
+such as an end date's earliest, read that data too. Shoal runs `@index`,
+`formatString` over data paths, the checks `required`, `length`, `numeric`,
+`email` and `regex`, and `and`, `or` and `not` itself, in a context, a check,
+a bound and the text it shows. A check it cannot run passes. It records any other function call in a context as written, since its
 result depends on the renderer, such as its locale or clock, and a bound it
 gives bounds nothing. It treats the same way calls nested more than four deep
 and a `formatString` whose text would outgrow 8 KiB.
