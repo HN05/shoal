@@ -1,7 +1,10 @@
 //! Shared fixtures and process defaults for integration tests. Apply overrides with
 //! `Command::env` / `current_dir` / `stdin` after constructing a command.
-// Each integration test binary uses its own subset of support.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    unused_imports,
+    reason = "each integration test binary uses its own subset of support"
+)]
 
 pub mod daemon;
 pub mod daemon_client;
@@ -16,8 +19,6 @@ pub mod run;
 pub mod wait;
 pub mod zmx;
 
-// Each test binary uses its own subset of support, this included.
-#[allow(unused_imports)]
 pub use shoal_core::test_support::{
     git, git_with_identity, install_test_script, install_test_script_with_mode, printed,
     repository_with, set_config,

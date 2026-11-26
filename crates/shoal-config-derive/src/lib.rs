@@ -127,7 +127,8 @@ impl Declaration {
         let values = self.options().map(Field::resolved_value);
         let entries = fields.iter().map(Field::entries);
         quote! {
-            #[allow(unused_variables)]
+            // An expectation would fail on a struct whose fields read them all.
+            #[allow(unused_variables, reason = "only some fields read `prefix` and `__layering`")]
             impl crate::config::options::Options for #written {
                 type Resolved = #resolved;
 

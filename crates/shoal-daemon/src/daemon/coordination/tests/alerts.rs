@@ -1,5 +1,3 @@
-#[allow(unused_imports)]
-use crate::daemon::manager::Manager;
 use crate::daemon::scope::Access;
 use crate::daemon::test_support::{away_on_offline_machine, held_calls, manager};
 use crate::daemon::workspace_files::{FileSource, NewFile};

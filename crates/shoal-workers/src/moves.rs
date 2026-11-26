@@ -41,7 +41,7 @@ pub trait Steps: Sync {
 }
 
 /// A space a move takes, once checked, with the file its package goes to.
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "one per moved space, kept until it moves"
 )]

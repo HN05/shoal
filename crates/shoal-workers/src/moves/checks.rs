@@ -23,7 +23,7 @@ pub struct Checked {
 
 /// What ending a space for its move does: removing a workspace, with what
 /// its removal would delete, or a chat.
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "one per moved space, kept with its planned move"
 )]

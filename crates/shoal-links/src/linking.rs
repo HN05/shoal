@@ -23,7 +23,7 @@ impl Links {
     /// Link the item `input` names with `relation`; an issue or PR linked
     /// without its title gets the one the forge shows, or else none, which
     /// the answer says why.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the fields of the link request, beside the daemon and its caller"
     )]
@@ -52,7 +52,7 @@ impl Links {
 
     /// Record the link [`Self::link_item`] makes, with `title`, returning
     /// what assigning an issue on the forge warns of.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the fields of the link request, beside the daemon and its caller"
     )]

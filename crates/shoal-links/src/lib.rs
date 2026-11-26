@@ -56,7 +56,7 @@ pub struct Links {
 }
 
 impl Links {
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the links share with the daemon's other subsystems"
     )]

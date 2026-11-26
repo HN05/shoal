@@ -1162,7 +1162,10 @@ time.sleep(30)
 
 #[test]
 #[ignore = "manual release-mode measurement"]
-#[allow(clippy::disallowed_macros)] // An ignored benchmark run with --nocapture.
+#[expect(
+    clippy::disallowed_macros,
+    reason = "an ignored benchmark run with --nocapture"
+)]
 fn benchmark_daemon_reads() {
     let fixture = Fixture::new();
     for name in ["bench0", "bench1", "bench2", "bench3"] {

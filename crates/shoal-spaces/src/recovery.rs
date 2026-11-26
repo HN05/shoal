@@ -317,7 +317,7 @@ impl Spaces {
     }
 
     /// Optionally stops and clears it.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the execution, its workspace and the reconciliation's state, beside the daemon"
     )]

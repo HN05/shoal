@@ -156,7 +156,7 @@ impl Spaces {
     }
 
     /// Runs under the repository's Git gate `git`, which settling releases.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the workspace is created from and with, beside the daemon"
     )]

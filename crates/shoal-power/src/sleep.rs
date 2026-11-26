@@ -28,7 +28,7 @@ pub enum PowerEvent<H> {
 }
 
 /// The platform's sleep announcements.
-#[allow(
+#[expect(
     async_fn_in_trait,
     reason = "the daemon awaits it in the task that reads the platform"
 )]

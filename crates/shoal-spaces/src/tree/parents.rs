@@ -43,7 +43,7 @@ impl Spaces {
 
     /// [`Self::open_branch_with`] below `parent`. A scoped `caller` takes over no
     /// existing workspace outside its scope.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the branch opens with and below, beside the daemon"
     )]

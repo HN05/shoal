@@ -1,5 +1,3 @@
-#[allow(unused_imports)]
-use crate::daemon::manager::Manager;
 use crate::daemon::resources::{Definition, LockMode, Scope};
 use crate::daemon::scope::Access;
 use crate::daemon::{

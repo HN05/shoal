@@ -139,7 +139,7 @@ impl<'a> AgentHome<'a> {
 /// The records of a space an agent runs in as the daemon has them now,
 /// which an [`AgentHome`] borrows: a workspace's, or a chat's with its
 /// repository and the workspace whose worktree it runs in.
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "read once by the restore that reads it"
 )]

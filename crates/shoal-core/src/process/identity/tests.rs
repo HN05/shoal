@@ -720,7 +720,7 @@ fn listings_show_live_processes_with_group_and_parent_but_no_zombies() -> Result
 
 /// The same-user listing and inventory PIDs while `child` runs, then the
 /// listing once it exited unreaped.
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity, reason = "three listings a single test reads")]
 fn list_unreaped_child(
     child: &mut std::process::Child,
 ) -> Result<(Vec<(u32, u32, u32)>, Vec<u32>, Vec<(u32, u32, u32)>)> {

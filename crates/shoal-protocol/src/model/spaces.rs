@@ -66,7 +66,7 @@ pub struct SpaceOffer {
 /// could not be asked.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant, reason = "a page holds a few spaces")]
+#[expect(clippy::large_enum_variant, reason = "a page holds a few spaces")]
 pub enum EverywherePart {
     Here(Space),
     Elsewhere(crate::hub::directory::ViewPart),

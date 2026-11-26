@@ -82,7 +82,7 @@ pub struct Space<P = SpacePart> {
 /// What only a space of one kind has. Each part names its `kind` itself.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "a space's record, of which a caller holds a few"
 )]
@@ -92,7 +92,7 @@ pub enum SpacePart {
 }
 
 /// A space taken apart by its kind, which [`Space::by_kind`] gives.
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "a space's record, of which a caller holds a few"
 )]
@@ -335,7 +335,7 @@ impl Space {
     }
 
     /// The workspace it is, or else the space itself.
-    #[allow(
+    #[expect(
         clippy::result_large_err,
         reason = "the space comes back whole for its caller to read"
     )]
@@ -347,7 +347,7 @@ impl Space {
     }
 
     /// The chat it is, or else the space itself.
-    #[allow(
+    #[expect(
         clippy::result_large_err,
         reason = "the space comes back whole for its caller to read"
     )]

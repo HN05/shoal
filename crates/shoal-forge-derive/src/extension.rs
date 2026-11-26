@@ -105,9 +105,13 @@ impl Declared {
             .filter(|attribute| !attribute.path().is_ident("doc"));
         // Callers call the methods on the one type that implements the
         // trait, whose futures they see whole, so no bound on them is lost.
+        // An expectation would fail on a trait without public async methods.
         Ok(quote! {
             #(#attributes)*
-            #[allow(async_fn_in_trait)]
+            #[allow(
+                async_fn_in_trait,
+                reason = "callers see the futures of the one implementation"
+            )]
             #visibility trait #name: Sized {
                 #(#declarations)*
             }

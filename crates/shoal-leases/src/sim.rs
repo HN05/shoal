@@ -434,7 +434,7 @@ impl Leases {
 
     /// Called only after approval, under the allocation caller's simulator gate.
     /// Audits precede destructive actions; claims survive every failed boot step.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the plan and what it acts for, which only allocation passes"
     )]

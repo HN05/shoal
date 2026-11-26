@@ -7,7 +7,7 @@ use crate::{executions::ExecutionKind, processes::Identity};
 /// Requests that run tracked commands, agents included, in a space.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "a request, sent and read once, as large as its operation"
 )]

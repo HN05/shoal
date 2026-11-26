@@ -243,7 +243,7 @@ impl Coordination {
     /// code `code` and the changes `changes` to the thread `number` from
     /// the side `caller` posts on, or the user's without a caller, and
     /// deliver it.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the post says, beside the daemon"
     )]

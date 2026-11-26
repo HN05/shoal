@@ -255,7 +255,7 @@ impl Agents {
     /// counts. A report with `turn_end` ends a turn, as [`Self::end_turn`]
     /// records it. Repeating the current report writes nothing, since hooks
     /// repeat it after every tool call, and a repeated state keeps its start.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the fields of the state report, beside the daemon"
     )]
@@ -476,7 +476,7 @@ impl Agents {
     /// `ending` says how it ends the agent's turn, while the caller holds
     /// the space's [`Self::report_order`]. A report that arrives late, from
     /// a hook that could not send it, counts from when it was `made`.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the fields of the state report, beside the daemon"
     )]
@@ -498,7 +498,7 @@ impl Agents {
 
     /// [`Self::record_agent_state`], returning the status the space takes,
     /// or none when it takes no report, as a chat that stopped.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the fields of the state report, beside the daemon"
     )]
@@ -576,7 +576,7 @@ impl Agents {
     /// hook `made` the report, which leaves the agent idle and may retry
     /// the turn. The retry is scheduled
     /// first, since the agent going idle finishes a delivered one.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the fields of the state report, beside the daemon"
     )]
@@ -603,7 +603,7 @@ impl Agents {
     /// [`Self::report_turn_failure`] for a report made at `made`, as
     /// [`Self::record_agent_state`] takes it, while the caller holds the
     /// space's [`Self::report_order`].
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the fields of the state report, beside the daemon"
     )]

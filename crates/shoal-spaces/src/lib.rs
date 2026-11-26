@@ -94,7 +94,7 @@ pub struct Spaces {
 }
 
 impl Spaces {
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the spaces share with the daemon's other subsystems"
     )]

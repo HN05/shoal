@@ -97,7 +97,7 @@ pub struct Wrapper<'a> {
 
 /// `hold` is the operation guard that holds back a daemon update while the
 /// wrapper waits, which a wait for an update lets go of.
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "the wrapper's state, beside the service and the daemon"
 )]

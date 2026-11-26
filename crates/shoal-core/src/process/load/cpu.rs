@@ -78,8 +78,10 @@ pub fn cpu_ticks() -> Result<CpuTicks> {
     // Retain one host port for the process lifetime instead of acquiring a new
     // Mach send right on every sample.
     pub(crate) static HOST: std::sync::OnceLock<libc::mach_port_t> = std::sync::OnceLock::new();
-    // libc retains the native ABI; avoid a new dependency for this single call.
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "libc keeps the native ABI; a new dependency for one call is not worth it"
+    )]
     let host = *HOST.get_or_init(|| unsafe { libc::mach_host_self() });
     let mut info = std::mem::MaybeUninit::<libc::host_cpu_load_info>::zeroed();
     let mut count = libc::HOST_CPU_LOAD_INFO_COUNT;

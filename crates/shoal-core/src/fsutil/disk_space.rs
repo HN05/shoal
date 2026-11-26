@@ -11,7 +11,10 @@ pub fn available_bytes(path: &Path) -> io::Result<u64> {
     }
     // SAFETY: statvfs succeeded, so the buffer is initialized.
     let stat = unsafe { stat.assume_init() };
-    #[allow(clippy::useless_conversion)] // The field types differ by platform.
+    #[expect(
+        clippy::useless_conversion,
+        reason = "the field types differ by platform"
+    )]
     Ok(u64::from(stat.f_bavail).saturating_mul(u64::from(stat.f_frsize)))
 }
 

@@ -257,7 +257,7 @@ struct BsdInfo {
 }
 
 #[repr(C)]
-#[allow(dead_code, reason = "unread fields fix the kernel's layout")]
+#[expect(dead_code, reason = "unread fields fix the kernel's layout")]
 struct UniqueIdentifiers {
     uuid: [u8; 16],
     unique: u64,

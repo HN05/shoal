@@ -23,7 +23,7 @@ pub(super) type Connection =
     Box<dyn FnOnce(UnixStream, u64, OperationGuard) -> BoxFuture<'static, Result<()>> + Send>;
 
 /// How the daemon answers a request.
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "each request has one answer, moved straight into its reply"
 )]

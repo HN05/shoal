@@ -13,7 +13,7 @@ use shoal_protocol::{
 /// machine's as that machine last reported it, which names it.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-#[allow(clippy::large_enum_variant, reason = "a listing holds a few spaces")]
+#[expect(clippy::large_enum_variant, reason = "a listing holds a few spaces")]
 pub enum ListedSpace {
     Elsewhere(Listed),
     Here(Space),

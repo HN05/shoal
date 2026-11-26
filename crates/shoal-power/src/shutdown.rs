@@ -15,7 +15,7 @@ pub use logind::connect;
 pub use unsupported::connect;
 
 /// The login manager's shutdown announcements and delay lock.
-#[allow(
+#[expect(
     async_fn_in_trait,
     reason = "the daemon awaits it in the task that holds the lock"
 )]

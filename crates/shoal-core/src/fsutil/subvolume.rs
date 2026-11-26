@@ -234,7 +234,6 @@ mod ioctl {
         // SAFETY: `path` is NUL-terminated and outlives the call.
         let status = unsafe { libc::statfs(path.as_ptr(), &mut stat) };
         // The field's type differs between targets; the magic fits 32 bits.
-        #[allow(clippy::unnecessary_cast)]
         let magic = stat.f_type as u32;
         status == 0 && magic == SUPER_MAGIC
     }

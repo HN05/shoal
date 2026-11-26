@@ -95,7 +95,7 @@ pub enum Item {
 /// What another machine's space needs of the user.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant, reason = "an inbox holds a few items")]
+#[expect(clippy::large_enum_variant, reason = "an inbox holds a few items")]
 pub enum Need {
     Thread(Box<Thread>),
     Approval(ApprovalRequest),

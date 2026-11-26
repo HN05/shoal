@@ -311,7 +311,10 @@ enum Image {
     Settled,
     /// Replacing its image: the new environment is not published yet. Only
     /// Linux exposes it.
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg_attr(
+        target_os = "macos",
+        expect(dead_code, reason = "macOS never constructs it")
+    )]
     Loading,
     /// Exiting or a kernel thread: it runs no more user code.
     Ended,

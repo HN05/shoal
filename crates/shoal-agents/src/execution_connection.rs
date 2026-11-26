@@ -379,7 +379,7 @@ async fn relay_reporting(
 
 /// Exchange controls and events until the wrapper reports its exit code or
 /// detaches for a daemon shutdown.
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     reason = "the connection's state, beside the service and the daemon"
 )]

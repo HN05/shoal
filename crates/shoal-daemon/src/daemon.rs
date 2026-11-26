@@ -67,12 +67,19 @@ pub(crate) use shoal_store as store;
 mod subscriptions;
 pub(crate) mod target_checks;
 #[cfg(any(test, feature = "test-support"))]
-// Other crates' tests read most of it.
-#[cfg_attr(not(feature = "test-support"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "test-support"),
+    expect(dead_code, reason = "other crates' tests read most of it")
+)]
 pub(crate) mod test_daemon;
 #[cfg(any(test, feature = "test-support"))]
-// Other crates' tests read only some of the daemon's own fixtures.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "other crates' tests read only some of the daemon's own fixtures"
+    )
+)]
 pub(crate) mod test_support;
 
 mod turn_ends;

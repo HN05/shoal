@@ -23,7 +23,7 @@ use crate::model::Workspace;
 use shoal_store;
 
 /// The space an execution registers in, read and checked for its plan.
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "read once by the registration that made it"
 )]

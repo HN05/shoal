@@ -81,7 +81,7 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
 
 /// The space a revert is opened from: a workspace, its worktree verified, or
 /// a running chat, which acts in its repository's registered checkout.
-#[allow(
+#[expect(
     clippy::large_enum_variant,
     reason = "a lookup's result, read by the revert that made it"
 )]

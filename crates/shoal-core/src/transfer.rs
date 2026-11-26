@@ -221,8 +221,10 @@ fn open_session_file(source: &SessionSource) -> Result<(std::fs::File, u64)> {
 }
 
 /// Operations on the client type [`Manifest`] that only the `shoal` command uses.
-// Only Shoal's own crates implement and await it.
-#[allow(async_fn_in_trait)]
+#[expect(
+    async_fn_in_trait,
+    reason = "only Shoal's own crates implement and await it"
+)]
 pub trait ManifestExt: Sized {
     /// The package of the space `removed` records, of `repo` or of none,
     /// without its session files.

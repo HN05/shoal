@@ -27,7 +27,7 @@ pub struct Lid {
 }
 
 /// What the platform says of the user's presence.
-#[allow(
+#[expect(
     async_fn_in_trait,
     reason = "the daemon awaits it in the task that reads the platform"
 )]

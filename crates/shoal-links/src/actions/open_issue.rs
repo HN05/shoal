@@ -276,7 +276,7 @@ impl Links {
     /// `destination`, refusing it first for what opening it would refuse:
     /// a label in `required` it leaves out, or a file the forge does not
     /// take.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the issue and where it opens, beside the daemon and its proposer"
     )]

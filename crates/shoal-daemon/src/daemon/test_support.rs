@@ -10,8 +10,13 @@ use crate::{daemon::manager::Manager, paths::Paths};
 use shoal_ids::space_ids::SpaceId;
 
 mod chats;
-// The overload tests in `shoal-workers` read the rest of it.
-#[cfg_attr(not(feature = "test-support"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "test-support"),
+    expect(
+        dead_code,
+        reason = "the overload tests in `shoal-workers` read the rest of it"
+    )
+)]
 pub mod overload;
 
 /// Import the package `bytes` as `shoal restore --from` asks the daemon to,
@@ -517,8 +522,10 @@ pub fn ended(pid: u32) -> bool {
 
 /// The launches the daemon of `manager` queued in its chats, oldest first,
 /// as their plans hold them, while they wait or start.
-// The launch tests in `shoal-client` read it.
-#[cfg_attr(not(feature = "test-support"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "test-support"),
+    expect(dead_code, reason = "the launch tests in `shoal-client` read it")
+)]
 pub async fn chat_launches(manager: &Manager) -> Vec<crate::protocol::operations::QueuedLaunch> {
     let plans: Vec<String> = (manager.store)
         .run(|db| {

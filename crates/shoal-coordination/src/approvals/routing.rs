@@ -181,7 +181,7 @@ impl Coordination {
     /// governs only where it holds that permission at `direct` too; any
     /// other decides only what was routed to its space, as
     /// [`Self::decide_routed_approval`] allows.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the request decides, beside the daemon"
     )]

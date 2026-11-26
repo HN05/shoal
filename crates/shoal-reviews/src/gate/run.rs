@@ -329,7 +329,6 @@ impl Reviews {
 
     /// Run `agent` once in the checkout, writing to `files`, under a
     /// read-only scope of the requesting space that ends with the run.
-    #[allow(clippy::too_many_arguments)]
     async fn run_gate_once(
         &self,
         case: &Case,

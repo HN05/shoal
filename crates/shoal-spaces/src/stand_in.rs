@@ -1,7 +1,6 @@
 //! A stand-in for the rest of the daemon, which the spaces' tests build the
 //! service over. It has no links, hub, CI jobs, reviews, leases or demos,
 //! whose records read as empty.
-#![allow(clippy::too_many_lines, reason = "one stand-in per interface method")]
 
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::collections::{BTreeMap, HashMap, HashSet};

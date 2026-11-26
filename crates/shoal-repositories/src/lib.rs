@@ -46,7 +46,7 @@ pub struct Repositories {
 }
 
 impl Repositories {
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the repositories share with the daemon's other subsystems"
     )]

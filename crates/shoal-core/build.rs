@@ -1,6 +1,9 @@
 use std::{env, fs, path::PathBuf};
 
-#[allow(clippy::disallowed_macros)] // Cargo reads build script instructions from stdout.
+#[expect(
+    clippy::disallowed_macros,
+    reason = "Cargo reads build script instructions from stdout"
+)]
 fn main() {
     println!("cargo:rerun-if-changed=configs");
     let directory = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("configs");

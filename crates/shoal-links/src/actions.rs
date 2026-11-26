@@ -79,7 +79,7 @@ impl Links {
     /// decisions with the user's login, unless a scoped `caller` takes one
     /// as its permissions allow, as the review account for a review's
     /// verdict and the agent account otherwise.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the action and the item it acts on, beside the daemon and its caller"
     )]
@@ -218,7 +218,7 @@ impl Links {
     /// user and for Shoal's own changes. A PR it moves into or out of draft
     /// has its progress section published again. The caller holds the gates
     /// [`Self::lock_change_gates`] takes for the workspace.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the action, its item and its account, beside the daemon and its caller"
     )]

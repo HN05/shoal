@@ -322,7 +322,7 @@ pub struct HubView {
 /// threads and approval requests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant, reason = "a view holds a few spaces")]
+#[expect(clippy::large_enum_variant, reason = "a view holds a few spaces")]
 pub enum ViewPart {
     /// This machine's ID at the hub, which comes first.
     Here(MemberId),

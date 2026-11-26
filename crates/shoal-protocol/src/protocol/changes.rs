@@ -10,10 +10,6 @@ use crate::{
 /// Requests about the changes Shoal records of agents' worktrees.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[allow(
-    clippy::enum_variant_names,
-    reason = "variants are named as their requests are spelled on the wire"
-)]
 pub enum ChangeMethod {
     /// What a tool call of the caller's agent changed in its space's
     /// worktree, from the agent's hook; the mixed changes it recorded.

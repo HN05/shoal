@@ -305,7 +305,7 @@ impl Agents {
     /// proven stopped, and `oom_kills` counts what the kernel's OOM killer
     /// killed in its scope. A chat's agent that exits cleanly tells no one,
     /// since the user saw it end.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the exit reports, beside the daemon"
     )]
@@ -485,7 +485,7 @@ impl Agents {
 
     /// `running` is how long the agent has already run, so a reattached
     /// agent keeps its place in the newest-first overload order.
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "the agent and the space it runs in, beside the daemon"
     )]

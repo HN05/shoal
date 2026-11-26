@@ -113,7 +113,7 @@ pub struct Agents {
 }
 
 impl Agents {
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "what the agents share with the daemon's other subsystems"
     )]
