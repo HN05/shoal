@@ -1,7 +1,6 @@
 //! `git-remote-shoal`, the remote helper Git runs for an agent's push to a
 //! rewritten URL. Standard output carries only Git's remote helper
 //! protocol.
-use shoal_refs::CommitId;
 use std::collections::BTreeMap;
 
 use std::io::{BufRead as _, Write as _};
@@ -11,8 +10,7 @@ use anyhow::{Context as _, Result, bail};
 use crate::{
     client::approvals,
     client::connection::CommandPaths,
-    git,
-    tools::Tool,
+    git::push_gate as git,
     workspace_context::{self, ScopeOrder},
 };
 use shoal_protocol::{
@@ -78,7 +76,7 @@ impl Session {
 
     /// The remote's refs, as Git's `list` command expects them.
     async fn list(&mut self) -> Result<String> {
-        let listed = git_output(&git::list_remote_args(&self.url)).await?;
+        let listed = git::list_remote(&self.url).await?;
         let mut reply = String::new();
         for line in listed.lines() {
             let Some((object, name)) = line.split_once('\t') else {
@@ -171,12 +169,7 @@ impl Session {
             .with_context(|| format!("Git sent a push without a destination: {refspec}"))?;
         let commit = match source {
             "" => None,
-            source => Some(
-                git_output(&git::resolve_args(source))
-                    .await?
-                    .trim()
-                    .to_owned(),
-            ),
+            source => Some(git::resolve(source).await?),
         };
         // A forced push or deletion replaces only what the remote had; an
         // empty expectation keeps a missing ref missing.
@@ -191,7 +184,7 @@ impl Session {
             remote: self.remote.clone(),
             url: self.one_of_several_urls().await,
             destination: destination.to_owned(),
-            commit: commit.map(CommitId::from),
+            commit,
             replaces,
             agent: None,
         })
@@ -201,8 +194,8 @@ impl Session {
     /// Git runs the helper for each, so approval must push to this one
     /// only. A remote given by URL, or one Git cannot read, has its own.
     async fn one_of_several_urls(&self) -> Option<String> {
-        let urls = git_output(&git::push_urls_args(&self.remote)).await.ok()?;
-        (urls.lines().count() > 1).then(|| self.url.clone())
+        let urls = git::push_urls(&self.remote).await.ok()?;
+        (urls.len() > 1).then(|| self.url.clone())
     }
 
     /// Push `refspecs` to the real URL with Git, without the rewrites and
@@ -216,13 +209,8 @@ impl Session {
                 Some((destination, expected.as_str()))
             })
             .collect();
-        let args = git::porcelain_push_args(&self.url, refspecs, &leases);
-        let pushed = git(&args)
-            .stderr(std::process::Stdio::inherit())
-            .output()
-            .await;
-        let porcelain = match &pushed {
-            Ok(output) => String::from_utf8_lossy(&output.stdout).into_owned(),
+        let porcelain = match git::porcelain_push(&self.url, refspecs, &leases).await {
+            Ok(porcelain) => porcelain,
             Err(error) => {
                 let message = one_line(&format!("git push could not run: {error}"));
                 return refspecs
@@ -285,34 +273,6 @@ async fn workspace(paths: &CommandPaths) -> Result<SpaceSelector> {
     let workspace = workspace_context::current(&workspaces, ScopeOrder::AfterDirectory)?
         .context("the push comes from no workspace")?;
     Ok(SpaceSelector::id(&workspace.id))
-}
-
-/// Git without the rewrites, so it reaches the real remote.
-fn git(args: &[String]) -> tokio::process::Command {
-    let mut command = tokio::process::Command::new(Tool::Git.program());
-    command
-        .args(args)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped());
-    shoal_core::agent_git::push_gate::strip(&mut command);
-    command
-}
-
-/// What Git prints for `args`, failing with its error output.
-async fn git_output(args: &[String]) -> Result<String> {
-    let output = git(args)
-        .stderr(std::process::Stdio::piped())
-        .output()
-        .await
-        .context("run git")?;
-    if !output.status.success() {
-        bail!(
-            "git {} failed: {}",
-            args.first().map(String::as_str).unwrap_or_default(),
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 #[cfg(test)]

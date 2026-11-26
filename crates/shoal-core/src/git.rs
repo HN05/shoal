@@ -23,6 +23,7 @@ mod merge_methods;
 mod merge_tree;
 pub(crate) mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
+pub mod push_gate;
 pub(crate) mod queries;
 pub(crate) use queries::{HeadState, config_value, git_path, head_state, is_bare_with_work_tree};
 pub use queries::{
@@ -416,25 +417,13 @@ pub fn approved_push_command(push: &shoal_protocol::approvals::PushSpecification
     command
 }
 
-pub fn list_remote_args(url: &str) -> Vec<String> {
-    ["ls-remote", "--", url].map(String::from).to_vec()
-}
-
-pub fn push_urls_args(remote: &str) -> Vec<String> {
-    ["remote", "get-url", "--push", "--all", remote]
-        .map(String::from)
-        .to_vec()
-}
-
-pub fn resolve_args(rev: &str) -> Vec<String> {
-    ["rev-parse", "--verify", "--end-of-options", rev]
-        .map(String::from)
-        .to_vec()
-}
-
 /// `leases` pairs each destination ref with the object `--force-with-lease`
 /// expects there.
-pub fn porcelain_push_args(url: &str, refspecs: &[String], leases: &[(&str, &str)]) -> Vec<String> {
+pub(crate) fn porcelain_push_args(
+    url: &str,
+    refspecs: &[String],
+    leases: &[(&str, &str)],
+) -> Vec<String> {
     let mut args = vec![
         "push".to_owned(),
         "--porcelain".into(),
