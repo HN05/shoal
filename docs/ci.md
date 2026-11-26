@@ -67,6 +67,9 @@ same change then updates:
 - the Containerfile's `ARG RUST`,
 - the `image:` tag in every workflow.
 
+Rust follows current stable, so the code can use its newest features. CI
+builds with the locked dependencies.
+
 The Shoal runners' machines install the same Rust.
 
 The Docker jobs' Cargo builds share the runner-mounted `/ci-target` through

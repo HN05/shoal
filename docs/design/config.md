@@ -29,6 +29,16 @@ Shoal parses the global file once. It deserializes `[machine]` and the
 repository schema from that parse strictly, each on its own. `serde(flatten)`
 would accept unknown keys and lose their error positions.
 
+`shoal-core` parses and resolves config files, so the CLI and the daemon read
+them alike. The protocol carries a target's repository layers as JSON that the
+caller reads. The daemon resolves what a launch needs.
+
+### References between options
+
+A layer's `same_as` references travel with the layer. Shoal takes them out of
+the file before it reads the options, and follows them once every layer is
+merged. An option thus takes the other option's final value.
+
 ## Machine policy
 
 Repository config cannot widen machine policy. Only the global and shared

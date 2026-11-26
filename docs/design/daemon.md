@@ -27,6 +27,14 @@ open file limit at startup to make room for them. An accept failure that
 clears on its own, such as running out of descriptors, is retried. Any other
 stops the daemon with a log line.
 
+### Frames
+
+Each protocol message is one frame of at most 64 KiB. A list too large for one
+frame goes in pages, and each frame but the last is marked as continued. A
+streamed listing sends its frames, then `ok`. Any other reply too large for one
+frame goes as pieces of its JSON, marked the same way, such as a thread whose
+surfaces outgrew a frame. The reader joins the pieces and parses them.
+
 ### Request limits
 
 Requests that answer once share a fixed limit. Executions, waits and streams

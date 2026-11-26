@@ -138,6 +138,11 @@ Shoal does not guess the format from the workspace or the terminal: people use
 workspaces too, agents sometimes have terminals, and piped text output keeps
 its meaning.
 
+With `--json`, a command prints only types that `shoal-client` marks as
+output. A program that runs `shoal --json` thus parses the output with the
+library's types. A development build checks that the output reads back as its
+type.
+
 Progress during a silent wait belongs to the CLI, as
 [Progress](../reference/output.md#progress) describes.
 
