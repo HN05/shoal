@@ -1,139 +1,259 @@
 # Chats
 
 This file covers chats, the spaces without a worktree of their own, including
-the chat without a repository.
+the chat without a repository. [Chats](../reference/chats.md) says what each
+command does.
 
-A chat gets every feature that coordinates or communicates, including
-requests to the forge such as starting CI runs. It gets nothing that runs code
-on this machine, such as leases, `shoal run` and demos, and nothing that needs
-a worktree or branch of its own. Features of the first kind take the same code
-path for both kinds of space.
+## What chats get
 
-A chat is a conversation with an agent about a repository, not an assignment,
-so it runs in the registered checkout instead of in a workspace: coordinating
-work is one thing a chat may do. Every chat is scoped, as a workspace's
-processes are: its agent carries a scope token, kept with the chat across
-stops and restores, that covers the chat and the spaces below it, so only the
-user's own terminal acts unscoped. The agent follows the workspace-agent rules
-without what needs a worktree: it opens workspaces and chats only below its
-chat and in its repository, never takes over one outside it, and renames only
-its own chat. It proposes issues where its permissions say so, as a workspace's agent
-does, recording no branch or commit, since it has none; approval opens the
-issue from the chat's checkout and records it as the chat's. It never proposes
-a PR, since it has no branch. It starts at once from the default branch the
-background sync keeps current, so an offline or diverged checkout still gets its
-chat. Its
-instructions describe the discussion only, from the `chat` rule that
-repositories can extend like the other rules.
-A chat's agent
-runs under the execution wrapper as a tracked execution of its chat, through
-the path a workspace's agent takes, so launches, stops, restores, wakes, exit
-reports, turn state and restarts are one code path, and the chat runs while
-that execution is recorded. Its agent's weight decides its capacity as for a
-workspace's agent, including a restore between turns waiting for an update,
-which the user who wants it sooner gets by attaching; only its clean exit
-differs by kind, notifying no one, since the user is in that conversation. A
-stop that keeps the wrapper restores the agent in place; one that ends it
-leaves its stop record for `shoal resume`, or for the agent queue when the
-agent is to come back on its own, which starts the chat's restore in the
-place the chat ran in. Once the chat's agent ends, the requests the chat
-decided go to the user, since no one attends them there. A stopped chat keeps
-its record, and with it its name, links, files, messages, threads,
-workspaces and temporary directory, until a restore runs its agent again. Only
-removal ends a chat: `shoal rm`, or space cleanup, which treats a chat as a
-workspace whose worktree is always clean, pushed and merged, its running agent
-as use, a queued restore as a queued agent and its saved stopped work as a
-workspace's, and takes the idle time of merged cleanup from when its agent
-stopped. `shoal resume` resolves each target to a space in one lookup over the
-shared namespace, so its picker, `--all` and a list of names act on chats as on
-workspaces, an interrupted turn continues in a chat as in a workspace, and
-`shoal restore --discard-agent` discards a chat's stopped agent as a workspace's.
-Starts, renames and removals are journal events, and its agent's starts and
-stops are logged as a workspace agent's. A workspace a chat opens is its child in the one tree of
-spaces, unless it was created below a workspace, where it stays; reopening
-it outside a chat for its issue or a picked branch returns it to the user, so
-Shoal knows which chat coordinates which workers, while a start of its own
-agent, with `--in` or the `--branch` it has, leaves it where it is. Removing the chat first removes the spaces below it through the
-removal path of any space's children, and a stopped chat passes their events
-on up, to the user at the top, unless it waits for its automatic restore. A
-chat opens workspaces only in its own repository.
-A chat may run in a ready workspace's worktree instead of the checkout, to
-debug, audit or review that workspace's live work, committed and uncommitted,
-with the commands that read a branch, rather than reading another worktree by
-path. A workspace has one editing agent, its own: a chat in it reads and does
-not edit, which its instructions say and nothing enforces until modes decide
-what an agent may do. The daemon keeps the workspace's own agent one: it
-refuses to queue a launch in an existing workspace while that workspace's
-agent runs, waits in the queue or is stopped awaiting `shoal resume`, so the
-CLI, coordinators and apps get one answer; a last session gives way, since its
-agent ended on its own. A stopped or asleep agent gives way only to a start
-with `--replace`, which discards it through the same operation as
-`shoal restore --discard-agent`, so replacing needs the right to discard; a
-running one never does, so a start never cuts off a live turn. A start on a
-terminal asks instead of refusing, since the user is there to choose. It stays a chat, with its own identity, scope,
-temporary directory and messages, and is not the workspace's child, since a
-child's threads and approvals go to its parent's agent while the user attends
-a chat; so Shoal commands it runs never act as the workspace's agent. Its scope
-reads the workspace as well as the chat and the spaces below it, and refuses
-any request that changes the workspace. Its
-record names the workspace, so a restore runs it there again, commands that
-take the workspace from the directory act on it, and those that act on chats
-keep acting on the chat. A running chat in a workspace is use, so no unattended
-removal takes the workspace from under it, and one Shoal saved is the
-workspace's saved stopped work, which keeps it from idle cleanup but not merged
-cleanup. Removing the workspace removes its chats first through the chat
-removal path, so a workspace one of them opened that cannot go keeps the chat,
-which keeps the workspace. Nothing moves a session between directories: a chat
-about another workspace is a new chat.
+A chat gets every feature that coordinates or communicates, such as alerts,
+threads, links and requests to the forge, including starting CI runs. Those
+features take the same code path for both kinds of space.
+
+A chat gets nothing that runs code on this machine, such as leases,
+`shoal run` and demos. It gets nothing that needs a worktree or a branch of its
+own, such as PRs.
+
+## A conversation, not an assignment
+
+A chat is a conversation with an agent about a repository. It is not an
+assignment, so it runs in the registered checkout instead of in a workspace.
+Coordinating work is one thing a chat may do.
+
+A chat starts at once from the default branch, which the background sync keeps
+current. An offline or diverged checkout thus still gets its chat.
+
+A repository may have several chats, so each start makes a new one.
+
+### Instructions
+
+A chat's instructions describe the discussion only. They come from the `chat`
+rule, which repositories extend like the other rules, as
+[Modes](modes.md) describes.
+
+A chat waits for the user to speak first unless it opens on a task. An agent
+whose tool takes instructions apart from the first message gets them so.
+Another agent gets them as its first message, which starts a turn. That message
+therefore asks only for a short reply, or carries the task.
+
+### Launcher
+
+A chat's launcher runs where only the checkout's path has a value. Shoal
+refuses a launcher that uses another workspace placeholder, rather than pass it
+the placeholder's literal text.
+
+## Scope
+
+Every chat is scoped, as a workspace's processes are. Its agent carries a scope
+token that covers the chat and the spaces below it. The chat keeps the token
+across stops and restores. Only the user's own terminal thus acts unscoped.
+[Scope](permissions.md#scope) says what a scope allows.
+
+The agent follows the rules of a workspace's agent, without what needs a
+worktree. It opens workspaces and chats only below its chat and in its
+repository. It never takes over a space outside its scope.
+
+### Proposals
+
+A chat's agent proposes issues where its permissions say so, as a workspace's
+agent does. The proposal records no branch or commit, since a chat has none.
+Approval opens the issue from the chat's checkout and records it as the chat's.
+
+A chat never proposes a PR, since it has no branch.
+
+## The chat's agent
+
+A chat's agent runs under the execution wrapper as a tracked execution of its
+chat. It takes the path a workspace's agent takes. Launches, stops, restores,
+wakes, exit reports, turn state and restarts are thus one code path for both
+kinds of space. The chat runs while that execution is recorded.
+
+The agent's mode's weight decides its capacity as for a workspace's agent, as
+[Agent queue](queue.md) describes. This includes the restore of an idle agent,
+which waits for an update. A user who wants it sooner attaches to the chat.
+
+Only the agent's clean exit differs by kind. It notifies no one, since the user
+is in that conversation.
+
+### Turn state
+
+A chat's agent runs the turn-state hooks of a workspace's agent. It runs no
+worktree hooks or lifecycle permission rules, since those need a worktree.
+`agent-state` and `turn-failed` act on the space they run in, and record the
+chat's state as a workspace's.
+
+The execution's session files keep the session, so the chat can move. The
+agent's state ends with its execution, as a workspace agent's does. Keep-awake
+reads it as it reads a workspace agent's.
+
+### Stop and restore
+
+A stop that keeps the wrapper restores the agent in place. A stop that ends the
+wrapper leaves its stop record for `shoal resume`. When the agent is to come
+back on its own, the record goes to the agent queue instead, which restores the
+chat in the place it ran in.
+
+A stopped chat keeps its record, and with it what
+[Stop and resume](../reference/chats.md#stop-and-resume) lists, until a restore
+runs its agent again.
+
+`shoal resume` resolves each target to a space in one lookup over the shared
+namespace. Its picker, `--all` and a list of names thus act on chats as on
+workspaces. An interrupted turn continues in a chat as in a workspace, and
+`shoal restore --discard-agent` discards a chat's stopped agent as a
+workspace's.
+
+### Events and messages
+
+A chat's starts, renames and removals are journal events. Its agent's starts and
+stops are logged as a workspace agent's.
+
 A chat's messages, including the user's request to rename it, wait and reach
-its agent as a workspace's do; a removed space, of either kind, gives the user
-the alerts its unread alerts stand for.
-A chat passes a thread up to the user, who attends it. The approval
-requests of the spaces below it come to it when it is the nearest space above
-them with an agent, and it approves them by its own permissions or grants, as
-a parent workspace does, and otherwise denies or passes them up; those it
-has not decided go to the user when its agent stops or it is removed, as with
-any deciding space. A repository may have several chats, so each call starts a new
-one, placed as other launches are. A chat has a name as a workspace has, a label that may repeat; its files are
-kept under its ID. A chat starts under its default name without asking
-the user for one: its agent learns what the work is and renames the chat with
-`shoal rename`. Renaming changes the record, not the zmx session, which zmx
-names only at creation. A place that
-hosts a space, a workspace or a chat, takes a new label only while it still
-shows the label Shoal gave it, since another label is the user's: a chat's its
-old name, a workspace's the label its previous title rendered. A place labelled
-before its workspace's template, issue or branch changed keeps that stale label
-rather than risk overwriting the user's. The daemon records the chat
-before the tab or session that hosts it opens, which carries its name, and a detach
-from its zmx session names its number; the chat's record names
-the session it runs in, so `shoal attach` finds it there, not by a session name
-zmx may have suffixed, and the chat labels the session with its ID, so the
-chat's removal closes a session Shoal created and no workspace's end does. A chat waits for the user to speak first unless it opens on a
-task: an agent that takes instructions apart from the first message gets them
-so, and another gets them as its first message, which starts a turn and so asks
-only for a short reply or carries the task.
-A chat's launcher runs where only the checkout's path has a value, so one that
-uses another workspace placeholder is refused rather than given the literal text.
-A Happy chat has no terminal to focus: like a workspace Happy session it starts
-detached, as Happy's daemon would start it, so the user continues it in the
-Happy app.
-A chat's agent runs the turn-state hooks a workspace's agent runs, without the
-worktree hooks and lifecycle permission rules, which need a worktree. The
-`agent-state` and `turn-failed` commands act on the space they run in and record
-the chat's state as a workspace's, and the execution's session files keep the
-session so the chat can move. Its state ends with its agent's execution, as a
-workspace agent's does; keep-awake reads it as a workspace agent's.
+its agent as a workspace's do. A removed space, of either kind, gives the user
+the alerts that its unread alerts stand for.
 
-A chat may also belong to no repository: a mode with `repository = false`,
-such as the built-in `orchestrate`, starts it in `root_dir`, with the global
-config alone, as a master session whose scope reaches every space on the
-machine. It starts work below itself in any repository, receives what its
-subtree reports as any parent does, and acts on other spaces as a coordinator
-acts below it, while what the scope keeps from every agent stays the user's,
-so the user can hand coordination to a tracked, scoped agent. Every registered
-repository counts as its own, so its forge actions take the repository they
-act in and their permissions as that repository's config resolves them, and
-its proposals belong to that repository; it links nothing, since its links would name no one
-repository.
-In a repository that is not registered, it opens an issue only directly,
-since a proposal belongs to a registered repository.
+## Name and place
+
+A chat starts under its default name without asking the user for one. Its agent
+learns what the work is and renames the chat with `shoal rename`.
+
+A chat's name is a label, as a workspace's is, and may repeat. Its files are
+kept under its ID.
+
+Renaming changes the record, not the zmx session, since zmx names a session
+only when it creates it.
+
+### Recording the chat first
+
+The daemon records the chat before the tab or session that hosts it opens. The
+place thus carries the chat's name, and a detach from its zmx session names its
+number.
+
+The chat's record names the session it runs in. `shoal attach` thus finds the
+chat there, not by a session name that zmx may have suffixed. The chat labels
+the session with its ID, so the chat's removal closes a session Shoal created,
+and no workspace's removal does. [Terminal hosts](terminals.md) says how labels
+carry ownership.
+
+### Happy chats
+
+A Happy chat has no terminal to focus. It starts detached, as a workspace's
+Happy session does, so the user continues it in the Happy app.
+
+## Removal
+
+Only removal ends a chat: `shoal rm`, or space cleanup. Removing the chat first
+removes the spaces below it, through the path that removes any space's
+children.
+
+Cleanup treats a chat as a workspace whose worktree is always clean, pushed and
+merged. It counts the chat's running agent as use, a queued restore as a queued
+agent, and its saved stopped work as a workspace's. Merged cleanup counts the
+chat's idle time from when its agent stopped. [Completion and
+cleanup](cleanup.md) says how cleanup decides.
+
+## Coordination
+
+A workspace a chat opens is its child in the one tree of spaces, which
+[Spaces](spaces.md) describes. Shoal thus knows which chat coordinates which
+workers. A workspace created below another workspace stays there.
+
+Reopening the workspace outside a chat, for its issue or a picked branch,
+returns it to the user. A start of its own agent leaves it where it is, with
+`--in` or with the `--branch` it has.
+
+A chat opens workspaces only in its own repository.
+
+### Events of the spaces below
+
+A stopped chat passes the events of the spaces below it on up, to the user at
+the top. A chat that waits for its automatic restore keeps them.
+
+A chat passes a thread up to the user, who attends it.
+
+### Approval requests
+
+The approval requests of the spaces below a chat come to it when it is the
+nearest space above them with an agent. It decides them as a parent workspace
+does, by its own permissions or grants, as [Spaces](spaces.md) describes.
+
+Once the chat's agent stops, or the chat is removed, the requests it has not
+decided go to the user, since no one attends them in the chat.
+
+## Chat in a workspace's worktree
+
+A chat may run in a ready workspace's worktree instead of the checkout. It
+debugs, audits or reviews the workspace's live work, committed and uncommitted.
+It uses the commands that read a branch, rather than reading another worktree
+by path.
+
+### One editing agent
+
+A workspace has one editing agent, its own. A chat in its worktree reads and
+does not edit. Its instructions say so. Nothing stops it from editing files,
+since Shoal does not yet restrict the filesystem, as
+[Overview](overview.md#filesystem-restrictions-decided-policy-not-implemented)
+says.
+
+The daemon keeps the workspace's own agent one. It refuses to queue a launch in
+an existing workspace while that workspace's agent runs, waits in the queue or
+is stopped awaiting `shoal resume`. The CLI, coordinators and apps thus get one
+answer. A start on a terminal asks instead of refusing, since the user is there
+to choose.
+
+A last session gives way, since its agent ended on its own. A stopped or asleep
+agent gives way only to a start with `--replace`. That start discards it
+through the operation `shoal restore --discard-agent` runs, so replacing needs
+the right to discard. A running agent never gives way, so a start never cuts
+off a live turn.
+
+### Not the workspace's child
+
+A chat in a worktree stays a chat, with its own identity, scope, temporary
+directory and messages. It is not the workspace's child: a child's threads and
+approvals go to its parent's agent, while the user attends a chat. The Shoal
+commands it runs thus never act as the workspace's agent.
+
+Its scope reads the workspace, as well as the chat and the spaces below it. It
+refuses any request that changes the workspace.
+
+The chat's record names the workspace. A restore therefore runs the chat there
+again. Commands that take the workspace from the directory act on the
+workspace, and those that act on chats keep acting on the chat.
+
+### The workspace's lifetime
+
+A running chat in a workspace counts as use, so no unattended removal takes the
+workspace from under it. A chat Shoal saved counts as the workspace's saved
+stopped work. It keeps the workspace from idle cleanup but not from merged
+cleanup.
+
+Removing the workspace first removes its chats, through the chat removal path.
+A workspace one of them opened that cannot go thus keeps the chat, which keeps
+the workspace.
+
+Nothing moves a session between directories. A chat about another workspace is
+a new chat.
+
+## Master session
+
+A chat may belong to no repository. A mode with `repository = false`, such as
+the built-in `orchestrate`, starts it in `root_dir` with the global config
+alone. Such a chat is a master session, whose scope reaches every space on the
+machine.
+
+A master session lets the user hand coordination to a tracked, scoped agent. It
+starts work below itself in any repository. It receives what its subtree
+reports, as any parent does. It acts on other spaces as a coordinator acts on
+the spaces below it. What the scope keeps from every agent stays the user's.
+
+### Repositories
+
+Every registered repository counts as a master session's own. Its forge actions
+take the repository they act in, with the permissions that repository's config
+resolves. Its proposals belong to that repository.
+
+A master session links nothing, since its links would name no one repository.
+
+In a repository that is not registered, it opens an issue only directly, since a
+proposal belongs to a registered repository.

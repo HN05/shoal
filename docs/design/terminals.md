@@ -11,7 +11,12 @@ template's `{name}` also gives. The user may rename the space or ask the
 agent to choose a name, a fixed alert refused without a running agent,
 which would leave it unread until removal. A rename relabels the places the
 space's agents run in and those Shoal created for it, wherever the command runs: each through the host
-that opened it, on the server its record names, as closing reaches it. An optional `terminal.herdr.tab_name` template
+that opened it, on the server its record names, as closing reaches it.
+A place takes a new label only while it still shows the label Shoal gave it,
+since another label is the user's: a chat's old name, or the label a
+workspace's previous title rendered. A place labelled before its workspace's
+template, issue or branch changed keeps that stale label rather than risk
+overwriting the user's. An optional `terminal.herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue
 fields once, and updates the branch after allocation. The resolved template travels
 with the launch plan so the worker preserves the caller's naming choice. Shoal
