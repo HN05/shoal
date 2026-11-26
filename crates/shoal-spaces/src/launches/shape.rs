@@ -1,6 +1,5 @@
 //! The shape of a launch: its mode, the kind of space it starts in, and
-//! whether that space has a repository, as [`launches::shape`] decides it
-//! from what the launch names and the settings that apply to it.
+//! whether that space has a repository.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -15,26 +14,22 @@ use crate::{
 };
 use shoal_core::launches::{self, shape::KindSource};
 
-/// What a launch starts as.
 pub struct Shape {
     pub kind: SpaceKind,
     pub mode: ModeName,
-    /// Whether its space has a repository.
     pub repository: bool,
 }
 
 impl Shape {
-    /// Whether `launch` in this shape starts the agent of the existing
-    /// workspace it names rather than a new space.
+    /// Rather than a new space.
     pub(super) fn starts_worker(&self, launch: &Launch) -> bool {
         self.kind == SpaceKind::Workspace && launch.in_workspace.is_some()
     }
 }
 
 impl Spaces {
-    /// The shape of `launch` for `caller`: in its [`Self::launch_mode`],
-    /// refused where the labels of its item call for several, the kind of
-    /// space that mode starts in.
+    /// In its [`Self::launch_mode`], refused where the labels of its item
+    /// call for several modes.
     pub async fn launch_shape(
         &self,
         daemon: &dyn Daemon,
@@ -45,9 +40,8 @@ impl Spaces {
         self.shape_in(daemon, launch, mode, caller).await
     }
 
-    /// The shape a check of `launch` for `caller` places it in, as
-    /// [`Self::launch_shape`] decides it; none where the labels of its item
-    /// call for several modes, which a terminal's picker chooses among.
+    /// None where the labels of its item call for several modes, which a
+    /// terminal's picker chooses among.
     pub(super) async fn checked_shape(
         &self,
         daemon: &dyn Daemon,
@@ -60,10 +54,9 @@ impl Spaces {
         }
     }
 
-    /// The mode of `launch` for `caller`: the one it names, else the one
-    /// the labels of the issue or PR it names call for, else the
-    /// [`launches::default_mode`]; the modes whose labels its item carries
-    /// where they call for several.
+    /// The one it names, else the one the labels of the issue or PR it names
+    /// call for, else the [`launches::default_mode`]. Returns the modes the
+    /// labels call for where they call for several.
     async fn launch_mode(
         &self,
         daemon: &dyn Daemon,
@@ -82,8 +75,6 @@ impl Spaces {
         )
     }
 
-    /// The shape of `launch` in `mode` for `caller`: the kind of space that
-    /// mode starts in, and whether it has a repository.
     async fn shape_in(
         &self,
         daemon: &dyn Daemon,
@@ -100,11 +91,9 @@ impl Spaces {
         })
     }
 
-    /// The kind of space `launch` creates in `mode`, which must exist, for
-    /// `caller`, and whether `mode` starts it in a repository: in the
-    /// existing workspace the launch names, the mode's kind there decides
-    /// whether the agent is the workspace's worker or a chat in its
-    /// worktree.
+    /// `mode` must exist. In the existing workspace the launch names, the
+    /// mode's kind there decides whether the agent is the workspace's worker
+    /// or a chat in its worktree.
     pub(super) async fn launch_kind(
         &self,
         daemon: &dyn Daemon,
@@ -126,12 +115,10 @@ impl Spaces {
         }
     }
 
-    /// The modes `launch` may start in for `caller`, each with the space it
-    /// starts, as the machine it starts on defines them: through the hub
-    /// for another joined machine it names, else here, under the config
-    /// the repository it starts in tracks where this machine has none of
-    /// it: as a launch another machine forwarded carries it, or as the
-    /// machine of the space it goes below reads it.
+    /// As the machine it starts on defines them: through the hub for another
+    /// joined machine it names, else here. Where this machine does not have
+    /// the repository, reads the config that repository tracks, as a
+    /// forwarded launch carries it or as the parent's machine reads it.
     pub async fn launch_modes(
         &self,
         daemon: &dyn Daemon,
@@ -157,8 +144,7 @@ impl Spaces {
         self.local_launch_modes(daemon, &launch, caller).await
     }
 
-    /// The modes `launch` may start in on this machine for `caller`, each
-    /// with the space it starts, from the settings of the target
+    /// From the settings of the target
     /// [`launches::shape::settings_target`] finds.
     async fn local_launch_modes(
         &self,
@@ -171,15 +157,11 @@ impl Spaces {
         self.target_modes(daemon, target).await
     }
 
-    /// The modes the settings of `target` define, each with the space it
-    /// starts.
     async fn target_modes(&self, daemon: &dyn Daemon, target: ConfigTarget) -> Result<ModeShapes> {
         let settings = daemon.target_settings_with_templates(target).await?;
         Ok(modes::shapes(&settings.modes))
     }
 
-    /// The ID of the workspace whose worktree the start of `launch` was
-    /// made in.
     pub(super) async fn launch_directory_workspace(
         &self,
         launch: &Launch,

@@ -1,5 +1,5 @@
-//! The branch a launch's new workspace starts on: the one it names as
-//! typed, a branch link's, or the one earlier work on its issue left.
+//! The branch a launch's new workspace starts on: the one it names as typed,
+//! a branch link's, or the one earlier work on its issue left.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, ensure};
@@ -13,7 +13,6 @@ use crate::{
 };
 use shoal_core::launches::workspace;
 
-/// Open the pushed `branch` a branch link names.
 pub(super) async fn branch_creation(branch: &str, creation: &mut Creation) -> Result<()> {
     git::check_branch_name(branch)?;
     creation.existing = Some(git::remote_ref("origin", branch));
@@ -21,11 +20,9 @@ pub(super) async fn branch_creation(branch: &str, creation: &mut Creation) -> Re
 }
 
 impl Spaces {
-    /// Settle the branch `creation` names as typed in `repo`, which
-    /// `selector` names: the one of `workspaces` that already has it, which
-    /// the start goes into instead, else the existing branch `creation`
-    /// then opens, else the new branch it creates, which a name already
-    /// taken would suffix and is refused.
+    /// The workspace that already has the branch, which the start goes into
+    /// instead, else the existing branch, else a new branch. A name already
+    /// taken would get a suffix, so it is refused.
     pub(super) async fn settle_branch(
         &self,
         daemon: &dyn Daemon,
@@ -70,8 +67,7 @@ impl Spaces {
     }
 }
 
-/// The remote and branch `name` names in `repo`, if it names a remote one,
-/// and the branch names a new branch must not take.
+/// Also returns the names a new branch must not take.
 pub async fn branches(
     repo: &Repository,
     name: &str,
@@ -93,17 +89,16 @@ pub async fn branches(
         let message = format!("repository {name} ({}) was removed", repo.id);
         return Err(crate::refusal::Refusal::new(crate::refusal::Reason::NotFound, message).into());
     }
-    // As while a removal deletes its files: named by its ID, which a
-    // retry of either takes.
+    // As while a removal deletes its files: named by its ID, which a retry
+    // of either takes.
     Err(error.context(format!(
         "read the branches of repository {name} ({})",
         repo.id
     )))
 }
 
-/// `creation` on the branch the issue at `url` with `title` settles in
-/// `repo` when nothing else names one: the branch or one of `workspaces`
-/// earlier work on it left, else a new branch named after it.
+/// The branch, or the workspace, earlier work on the issue left, else a new
+/// branch named after it.
 pub(super) async fn issue_settled(
     workspaces: &[Workspace],
     repo: &Repository,
@@ -119,10 +114,9 @@ pub(super) async fn issue_settled(
     }
 }
 
-/// `creation` on the branch `name` of an issue at `issue_url`: the local
-/// branch or one of `workspaces` earlier work on the issue left, which
-/// reopens rather than suffixing a new branch and is refused here when it
-/// cannot, else the new branch `name`.
+/// The local branch or workspace earlier work on the issue left reopens
+/// rather than getting a suffixed new branch, and is refused here when it
+/// cannot. Else the new branch `name`.
 async fn issue_creation(
     workspaces: &[Workspace],
     repo: &Repository,
@@ -167,7 +161,6 @@ async fn issue_creation(
     Ok(creation)
 }
 
-/// Refuse to reopen `workspace` unless it is ready.
 fn ensure_reopens(workspace: &Workspace) -> Result<()> {
     crate::target_checks::ready(workspace, workspace.state).require()
 }

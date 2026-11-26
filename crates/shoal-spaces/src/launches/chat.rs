@@ -1,7 +1,5 @@
-//! Where a launch's new chat goes: in a repository's checkout, in the
-//! worktree of the workspace it names, or without a repository in
-//! `root_dir`, and the issue it starts on, which a chat takes only as the
-//! launch names it.
+//! Where a launch's new chat goes, and the issue it starts on, which a chat
+//! takes only as the launch names it.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, ensure};
@@ -22,8 +20,6 @@ use crate::{
 use shoal_core::launches;
 
 impl Spaces {
-    /// Where the new chat `launch` starts in `shape` goes for `caller`,
-    /// with the issue it starts on.
     pub(super) async fn chat_placement(
         &self,
         daemon: &dyn Daemon,
@@ -41,9 +37,8 @@ impl Spaces {
         })
     }
 
-    /// Settle where the new chat `launch` starts in `shape` runs for
-    /// `caller`, and the issue it starts on, read; one a picker has yet to
-    /// choose stays open where it `picks`.
+    /// Reads the issue it starts on. One a picker has yet to choose stays
+    /// open where it `picks`.
     async fn settle_chat(
         &self,
         daemon: &dyn Daemon,
@@ -63,7 +58,7 @@ impl Spaces {
         let issue = named_issue(issue, picks)?;
         let home =
             (self.launch_chat_home(daemon, launch, shape, (named, issue.as_ref()), caller)).await?;
-        // A named parent is never the workspace the chat runs in; one it
+        // A named parent is never the workspace the chat runs in. One it
         // leaves out is the caller's own space, wherever the chat runs.
         if let Home::Worktree(workspace) = &home {
             (self.ensure_parent_not_host(daemon, Some(workspace), launch.parent.as_ref())).await?;
@@ -83,10 +78,10 @@ impl Spaces {
         Ok((home, issue))
     }
 
-    /// Where the chat `launch` starts runs: in the worktree of the
-    /// workspace it names, without a repository for a `shape` that has
-    /// none, else in the checkout of the repository it `names`, or that of
-    /// the issue it starts on or of where the start was made.
+    /// In the worktree of the workspace it names, without a repository for a
+    /// `shape` that has none, else in the checkout of the repository it
+    /// `names`, or that of the issue it starts on or of where the start was
+    /// made.
     async fn launch_chat_home(
         &self,
         daemon: &dyn Daemon,
@@ -106,10 +101,9 @@ impl Spaces {
         Ok(Home::Checkout(repository))
     }
 
-    /// The registered repository of the chat `launch` starts, which
-    /// `named` names, else the repository of the `issue` URL it starts on,
-    /// else that of the space it goes below, which a child shares, else
-    /// that of the checkout or worktree the start was made in.
+    /// The one `named` names, else the repository of the `issue` URL, else
+    /// that of the space it goes below, which a child shares, else that of
+    /// the checkout or worktree the start was made in.
     async fn launch_chat_repository(
         &self,
         daemon: &dyn Daemon,
@@ -148,9 +142,8 @@ impl Spaces {
     }
 }
 
-/// Refuse what a chat of `shape` cannot start with: a repository's setup,
-/// which works on its setup branch, and for a chat without a repository
-/// what only one with a repository takes.
+/// Refuses a repository's setup, which works on its setup branch, and for a
+/// chat without a repository what only one with a repository takes.
 fn ensure_chat_takes(launch: &Launch, shape: &Shape) -> Result<()> {
     ensure!(
         launch.setup != Some(Setup::Repository),
@@ -162,8 +155,8 @@ fn ensure_chat_takes(launch: &Launch, shape: &Shape) -> Result<()> {
     Ok(())
 }
 
-/// The issue a chat starts on: one the launch names, since a pick needs a
-/// terminal, which leaves it open where it `picks`.
+/// Only one the launch names, since a pick needs a terminal. It stays open
+/// where the launch `picks`.
 fn named_issue(issue: Option<ItemChoice>, picks: bool) -> Result<Option<ItemInput>> {
     match issue {
         Some(ItemChoice::Pick) => {

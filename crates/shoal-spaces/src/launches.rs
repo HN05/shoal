@@ -1,8 +1,5 @@
 //! Launches: starting an agent as a [`Launch`] asks, for a client such as
-//! `shoal start` or for the daemon itself. A launch decides what it leaves
-//! out, its mode, the kind of space it starts in and the repository,
-//! refuses what does not fit them, and starts its agent where they say,
-//! under the caller's scope and permissions.
+//! `shoal start` or for the daemon itself. See `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result};
@@ -31,7 +28,6 @@ pub mod worker;
 pub mod workspace;
 
 impl Spaces {
-    /// Start an agent as `launch`, which `source` made, asks for `caller`.
     pub async fn launch(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -59,16 +55,14 @@ impl Spaces {
                 self.release_carried_hold(&**daemon, (origin, commit)).await;
             }
         }
-        // The machine that forwarded it finds the space through the hub
-        // once it hears of it.
+        // The machine that forwarded it finds the space through the hub once
+        // it hears of it.
         if forwarded && let Ok(launched) = &launched {
             daemon.listed(&launched.space.id).await;
         }
         launched
     }
 
-    /// Start an agent on this machine as `launch`, which `source` made,
-    /// asks for `caller`.
     async fn launch_here(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -108,9 +102,8 @@ impl Spaces {
         Ok(launched)
     }
 
-    /// Record that the user interacted with the agent `launched` started,
-    /// which the user's own start made by hand; a scoped caller's start is
-    /// not theirs.
+    /// Only the user's own start, made by hand, counts. A scoped caller's
+    /// start is not theirs.
     async fn record_launch_interaction(
         &self,
         daemon: &dyn Daemon,
@@ -121,10 +114,8 @@ impl Spaces {
         daemon.record_user_interaction(caller, &space).await;
     }
 
-    /// Register the repository of the space `launch` goes below for
-    /// `caller`, as [`Self::take_parent_repository`] does first in a launch
-    /// that starts here, for a client that settles the rest of the start in
-    /// it.
+    /// As [`Self::take_parent_repository`] does first in a launch that
+    /// starts here, for a client that settles the rest of the start in it.
     pub async fn take_launch_parent_repository(
         &self,
         daemon: &dyn Daemon,
@@ -139,9 +130,9 @@ impl Spaces {
             .await
     }
 
-    /// Name the spaces `launch` names by ID: the space it goes below, here
-    /// or on another joined machine, and the workspace it starts in, the
-    /// current one the start was made in when it names none.
+    /// The space it goes below, here or on another joined machine, and the
+    /// workspace it starts in: the one the start was made in when it names
+    /// none.
     pub async fn select_launch_spaces(
         &self,
         daemon: &dyn Daemon,
@@ -159,9 +150,9 @@ impl Spaces {
     }
 }
 
-/// The URL of the origin `launch`, which another joined machine forwarded
-/// here, carried commits of, with those commits, each once, which this
-/// machine holds for it until it ends: its base's and the one keeping a
+/// For a launch another joined machine forwarded: the URL of the origin it
+/// carried commits of, with those commits, each once, which this machine
+/// holds until the launch ends. They are its base's and the one that keeps a
 /// copy's files.
 pub fn carried_commits(launch: &Launch) -> Option<(String, Vec<shoal_refs::CommitId>)> {
     let carried = launch.forwarded.as_ref()?;

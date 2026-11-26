@@ -1,8 +1,6 @@
-//! Where a launch of a workspace starts: the registered repository it, or
-//! the issue or link it names, belongs to, else the one of the checkout or
-//! worktree the start was made in; and what the positional argument starts
-//! on, an issue, or a PR's or a branch link's branch, which fills the
-//! creation.
+//! Where a launch of a workspace starts: its repository, and what the
+//! positional argument starts on, an issue or a PR's or branch link's
+//! branch.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, ensure};
@@ -19,18 +17,16 @@ use crate::{
 };
 use shoal_core::launches::{LaunchState, workspace};
 
-/// The repository and issue a launch of a workspace starts on.
 pub(super) struct Target {
     pub repo: Repository,
     pub issue: Option<ItemInput>,
 }
 
 impl Spaces {
-    /// The target of `launch`, whose positional argument classifies as a
-    /// repository, an issue, or a PR or branch link, which completes
-    /// `creation`, fetching a PR's branches where it `fetches`, from what
-    /// `state` holds for `caller`. A copy goes in the copied workspace's
-    /// repository unless the launch names one.
+    /// The positional argument classifies as a repository, an issue, or a PR
+    /// or branch link, which completes `creation`. Fetches a PR's branches
+    /// where it `fetches`. A copy goes in the copied workspace's repository
+    /// unless the launch names one.
     pub(super) async fn workspace_target(
         &self,
         daemon: &dyn Daemon,
@@ -95,9 +91,8 @@ impl Spaces {
         Ok(Target { repo, issue: None })
     }
 
-    /// The target of `launch` on the PR `--pr` names, which completes
-    /// `creation` as a positional PR link does, refusing what that link
-    /// refuses beside it.
+    /// Completes `creation` as a positional PR link does, and refuses what
+    /// that link refuses beside it.
     async fn flagged_pull_target(
         &self,
         daemon: &dyn Daemon,
@@ -121,9 +116,8 @@ impl Spaces {
         Ok(Target { repo, issue: None })
     }
 
-    /// The registered repository of the PR `pull` that `--pr` names, among
-    /// those `state` holds: the one `launch` names, else that of the PR's
-    /// URL, else as for an issue number; a URL must be a PR's in it.
+    /// The one `launch` names, else that of the PR's URL, else as for an
+    /// issue number. A URL must be a PR's in it.
     async fn flagged_pull_repository(
         &self,
         daemon: &dyn Daemon,
@@ -157,10 +151,9 @@ impl Spaces {
         Ok(repo)
     }
 
-    /// The target in the repository `named` names, else that of `issue`'s
-    /// URL, else that of the space the launch goes below, which a child
-    /// shares, else that of the checkout or worktree the start was made in,
-    /// as `state` holds them.
+    /// The repository `named` names, else that of `issue`'s URL, else that of
+    /// the space the launch goes below, which a child shares, else that of
+    /// the checkout or worktree the start was made in.
     async fn target(
         &self,
         daemon: &dyn Daemon,
@@ -194,9 +187,7 @@ impl Spaces {
         Ok(Target { repo, issue })
     }
 
-    /// The registered repository a PR or branch link of `launch` belongs to,
-    /// among those `state` holds: the one `--repo` names, else its
-    /// remote's, else the current one.
+    /// The one `--repo` names, else its remote's, else the current one.
     async fn linked_repository(
         &self,
         daemon: &dyn Daemon,
@@ -223,9 +214,7 @@ impl Spaces {
         }
     }
 
-    /// The repository of the checkout or worktree the start of `launch` was
-    /// made in, as `state` holds them, refused with `hint` when there is
-    /// none.
+    /// Refused with `hint` when there is none.
     async fn current_repository(
         &self,
         daemon: &dyn Daemon,
@@ -242,9 +231,8 @@ impl Spaces {
             .await
     }
 
-    /// Complete `creation` for the PR `pull` names in `repo`, which
-    /// `caller` reads, among the `workspaces` it sees, fetching its branches
-    /// where it `fetches`.
+    /// Reads the PR as `caller`, among the `workspaces` it sees. Fetches its
+    /// branches where it `fetches`.
     async fn pull_target(
         &self,
         daemon: &dyn Daemon,
@@ -262,10 +250,9 @@ impl Spaces {
     }
 }
 
-/// Settle `creation` on `pull` as [`workspace::pull_creation`] does, short
-/// of fetching its branches: a fork's head refuses what only a branch
-/// takes, and another PR opens its head branch, in the one of `workspaces`
-/// that owns it if any.
+/// As [`workspace::pull_creation`] does, short of fetching its branches: a
+/// fork's head refuses what only a branch takes, and another PR opens its
+/// head branch, in the workspace that owns it if any.
 fn pull_settled(
     workspaces: &[Workspace],
     repo: &Repository,
@@ -279,8 +266,7 @@ fn pull_settled(
     Ok(())
 }
 
-/// The only registered repository among `repos` whose origin the issue
-/// `item` belongs to.
+/// Refuses unless exactly one registered repository's origin has the issue.
 async fn item_repository<'a>(repos: &'a [Repository], item: &ItemRef) -> Result<&'a Repository> {
     item.of_kind(crate::forge::items::link::ItemKind::Issue.into())?;
     let retry = "shoal start <repository> --issue <url>";

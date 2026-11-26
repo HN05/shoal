@@ -1,6 +1,5 @@
-//! A launch that starts the worker of an existing workspace: its own agent,
-//! started as a new workspace's is, with no space created, in place of its
-//! stopped agent where the launch replaces that.
+//! A launch that starts the worker of an existing workspace, with no space
+//! created, in place of its stopped agent where the launch replaces that.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result};
@@ -18,11 +17,10 @@ use crate::{
 };
 
 impl Spaces {
-    /// Queue the worker `launch`, which `source` made, starts in `shape` in
-    /// the workspace it names, on the workspace's issue unless it names a
-    /// task, once what blocks it is done: the agent it names, else
-    /// `agent.default`, refused without either. A launch that replaces the
-    /// workspace's stopped agent discards it as it queues.
+    /// On the workspace's issue unless the launch names a task, once what
+    /// blocks it is done. The agent it names, else `agent.default`, refused
+    /// without either. A launch that replaces the workspace's stopped agent
+    /// discards it as it queues.
     pub(super) async fn launch_worker(
         &self,
         daemon: &dyn Daemon,
@@ -52,11 +50,9 @@ impl Spaces {
         Ok(queued(workspace, entry))
     }
 
-    /// Refuse what starting the worker `launch` names in `shape` for
-    /// `caller` would refuse, as [`Self::launch_worker`] starts it, short
-    /// of queuing it: a workspace outside a scoped caller's tree,
-    /// permissions it does not hold, blockers no one knows, and an agent
-    /// of the workspace's own it does not replace; returns the workspace.
+    /// Refuses short of queuing: a workspace outside a scoped caller's tree,
+    /// permissions it does not hold, blockers no one knows, and an agent of
+    /// the workspace's own it does not replace. Returns the workspace.
     pub(super) async fn check_worker(
         &self,
         daemon: &dyn Daemon,
@@ -85,9 +81,8 @@ impl Spaces {
         Ok(workspace)
     }
 
-    /// Refuse the worker of `launch` in `workspace` while the workspace has
-    /// an agent of its own that the launch does not replace, as queuing it
-    /// refuses it.
+    /// Refuses while the workspace has an agent of its own that the launch
+    /// does not replace, as queuing it refuses it.
     pub(super) async fn check_takes_worker(
         &self,
         daemon: &dyn Daemon,
@@ -101,8 +96,8 @@ impl Spaces {
         }
     }
 
-    /// Refuse the scoped `caller` a worker it may not start in the
-    /// workspace `selector` names, or start regardless of the limits.
+    /// Also refuses starting regardless of the limits where the caller may
+    /// not.
     async fn ensure_worker_allowed(
         &self,
         daemon: &dyn Daemon,
@@ -126,9 +121,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// What holds the worker of `request` in `workspace`: what it names,
-    /// and, unless it starts now or on a task of its own, the issues the
-    /// forge records as blocking the workspace's issue.
+    /// What it names, and, unless it starts now or on a task of its own, the
+    /// issues the forge records as blocking the workspace's issue.
     async fn worker_blockers(
         &self,
         daemon: &dyn Daemon,
@@ -154,8 +148,6 @@ impl Spaces {
     }
 }
 
-/// The launch of the worker of `workspace`, which waits as its queue
-/// `entry`.
 fn queued(workspace: Workspace, entry: crate::model::QueueEntry) -> Launched {
     Launched {
         space: Box::new(workspace.into()),
@@ -167,13 +159,11 @@ fn queued(workspace: Workspace, entry: crate::model::QueueEntry) -> Launched {
     }
 }
 
-/// A worker's launch, with what the launch names as blocking it.
 struct WorkerRequest {
     launch: LaunchRequest,
     blockers: Vec<String>,
 }
 
-/// The worker `launch` asks for in `shape`, which `source` made.
 fn worker_request(launch: Launch, shape: Shape, source: LaunchSource) -> WorkerRequest {
     WorkerRequest {
         launch: super::space::agent_request(&launch, &shape.mode, source),

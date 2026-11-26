@@ -1,7 +1,5 @@
-//! What checking a launch's new workspace before a start's pickers
-//! refuses: the workspace settled as its start settles it, short of
-//! fetching a PR's branches, with what a picker has yet to choose left
-//! open, then what creating it would refuse, without creating anything.
+//! Checking a launch's new workspace before a start's pickers, as its start
+//! settles it, short of fetching a PR's branches or creating anything.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -15,13 +13,11 @@ use crate::{
 };
 
 impl Spaces {
-    /// Refuse what starting the new workspace `launch` names for `caller`
-    /// would refuse, settled as [`Self::workspace_placement`] settles it
-    /// short of fetching a PR's branches, and with what a picker has yet to
-    /// choose left open; returns instead the existing workspace that has
-    /// the branch it names or that its issue reopens, which the start goes
-    /// into, refusing one with an agent of its own the launch does not
-    /// replace.
+    /// Settles as [`Self::workspace_placement`] does, short of fetching a
+    /// PR's branches, with what a picker has yet to choose left open.
+    /// Returns the existing workspace the start goes into instead, the one
+    /// with the branch it names or that its issue reopens, and refuses one
+    /// with an agent of its own the launch does not replace.
     pub(in crate::launches) async fn check_workspace_placement(
         &self,
         daemon: &dyn Daemon,
@@ -37,10 +33,8 @@ impl Spaces {
         Ok(workspace)
     }
 
-    /// Refuse what creating the workspace `launch` names for `caller` would
-    /// refuse, as [`Self::check_workspace_placement`] checks a start, short
-    /// of the agent it starts; returns instead the existing workspace it
-    /// opens.
+    /// As [`Self::check_workspace_placement`] checks a start, without the
+    /// agent. Returns the existing workspace it opens instead.
     pub(in crate::launches) async fn check_workspace_creation(
         &self,
         daemon: &dyn Daemon,
@@ -57,9 +51,8 @@ impl Spaces {
         }
     }
 
-    /// The workspace that owns the existing branch `settled` opens, such
-    /// as the one an issue's earlier work left, which the start reopens,
-    /// found as opening the branch finds it.
+    /// Such as the one an issue's earlier work left, found as opening the
+    /// branch finds it.
     async fn reopened_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -71,9 +64,8 @@ impl Spaces {
         }
     }
 
-    /// Refuse what creating the workspace `settled` describes for `launch`
-    /// would refuse below the parent it goes below, a scoped `caller`'s
-    /// copy confined to its scope as the start confines it.
+    /// Refuses what creating it below its parent would refuse. A scoped
+    /// `caller`'s copy is confined to its scope as the start confines it.
     async fn check_settled(
         &self,
         daemon: &dyn Daemon,
@@ -103,7 +95,6 @@ impl Spaces {
     }
 }
 
-/// The options of the new worktree `creation` describes.
 fn worktree_options(creation: &Creation) -> NewWorktreeOptions<'_> {
     NewWorktreeOptions {
         git_profile: creation.git_profile.as_deref(),

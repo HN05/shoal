@@ -1,7 +1,6 @@
-//! A launch on a CI run: the run read before the start is placed, as the
-//! caller may link it, which settles the launch into the start the run
-//! names, its PR's, its branch's or a chat's, so the rest of the start goes
-//! as for those; the run is linked to the space once the start has one.
+//! A launch on a CI run: reading the run before the start is placed settles
+//! the launch into the start the run names, its PR's, its branch's or a
+//! chat's. The run is linked to the space once the start has one.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result};
@@ -29,10 +28,9 @@ use shoal_core::launches::{
 };
 
 impl Spaces {
-    /// Settle `launch` for `caller` on the CI run it names, if any: the
-    /// run, read in its registered repository, which the launch must not
-    /// name otherwise, starts in a chat in a mode that starts one, and
-    /// otherwise where [`RunStart`] says.
+    /// The run is read in its registered repository, which the launch must
+    /// not name otherwise. A mode that starts a chat starts one; otherwise
+    /// [`RunStart`] says where it starts.
     pub(super) async fn settle_launch_run(
         &self,
         daemon: &dyn Daemon,
@@ -55,8 +53,7 @@ impl Spaces {
         launches::run::settle(launch, (url, &run), start, repo.id.to_string())
     }
 
-    /// The registered repository of the run `input` that `launch` names:
-    /// the one it names with `--repo` or positionally, else that of the
+    /// The one it names with `--repo` or positionally, else that of the
     /// run's URL, or for the number in it the one the start inherits.
     async fn run_repository(
         &self,
@@ -87,10 +84,9 @@ impl Spaces {
         }
     }
 
-    /// Where `caller` reads a run of `repo` it starts on: from its own
-    /// space, whose repository decides whether the run is its own to link,
-    /// acting in `repo` where that space has no repository, or for the user
-    /// from `repo`'s checkout.
+    /// From the caller's own space, whose repository decides whether the run
+    /// is its own to link, acting in `repo` where that space has none. For
+    /// the user, from `repo`'s checkout.
     async fn run_context(&self, repo: &Repository, caller: Option<&Caller>) -> Result<ItemContext> {
         let Some(caller) = caller else {
             return Ok(ItemContext::Checkout(repo.id.clone()));
@@ -103,8 +99,7 @@ impl Spaces {
         })
     }
 
-    /// Whether the mode `launch` names starts a chat for `caller`; the
-    /// default mode starts a workspace.
+    /// The default mode starts a workspace.
     async fn mode_starts_chat(
         &self,
         daemon: &dyn Daemon,
@@ -118,9 +113,8 @@ impl Spaces {
         Ok(kind == SpaceKind::Chat)
     }
 
-    /// Link the CI run a launch was settled on, if any, to the space `id`
-    /// it started for `caller`, related to it. The space started whatever
-    /// happens here, so a failure joins the start's `warnings`.
+    /// Links it as related. The space started whatever happens here, so a
+    /// failure joins the start's `warnings`.
     pub(super) async fn link_launch_run(
         &self,
         daemon: &dyn Daemon,
@@ -140,7 +134,6 @@ impl Spaces {
     }
 }
 
-/// The repository `launch` names with `--repo` or positionally.
 fn named_repository(launch: &Launch) -> Option<&String> {
     let positional = match &launch.target {
         Some(StartTarget::Repository(named) | StartTarget::Number(named)) => Some(named),
@@ -149,9 +142,8 @@ fn named_repository(launch: &Launch) -> Option<&String> {
     launch.repository.as_ref().or(positional)
 }
 
-/// The branch of `repo` other than its default branch that `run` ran on,
-/// where it ran for no PR and its remote has the branch; none for a tag,
-/// which a forge reports in a branch's place.
+/// Only where it ran for no PR and the remote has the branch. None for a
+/// tag, which a forge reports in a branch's place.
 async fn pushed_branch(repo: &Repository, run: &Run) -> Result<Option<String>> {
     let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
     let Some(other) = RunStart::other_ref(run, default.as_str()) else {
