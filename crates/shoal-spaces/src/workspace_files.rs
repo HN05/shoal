@@ -356,9 +356,9 @@ impl Spaces {
         self.delete_files(&home, files).await
     }
 
-    /// Takes the files of every workspace without a running agent or
-    /// command, or whose end is unresolved, and of every removed space. No
-    /// execution starts while a repository's files are chosen and deleted.
+    /// Takes the files of every removed space, and of every workspace with no
+    /// execution that runs or whose end is unresolved. No execution starts
+    /// while a repository's files are chosen and deleted.
     pub async fn remove_idle_files(&self, daemon: &dyn Daemon) -> Result<Vec<AttachedFile>> {
         let mut deleted = Vec::new();
         for key in self.files_homes(daemon).await? {
