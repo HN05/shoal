@@ -311,9 +311,11 @@ workspace. The project starts before the post-setup hook and before the agent
 that waits for setup. A failure marks the workspace failed, and `shoal setup`
 retries it.
 
-The project then belongs to the workspace's own agent once it starts, and
-until then to whoever created the workspace. An agent that starts in such a
-workspace while the project is stopped starts it first.
+While the workspace's own agent waits to start, the project belongs to the
+user, and the agent takes it over once it starts. In a workspace created
+without an agent, the project belongs to whoever created the workspace. An
+agent that starts in such a workspace while the project is stopped starts it
+first.
 
 ### Lifetime
 
