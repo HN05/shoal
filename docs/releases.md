@@ -6,13 +6,10 @@ Entering the already-tagged version on `main` resumes an interrupted publication
 from that immutable tag without creating another version commit.
 
 The workflow waits for the required CI checks on the `main` commit it releases,
-and stops unless both passed. It then updates both Cargo versions, checks their
-formatting and Clippy, creates and merges a version PR, checks the merged commit
-the same way when `main` moved meanwhile, and publishes its
-immutable tag and Forgejo release. Notes list merged PRs excluding release preparation
-since the nearest earlier published ancestor release, link referenced issues, and
-are copied to GitHub, with runtime dependency links to each host's tagged README.
-Dependent jobs then work from that exact tag:
+and stops unless both passed. It then updates both Cargo versions, creates and
+merges a version PR, and publishes its immutable tag and Forgejo release.
+[Distribution](design/distribution.md#releases) says which checks it runs and
+what the notes hold. Dependent jobs then work from that exact tag:
 the bare binary `shoal-vX.Y.Z-<os>-<arch>` is cross-built
 for `linux` (static musl) and `macos` on `x86_64` and `arm64`, with
 `shoal-vX.Y.Z-macos-<arch>-app.tar.gz` holding only the signed binary as a
@@ -37,13 +34,15 @@ token. There is no separate Homebrew or GitHub workflow to run.
   read and write access to Contents; it creates the GitHub release and assets.
 - `MACOS_SIGNING_PEM`: Actions secret holding the unified PEM (certificate and
   private key) of Shoal's self-signed code-signing certificate, which signs the
-  macOS binaries and `Shoal.app`. Store the maintainer's existing copy; a new certificate
-  changes the requirement in `.forgejo/scripts/sign-macos.sh` and makes every
-  user grant access again.
+  macOS binaries and `Shoal.app`. Store the maintainer's existing copy, which
+  `rcodesign generate-self-signed-certificate --person-name "Shoal"
+  --validity-days 7300` made. A new certificate changes the requirement in
+  `.forgejo/scripts/sign-macos.sh`, and
+  [every user grants access again](design/distribution.md#macos-signing).
 - A `docker` Actions runner with HTTPS access to the forge, registries, and GitHub.
 
 No SSH access is needed. The workflow respects branch protection and will stop
-if required approvals or checks prevent merging. It never force-merges.
+if required approvals or checks prevent merging.
 Failed runs retain their release branch or PR for inspection. Existing tags are
 never moved. If publication succeeded but a later job failed, rerun the failed
 jobs in the same workflow run; they reuse the published tag rather than creating

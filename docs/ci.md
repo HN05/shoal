@@ -23,9 +23,8 @@ that depend on them.
 A draft PR runs no checks. Taking it out of draft starts one run: `shoal ready`
 does this by removing the `WIP:` title prefix.
 
-The release workflow's PR and version commit skip the checks.
-`scripts/release.py` releases only a `main` commit whose required checks
-passed, and runs only formatting and Clippy on the version change.
+The release workflow's PR and version commit skip the checks, as
+[distribution](design/distribution.md#checks) explains.
 [releases.md](releases.md) says how to make a release.
 
 ## Shoal runners
