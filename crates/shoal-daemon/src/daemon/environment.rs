@@ -33,23 +33,40 @@ impl Check {
 }
 
 fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
-    Tool::dependencies()
-        .map(|(tool, dependency)| {
-            let program = tool.program();
-            let executable = path.and_then(|path| crate::fsutil::executables::find_executable(OsStr::new(program), path));
-            let (status, message) = match executable {
-                Some(path) => (CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
-                None => (
-                    match dependency { Dependency::Required => CheckStatus::Error, Dependency::Optional(_) => CheckStatus::Warning },
-                    format!(
-                        "{program} is missing or not executable on the daemon's PATH{}; install it and restart the daemon with the updated PATH",
-                        match dependency { Dependency::Required => String::new(), Dependency::Optional(reason) => format!(" ({reason})") }
-                    ),
-                ),
-            };
-            Check::new(status, message)
-        })
-        .collect()
+    let git = dependency("git", Dependency::Required, path.and_then(crate::git::find));
+    let tools = Tool::dependencies().map(|(tool, needed)| {
+        let program = tool.program();
+        let found = path.and_then(|path| {
+            crate::fsutil::executables::find_executable(OsStr::new(program), path)
+        });
+        dependency(program, needed, found)
+    });
+    std::iter::once(git).chain(tools).collect()
+}
+
+/// The check of `program`, which the daemon needs as `needed` says, that
+/// its PATH found at `executable`.
+fn dependency(program: &str, needed: Dependency, executable: Option<PathBuf>) -> Check {
+    let (status, message) = match executable {
+        Some(path) => (
+            CheckStatus::Ok,
+            format!("{} on the daemon's PATH", path.display()),
+        ),
+        None => (
+            match needed {
+                Dependency::Required => CheckStatus::Error,
+                Dependency::Optional(_) => CheckStatus::Warning,
+            },
+            format!(
+                "{program} is missing or not executable on the daemon's PATH{}; install it and restart the daemon with the updated PATH",
+                match needed {
+                    Dependency::Required => String::new(),
+                    Dependency::Optional(reason) => format!(" ({reason})"),
+                }
+            ),
+        ),
+    };
+    Check::new(status, message)
 }
 
 /// Whether the terminal host `default` names is installed, as `installed`

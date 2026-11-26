@@ -9,10 +9,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{
-    fsutil::{executables::find_executable, off_runtime},
-    tools::Tool,
-};
+use crate::fsutil::off_runtime;
 
 /// The repository-format extensions with which gix reads a repository's
 /// location, refs and config as Git does, lowercase as Git compares them. A
@@ -160,7 +157,7 @@ fn system_config() -> Option<&'static Path> {
 /// directory.
 fn git_on_path() -> Option<PathBuf> {
     let search_path = std::env::var_os("PATH")?;
-    let found = find_executable(Tool::Git.program().as_ref(), &search_path)?;
+    let found = super::find(&search_path)?;
     std::fs::canonicalize(found).ok()
 }
 
@@ -171,7 +168,7 @@ fn handed_down_system_config(git: Option<&Path>) -> Option<PathBuf> {
 }
 
 fn ask_system_config() -> Option<PathBuf> {
-    let mut command = std::process::Command::new(Tool::Git.program());
+    let mut command = std::process::Command::new(super::PROGRAM);
     command
         .args(["--no-optional-locks", "var", "GIT_CONFIG_SYSTEM"])
         .env_remove("GIT_CONFIG_SYSTEM")

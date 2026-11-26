@@ -7,8 +7,6 @@ use anyhow::{Context, Result};
 use shoal_refs::CommitId;
 use tokio::process::Command;
 
-use crate::tools::Tool;
-
 /// The remote's refs at `url`, as `git ls-remote` prints them.
 pub async fn list_remote(url: &str) -> Result<String> {
     output(&["ls-remote", "--", url])
@@ -55,7 +53,7 @@ async fn output(args: &[&str]) -> Result<String> {
 /// Git in the repository Git runs the helper for, which the variables it
 /// exports name, without the rewrites.
 fn git(args: &[impl AsRef<OsStr>]) -> Command {
-    let mut command = Command::new(Tool::Git.program());
+    let mut command = Command::new(super::PROGRAM);
     command.args(args);
     crate::agent_git::push_gate::strip(&mut command);
     command

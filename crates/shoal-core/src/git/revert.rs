@@ -4,7 +4,7 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context, Result, ensure};
 use shoal_refs::CommitId;
 
-use crate::{git, tools::Tool};
+use crate::git;
 
 /// The merged PR's facts that tell what its merge left on the base branch.
 pub struct Merged<'a> {
@@ -62,7 +62,7 @@ impl Merge {
     /// worktree without committing it.
     fn revert_command(&self) -> Vec<OsString> {
         let mut args = vec![
-            Tool::Git.program(),
+            git::PROGRAM,
             "revert",
             "--no-commit",
             "--no-rerere-autoupdate",
@@ -119,14 +119,14 @@ pub async fn revert(
 }
 
 fn commit_command(message: &str) -> Vec<OsString> {
-    [Tool::Git.program(), "commit", "--no-edit", "-m", message]
+    [git::PROGRAM, "commit", "--no-edit", "-m", message]
         .into_iter()
         .map(OsString::from)
         .collect()
 }
 
 fn abort_command() -> Vec<OsString> {
-    [Tool::Git.program(), "revert", "--abort"]
+    [git::PROGRAM, "revert", "--abort"]
         .into_iter()
         .map(OsString::from)
         .collect()

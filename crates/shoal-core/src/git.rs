@@ -51,9 +51,8 @@ mod worktree_add;
 mod worktree_list;
 pub use worktree_list::{Worktree, checkout_of, listed_checkout_of, listed_worktrees, worktrees};
 
-use crate::tools::Tool;
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -63,6 +62,14 @@ use shoal_refs::{BranchName, CommitId};
 use tokio::process::Command;
 
 use crate::subprocess;
+
+/// Git's program, which only this module and those below it start.
+const PROGRAM: &str = "git";
+
+/// Where `search_path` finds Git, for the checks that it is installed.
+pub fn find(search_path: &OsStr) -> Option<PathBuf> {
+    crate::fsutil::executables::find_executable(OsStr::new(PROGRAM), search_path)
+}
 
 /// A Git command still running after this long is presumed hung, as on a
 /// volume that stopped answering, and is stopped. Clones, whose time grows
@@ -271,7 +278,7 @@ pub async fn pushed_commit(
 /// process Shoal starts for itself carries the option, which tells its
 /// processes from a test fixture's in `scripts/profile_tests.py --git`.
 pub(crate) fn command(repo: &Path) -> Command {
-    let mut command = Command::new(Tool::Git.program());
+    let mut command = Command::new(PROGRAM);
     command.arg("--no-optional-locks").arg("-C").arg(repo);
     without_inherited_repository(&mut command);
     command
@@ -362,7 +369,7 @@ pub async fn run_isolated(repo: &Path, args: &[&str]) -> Result<String> {
 
 /// Runs with the caller's Git configuration, pager and external diff.
 pub fn diff_command(rev: &str) -> Vec<OsString> {
-    [Tool::Git.program(), "diff", rev, "--"]
+    [PROGRAM, "diff", rev, "--"]
         .into_iter()
         .map(OsString::from)
         .collect()
@@ -371,7 +378,7 @@ pub fn diff_command(rev: &str) -> Vec<OsString> {
 pub fn push_command(remote: &str, branch: &BranchName) -> Vec<OsString> {
     let branch = local_ref(branch);
     [
-        Tool::Git.program(),
+        PROGRAM,
         "push",
         "--set-upstream",
         "--",
@@ -387,7 +394,7 @@ pub fn push_command(remote: &str, branch: &BranchName) -> Vec<OsString> {
 /// `path`, for a hint the user runs.
 pub(crate) fn clear_bare_flag_command(path: &Path) -> String {
     crate::shell::quote(&[
-        Tool::Git.program(),
+        PROGRAM,
         "-C",
         &path.to_string_lossy(),
         "config",
@@ -400,7 +407,7 @@ pub(crate) fn clear_bare_flag_command(path: &Path) -> String {
 /// approved object to the approved ref, replacing only the commit the remote
 /// had when it was requested.
 pub fn approved_push_command(push: &shoal_protocol::approvals::PushSpecification) -> Vec<OsString> {
-    let mut command = vec![OsString::from(Tool::Git.program()), "push".into()];
+    let mut command = vec![OsString::from(PROGRAM), "push".into()];
     if let Some(replaces) = &push.replaces {
         command.push(format!("--force-with-lease={}:{replaces}", push.destination).into());
     }
@@ -466,7 +473,7 @@ pub async fn clone(source: &str, destination: &Path, fork: Option<&str>) -> Resu
 }
 
 fn clone_command(source: &str, destination: &Path, fork: Option<&str>) -> Command {
-    let mut command = Command::new(Tool::Git.program());
+    let mut command = Command::new(PROGRAM);
     without_inherited_repository(&mut command);
     command.args(["--no-optional-locks", "clone"]);
     if let Some(url) = fork {

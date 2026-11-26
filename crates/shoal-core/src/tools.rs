@@ -1,5 +1,6 @@
 //! Executable names, whether they are installed, and the dependencies
-//! checked by doctor on every installation.
+//! checked by doctor on every installation. Git's program is the `git`
+//! module's, so Git runs only through it.
 use std::{ffi::OsStr, path::Path};
 
 use anyhow::{Result, ensure};
@@ -33,7 +34,6 @@ macro_rules! tools {
 }
 
 tools! {
-    Git => ("git", Some(Dependency::Required)),
     Fzf => ("fzf", Some(Dependency::Optional("needed for interactive pickers"))),
     // The default terminal host's program is checked as that host's;
     // feature-specific and platform tools are diagnosed when invoked.

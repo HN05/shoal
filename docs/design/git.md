@@ -8,6 +8,10 @@ commands do.
 
 ## Running Git
 
+Only the `git` module names Git's program, so every Git command Shoal runs
+goes through one of its operations. The push gate's commands are among them:
+they run without the push rewrites, so they reach the real remote.
+
 Shoal's own Git commands run with `--no-optional-locks`. A background status
 check therefore never holds the index lock that the user's or an agent's Git
 needs.

@@ -7,7 +7,7 @@ use shoal_refs::BranchName;
 
 use tokio::process::Command;
 
-use crate::{fsutil::off_runtime, tools::Tool};
+use crate::fsutil::off_runtime;
 use shoal_protocol::removal::{BranchOutcome, RemovalResult};
 
 pub mod interrupted;
@@ -188,7 +188,7 @@ async fn run_removal(command: tokio::process::Command) -> Result<(), Unfinished>
         Err(error) => error.kind() == std::io::ErrorKind::TimedOut,
         Ok(output) => output.status.code().is_none(),
     };
-    crate::subprocess::checked_output(Tool::Git.program(), ran)
+    crate::subprocess::checked_output(super::PROGRAM, ran)
         .map(drop)
         .map_err(|error| Unfinished { error, stopped })
 }

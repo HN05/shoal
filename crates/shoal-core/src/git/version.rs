@@ -5,7 +5,7 @@ use std::{io, process::Output};
 use anyhow::Result;
 use tokio::process::Command;
 
-use crate::{subprocess, tools::Tool};
+use crate::subprocess;
 
 pub(crate) type Release = (u32, u32);
 
@@ -37,7 +37,7 @@ pub(crate) async fn checked_output(
 }
 
 async fn installed() -> Option<Release> {
-    let mut command = Command::new(Tool::Git.program());
+    let mut command = Command::new(super::PROGRAM);
     command.args(["--no-optional-locks", "--version"]);
     parse(&super::output(command).await.ok()?)
 }

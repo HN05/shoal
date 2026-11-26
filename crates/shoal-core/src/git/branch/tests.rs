@@ -1,5 +1,5 @@
 use super::{check_branch_name, switch_selectors};
-use crate::{test_support::isolate, tools::Tool};
+use crate::{git::PROGRAM, test_support::isolate};
 
 #[test]
 fn a_bare_name_completes_only_where_one_remote_alone_has_it() {
@@ -77,13 +77,10 @@ fn branch_names_are_those_git_accepts() {
         "a.lock.",
     ];
     for name in names {
-        let output = isolate(
-            &mut std::process::Command::new(Tool::Git.program()),
-            outside.path(),
-        )
-        .args(["check-ref-format", "--branch", name])
-        .output()
-        .unwrap();
+        let output = isolate(&mut std::process::Command::new(PROGRAM), outside.path())
+            .args(["check-ref-format", "--branch", name])
+            .output()
+            .unwrap();
         assert_eq!(
             check_branch_name(name).is_ok(),
             output.status.success(),
