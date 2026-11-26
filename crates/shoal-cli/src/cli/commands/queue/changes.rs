@@ -1,13 +1,11 @@
-//! `shoal queue start` and `cancel`: the requests that change the queue,
-//! and what they report.
+//! `shoal queue start` and `cancel`.
 use anyhow::{Result, ensure};
 
 use super::selection;
 use crate::client::queue;
 use crate::{cli::context::Context, model::QueueEntry, state::QueueKind};
 
-/// `shoal queue start`: start the entry now, regardless of the limits, and
-/// with `attach` attach this terminal to its agent's session.
+/// Start the entry now, regardless of the limits.
 pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) -> Result<i32> {
     require_scope_token(ctx)?;
     let limits = crate::config::permissions::PermissionKey::Limits;
@@ -30,7 +28,7 @@ pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) ->
     Ok(0)
 }
 
-/// `shoal queue cancel`: remove the entry; a restore's agent stays stopped.
+/// A restore's agent stays stopped.
 pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> {
     require_scope_token(ctx)?;
     let entry = selection::selected(ctx, entry, "Cancel> ").await?;

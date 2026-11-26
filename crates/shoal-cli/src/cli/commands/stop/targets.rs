@@ -8,9 +8,8 @@ use crate::{
 use shoal_protocol::model::Located;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The spaces, workspaces or chats, that `selectors` name, each once, and
-/// with `children` each followed by the spaces below it, which a stop of it
-/// stops too: their agents work for it.
+/// With `children`, each is followed by the spaces below it, since their agents
+/// work for it.
 pub(in crate::cli::commands) async fn resolve(
     ctx: &Context,
     selectors: Vec<SpaceSelector>,
@@ -34,18 +33,16 @@ pub(in crate::cli::commands) async fn resolve(
     Ok(found)
 }
 
-/// Refuse a stop in a scoped process, a workspace's or a chat's agent, that
-/// `selected` includes its own space in. The daemon refuses each space not
-/// below the caller's, which needs the scope token; refusing its own here,
-/// before any stops, keeps the stop from taking the spaces below it alone.
+/// The daemon refuses each space not below the caller's by its scope token.
+/// Refusing its own here, before any stops, keeps the stop from taking the
+/// spaces below it alone.
 pub(in crate::cli::commands) fn ensure_below(selected: &[Space]) -> Result<()> {
     let own = ensure_scoped()?;
     ensure!(selected.iter().all(|space| space.id != own), "{REFUSAL}");
     Ok(())
 }
 
-/// Refuse a stop in a process of a space that cleared its scope token,
-/// which the daemon would take for the user's, returning its space.
+/// The daemon would take a process that cleared its scope token for the user.
 pub(super) fn ensure_scoped() -> Result<shoal_ids::space_ids::SpaceId> {
     let own = crate::env::own_space().context(REFUSAL)?;
     ensure!(crate::env::is_scoped(), "{REFUSAL}");
@@ -55,17 +52,14 @@ pub(super) fn ensure_scoped() -> Result<shoal_ids::space_ids::SpaceId> {
 const REFUSAL: &str =
     "scoped processes stop only the spaces below theirs; finish their own with shoal done";
 
-/// Refuse `spaces` all before any stops when stopping one would be refused
-/// now, as while another lifecycle operation or a resource hook runs in a
-/// workspace, or a restart in a chat.
+/// Refuse all before any stops when stopping one would be refused now, as while
+/// another lifecycle operation runs in a workspace.
 pub(super) async fn check_each(ctx: &Context, spaces: &[Space]) -> Result<()> {
     let targets =
         (spaces.iter()).map(|space| (space.name.to_string(), SpaceSelector::id(&space.id)));
     check_targets(ctx, targets.collect()).await
 }
 
-/// [`check_each`] over `targets`, each named for its refusal, which may run
-/// on another machine.
 pub(super) async fn check_targets(
     ctx: &Context,
     targets: Vec<(String, SpaceSelector)>,
@@ -85,10 +79,8 @@ pub(super) async fn check_targets(
     Ok(())
 }
 
-/// The spaces `--machine` selects on the machines `targets` names: those
-/// `shoal stop --all` would stop there, another machine's as it last
-/// reported them, which the hub holds a stop for while it is offline, and
-/// this machine's as its daemon selects them now.
+/// The hub holds a stop for an offline machine's spaces, as that machine last
+/// reported them.
 pub(super) async fn on_machines(ctx: &Context, targets: SpaceTargets) -> Result<Vec<Located>> {
     let located = space_selection::located(ctx, targets, false, &super::stopping()).await?;
     let here = match located
@@ -106,7 +98,6 @@ pub(super) async fn on_machines(ctx: &Context, targets: SpaceTargets) -> Result<
         .collect())
 }
 
-/// The spaces of this machine among `located`.
 pub(super) fn here(located: &[Located]) -> Vec<Space> {
     (located.iter())
         .filter_map(|located| match located {
@@ -116,9 +107,7 @@ pub(super) fn here(located: &[Located]) -> Vec<Space> {
         .collect()
 }
 
-/// What a stop of `located` checks before it stops any: each space here,
-/// and those elsewhere on connected machines, since a stop for an offline
-/// one waits for it unchecked.
+/// A stop for an offline machine waits for it unchecked.
 pub(super) fn checked(located: &[Located]) -> Vec<(String, SpaceSelector)> {
     (located.iter())
         .filter_map(|located| match located {

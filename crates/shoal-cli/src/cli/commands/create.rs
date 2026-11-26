@@ -1,8 +1,4 @@
-//! `shoal create`: a workspace without an agent, made as `shoal start`
-//! makes one, below the current space or the one `--parent` names, whose
-//! agent works on it and receives its activity, or outside a space at the
-//! top; or a workspace at a commit, with no branch of its own. `shoal
-//! start` starts an agent of its own there.
+//! `shoal create`: a workspace without an agent.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_workers::hosting;
@@ -29,9 +25,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Create the workspace `args` describe, below the space they or the
-/// current directory name, or at the top outside one, follow its
-/// preparation and report it.
 pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
     super::start::ensure_scope_token(ctx)?;
     let parent = parent_space(ctx, args.parent.clone()).await?;
@@ -55,11 +48,9 @@ pub(super) async fn run(ctx: &Context, args: CreateArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// The creation `args` ask for, below `parent`, which the current space
-/// is unless they name it: made in this process's directory, with a
-/// relative path resolved there, and with what a terminal's pickers pick.
-/// Only a parent named with `--parent` keeps the creation out of the
-/// existing workspace of the branch it names.
+/// Made in this process's directory, with a relative path resolved there. Only
+/// a parent named with `--parent` keeps the creation out of the existing
+/// workspace of the branch it names.
 async fn picked_creation(
     ctx: &Context,
     args: &CreateArgs,
@@ -81,8 +72,6 @@ async fn picked_creation(
     Ok(NewCreation { launch, below })
 }
 
-/// The space a new workspace goes below: the one `named`, else the
-/// current one, else none.
 async fn parent_space(
     ctx: &Context,
     named: Option<SpaceSelector>,
@@ -94,10 +83,6 @@ async fn parent_space(
     }
 }
 
-/// Create the workspace without a branch `args` describe, at their base,
-/// or at the default branch, or a copy of the workspace they copy: a child
-/// of `parent`, or without one a top-level workspace in the repository
-/// they name, else the copied one's or the current one.
 async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateArgs) -> Result<i32> {
     let named = commit_named_repository(args)?;
     check_registered(ctx, named.clone()).await?;
@@ -139,8 +124,6 @@ async fn at_commit(ctx: &Context, parent: Option<SpaceSelector>, args: &CreateAr
     Ok(0)
 }
 
-/// The repository `launch` names, positionally or with `--repo`, as a
-/// selector.
 fn launch_repository(
     launch: &shoal_protocol::launches::Launch,
 ) -> Result<Option<crate::repository::Selector>> {
@@ -173,9 +156,6 @@ async fn check_registered(
     Ok(())
 }
 
-/// The repository a creation at a commit names, positionally or with
-/// `--repo`, refusing an item or branch link, which a workspace at a commit
-/// does not start on.
 fn commit_named_repository(args: &CreateArgs) -> Result<Option<crate::repository::Selector>> {
     use shoal_protocol::launches::StartTarget;
     let positional = match &args.repository {
@@ -194,9 +174,6 @@ fn commit_named_repository(args: &CreateArgs) -> Result<Option<crate::repository
         .transpose()
 }
 
-/// The repository of a workspace at a commit: that of its `parent`, or the
-/// `copied` repository or else the current one for a parent without one or
-/// none.
 async fn commit_repository(
     ctx: &Context,
     parent: Option<&SpaceSelector>,
@@ -215,14 +192,12 @@ async fn commit_repository(
     Ok(repository.into())
 }
 
-/// The registered repository of the current directory.
 async fn current_repository(ctx: &Context) -> Result<RepositoryId> {
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let hint = "pass --parent or run it in a registered checkout";
     super::issues::current_repository(ctx, repositories, hint).await
 }
 
-/// Create the child `child` describes and follow its preparation.
 pub(super) async fn start_child(
     ctx: &Context,
     child: NewChild,
@@ -270,8 +245,6 @@ async fn follow_queuing(
     }
 }
 
-/// Report the child, then enter it when this terminal follows new
-/// workspaces.
 fn report(ctx: &Context, child: &Workspace) -> Result<()> {
     let palette = Palette::stdout(ctx.json);
     let text = format!(
@@ -291,7 +264,6 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
     Ok(())
 }
 
-/// The parent and child spaces of a space, when it has any.
 pub(super) fn render(parent: &Option<SpaceRef>, children: &[SpaceRef]) {
     if let Some(parent) = parent {
         outln!("Parent space:  {}", super::base::describe_space(parent));

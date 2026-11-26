@@ -1,5 +1,4 @@
-//! What a terminal picks of what a settled launch leaves open: the issue
-//! or PR it asks for, what a new workspace starts from, and the agent.
+//! What a terminal picks of what a settled launch leaves open.
 mod agent;
 mod item;
 mod source;

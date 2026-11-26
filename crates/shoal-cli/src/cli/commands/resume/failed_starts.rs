@@ -1,5 +1,5 @@
-//! `--focus` on a space whose agent's launch failed to start: the launch
-//! queues again exactly as it was and starts in this terminal.
+//! `--focus` on a space whose agent's launch failed: the launch queues again as
+//! it was and starts in this terminal.
 use anyhow::Result;
 
 use crate::{
@@ -11,7 +11,6 @@ use crate::{
 use shoal_protocol::protocol::RetryStart;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The failed launch of the space `selector` names, if it has one.
 pub(super) async fn of(ctx: &Context, selector: &SpaceSelector) -> Result<Option<QueueEntry>> {
     let space = super::space::present_space(ctx, selector).await?;
     let entries = queued_agents::entries(ctx).await?.into_iter();
@@ -20,9 +19,6 @@ pub(super) async fn of(ctx: &Context, selector: &SpaceSelector) -> Result<Option
         .find(|entry| entry.space() == Some(&space.id)))
 }
 
-/// Queue the failed launch `failed` again and start its agent in this
-/// terminal, which the queue leaves to this process meanwhile, making
-/// `change` to the permissions it starts with.
 pub(super) async fn retry_here(
     ctx: &Context,
     failed: &QueueEntry,

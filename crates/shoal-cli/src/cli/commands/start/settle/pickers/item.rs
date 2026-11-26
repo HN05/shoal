@@ -1,8 +1,5 @@
 //! The issue, PR or CI run a start asks for without naming it, picked on a
-//! terminal: an issue or PR among its repository's open ones, only those
-//! carrying the label of the mode it names where that mode has one, whose
-//! labels then decide the mode a start that names none takes, and a run
-//! among those that fail now.
+//! terminal. A mode with a label offers only the items that carry it.
 use anyhow::{Context as _, Result};
 use shoal_protocol::launches::{ItemChoice, Launch};
 
@@ -21,14 +18,10 @@ use crate::{
     protocol::RunsOf,
 };
 
-/// Whether `launch` asks for an issue, PR or CI run without naming it.
 pub(in crate::cli::commands::start::settle) fn picks_items(launch: &Launch) -> bool {
     [&launch.issue, &launch.pr, &launch.ci].contains(&&Some(ItemChoice::Pick))
 }
 
-/// The issue, PR and CI run `launch` asks for without naming them, picked
-/// on a terminal in `repository` under its `settings`; off a terminal,
-/// refused.
 pub(in crate::cli::commands::start::settle) async fn pick_items(
     ctx: &Context,
     launch: &mut Launch,
@@ -51,14 +44,11 @@ pub(in crate::cli::commands::start::settle) async fn pick_items(
     Ok(())
 }
 
-/// The label of the mode `launch` names under `settings`, if any.
 fn mode_label(launch: &Launch, settings: &Effective) -> Option<String> {
     let mode = settings.modes.get(launch.mode.as_ref()?.as_str())?;
     mode.label.clone()
 }
 
-/// The number of an open item of `kind` in `repo`, carrying `label` where
-/// there is one, picked; refused off a terminal.
 async fn picked(
     ctx: &Context,
     repo: Option<&Repository>,
@@ -82,8 +72,6 @@ async fn picked(
     Ok(ItemInput::Number(number))
 }
 
-/// The newest run of each workflow and ref in `repo` that fails now,
-/// picked; refused off a terminal.
 async fn picked_run(ctx: &Context, repo: Option<&Repository>) -> Result<ItemRef> {
     ui::require_argument(ctx, "ci", "ci")?;
     let repo = repo.context("name the repository whose CI runs to pick from")?;

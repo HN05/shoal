@@ -1,8 +1,5 @@
-//! A start on another joined machine that `--here` or `--focus` shows in
-//! this terminal: that machine's queue starts the agent there at once, as
-//! the user waits for it, and once a new workspace is prepared this
-//! terminal attaches to the agent as `shoal attach` does, through that
-//! machine; a call without a terminal leaves it running there.
+//! A start on another joined machine that `--here` or `--focus` shows in this
+//! terminal, which attaches to the agent through that machine.
 use anyhow::{Result, ensure};
 use shoal_protocol::launches::Launch;
 use shoal_protocol::protocol::{Launched, Started};
@@ -13,16 +10,11 @@ use crate::cli::{
     context::Context,
 };
 
-/// Whether `options` show `launch`, which names a machine to start on, in
-/// this terminal.
 pub(in crate::cli::commands) fn shown_elsewhere(launch: &Launch, options: &StartOptions) -> bool {
     launch.machine.is_some() && (options.here || options.focus)
 }
 
-/// Send `launch`, which names a machine to start on, with its agent started
-/// now, and attach this terminal to the agent once it runs, or report it
-/// running there without a terminal. A scoped caller is refused, as
-/// `shoal attach` refuses it.
+/// A scoped caller is refused, as `shoal attach` refuses it.
 pub(in crate::cli::commands) async fn start(ctx: &Context, mut launch: Launch) -> Result<i32> {
     ensure!(
         !crate::process::scoped::inherits_scope(&ctx.paths.state),
@@ -41,11 +33,6 @@ pub(in crate::cli::commands) async fn start(ctx: &Context, mut launch: Launch) -
     sessions::attach_started(ctx, space, machine.as_deref()).await
 }
 
-/// Follow the preparation of the workspace `launched` opened, which
-/// `machine` runs, to its end, after what the launch warned of; the exit
-/// code of a start that leaves the agent to that machine's queue, as a
-/// preparation that waits for other work or disk space does, which `shoal
-/// attach` shows once it starts.
 async fn await_preparation(
     ctx: &Context,
     launched: Launched,

@@ -1,5 +1,4 @@
-//! `shoal queue`: the agent queue of every repository, and starting, moving
-//! and cancelling its entries, named or picked.
+//! `shoal queue`.
 mod attach;
 mod changes;
 mod listing;

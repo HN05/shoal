@@ -1,4 +1,4 @@
-//! Stopping several spaces at once, reporting each.
+//! Stopping several spaces at once.
 use anyhow::Result;
 use futures_util::future::join_all;
 
@@ -15,11 +15,8 @@ use super::{
     stop_confirming,
 };
 
-/// Stop every settled workspace and every chat with a running execution or
-/// an agent whose restore is queued or requested, and every workspace with
-/// an agent launch waiting to start in it, which stopping cancels; the
-/// daemon selects them while no restore or launch can move between the
-/// queue and its agent.
+/// The daemon selects the spaces while no restore or launch can move between
+/// the queue and its agent.
 pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
     let running = crate::client::stopping::targets(&ctx.paths).await?;
     // A scoped process that cleared its token gets every space from the
@@ -33,7 +30,6 @@ pub(super) async fn stop_all(ctx: &Context) -> Result<i32> {
     stop_each(ctx, &running, "--all", false).await
 }
 
-/// Report that a stop selected nothing to stop.
 pub(super) fn nothing_to_stop(ctx: &Context) -> Result<i32> {
     ctx.emit(
         "No running agents or commands",
@@ -47,9 +43,7 @@ pub(super) fn nothing_to_stop(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-/// Stop `spaces` in parallel, reporting each; one failure does not keep the
-/// others running, and an execution Shoal cannot prove ended fails its
-/// workspace unless `acknowledge_unproven`. `restore` is what the hint to
+/// One failure does not keep the others running. `restore` is what the hint to
 /// continue them passes `shoal resume`; empty, it names each one.
 pub(super) async fn stop_each(
     ctx: &Context,
@@ -109,9 +103,6 @@ pub(super) async fn stop_each(
     })
 }
 
-/// Stop the agents and commands of `space`, cancelling the launches
-/// waiting to start in it, then its untracked processes; a CI job's
-/// workspace has its run cancelled instead.
 async fn stop(ctx: &Context, space: &Space, acknowledge_unproven: bool) -> Result<Stop> {
     let stopped = stop_confirming(
         ctx,
@@ -131,7 +122,6 @@ async fn stop(ctx: &Context, space: &Space, acknowledge_unproven: bool) -> Resul
     })
 }
 
-/// What stopping one space did.
 enum Stop {
     /// A space's agents and commands stopped, with how many untracked
     /// processes, the launches the stop removed from the queue, and whether
@@ -146,7 +136,6 @@ enum Stop {
 }
 
 impl Stop {
-    /// What the report says of the space `name` this stop stopped.
     fn message(&self, name: &SpaceName) -> String {
         match self {
             Self::Space {
@@ -167,8 +156,7 @@ impl Stop {
         }
     }
 
-    /// Whether this stop saved work for `shoal resume`, which refuses to
-    /// resume a space without any.
+    /// `shoal resume` refuses to resume a space without saved work.
     fn saved(&self) -> bool {
         match self {
             Self::Space { saved, .. } => *saved,
@@ -177,7 +165,6 @@ impl Stop {
     }
 }
 
-/// What stopping one of several spaces reports.
 enum Outcome {
     Stopped(SpaceName),
     /// A CI job's workspace, whose run the forge was asked to cancel.

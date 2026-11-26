@@ -1,6 +1,4 @@
-//! The launch a start's arguments ask for, made where the start is made:
-//! the spaces it names by ID, the copy it copies, the session `--fork`
-//! forks, its task, and the terminal it is made in.
+//! The launch a start's arguments ask for, made where the start is made.
 use crate::cli::ui::Acting;
 use std::ffi::OsString;
 
@@ -21,10 +19,6 @@ use crate::{
     protocol::ConfigTarget,
 };
 
-/// The launch `args` ask for, made from this process: below the space
-/// they name, in the workspace `--in` names or picks, with the copy and
-/// the session `--fork` forks it reads, the agent's task, below the chat
-/// it runs in, in its directory and with its terminal's environment.
 pub(super) async fn launch(ctx: &Context, args: &StartArgs) -> Result<Launch> {
     let mut launch = args.launch();
     if let Some(parent) = &launch.parent {
@@ -70,18 +64,13 @@ pub(in crate::cli::commands) fn launch_args(args: Vec<OsString>) -> Result<Vec<S
         .collect()
 }
 
-/// The ID of the space `selector` names, by number or ID: one of this
-/// machine, else one the hub lists on another joined machine.
 async fn space_id(ctx: &Context, selector: &SpaceSelector) -> Result<SpaceId> {
     let located = crate::client::spaces::locate(&ctx.paths, selector.clone()).await?;
     Ok(located.id().clone())
 }
 
-/// `launch` started from a fork of the session of the agent `--fork`
-/// forks: the `copied` workspace's, whose copy goes below the parent
-/// `launch` names as any start does; else the agent of the existing
-/// workspace `launch` starts in; else the parent's, which the start then
-/// goes below.
+/// The `copied` workspace's agent, else the agent of the existing workspace
+/// `launch` starts in, else the parent's, which the start then goes below.
 async fn forked_into(
     ctx: &Context,
     launch: &mut Launch,
@@ -101,10 +90,8 @@ async fn forked_into(
     Ok(())
 }
 
-/// The space, a workspace or a chat, whose agent `--fork` forks, `space`
-/// or else the current one, the agent that starts from the fork, `agent` or
-/// else that one, and the session it forks. An agent that cannot start from
-/// a fork is refused before anything is created.
+/// An agent that cannot start from a fork is refused before anything is
+/// created.
 async fn forked(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -129,9 +116,7 @@ async fn forked(
     Ok((space, agent, session))
 }
 
-/// What starting an agent in an existing workspace sends for the workspace
-/// a picker picks; what the agent starts with decides nothing of which
-/// workspaces it reaches.
+/// What the agent starts with decides nothing of which workspaces it reaches.
 pub(in crate::cli::commands) fn starting() -> Acting {
     Acting::request(|space| {
         crate::client::launches::launch_request(shoal_protocol::launches::Launch {

@@ -25,10 +25,8 @@ use shoal_protocol::protocol::{Launched, Started};
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_workers::starts::{Starting, finish_workspace};
 
-/// Enter the workspace a creation `started` without an agent where a start
-/// without one enters it from the user's terminal: here, or in a place
-/// beside it, its shell opened once its preparation ends. `None` where the
-/// caller follows the preparation itself, as an agent's creation does.
+/// `None` where the caller follows the preparation itself, as an agent's
+/// creation does.
 pub(in crate::cli::commands) async fn enter_created(
     ctx: &Context,
     launch: &Launch,
@@ -56,11 +54,9 @@ pub(in crate::cli::commands) async fn enter_created(
     Ok(Some(code))
 }
 
-/// Report the workspace the daemon `launched`, whose agent, which `agent`
-/// runs if it names one, runs in no terminal of this caller: once it is
-/// recorded, or with `wait` once its preparation ends, unless the
-/// preparation waits for other work or disk space, which leaves nothing to
-/// follow yet.
+/// Report once the workspace is recorded, or with `wait` once its preparation
+/// ends, unless the preparation waits for other work or disk space, which
+/// leaves nothing to follow yet.
 pub(in crate::cli::commands) async fn report_launched(
     ctx: &Context,
     launched: Launched,
@@ -85,10 +81,6 @@ pub(in crate::cli::commands) async fn report_launched(
     }
 }
 
-/// Follow the preparation of the workspace `machine`, another joined
-/// machine, `started`, of which nothing runs in this caller, and report
-/// the workspace and the entry of its agent, which that machine's queue
-/// starts, once it ends.
 async fn follow_elsewhere(ctx: &Context, started: StartedWorkspace, machine: &str) -> Result<i32> {
     let reused = started.reused;
     let Prepared { workspace, agent } = prepared_on(ctx, started, Some(machine)).await?;
@@ -99,10 +91,8 @@ async fn follow_elsewhere(ctx: &Context, started: StartedWorkspace, machine: &st
     }
 }
 
-/// The workspace `started` once its preparation, which `machine` runs
-/// where another joined machine than this one does, ended, without
-/// entering it or offering a retry, which act on its worktree; a failure
-/// names what shows and retries it.
+/// It neither enters the workspace nor offers a retry, which act on its
+/// worktree; a failure names what shows and retries it.
 pub(in crate::cli::commands) async fn prepared_on(
     ctx: &Context,
     started: StartedWorkspace,
@@ -125,8 +115,6 @@ pub(in crate::cli::commands) async fn prepared_on(
     }
 }
 
-/// Follow the preparation of the workspace the daemon `started`, and report
-/// the workspace and the entry of its agent as the queue has it then.
 async fn follow_workspace(
     ctx: &Context,
     started: StartedWorkspace,
@@ -153,8 +141,6 @@ async fn follow_workspace(
     start::report_queued_in(ctx, &workspace.name, &entry)
 }
 
-/// Report the existing workspace whose worker the daemon `started`, and
-/// the entry of its agent, if it queued one.
 fn report_worker(ctx: &Context, started: StartedWorkspace) -> Result<i32> {
     let StartedWorkspace {
         workspace, entry, ..
@@ -166,8 +152,6 @@ fn report_worker(ctx: &Context, started: StartedWorkspace) -> Result<i32> {
     }
 }
 
-/// Report the workspace the daemon `started`, whose preparation goes on
-/// without this process, and the entry of its agent, which waits for it.
 pub(super) fn report_workspace(ctx: &Context, started: StartedWorkspace) -> Result<i32> {
     links::print_warnings(&started.warnings);
     let StartedWorkspace {

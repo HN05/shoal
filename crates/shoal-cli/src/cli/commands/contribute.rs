@@ -1,6 +1,4 @@
-//! `shoal contribute`: a workspace in someone else's repository for a PR,
-//! pushed to your fork when you cannot push to the repository, whose clone
-//! Shoal removes once nothing of it is left.
+//! `shoal contribute`.
 use anyhow::Result;
 
 use crate::{
@@ -18,8 +16,6 @@ use crate::{
     model::Repository,
 };
 
-/// Register the repository a repository URL, or an issue, PR or branch link
-/// names, then start the workspace in it as `shoal start` does.
 pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i32> {
     let ContributeArgs {
         here,
@@ -59,8 +55,8 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
 }
 
 /// Refuse an unavailable agent before registration, which may fork and clone.
-/// Only the global settings can name it before the repository is cloned;
-/// `start` checks it again against the repository's.
+/// Only the global settings can name it before the clone exists; `start` checks
+/// it again against the repository's.
 fn ensure_agent_available(ctx: &Context, agent: Option<&Agent>) -> Result<()> {
     let Some(agent) = agent else {
         return Ok(());
@@ -69,8 +65,7 @@ fn ensure_agent_available(ctx: &Context, agent: Option<&Agent>) -> Result<()> {
     agents::ensure_available(agent, &settings)
 }
 
-/// Register `source` as a contribution, held against cleanup, and say where
-/// its pushes go. A repository registered otherwise needs no hold.
+/// A repository registered otherwise needs no hold.
 async fn register(ctx: &Context, source: String) -> Result<(Repository, Option<ContributionHold>)> {
     let (repo, hold) = ctx
         .progress(

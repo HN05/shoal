@@ -1,5 +1,4 @@
-//! Restoring the agents a move stopped through their space's daemon, which
-//! starts them as the agent limits allow.
+//! Restoring the agents a move stopped, through their space's daemon.
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 
@@ -10,10 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::transfer::StoppedExecutions;
 
-/// Have the daemon queue the restores of the agents among `stopped`, whose
-/// workspaces' stopped commands go to them, while those of workspaces
-/// without one stay for `shoal resume`, warning when that fails, since
-/// `shoal resume` still resumes them.
+/// A failure only warns, since `shoal resume` still resumes them.
 pub(in crate::cli::commands) async fn restore_stopped(
     ctx: &Context,
     stopped: &StoppedExecutions,
@@ -31,8 +27,6 @@ pub(in crate::cli::commands) async fn restore_stopped(
     }
 }
 
-/// The executions of the stopped agents and last sessions the space
-/// `space` saves for `shoal resume`.
 pub(in crate::cli::commands) async fn saved_agents(
     ctx: &Context,
     space: &SpaceId,

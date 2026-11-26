@@ -1,7 +1,5 @@
-//! A start in an existing workspace whose stopped or asleep agent it does
-//! not replace: on a terminal, the user resumes that agent, replaces it with
-//! the new one or cancels the start; without one, the daemon's refusal
-//! stands, naming `shoal resume` and `--replace`.
+//! A start in an existing workspace whose stopped or asleep agent it does not
+//! replace. Without a terminal, the daemon's refusal stands.
 use anyhow::{Context as _, Result, bail};
 use shoal_protocol::launches::Launch;
 use shoal_protocol::space_names::SpaceSelector;
@@ -13,7 +11,6 @@ use crate::{
     protocol::{ErrorCode, RemoteError},
 };
 
-/// What the daemon's check of a launch led to.
 pub(super) enum Checked {
     /// The start goes on, into the existing workspace, if any.
     Goes(Option<Box<Workspace>>),
@@ -22,9 +19,7 @@ pub(super) enum Checked {
     Resumed(i32),
 }
 
-/// Have the daemon check `launch` as [`check::check`] does, and where it
-/// refuses the stopped agent of the workspace the start goes into, ask on
-/// a terminal what to do with it: replacing it makes `launch` replace it.
+/// Replacing the stopped agent makes `launch` replace it.
 pub(super) async fn checked(
     ctx: &Context,
     launch: &mut Launch,
@@ -52,11 +47,7 @@ pub(super) async fn checked(
     }
 }
 
-/// Check `launch`, whose mode now starts a workspace's agent, again on a
-/// terminal as [`checked`] does, once the workspace it goes into is known,
-/// returning the exit code of the resume the user chose instead of the
-/// start. Without a terminal nothing asks, and the launch meets the
-/// daemon's refusal.
+/// Without a terminal nothing asks, and the launch meets the daemon's refusal.
 pub(super) async fn resumed(
     ctx: &Context,
     launch: &mut Launch,
@@ -78,9 +69,8 @@ fn refuses_stopped_agent(error: &anyhow::Error) -> bool {
         .is_some_and(|remote| remote.code == ErrorCode::StoppedAgent)
 }
 
-/// The workspace whose stopped agent `launch` would replace, as the
-/// daemon's check of the replacing launch names it, refusing what that
-/// launch refuses, such as a scoped caller's own space.
+/// It refuses what the replacing launch refuses, such as a scoped caller's own
+/// space.
 async fn replaced_workspace(
     ctx: &Context,
     launch: &Launch,
@@ -94,9 +84,6 @@ async fn replaced_workspace(
         .context("the start goes into no existing workspace")
 }
 
-/// Resume the stopped agent of `workspace` as `shoal resume` does, at once
-/// for a `launch` that starts now, or in this terminal where `options`
-/// focus it.
 async fn resume_agent(
     ctx: &Context,
     workspace: &Workspace,

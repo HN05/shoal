@@ -1,6 +1,4 @@
-//! `shoal restart --cancel`: dropping the restarts the daemon keeps for
-//! later, with the permission changes that never took effect, here or on
-//! another joined machine.
+//! `shoal restart --cancel`.
 use anyhow::Result;
 
 use super::selection;
@@ -11,10 +9,8 @@ use crate::client::output::{
     batch::Failure,
 };
 
-/// Drop the recorded restart of each space `targets` selects; with `--all`
-/// or `--machine`, reporting only the spaces that had one. A space whose
-/// daemon cannot be asked, as on an offline machine, fails alone, exiting 1
-/// once the others were asked.
+/// A space whose daemon cannot be asked, as on an offline machine, fails alone,
+/// exiting 1 once the others were asked.
 pub(in crate::cli::commands) async fn cancel(ctx: &Context, targets: SpaceTargets) -> Result<i32> {
     let selector = targets.all || !targets.machines.is_empty();
     let spaces = selection::spaces(ctx, targets, &cancelling()).await?;
@@ -53,7 +49,6 @@ pub(in crate::cli::commands) async fn cancel(ctx: &Context, targets: SpaceTarget
     Ok(code)
 }
 
-/// A line for each space, saying whether its restart was dropped.
 fn summary(cancelled: &CancelledRestarts) -> String {
     let dropped = (cancelled.cancelled.iter()).map(|space| {
         format!(
@@ -76,8 +71,6 @@ fn summary(cancelled: &CancelledRestarts) -> String {
     }
 }
 
-/// What cancelling a space's recorded restart sends for each space a
-/// picker picks.
 pub(in crate::cli::commands) fn cancelling() -> Acting {
     Acting::request(crate::client::agents::cancel_restart)
 }

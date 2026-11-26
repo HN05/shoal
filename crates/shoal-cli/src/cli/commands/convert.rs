@@ -1,7 +1,4 @@
-//! `shoal convert`: a chat becomes a workspace, which the command sets up,
-//! or a workspace a chat, or another agent tool takes a space's work over.
-//! The space stays the same, and its agent restarts in the new place once
-//! its turn ends, or the new tool takes over then.
+//! `shoal convert`.
 use anyhow::{Context as _, Result};
 use shoal_refs::BranchName;
 
@@ -22,8 +19,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Turn the chat `space` names, or the one this runs in, into a workspace
-/// on the branch `branch` names, set it up, and report it.
 pub(super) async fn to_workspace(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -76,9 +71,6 @@ pub(super) async fn to_workspace(
     report(ctx, &text, SpaceKind::Workspace, workspace)
 }
 
-/// Turn the workspace `space` names, or the one this runs in, into a chat
-/// once its agent's turn ends, its agent carrying on as `agent` says, and
-/// report it.
 pub(super) async fn to_chat(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -98,8 +90,6 @@ pub(super) async fn to_chat(
     report(ctx, &text, SpaceKind::Chat, workspace)
 }
 
-/// Hand the work of the space `space` names, or the one this runs in, over
-/// to the agent tool `agent` names, in `mode`, and report it.
 pub(super) async fn to_agent(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -134,7 +124,6 @@ fn own_space(acting: &Acting) -> Fallback<'_> {
     }
 }
 
-/// The issue `input` names, read where the chat reads its forge.
 async fn load_issue(ctx: &Context, chat: &SpaceSelector, input: &ItemInput) -> Result<Issue> {
     super::issues::load(ctx, ItemContext::space(chat.clone()), input.clone()).await
 }
@@ -152,16 +141,13 @@ async fn linked_issue_branch(ctx: &Context, chat: &SpaceSelector) -> Result<Stri
     Ok(load_issue(ctx, chat, &linked.into()).await?.branch_name())
 }
 
-/// Print what the conversion did to `workspace`, which is or becomes a
-/// space of `kind`.
 fn report(ctx: &Context, text: &str, kind: SpaceKind, workspace: Workspace) -> Result<i32> {
     ctx.emit(text, Converted { kind, workspace })?;
     Ok(0)
 }
 
-/// What converting a chat into a workspace with `mode` and `agent` sends
-/// for the chat a picker picks; the branch, which may still come from the
-/// chat's issue, decides nothing of which spaces the conversion reaches.
+/// The branch, which may still come from the chat's issue, decides nothing of
+/// which spaces the conversion reaches.
 pub(super) fn to_workspace_request(mode: Option<ModeName>, agent: AgentChange) -> Acting {
     Acting::request(move |chat| {
         let new = crate::client::conversions::NewWorkspace {
@@ -177,16 +163,12 @@ pub(super) fn to_workspace_request(mode: Option<ModeName>, agent: AgentChange) -
     })
 }
 
-/// What converting a workspace into a chat with `mode` and `agent` sends
-/// for the workspace a picker picks.
 pub(super) fn to_chat_request(mode: Option<ModeName>, agent: AgentChange) -> Acting {
     Acting::request(move |space| {
         crate::client::conversions::to_chat(space, mode.clone(), agent.clone())
     })
 }
 
-/// What handing a space's work to the agent tool `agent` names in `mode`
-/// sends for the space a picker picks.
 pub(super) fn to_agent_request(mode: Option<ModeName>, agent: AgentChange) -> Acting {
     Acting::request(move |space| {
         crate::client::conversions::to_agent(space, mode.clone(), agent.clone())

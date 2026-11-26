@@ -1,6 +1,4 @@
-//! `shoal setup`: run a workspace's setup again or skip a failed one, and
-//! the CLI's side of every workspace's preparation: its spinner, and asking
-//! the user on a terminal what to do with a failed setup.
+//! `shoal setup`, and the CLI's side of every workspace's preparation.
 use anyhow::{Result, ensure};
 use shoal_workers::{
     following::Display,
@@ -80,9 +78,7 @@ pub(in crate::cli::commands) async fn skip_setup(
     Ok(0)
 }
 
-/// What setup sends for the workspace it picks: an operation that runs its
-/// setup and post-setup there, or with `skip` only its post-setup, which
-/// accepts a failed setup.
+/// With `skip`, only the post-setup hook runs, which accepts a failed setup.
 pub(super) fn setting_up(skip: bool) -> Acting {
     preparing(Preparation {
         setup: !skip,
@@ -91,8 +87,6 @@ pub(super) fn setting_up(skip: bool) -> Acting {
     })
 }
 
-/// What setup sends for the workspace it picks: an operation that takes
-/// `steps` in it on the machine that runs it, where its worktree is.
 fn preparing(steps: Preparation) -> Acting {
     Acting::request(move |workspace| {
         let spec = OperationSpec::Prepare {
@@ -103,8 +97,6 @@ fn preparing(steps: Preparation) -> Acting {
     })
 }
 
-/// A command shows an operation's steps under its spinner, and asks a user
-/// on its terminal what to do with a failed setup.
 impl Frontend for Context {
     fn json(&self) -> bool {
         self.json

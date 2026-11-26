@@ -15,10 +15,8 @@ use crate::{
 use shoal_protocol::launches::{Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// What a start or split copies.
 pub(super) struct Copied {
     pub source: CopySource,
-    /// The ID of the copied workspace's repository.
     pub repository: RepositoryId,
 }
 
@@ -69,9 +67,7 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
     }))
 }
 
-/// What copying a workspace, or with `checkpoint` one of its checkpoints,
-/// sends for the workspace a picker picks; the new space copies it on this
-/// machine.
+/// The new space copies the workspace on this machine.
 pub(super) fn copying(checkpoint: Option<CheckpointNumber>) -> Acting {
     Acting::here(move |workspace| {
         crate::client::workspaces::copy_origin(CopySource {

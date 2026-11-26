@@ -1,8 +1,6 @@
 //! A move to standard output, which needs this command until it copied the
-//! package: refused where ending the spaces would end the command first,
-//! and holding the move's lock until the command copied the package and
-//! ended the space here, so a command that goes before leaves the space to
-//! the daemon to finish.
+//! package. It holds the move's lock until then, so a command that goes before
+//! leaves the space to the daemon to finish.
 use std::{
     io::Write as _,
     path::{Path, PathBuf},
@@ -15,17 +13,13 @@ use crate::transfer::{MoveDestination, MoveLock, MoveOrder, MoveReport, SpaceMov
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_workers::moves::{self, Planned};
 
-/// A move to standard output in progress, holding the move's lock, with
-/// the file its package waits in.
 pub(super) struct Streaming {
     lock: MoveLock,
     package: PathBuf,
 }
 
 impl Streaming {
-    /// The move `order` to standard output, once nothing it ends would end
-    /// this command first, under the move's lock; none for another
-    /// destination.
+    /// Refused where ending the spaces would end this command first.
     pub(super) async fn start(ctx: &Context, order: &MoveOrder) -> Result<Option<Self>> {
         let MoveDestination::Client { path } = &order.destination else {
             return Ok(None);
@@ -37,8 +31,6 @@ impl Streaming {
         Ok(Some(Self { lock, package }))
     }
 
-    /// Copy the package of the move `order` that `report` describes to
-    /// standard output, then end its space here, which its reader has.
     pub(super) async fn deliver(
         self,
         ctx: &Context,
@@ -60,7 +52,6 @@ impl Streaming {
     }
 }
 
-/// Copy the package in `path` to standard output.
 fn copy_to_stdout(path: &Path) -> Result<()> {
     let mut file = std::fs::File::open(path)?;
     crate::stdout::write(|stdout| {
@@ -70,9 +61,7 @@ fn copy_to_stdout(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// End the `moved` space where it runs, whose package its reader took,
-/// unless the move took a removed space's record, which stays where it is
-/// kept.
+/// A removed space's record stays where it is kept.
 async fn end_moved_space(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
     if moves::takes_record(&ctx.paths, &moved.id).await {
         return Ok(());
@@ -88,7 +77,6 @@ async fn end_moved_space(ctx: &Context, moved: &SpaceMoved) -> Result<()> {
     Ok(())
 }
 
-/// What a move wrote of the `moved` space: it, or with `--keep` a copy.
 fn exported(order: &MoveOrder, moved: &SpaceMoved) -> String {
     match order.keep {
         true => format!("a copy of {}", moved.name),
@@ -96,9 +84,6 @@ fn exported(order: &MoveOrder, moved: &SpaceMoved) -> String {
     }
 }
 
-/// Refuse the move `order` to standard output when it would end the chat
-/// this process runs in, or a space this terminal closes with, before the
-/// package reached standard output.
 async fn ensure_survives(ctx: &Context, order: &MoveOrder) -> Result<()> {
     // Another machine's space runs neither this process nor its terminal.
     if moves::runs_elsewhere(&ctx.paths, order).await? {

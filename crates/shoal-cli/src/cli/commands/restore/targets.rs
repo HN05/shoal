@@ -1,6 +1,4 @@
-//! What `shoal restore` reopens: the removed spaces named by ID, refusing a
-//! space that is not removed; without a space, those picked among the
-//! removed spaces, or else a list of them.
+//! What `shoal restore` reopens.
 use anyhow::{Result, bail};
 
 use crate::client::output::restore::Restorable;
@@ -10,10 +8,8 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The removed spaces `names` names, each once and a workspace before a
-/// chat in its worktree, refusing a space that is not removed; without a
-/// name, those picked among the removed spaces the caller may restore.
-/// `None` once it listed those, without a terminal or anything to pick.
+/// Each once, and a workspace before a chat in its worktree. `None` once it
+/// listed them, without a terminal or anything to pick.
 pub(super) async fn removed(
     ctx: &Context,
     names: Vec<SpaceSelector>,
@@ -63,8 +59,6 @@ async fn named(
     Ok(selected)
 }
 
-/// The removed spaces picked among `removed`; `None` without a terminal or
-/// anything to pick.
 fn pick(ctx: &Context, removed: &[RemovedSpace]) -> Result<Option<Vec<RemovedSpace>>> {
     if removed.is_empty() || !ctx.interactive() {
         return Ok(None);
@@ -83,8 +77,6 @@ fn pick(ctx: &Context, removed: &[RemovedSpace]) -> Result<Option<Vec<RemovedSpa
     ))
 }
 
-/// Print the removed spaces of `restorable` by kind, each led by its ID,
-/// which selects it.
 fn print_restorable(restorable: &Restorable) {
     let removed = &restorable.removed;
     if removed.is_empty() {

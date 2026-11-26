@@ -1,14 +1,10 @@
-//! `--focus`: resuming one space's agent in this terminal, which only this
-//! process can do: its failed launch, else its stopped agent or last
-//! session, the `--execution` one when given.
+//! `--focus`: resuming one space's agent in this terminal.
 use anyhow::{Result, bail};
 
 use super::{Options, Resuming, failed_starts, reports};
 use crate::cli::context::Context;
 use crate::client::output::resume::Queued;
 
-/// Resume the agent of the one space `resuming` lists in this terminal as
-/// `options` says, after reporting the spaces reopened for it.
 pub(super) async fn here(ctx: &Context, resuming: Resuming, options: Options) -> Result<i32> {
     let [space] = resuming.spaces.as_slice() else {
         bail!("--focus resumes the agent of one space");

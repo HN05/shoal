@@ -1,8 +1,5 @@
-//! `shoal restore --discard-agent`: discarding a space's stopped agent, last
-//! sessions, stopped commands and failed launch instead of bringing them
-//! back, which leaves its files, branch and worktree as they are. Each
-//! space's daemon discards its own, one request per space, on this machine
-//! or another joined machine, never waiting for an offline one.
+//! `shoal restore --discard-agent`. Each space's daemon discards its own, one
+//! request per space, never waiting for an offline machine.
 use anyhow::{Result, ensure};
 
 use crate::cli::commands::resume::{
@@ -15,9 +12,6 @@ use crate::client::assignments;
 use crate::client::output::restore::DiscardedAgents;
 use shoal_ids::execution_ids::ExecutionId;
 
-/// Discard the agents of the spaces `targets` selects as `shoal resume`
-/// selects them, every space's with one for `--all`, and for `--machine`
-/// those of the machines it names, only the `execution` one when given.
 pub(in crate::cli::commands) async fn run(
     ctx: &Context,
     targets: SpaceTargets,
@@ -90,8 +84,6 @@ fn ensure_one_here(spaces: &[Target], execution: Option<&ExecutionId>) -> Result
     Ok(())
 }
 
-/// Report the agents `discarded` of the spaces `names` lists and the spaces
-/// it left, or that there was none.
 fn report_discarded(ctx: &Context, discarded: &DiscardedAgents, names: &[String]) -> Result<()> {
     ctx.show(discarded, |discarded| {
         resume::reports::skipped_lines(&discarded.skipped);

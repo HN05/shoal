@@ -1,5 +1,3 @@
-//! The agent a start runs: the one it names, else `agent.default`, else
-//! one a terminal picks, with the model asked of it.
 use anyhow::Result;
 use shoal_protocol::launches::Launch;
 
@@ -9,9 +7,7 @@ use crate::{
     config::Effective,
 };
 
-/// Refuse the agent `launch` names, else `agent.default`, and the model
-/// it asks of it, before anything is asked, when `settings` cannot start
-/// them; another machine checks its own.
+/// Another machine checks its own.
 pub(in crate::cli::commands::start::settle) fn check_agent(
     launch: &Launch,
     settings: &Effective,
@@ -22,9 +18,7 @@ pub(in crate::cli::commands::start::settle) fn check_agent(
     Ok(())
 }
 
-/// Name the agent of `launch` under `settings`: the one it names, else
-/// `agent.default`, else on a terminal a picked one; another machine
-/// picks its own.
+/// Another machine picks its own.
 pub(in crate::cli::commands::start::settle) fn pick_agent(
     ctx: &Context,
     launch: &mut Launch,
@@ -36,8 +30,6 @@ pub(in crate::cli::commands::start::settle) fn pick_agent(
     Ok(())
 }
 
-/// Refuse `model` for `agent` before anything else is asked for, when its
-/// launch cannot pass the values on.
 pub(in crate::cli::commands) fn check_model(
     settings: &Effective,
     agent: &Agent,

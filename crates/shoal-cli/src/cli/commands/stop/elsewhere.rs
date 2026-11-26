@@ -1,6 +1,5 @@
-//! Stopping the spaces other joined machines run, which the daemon's
-//! selection names with their machines: each stop goes to that machine
-//! through the daemon, and the hub holds it while that machine is offline.
+//! Stopping the spaces other joined machines run. The hub holds a stop while
+//! the machine is offline.
 use anyhow::Result;
 use shoal_protocol::{
     hub::{directory::Listed, routing::Queued},
@@ -13,8 +12,6 @@ use crate::{
     protocol::{QueuedLaunches, UntrackedProcesses},
 };
 
-/// Stop `space` on its machine, reporting it, or return the stop the hub
-/// holds while that machine is offline.
 pub(super) async fn stop_one(ctx: &Context, space: &Listed, yes: bool) -> Result<Option<Queued>> {
     let selector = SpaceSelector::id(&space.space.id);
     // A process here is none of that machine's.

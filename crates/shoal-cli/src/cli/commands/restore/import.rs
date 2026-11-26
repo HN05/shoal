@@ -1,7 +1,4 @@
-//! `shoal restore --from`: continue spaces from the packages `shoal move`
-//! wrote: the daemon reads each package, records its spaces as removed here
-//! and opens its own space again, which this sets up as `shoal restore`
-//! does, then opens the spaces that go with it.
+//! `shoal restore --from`.
 use super::reopen::ReopenedExt;
 use std::{
     io::IsTerminal,
@@ -29,7 +26,6 @@ use crate::{
 use super::reopen;
 use shoal_workers::reopening;
 
-/// How `shoal restore --from` opens each space.
 pub(in crate::cli::commands) struct ImportOptions {
     /// The repository to import into instead of the one with the export's
     /// origin.
@@ -37,13 +33,9 @@ pub(in crate::cli::commands) struct ImportOptions {
     /// Whether the agents keep their sessions; `None` keeps those on the
     /// machine that exported the space or whose files it carries.
     pub(in crate::cli::commands) sessions: Option<bool>,
-    /// Whether to queue the restores of the agents the export stopped.
     pub(in crate::cli::commands) restore: bool,
 }
 
-/// `shoal restore --from`: continue the spaces exported to `files`, or to
-/// the `.shoal` files in the directories among them, as `options` says. A
-/// directory or several files import each space and report every result.
 pub(in crate::cli::commands) async fn import(
     ctx: &Context,
     files: Vec<PathBuf>,
@@ -65,8 +57,6 @@ pub(in crate::cli::commands) async fn import(
     import_each(ctx, &files, &options).await.report(ctx)
 }
 
-/// Have the daemon import the package in `file`, or on standard input for
-/// `-`, as `options` says; an error says when nothing was recorded.
 async fn import_package(
     ctx: &Context,
     file: &Path,
@@ -86,8 +76,7 @@ async fn import_package(
     ctx.progress("Importing", importing).await
 }
 
-/// The import of the package in `file`, or on standard input for `-`,
-/// which must not be a terminal, since no one types an archive.
+/// Standard input must not be a terminal, since no one types an archive.
 fn package_import(file: &Path, options: &ImportOptions) -> Result<PackageImport> {
     let package = if file.as_os_str() == STANDARD_STREAM {
         ensure!(
@@ -143,8 +132,6 @@ fn import_files(files: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     Ok(found)
 }
 
-/// Import each of `files`, going on after one fails, then the spaces that
-/// go with the space of each.
 async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) -> ImportReport {
     let mut report = ImportReport::default();
     for file in files {
@@ -196,8 +183,6 @@ async fn import_one(
     true
 }
 
-/// The spaces an import of several files continued, and the files it could
-/// not import.
 #[derive(Default)]
 struct ImportReport {
     imported: Vec<Reopened>,

@@ -7,7 +7,6 @@ use crate::{
     state::QueueKind,
 };
 
-/// What the menu does with the entry it picks.
 #[derive(Clone, Copy)]
 enum Action {
     Start,

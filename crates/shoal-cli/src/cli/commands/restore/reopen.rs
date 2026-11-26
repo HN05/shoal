@@ -16,12 +16,8 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Open each of the `removed` spaces again, in the order given, so a
-/// workspace opens before a chat in its worktree: link its PRs and set up a
-/// workspace and run its post-setup hook, in which the agents restored for
-/// it start; an error once one fails names those opened before it. A
-/// workspace opened alone becomes the directory of a shell that follows
-/// the caller.
+/// In the order given, so a workspace opens before a chat in its worktree. An
+/// error once one fails names those opened before it.
 pub(in crate::cli::commands) async fn reopen_each(
     ctx: &Context,
     removed: &[RemovedSpace],
@@ -40,8 +36,6 @@ pub(in crate::cli::commands) async fn reopen_each(
     Ok(reopened)
 }
 
-/// Open the `removed` space again: a workspace set up, with its PRs linked
-/// and its post-setup hook run, a chat with its PRs linked.
 async fn reopen(ctx: &Context, removed: &RemovedSpace) -> Result<Reopened> {
     let restore = crate::client::removal::restore(&ctx.paths, SpaceSelector::id(&removed.space_id));
     let restored = ctx.progress("Restoring", restore).await?;
@@ -50,8 +44,8 @@ async fn reopen(ctx: &Context, removed: &RemovedSpace) -> Result<Reopened> {
     Ok(opened)
 }
 
-/// The spaces a restore opened again, which an error that ends it
-/// afterwards names, since it reports them no other way.
+/// An error that ends a restore afterwards names these, since it reports them
+/// no other way.
 pub(in crate::cli::commands) struct Reopening(Option<String>);
 
 impl Reopening {
@@ -63,7 +57,6 @@ impl Reopening {
         Self((!names.is_empty()).then(|| names.join(", ")))
     }
 
-    /// `error`, saying which spaces opened before it.
     pub(in crate::cli::commands) fn explain(&self, error: anyhow::Error) -> anyhow::Error {
         match &self.0 {
             Some(names) => error.context(format!("reopened {names}, then stopped")),
@@ -72,10 +65,7 @@ impl Reopening {
     }
 }
 
-/// Prepare a space the daemon opened again from a removal record, as
-/// [`prepare_restored`] does, then queue its stopped agents when `restore`;
-/// `action` begins the report. A workspace becomes the directory of a shell
-/// that follows the caller.
+/// A workspace becomes the directory of a shell that follows the caller.
 pub(in crate::cli::commands) async fn finish_reopen(
     ctx: &Context,
     restored: RestoredSpace,
@@ -104,7 +94,6 @@ pub(in crate::cli::commands) async fn finish_reopen(
 
 /// Operations on the client type [`Reopened`] that only the `shoal` command uses.
 pub(crate) trait ReopenedExt {
-    /// The report of the reopening, which `action` begins.
     fn message(&self, ctx: &Context, action: &str) -> String;
 }
 
@@ -156,9 +145,6 @@ impl reopening::Reopening for Context {
     }
 }
 
-/// One aligned line per removed space: its name, the branch or commit a
-/// workspace's restore opens, when and why it was removed, and the number of the checkpoint a workspace's
-/// removal took.
 pub(super) fn removed_lines(removed: &[RemovedSpace]) -> Vec<String> {
     let width = removed
         .iter()

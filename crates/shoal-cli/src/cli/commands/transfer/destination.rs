@@ -1,5 +1,4 @@
-//! Where `shoal move` takes spaces: the destination its flags name, or one
-//! the user picks on a terminal, as the daemon that runs the move reads it.
+//! Where `shoal move` takes spaces.
 use std::{
     io::IsTerminal,
     path::{Path, PathBuf},
@@ -12,11 +11,8 @@ use crate::cli::{args::transfer::MoveArgs, context::Context, ui};
 use crate::transfer::{MachineDestination, MoveDestination, SshDestination};
 use shoal_ids::space_ids::SpaceId;
 
-/// Where a move takes spaces, as the user names it.
 enum Named {
-    /// Another machine's Shoal, through this SSH destination.
     Ssh(String),
-    /// Another machine joined to the same hub, by its name or ID.
     Machine(String),
     /// A file, a directory of them or standard output, which
     /// `shoal restore --from` reads.
@@ -30,7 +26,6 @@ pub(super) struct Chosen {
     _stream: Option<tempfile::TempDir>,
 }
 
-/// What the destination picker offers.
 #[derive(Clone, Copy)]
 enum Kind {
     Machine,
@@ -38,10 +33,8 @@ enum Kind {
     File,
 }
 
-/// The spaces `args` names with the destination it names, or without one
-/// the destination the user picks on a terminal, once the spaces and
-/// repository it names exist and a checkpoint names one space, after
-/// picking the spaces when it names none.
+/// The destination is asked for only once the spaces and repository named exist
+/// and a checkpoint names one space.
 pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<SpaceId>, Chosen)> {
     let named = match (&args.ssh, &args.machine, &args.output) {
         (Some(host), _, _) => Some(Named::Ssh(host.clone())),
@@ -91,8 +84,7 @@ pub(super) async fn choose(ctx: &Context, args: &MoveArgs) -> Result<(Vec<SpaceI
     Ok((spaces, chosen))
 }
 
-/// Refuse a file `-o path` names that exists, before any picker opens; a
-/// directory takes a file per space.
+/// Refused before any picker opens. A directory takes a file per space.
 fn ensure_new_file(path: &Path) -> Result<()> {
     ensure!(
         path.as_os_str() == STANDARD_STREAM || path.is_dir() || !path.exists(),
@@ -102,8 +94,6 @@ fn ensure_new_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The destination `-o path` names for `several` spaces or one: standard
-/// output for `-`, a directory that takes a file per space, or a file.
 fn file_destination(path: &Path, several: bool) -> Result<Chosen> {
     if path.as_os_str() == STANDARD_STREAM {
         ensure!(
@@ -133,9 +123,6 @@ fn file_destination(path: &Path, several: bool) -> Result<Chosen> {
     })
 }
 
-/// The destination the user picks: its kind, `Joined machine` first where
-/// another joined machine is online, and a file only where `files`, then
-/// the machine, the host or the path, a directory for `several` spaces.
 async fn pick(ctx: &Context, several: bool, files: bool) -> Result<Named> {
     let joined = crate::cli::everywhere::elsewhere(ctx, "the joined machines to move to");
     let view = joined.await.filter(ui::can_pick_machine);
@@ -160,13 +147,11 @@ async fn pick(ctx: &Context, several: bool, files: bool) -> Result<Named> {
     }
 }
 
-/// The SSH host the user types.
 fn ssh_host(ctx: &Context) -> Result<Named> {
     Ok(Named::Ssh(ui::input(ctx, "SSH host")?))
 }
 
-/// The file the user types, a directory for `several` spaces, never
-/// standard output, which only `-o -` writes.
+/// Never standard output, which only `-o -` writes.
 async fn file(ctx: &Context, several: bool) -> Result<Named> {
     let prompt = match several {
         true => "Directory",

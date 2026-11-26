@@ -8,14 +8,12 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The waiting entries in queue order.
 pub(super) async fn waiting(ctx: &Context) -> Result<Vec<QueueEntry>> {
     let mut entries = queued_agents::entries(ctx).await?;
     entries.retain(|entry| entry.state == QueueState::Queued);
     Ok(entries)
 }
 
-/// The entry `selector` names, or one picked among the waiting entries.
 pub(super) async fn selected(
     ctx: &Context,
     selector: Option<String>,
@@ -24,8 +22,6 @@ pub(super) async fn selected(
     selected_among(ctx, selector, prompt, |_| true).await
 }
 
-/// The entry `selector` names, or one picked among the waiting entries
-/// `offered` keeps.
 pub(super) async fn selected_among(
     ctx: &Context,
     selector: Option<String>,
@@ -63,7 +59,6 @@ async fn named(ctx: &Context, selector: String) -> Result<String> {
     Ok(restore.map_or(selector, |entry| entry.id.to_string()))
 }
 
-/// Pick one of `entries`.
 pub(super) async fn pick_entry(
     ctx: &Context,
     entries: &[QueueEntry],
@@ -77,7 +72,6 @@ pub(super) async fn pick_entry(
         .context("picker returned an unknown entry")
 }
 
-/// `entries` as picker entries: each ID with its listing row.
 async fn labelled(ctx: &Context, entries: &[QueueEntry]) -> Result<ui::Entries> {
     let rows = queued_agents::rows(ctx, entries).await?;
     Ok(entries

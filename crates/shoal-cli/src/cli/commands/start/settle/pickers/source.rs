@@ -1,5 +1,5 @@
 //! What a new workspace starts from when nothing names it, picked on a
-//! terminal: a new or existing branch, an issue or a PR.
+//! terminal.
 use crate::git::existing_branch::BranchExt;
 use anyhow::Result;
 use shoal_protocol::launches::{ItemChoice, Launch, StartTarget};
@@ -13,12 +13,9 @@ use crate::{
     start_plan::Creation,
 };
 
-/// Pick on a terminal what the new workspace of `launch` in `repository`
-/// starts from when it names nothing: an existing branch or PR, or an
-/// issue. A new branch it leaves unnamed, which the daemon begins as a
-/// chat whose agent makes it a workspace once it knows the work, so what
-/// only a branch takes is refused before another picker asks. Returns
-/// whether it picked one.
+/// A new branch stays unnamed: the daemon begins it as a chat whose agent makes
+/// it a workspace once it knows the work, so what only a branch takes is
+/// refused before another picker asks. Returns whether it picked one.
 pub(in crate::cli::commands::start::settle) async fn pick_source(
     ctx: &Context,
     launch: &mut Launch,
@@ -34,8 +31,6 @@ pub(in crate::cli::commands::start::settle) async fn pick_source(
     Ok(repo.is_some())
 }
 
-/// Refuse what only a new workspace's branch takes in `launch` when it
-/// names none, so it begins as a chat.
 fn ensure_branch_takes(launch: &Launch) -> Result<()> {
     match names_no_branch(launch) {
         true => crate::launches::ensure_begins_as_chat(launch),
@@ -43,11 +38,7 @@ fn ensure_branch_takes(launch: &Launch) -> Result<()> {
     }
 }
 
-/// Settle on a terminal what the new workspace a creation `launch` makes
-/// starts in and from, as a start's pickers do: its repository, picked
-/// when nothing names one, checked with the daemon, and, when it names
-/// nothing its branch comes from, its source, a new branch's name
-/// included; without a terminal, refuse a launch that names no source.
+/// Without a terminal, a launch that names no source is refused.
 pub(in crate::cli::commands) async fn pick_start_source(
     ctx: &Context,
     launch: &mut Launch,
@@ -81,15 +72,12 @@ pub(in crate::cli::commands) async fn pick_start_source(
     Ok(())
 }
 
-/// Whether `launch` names nothing a new workspace starts from: no branch,
-/// issue, link, base or copy; a repository alone names none.
+/// A repository alone names none.
 fn names_nothing(launch: &Launch) -> bool {
     names_no_branch(launch) && launch.base.is_none()
 }
 
-/// Whether `launch` names nothing its workspace's branch comes from: no
-/// existing workspace, which has its own, branch, issue, PR, CI run, link or
-/// copy; a base or a repository alone settles no branch.
+/// A base or a repository alone settles no branch.
 fn names_no_branch(launch: &Launch) -> bool {
     let names_link = !matches!(launch.target, None | Some(StartTarget::Repository(_)));
     launch.in_workspace.is_none()
@@ -102,8 +90,6 @@ fn names_no_branch(launch: &Launch) -> bool {
         && !names_link
 }
 
-/// `launch` starting from what a picker chose: the existing branch or PR
-/// `creation` opens, or the issue `picked`.
 fn picked_source(launch: &mut Launch, creation: Creation, picked: Option<ItemInput>) {
     if let Some(issue) = picked {
         launch.issue = Some(ItemChoice::Named(issue));
@@ -119,9 +105,8 @@ fn picked_source(launch: &mut Launch, creation: Creation, picked: Option<ItemInp
     }
 }
 
-/// The branch the picked ref `selector` names, as the daemon settles a
-/// start's branch: a local branch by its name, and a remote's by its whole
-/// ref, which keeps the remote it was picked from.
+/// As the daemon settles a start's branch: a local branch by its name, and a
+/// remote's by its whole ref, which keeps the remote it was picked from.
 fn switched_branch(selector: &str) -> String {
     crate::git::strip_local(selector)
         .unwrap_or(selector)
@@ -178,8 +163,6 @@ async fn pick_add_source(
     Ok(None)
 }
 
-/// An existing branch of `repo`, local or remote, picked with the
-/// workspace that has it.
 async fn pick_branch(ctx: &Context, repo: &Repository) -> Result<String> {
     let branches = crate::client::repositories::branches(&ctx.paths, (&repo.id).into()).await?;
     let workspaces = crate::client::spaces::list(&ctx.paths)

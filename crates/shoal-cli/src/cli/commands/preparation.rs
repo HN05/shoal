@@ -1,6 +1,5 @@
-//! What a start, a creation or a setup reads of a workspace's preparation:
-//! the workspace a launch recorded, followed to its end, reported or
-//! entered, and its shell once prepared.
+//! Following and reporting a workspace's preparation for a start, a creation or
+//! a setup.
 mod prepared;
 mod reports;
 mod starting;

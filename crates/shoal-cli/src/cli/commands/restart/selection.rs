@@ -1,5 +1,4 @@
-//! The spaces a command restarts the agents of, as it selects them, on this
-//! machine and on the other joined machines.
+//! The spaces a restart selects, on this machine and the other joined machines.
 use std::collections::HashMap;
 
 use anyhow::{Result, ensure};
@@ -21,8 +20,6 @@ use crate::{
     time::UnixTime,
 };
 
-/// The spaces whose agents a command asks the daemon to restart, and those
-/// it leaves out.
 pub(super) struct Selection {
     pub spaces: Vec<Target>,
     pub skipped: Vec<Skipped>,
@@ -31,12 +28,8 @@ pub(super) struct Selection {
     pub places: HashMap<SpaceId, Origin>,
 }
 
-/// `--all` selects every workspace and chat of this machine but the
-/// caller's own, `--machine` every space of the machines it names, names
-/// select theirs wherever they run, and none of them the picker, with
-/// `agent` only the spaces whose agent is named so. The daemon lists only
-/// the agents a scoped caller may restart, and the hub only the spaces of
-/// other machines its scope reaches.
+/// The daemon lists only the agents a scoped caller may restart, and the hub
+/// only the spaces of other machines its scope reaches.
 pub(super) async fn load(
     ctx: &Context,
     targets: SpaceTargets,
@@ -51,9 +44,6 @@ pub(super) async fn load(
     Ok(selection)
 }
 
-/// The spaces `targets` selects: with `--all` every workspace and chat of
-/// this machine but the caller's own, else as every command that selects
-/// spaces selects them.
 pub(super) async fn spaces(
     ctx: &Context,
     targets: SpaceTargets,
@@ -76,9 +66,8 @@ fn reached(ctx: &Context, spaces: Spaces) -> Vec<Space> {
     crate::scoping::Scoping::inherited(&ctx.paths.state).reached_below(spaces)
 }
 
-/// The spaces of `spaces` whose agent among `agents` is named `agent`, and
-/// without names each that runs one Shoal did not stop. The daemon tells
-/// why it skips a named one; one that runs no `agent` agent is skipped here.
+/// The daemon tells why it skips a named space; one that runs no `agent` agent
+/// is skipped here.
 fn select(
     spaces: Vec<Space>,
     agents: &[RunningAgent],
@@ -115,11 +104,8 @@ fn select(
     selection
 }
 
-/// Add to `selection` the spaces of other machines among `elsewhere` whose
-/// agent their machine last reported named `agent`, and without names each
-/// that runs one; a space of an offline machine that it would select is
-/// skipped, naming the machine, unless named, which its machine's refusal
-/// names.
+/// A space of an offline machine that it would select is skipped, naming the
+/// machine, unless named, which its machine's refusal names.
 fn select_elsewhere(
     selection: &mut Selection,
     elsewhere: Vec<(Listed, Member)>,
@@ -150,9 +136,8 @@ fn select_elsewhere(
     }
 }
 
-/// The agent of `agents` a restart of `space` restarts, as the daemon picks
-/// it: one Shoal did not stop before one it did, and a connected one before
-/// an execution whose wrapper is gone.
+/// As the daemon picks it: one Shoal did not stop before one it did, and a
+/// connected one before an execution whose wrapper is gone.
 fn restarted<'a>(agents: &'a [RunningAgent], space: &Space) -> Option<&'a RunningAgent> {
     let theirs = || (agents.iter()).filter(|running| running.space_id == space.id);
     let live = || theirs().filter(|running| running.stopped.is_none());
@@ -161,10 +146,9 @@ fn restarted<'a>(agents: &'a [RunningAgent], space: &Space) -> Option<&'a Runnin
         .or_else(|| theirs().next())
 }
 
-/// Refuse a selection that includes the scoped caller's own space,
-/// before any restarts, as the daemon would refuse its agent. The daemon
-/// refuses each space outside the caller's scope, which needs the scope
-/// token: a process that cleared it stays refused.
+/// Refused before any restart, as the daemon would refuse it. The daemon
+/// refuses each space outside the caller's scope by its scope token, so a
+/// process that cleared it stays refused.
 pub(super) fn ensure_below(spaces: &[Target]) -> Result<()> {
     let own = crate::env::own_space();
     ensure!(
@@ -176,7 +160,6 @@ pub(super) fn ensure_below(spaces: &[Target]) -> Result<()> {
     Ok(())
 }
 
-/// The `chosen` spaces as targets, this machine's first.
 pub(super) fn into_targets(chosen: Chosen) -> Vec<Target> {
     let elsewhere =
         (chosen.elsewhere.into_iter()).map(|(listed, machine)| Target::elsewhere(&listed, machine));

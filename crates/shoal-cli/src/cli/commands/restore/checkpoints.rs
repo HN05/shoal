@@ -1,4 +1,4 @@
-//! Checkpoints of workspaces: taking one, and returning a workspace to one.
+//! `shoal checkpoint` and `shoal restore --checkpoint`.
 use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result, ensure};
 use shoal_refs::BranchName;
@@ -15,7 +15,6 @@ use crate::{
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// `shoal checkpoint`: keep the workspace's current state.
 pub(in crate::cli::commands) async fn checkpoint(
     ctx: &Context,
     workspace: Option<SpaceSelector>,
@@ -38,9 +37,6 @@ pub(in crate::cli::commands) async fn checkpoint(
     Ok(0)
 }
 
-/// Return the one workspace `spaces` names, else the current one or the
-/// one picked, to `checkpoint`, or to the one the user picks when it names
-/// none.
 pub(super) async fn run(
     ctx: &Context,
     spaces: Vec<SpaceSelector>,
@@ -57,21 +53,17 @@ pub(super) async fn run(
     }
 }
 
-/// What taking a checkpoint sends for the workspace a picker picks; its
-/// name decides nothing of which workspaces it reaches.
+/// Its name decides nothing of which workspaces it reaches.
 pub(in crate::cli::commands) fn taking() -> Acting {
     Acting::request(|space| recovery::checkpoint(space, None))
 }
 
-/// What returning to a checkpoint sends for the workspace a picker picks;
-/// the checkpoint, which may be picked next, decides nothing of which
+/// The checkpoint, which may be picked next, decides nothing of which
 /// workspaces it reaches.
 pub(in crate::cli::commands) fn returning() -> Acting {
     Acting::request(|space| recovery::restore_checkpoint(space, CheckpointNumber::new(1)))
 }
 
-/// Return the workspace to the checkpoint the user picks, or list its
-/// checkpoints when there is no terminal or none to pick.
 async fn choose(ctx: &Context, workspace: SpaceSelector) -> Result<i32> {
     let checkpoints =
         (list(ctx, &workspace).await?).with_context(|| format!("no workspace {workspace}"))?;
@@ -133,7 +125,6 @@ fn print_checkpoints(checkpoints: &[Checkpoint]) {
     }
 }
 
-/// One aligned line per checkpoint: its number, time, cause, branch and name.
 fn checkpoint_lines(checkpoints: &[Checkpoint]) -> Vec<String> {
     let width = checkpoints
         .last()

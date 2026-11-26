@@ -1,6 +1,4 @@
-//! What a start reports of the agent it started: the machine the hub
-//! placed it on, where a chat's agent runs or waits when it runs in no
-//! terminal, and where an agent waits in the queue.
+//! What a start reports of the agent it started.
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
@@ -12,9 +10,6 @@ use shoal_protocol::hub::placement::{Decision, Unanswered};
 use shoal_protocol::protocol::{self as launches, Launched};
 use shoal_schedule::placement::{Reason, SkippedBy};
 
-/// Report the chat `launched` started for a start that runs its agent in
-/// no terminal, as a start of it in its place would: where its agent runs
-/// or waits.
 pub(in crate::cli::commands) fn report_started(ctx: &Context, launched: Launched) -> Result<i32> {
     let space = &launched.space;
     let text = match &launched.start {
@@ -41,8 +36,6 @@ pub(in crate::cli::commands) fn report_started(ctx: &Context, launched: Launched
     Ok(0)
 }
 
-/// What a start says of the chat `space`, whose agent waits in the queue as
-/// `entry` behind `waiting` entries.
 fn queued(space: &Space, entry: &QueueEntry, waiting: usize) -> String {
     format!(
         "Queued chat {}, {} (position {} of {waiting}); its agent starts {}",
@@ -53,7 +46,6 @@ fn queued(space: &Space, entry: &QueueEntry, waiting: usize) -> String {
     )
 }
 
-/// Report the agent of `entry`, queued in the space `name`.
 pub(in crate::cli::commands) fn report_queued_in(
     ctx: &Context,
     name: &str,
@@ -63,8 +55,6 @@ pub(in crate::cli::commands) fn report_queued_in(
     Ok(0)
 }
 
-/// Report the machine the hub placed a start on, `decision`, and why, with
-/// each machine it skipped.
 pub(in crate::cli::commands) fn report_placement(ctx: &Context, decision: &Decision) -> Result<()> {
     let text = std::iter::once(placed(decision))
         .chain(decision.skipped.iter().map(|skipped| {
@@ -79,7 +69,6 @@ pub(in crate::cli::commands) fn report_placement(ctx: &Context, decision: &Decis
     ctx.emit(&text, decision)
 }
 
-/// What a start says of the machine `decision` placed it on.
 fn placed(decision: &Decision) -> String {
     let unanswered =
         (decision.unanswered).map(|unanswered| format!(", as {}", unanswered_why(unanswered)));
@@ -92,7 +81,6 @@ fn placed(decision: &Decision) -> String {
     )
 }
 
-/// Why a placement put a start on a machine.
 fn reason(reason: Reason) -> String {
     let memory = |memory: Option<u64>| {
         memory.map_or_else(String::new, |memory| {
@@ -113,7 +101,6 @@ fn reason(reason: Reason) -> String {
     }
 }
 
-/// Why the external placer did not decide.
 fn unanswered_why(unanswered: Unanswered) -> &'static str {
     match unanswered {
         Unanswered::NoPlacer => "no placer is registered",
@@ -122,7 +109,6 @@ fn unanswered_why(unanswered: Unanswered) -> &'static str {
     }
 }
 
-/// Why a placement skipped a machine, with what lets a start go there.
 fn skipped_why(why: SkippedBy) -> &'static str {
     match why {
         SkippedBy::NoRepository => "repository not registered; `shoal repo add` there registers it",

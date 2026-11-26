@@ -1,6 +1,5 @@
-//! Starting the agent of a space that changed since its session stopped,
-//! a workspace's or a chat's: what it is told, whether it starts from a
-//! fork of its session and its launch are the same for either kind.
+//! Starting the agent of a space that changed since its session stopped, the
+//! same way for a workspace and a chat.
 use anyhow::{Context as _, Result};
 use std::path::PathBuf;
 
@@ -26,10 +25,8 @@ struct ChangedStart {
     records: Vec<PathBuf>,
 }
 
-/// Start the agent of `session` in `space`, which changed as `change` says
-/// since it stopped: from a fork of its session where it may and its agent
-/// can, otherwise as a new agent, told how the space changed and about the
-/// stopped commands `handoff` describes; it consumes `records` once it has
+/// From a fork of its session where it may and its agent can, otherwise as a
+/// new agent told how the space changed. It consumes `records` once it has
 /// started.
 pub(super) async fn start_changed(
     ctx: &Context,
@@ -54,11 +51,8 @@ pub(super) async fn start_changed(
     launch_in(ctx, space, start).await
 }
 
-/// Launch the agent `start` describes in `space`, as a new agent is
-/// started: a handoff's new tool with the model and effort asked of it over
-/// its configured ones, any other with those it ran with. A converted one
-/// or a handoff's starts on what it is told and its mode's instructions,
-/// then a handoff's note; any other is told it as it is.
+/// A handoff's new tool takes the model and effort asked of it over its
+/// configured ones; any other agent takes those it ran with.
 async fn launch_in(ctx: &Context, space: &Space, start: ChangedStart) -> Result<i32> {
     let ChangedStart {
         session,

@@ -1,6 +1,4 @@
-//! `shoal sleep`: put a space's agent to sleep from the end of its turn,
-//! until its next turn starts or after every turn until `--undo`, which
-//! wakes it, and set the timer that wakes it at a time.
+//! `shoal sleep`.
 use anyhow::Result;
 
 use crate::{
@@ -18,9 +16,6 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-/// Let the agent of the space `space` names, else the current one, sleep
-/// as `sleep` says, replacing its timer with `timer` when one is given, or
-/// with none end its sleep, cancel its timer and wake it.
 pub(super) async fn run(
     ctx: &Context,
     space: Option<SpaceSelector>,
@@ -34,8 +29,6 @@ pub(super) async fn run(
     Ok(0)
 }
 
-/// The timer `args` set at `now`, sending `message`, its words joined; none
-/// when they set none.
 pub(super) fn timer(args: &SleepTimerArgs, message: &[String], now: UnixTime) -> Option<WakeTimer> {
     let at = match (args.after, args.until) {
         (Some(after), _) => now + after.duration(),
@@ -46,8 +39,6 @@ pub(super) fn timer(args: &SleepTimerArgs, message: &[String], now: UnixTime) ->
     Some(WakeTimer { at, message })
 }
 
-/// How long the agent sleeps after `slept`, or how Shoal wakes it, and
-/// when its timer does.
 fn summary(slept: &Slept) -> String {
     let space = &slept.space;
     let sleep = match (slept.sleep, slept.idle_wake_minutes) {
@@ -70,9 +61,7 @@ fn summary(slept: &Slept) -> String {
     }
 }
 
-/// What putting a space's agent to sleep, or waking it, sends for the
-/// space a picker picks; how it sleeps decides nothing of which spaces it
-/// reaches.
+/// How it sleeps decides nothing of which spaces it reaches.
 pub(super) fn sleeping() -> Acting {
     Acting::request(|space| sleep::set(space, None, None))
 }

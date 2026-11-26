@@ -1,5 +1,4 @@
-//! Stopping the processes Shoal does not track, which are not saved for
-//! `shoal resume`.
+//! `shoal stop --processes` and `--leftovers`.
 use crate::cli::ui::Acting;
 use anyhow::{Result, ensure};
 
@@ -8,9 +7,6 @@ use crate::client::output::agents::StoppedProcesses;
 use shoal_protocol::processes::{Selection, Stopped};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Stop the processes Shoal does not track that `selection` takes, of each
-/// space `selectors` names, else of the current chat or workspace, else of
-/// one picked. They are not saved for `shoal resume`.
 pub(in crate::cli::commands) async fn processes(
     ctx: &Context,
     selectors: Vec<SpaceSelector>,
@@ -64,8 +60,6 @@ async fn ensure_spaces(ctx: &Context, selectors: &[SpaceSelector]) -> Result<()>
     super::check_each(ctx, &workspaces).await
 }
 
-/// Stop the untracked processes of `space` that `selection` takes, other
-/// than this one and the processes that started it.
 async fn stop_untracked(
     ctx: &Context,
     space: &SpaceSelector,
@@ -77,7 +71,6 @@ async fn stop_untracked(
         .await
 }
 
-/// What a stop of `selection` reports for `stopped`.
 fn stopped_message(stopped: &Stopped, selection: Selection) -> String {
     let (one, many) = match selection {
         Selection::Processes => ("untracked process", "untracked processes"),
@@ -90,9 +83,7 @@ fn stopped_message(stopped: &Stopped, selection: Selection) -> String {
     }
 }
 
-/// What stopping a space's untracked processes of `selection` sends for
-/// each space a picker picks; the spaces it takes are checked among this
-/// machine's.
+/// The spaces it takes are checked among this machine's.
 pub(in crate::cli::commands) fn stopping_processes(selection: Selection) -> Acting {
     Acting::here(move |space| crate::client::stopping::stop_processes(space, selection, None))
 }

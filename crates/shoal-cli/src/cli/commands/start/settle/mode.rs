@@ -1,6 +1,4 @@
-//! The mode a start's agent starts in: named, else the one the daemon finds
-//! its PR's or issue's labels call for, else on a terminal a picked one,
-//! else the default mode.
+//! The mode a start's agent starts in.
 use anyhow::Result;
 use shoal_protocol::launches::{LabelledMode, Launch};
 
@@ -16,11 +14,9 @@ use crate::{
     model::SpaceKind,
 };
 
-/// The mode of `launch` as far as nothing needs asking: the one it names,
-/// else the one the daemon finds its PR's or issue's labels call for;
-/// otherwise one a terminal picks once the daemon has checked the rest,
-/// and off one the [`launches::default_mode`], or the refusal of labels
-/// that call for several.
+/// Otherwise a terminal picks one once the daemon has checked the rest, and off
+/// a terminal the [`launches::default_mode`] applies, or labels that call for
+/// several refuse the start.
 pub(super) async fn decided(
     ctx: &Context,
     launch: &Launch,
@@ -38,9 +34,8 @@ pub(super) async fn decided(
     })
 }
 
-/// The mode the labels of the issue or PR `launch` names call for, as the
-/// daemon finds it; unlabelled without asking where it names neither or
-/// none of the `modes` it may take has a label.
+/// Unlabelled without asking where the launch names no item or none of the
+/// `modes` has a label.
 async fn labelled(ctx: &Context, launch: &Launch, modes: &ModeShapes) -> Result<LabelledMode> {
     if !labels::names_item(launch)? || labels::labelled(launch, modes)?.is_empty() {
         return Ok(LabelledMode::Unlabelled);
@@ -48,9 +43,7 @@ async fn labelled(ctx: &Context, launch: &Launch, modes: &ModeShapes) -> Result<
     crate::client::launches::labelled_mode(&ctx.paths, launch.clone()).await
 }
 
-/// Refuse the copy and fork pickers that making the launch of `args`
-/// opens where the mode they name starts a kind of space that takes
-/// neither, before either picker asks anything.
+/// Refused before either picker asks anything.
 pub(super) async fn ensure_located_fit(ctx: &Context, args: &StartArgs) -> Result<()> {
     let Some(mode) = args
         .mode
@@ -69,10 +62,7 @@ pub(super) async fn ensure_located_fit(ctx: &Context, args: &StartArgs) -> Resul
     super::arguments::ensure_flags_fit(args, kind, mode)
 }
 
-/// The mode `choice` names, else one picked among the `modes` the start
-/// may take that start the kind of space the arguments of `launch` other
-/// than the mode fit, in a repository where they name one. A setup's mode
-/// is built in, which no config defines.
+/// A setup's mode is built in, which no config defines.
 pub(super) fn chosen(
     ctx: &Context,
     choice: ModeChoice,
@@ -85,9 +75,7 @@ pub(super) fn chosen(
     choice.chosen(ctx, modes, fit::fit(launch)?)
 }
 
-/// The space `mode` of `launch` starts among the `modes` the start may
-/// take, which says what a terminal picks for it; none for a setup's,
-/// which its setup settles.
+/// None for a setup's mode, which its setup settles.
 pub(super) fn configured<'a>(
     launch: &Launch,
     mode: &modes::ModeName,
@@ -99,9 +87,7 @@ pub(super) fn configured<'a>(
     }
 }
 
-/// Refuse what `launch` names that the kind of space `mode` starts, among
-/// the `modes` the start may take, cannot take, before a picker asks for
-/// the rest; a setup's mode starts where its setup says.
+/// A setup's mode starts where its setup says.
 pub(super) fn ensure_fits(
     launch: &Launch,
     mode: &modes::ModeName,
@@ -113,9 +99,6 @@ pub(super) fn ensure_fits(
     }
 }
 
-/// Whether `mode`, among the `modes` the start may take, starts the agent
-/// of `launch` in a workspace, where a terminal picks what the workspace
-/// starts from.
 pub(super) fn starts_workspace(
     launch: &Launch,
     mode: &modes::ModeName,

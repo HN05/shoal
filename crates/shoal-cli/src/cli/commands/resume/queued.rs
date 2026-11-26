@@ -1,6 +1,5 @@
-//! A queued restore the daemon started: `shoal resume` for the admitted
-//! entry, where the agent stopped or in a background place, restores the
-//! agent there, taking over the entry's slot.
+//! A queued restore the daemon started: the restored agent takes over the
+//! entry's slot.
 use anyhow::{Result, ensure};
 use shoal_workers::hosting;
 
@@ -12,9 +11,6 @@ use crate::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
-/// Restore the stopped agent `execution` of the one space `targets` names
-/// for the daemon's start of the queued restore `entry`, whose slot the
-/// agent takes over.
 pub async fn start_entry(
     ctx: &Context,
     targets: SpaceTargets,
@@ -43,24 +39,19 @@ pub async fn start_entry(
     restored
 }
 
-/// Record the place this restore runs in, one `host` opened in the
-/// background for it, as the space's, before anything runs there.
 pub async fn record_place(ctx: &Context, host: HostName, targets: &SpaceTargets) {
     if let Some(space) = background_space(targets) {
         hosting::record_owned_here(ctx.caller(), host, &space).await;
     }
 }
 
-/// Close the place this restore runs in, one `host` opened in the
-/// background for it, once the one space `targets` names is done.
 pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &SpaceTargets) {
     if let Some(space) = background_space(targets) {
         hosting::close_background_place_when_done(ctx.caller(), host, &space).await;
     }
 }
 
-/// The one space a restore in a background place names, which the
-/// daemon's worker passes by its ID.
+/// The daemon's worker passes the space by its ID.
 fn background_space(targets: &SpaceTargets) -> Option<SpaceId> {
     match targets.space.as_slice() {
         [space] => Some(SpaceId::from(space.to_string())),

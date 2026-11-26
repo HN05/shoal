@@ -1,9 +1,6 @@
-//! Interrupting an agent's turn without stopping the agent: Shoal types the
-//! agent's own interrupt key into the place it runs in, through that
-//! place's terminal host, and the daemon records that the interrupt ended
-//! the turn, which `shoal resume` continues. Every target is resolved before
-//! Shoal types into any; a target Shoal then fails to type into does not
-//! keep it from the others.
+//! `shoal stop --interrupt`: Shoal types the agent's own interrupt key into the
+//! place it runs in. Every target is resolved before Shoal types into any, and
+//! one Shoal then fails to type into does not keep it from the others.
 use crate::cli::ui::Acting;
 use anyhow::{Context as _, Result};
 use shoal_ids::execution_ids::ExecutionId;
@@ -19,8 +16,6 @@ use crate::{
 };
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
-/// `shoal stop --interrupt`: cancel the running turns of the agents in the
-/// `selected` spaces, workspaces or chats, leaving agents without one alone.
 pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Result<i32> {
     let selected = ui::select_spaces(ctx, selected, false, &typing()).await?;
     let spaces = super::stop::resolve(ctx, selected, false).await?;
@@ -51,14 +46,12 @@ pub(super) async fn interrupt(ctx: &Context, selected: Vec<SpaceSelector>) -> Re
     })
 }
 
-/// A running turn and the key that interrupts it.
 struct Interruption {
     target: Target,
     key: &'static str,
 }
 
-/// The running turns of the agents in `spaces`, refusing them all when
-/// Shoal cannot interrupt one.
+/// All are refused when Shoal cannot interrupt one.
 async fn running_turns(ctx: &Context, spaces: &[Space]) -> Result<Vec<Interruption>> {
     let mut interruptions = Vec::new();
     for space in spaces {
@@ -80,7 +73,6 @@ async fn running_turns(ctx: &Context, spaces: &[Space]) -> Result<Vec<Interrupti
     Ok(interruptions)
 }
 
-/// Type the interrupt key, then record that it ended the turn.
 async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()> {
     let target = &interruption.target;
     target.report_typing(ctx).await?;
@@ -92,24 +84,19 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
     Ok(())
 }
 
-/// Whether an agent in `state` runs a turn, which waits for the user while
-/// it asks a question or for permission.
+/// A turn waits for the user while it asks a question or for permission.
 fn runs_turn(state: Option<AgentState>) -> bool {
     matches!(state, Some(AgentState::Working | AgentState::Waiting))
 }
 
-/// The connected agents of `space`.
 async fn agents_in(ctx: &Context, space: &Space) -> Result<Vec<RunningAgent>> {
     crate::client::agents::running(&ctx.paths, SpaceSelector::id(&space.id)).await
 }
 
-/// `agent`'s name, or a stand-in for one whose wrapper is gone.
 fn name(agent: Option<&crate::agent::Agent>) -> &str {
     agent.map_or("the agent", |agent| agent.name())
 }
 
-/// An agent Shoal types into, by space and name as output shows it, with
-/// its execution and the place it runs in.
 #[derive(Debug)]
 struct Target {
     space: SpaceName,
@@ -121,7 +108,6 @@ struct Target {
 }
 
 impl Target {
-    /// `agent` of `space`, refusing one that runs in no terminal host.
     fn of(space: &Space, agent: RunningAgent) -> Result<Self> {
         let place = agent.origin.with_context(|| {
             format!(
@@ -139,7 +125,6 @@ impl Target {
         })
     }
 
-    /// The agent as output names it.
     fn output(&self) -> Agent {
         Agent {
             space: self.space.clone(),
@@ -148,21 +133,18 @@ impl Target {
         }
     }
 
-    /// The agent and its space, as messages name them.
     fn described(&self) -> String {
         format!("{} in {}", name(self.agent.as_ref()), self.space)
     }
 
-    /// Tell the daemon that Shoal types into the agent's terminal now, so it
-    /// does not count the keys as the user's.
+    /// So that the daemon does not count the keys as the user's.
     async fn report_typing(&self, ctx: &Context) -> Result<()> {
         let (space, execution) = (SpaceSelector::id(&self.space_id), self.execution.clone());
         crate::client::agents::report_typing(&ctx.paths, space, execution).await
     }
 }
 
-/// What interrupting a turn sends for each space a picker picks; Shoal
-/// types the interrupt key into a place on this machine.
+/// Shoal types the interrupt key into a place on this machine.
 pub(super) fn typing() -> Acting {
     Acting::here(|space| {
         crate::client::agents::interrupt_turn(space, ExecutionId::from(String::new()))

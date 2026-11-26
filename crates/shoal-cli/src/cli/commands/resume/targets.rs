@@ -1,9 +1,4 @@
-//! What `shoal resume` acts on: the spaces named, workspaces and chats
-//! alike, wherever they run, every space with a stopped agent for `--all`,
-//! or the spaces of the machines `--machine` names that `--all` would take
-//! there; without a space, the current workspace when its agent can
-//! resume, else those picked among the spaces whose agent can resume, on
-//! this machine and the other joined machines, or else a list of them.
+//! What `shoal resume` and `restore --discard-agent` act on.
 use anyhow::Result;
 use std::collections::HashSet;
 
@@ -33,29 +28,23 @@ use shoal_protocol::hub::{
 use shoal_protocol::model::Located;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
-/// The spaces a resume acts on.
 #[derive(Debug)]
 pub(in crate::cli::commands) enum Selected {
-    /// Every space in reach with something to resume, for `--all`.
     All,
-    /// The spaces named or picked.
     Named(Vec<Target>),
-    /// The spaces `--machine` selects, and those of an offline machine it
-    /// skips, since a resume never waits for its machine.
+    /// A resume never waits for an offline machine, so it skips its spaces.
     OnMachines {
         spaces: Vec<Target>,
         skipped: Vec<Skipped>,
     },
 }
 
-/// A space a resume acts on: by its ID where a machine has it, else as
-/// given for its daemon to refuse.
+/// By its ID where a machine has it, else as given for its daemon to refuse.
 #[derive(Debug, Clone, PartialEq)]
 pub(in crate::cli::commands) struct Target {
     pub selector: SpaceSelector,
     /// Its number and name, where a machine has it.
     pub space: Option<(SpaceNumber, SpaceName)>,
-    /// The other joined machine it runs on; none for this machine's.
     pub machine: Option<Member>,
 }
 
@@ -63,19 +52,13 @@ pub(in crate::cli::commands) struct Target {
 /// as its `--all` takes them here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::cli::commands) enum Taking {
-    /// `shoal resume`: the spaces whose saved work `--all` resumes.
     Resumes,
-    /// `restore --discard-agent`: every space with something to resume.
     Discards,
 }
 
 impl Selected {
-    /// The spaces `targets` selects for what `taking` does with them: every
-    /// space in reach with something to resume for `--all`, those on the
-    /// machines `--machine` names that `--all` would take there, else
-    /// those named, else the current workspace when its agent can resume,
-    /// else those picked among the spaces whose agent can resume. `None`
-    /// once it listed those, without a terminal or anything to pick.
+    /// `None` once it listed the resumable spaces, without a terminal or
+    /// anything to pick.
     pub async fn load(
         ctx: &Context,
         targets: SpaceTargets,
@@ -100,10 +83,7 @@ impl Selected {
     }
 }
 
-/// The spaces picked among those whose agent can resume, on this machine
-/// and the other joined machines, or the current workspace when its agent
-/// can; `None` once they are listed instead, without a terminal or
-/// anything to pick.
+/// `None` once they are listed instead, without a terminal or anything to pick.
 async fn picked(ctx: &Context, spaces: &Spaces) -> Result<Option<Vec<SpaceSelector>>> {
     let resumable = resumable(ctx, spaces).await?;
     let elsewhere = everywhere::elsewhere(ctx, "the other machines' spaces").await;
@@ -115,9 +95,8 @@ async fn picked(ctx: &Context, spaces: &Spaces) -> Result<Option<Vec<SpaceSelect
     Ok(picked)
 }
 
-/// The spaces `selectors` name among `spaces`, by ID and each once; a
-/// selector no space here has stays as given, for the machine that has it,
-/// or else the daemon, to refuse.
+/// A selector no space here has stays as given, for the machine that has it, or
+/// else the daemon, to refuse.
 fn resolved(spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Vec<SpaceSelector> {
     let mut resolved = Vec::new();
     for selector in selectors {
@@ -132,8 +111,6 @@ fn resolved(spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Vec<SpaceSelector
     resolved
 }
 
-/// The targets `selectors` name: this machine's among `spaces`, else
-/// another machine's as the hub lists it, else as given.
 async fn located(ctx: &Context, spaces: &Spaces, selectors: Vec<SpaceSelector>) -> Vec<Target> {
     let elsewhere = match selectors
         .iter()
@@ -150,10 +127,8 @@ async fn located(ctx: &Context, spaces: &Spaces, selectors: Vec<SpaceSelector>) 
         .collect()
 }
 
-/// The spaces of the joined machines `machines` names that `--all` would
-/// take there for what `taking` does: another machine's as it last
-/// reported them, skipped while it is offline, and this machine's as
-/// `--all` takes them here.
+/// Another machine's spaces as it last reported them, skipped while it is
+/// offline.
 async fn on_machines(ctx: &Context, machines: Vec<String>, taking: Taking) -> Result<Selected> {
     let located = space_selection::on_machines(ctx, machines).await?;
     let here: HashSet<SpaceId> = match located
@@ -188,8 +163,6 @@ async fn on_machines(ctx: &Context, machines: Vec<String>, taking: Taking) -> Re
 }
 
 impl Taking {
-    /// Whether it takes another machine's space `listed`, as that machine
-    /// last reported it.
     fn takes(self, listed: &Listed) -> bool {
         match (self, listed.space.resumable) {
             (Self::Resumes, resumable) => resumable == Some(Reported::Saved),
@@ -207,7 +180,6 @@ impl Taking {
 }
 
 impl Target {
-    /// This machine's `space`.
     pub(in crate::cli::commands) fn here(space: &Space) -> Self {
         Self {
             selector: SpaceSelector::id(&space.id),
@@ -216,7 +188,6 @@ impl Target {
         }
     }
 
-    /// The space of another machine that `listed` lists on `machine`.
     fn elsewhere(listed: &Listed, machine: Member) -> Self {
         let space = &listed.space;
         Self {
@@ -244,7 +215,6 @@ impl Target {
         }
     }
 
-    /// The name of the other machine it runs on.
     pub(in crate::cli::commands) fn machine_name(&self) -> Option<String> {
         self.machine.as_ref().map(|machine| machine.name.clone())
     }
@@ -260,18 +230,14 @@ impl Target {
     }
 }
 
-/// The spaces this process's scope reaches below its own whose agent can
-/// resume, with what of it resumes.
 async fn in_reach(ctx: &Context) -> Result<Vec<ResumableSpace>> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let scoping = crate::scoping::Scoping::inherited(&ctx.paths.state);
     resumable(ctx, &Spaces(scoping.reached_below(spaces))).await
 }
 
-/// The spaces in reach that `--all` resumes, by ID: those that saved
-/// stopped work or last sessions, since a failed launch queues again only
-/// for its space named or picked, and a done space's agent resumes only
-/// when its space is named.
+/// A failed launch queues again only for its space named or picked, and a done
+/// space's agent resumes only when its space is named.
 pub(super) async fn resumable_in_reach(ctx: &Context) -> Result<Vec<Target>> {
     Ok((in_reach(ctx).await?.into_iter())
         .filter(|resumable| resumable.saved.is_some() && !resumable.space.done())
@@ -287,9 +253,7 @@ pub(in crate::cli::commands) async fn discardable_in_reach(ctx: &Context) -> Res
         .collect())
 }
 
-/// The spaces among `spaces` whose agent can resume: those that saved a
-/// stopped agent, last session or command, and those whose launch failed,
-/// unfinished work first.
+/// Unfinished work comes first.
 async fn resumable(ctx: &Context, spaces: &Spaces) -> Result<Vec<ResumableSpace>> {
     let mut summaries = ui::saved_summaries(&ctx.paths).await;
     let entries = queued_agents::entries(ctx).await?;
@@ -310,8 +274,6 @@ async fn resumable(ctx: &Context, spaces: &Spaces) -> Result<Vec<ResumableSpace>
     Ok(resumable)
 }
 
-/// Print each space of `resumable` led by its number, which selects it,
-/// with what of it resumes.
 fn print_resumable(resumable: &Resumable) {
     if resumable.spaces.is_empty() {
         outln!("No agents to resume");

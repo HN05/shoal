@@ -1,6 +1,4 @@
-//! Resuming one space's stopped agent or last session, a workspace's or a
-//! chat's, in this terminal, as `--focus` and the daemon's start of a
-//! queued restore do.
+//! Resuming one space's stopped agent or last session in this terminal.
 use anyhow::{Result, ensure};
 use shoal_workers::hosting;
 use std::path::PathBuf;
@@ -25,9 +23,7 @@ use shoal_workers::resume::{
     space::{Choice, Restore},
 };
 
-/// Resume the stopped agent of the space `space` names in this terminal,
-/// the `execution` one when given, making `change` when given; one whose
-/// wrapper waits to restore it starts there at once.
+/// An agent whose wrapper waits to restore it starts there at once.
 pub(super) async fn here(
     ctx: &Context,
     space: SpaceSelector,
@@ -49,13 +45,10 @@ pub(super) async fn here(
     }
 }
 
-/// The space `selector` names, a workspace or a chat.
 pub(super) async fn present_space(ctx: &Context, selector: &SpaceSelector) -> Result<Space> {
     resume::space::present_space(&ctx.paths, selector).await
 }
 
-/// Restore the stopped agent `chosen` picked in this terminal, telling it
-/// about its stop and the stopped commands.
 async fn restore_agent(ctx: &Context, chosen: Restore) -> Result<i32> {
     let Restore {
         space,
@@ -74,8 +67,6 @@ async fn restore_agent(ctx: &Context, chosen: Restore) -> Result<i32> {
     restore(ctx, &space, session, picked.path, commands).await
 }
 
-/// Continue the last session `chosen` picked in this terminal, telling it
-/// about the stopped commands.
 async fn continue_last_session(ctx: &Context, chosen: Restore) -> Result<i32> {
     let Restore {
         space,
@@ -91,9 +82,8 @@ async fn continue_last_session(ctx: &Context, chosen: Restore) -> Result<i32> {
     restore(ctx, &space, last, picked.path, commands).await
 }
 
-/// Restore the agent of `session` in `space`, saved at `path`, telling it
-/// about its stop and the stopped `commands`, which the caller claimed; it
-/// consumes their records once it runs.
+/// The caller claimed the stopped `commands`. It consumes their records once
+/// the agent runs.
 async fn restore(
     ctx: &Context,
     space: &Space,
@@ -132,8 +122,6 @@ async fn restore(
     launch(ctx, space, recovery, records).await
 }
 
-/// Start the restore command in `space`, where its terminal host runs
-/// agents, otherwise here, consuming `records` once the agent runs.
 async fn launch(
     ctx: &Context,
     space: &Space,
@@ -175,8 +163,8 @@ async fn launch(
     .await
 }
 
-/// What made this restore: the user, who runs it here, unless the queue
-/// started it for an admitted entry, whose interaction its queuing decided.
+/// The queue decided the interaction of a restore it started for an admitted
+/// entry; otherwise the user runs it here.
 fn restore_source() -> Option<shoal_protocol::launches::LaunchSource> {
     (crate::env::queue_entry().is_none()).then_some(shoal_protocol::launches::LaunchSource::Manual)
 }

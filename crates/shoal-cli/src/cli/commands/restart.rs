@@ -1,8 +1,4 @@
-//! Restarting agents, each in a new wrapper or in place, so each runs its
-//! agent's current binary: the daemon restarts the agent of each space the
-//! command asks it to, and says what it did, passing the request through the
-//! hub for a space of another joined machine. A chat's agent restarts in a
-//! new place, as `shoal resume` resumes a chat.
+//! `shoal restart`.
 use anyhow::Result;
 use futures_util::{StreamExt, stream::FuturesUnordered};
 
@@ -79,9 +75,7 @@ pub(super) async fn run(
     progress.finish()
 }
 
-/// Refuse `change` before any agent restarts where this scoped process
-/// does not hold what it gives the agent of one of `spaces` of this
-/// machine; another machine checks its own spaces.
+/// Another machine checks the permissions given to its own spaces.
 async fn ensure_change_fits(
     ctx: &Context,
     spaces: &[Target],
@@ -94,9 +88,6 @@ async fn ensure_change_fits(
     Ok(())
 }
 
-/// Ask the daemon to restart the agent of each of `spaces` as `restart`
-/// says, up to [`PARALLEL_RESTARTS`] at once, telling `progress` what it
-/// did with each.
 async fn restart_all(
     ctx: &Context,
     spaces: Vec<Target>,
@@ -121,7 +112,6 @@ async fn restart_all(
     }
 }
 
-/// What the daemon did with the restart of the agent of `space`.
 async fn restart_space(
     ctx: &Context,
     space: &Target,
@@ -137,9 +127,7 @@ async fn restart_space(
     }
 }
 
-/// `error`, of the failed restart of `space`'s agent, naming how to restore
-/// the agent when the space, one of this machine's, saved stopped work for
-/// that. The daemon's error stays its cause, which callers can inspect.
+/// The daemon's error stays the cause, which callers can inspect.
 async fn with_restore(ctx: &Context, space: &Target, error: anyhow::Error) -> anyhow::Error {
     if space.machine.is_some() {
         return error;
@@ -154,8 +142,7 @@ async fn with_restore(ctx: &Context, space: &Target, error: anyhow::Error) -> an
     }
 }
 
-/// What restarting a space's agents sends for each space a picker picks;
-/// how they restart decides nothing of which spaces it reaches.
+/// How the agents restart decides nothing of which spaces it reaches.
 pub(super) fn restarting() -> Acting {
     Acting::request(|space| crate::client::agents::restart(space, AgentRestart::default()))
 }

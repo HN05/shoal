@@ -1,5 +1,5 @@
-//! What a launch's arguments alone refuse, before anything is looked up or
-//! a picker opens.
+//! What a launch's arguments alone refuse, before anything is looked up or a
+//! picker opens.
 use anyhow::{Result, ensure};
 use shoal_protocol::launches::{Launch, StartTarget};
 
@@ -9,10 +9,6 @@ use crate::{
     model::SpaceKind,
 };
 
-/// Refuse what `launch` asks for that its arguments alone refuse, as
-/// [`check_start_arguments`] and [`crate::launches`] refuse it, a mode only
-/// its own commands start included, taking its positional argument as the
-/// start decides it.
 pub(super) fn check(launch: &mut Launch) -> Result<()> {
     check_start_arguments(launch)?;
     crate::launches::ensure_in_fits(launch)?;
@@ -25,10 +21,6 @@ pub(super) fn check(launch: &mut Launch) -> Result<()> {
     Ok(())
 }
 
-/// Refuse what `launch` asks for that its arguments alone refuse: two
-/// repositories, a link or `--pr` beside a branch, an issue, another link
-/// or a copy, what a CI run refuses beside it, and a branch that is not a
-/// literal Git branch name.
 pub(in crate::cli::commands) fn check_start_arguments(launch: &Launch) -> Result<()> {
     let positional = crate::launches::decided_target(launch)?;
     ensure!(
@@ -52,8 +44,7 @@ pub(in crate::cli::commands) fn check_start_arguments(launch: &Launch) -> Result
     Ok(())
 }
 
-/// Refuse a `--permission KEY=mode`, which drops a value given before, and
-/// a new agent has none.
+/// `KEY=mode` drops a value given before, and a new agent has none.
 pub(super) fn ensure_nothing_dropped(args: &StartArgs) -> Result<()> {
     ensure!(
         PermissionChange::combined(&args.permissions)
@@ -65,8 +56,7 @@ pub(super) fn ensure_nothing_dropped(args: &StartArgs) -> Result<()> {
     Ok(())
 }
 
-/// Refuse what `args` ask for that the `kind` of space their `mode` starts
-/// cannot take, `--fork` included, which only this process reads.
+/// `--fork` is included, which only this process reads.
 pub(super) fn ensure_flags_fit(args: &StartArgs, kind: SpaceKind, mode: &ModeName) -> Result<()> {
     let fork: &[&'static str] = match args.fork {
         true => &["--fork"],

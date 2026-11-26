@@ -1,9 +1,6 @@
-//! The one way every start settles its launch before sending it, whatever
-//! space the daemon starts it in: the issue or PR it asks for, whose labels
-//! may decide the mode, then what refuses before what asks, and the mode
-//! before the pickers it decides. Only the daemon decides the
-//! kind of space; this process reads what a mode says only to choose which
-//! pickers the launch leaves open.
+//! The one way every start settles its launch before sending it. Only the
+//! daemon decides the kind of space; this process reads what a mode says only
+//! to choose which pickers the launch leaves open.
 use anyhow::Result;
 use shoal_protocol::launches::Launch;
 
@@ -30,9 +27,7 @@ pub(in crate::cli::commands) use arguments::check_start_arguments;
 pub(in crate::cli::commands) use located::{launch_args, starting};
 pub(in crate::cli::commands) use pickers::{check_model, pick_start_source};
 
-/// Start what `args` ask for: refuse what they alone refuse, and what
-/// their named mode refuses of the copy and fork pickers that making the
-/// launch where the start is made opens, then [`settle`] it.
+/// Refuse what `args` alone refuse, then [`settle`] the launch.
 pub(in crate::cli::commands) async fn start(ctx: &Context, args: StartArgs) -> Result<i32> {
     arguments::check(&mut args.launch())?;
     arguments::ensure_nothing_dropped(&args)?;
@@ -41,14 +36,8 @@ pub(in crate::cli::commands) async fn start(ctx: &Context, args: StartArgs) -> R
     settle(ctx, launch, &StartOptions::of(&args)).await
 }
 
-/// Settle `launch`, made where the start is made, and start it, placing
-/// its agent as `options` ask: refuse what its arguments alone refuse,
-/// find its repository and settings without asking, pick the issue or PR
-/// it asks for without naming, decide its mode where
-/// nothing needs asking and check its agent, have the daemon refuse
-/// what it would refuse, asking on a terminal about a stopped agent the
-/// launch does not replace, then pick on a terminal what the launch leaves
-/// open, and send it.
+/// The order matters: what refuses goes before what asks, and the mode before
+/// the pickers it decides.
 pub(in crate::cli::commands) async fn settle(
     ctx: &Context,
     mut launch: Launch,
@@ -104,11 +93,8 @@ pub(in crate::cli::commands) async fn settle(
     super::place(ctx, launch, issue_linked, &settings, options).await
 }
 
-/// The repository and settings `launch` goes on with once a terminal has
-/// picked the issue and PR it asks for without naming them, from the
-/// `found` repository with its `settings`, else a picked one: first what
-/// its named mode and its agent refuse, so no picker asks for what would
-/// be refused.
+/// What the named mode and agent refuse comes first, so no picker asks for what
+/// would be refused.
 async fn picked_items(
     ctx: &Context,
     launch: &mut Launch,

@@ -1,5 +1,4 @@
-//! `shoal queue start --attach`: wait until the started entry's agent runs
-//! in a session, then attach this terminal to that session.
+//! `shoal queue start --attach`.
 use anyhow::{Result, bail};
 
 use crate::{
@@ -23,7 +22,6 @@ pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()>
     }
 }
 
-/// Attach to the session of the started `entry`'s agent once it has one.
 pub(super) async fn started(ctx: &Context, entry: &QueueEntry) -> Result<i32> {
     let (workspace, session) =
         shoal_workers::attach::entry_session(&ctx.paths, entry, None).await?;

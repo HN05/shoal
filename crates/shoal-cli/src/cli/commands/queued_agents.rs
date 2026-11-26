@@ -1,5 +1,4 @@
-//! `shoal start` launches under `max_heavy_agents`: admission, the entries the
-//! queue lists, and the hold that keeps a starting launch's slot.
+//! The agent queue's entries as `shoal start`, `list` and `queue` use them.
 
 use anyhow::Result;
 
@@ -30,7 +29,6 @@ pub(super) async fn current(ctx: &Context, launch: &QueueEntry) -> Result<Option
     Ok(entries.into_iter().find(|entry| entry.id == launch.id))
 }
 
-/// The entries `shoal list` and `shoal queue` show under `filter`.
 pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<QueueEntry>> {
     let mut entries = entries(ctx).await?;
     entries.retain(|entry| filter.keeps_entry(entry));
@@ -63,8 +61,6 @@ pub(super) async fn remove_new(ctx: &Context, selector: &str) -> Result<Option<i
     remove_waiting(ctx, selector, |entry| entry.opens.is_none()).await
 }
 
-/// Remove `selector` from the queue as [`remove`] does when it names a
-/// waiting launch that `takes` accepts.
 async fn remove_waiting(
     ctx: &Context,
     selector: &str,

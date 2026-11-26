@@ -1,6 +1,3 @@
-//! How a command reports the starts it carries out in its own process:
-//! a workspace its preparation readied, and a shell without the
-//! integration that follows it into the workspace.
 use anyhow::Result;
 use shoal_workers::{hosting::Caller, starts::Starting};
 

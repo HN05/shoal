@@ -1,6 +1,5 @@
-//! What a restart tells the user: a numbered line for each selected agent as
-//! the daemon answers for it or it is skipped, what goes on when the command
-//! is interrupted, and with `--json` the object that lists them.
+//! What a restart tells the user, a line for each selected agent as the daemon
+//! answers for it.
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -29,12 +28,10 @@ pub(super) struct Progress<'a> {
     /// selected.
     position: usize,
     total: usize,
-    /// Where the agent of each selected space ran before its restart.
     places: HashMap<SpaceId, Origin>,
 }
 
 impl<'a> Progress<'a> {
-    /// Progress of restarting `total` agents, which ran in `places`.
     pub(super) fn new(ctx: &'a Context, total: usize, places: HashMap<SpaceId, Origin>) -> Self {
         Self {
             ctx,
@@ -53,7 +50,6 @@ impl<'a> Progress<'a> {
         format!("({}/{})", self.position, self.total)
     }
 
-    /// Report an agent the command does not restart.
     pub(super) fn skipped(&mut self, skipped: Skipped) {
         let place = self.next();
         if !self.ctx.json {
@@ -64,7 +60,6 @@ impl<'a> Progress<'a> {
         self.skipped.push(skipped);
     }
 
-    /// Report what the daemon did with the restart of the agent of `space`.
     pub(super) fn ended(&mut self, space: &Target, outcome: Result<RestartOutcome>) {
         let (name, shown, machine) = (&space.name, space.shown(), space.machine_name());
         match outcome {
@@ -110,8 +105,7 @@ impl<'a> Progress<'a> {
         }
     }
 
-    /// Report that the command was interrupted, while the daemon goes on
-    /// with the restarts it was asked for; exit 130.
+    /// The daemon goes on with the restarts it was asked for; exit 130.
     pub(super) fn interrupted(self) -> Result<i32> {
         if !self.ctx.json {
             eprintln!("Interrupted; the daemon goes on with the restarts it was asked for");
@@ -125,7 +119,6 @@ impl<'a> Progress<'a> {
         self.report(false)
     }
 
-    /// Print the JSON object of a command, `interrupted` or not.
     fn report(self, interrupted: bool) -> Result<i32> {
         let (pending, skipped) = (self.pending, self.skipped);
         self.report
@@ -139,10 +132,6 @@ impl<'a> Progress<'a> {
     }
 }
 
-/// The line for the agent of the space `name`, shown as `shown` with the
-/// machine it runs on, `position` among those selected, which ran in
-/// `before` and runs in `place` now: it names that place as a background
-/// start does when the agent moved there.
 fn restarted(
     (name, shown): (&str, &str),
     position: &str,
@@ -158,7 +147,6 @@ fn restarted(
     }
 }
 
-/// What the restart of the agent of the space numbered `number` waits for.
 fn waiting(waits: &RestartWait, number: SpaceNumber) -> String {
     match waits {
         RestartWait::Turn => {

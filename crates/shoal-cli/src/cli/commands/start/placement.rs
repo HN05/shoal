@@ -8,7 +8,6 @@ use crate::{
 use shoal_protocol::launches::{Launch, StartTarget};
 use shoal_workers::hosting;
 
-/// How a start runs its agent once the daemon records its space.
 #[derive(Debug, Clone, Copy, Default)]
 pub(in crate::cli::commands) struct StartOptions {
     /// Run in this terminal instead of a new tab or detached session.
@@ -20,7 +19,6 @@ pub(in crate::cli::commands) struct StartOptions {
 }
 
 impl StartOptions {
-    /// The options `args` give.
     pub(in crate::cli::commands) fn of(args: &crate::cli::args::create::StartArgs) -> Self {
         Self {
             here: args.here,
@@ -32,15 +30,8 @@ impl StartOptions {
 
 pub(in crate::cli::commands) use shoal_workers::starts::Attach;
 
-/// Where the agent of `launch`, if it names one, runs in its caller as
-/// `options` and `settings` say: `--here` runs here, as the user's
-/// agent that runs its own way does without a terminal; on a terminal a
-/// focused start runs in a focused place, as a shell or an agent that
-/// runs its own way takes a place beside it, or here where no host
-/// opens places. `None` leaves the agent's start to the daemon, as
-/// another machine's daemon starts one there. An `issue_linked`
-/// workspace's own issue prompts the agent where the launch names
-/// nothing to start on.
+/// `None` leaves the agent's start to the daemon. An `issue_linked` workspace's
+/// own issue prompts the agent where the launch names nothing to start on.
 pub(in crate::cli::commands) fn attach(
     ctx: &Context,
     (launch, issue_linked): (&Launch, bool),
@@ -75,10 +66,7 @@ pub(in crate::cli::commands) fn attach(
     }
 }
 
-/// `launch` with its agent run in this caller, skipping the queue where
-/// the user waits for it under `settings`, unless a scoped caller makes it;
-/// an `issue_linked` workspace's own issue prompts the agent where the
-/// launch names nothing to start on.
+/// The user's waiting never lets a scoped caller's start skip the queue.
 pub(in crate::cli::commands) fn in_caller(
     ctx: &Context,
     (launch, issue_linked): (&mut Launch, bool),
@@ -92,11 +80,10 @@ pub(in crate::cli::commands) fn in_caller(
     launch.now |= !crate::env::is_scoped() && now;
 }
 
-/// Whether the agent of `launch`, which runs in its caller, skips the
-/// queue: the user waits for one `--focus` focuses, or one that
-/// `waits_for_user` on a terminal and the `focus` `setting` does not send
-/// to the background; the setting alone does not, so it cannot switch the
-/// limit off. A start that waits for work queues.
+/// The user waits for one `--focus` focuses, or for one that waits for input on
+/// a terminal unless the `focus` setting sends it to the background. The
+/// setting alone cannot switch the limit off. A start that waits for work
+/// queues.
 fn starts_now(
     launch: &Launch,
     setting: Option<bool>,
@@ -106,7 +93,6 @@ fn starts_now(
     options.focus || (launch.blockers.is_empty() && waits_for_user && setting != Some(false))
 }
 
-/// The mode `launch` starts its agent in.
 fn mode(launch: &Launch) -> ModeName {
     (launch.mode.clone()).unwrap_or(ModeName::DEFAULT)
 }

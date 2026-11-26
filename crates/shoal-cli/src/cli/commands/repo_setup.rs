@@ -1,6 +1,4 @@
-//! `shoal repo setup`: a setup agent writes a repository's Shoal config in a
-//! workspace on the setup branch, then commits it or saves it as the
-//! repository's local config, as the user chooses.
+//! `shoal repo setup`.
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -21,11 +19,9 @@ use crate::{
     repository,
 };
 
-/// The branch the setup agent works on, whose workspace a later setup
-/// reopens.
+/// A later setup reopens this branch's workspace.
 const BRANCH: &str = "shoal-setup";
 
-/// How the command line starts the setup agent.
 pub(super) struct Options {
     /// Run in this terminal instead of a new tab or detached session.
     pub here: bool,
@@ -37,9 +33,6 @@ pub(super) struct Options {
     pub args: Vec<OsString>,
 }
 
-/// Start the setup agent of the repository `repository` names, else the
-/// current one, else one picked, through the daemon unless it starts in
-/// this process.
 pub(super) async fn start(
     ctx: &Context,
     repository: Option<String>,
@@ -56,10 +49,9 @@ pub(super) async fn start(
     super::start::settle(ctx, launch, &start).await
 }
 
-/// How the setup agent's start runs, `here` or not: the user waits for it,
-/// so from a call `on_terminal` it takes a focused place whatever the
-/// `focus` setting says, unless the start `leaves` the caller, with
-/// nothing to focus.
+/// The user waits for the setup agent, so from a terminal it takes a focused
+/// place whatever the `focus` setting says, unless the start `leaves` the
+/// caller, with nothing to focus.
 fn launch_options(here: bool, on_terminal: bool, leaves: bool) -> super::start::StartOptions {
     super::start::StartOptions {
         here,
@@ -68,10 +60,8 @@ fn launch_options(here: bool, on_terminal: bool, leaves: bool) -> super::start::
     }
 }
 
-/// The launch that has the daemon start the setup agent of `repo` on
-/// `prompt` in setup mode, with the agent, model and arguments `options`
-/// give, on the setup branch, which opens its workspace or the branch an
-/// earlier setup left. The user waits for it, so it skips the queue.
+/// The setup branch reopens its workspace or the branch an earlier setup left.
+/// The user waits for the agent, so it skips the queue.
 fn setup_launch(repo: &Repository, prompt: String, options: Options) -> Result<Launch> {
     Ok(Launch {
         repository: Some(repo.id.to_string()),
@@ -92,9 +82,8 @@ fn setup_launch(repo: &Repository, prompt: String, options: Options) -> Result<L
     })
 }
 
-/// The repository's local config file, in a directory that exists and is
-/// named as the agent's working directories name it. The daemon refuses one
-/// where a checkout lies before the agent is told to write there.
+/// The daemon refuses a directory where a checkout lies before the agent is
+/// told to write there.
 async fn local_config(ctx: &Context, repository: repository::Selector) -> Result<PathBuf> {
     let path = repositories::local_config_path(ctx, repository).await?;
     let directory = crate::agents::writable_config_dir(&path)?;
@@ -104,8 +93,6 @@ async fn local_config(ctx: &Context, repository: repository::Selector) -> Result
     ))
 }
 
-/// What the setup agent of repository `name`, whose local config is
-/// `local_config`, starts on: the config it writes and how it saves it.
 fn subject(name: &str, local_config: &Path) -> String {
     let directory = local_config.parent().unwrap_or(local_config).display();
     let local_config = local_config.display();

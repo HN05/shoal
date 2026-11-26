@@ -1,5 +1,4 @@
-//! The spaces `shoal move` takes: those named, every space of a repository,
-//! or the current one or those the picker offers.
+//! The spaces `shoal move` takes.
 use crate::cli::ui::Acting;
 use crate::transfer::{MoveDestination, MoveOrder};
 use anyhow::{Context as _, Result, ensure};
@@ -10,8 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::protocol::{ErrorCode, RemoteError};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The spaces `args` selects, by ID, refusing one that selects no space, or
-/// with `removed` no live or removed space, before asking for anything else.
+/// A selector that selects no space is refused before anything else is asked.
 pub(super) async fn select(ctx: &Context, args: &MoveArgs, removed: bool) -> Result<Vec<SpaceId>> {
     let ids = match &args.repository {
         Some(repository) => (repository_spaces(ctx, repository.clone())
@@ -25,8 +23,6 @@ pub(super) async fn select(ctx: &Context, args: &MoveArgs, removed: bool) -> Res
     Ok(ids)
 }
 
-/// The IDs of the spaces `names` select, here or on another joined
-/// machine, or with `removed` of the removed spaces they select by ID.
 async fn named(ctx: &Context, names: &[SpaceSelector], removed: bool) -> Result<Vec<SpaceId>> {
     let mut ids = Vec::new();
     for selector in names {
@@ -38,9 +34,6 @@ async fn named(ctx: &Context, names: &[SpaceSelector], removed: bool) -> Result<
     Ok(ids)
 }
 
-/// The ID of the space `selector` names, wherever it runs, or with
-/// `removed` of the removed space it names by ID, wherever its record is
-/// kept.
 async fn live_or_removed(
     ctx: &Context,
     selector: &SpaceSelector,
@@ -56,12 +49,10 @@ async fn live_or_removed(
     Ok((record.await).context(missing)?.space().space_id.clone())
 }
 
-/// Whether `error` is the daemon's refusal for a space no machine has.
 fn names_no_space(error: &anyhow::Error) -> bool {
     (error.downcast_ref::<RemoteError>()).is_some_and(|remote| remote.code == ErrorCode::NotFound)
 }
 
-/// The IDs of the current space or those the user picks.
 async fn picked(ctx: &Context) -> Result<Vec<SpaceId>> {
     let mut ids = Vec::new();
     for selector in ui::select_spaces(ctx, Vec::new(), true, &moving()).await? {
@@ -71,7 +62,6 @@ async fn picked(ctx: &Context) -> Result<Vec<SpaceId>> {
     Ok(ids)
 }
 
-/// The spaces of `repository`: its workspaces and running chats.
 async fn repository_spaces(ctx: &Context, repository: String) -> Result<Vec<Space>> {
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let repo =
@@ -90,8 +80,7 @@ async fn repository_spaces(ctx: &Context, repository: String) -> Result<Vec<Spac
     Ok(spaces)
 }
 
-/// What moving spaces sends for each space a picker picks; its
-/// destination, which may be asked for next, decides nothing of which
+/// Its destination, which may be asked for next, decides nothing of which
 /// spaces the move reaches.
 pub(in crate::cli::commands) fn moving() -> Acting {
     Acting::request(|_| {

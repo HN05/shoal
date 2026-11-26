@@ -1,8 +1,5 @@
-//! Asking each selected space's daemon to resume its agent, and gathering
-//! what each did into one report: the restores and launches queued or
-//! started, here or on another joined machine, the stopped commands no
-//! agent receives, the turns continued, the spaces left and those it
-//! failed for.
+//! Asking each selected space's daemon to resume its agent, and gathering what
+//! each did into one report.
 use anyhow::Result;
 
 use super::{Chosen, Resuming, targets::Target};
@@ -17,10 +14,8 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Resume the agent of each space `resuming` lists as `resume` says, one
-/// request per space, going on after one fails, and report what each did
-/// with the spaces reopened for it and those it left; a space with nothing
-/// to resume fails when it was named or picked.
+/// One request per space, going on after one fails. A space with nothing to
+/// resume fails when it was named or picked.
 pub(super) async fn resume_each(
     ctx: &Context,
     resuming: Resuming,
@@ -52,9 +47,8 @@ pub(super) async fn resume_each(
     Ok(report)
 }
 
-/// Mark the space `selector` names, when `shoal restore` reopened it for
-/// this resume, as keeping its saved agents, which its resume left there,
-/// so its report names the `shoal resume` that resumes them.
+/// Its resume left the saved agents there, so its report names the `shoal
+/// resume` that resumes them.
 fn keep_saved(reopened: &mut [Reopened], selector: &SpaceSelector) {
     let opened = reopened
         .iter_mut()
@@ -64,8 +58,6 @@ fn keep_saved(reopened: &mut [Reopened], selector: &SpaceSelector) {
     }
 }
 
-/// Add what the resume of `space` did, its `outcome`, to `report`: what
-/// another machine queued apart from this machine's queue.
 fn add(ctx: &Context, report: &mut Queued, space: &Target, outcome: ResumeOutcome) {
     let Some((_, name)) = &space.space else {
         return;
@@ -93,8 +85,6 @@ fn add(ctx: &Context, report: &mut Queued, space: &Target, outcome: ResumeOutcom
     }
 }
 
-/// Add the stopped `commands` of `space`, which no agent receives, to
-/// `report`, listing them in text output.
 fn add_commands(ctx: &Context, report: &mut Queued, space: &Target, commands: Vec<Vec<String>>) {
     let Some((number, name)) = &space.space else {
         return;

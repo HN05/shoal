@@ -1,12 +1,10 @@
-//! The workspace a launch started its agent in, as a start's workspace.
 use anyhow::{Context as _, Result};
 
 use crate::protocol::operations::StartedWorkspace;
 use shoal_protocol::protocol::{Launched, Started};
 
-/// The workspace a launch started its agent in, as a start's workspace: a
-/// new or reopened one with its preparation, or an existing one whose
-/// worker it queued, with nothing left to prepare.
+/// A new or reopened workspace comes with its preparation; an existing one
+/// whose worker the launch queued has nothing left to prepare.
 pub(in crate::cli::commands) fn workspace_start(launched: Launched) -> Result<StartedWorkspace> {
     let Launched {
         space,

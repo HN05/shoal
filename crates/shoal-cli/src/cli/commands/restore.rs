@@ -1,6 +1,4 @@
-//! `shoal restore`: reopening removed spaces, whose agents resume as
-//! `shoal resume` resumes them, returning workspaces to their checkpoints,
-//! and discarding the stopped agents of the spaces it selects.
+//! `shoal restore`.
 use anyhow::{Result, ensure};
 
 use super::resume;
@@ -10,7 +8,6 @@ use crate::model::RemovedSpace;
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// What `shoal restore` does with the spaces it names.
 pub(super) enum Action {
     /// Return the workspace to this checkpoint, or to one picked.
     Checkpoint(Option<CheckpointNumber>),
@@ -19,7 +16,6 @@ pub(super) enum Action {
     Reopen { resume: Option<resume::Options> },
 }
 
-/// `shoal restore`: do `action` with the `spaces` named.
 pub(super) async fn run(ctx: &Context, spaces: Vec<SpaceSelector>, action: Action) -> Result<i32> {
     match action {
         Action::Checkpoint(checkpoint) => checkpoints::run(ctx, spaces, checkpoint).await,
@@ -30,9 +26,7 @@ pub(super) async fn run(ctx: &Context, spaces: Vec<SpaceSelector>, action: Actio
     }
 }
 
-/// Open the `removed` spaces again, then resume the agents their removal
-/// saved as `resume` says, or report them reopened with their agents saved
-/// without it; an error once one opened names those opened before it.
+/// An error once one opened names those opened before it.
 async fn reopen(
     ctx: &Context,
     removed: Vec<RemovedSpace>,
@@ -53,7 +47,6 @@ async fn reopen(
     resumed.map_err(|error| reopening.explain(error))
 }
 
-/// Report the spaces `reopened` with their agents left saved.
 fn report_reopened(ctx: &Context, reopened: Vec<Reopened>) -> Result<i32> {
     let reopened = Queued {
         reopened,

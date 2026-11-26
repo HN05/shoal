@@ -1,6 +1,4 @@
-//! `shoal config setup`: a setup agent writes the global config in a chat
-//! without a repository, which reaches every space and so reads how each
-//! repository is set up.
+//! `shoal config setup`.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
@@ -15,12 +13,9 @@ use crate::{
 use shoal_protocol::launches::{Launch, Setup};
 use shoal_protocol::space_names::SpaceName;
 
-/// Start the setup chat, writing the packaged default config first when
-/// there is none and the agent is settled. As chats do, it starts at once,
-/// and unless `--here` in a focused place beside this terminal, whatever
-/// the `focus` setting says, since the user works with it straight away.
-/// Without a terminal, or from a scoped process, the daemon starts it
-/// detached instead, as it starts any chat.
+/// The packaged default config is written first when there is none, once the
+/// agent is settled. The chat starts at once, focused beside this terminal
+/// unless `--here`, since the user works with it straight away.
 pub(super) async fn start(ctx: &Context, mut args: ConfigSetupArgs) -> Result<i32> {
     // Chosen before the config is written, so a refused agent leaves none.
     let settings = shoal_workers::settings::of(&ctx.paths, ConfigTarget::Global).await?;
@@ -62,8 +57,6 @@ fn installed_config(ctx: &Context) -> Result<PathBuf> {
     Ok(directory.join(path.file_name().context("the config has no file name")?))
 }
 
-/// What the setup agent of the global config `config` starts on: which file
-/// it writes and how it saves it.
 fn subject(config: &Path) -> String {
     let config = config.display();
     format!(

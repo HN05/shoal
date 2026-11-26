@@ -1,5 +1,3 @@
-//! A space whose agent a restart acts on, of this machine or of another
-//! joined machine, as the hub lists it.
 use shoal_ids::{
     repository_ids::RepositoryId,
     space_ids::{SpaceId, SpaceNumber},
@@ -19,17 +17,15 @@ pub(super) struct Target {
     pub name: SpaceName,
     /// The other machine it runs on; none for this machine's.
     pub machine: Option<Member>,
-    /// Its repository, for a space of this machine, which checks the
-    /// permissions a restart gives there; another machine checks its own.
+    /// For a space of this machine, which checks the permissions a restart
+    /// gives there; another machine checks its own.
     pub repository: Option<RepositoryId>,
-    /// Whether the daemon may keep a restart of it for later: one that this
-    /// machine lists with one, or any of another machine's, whose listing
-    /// does not say.
+    /// Another machine's listing does not say, so any of its spaces may keep a
+    /// restart.
     pub may_keep_restart: bool,
 }
 
 impl Target {
-    /// The space of another machine that `listed` lists on `machine`.
     pub(super) fn elsewhere(listed: &Listed, machine: Member) -> Self {
         let space = &listed.space;
         Self {
@@ -46,7 +42,6 @@ impl Target {
         SpaceSelector::id(&self.id)
     }
 
-    /// The name of the other machine it runs on.
     pub(super) fn machine_name(&self) -> Option<String> {
         self.machine.as_ref().map(|machine| machine.name.clone())
     }

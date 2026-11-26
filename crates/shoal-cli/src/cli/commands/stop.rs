@@ -1,7 +1,4 @@
-//! Stopping keeps agent sessions and commands for `shoal resume`, a
-//! workspace's or a chat's; agents stay down until it continues them. The
-//! other processes of a space stop for good, and the agent launches waiting
-//! in the queue leave it, having nothing to save.
+//! `shoal stop`.
 use anyhow::{Result, ensure};
 
 use crate::client::output::agents::SpaceStopped;
@@ -68,10 +65,8 @@ pub(super) async fn run(ctx: &Context, args: StopArgs) -> Result<i32> {
     stop_located(ctx, located, yes).await
 }
 
-/// Stop `located` in the selection's order, each space after the one above
-/// it: this machine's together where they follow each other, another
-/// machine's each on its machine, reporting once per offline machine the
-/// stops the hub holds for it.
+/// Each space goes after the one above it. The hub's held stops are reported
+/// once per offline machine.
 async fn stop_located(ctx: &Context, located: Vec<Located>, yes: bool) -> Result<i32> {
     let mut code = 0;
     let mut here = Vec::new();
@@ -90,7 +85,6 @@ async fn stop_located(ctx: &Context, located: Vec<Located>, yes: bool) -> Result
     Ok(code)
 }
 
-/// Stop `spaces`, this machine's, reporting one alone and several each.
 async fn stop_here(ctx: &Context, spaces: &[Space], yes: bool) -> Result<i32> {
     match spaces {
         [] => Ok(0),
@@ -99,7 +93,6 @@ async fn stop_here(ctx: &Context, spaces: &[Space], yes: bool) -> Result<i32> {
     }
 }
 
-/// Stop `space`, reporting it alone.
 async fn stop_one(ctx: &Context, space: &Space, yes: bool) -> Result<i32> {
     let selector = SpaceSelector::id(&space.id);
     let launches = QueuedLaunches::Cancel;
@@ -152,14 +145,10 @@ async fn stop_one(ctx: &Context, space: &Space, yes: bool) -> Result<i32> {
     Ok(0)
 }
 
-/// What `shoal stop` says once the forge was asked to cancel `run`, the run
-/// of the CI job in `workspace`.
 pub(super) fn cancelled_run_message(workspace: &str, run: &str) -> String {
     format!("Asked the forge to cancel {run}; {workspace} goes once its CI job's runner stops it")
 }
 
-/// How `shoal stop` names the `count` agent launches it removed from the
-/// agent queue.
 pub(super) fn removed_launches(count: usize) -> String {
     match count {
         1 => "Removed 1 queued agent from the agent queue".to_owned(),
@@ -167,8 +156,6 @@ pub(super) fn removed_launches(count: usize) -> String {
     }
 }
 
-/// How plain `shoal stop` names the untracked processes it stopped besides
-/// the saved agents and commands.
 pub(super) fn other_processes(count: usize) -> String {
     match count {
         1 => "1 other process".to_owned(),
@@ -176,19 +163,14 @@ pub(super) fn other_processes(count: usize) -> String {
     }
 }
 
-/// What plain `shoal stop` does with a workspace's untracked processes:
-/// it stops them, other than this process and those that started it.
 pub(super) fn other_processes_stop() -> UntrackedProcesses {
     UntrackedProcesses::Stop {
         requester: Some(std::process::id()),
     }
 }
 
-/// Stop `space`, doing with the agent launches waiting to start in it
-/// what `launches` says and with its untracked processes what `processes`
-/// says, and return what the stop did, or the run the forge was asked to
-/// cancel for a CI job's workspace. An execution Shoal cannot prove ended
-/// stops only once the user confirms it did, or with `yes`.
+/// An execution Shoal cannot prove ended stops only once the user confirms it
+/// did, or with `yes`.
 pub(super) async fn stop(
     ctx: &Context,
     space: &SpaceSelector,
@@ -209,10 +191,7 @@ pub(super) async fn stop(
     stop_confirming(ctx, space, launches, processes, confirm).await
 }
 
-/// Stop `space` as [`stop`] does, and once the daemon refuses the stop as
-/// unproven, repeat it acknowledging that when `confirm` accepts the
-/// refusal, or else fail with it. A stop the daemon can prove so never
-/// carries an acknowledgement.
+/// A stop the daemon can prove never carries an acknowledgement.
 pub(super) async fn stop_confirming(
     ctx: &Context,
     space: &SpaceSelector,
@@ -245,15 +224,12 @@ pub(super) async fn stop_confirming(
     request_stop(true).await
 }
 
-/// How to continue what `shoal stop` stopped in `targets`, the arguments of
-/// `shoal resume`, and how to take agents down only briefly instead.
 pub(super) fn continue_hint(targets: &str) -> String {
     format!(
         "Continue with shoal resume {targets}. To restart agents without stopping them, use shoal restart"
     )
 }
 
-/// What stopping a space sends for each space a picker picks.
 pub(super) fn stopping() -> Acting {
     Acting::request(|space| {
         let processes = UntrackedProcesses::Stop { requester: None };

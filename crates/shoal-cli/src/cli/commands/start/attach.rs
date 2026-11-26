@@ -1,6 +1,5 @@
-//! Sending a start whose agent runs in its caller, here or in a place it
-//! opens beside this terminal, and the place worker that carries out such a
-//! start's plan there; [`shoal_workers::starts`] runs them.
+//! Sending a start whose agent runs in its caller, and the place worker that
+//! carries out its plan; [`shoal_workers::starts`] runs them.
 use anyhow::Result;
 use shoal_workers::starts::{self, Placed};
 
@@ -12,12 +11,8 @@ use crate::{
 use shoal_protocol::launches::Launch;
 use shoal_protocol::protocol::{Launched, Started};
 
-/// Send `launch` under `settings`, its agent, the one it names or else
-/// `agent.default`, run in this caller where `options` and this terminal
-/// say, else by the daemon, which for a start on another machine this
-/// terminal attaches to where `options` show it here. An `issue_linked`
-/// workspace's own issue prompts the agent where the launch names nothing
-/// to start on.
+/// An `issue_linked` workspace's own issue prompts the agent where the launch
+/// names nothing to start on.
 pub(in crate::cli::commands) async fn place(
     ctx: &Context,
     mut launch: Launch,
@@ -42,12 +37,8 @@ pub(in crate::cli::commands) async fn place(
     .await
 }
 
-/// Send `launch`, which `agent` runs if it names one, and report what the
-/// daemon started, or run its agent in this caller as `attach` says under
-/// the start's settings: a workspace's once its preparation ends, unless
-/// it waits for other work or disk space, which leaves the agent to the
-/// queue's start. A start that runs nothing here reports a new workspace
-/// once it is recorded, or with `wait` once its preparation ends.
+/// A workspace's agent runs here once its preparation ends, unless it waits for
+/// other work or disk space, which leaves the agent to the queue.
 pub(in crate::cli::commands) async fn send(
     ctx: &Context,
     launch: Launch,
@@ -72,11 +63,9 @@ pub(in crate::cli::commands) async fn send(
     }
 }
 
-/// Report what the daemon `launched` for a start whose agent, which
-/// `agent` runs if it names one, runs in no terminal of this caller, as
-/// [`send`] does, with the machine the hub placed it on: first in text, and
-/// in JSON inside a chat's launch, or after a workspace's documents, so a
-/// start's first document stays its space.
+/// Text reports the machine the hub placed the start on first. JSON puts it
+/// inside a chat's launch, or after a workspace's documents, so a start's first
+/// document stays its space.
 async fn report_detached(
     ctx: &Context,
     launched: Launched,
