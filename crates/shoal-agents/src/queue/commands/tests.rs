@@ -10,7 +10,7 @@ use shoal_protocol::{
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};
 
 use super::{CommandRequest, admit_command};
-use crate::{daemon::Daemon, protocol, stand_in::Fixture};
+use crate::{daemon::Daemon, protocol, stand_in::Fixture, state::QueueKind};
 
 const GIB: u64 = 1 << 30;
 
@@ -133,6 +133,30 @@ async fn protection_stops_an_admitted_command_through_its_link() {
             reason: "memory pressure".into()
         }
     );
+}
+
+#[tokio::test]
+async fn a_waiting_command_is_listed_and_cancelled_in_the_queue() {
+    let fixture = fixture().await;
+    let workspace = fixture.workspace("api").await;
+    let mut wrapper = admit(&fixture, &workspace, false).await;
+    let daemon = &*fixture.daemon;
+    let entries = loop {
+        let entries = fixture.agents.queue_entries(daemon).await.unwrap();
+        if !entries.is_empty() {
+            break entries;
+        }
+        tokio::task::yield_now().await;
+    };
+    let [entry] = entries.as_slice() else {
+        panic!("one entry waits");
+    };
+    assert_eq!(entry.kind, QueueKind::Command);
+    assert_eq!(entry.command.as_deref(), Some("test"));
+    assert_eq!(entry.space_id.as_ref(), Some(&workspace.id));
+    let removed = fixture.agents.queue_remove(daemon, entry.id.as_str(), None);
+    removed.await.unwrap();
+    assert!(matches!(wrapper.frame().await, AdmissionFrame::Stop { .. }));
 }
 
 /// Record the running command `id` in `workspace`, whose wrapper is the

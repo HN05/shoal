@@ -2,10 +2,7 @@
 use anyhow::Result;
 
 use super::{changes, listing, selection};
-use crate::{
-    cli::{context::Context, ui},
-    state::QueueKind,
-};
+use crate::cli::{context::Context, ui};
 
 #[derive(Clone, Copy)]
 enum Action {
@@ -26,8 +23,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<i32> {
     let limits = crate::config::permissions::PermissionKey::Limits;
     if crate::cli::commands::authorization::permits(ctx, limits).await? {
         actions.insert(0, (Action::Start, "Start now"));
-        // A CI job runs without a session.
-        if entry.kind != QueueKind::Job {
+        if entry.kind.starts_session() {
             actions.insert(1, (Action::StartAttached, "Start and attach"));
         }
     }

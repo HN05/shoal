@@ -11,6 +11,7 @@ use rusqlite::{OptionalExtension, params};
 use super::{
     blockers,
     dispatch::Start,
+    state::{MeasuredKind, OneShotWork, WaitingOneShot},
     store::{
         Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, ensure_recordable, entry, insert_launch,
     },
@@ -260,9 +261,14 @@ impl Agents {
     /// those waiting.
     async fn ranked_entries(&self, daemon: &dyn Daemon) -> Result<Vec<QueueEntry>> {
         let ranked = self.ranked_queue(daemon).await?;
-        let (entries, failed) = (self.store)
-            .run(move |db| Ok((all_entries(db)?, super::failures::entries(db)?)))
+        let oneshots = self.agent_queue.waiting_oneshots();
+        let (mut entries, failed, commands) = (self.store)
+            .run(move |db| {
+                let failed = super::failures::entries(db)?;
+                Ok((all_entries(db)?, failed, waiting_commands(db, oneshots)?))
+            })
             .await?;
+        entries.extend(commands);
         let mut entries = in_rank_order(entries, ranked);
         entries.extend(failed);
         Ok(entries)
@@ -585,6 +591,58 @@ fn all_entries(db: &rusqlite::Connection) -> Result<Vec<QueueEntry>> {
         ))?
         .query_map([], entry)?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The entries of the `shoal run` commands among `oneshots`, each named
+/// after the space it runs in.
+fn waiting_commands(
+    db: &rusqlite::Connection,
+    oneshots: Vec<WaitingOneShot>,
+) -> Result<Vec<QueueEntry>> {
+    let mut entries = Vec::new();
+    for oneshot in oneshots {
+        let (OneShotWork::Measured(measured), Some(serving)) = (oneshot.work, oneshot.serving)
+        else {
+            continue;
+        };
+        let MeasuredKind::Command(command) = measured.kind else {
+            continue;
+        };
+        let name = db.query_row(
+            "SELECT name FROM spaces WHERE id=?1",
+            [&serving.space],
+            |row| row.get(0),
+        );
+        let Some(name) = name.optional()? else {
+            continue;
+        };
+        entries.push(QueueEntry {
+            id: oneshot.id,
+            kind: QueueKind::Command,
+            repository_id: Some(oneshot.repository),
+            name,
+            agent: crate::agent::Agent::unchecked(String::new()),
+            mode: None,
+            narrowing: Default::default(),
+            issue_title: None,
+            state: QueueState::Queued,
+            position: None,
+            created_at: oneshot.requested_at,
+            space_id: Some(serving.space),
+            execution: None,
+            opens: None,
+            queued_by: None,
+            blockers: Vec::new(),
+            waits_for_update: false,
+            base: None,
+            job: None,
+            command: Some(command),
+            held_by: None,
+            rank: None,
+            error: None,
+        });
+    }
+    Ok(entries)
 }
 
 /// `entries` with the starting ones first and then the waiting ones in the

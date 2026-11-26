@@ -450,6 +450,7 @@ pub fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         waits_for_update: false,
         base: row.get("base_branch")?,
         job: shoal_store::json_column(row, "job")?,
+        command: None,
         held_by: None,
         rank: None,
         error: None,

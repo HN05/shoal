@@ -67,7 +67,18 @@ states!(QueueKind {
     Restore => "restore",
     /// A CI job waiting in the forge's queue for this machine's runner.
     Job => "job",
+    /// A `shoal run` command waiting for memory; the queue keeps it in
+    /// memory alone.
+    Command => "command",
 });
+
+impl QueueKind {
+    /// Whether starting the entry starts an agent's session, which a user
+    /// can attach.
+    pub fn starts_session(self) -> bool {
+        matches!(self, Self::Launch | Self::Restore)
+    }
+}
 states!(BlockerKind {
     /// A space, by ID.
     Space => "space",

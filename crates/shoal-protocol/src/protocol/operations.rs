@@ -556,6 +556,10 @@ pub enum Ended {
 /// What a successful operation did.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "an operation's outcome, sent and read once, boxed where it ends"
+)]
 pub enum Outcome {
     Prepared(Prepared),
     Opened(OpenOutcome),

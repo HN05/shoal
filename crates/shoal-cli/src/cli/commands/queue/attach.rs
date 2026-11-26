@@ -7,17 +7,18 @@ use crate::{
         context::Context,
     },
     model::QueueEntry,
-    state::QueueKind,
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Refuse to attach to the entry `selector` names when it is a CI job,
-/// which has no session, before anything starts it.
+/// Refuse to attach to the entry `selector` names when starting it starts
+/// no agent's session, such as a CI job or a command, before anything
+/// starts it.
 pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()> {
     let entries = queued_agents::entries(ctx).await?;
-    let job = (entries.iter()).find(|entry| entry.kind == QueueKind::Job && entry.id == selector);
-    match job {
-        Some(job) => bail!("{} is a CI job, which has no session to attach", job.name),
+    let sessionless =
+        (entries.iter()).find(|entry| entry.id == selector && !entry.kind.starts_session());
+    match sessionless {
+        Some(entry) => bail!("{} starts no agent session to attach", entry.name),
         None => Ok(()),
     }
 }

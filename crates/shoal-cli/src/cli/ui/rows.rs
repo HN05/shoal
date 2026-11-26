@@ -443,6 +443,9 @@ fn queue_subject(entry: &QueueEntry) -> String {
         (QueueKind::Restore, _) => format!("Restore of {}", entry.agent),
         (QueueKind::Job, Some(job)) => job_subject(job),
         (QueueKind::Job, None) => "CI job".into(),
+        (QueueKind::Command, _) => {
+            format!("shoal run {}", entry.command.as_deref().unwrap_or_default())
+        }
     }
 }
 

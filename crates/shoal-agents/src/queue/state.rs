@@ -469,6 +469,18 @@ impl AgentQueue {
             .collect()
     }
 
+    /// Cancel the waiting command `id` for `reason`, returning whether it
+    /// waited.
+    pub fn cancel_waiting(&self, id: &QueueEntryId, reason: &str) -> bool {
+        let Some(number) = oneshot_number(id) else {
+            return false;
+        };
+        let stop = (self.oneshots.lock().unwrap().runs.get_mut(&number))
+            .filter(|run| run.admitted.borrow().is_none())
+            .and_then(|run| run.stop.take());
+        stop.map(|stop| stop(reason)).is_some()
+    }
+
     /// Stop the admitted command or seed build `id` for protection, which
     /// names its `reason`, returning whether it was there to stop.
     pub fn stop_measured(&self, id: &QueueEntryId, reason: &str) -> bool {

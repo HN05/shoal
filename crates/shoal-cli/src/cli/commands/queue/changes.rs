@@ -11,8 +11,7 @@ pub(super) async fn start(ctx: &Context, entry: Option<String>, attach: bool) ->
     let limits = crate::config::permissions::PermissionKey::Limits;
     crate::cli::commands::authorization::authorize_key(ctx, limits).await?;
     ensure!(!attach || ctx.on_terminal(), "--attach requires a terminal");
-    // A CI job runs without a session to attach.
-    let offered = |queued: &QueueEntry| !attach || queued.kind != QueueKind::Job;
+    let offered = |queued: &QueueEntry| !attach || queued.kind.starts_session();
     let entry = selection::selected_among(ctx, entry, "Start> ", offered).await?;
     if attach {
         super::attach::require_session(ctx, &entry).await?;
@@ -42,6 +41,11 @@ pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> 
         ),
         QueueKind::Job => format!(
             "Passed over {}; the forge keeps it for other runners",
+            entry.name
+        ),
+        QueueKind::Command => format!(
+            "Cancelled shoal run {} in {}",
+            entry.command.as_deref().unwrap_or_default(),
             entry.name
         ),
     };

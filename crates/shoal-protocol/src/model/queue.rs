@@ -64,6 +64,10 @@ pub struct QueueEntry {
     /// The CI job a job's entry claims.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub job: Option<Box<QueuedJob>>,
+    /// The command a waiting `shoal run` runs, by its configured name or
+    /// its arguments.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
     /// What kept a waiting agent or job from starting at the last admission
     /// pass.
     #[serde(default, skip_serializing_if = "Option::is_none")]

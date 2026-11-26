@@ -136,6 +136,15 @@ impl Agents {
         mut entry: QueueEntry,
         here: bool,
     ) -> Result<QueueEntry> {
+        if entry.kind == QueueKind::Command {
+            ensure!(
+                self.agent_queue.admit_oneshot(&entry.id),
+                "{} is no longer waiting",
+                entry.name
+            );
+            entry.state = QueueState::Starting;
+            return Ok(entry);
+        }
         let base = self.start_base(daemon, &entry).await?;
         match self.waiting_wrapper(&entry).await? {
             Some(execution) => self.grant_now(&entry, &execution).await?,
@@ -204,6 +213,11 @@ impl Agents {
         let entry = self
             .waiting_entry(daemon, selector, caller, "; remove its workspace instead")
             .await?;
+        if entry.kind == QueueKind::Command {
+            let cancelled = (self.agent_queue).cancel_waiting(&entry.id, "cancelled in the queue");
+            ensure!(cancelled, "{} is no longer waiting", entry.name);
+            return Ok(entry);
+        }
         let wrapper = self.waiting_wrapper(&entry).await?;
         if let Some(execution) = &wrapper {
             self.stop_waiting_wrapper(&entry, execution).await?;

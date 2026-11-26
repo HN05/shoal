@@ -112,7 +112,7 @@ impl Attaching for Callbacks<'_> {
 
     fn resuming(&self, entry: &QueueEntry) -> Result<()> {
         let starts = match entry.kind {
-            QueueKind::Launch => "Starting",
+            QueueKind::Launch | QueueKind::Command => "Starting",
             QueueKind::Restore | QueueKind::Job => "Resuming",
         };
         self.0.emit(&format!("{starts} {}", entry.name), entry)
