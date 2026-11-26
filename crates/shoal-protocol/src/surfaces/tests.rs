@@ -1327,6 +1327,12 @@ fn an_answer_s_value_is_entered_only_where_a_pointer_reads_it() {
         .unwrap_err()
         .to_string();
     assert!(refused.contains("/people/00/name cannot hold"), "{refused}");
+    // A path of slashes alone names the whole model, read or written.
+    let root = entering("/", json!({}));
+    let resolved = root
+        .resolve("save", values(&[("name", json!("Ada"))]))
+        .unwrap();
+    assert_eq!(Value::Object(resolved), json!({"name": "Ada"}));
 }
 
 #[test]

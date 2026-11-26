@@ -230,7 +230,12 @@ impl Surface {
             .and_then(Value::as_object_mut)
             .context("a surface holds a createSurface object")?;
         let mut at = (body.entry("dataModel")).or_insert(Value::Null);
-        for field in path.split('/').skip(1) {
+        // A path of slashes alone names the whole model, as reading reads it.
+        let fields = match path.trim_start_matches('/') {
+            "" => "",
+            _ => path,
+        };
+        for field in fields.split('/').skip(1) {
             let field = field.replace("~1", "/").replace("~0", "~");
             let index = array_index(&field);
             if at.is_null() {
