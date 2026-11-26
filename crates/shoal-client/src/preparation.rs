@@ -1,7 +1,5 @@
-//! Creating a workspace, or a child of a space, and following its
-//! preparation, the setup and what follows it that the daemon runs in an
-//! operation: its progress as it comes, then the prepared workspace or how
-//! preparing it failed, with the workspace as the failure left it.
+//! Creating a workspace and following its preparation to the prepared
+//! workspace or its failure.
 use shoal_protocol::progress::Blocker;
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -39,27 +37,22 @@ pub struct NewWorkspace {
     /// The chat the workspace is created in.
     pub parent: Option<SpaceSelector>,
     pub options: CreationOptions,
-    /// The issue to link, by number or URL.
     pub issue: Option<ItemInput>,
-    /// The PR to link, by number or URL.
     pub pr: Option<ItemInput>,
-    /// The agent its preparation queues, which the daemon resolves under
-    /// the workspace's settings.
+    /// The agent its preparation queues, resolved under the workspace's
+    /// settings.
     pub agent: Option<Box<LaunchRequest>>,
     /// The starting queue entry whose launch opens it.
     pub queue_entry: Option<QueueEntryId>,
     /// The agent the caller starts itself once setup succeeds, which waits
     /// in the queue should setup fail.
     pub waiting: Option<Box<QueuedLaunch>>,
-    /// What `agent` waits for besides the preparation, which waits for it
-    /// too before it creates a new worktree, on the branch of the done
-    /// blocker that holds the others' work.
+    /// What `agent` waits for besides the preparation. A new worktree waits
+    /// for it too.
     pub blockers: Vec<Blocker>,
 }
 
 impl NewWorkspace {
-    /// A workspace of `repository` that starts at `start`, with defaults
-    /// for everything else.
     pub fn new(repository: Selector, start: WorkspaceStart) -> Self {
         Self {
             repository,
@@ -78,7 +71,6 @@ impl NewWorkspace {
         }
     }
 
-    /// The request that opens it and starts preparing it with `env`.
     fn method(self, env: BTreeMap<String, String>) -> OperationMethod {
         let Self {
             repository,
@@ -126,16 +118,13 @@ pub struct NewChild {
     /// The branch its branch starts from.
     pub base: Option<String>,
     pub options: CreationOptions,
-    /// The issue to link, by number or URL.
     pub issue: Option<ItemInput>,
-    /// The agent its preparation queues, which the daemon resolves under
-    /// the parent's settings.
+    /// The agent its preparation queues, resolved under the parent's
+    /// settings.
     pub agent: Option<Box<LaunchRequest>>,
 }
 
 impl NewChild {
-    /// A child of the space `parent` on a new branch `name`, with defaults
-    /// for everything else.
     pub fn new(parent: SpaceSelector, name: Option<String>) -> Self {
         Self {
             parent,
@@ -148,7 +137,6 @@ impl NewChild {
         }
     }
 
-    /// The request that creates it and starts preparing it with `env`.
     fn method(self, env: BTreeMap<String, String>) -> OperationMethod {
         let Self {
             parent,
@@ -172,17 +160,14 @@ impl NewChild {
     }
 }
 
-/// A workspace to create: a new one, a child of a space, or the one a
-/// start without an agent describes, which the daemon places as a launch's.
 pub enum Creation {
     Workspace(NewWorkspace),
     Child(NewChild),
     Placed(Box<NewCreation>),
 }
 
-/// The workspace a start without an agent describes, which the daemon
-/// places as a launch's: below the space `launch` names, else below
-/// `below`, the space the creation was made in.
+/// The workspace a start without an agent describes. The daemon places it as
+/// it places a launch: below the space `launch` names, else below `below`.
 pub struct NewCreation {
     pub launch: shoal_protocol::launches::Launch,
     pub below: Option<SpaceSelector>,
@@ -206,8 +191,6 @@ impl From<NewChild> for Creation {
     }
 }
 
-/// Create the workspace `creation` describes and follow its preparation,
-/// which runs with `env`.
 pub async fn create<'d, D: Daemon>(
     daemon: &'d D,
     creation: impl Into<Creation>,
@@ -217,9 +200,8 @@ pub async fn create<'d, D: Daemon>(
     Preparing::follow(daemon, started).await
 }
 
-/// Create the workspace `creation` describes and start its preparation,
-/// which runs with `env`, without following it, as for one whose
-/// preparation waits for its agent's blockers.
+/// [`create`] without following the preparation, as for one that waits for
+/// its agent's blockers.
 pub async fn start<D: Daemon>(
     daemon: &D,
     creation: impl Into<Creation>,
@@ -237,7 +219,6 @@ pub async fn start<D: Daemon>(
     connection::request(daemon, method).await
 }
 
-/// Run `steps` on `workspace` with `env` and follow them.
 pub async fn prepare<'d, D: Daemon>(
     daemon: &'d D,
     workspace: &Workspace,
@@ -276,9 +257,7 @@ pub struct Preparing<'d, D> {
 }
 
 impl<'d, D: Daemon> Preparing<'d, D> {
-    /// Follow the preparation the daemon `started` for the workspace a
-    /// request opened, refusing one that waits, which has nothing to follow
-    /// yet.
+    /// Refuses a preparation that waits, which has nothing to follow yet.
     pub async fn follow(daemon: &'d D, started: StartedWorkspace) -> Result<Self> {
         let StartedWorkspace {
             operation,
@@ -350,8 +329,6 @@ impl<'d, D: Daemon> Preparing<'d, D> {
         Ok(Followed::Ended(Err(self.unprepared().await?)))
     }
 
-    /// Follow it to its end, passing each step and line its processes wrote
-    /// to `progress`.
     pub async fn finish(
         mut self,
         mut progress: impl FnMut(Progress),
@@ -364,7 +341,6 @@ impl<'d, D: Daemon> Preparing<'d, D> {
         }
     }
 
-    /// The failure it ended with, with the workspace as the failure left it.
     async fn unprepared(&mut self) -> Result<Unprepared> {
         let selector = SpaceSelector::id(&self.workspace.id);
         let inspection = crate::workspaces::inspect(selector)
@@ -390,9 +366,9 @@ pub struct Unprepared {
 }
 
 impl Unprepared {
-    /// Whether setup was done before the failure, which came after it, as
-    /// in the post-setup hook, leaving the workspace ready. Otherwise its
-    /// setup waits for a retry or a skip, or the workspace for removal.
+    /// Whether setup finished before the failure, as one in the post-setup
+    /// hook, leaving the workspace ready. Otherwise setup waits for a retry
+    /// or a skip.
     pub fn set_up(&self) -> bool {
         self.workspace.state == WorkspaceState::Ready
     }

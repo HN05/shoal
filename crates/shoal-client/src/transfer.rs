@@ -21,9 +21,9 @@ use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_ids::move_tickets::MoveTicket;
 use shoal_ids::space_ids::SpaceId;
 
-/// Package the removal record of the removed space `space` names by ID,
-/// which stays, with the records of the spaces its removal took that
-/// `carrying` carries, into `file`.
+/// Packages the removal record of `space` into `file`, with the records of
+/// the spaces its removal took that `carrying` carries. The record stays
+/// here.
 pub async fn export_removed(
     daemon: &impl Daemon,
     space: SpaceSelector,
@@ -38,12 +38,11 @@ pub async fn export_removed(
     request(daemon, method).await
 }
 
-/// Record the move of `space` and of the spaces below it that `carrying`
-/// carries to `destination`, which may delete the `unsaved` work the caller
-/// saw, then stop their agents, saving their sessions, and package them
-/// into the file the destination takes, leaving them here until
-/// [`end_moved`] ends them or [`abandon_move`] forgets the move; `again`
-/// packs again under the move's record, as only its finisher does.
+/// Records the move of `space`, and of the spaces below it that `carrying`
+/// carries, to `destination`, then stops their agents and packages them.
+/// The move may delete the `unsaved` work the caller saw. The spaces stay
+/// here until [`end_moved`] ends them or [`abandon_move`] forgets the move.
+/// `again` packs again under the move's record, as only its finisher does.
 pub async fn export_moving(
     daemon: &impl Daemon,
     space: SpaceSelector,
@@ -68,17 +67,15 @@ pub async fn end_moved(daemon: &impl Daemon, space: SpaceSelector) -> Result<Rem
     request(daemon, RemovalMethod::EndMovedSpace { space }).await
 }
 
-/// Forget the recorded move of `space`, which failed, returning the
-/// executions whose stopped work its spaces saved once it stopped their
-/// agents.
+/// Forgets the failed move of `space`. Returns the executions whose work
+/// its spaces saved when the move stopped their agents.
 pub async fn abandon_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<StoppedExecutions> {
     request(daemon, RemovalMethod::AbandonMove { space }).await
 }
 
-/// Write into `into` the package of `space` that the machine which runs it
-/// holds for the one that started its move: the recorded move's, or with
-/// `copy` a copy's, which goes there once read; refusing a stream that ends
-/// before the whole package arrived.
+/// Writes into `into` the package of `space` that its machine holds for the
+/// machine that started the move: the move's, or with `copy` a copy's, which
+/// that machine deletes once read. Refuses a stream that ends early.
 pub async fn read_held_package(
     daemon: &impl Daemon,
     space: SpaceSelector,
@@ -94,8 +91,6 @@ pub async fn read_held_package(
     receive_package(&mut stream, size, into).await
 }
 
-/// Write the `size` bytes of a package `stream` carries into `into`,
-/// refusing a stream that ends before them.
 async fn receive_package(
     stream: &mut (impl AsyncRead + Unpin),
     size: u64,
@@ -118,22 +113,19 @@ async fn receive_package(
     Ok(())
 }
 
-/// Give back the recorded move of `space` that holds its package for this
-/// machine, which could not take it, so `space` stays where it runs with
-/// its agents' restores queued there.
+/// Gives back the move of `space` whose package this machine could not
+/// take. `space` stays where it runs, with its agents' restores queued
+/// there.
 pub async fn release_held_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<()> {
     request(daemon, RemovalMethod::ReleaseHeldMove { space }).await
 }
 
-/// Deliver the package of the recorded move of `space` to the joined
-/// machine it goes to, returning how the import there went; an error leaves
-/// it unknown whether that machine claimed the space.
+/// Delivers the package of the move of `space` to the machine it goes to.
+/// After an error, whether that machine claimed the space is unknown.
 pub async fn deliver_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<ImportedMove> {
     request(daemon, RemovalMethod::DeliverMove { space }).await
 }
 
-/// Deliver the package of a copy of `space` to the joined machine
-/// `destination` names, returning how the import there went.
 pub async fn deliver_copy(
     daemon: &impl Daemon,
     space: SpaceSelector,
@@ -142,17 +134,16 @@ pub async fn deliver_copy(
     request(daemon, RemovalMethod::DeliverCopy { space, destination }).await
 }
 
-/// Settle at the hub the recorded move of `space`, whose arrival the joined
-/// machine it goes to could not report; fails while the hub cannot be
-/// asked.
+/// Settles at the hub the move of `space`, whose arrival the machine it went
+/// to could not report. Fails while the hub cannot be asked.
 pub async fn settle_move(daemon: &impl Daemon, space: SpaceSelector) -> Result<MoveSettled> {
     request(daemon, RemovalMethod::SettleMove { space }).await
 }
 
-/// Deliver the removal record of `space`, with those of the spaces its
-/// removal took that `carrying` carries, to the joined machine
-/// `destination` names, its claims there carrying `ticket`, returning the
-/// package and how it arrived, which forgot here what that machine recorded.
+/// Delivers the removal record of `space`, with those of the spaces its
+/// removal took that `carrying` carries, to the machine `destination` names.
+/// Its claims there carry `ticket`. This machine forgets the records that
+/// machine recorded.
 pub async fn deliver_removed(
     daemon: &impl Daemon,
     space: SpaceSelector,
@@ -169,10 +160,10 @@ pub async fn deliver_removed(
     request(daemon, method).await
 }
 
-/// Settle at the hub the move `ticket` of the removal record of `space`,
-/// with the records of the spaces `carried`, to the joined machine named
-/// `machine`, whose arrival it could not report, forgetting here each
-/// record that machine claimed; fails while the hub cannot be asked.
+/// Settles at the hub the move `ticket` of the removal records of `space`
+/// and `carried` to `machine`, whose arrival it could not report. This
+/// machine forgets each record that machine claimed. Fails while the hub
+/// cannot be asked.
 pub async fn settle_removed_move(
     daemon: &impl Daemon,
     space: SpaceSelector,
@@ -234,10 +225,9 @@ pub async fn import_streamed(
     }
 }
 
-/// Send `package` to the daemon on `stream` as [`send_package`] does while
-/// reading its answer, which ends the sending once it arrives, since a
-/// daemon that refuses the package answers before reading all of it; the
-/// error reading `package`, and the answer.
+/// [`send_package`] while reading the daemon's answer, which ends the
+/// sending: a daemon that refuses the package answers before reading all of
+/// it. Returns the error reading `package`, and the answer.
 async fn exchange(
     package: &mut (impl AsyncRead + Unpin),
     stream: BufReader<UnixStream>,
@@ -254,10 +244,9 @@ async fn exchange(
     (read, answer.await)
 }
 
-/// Send what `package` holds to the daemon on `stream` until it ends, the
-/// daemon stops reading or reading it fails, then shut the sending half, so
-/// the daemon always reaches the end of what it received and answers; the
-/// error reading `package`.
+/// Sends `package` until it ends, the daemon stops reading or reading it
+/// fails. Then it shuts the sending half, so that the daemon reaches the end
+/// of what it received and answers. Returns the error reading `package`.
 async fn send_package(
     package: &mut (impl AsyncRead + Unpin),
     stream: &mut (impl AsyncWrite + Unpin),

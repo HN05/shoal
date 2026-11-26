@@ -1,7 +1,5 @@
-//! The client side of the daemon protocol, which the CLI and apps share:
-//! finding the daemon, sending one request per connection with the caller's
-//! scope token, reading its reply, and the daemon's own status, reload, exit
-//! and wait.
+//! The connection to the daemon: one request per connection, sent with the
+//! caller's scope token, and its reply.
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::connection::ProtocolMismatch;
 use std::{io, ops::Deref, sync::OnceLock, time::Duration};
@@ -29,14 +27,11 @@ use shoal_protocol::{
 
 /// A daemon to send requests to, and the scope they carry.
 pub trait Daemon: Sync {
-    /// Where the daemon listens and keeps its state.
     fn paths(&self) -> &Paths;
-    /// The scope token requests carry: with one, the caller is the agent of
-    /// the workspace it belongs to; without one, the user.
+    /// The scope token requests carry. `None` sends them as the user.
     fn scope(&self) -> Option<ScopeToken>;
 }
 
-/// Tests' daemon, which they reach as the user.
 #[cfg(test)]
 impl Daemon for Paths {
     fn paths(&self) -> &Paths {
@@ -56,8 +51,7 @@ pub struct Connector {
 }
 
 impl Connector {
-    /// The daemon `shoal` uses: in the state directory `SHOAL_STATE_DIR`
-    /// names, else the default one, with no scope token.
+    /// The daemon of `SHOAL_STATE_DIR`, else of the default state directory.
     pub fn new() -> Result<Self> {
         let state = std::env::var_os(shoal_protocol::env::STATE_DIR).map(Into::into);
         Ok(Self {
@@ -85,9 +79,8 @@ impl Daemon for Connector {
     }
 }
 
-/// The daemon of the `shoal` command, which its requests reach with the scope
-/// token the command was handed or inherited; apps choose theirs with
-/// [`Connector`] instead.
+/// The daemon of the `shoal` command, reached with the scope token of its
+/// environment. Apps use [`Connector`] instead.
 #[derive(Debug, Clone)]
 pub struct CommandPaths(Paths);
 
@@ -121,10 +114,9 @@ impl Daemon for CommandPaths {
     }
 }
 
-/// What the `shoal` command adds to the connections it makes: telling a
-/// daemon that stopped answering from one that is not running, and waiting
-/// for a managed daemon to restart with an installed update. Apps connect
-/// without it.
+/// What the `shoal` command adds to its connections: it tells a daemon that
+/// stopped answering from one that is not running, and waits for a managed
+/// daemon to restart with an installed update. Apps connect without it.
 pub trait Supervision: Send + Sync {
     /// The daemon that owns the state directory of `paths`, when one does.
     fn owner(&self, paths: &Paths) -> Option<Identity>;
@@ -140,13 +132,11 @@ pub trait Supervision: Send + Sync {
 
 static SUPERVISION: OnceLock<&'static dyn Supervision> = OnceLock::new();
 
-/// Supervise this process's connections with `supervision`.
 pub fn supervise(supervision: &'static dyn Supervision) {
     let _ = SUPERVISION.set(supervision);
 }
 
-/// A daemon owns the state directory but does not answer, as when it stopped
-/// accepting connections.
+/// A daemon owns the state directory but does not answer.
 #[derive(Debug)]
 pub struct Unresponsive {
     pub owner: Identity,
@@ -162,13 +152,11 @@ impl std::fmt::Display for Unresponsive {
     }
 }
 
-/// [`Unresponsive`] when a live daemon owns the state directory.
 fn unresponsive(paths: &Paths) -> Option<Unresponsive> {
     let owner = SUPERVISION.get()?.owner(paths)?;
     Some(Unresponsive { owner })
 }
 
-/// `method` as a request from `daemon`'s caller.
 fn request_to(daemon: &impl Daemon, method: impl Into<Method>) -> Request {
     Request {
         scope: daemon.scope(),
@@ -176,14 +164,14 @@ fn request_to(daemon: &impl Daemon, method: impl Into<Method>) -> Request {
     }
 }
 
-/// Send `method` and return the open stream with the daemon's first reply,
-/// including [`Body::Error`]. Executions keep using the stream; [`call`] drops it.
+/// The open stream and the daemon's first reply to `method`, which may be a
+/// [`Body::Error`].
 pub async fn open(daemon: &impl Daemon, method: impl Into<Method>) -> Result<(UnixStream, Body)> {
     let (reader, body) = open_buffered(daemon, method).await?;
     Ok((reader.into_inner(), body))
 }
 
-/// Preserve frames read alongside the initial reply for long-lived streams.
+/// [`open`], keeping the frames the reader buffered after the first reply.
 pub async fn open_buffered(
     daemon: &impl Daemon,
     method: impl Into<Method>,
@@ -213,8 +201,7 @@ pub async fn open_buffered(
 }
 
 /// [`open_buffered`] with the stream split, so a task can own the receive
-/// half. `limit` bounds the daemon's silence before each frame of its reply,
-/// not a wait for an update.
+/// half. `limit` bounds the daemon's silence before each frame of its reply.
 pub async fn open_split(
     daemon: &impl Daemon,
     method: impl Into<Method>,
@@ -268,12 +255,10 @@ async fn reply_kept_alive(
     }
 }
 
-/// What a request waits for before it is sent again: a managed daemon from
-/// before the installed update refuses requests of the newer protocol
-/// without running them, and restarts with the update once idle, and a
-/// daemon about to exit holds back requests that would start work until the
-/// next one answers. Either way the request is sent again until a daemon
-/// takes it.
+/// Why a request is sent again until a daemon takes it. A managed daemon
+/// older than the installed update refuses newer requests without running
+/// them, then restarts with the update once idle. A daemon about to exit
+/// holds back requests that would start work.
 #[derive(Default)]
 struct DaemonWait {
     deadline: Option<Instant>,
@@ -285,9 +270,8 @@ struct DaemonWait {
 }
 
 impl DaemonWait {
-    /// `body`, unless it says a daemon about to exit held `request` back,
-    /// which is then sent again, except a daemon control, which reports the
-    /// daemon that runs.
+    /// `body`, or `None` when a daemon about to exit held `request` back and
+    /// it must be sent again. A daemon control takes the refusal as its answer.
     fn held_back(&mut self, paths: &Paths, request: &Request, body: Body) -> Option<Body> {
         let held_back = matches!(
             &body,
@@ -317,19 +301,16 @@ impl DaemonWait {
         supervision.owner(paths)
     }
 
-    /// Whether `error` of an attempt that connected to `reached` is the gap
-    /// before the next daemon after a daemon held the request back: no
-    /// socket, or a connection the daemon that held it back closed
-    /// unanswered as it exits, which ran none of it. Another daemon that
-    /// closed it may have run it, so it is not sent again.
+    /// Whether `error` falls in the gap before the next daemon: no socket, or
+    /// a connection that the daemon which held the request back closed
+    /// unanswered. Another daemon that closed it may have run the request,
+    /// so that is no gap.
     fn gap(&self, error: &anyhow::Error, reached: Option<&Identity>) -> bool {
         let by_holder = reached.is_some() && reached == self.held_by.as_ref();
         self.exiting && (is_unreachable(error) || (by_holder && stream_closed(error)))
     }
 
-    /// Return after a pause to send `request` again, or fail with `error`.
-    /// An attempt that fails after connecting to `reached` waits for the
-    /// next daemon while that is [`Self::gap`].
+    /// Returns after a pause to send `request` again, or fails with `error`.
     async fn retry(
         &mut self,
         paths: &Paths,
@@ -359,8 +340,6 @@ impl DaemonWait {
         Ok(())
     }
 
-    /// Pause before sending a request a daemon held back for its exit
-    /// again, failing once the next daemon has not taken it in time.
     async fn pause(&mut self) -> Result<()> {
         let deadline =
             *(self.deadline).get_or_insert_with(|| Instant::now() + timing::EXIT_WAIT_TIMEOUT);
@@ -410,7 +389,7 @@ async fn reply(stream: &mut (impl AsyncBufRead + Unpin), request: &Request) -> R
     Ok(reply.body)
 }
 
-/// One request; daemon errors become `code: message` failures.
+/// One request. A daemon's error reply fails as `code: message`.
 pub async fn call(daemon: &impl Daemon, method: impl Into<Method>) -> Result<Body> {
     let method = method.into();
     let duration = if method.controls_daemon() {
@@ -431,8 +410,8 @@ pub async fn call(daemon: &impl Daemon, method: impl Into<Method>) -> Result<Bod
     body.into_result()
 }
 
-/// A request built before it is sent, with the answer it expects, as one a
-/// picker offers spaces for, which the daemon judges by what it does.
+/// A request built before it is sent, typed by its answer. A picker passes
+/// one so that the daemon offers the spaces the request may act on.
 pub struct Prepared<T> {
     operation: Operation,
     answer: std::marker::PhantomData<fn() -> T>,
@@ -452,7 +431,6 @@ impl<T> Prepared<T> {
 }
 
 impl<T: TryFrom<Body, Error = anyhow::Error>> Prepared<T> {
-    /// Send it, with its answer.
     pub async fn send(self, daemon: &impl Daemon) -> Result<T> {
         request(daemon, self.operation).await
     }
@@ -477,15 +455,13 @@ impl<T> PreparedPages<T>
 where
     Vec<T>: TryFrom<Body, Error = anyhow::Error>,
 {
-    /// Send it, with the items of every page of its answer.
     pub async fn send(self, daemon: &impl Daemon) -> Result<Vec<T>> {
         pages(daemon, self.operation).await
     }
 }
 
-/// A request built before it is sent, as either kind of prepared request.
+/// Either kind of prepared request.
 pub trait Sendable {
-    /// The request it sends.
     fn into_operation(self) -> Operation;
 }
 
@@ -501,7 +477,6 @@ impl<T> Sendable for PreparedPages<T> {
     }
 }
 
-/// Send a request and extract its expected response payload.
 pub async fn request<T>(daemon: &impl Daemon, method: impl Into<Method>) -> Result<T>
 where
     T: TryFrom<Body, Error = anyhow::Error>,
@@ -558,10 +533,9 @@ pub async fn reload_config(daemon: &impl Daemon) -> Result<bool> {
     }
 }
 
-/// Ask the daemon to exit as `request` says, whatever its release. A daemon
-/// that waits for work its exit would cut off sends that work, which
-/// `waiting` hears each time it changes, until it agrees to exit. A refusal
-/// fails.
+/// Asks the daemon to exit as `request` says, whatever its release. While
+/// the daemon waits for work its exit would cut off, `waiting` hears that
+/// work each time it changes.
 pub async fn exit(
     daemon: &impl Daemon,
     request: ExitRequest,
@@ -680,9 +654,9 @@ pub fn stream_closed(error: &anyhow::Error) -> bool {
         })
 }
 
-/// Only read-only followers reconnect; ordinary requests must never replay an
-/// operation whose response was lost. The normal daemon wait budget bounds a
-/// manually stopped or failed daemon while a managed update keeps its socket.
+/// Opens `method` again until a daemon answers. Use it only for read-only
+/// followers: an ordinary request must never repeat an operation whose reply
+/// was lost.
 pub async fn reconnect<M: Into<Method>>(
     daemon: &impl Daemon,
     method: impl Fn() -> M,
@@ -702,13 +676,14 @@ pub async fn reconnect<M: Into<Method>>(
     .context("daemon did not restart for the followed stream")?
 }
 
-/// The reply to a long-lived request that waits for an event, across daemon
-/// restarts: a closed connection asks again at once, and an unreachable socket
-/// is retried for the normal daemon wait budget, or the restart budget once
-/// the daemon went away. After a restart, a scope refusal is retried within
-/// the restart budget too, since a restarted daemon knows an execution's scope
-/// only once its wrapper reattaches; `restarted` says the daemon restarted
-/// before this wait began. Only for requests that are safe to repeat.
+/// The reply to a request that waits for an event, across daemon restarts.
+/// Use it only for requests that are safe to repeat.
+///
+/// A closed connection asks again at once. An unreachable socket is retried
+/// within the start budget, or the restart budget once the daemon went away.
+/// After a restart, a scope refusal is retried too: a restarted daemon knows
+/// an execution's scope only once its wrapper reattaches. `restarted` says
+/// the daemon restarted before this wait began.
 pub async fn await_reply<M: Into<Method>>(
     daemon: &impl Daemon,
     method: impl Fn() -> M,
@@ -731,12 +706,11 @@ pub async fn await_reply<M: Into<Method>>(
     }
 }
 
-/// The result of `ask`, requests that are safe to repeat, from a daemon
-/// that restarted: an unreachable socket, a closed connection or a scope
-/// refusal is tried again within the restart budget, since a restarted
-/// daemon knows an execution's scope only once its wrapper reattaches, as
-/// is another machine that the hub cannot reach while it or the hub
-/// restarts.
+/// The result of `ask`, requests that are safe to repeat, from a daemon that
+/// restarted. Within the restart budget, a scope refusal and an unreachable
+/// machine are retried with the connection failures: a restarted daemon
+/// knows an execution's scope only once its wrapper reattaches, and the hub
+/// cannot reach a machine while either restarts.
 pub async fn after_restart<T, F>(ask: impl Fn() -> F) -> Result<T>
 where
     F: Future<Output = Result<T>>,

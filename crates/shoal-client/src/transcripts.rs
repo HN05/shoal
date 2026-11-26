@@ -1,9 +1,5 @@
-//! Where agent tools keep their sessions' files on this machine, such as a
-//! session's transcript. Shoal finds them by name and never reads them: an
-//! app that shows a conversation reads its tool's own format. The daemon
-//! says which sessions a space's agents reported, and
-//! [`space_transcripts`] finds their files. [`follow_session`] follows a
-//! session's files on whichever machine its space runs.
+//! Finding and following the files of a space's agent sessions, such as
+//! transcripts. Shoal never parses them: an app reads its tool's own format.
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::transcripts::{FollowedSession, ReadTo, SpaceSessions, Transcript, locate};
 
@@ -19,13 +15,11 @@ use crate::connection::{self, Daemon, open_buffered, request};
 use shoal_protocol::protocol::{Body, Responses, SpaceMethod};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The sessions the agents of the workspace or chat `space` reported.
 pub async fn space_sessions(daemon: &impl Daemon, space: SpaceSelector) -> Result<SpaceSessions> {
     request(daemon, SpaceMethod::SpaceSessions { space }).await
 }
 
-/// The sessions the agents of the workspace or chat `space` reported, each
-/// with its files on this machine.
+/// [`space_sessions`], each with its files on this machine.
 pub async fn space_transcripts(
     daemon: &impl Daemon,
     space: SpaceSelector,
@@ -70,11 +64,10 @@ pub enum Followed {
     },
 }
 
-/// Follow the session `session` of an agent of the workspace or chat
-/// `space`, or else its current one, wherever the space runs:
-/// [`SessionFollow::next`] brings the session, then its files' bytes,
-/// everything so far and then what its tool appends. Fails at once when
-/// the daemon refuses, as for a space whose machine is offline.
+/// Follows `session` of `space`, else its current one, wherever the space
+/// runs. [`SessionFollow::next`] brings the session, then its files' bytes so
+/// far, then what its tool appends. Fails at once when the daemon refuses,
+/// as for a space whose machine is offline.
 pub async fn follow_session<D: Daemon>(
     daemon: D,
     space: SpaceSelector,
@@ -93,8 +86,6 @@ pub async fn follow_session<D: Daemon>(
     })
 }
 
-/// Follow `space`'s session `session` on a new connection, from `from`,
-/// and read the session it follows.
 async fn open(
     daemon: &impl Daemon,
     space: &SpaceSelector,
