@@ -34,7 +34,7 @@ Under `handover`, only a [hand-over](#handing-work-over) keeps the machine
 awake. Under `off`, nothing does.
 
 An agent has work while its [turn](agents.md#agent-state) is working. An idle
-agent also has work while it receives the activity of a [watched](links.md) PR
+agent also has work while it receives the activity of a [watched](links.md#watch-items) PR
 not yet seen merged or closed, since that activity starts its next turn. The
 PR may be its own space's or a [child](create.md)'s without an agent.
 

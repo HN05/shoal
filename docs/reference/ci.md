@@ -52,7 +52,7 @@ the branches of the workspaces its scope reaches, in the repository it acts
 in.
 `--json` returns `workflow`, `branch` and the run's `url` where the forge
 reports it, which GitHub and Gitea do not. Inside a workspace, a run with a URL
-is [linked](links.md) as opened where Shoal reads runs, which
+is [linked](links.md#ci-runs) as opened where Shoal reads runs, which
 Bitbucket's it does not, so `shoal watch` reports when it finishes; `linked` says
 whether it was. A chat links the runs it starts the same way.
 

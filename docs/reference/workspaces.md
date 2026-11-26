@@ -94,7 +94,7 @@ attempts. Its agent starts on the run: its workflow, number, ref, URL, commit,
 state and failed jobs, with a pointer to `shoal view ci` for their logs. A chat
 on a run is named `<workflow> run <number> on <ref>` unless `--name` names it.
 A scoped caller's run of another repository is refused as
-[`shoal link ci`](links.md) refuses it. `shoal create` takes a run of a PR or
+[`shoal link ci`](links.md#select-items) refuses it. `shoal create` takes a run of a PR or
 branch the same way.
 
 ### Branch links

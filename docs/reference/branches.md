@@ -117,7 +117,7 @@ branch without an upstream is refused before it merges. A failed push keeps the
 merge.
 
 Where [`[pr] watch_merge_runs`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#prs)
-is on, the workspace follows the default branch's [runs](links.md) for the
+is on, the workspace follows the default branch's [runs](links.md#merge-runs) for the
 commit the push published, as it follows a merged PR's. It reads them on the
 forge of the first URL the push went to on a network host.
 

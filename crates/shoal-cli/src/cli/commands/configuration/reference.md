@@ -1271,7 +1271,7 @@ area_prefix = "area/"        # Default: unset
   as assigned. `agent` adds the agent account while an agent works the issue,
   `user` adds your own login for every assigned link, `both` does both, and
   `none` adds no one.
-  See [linked items](../../../../../../docs/reference/links.md).
+  See [assignees on the forge](../../../../../../docs/reference/links.md#assignees-on-the-forge).
 - `area_prefix` is the prefix of the labels that name an issue's areas. The
   [agent queue](../../../../../../docs/reference/queue.md#queue-order) starts
   new workspaces whose issues share fewer areas with existing workspaces
