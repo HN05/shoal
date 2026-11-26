@@ -112,9 +112,15 @@ they run in, a chat's included.
 ### Outside a space
 
 Outside a space, the commands act in the repository of the registered checkout
-they run in. They take only a number or URL. Outside any checkout, a terminal
-offers the registered repositories to pick from. Without a terminal, the call
-fails and says so.
+they run in. They take only a number or URL.
+
+Outside any checkout, a terminal offers a picker:
+
+- `shoal pr` and `shoal issue` commands that act on an item, or open an issue,
+  offer the spaces.
+- Commands that need only a repository offer the registered repositories.
+
+Without a terminal, the call fails and says so.
 
 ### Another repository
 
@@ -511,8 +517,12 @@ the PR as opened, without linking it.
 ### Where Shoal reverts
 
 Elsewhere, Shoal creates a workspace on branch `revert-<number>`, from the base
-branch as `origin` has it. Setup runs as for any new workspace. The new
-workspace is a child of the space that asked for the revert.
+branch as `origin` has it. Setup runs as for any new workspace. Where the new
+workspace sits depends on who reverts:
+
+- A workspace process's revert makes it a child of the process's workspace.
+- A chat's revert makes it a child of the chat.
+- Your own revert from a workspace makes it a top-level workspace.
 
 Shoal reverts the merge in one commit, as tracked commands of that workspace.
 It first establishes which commits the merge added. The merge is one of these:
