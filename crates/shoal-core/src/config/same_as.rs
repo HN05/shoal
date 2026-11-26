@@ -9,7 +9,6 @@ use toml::de::{DeTable, DeValue};
 
 const SAME_AS: &str = "same_as";
 
-/// The references one file makes.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct References(Vec<Reference>);

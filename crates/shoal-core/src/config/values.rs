@@ -12,7 +12,6 @@ use futures_util::future::BoxFuture;
 
 use super::value::{self, Value};
 
-/// Why another machine gave no value.
 pub enum Unanswered {
     /// The machine, or the hub on the way to it, cannot be reached now.
     Unreachable(anyhow::Error),
@@ -36,7 +35,6 @@ pub trait Remote: Send + Sync {
 /// A command and the machine that runs it, which a kept value answers.
 type Source = (Vec<String>, String);
 
-/// The daemon's reader of values, which every subsystem shares.
 #[derive(Default)]
 pub struct Values {
     remote: RwLock<Option<Arc<dyn Remote>>>,

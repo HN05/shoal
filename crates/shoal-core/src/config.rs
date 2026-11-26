@@ -47,8 +47,6 @@ use resolve::GlobalLayer;
 pub use shared::Shared;
 pub use shoal_protocol::config::options;
 
-/// How many of a repository's heavy agents may run at once: a fixed
-/// number, or under `dynamic` and `none` only the machine's limit.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum RunLimit {
     #[default]
@@ -147,7 +145,6 @@ pub fn validate_port_range(start: Option<u16>, end: Option<u16>) -> Result<()> {
 }
 
 impl Cleanup {
-    /// How long a workspace stays eligible before automatic cleanup removes it.
     pub fn grace(&self) -> Duration {
         Duration::from_secs(self.grace_minutes * 60)
     }
@@ -228,8 +225,7 @@ impl Config {
         Self::parse_over(&text, &shared, paths).with_context(|| format!("parse {}", path.display()))
     }
 
-    /// Both files as written, layered without validating their values, as
-    /// skill delivery reads them without daemon paths.
+/// Both files as written, layered without validating their values.
     pub fn load_unchecked(home: &Path) -> Result<Self> {
         let path = Shared::path_for_home(home);
         let shared = parse::shared(&read_file(&path)?)
@@ -245,8 +241,8 @@ impl Config {
         })
     }
 
-    /// [`Self::load`] with the template files beside each file standing in
-    /// for its omitted inline templates, as the CLI reads it for a launch.
+/// [`Self::load`] with the template files beside each file standing in
+/// for its omitted inline templates.
     pub fn load_with_templates(paths: &Paths) -> Result<Self> {
         let mut config = Self::load(paths)?;
         let [shared, own] = template_directories(paths)?;

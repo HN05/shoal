@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{options::Options, presets::Preset, repo::RepoConfig};
 
-/// One server as a layer writes it.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = ServerSettings)]
@@ -16,12 +15,9 @@ pub struct ServerConfig {
     /// The program that runs the server, which defines it whole; unset
     /// changes the server a preset brings under the same name.
     pub command: Option<String>,
-    /// The program's arguments.
     pub args: Option<Vec<String>>,
-    /// Variables the server runs with.
     #[option(named)]
     pub env: BTreeMap<String, String>,
-    /// Whether agents start the server.
     #[option(default = true)]
     pub enabled: Option<bool>,
 }
@@ -42,7 +38,6 @@ pub struct Server {
 pub struct Servers(BTreeMap<String, Server>);
 
 impl Servers {
-    /// The servers agents start, by name.
     pub(crate) fn enabled(&self) -> impl Iterator<Item = (&str, &Server)> {
         (self.0.iter())
             .filter(|(_, server)| server.enabled)
@@ -82,7 +77,6 @@ pub(crate) fn resolve(
     Ok(Servers(servers))
 }
 
-/// The servers `presets` bring, by name.
 fn preset_servers(presets: &[Preset]) -> BTreeMap<String, Server> {
     (presets.iter())
         .flat_map(|preset| preset.mcp_servers())

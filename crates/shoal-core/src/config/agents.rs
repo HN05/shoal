@@ -1,5 +1,6 @@
 //! `[agents.<name>]`: how each AI tool launches, merged field by field across
-//! layers, and `[machine.agents.<name>]`: what it needs of this machine.
+//! layers, and `[machine.agents.<name>]`: what it needs of this machine. The
+//! configuration reference describes each option.
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Context, Result};
@@ -11,81 +12,34 @@ use crate::config::options::Options;
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = AgentTool)]
 pub struct AgentToolConfig {
-    /// The launcher `shoal run <name>` and tracked launches run; a tool with one
-    /// runs as an agent.
     pub command: Option<Vec<String>>,
-    /// Restores a session; it must not repeat the initial prompt.
     pub resume_command: Option<Vec<String>>,
-    /// Whether the tool's agents can start: `false` turns them off, and
-    /// pickers and completion leave them out. `[agents.happy]` turns on
-    /// Happy's agents, which are off until it is `true`.
     pub enabled: Option<bool>,
-    /// The AI tool this one is a launch profile of: it inherits that tool's
-    /// integration, launcher and arguments, each replaced by its own.
     pub base: Option<String>,
-    /// Arguments that give the agent instructions apart from its first
-    /// message, with `{instructions}`, or `{instructions_toml}` for a TOML
-    /// string. Without them, instructions join the prompt.
     pub instructions: Option<Vec<String>>,
-    /// Arguments that resume the session with ID `{session}`.
     pub resume: Option<Vec<String>>,
-    /// Arguments that resume the workspace's latest session.
     pub resume_latest: Option<Vec<String>>,
-    /// Arguments that start a new session from a fork of the one with ID
-    /// `{session}`, which stays unchanged, working in `{directory}`.
     pub fork: Option<Vec<String>>,
-    /// Arguments that give the agent another working directory,
-    /// `{directory}`; empty gives none.
     pub add_dir: Option<Vec<String>>,
-    /// The model the tool's agents run with, unless a launch or the setting
-    /// that chose the agent says otherwise.
     pub model: Option<String>,
-    /// The reasoning effort the tool's agents run with, as `model`.
     pub effort: Option<String>,
-    /// Arguments that select the model `{model}`.
     pub model_args: Option<Vec<String>>,
-    /// Arguments that select the reasoning effort `{effort}`.
     pub effort_args: Option<Vec<String>>,
-    /// Arguments of a one-shot, read-only review, which follow the launcher's
-    /// words before `{args}`: the prompt as `{prompt}` and `{output}`, a
-    /// file the result goes to instead of standard output. It lets the
-    /// reviewer run Shoal's commands, which write its review, or its answer
-    /// in one of its findings' threads.
     pub review: Option<Vec<String>>,
-    /// Arguments of a review or answer that resumes the session with ID
-    /// `{session}`, with `review`'s placeholders, in place of `review`'s.
     pub review_resume: Option<Vec<String>>,
-    /// Arguments of the gate's one-shot run, as `review`'s, that returns its
-    /// result in an output schema, as a file, `{schema}`, or its text,
-    /// `{schema_json}`.
     pub gate: Option<Vec<String>>,
-    /// Arguments of a gate run that resumes the session with ID
-    /// `{session}`, with `gate`'s placeholders, in place of `gate`'s.
     pub gate_resume: Option<Vec<String>>,
-    /// Variables set for the tool's tracked launches, after the workspace's
-    /// `[env]`; a value starting with `~/` names a path under the home.
     #[option(named)]
     pub env: BTreeMap<String, String>,
-    /// Variables removed from the tool's tracked launches, whether inherited
-    /// or set by `[env]`; an empty list removes none of those a lower layer
-    /// names.
     pub env_remove: Option<Vec<String>>,
-    /// Whether Shoal retries a turn an API failure ended, for an agent whose
-    /// integration reports failed turns.
     pub retry: Option<bool>,
-    /// How many minutes the tool's prompt cache lives after its last
-    /// request, over what its own settings give.
     pub prompt_cache_minutes: Option<u64>,
 }
 
-/// What an AI tool needs of this machine.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct MachineAgent {
-    /// Parent directory in which Shoal installs `<skill>/SKILL.md`.
     pub skill_dir: Option<PathBuf>,
-    /// The `[machine.proxies.<name>]` the tool's tracked agents reach their
-    /// API through.
     pub proxy: Option<String>,
 }
 

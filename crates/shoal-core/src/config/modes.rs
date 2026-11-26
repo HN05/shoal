@@ -1,11 +1,5 @@
-//! `[modes.<name>]` and `[rules.<name>]`: what an agent is told. A mode
-//! names the rules its system text carries, the instructions its first
-//! message ends with, and the kind of space `shoal start` creates for it,
-//! with or without a repository.
-//! Rules are shared by name; instructions belong to one mode. Each may be
-//! written inline or as `rules/<name>.md` and `modes/<name>.md` beside a
-//! config file. The `setup` mode is built in apart from them: no config
-//! defines or changes it.
+//! `[modes.<name>]` and `[rules.<name>]`: what an agent is told and the
+//! space it starts in. See `docs/design/modes.md`.
 use std::{
     borrow::Cow,
     collections::BTreeMap,
@@ -30,7 +24,6 @@ const SETUP_INSTRUCTIONS: &str = include_str!("modes/setup.md");
 /// list, replace or leave out.
 const WORK_RULE: &str = "work";
 
-/// How long a worker may stay idle before Shoal wakes it.
 const WORKER_IDLE_WAKE_MINUTES: u64 = 60;
 /// The longest idle wake a mode may set: a year.
 const MAX_IDLE_WAKE_MINUTES: u64 = 525_600;
@@ -42,46 +35,28 @@ pub(super) const RULES_DIR: &str = "rules";
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Mode)]
 pub struct ModeConfig {
-    /// The kind of space `shoal start` creates in this mode.
     #[option(default = SpaceKind::Workspace)]
     pub kind: Option<SpaceKind>,
-    /// Whether the space belongs to a repository. Only a chat may have
-    /// none: it runs in `root_dir`, and its scope reaches every space.
+    /// Only a chat may have none.
     #[option(default = true)]
     pub repository: Option<bool>,
-    /// The rules the agent's system text carries after the facts of its
-    /// space and the space rules, in order.
     #[option(list)]
     pub rules: Vec<String>,
-    /// How to do the mode's job, sent once after the subject in the first
-    /// message.
     #[option(template, default = String::new())]
     pub instructions: Option<String>,
-    /// Whether the new tab or session of a space started in this mode
-    /// takes the terminal, over `terminal.focus`; unset follows the launch.
     pub focus: Option<bool>,
-    /// How many minutes its agent may stay idle before Shoal wakes it and
-    /// asks it to continue; 0 never wakes it.
     #[option(default = 0)]
     pub idle_wake_minutes: Option<u64>,
-    /// What the mode's agents may do, over `[permissions]`.
     #[option(section)]
     pub permissions: PermissionsConfig,
-    /// Whether its agents take a heavy slot, wherever they run.
     #[option(default = Weight::Heavy)]
     pub weight: Option<Weight>,
-    /// The forge label of the issues and PRs a launch starts in this mode
-    /// when it names none.
     pub label: Option<String>,
 }
 
 shoal_states::states!(
-    /// How much of the machine a mode's agents take.
     Weight {
-        /// They start at once, hold no heavy slot and are never stopped
-        /// for load.
         Light => "light",
-        /// They wait for a heavy slot and protection may stop them.
         Heavy => "heavy",
     }
 );
@@ -90,7 +65,6 @@ shoal_states::states!(
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Rule)]
 pub struct RuleConfig {
-    /// What the agent's system text says for the rule.
     #[option(template, default = String::new())]
     pub text: Option<String>,
 }
@@ -230,7 +204,6 @@ pub fn get<'a, M>(modes: &'a BTreeMap<String, M>, name: &ModeName) -> Result<&'a
         .with_context(|| format!("no mode {name}; [modes.{name}] in config defines one"))
 }
 
-/// The space each of `modes` starts, with its label.
 pub fn shapes(modes: &BTreeMap<String, Mode>) -> ModeShapes {
     let shape = |mode: &Mode| ModeShape {
         kind: mode.kind,

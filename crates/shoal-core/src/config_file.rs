@@ -177,7 +177,6 @@ fn install_at(path: &Path, packaged: &str) -> Result<bool> {
     }
 }
 
-/// The packaged config named `name`.
 fn packaged(name: &str) -> Result<&'static str> {
     PACKAGED
         .iter()

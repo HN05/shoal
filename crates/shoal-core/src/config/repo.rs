@@ -1,3 +1,5 @@
+//! A repository's config: the layers it is read from and their options. The
+//! configuration reference describes each option.
 use crate::agent::Agent;
 use crate::config::hooks::HookCommand;
 use crate::config::{modes, options::Options};
@@ -44,12 +46,10 @@ pub struct ConfigLayers {
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Settings)]
 pub struct RepoConfig {
-    /// Workspace shortcuts that are not agents: `shoal run <name> [-w <workspace>]`.
     #[option(named)]
     pub commands: crate::config::named_commands::Commands,
     #[option(named_sections, default = crate::config::agents::built_in())]
     pub agents: BTreeMap<String, crate::config::agents::AgentToolConfig>,
-    /// The Git profile new worktrees use.
     pub git_profile: Option<String>,
     #[option(section)]
     pub agent: AgentConfig,
@@ -58,10 +58,8 @@ pub struct RepoConfig {
     /// Each app's own settings, which Shoal hands it unread.
     #[option(named_sections)]
     pub apps: BTreeMap<String, crate::config::apps::AppTable>,
-    /// What agents are told and the kind of space they start in, by mode.
     #[option(named_sections, default = crate::config::modes::built_in_modes())]
     pub modes: BTreeMap<String, crate::config::modes::ModeConfig>,
-    /// Text a mode's agents receive after Shoal's guidance, by name.
     #[option(named_sections, default = crate::config::modes::built_in_rules())]
     pub rules: BTreeMap<String, crate::config::modes::RuleConfig>,
     #[option(section)]
@@ -80,7 +78,6 @@ pub struct RepoConfig {
     /// MCP servers agents start, with the presets'.
     #[option(named_sections, resolve = crate::config::mcp::resolve -> crate::config::mcp::Servers)]
     pub mcp: BTreeMap<String, crate::config::mcp::ServerConfig>,
-    /// Commands kept running for the user to try, by name.
     #[option(named)]
     pub demos: BTreeMap<String, shoal_protocol::demos::Demo>,
     /// Machine-specific, so the global config or local config sets it, never
@@ -133,7 +130,6 @@ pub struct RepoConfig {
 }
 
 states!(
-    /// A desktop app `shoal open` hands a workspace to.
     DesktopApp: ValueEnum {
         Claude => "claude",
         Codex => "codex",
@@ -141,54 +137,37 @@ states!(
     }
 );
 
-/// The desktop app of a repository's workspaces.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = App)]
 pub struct AppConfig {
-    /// Desktop app `shoal open` opens when `--app` is omitted.
     pub default: Option<DesktopApp>,
 }
 
-/// What every agent of a repository starts with.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = AgentSettings)]
 pub struct AgentConfig {
-    /// Agent an issue workspace starts when `--agent` is omitted.
     #[serde(deserialize_with = "crate::agent::configured")]
     pub default: Option<Agent>,
-    /// The model the `default` agent runs with, over its AI tool's.
     pub model: Option<String>,
-    /// The reasoning effort the `default` agent runs with, over its AI
-    /// tool's.
     pub effort: Option<String>,
-    /// Heavy modes' agents of this repository running at once; by default
-    /// only the machine limit applies. Use `none` for unlimited.
     #[option(default = crate::config::RunLimit::Dynamic)]
     pub max_heavy_running: Option<crate::config::RunLimit>,
-    /// Directories every agent and chat gets as other working directories.
     #[option(default = vec!["/tmp".into()])]
     pub dirs: Option<Vec<String>>,
-    /// The Git profile of tracked agents' Git commands.
     pub git_profile: Option<String>,
 }
 
-/// Where and how Shoal opens places for a workspace.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Terminal)]
 pub struct TerminalConfig {
-    /// The terminal host for launches from a terminal no host serves.
     #[option(default = DefaultHost::default(), resolve = DefaultHost::resolve -> HostName)]
     pub default_host: Option<DefaultHost>,
-    /// Whether new tabs and sessions take the terminal; unset follows the launch.
     pub focus: Option<bool>,
-    /// Whether a place Shoal opened for a workspace closes once it is done.
     #[option(default = true)]
     pub close_when_done: Option<bool>,
-    /// Whether an agent or demo Shoal runs in a host's place runs in a zmx
-    /// session attached there, which other terminals attach to too.
     #[option(default = false)]
     pub nested_zmx: Option<bool>,
     #[option(section)]
@@ -201,18 +180,13 @@ pub struct TerminalConfig {
     pub zellij: ZellijConfig,
 }
 
-/// How a new worktree is prepared.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Setup)]
 pub struct SetupConfig {
-    /// The tracked setup executable, which gates readiness.
     pub command: Option<String>,
-    /// Copy the main checkout's ignored files into the worktree before setup.
     #[option(default = true)]
     pub copy_ignored: Option<bool>,
-    /// Gitignore-style patterns of ignored entries that copy leaves out; an
-    /// empty list turns inherited patterns off.
     #[option(default = Vec::new())]
     pub copy_ignored_exclude: Option<Vec<String>>,
     /// Build tools whose usual setup the repository's workspaces share; an
@@ -223,15 +197,12 @@ pub struct SetupConfig {
     pub seed: Seed,
 }
 
-/// Untracked lifecycle executables, by the event they follow or precede.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Hooks)]
 pub struct HooksConfig {
     pub pre_setup: Option<String>,
-    /// Runs untracked after the workspace is ready, e.g. to open a tmux session.
     pub post_setup: Option<String>,
-    /// Runs untracked before the worktree is removed, e.g. to close that session.
     pub pre_remove: Option<String>,
     pub post_remove: Option<String>,
     pub post_done: Option<String>,
@@ -258,9 +229,7 @@ fn preset_caches(
 }
 
 states!(
-    /// Who shares a cache directory.
     CacheScope {
-        /// Every workspace of the repository.
         Shared => "shared",
     }
 );
@@ -272,14 +241,11 @@ pub struct Cache {
     pub scope: CacheScope,
 }
 
-/// The default-branch build new workspaces start from.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Self)]
 pub struct Seed {
-    /// Executable in the seed worktree that builds the default branch.
     pub command: Option<String>,
-    /// Worktree-relative build outputs cloned into each new workspace.
     #[option(list)]
     pub paths: Vec<String>,
 }
@@ -345,13 +311,11 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
 /// config and the scripts it names, beside the workspaces and `.checkout`.
 pub const LOCAL_DIR: &str = ".shoal";
 
-/// `<repository directory>/.shoal/config.toml`.
 pub fn local_config_path(repository_dir: &Path) -> PathBuf {
     repository_dir.join(LOCAL_DIR).join("config.toml")
 }
 
-/// `<repository directory>/.shoal/false-positives.toml`, the claims its
-/// reviews raised that were resolved as wrong.
+/// The claims the repository's reviews raised that were resolved as wrong.
 pub fn false_positives_path(repository_dir: &Path) -> PathBuf {
     repository_dir.join(LOCAL_DIR).join("false-positives.toml")
 }
@@ -375,8 +339,6 @@ pub fn load_local(repository_dir: &Path) -> Result<(RepoConfig, modes::Files)> {
     Ok((config, files))
 }
 
-/// Make each relative hook path and `setup.command` name a script in
-/// `directory`.
 fn resolve_script_paths(config: &mut RepoConfig, directory: &Path) {
     for &kind in crate::config::hooks::HookKind::ALL {
         if let Some(command) = kind.repository_command_mut(config) {
@@ -512,16 +474,11 @@ pub struct SimulatorsConfig {
     pub preferred: Vec<String>,
 }
 
-/// The Compose project that runs a workspace's service containers.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Containers)]
 pub struct ContainersConfig {
-    /// The Compose file, relative to the worktree root; unset gives the
-    /// repository's workspaces no containers.
     pub compose: Option<String>,
-    /// Named ports reserved before the project starts, which it reads from
-    /// each port's variable.
     #[option(list)]
     pub ports: Vec<String>,
     #[option(default = ContainerStart::default())]
@@ -604,7 +561,6 @@ pub struct AutoCleanupConfig {
     pub idle_minutes: Option<u64>,
 }
 
-/// Removal of merged workspaces whether or not their assignment is done.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = MergedCleanup)]
@@ -615,8 +571,6 @@ pub struct MergedCleanupConfig {
     pub idle_minutes: Option<u64>,
 }
 
-/// How long checkpoints and removed workspaces stay restorable, and how
-/// much of the unsaved files a checkpoint keeps.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Restore)]
@@ -627,9 +581,6 @@ pub struct RestoreConfig {
     pub archive_max_mb: Option<u64>,
 }
 
-/// Whether Shoal puts idle agents to sleep, the longest an idle agent the
-/// user is engaged with waits for them first, and how long an asleep agent
-/// keeps the leases that keep something running.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = SleepSettings)]
@@ -642,35 +593,24 @@ pub struct SleepConfig {
     pub keep_leases_minutes: Option<u64>,
 }
 
-/// Who runs local reviews and whether PR reviews post their findings.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Review)]
 pub struct ReviewConfig {
     #[option(default = true)]
     pub post: Option<bool>,
-    /// The agent that reviews; unset, `agent.default`.
     #[serde(deserialize_with = "crate::agent::configured")]
     pub agent: Option<Agent>,
-    /// The agent that reviews once more when the first reviewer fails for a
-    /// reason other than running too long.
     #[serde(deserialize_with = "crate::agent::configured")]
     pub fallback_agent: Option<Agent>,
-    /// Whose opening of a new PR needs a finished review of HEAD with every
-    /// finding resolved.
     #[option(default = ReviewRequirement::default())]
     pub require_for_pr: Option<ReviewRequirement>,
-    /// Whose marking of work ready needs one.
     #[option(default = ReviewRequirement::default())]
     pub require_for_ready: Option<ReviewRequirement>,
-    /// Whose merge needs one of the commit that merges.
     #[option(default = ReviewRequirement::default())]
     pub require_for_merge: Option<ReviewRequirement>,
 }
 
-/// Whose commands a review gate holds until a finished review covers the
-/// commit they act on with every finding resolved: nobody's, agents', or
-/// everyone's, the user's own included.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReviewRequirement {
@@ -727,8 +667,6 @@ impl ReviewRequirement {
     }
 }
 
-/// How alerts that arrive in quick succession are held to reach the agent
-/// together.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Alerts)]
@@ -746,59 +684,37 @@ impl AlertsConfig {
     }
 }
 
-/// Whether new PRs open as drafts and `shoal ready` moves them, the labels
-/// a new PR needs, and whether PRs show their agent's progress.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Pr)]
 pub struct PrConfig {
     #[option(default = false)]
     pub draft: Option<bool>,
-    /// Whether `shoal ready` takes marked PRs out of draft.
     #[option(default = true)]
     pub undraft_on_ready: Option<bool>,
-    /// Whether `shoal ready --undo` returns PRs whose marks it withdraws to draft.
     #[option(default = false)]
     pub draft_on_unready: Option<bool>,
-    /// Entries a new PR's labels must each start with; an empty list turns
-    /// inherited entries off.
     #[option(default = Vec::new())]
     pub required_labels: Option<Vec<String>>,
-    /// Whether Shoal writes the agent's progress into a section at the end
-    /// of the body of each open draft PR it opened or was assigned.
     #[option(default = false)]
     pub progress: Option<bool>,
-    /// Whether, once a PR a space watches merges into the default branch,
-    /// Shoal links the default branch's CI runs for its merge commit to the
-    /// space and reports how they end.
     #[option(default = false)]
     pub watch_merge_runs: Option<bool>,
 }
 
-/// The labels a new issue needs and whether a space's issues are assigned
-/// on the forge.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Issue)]
 pub struct IssueConfig {
-    /// Entries a new issue's labels must each start with; an empty list turns
-    /// inherited entries off.
     #[option(default = Vec::new())]
     pub required_labels: Option<Vec<String>>,
-    /// Whose accounts Shoal adds to the forge assignees of the issues
-    /// spaces link as assigned.
     #[option(default = IssueAssign::default())]
     pub assign: Option<IssueAssign>,
-    /// The prefix of the labels that name the areas of the code an issue or
-    /// PR changes, which order the agent queue's new workspaces.
     pub area_prefix: Option<String>,
 }
 
 states!(
     #[derive(Default)]
-    /// Whose accounts an assigned issue's forge assignees take: the agent
-    /// account while an agent works the issue, the user's own login for as
-    /// long as a space links it, both, or neither.
     IssueAssign {
         #[default]
         Agent => "agent",
@@ -809,14 +725,10 @@ states!(
 );
 
 impl IssueAssign {
-    /// Whether the agent account joins the assignees while an agent works
-    /// the issue.
     pub fn agent(self) -> bool {
         matches!(self, Self::Agent | Self::Both)
     }
 
-    /// Whether the user's own login joins the assignees of every assigned
-    /// link.
     pub fn user(self) -> bool {
         matches!(self, Self::User | Self::Both)
     }
@@ -839,19 +751,15 @@ impl Issue {
     }
 }
 
-/// The priorities a space takes from the labels of the issues it works on.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = PrioritySettings)]
 pub struct PriorityConfig {
-    /// The priority each forge label gives a space working on an issue
-    /// with it, unless the space has one set.
     #[option(named)]
     pub labels: BTreeMap<String, Priority>,
 }
 
 impl PrioritySettings {
-    /// The highest priority `labels` map to, if any does.
     pub fn of_labels<'a>(&self, labels: impl IntoIterator<Item = &'a str>) -> Option<Priority> {
         (labels.into_iter())
             .filter_map(|label| self.labels.get(label).copied())
@@ -859,35 +767,23 @@ impl PrioritySettings {
     }
 }
 
-/// Whether `shoal merge` merges a branch locally into the default branch,
-/// by which method it merges, whether it asks before it pushes, and whether
-/// it pushes the default branch to its upstream afterwards.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Merge)]
 pub struct MergeConfig {
-    /// False refuses a local merge, as in a repository that merges only
-    /// through PRs.
     #[option(default = true)]
     pub enabled: Option<bool>,
-    /// Ask before a merge that pushes; `--yes` skips the question once.
     #[option(default = true)]
     pub confirm: Option<bool>,
     #[option(default = false)]
     pub push: Option<bool>,
-    /// How a local merge and a PR merge merge, unless `--method` says;
-    /// without it, a PR merges by the forge's default and a local merge
-    /// fast-forwards or creates a merge commit.
     pub method: Option<MergeMethod>,
 }
 
-/// Files that hold a number each change picks for itself, such as a schema
-/// or protocol version, which a branch and its base must not both change.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Conflicts)]
 pub struct ConflictsConfig {
-    /// Paths and globs relative to the repository root.
     #[option(default = Vec::new())]
     pub sensitive: Option<Vec<String>>,
 }
@@ -906,20 +802,14 @@ impl ConflictsConfig {
     }
 }
 
-/// Running the repository's CI jobs on this machine.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Runner)]
 pub struct RunnerConfig {
-    /// Register a runner for the repository on its forge and run its CI
-    /// jobs here.
     #[option(default = false)]
     pub enabled: Option<bool>,
-    /// The labels of the jobs the runner takes; `shoal-<os>-<arch>` is
-    /// always added.
     #[option(default = vec!["shoal".into()])]
     pub labels: Option<Vec<String>>,
-    /// A resource pool each job holds one permit from while it runs.
     pub permit: Option<String>,
 }
 
@@ -938,7 +828,6 @@ impl RunnerConfig {
     }
 }
 
-/// Whether `shoal done` cleans up by default; false keeps the workspace for review.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = CleanupDone)]
@@ -955,7 +844,6 @@ pub struct PrCleanupConfig {
     pub enabled: Option<bool>,
 }
 
-/// Configured cache names, which `{cache.NAME}` spells.
 fn validate_caches(caches: &BTreeMap<String, Cache>) -> Result<()> {
     for name in caches.keys() {
         crate::validate::lowercase_name("cache", name)
@@ -976,13 +864,9 @@ pub struct HerdrConfig {
     pub tab_name: Option<String>,
     #[option(default = true)]
     pub new_tab: Option<bool>,
-    /// The workspace Shoal opens tabs in when it has none of its own;
-    /// `{repo}` is the repository's name.
     #[option(default = "{repo}".into())]
     pub workspace_name: Option<String>,
-    /// Overrides the top-level `close_when_done` for Herdr tabs.
     pub close_when_done: Option<bool>,
-    /// Overrides the top-level `nested_zmx` for Herdr.
     pub nested_zmx: Option<bool>,
 }
 
@@ -997,17 +881,12 @@ pub struct RexConfig {
     #[option(default = Placement::default())]
     pub placement: Option<Placement>,
     pub window_name: Option<String>,
-    /// The session Shoal opens windows in when it has none of its own;
-    /// `{repo}` is the repository's name.
     #[option(default = "{repo}".into())]
     pub session_name: Option<String>,
-    /// Overrides the top-level `close_when_done` for Rex windows.
     pub close_when_done: Option<bool>,
-    /// Overrides the top-level `nested_zmx` for Rex.
     pub nested_zmx: Option<bool>,
 }
 
-/// tmux is opt-in: unset, `enabled` follows whether `default_host` names it.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Tmux)]
@@ -1018,17 +897,12 @@ pub struct TmuxConfig {
     #[option(default = Placement::default())]
     pub placement: Option<Placement>,
     pub window_name: Option<String>,
-    /// The session Shoal opens windows in when it has none of its own;
-    /// `{repo}` is the repository's name.
     #[option(default = "{repo}".into())]
     pub session_name: Option<String>,
-    /// Overrides the top-level `close_when_done` for tmux windows.
     pub close_when_done: Option<bool>,
-    /// Overrides the top-level `nested_zmx` for tmux.
     pub nested_zmx: Option<bool>,
 }
 
-/// Zellij is opt-in: unset, `enabled` follows whether `default_host` names it.
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Zellij)]
@@ -1039,16 +913,12 @@ pub struct ZellijConfig {
     #[option(default = TabPlacement::default())]
     pub placement: Option<TabPlacement>,
     pub tab_name: Option<String>,
-    /// Overrides the top-level `close_when_done` for Zellij tabs.
     pub close_when_done: Option<bool>,
-    /// Overrides the top-level `nested_zmx` for Zellij.
     pub nested_zmx: Option<bool>,
 }
 
 states!(
     #[derive(Default)]
-    /// Where a host with tabs opens a place beside the caller's: a new tab,
-    /// or a split of the caller's pane.
     TabPlacement {
         #[default]
         Tab => "tab",
@@ -1058,8 +928,6 @@ states!(
 
 states!(
     #[derive(Default)]
-    /// Where a host opens a place beside the caller's: a new window, or a
-    /// split of the caller's place.
     Placement {
         #[default]
         Window => "window",
@@ -1067,8 +935,7 @@ states!(
     }
 );
 
-/// The terminal host for launches from a terminal no host serves, by the
-/// host's name: any host but the plain terminal.
+/// A host's name: any host but the plain terminal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "HostName", into = "HostName")]
 pub struct DefaultHost(HostName);

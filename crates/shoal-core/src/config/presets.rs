@@ -1,8 +1,5 @@
-//! Build tools a repository names in `presets`, and what each sets up so its
-//! workspaces stop repeating the same work: a seed build of the default
-//! branch whose outputs new workspaces clone, environment that lets a
-//! tool's own cache serve every workspace, shared caches, and the MCP
-//! servers its agents use.
+//! Build tools a repository names in `presets`, and what each sets up. See
+//! `docs/design/repositories.md`.
 use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
@@ -10,40 +7,23 @@ use shoal_states::states;
 
 use crate::config::repo::{Cache, CacheScope};
 
-/// The shared cache the `cargo` preset keeps its files in.
 pub const CARGO_CACHE: &str = "preset.cargo";
-/// The shared cache the `xcode` preset keeps its files in.
 pub const XCODE_FILES_CACHE: &str = "preset.xcode-files";
-/// The shared cache of the `xcode` preset's compilation cache and package
-/// checkouts.
 pub const XCODE_CACHE: &str = "preset.xcode";
 /// The preset caches that hold only a preset's own files, which emptying
 /// caches keeps since it frees nothing there.
 pub const KEPT_CACHES: &[&str] = &[CARGO_CACHE, XCODE_FILES_CACHE];
 
 states!(
-    /// A build tool whose usual setup Shoal knows.
     Preset {
-        /// Cargo: seeds `target`, and runs workspace crates through
-        /// wrappers that keep their incremental state usable elsewhere.
         Cargo => "cargo",
-        /// npm: seeds `node_modules`.
         Npm => "npm",
-        /// pnpm: seeds `node_modules`.
         Pnpm => "pnpm",
-        /// Yarn: seeds `node_modules`.
         Yarn => "yarn",
-        /// Bun: seeds `node_modules`.
         Bun => "bun",
-        /// Go: builds without workspace paths so its shared build cache
-        /// serves every workspace, and seeds that cache.
         Go => "go",
-        /// Xcode: one compilation cache for every workspace's `xcodebuild`,
-        /// and Xcode's MCP server for agents.
         Xcode => "xcode",
-        /// Zig: one local cache for every workspace, and seeds it.
         Zig => "zig",
-        /// ccache: C and C++ builds through CMake share one compiler cache.
         Ccache => "ccache",
     }
 );

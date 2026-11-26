@@ -12,7 +12,6 @@ use shoal_protocol::hub::shared_config::FileName;
 use super::{Config, machine, modes, parse, repo::RepoConfig};
 use crate::paths::Paths;
 
-/// The shared config's file name, beside the global config.
 const FILE: &str = "shared.toml";
 
 /// The directory beside the shared config that holds its `modes/` and
@@ -36,7 +35,6 @@ impl Shared {
         Config::path_for_home(home).with_file_name(FILE)
     }
 
-    /// Where the shared file `name` is on this machine.
     pub fn file(paths: &Paths, name: &FileName) -> PathBuf {
         match name {
             FileName::Config => Self::path(paths),
@@ -106,7 +104,6 @@ fn names_in(directory: &Path, kind: &str) -> Result<Vec<FileName>> {
     Ok(names)
 }
 
-/// The text of the file at `path`, none while there is none.
 fn read_optional(path: &Path) -> Result<Option<String>> {
     crate::fsutil::read_optional(path).with_context(|| format!("read {}", path.display()))
 }

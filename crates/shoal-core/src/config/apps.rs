@@ -1,8 +1,6 @@
-//! `[apps.<name>]`: a table of settings for an app built on Shoal, such as
-//! Quay, in every config layer. Shoal reads none of it: it checks only that
-//! the table is TOML, layers it as it layers its own options, a table
-//! merging key by key with the one below it and any other value replacing
-//! what is below, and hands the result to the app.
+//! `[apps.<name>]`: a table of settings for an app built on Shoal. Shoal
+//! reads none of it: it checks only that the table is TOML, layers it as it
+//! layers its own options, and hands the result to the app.
 use std::collections::BTreeSet;
 
 use anyhow::Result;
@@ -82,7 +80,6 @@ fn merge_tables(
     }
 }
 
-/// Remove the value under the key path `path` from `table`.
 fn remove(table: &mut Table, path: &[String]) {
     let Some((last, parents)) = path.split_last() else {
         return;

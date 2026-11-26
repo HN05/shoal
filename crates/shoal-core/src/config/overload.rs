@@ -1,13 +1,11 @@
-//! Machine-wide protection for the daemon's tracked agents.
+//! `[machine.overload]`: the thresholds at which Shoal protects the machine
+//! from its tracked agents. The configuration reference describes each.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::process::load::{MemoryLevel, MemoryLevels};
 
 shoal_states::states! {
-    /// How hard Shoal may load this machine: a computer someone works on, or
-    /// one that only runs agents. It sets the CPU and memory thresholds that
-    /// `[machine.overload]` leaves out.
     #[derive(Default)]
     Load {
         Light => "light",
@@ -108,11 +106,7 @@ impl Default for Overload {
 #[serde(default, deny_unknown_fields)]
 pub struct Memory {
     pub enabled: bool,
-    /// The share of RAM and disk swap in use, which stops work at once. Linux
-    /// counts reclaimable cache as available; macOS uses native pressure.
     pub used_percent: u8,
-    /// The share of time every task stalls waiting for memory, which stops
-    /// work once it has held for `sustained_seconds`. Linux only.
     pub stall_percent: u8,
     pub sustained_seconds: u64,
 }
@@ -146,14 +140,11 @@ impl Default for Cpu {
     }
 }
 
-/// Free space, in GiB, on filesystems holding workspaces or daemon state.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Disk {
     pub enabled: bool,
-    /// Remove workspaces idle cleanup would remove, without the idle delay.
     pub cleanup_free_gib: u64,
-    /// Stop tracked executions when cleanup cannot free enough space.
     pub stop_free_gib: u64,
 }
 
@@ -182,7 +173,6 @@ impl Disk {
 pub struct Recovery {
     pub enabled: bool,
     pub memory_used_percent: u8,
-    /// The share of time some task stalls waiting for memory, over a minute.
     pub memory_stall_percent: u8,
     pub cpu_used_percent: u8,
     pub sustained_seconds: u64,
@@ -200,20 +190,15 @@ impl Default for Recovery {
     }
 }
 
-/// Thresholds, normally below each enabled protection's stop threshold, at
-/// which Shoal messages running agents before anything stops.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Warning {
     pub enabled: bool,
-    /// Linux only; macOS warns at native warning pressure.
     pub memory_used_percent: u8,
-    /// The share of time some task stalls waiting for memory. Linux only.
     pub memory_stall_percent: u8,
     pub cpu_used_percent: u8,
     pub cpu_sustained_seconds: u64,
     pub disk_free_gib: u64,
-    /// The least time between warnings about one signal to one workspace.
     pub repeat_minutes: u64,
 }
 

@@ -97,7 +97,6 @@ fn is_codex_api(url: &str) -> bool {
     host.eq_ignore_ascii_case("chatgpt.com") || path == "v1" || path.ends_with("/v1")
 }
 
-/// The proxy each AI tool's launches reach their upstream through.
 pub fn routes(tools: &crate::ai::Tools, proxies: &Proxies) -> BTreeMap<String, Proxy> {
     tools
         .values()

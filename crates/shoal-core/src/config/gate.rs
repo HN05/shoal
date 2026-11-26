@@ -12,14 +12,10 @@ use crate::config::{options::Options, permissions::PermissionKey};
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Gate)]
 pub struct GateConfig {
-    /// The agent that decides; unset, `agent.default`.
     #[serde(deserialize_with = "crate::agent::configured")]
     pub agent: Option<Agent>,
-    /// The agent that decides once more when the first one fails.
     #[serde(deserialize_with = "crate::agent::configured")]
     pub fallback_agent: Option<Agent>,
-    /// What the gate is told after its built-in instructions, such as the
-    /// repository's contributor rules.
     pub instructions: Option<String>,
     /// The cases the gate passes to the user, each of which an escalation
     /// quotes word for word.
@@ -81,7 +77,6 @@ pub struct GateRules {
 }
 
 impl Gate {
-    /// The rules for a request the keys `governing` govern.
     pub fn rules(&self, governing: &[PermissionKey]) -> GateRules {
         let keys = governing.iter().filter_map(|&key| self.key(key));
         let tables = std::iter::once((&self.instructions, &self.escalate))

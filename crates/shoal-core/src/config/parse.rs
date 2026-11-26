@@ -95,7 +95,6 @@ pub(crate) struct GlobalFile {
     pub repository: RepoConfig,
 }
 
-/// This machine's own global file.
 pub(crate) fn global(text: &str) -> Result<GlobalFile, Error> {
     global_file(text, |_| Ok(()))
 }

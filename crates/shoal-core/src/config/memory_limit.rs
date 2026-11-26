@@ -17,7 +17,6 @@ const UNITS: [(&str, u64); 5] = [
     ("TiB", 1 << 40),
 ];
 
-/// The most memory Shoal's work may hold on this machine together.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryLimit {
     /// This many bytes, written as a size such as `24GiB`.
@@ -37,7 +36,6 @@ impl MemoryLimit {
         }
     }
 
-    /// The limit `text` writes, as the config spells it.
     fn parse(text: &str) -> Result<Self, String> {
         let invalid = || {
             format!(
@@ -94,7 +92,6 @@ impl<'de> Deserialize<'de> for MemoryLimit {
     }
 }
 
-/// `memory_limit` as the config writes it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum MemoryLimitSetting {
     /// Left out: the share of RAM `load` sets, where the kernel enforces it.
@@ -102,7 +99,6 @@ pub enum MemoryLimitSetting {
     Load,
     /// `"none"`: no limit.
     Off,
-    /// A size or a share of RAM.
     Limit(MemoryLimit),
 }
 
@@ -115,12 +111,10 @@ pub struct InEffect {
 }
 
 impl MemoryLimitSetting {
-    /// Whether the config leaves the limit to `load`.
     pub(super) fn follows_load(&self) -> bool {
         *self == Self::Load
     }
 
-    /// The limit in effect on this machine under `load`.
     pub(super) fn in_effect(self, load: Load) -> InEffect {
         self.where_enforced(load, enforced())
     }
@@ -171,7 +165,6 @@ impl<'de> Deserialize<'de> for MemoryLimitSetting {
     }
 }
 
-/// The value that turns the limit off.
 const OFF: &str = "none";
 
 #[cfg(test)]

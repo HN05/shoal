@@ -22,13 +22,11 @@ use crate::config::{
 pub struct Effective {
     #[serde(flatten)]
     settings: Settings,
-    /// Every AI tool.
     #[serde(skip)]
     pub tools: crate::ai::Tools,
     /// Each agent's launcher, or the nearest of its bases'.
     #[serde(skip)]
     pub launchers: crate::config::named_commands::Commands,
-    /// Each agent's command that restores a session.
     #[serde(skip)]
     pub resume_commands: crate::config::named_commands::Commands,
     /// The proxy each AI tool's tracked agents reach their upstream through.
@@ -173,7 +171,6 @@ impl Stack {
             .cloned()
     }
 
-    /// Warnings for the settings each layer sets that repeat Shoal's guidance.
     pub fn warnings(&self) -> &[String] {
         &self.warnings
     }
@@ -385,7 +382,6 @@ impl Effective {
             .map_or(crate::ai::IntegrationKind::None, |tool| tool.integration)
     }
 
-    /// The proxy `agent`'s tracked launches reach their upstream through.
     pub fn proxy(&self, agent: &Agent) -> Option<&crate::config::proxies::Proxy> {
         self.proxies.get(agent.name())
     }

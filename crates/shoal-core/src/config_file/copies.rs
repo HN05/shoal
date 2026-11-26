@@ -54,7 +54,6 @@ fn remove_keeping(path: &Path, backup: Option<&Path>) -> Result<bool> {
     }
 }
 
-/// Where the replaced `path` stays: beside it, its name ending `.backup`.
 fn backup_of(path: &Path) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_owned();
     name.push(".backup");

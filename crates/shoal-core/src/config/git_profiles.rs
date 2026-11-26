@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::validate;
 
-/// `[machine.git_profiles]`: the profiles a repository config or
-/// `add --git-profile` may select by name.
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct Git {

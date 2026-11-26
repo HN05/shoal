@@ -1,5 +1,5 @@
-//! Settings that describe this machine: `[machine]` in the global config,
-//! which no repository overrides.
+//! `[machine]` in the global config: settings that describe this machine,
+//! which no repository overrides. The configuration reference describes each.
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -12,47 +12,32 @@ use super::{
 };
 
 shoal_states::states! {
-    /// What the agent queue starts first within a priority.
     #[derive(Default)]
     Schedule {
-        /// Work closest to finished, then the tie-breaks.
         #[default]
         Balanced => "balanced",
-        /// The work with the longest chain of work waiting on it, then as
-        /// `balanced`.
         Speed => "speed",
-        /// Restores of agents whose prompt cache has not expired, the latest
-        /// to expire first, then as `balanced`.
         Cache => "cache",
     }
 }
 
 shoal_states::states! {
-    /// `keep_awake`: what this machine does once the user walks away from
-    /// it, by closing its lid or leaving it idle.
     #[derive(Default)]
     KeepAwake: Variants {
-        /// Sleep as usual.
         #[default]
         Off => "off",
-        /// Admit nothing new and hand the spaces with something to do over
-        /// to other machines, then sleep.
         Handover => "handover",
-        /// Admit nothing new and let running turns finish, then sleep.
         Finish => "finish",
-        /// Carry on as while the user is there.
         On => "on",
     }
 }
 
 impl KeepAwake {
-    /// Whether this machine admits nothing new once the user walks away.
     pub fn stops_when_away(self) -> bool {
         matches!(self, Self::Handover | Self::Finish)
     }
 
-    /// A level by its name, refusing any other value, such as the boolean
-    /// an earlier Shoal took, with the names it takes.
+    /// A level by its name, refusing any other value with the names it takes.
     fn deserialize<'de, D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -74,36 +59,20 @@ impl KeepAwake {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Machine {
-    /// Parent of every repository directory.
     pub root_dir: Option<PathBuf>,
-    /// How hard Shoal may load this machine; sets `[machine.overload]` defaults.
     pub load: overload::Load,
-    /// What this machine does once the user walks away from it.
     #[serde(deserialize_with = "KeepAwake::deserialize")]
     pub keep_awake: KeepAwake,
-    /// Whether this machine stays reachable for lasting work, which the hub
-    /// guesses under `auto`.
     pub availability: shoal_protocol::hub::availability::AvailabilitySetting,
-    /// Heavy slots: heavy modes' agents running at once on this machine;
-    /// defaults to measured load and `shoal start` queues past it.
     pub max_heavy_agents: MachineLimit,
-    /// CI jobs the runner runs at once on this machine; defaults to measured
-    /// load, which agents and jobs share.
     pub max_jobs: MachineLimit,
-    /// What the agent queue starts first after priority.
     pub schedule: Schedule,
-    /// The most memory Shoal's work holds together; `load` sets it where
-    /// it is left out.
     #[serde(skip_serializing_if = "MemoryLimitSetting::follows_load")]
     pub memory_limit: MemoryLimitSetting,
     pub overload: overload::Overload,
-    /// What each AI tool needs of this machine.
     pub agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,
-    /// Retrying proxies an AI tool's agents reach their API through.
     pub proxies: crate::config::proxies::Proxies,
-    /// Forge hosts: the type each serves, and the tokens that sign in to it.
     pub forges: forges::Forges,
-    /// Named Git settings a repository or agent selects.
     pub git_profiles: crate::config::git_profiles::Git,
     pub simulators: crate::sim::SimConfig,
     pub webhooks: Webhooks,
@@ -115,8 +84,6 @@ pub struct Machine {
     pub same_as: same_as::References,
 }
 
-/// How many heavy agents, or CI jobs, this machine runs at once: as
-/// measured load allows, or a fixed number, where 0 admits none.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum MachineLimit {
     #[default]
@@ -168,47 +135,27 @@ impl<'de> Deserialize<'de> for MachineLimit {
     }
 }
 
-/// The daemon's HTTP listener for webhook triggers.
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Webhooks {
-    /// The address it listens on; none without it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listen: Option<std::net::SocketAddr>,
 }
 
-/// `[machine.hub]`: the hub role this daemon takes, or the command it
-/// reaches the hub it joins through.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Hub {
-    /// Take the hub role, which the user's other machines and devices join.
     pub enabled: bool,
-    /// The address the hub's listener binds, which Shoal never encrypts.
     pub listen: std::net::SocketAddr,
-    /// The URL members reach the listener at, through the proxy or tunnel in
-    /// front of it; defaults to `http://` and the listener's address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<shoal_protocol::hub::HubUrl>,
-    /// A command whose standard input and output reach the hub's daemon,
-    /// which this machine joins and reaches it through instead of a URL.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub connect: Vec<String>,
-    /// Install the hub's exact version once the hub refuses this machine's,
-    /// where Shoal was installed from a release download.
     pub auto_update: bool,
-    /// How long a thread or approval request waits for a coordinator
-    /// whose machine is offline before it passes to the next space above
-    /// that is online, or to the user.
     pub escalate_after_minutes: u64,
-    /// The machine, by name or ID, a device's start goes to when it names
-    /// none, on the hub; none sends it where the device sent it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_machine: Option<String>,
-    /// The policy that places a start which names no machine, on the hub.
     pub placement: shoal_schedule::placement::Policy,
-    /// The local address the hub forwards the requests of paired members
-    /// under each path prefix to, such as an app's own server.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub forward: std::collections::BTreeMap<
         shoal_protocol::hub::app_servers::PathPrefix,
@@ -339,14 +286,10 @@ impl Machine {
     }
 }
 
-/// `[machine.app_store]`: how much the entries of apps this daemon keeps
-/// may hold, each and in all for one app.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AppStore {
-    /// The most bytes one entry holds, in MiB.
     pub max_entry_mib: u64,
-    /// The most bytes all of one app's entries hold, in MiB.
     pub max_app_mib: u64,
 }
 
@@ -385,11 +328,8 @@ impl Default for AppStore {
     }
 }
 
-/// `[machine.containers]`: the engine this machine runs workspaces'
-/// projects with.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Containers {
-    /// Unset takes the first of Docker and Podman on `PATH`.
     pub runtime: Option<shoal_protocol::containers::ContainerRuntime>,
 }

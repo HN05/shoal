@@ -18,20 +18,13 @@ use crate::{
 
 pub use crate::placeholders::render;
 
-/// What a workspace's agent is told about its space.
 const WORKSPACE_FACTS: &str = include_str!("templates/facts/workspace.md");
-/// What the agent of a workspace at a commit, which has no branch to push,
-/// is told about its space.
 const COMMIT_WORKSPACE_FACTS: &str = include_str!("templates/facts/commit_workspace.md");
-/// What the agent of a chat in a repository's checkout is told about its
-/// space.
 const CHECKOUT_CHAT_FACTS: &str = include_str!("templates/facts/checkout_chat.md");
 /// What the agent of a chat in a workspace's worktree is told about its
 /// space, which [`CHECKOUT_CHAT_FACTS`] would describe as the registered
 /// checkout.
 const WORKSPACE_CHAT_FACTS: &str = include_str!("templates/facts/workspace_chat.md");
-/// What the agent of a chat without a repository, in `root_dir`, is told
-/// about its space.
 const ROOT_CHAT_FACTS: &str = include_str!("templates/facts/root_chat.md");
 /// The practices Shoal's own mechanics depend on, sent to every agent after
 /// its space's facts.
@@ -89,11 +82,9 @@ pub fn review_base() -> &'static str {
         .map_or("", |(_, base)| base)
 }
 
-/// What a review's instructions name.
 pub struct ReviewFields<'a> {
     pub workspace: &'a str,
     pub branch: &'a str,
-    /// The review's checkout.
     pub path: &'a str,
     /// The commit the changes are compared against.
     pub base: &'a str,
@@ -129,7 +120,6 @@ pub enum Delivery {
 }
 
 impl Delivery {
-    /// How the agent receives its updates, as its facts state it.
     fn description(self) -> &'static str {
         match self {
             Self::Pushed => {
@@ -178,7 +168,6 @@ impl Place<'_> {
     }
 }
 
-/// What an agent starts on: an issue, or a task given in words.
 #[derive(Debug, Clone, Default)]
 pub struct Subject {
     /// The subject as the first message states it, the same in every mode.
@@ -188,7 +177,6 @@ pub struct Subject {
 }
 
 impl Subject {
-    /// A task given in words.
     pub fn told(text: String) -> Self {
         Self { text, issue: None }
     }
@@ -246,7 +234,6 @@ fn run_state(run: &Run) -> String {
     }
 }
 
-/// The names of the failed ones of `jobs`.
 fn failed_jobs(jobs: &[RunJob]) -> Vec<&str> {
     (jobs.iter())
         .filter(|job| job.state == JobState::Failed)
@@ -290,7 +277,6 @@ impl IssueFields {
     }
 }
 
-/// An agent's system text and its first message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Brief {
     /// The facts of the agent's space, the space rules, then the mode's
@@ -373,7 +359,6 @@ fn converts_to_workspace(place: Place<'_>, mode: &modes::Mode) -> bool {
     in_checkout && mode.kind == SpaceKind::Workspace
 }
 
-/// What the agent at `place` is told about its space, by the space's kind.
 fn facts(place: Place<'_>) -> &'static str {
     match place {
         Place::Workspace { workspace, .. } => match workspace.head {
@@ -398,7 +383,6 @@ fn join(parts: impl IntoIterator<Item = String>) -> String {
         .join("\n\n")
 }
 
-/// The placeholders an agent's text takes, with their values.
 struct Fields(Vec<(&'static str, String)>);
 
 impl Fields {

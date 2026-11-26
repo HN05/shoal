@@ -20,14 +20,10 @@ pub struct Forges(BTreeMap<String, Forge>);
 #[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Forge {
-    /// The forge's API, pinned so the host is never asked.
     #[serde(rename = "type")]
     pub kind: Option<ForgeKind>,
-    /// The user's token for the host.
     pub user_token: Option<Value>,
-    /// The agent account's token for the host.
     pub agent_token: Option<Value>,
-    /// The token agents approve and request changes on PRs with.
     pub review_token: Option<Value>,
     /// The account a token belongs to, where the forge signs it in with
     /// the account's email.
@@ -60,7 +56,6 @@ impl Forges {
         self.pinned(host).or_else(|| ForgeKind::named(host))
     }
 
-    /// Each pinned host and its type.
     pub fn pins(&self) -> Vec<(String, ForgeKind)> {
         self.0
             .iter()
@@ -76,7 +71,6 @@ impl Forges {
             .any(|(name, forge)| name.eq_ignore_ascii_case(host) && forge.agent_token.is_some())
     }
 
-    /// The hosts the agent account has a token of its own for.
     pub fn agent_token_hosts(&self) -> impl Iterator<Item = &str> {
         self.0
             .iter()
