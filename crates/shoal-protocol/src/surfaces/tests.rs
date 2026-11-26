@@ -853,6 +853,27 @@ fn booking() -> Surface {
 }
 
 #[test]
+fn a_button_in_a_list_over_absolute_data_keeps_its_outer_item_s_bounds() {
+    let booking = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "group", "path": "/groups"}},
+            {"id": "group", "component": "Column", "children": ["day", "slots"]},
+            {"id": "day", "component": "DateTimeInput", "enableDate": true,
+             "min": {"@path": "opens"}, "value": {"@path": "/day"}},
+            {"id": "slots", "component": "List", "children": {"componentId": "book", "path": "/items"}},
+            {"id": "book", "component": "Button", "child": "book-label",
+             "action": {"event": {"name": "book", "context": {"day": {"@path": "/day"}}}}},
+            {"id": "book-label", "component": "Text", "text": "Book"},
+        ]),
+        json!({"day": "", "items": [{}],
+            "groups": [{"opens": "2026-12-01"}, {"opens": "2026-12-10"}]}),
+    );
+    let answer = |id: &str| booking.resolve(id, values(&[("day", json!("2026-12-05"))]));
+    assert!(answer("book#2.1").is_err());
+    answer("book#1.1").unwrap();
+}
+
+#[test]
 fn a_list_input_bound_absolutely_keeps_its_item_s_bounds() {
     let booking = booking();
     let answer = |id: &str, day: &str| booking.resolve(id, values(&[("day", json!(day))]));

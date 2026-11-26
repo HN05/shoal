@@ -208,12 +208,16 @@ impl Surface {
     /// order those components render. A key that binds data no component
     /// enters takes the data as it is.
     fn inputs(&self, event: &str, button: &Placed<'_>) -> Vec<Input> {
+        let around: Vec<(&str, usize)> = (self.lists_above(button.component).into_iter())
+            .map(|list| list.id)
+            .zip(button.items.iter().copied())
+            .collect();
         let mut entered: Vec<(usize, Input)> = (self.context(event).into_iter())
             .filter_map(|(key, value)| {
                 let path = scoped(&button.scope, binding(value)?);
                 let (at, input) =
                     (self.tree_order().into_iter().enumerate()).find_map(|(at, component)| {
-                        let scope = self.scope_toward(component, &path, &button.scope)?;
+                        let scope = self.scope_toward(component, &path, &around)?;
                         let placed = Placed {
                             component,
                             scope,
@@ -237,9 +241,15 @@ impl Surface {
     /// `path`: for each list that repeats it, the item `path` names in
     /// that list's data; none when `path` lies in no item of one. An input
     /// that binds absolute data reads it in every item, so it takes the
-    /// item of `button`'s scope where that lies in the list, else the
-    /// first, for what else it reads in its item, such as its bounds.
-    fn scope_toward(&self, component: Component<'_>, path: &str, button: &str) -> Option<String> {
+    /// item the button is in where the list is one of `around`, the lists
+    /// around the button with the item of each, else the first, for what
+    /// else it reads in its item, such as its bounds.
+    fn scope_toward(
+        &self,
+        component: Component<'_>,
+        path: &str,
+        around: &[(&str, usize)],
+    ) -> Option<String> {
         let absolute = component
             .binding("value")
             .is_some_and(|bound| bound.starts_with('/'));
@@ -253,7 +263,7 @@ impl Surface {
             })
             .unwrap_or(0);
         let mut scope = String::new();
-        for list in &lists[fresh..] {
+        for (at, list) in lists.iter().enumerate().skip(fresh) {
             let items = scoped(&scope, list.template()?.1);
             let within = |path: &str| {
                 let item = path
@@ -264,7 +274,10 @@ impl Surface {
                 item.parse::<usize>().ok().map(|_| item.to_owned())
             };
             let item = match absolute {
-                true => within(button).unwrap_or_else(|| "0".to_owned()),
+                true => (around.get(at))
+                    .filter(|(id, _)| *id == list.id)
+                    .map_or(0, |(_, item)| *item)
+                    .to_string(),
                 false => within(path)?,
             };
             scope = format!("{items}/{item}");
