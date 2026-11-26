@@ -714,6 +714,33 @@ fn a_check_fails_on_known_data_of_the_wrong_kind_and_reads_validation_results() 
 }
 
 #[test]
+fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
+    let code = json!({"@path": "/code"});
+    let pattern = |pattern: &str| {
+        surface(
+            json!([
+                {"id": "root", "component": "Column", "children": ["code", "go"]},
+                {"id": "code", "component": "TextField", "label": "Code", "value": code,
+                 "@checks": [{"condition": {"@call": "regex",
+                     "args": {"value": code, "pattern": pattern}}}]},
+                {"id": "go", "component": "Button", "child": "go-label",
+                 "action": {"event": {"name": "go", "context": {"code": code}}}},
+                {"id": "go-label", "component": "Text", "text": "Go"},
+            ]),
+            json!({"code": ""}),
+        )
+    };
+    let answer =
+        |surface: &Surface, value: &str| surface.resolve("go", values(&[("code", json!(value))]));
+    let digits = pattern(r"^\d+$");
+    assert!(answer(&digits, "١٢").is_err());
+    answer(&digits, "12").unwrap();
+    assert!(answer(&pattern(r"^\w+$"), "é").is_err());
+    assert!(answer(&pattern(r"^a.b$"), "a\u{2028}b").is_err());
+    answer(&pattern(r"^[\d_]+$"), "1_2").unwrap();
+}
+
+#[test]
 fn a_date_and_time_may_write_its_t_and_z_lowercase() {
     let meeting = surface(
         json!([

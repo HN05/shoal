@@ -180,10 +180,45 @@ fn regex(pattern: &str) -> Option<regex::Regex> {
     if pattern.chars().count() > MAX_PATTERN_CHARS {
         return None;
     }
-    regex::RegexBuilder::new(pattern)
+    regex::RegexBuilder::new(&ecmascript(pattern))
         .size_limit(1 << 20)
         .build()
         .ok()
+}
+
+/// `pattern`, written in ECMAScript's syntax, with what Rust's syntax
+/// means otherwise spelled as ECMAScript means it: `\d`, `\w` and `\b`
+/// ASCII, and `.` excluding every line terminator.
+fn ecmascript(pattern: &str) -> String {
+    let mut translated = String::new();
+    let mut in_class = false;
+    let mut characters = pattern.chars();
+    while let Some(character) = characters.next() {
+        let spelled = match (character, in_class) {
+            ('\\', _) => match characters.next() {
+                Some('d') => "[0-9]".to_owned(),
+                Some('D') => "[^0-9]".to_owned(),
+                Some('w') => "[A-Za-z0-9_]".to_owned(),
+                Some('W') => "[^A-Za-z0-9_]".to_owned(),
+                Some('b') if !in_class => "(?-u:\\b)".to_owned(),
+                Some('B') if !in_class => "(?-u:\\B)".to_owned(),
+                Some(escaped) => format!("\\{escaped}"),
+                None => "\\".to_owned(),
+            },
+            ('[', false) => {
+                in_class = true;
+                "[".to_owned()
+            }
+            (']', true) => {
+                in_class = false;
+                "]".to_owned()
+            }
+            ('.', false) => "[^\\n\\r\\x{2028}\\x{2029}]".to_owned(),
+            (other, _) => other.to_string(),
+        };
+        translated.push_str(&spelled);
+    }
+    translated
 }
 
 /// Most code points a `regex` check's pattern may hold, as the dialect
