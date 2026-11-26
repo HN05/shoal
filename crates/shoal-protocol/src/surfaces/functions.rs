@@ -298,9 +298,29 @@ fn escape(characters: &mut Characters<'_>, in_class: bool) -> String {
             characters.next_if_eq(&'}');
             u32::from_str_radix(&digits, 16).map_or_else(|_| format!("u{{{digits}}}"), code)
         }
-        'u' => hex(characters, 4).map_or_else(|| "u".to_owned(), code),
+        'u' => match hex(characters, 4) {
+            Some(high @ 0xD800..=0xDBFF) => code(paired(characters, high)),
+            Some(unit) => code(unit),
+            None => "u".to_owned(),
+        },
         other => format!("\\{other}"),
     }
+}
+
+/// The code point the high surrogate `high` makes with the `\\uHHHH` low
+/// surrogate `characters` go on with, as ECMAScript joins such a pair;
+/// `high` alone where none follows.
+fn paired(characters: &mut Characters<'_>, high: u32) -> u32 {
+    let mut ahead = characters.clone();
+    let low = (ahead.next() == Some('\\') && ahead.next() == Some('u'))
+        .then(|| hex(&mut ahead, 4))
+        .flatten()
+        .filter(|low| (0xDC00..=0xDFFF).contains(low));
+    let Some(low) = low else {
+        return high;
+    };
+    *characters = ahead;
+    0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)
 }
 
 /// The number the next `digits` hex digits of `characters` spell, none

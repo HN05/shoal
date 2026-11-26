@@ -752,6 +752,10 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
     // A character escape means its code point, in a class or out of one.
     assert!(answer(&pattern(r"^[^\cJ]+$"), "a\nb").is_err());
     answer(&pattern(r"^\x41\u0042\u{43}[\u{44}\x45]\0?$"), "ABCD").unwrap();
+    // A surrogate pair is the one code point it encodes.
+    let smile = pattern(r"^\uD83D\uDE00$");
+    assert!(answer(&smile, "plain").is_err());
+    answer(&smile, "😀").unwrap();
     // A class holds its members as ECMAScript reads them.
     assert!(answer(&pattern(r"^[^a&&b]+$"), "a").is_err());
     answer(&pattern(r"^[[~]+$"), "[~").unwrap();
