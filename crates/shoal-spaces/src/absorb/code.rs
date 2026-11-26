@@ -1,6 +1,6 @@
-//! What becomes of an absorbed space's code: its branch merged into the
-//! branch of the workspace that takes it, its uncommitted files carried
-//! over there as uncommitted changes, under the repository's Git gate.
+//! Folding an absorbed space's code into the workspace that takes it: its
+//! branch merges there, and its uncommitted files carry over as
+//! uncommitted changes, under the repository's Git gate.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::path::PathBuf;
@@ -21,17 +21,15 @@ use crate::{
 };
 use shoal_protocol::absorb::{Absorb, AbsorbedCode};
 
-/// What folding the target's code did.
 #[derive(Default)]
 pub(super) struct Folded {
     pub(super) merge: Option<AbsorbedCode>,
     pub(super) carried: Vec<String>,
-    /// The target's commit that merged, past which the workspaces built on
-    /// its branch rebase.
+    /// The workspaces built on the target's branch rebase past this commit.
     pub(super) source: Option<CommitId>,
 }
 
-/// Both sides of a merge, read when it is about to happen.
+/// Both sides of a merge, read just before it happens.
 struct Sides {
     repo: PathBuf,
     branch: BranchName,
@@ -66,8 +64,8 @@ impl Sides {
 }
 
 impl Spaces {
-    /// Refuse now what folding the target's code as `request` asks would
-    /// refuse, before a forced absorb stops its agent.
+    /// Refuses now what folding would refuse, before a forced absorb stops
+    /// the target's agent.
     pub(super) async fn check_code(
         &self,
         daemon: &dyn Daemon,
@@ -84,9 +82,9 @@ impl Spaces {
         fold::check(sides.fold()).await
     }
 
-    /// Fold the target's code, its lifecycle reserved by the caller, into
-    /// the space that takes it, as `request` asks, with that workspace
-    /// reserved against every other lifecycle operation meanwhile.
+    /// The caller reserved the target's lifecycle. The workspace that takes
+    /// the code is reserved against every other lifecycle operation
+    /// meanwhile.
     pub(super) async fn fold_code(
         &self,
         daemon: &dyn Daemon,
@@ -107,9 +105,8 @@ impl Spaces {
         folded
     }
 
-    /// Fold `target`'s code into `into`, both reserved. A squash or rebase
-    /// records the target's completion as integrated, as `shoal done
-    /// --integrated` does.
+    /// A squash or rebase records the target's completion as integrated, as
+    /// `shoal done --integrated` does.
     async fn fold_reserved(
         &self,
         daemon: &dyn Daemon,
@@ -138,9 +135,8 @@ impl Spaces {
         })
     }
 
-    /// The sides of merging `target`'s branch into `into`'s as `request`
-    /// asks: by its method, else `[merge] method`, with its squash message,
-    /// else one naming the absorbed space.
+    /// Merges by the request's method, else `[merge] method`, with its
+    /// squash message, else one naming the absorbed space.
     async fn sides(
         &self,
         daemon: &dyn Daemon,

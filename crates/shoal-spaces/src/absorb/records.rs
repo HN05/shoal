@@ -1,7 +1,7 @@
 //! The records an absorbed space hands over: its links, attached files and
-//! open threads go to the space that takes its work, and the requests
-//! bound to its branch and commit are withdrawn. Issue proposals belong to
-//! the repository and stay.
+//! open threads go to the space that takes its work, and the requests bound
+//! to its branch and commit are withdrawn. Issue proposals belong to the
+//! repository and stay.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -19,7 +19,6 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-/// What the space that takes the work took over.
 pub(super) struct TakenOver {
     pub(super) links: SpaceLinks,
     pub(super) files: Vec<String>,
@@ -29,8 +28,7 @@ pub(super) struct TakenOver {
 }
 
 impl Spaces {
-    /// Hand the target's records over to the space that takes its work,
-    /// linking its items there as `caller` may.
+    /// Links the target's items there as `caller` may.
     pub(super) async fn take_over(
         &self,
         daemon: &dyn Daemon,
@@ -56,8 +54,7 @@ impl Spaces {
         })
     }
 
-    /// Withdraw the pending PR proposals and push requests of the space
-    /// `id`, which its branch and commit bind, returning their numbers.
+    /// The branch and commit bind them. Returns their numbers.
     async fn withdraw_branch_requests(
         &self,
         daemon: &dyn Daemon,
@@ -82,9 +79,8 @@ impl Spaces {
         Ok(withdrawn)
     }
 
-    /// Unlink the items of the space `from` and link them to the space `to`
-    /// as they were, returning them with a warning for each that could not
-    /// be linked there.
+    /// Returns the items, with a warning for each that could not be linked
+    /// there.
     async fn move_links(
         &self,
         daemon: &dyn Daemon,
@@ -111,7 +107,6 @@ impl Spaces {
         Ok((links, warnings))
     }
 
-    /// Unlink every item `links` lists from the space `id`.
     async fn unlink_all(
         &self,
         daemon: &dyn Daemon,

@@ -1,6 +1,6 @@
-//! What blocks a space or a step of its plan, kept with its progress. A
-//! step's blocker follows the step by the key its plan tool gave it, or by
-//! name when it has none, and goes with the step.
+//! What blocks a space or a step of its plan. A step's blocker follows the
+//! step by the key its plan tool gave it, or by name without one, and goes
+//! with the step.
 use anyhow::{Context as _, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,6 @@ use shoal_protocol::{
     progress::{PlanStep, RecordedBlocker, Step},
 };
 
-/// A blocker as the space's progress keeps it, with the step it blocks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Stored {
     #[serde(flatten)]
@@ -21,7 +20,6 @@ pub struct Stored {
     pub step: Option<StepRef>,
 }
 
-/// The step a blocker blocks, by its plan tool's key or else its name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StepRef {
@@ -42,8 +40,8 @@ impl StepRef {
     }
 }
 
-/// The blockers a removal names: those of `kind` whose target, a space's
-/// ID or an item's URL, is one of `names`.
+/// The blockers a removal names: those of `kind` whose target, a space's ID
+/// or an item's URL, is one of `names`.
 pub struct Named {
     pub kind: BlockerKind,
     pub names: Vec<String>,
@@ -58,9 +56,8 @@ impl Named {
 }
 
 impl Plan {
-    /// The plan with `blocker` on the step numbered `step` from 1, or on
-    /// the space, replacing the reason of the same blocker there, and the
-    /// blocker as it keeps it.
+    /// `step` counts from 1; none puts the blocker on the space. Replaces the
+    /// reason of the same blocker there.
     pub fn with_blocker(
         mut self,
         blocker: RecordedBlocker,
@@ -78,8 +75,7 @@ impl Plan {
         Ok((self, added))
     }
 
-    /// The plan without the blocker `named` names on the step numbered
-    /// `step`, or on the space, and the blocker it removed.
+    /// `step` counts from 1; none takes the blocker off the space.
     pub fn without_blocker(mut self, named: &Named, step: Option<usize>) -> Result<(Self, Stored)> {
         let step = self.step_ref(step)?;
         let at = (self.blockers.iter())
@@ -89,18 +85,16 @@ impl Plan {
         Ok((self, removed))
     }
 
-    /// The plan without any blocker, and those it had.
     pub(super) fn unblocked(mut self) -> (Self, Vec<Stored>) {
         let removed = std::mem::take(&mut self.blockers);
         (self, removed)
     }
 
-    /// Drop every step's blockers, keeping the space's.
+    /// Keeps the space's own blockers.
     pub(super) fn drop_step_blockers(&mut self) {
         self.blockers.retain(|stored| stored.step.is_none());
     }
 
-    /// Drop the blockers of the steps the plan no longer has.
     pub(super) fn prune_blockers(&mut self) {
         let steps = &self.steps;
         self.blockers.retain(|stored| {
@@ -108,9 +102,8 @@ impl Plan {
         });
     }
 
-    /// The plan without the blockers `found` says cleared, and with each
-    /// failed lookup recorded on its blocker, and the journal records of
-    /// those it removed.
+    /// Records each failed lookup on its blocker. Also returns the journal
+    /// records of the blockers it removed.
     pub(super) fn cleared(mut self, found: &Lookups) -> (Self, Vec<BlockerEvent>) {
         let mut cleared = Vec::new();
         let mut kept = Vec::new();
@@ -134,12 +127,11 @@ impl Plan {
         (self, events)
     }
 
-    /// Every blocker's kind and target.
     pub(super) fn targets(&self) -> impl Iterator<Item = Target> + '_ {
         (self.blockers.iter()).map(|stored| (stored.blocker.kind, stored.blocker.target.clone()))
     }
 
-    /// The step the step numbered `step` from 1 names, or none for the space.
+    /// `step` counts from 1; none names the space.
     fn step_ref(&self, step: Option<usize>) -> Result<Option<StepRef>> {
         let Some(number) = step else {
             return Ok(None);
@@ -151,7 +143,6 @@ impl Plan {
         }
     }
 
-    /// The blockers of the space itself.
     pub fn space_blockers(&self) -> Vec<RecordedBlocker> {
         (self.blockers.iter())
             .filter(|stored| stored.step.is_none())
@@ -159,7 +150,6 @@ impl Plan {
             .collect()
     }
 
-    /// The blockers of `step`.
     pub(super) fn step_blockers(&self, step: &PlanStep) -> Vec<RecordedBlocker> {
         (self.blockers.iter())
             .filter(|stored| stored.step.as_ref().is_some_and(|known| known.names(step)))
@@ -167,7 +157,6 @@ impl Plan {
             .collect()
     }
 
-    /// The journal record of `stored`, with the name of the step it blocks.
     pub(super) fn event(&self, stored: &Stored, cleared: Option<String>) -> BlockerEvent {
         let step = (stored.step.as_ref())
             .and_then(|step| self.steps.iter().find(|known| step.names(known)))
@@ -180,7 +169,6 @@ impl Plan {
     }
 }
 
-/// `step` as clients see it, with its blockers.
 pub(super) fn step(plan: &Plan, step: &PlanStep, done: bool) -> Step {
     Step {
         name: step.name.clone(),

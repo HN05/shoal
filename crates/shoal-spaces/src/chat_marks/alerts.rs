@@ -1,7 +1,6 @@
-//! Alerts an agent sends from its chat: the turn it marks sends its final
-//! message, once it ends, to the recipients `shoal send --in-chat` named,
-//! through the operation that sends every alert. Such an alert to the user
-//! is read once the user prompts the agent in that chat.
+//! Alerts an agent sends from its chat with `shoal send --in-chat`, through
+//! the operation that sends every alert. Such an alert to the user is read
+//! once the user prompts the agent in that chat.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, bail};
@@ -29,22 +28,20 @@ use crate::{
     },
 };
 
-/// The alert a turn's mark sends once the turn ends, as its record keeps it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct MarkedAlert {
-    /// Where it goes, a space by its ID.
+    /// A space by its ID.
     pub(super) to: AlertTarget,
-    /// The files it carries, by absolute path, which Shoal copies once the
-    /// turn ends.
+    /// By absolute path. Shoal copies them once the turn ends.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(super) attachments: Vec<NewFile>,
     /// Whom it reaches, as the mark showed them.
     pub(super) recipients: MarkedRecipients,
 }
 
-/// The text an alert to `to` carries for a turn's final `message`: one
-/// line up to the coordinator or the user, lines down to agents, each kept
-/// to the length and characters of such alerts, so it can always be sent.
+/// One line up to the coordinator or the user, lines down to agents, each
+/// kept to the length and characters of such alerts, so it can always be
+/// sent.
 fn alert_text(to: &AlertTarget, message: Option<&str>) -> String {
     let text: String = (message.unwrap_or_default().chars())
         .map(|c| match c {
@@ -70,8 +67,7 @@ fn alert_text(to: &AlertTarget, message: Option<&str>) -> String {
 }
 
 impl Spaces {
-    /// Mark the current turn of `caller`'s agent as sending its final
-    /// message to `to` with copies of `attachments`, once it ends.
+    /// Copies the attachments once the turn ends.
     pub async fn mark_chat_alert(
         &self,
         daemon: &dyn Daemon,
@@ -93,8 +89,7 @@ impl Spaces {
         self.mark_turn(turn, Mark::Alert(alert)).await
     }
 
-    /// Whom an alert from `space` to `to` reaches now, with `to` naming a
-    /// space by its ID.
+    /// `to` names a space by its ID.
     async fn marked_recipients(
         &self,
         daemon: &dyn Daemon,
@@ -121,8 +116,7 @@ impl Spaces {
         })
     }
 
-    /// The space `selector` names, as an alert names its recipient, with
-    /// the name of its machine when that is another one.
+    /// Adds the name of its machine when that is another one.
     async fn located_recipient(
         &self,
         daemon: &dyn Daemon,
@@ -141,7 +135,6 @@ impl Spaces {
         })
     }
 
-    /// Whom an alert sent up from `space` reaches now.
     async fn recipient_up(&self, daemon: &dyn Daemon, space: &Space) -> Result<MarkedRecipients> {
         Ok(
             match daemon
@@ -159,14 +152,12 @@ impl Spaces {
         )
     }
 
-    /// The name of the repository `selector` names, as text shows it.
     async fn repository_name(&self, daemon: &dyn Daemon, selector: &Selector) -> Result<String> {
         let repository = daemon.repository(selector.clone()).await?;
         Ok(repository.display_name().to_owned())
     }
 
-    /// Send `message`, the final message of the turn `turn` of the agent
-    /// of `space`, as `alert`, from that agent, under its scope then.
+    /// Sends from the agent, under its scope at that time.
     pub(super) async fn send_marked_alert(
         &self,
         daemon: &dyn Daemon,
@@ -199,8 +190,7 @@ impl Spaces {
     }
 }
 
-/// Refuse `attachments` to `recipients` on another machine, which cannot
-/// read this machine's files.
+/// Another machine cannot read this machine's files.
 fn refuse_files_elsewhere(
     daemon: &dyn Daemon,
     recipients: &MarkedRecipients,
@@ -215,8 +205,8 @@ fn refuse_files_elsewhere(
     }
 }
 
-/// What `sent` sent, none while the hub holds it until the recipient's
-/// machine connects.
+/// None while the hub holds the alert until the recipient's machine
+/// connects.
 fn held_as_sent(sent: Result<Sent>) -> Result<Option<Sent>> {
     match sent {
         Err(error) if error.is::<Queued>() => Ok(None),
@@ -224,8 +214,7 @@ fn held_as_sent(sent: Result<Sent>) -> Result<Option<Sent>> {
     }
 }
 
-/// The IDs of this machine's alerts in `sent`, an alert to `recipients`:
-/// none for another machine's space, whose IDs name that machine's.
+/// None for another machine's space, whose IDs name that machine's alerts.
 fn recorded_here(recipients: &MarkedRecipients, sent: Option<Sent>) -> Vec<i64> {
     match (recipients, sent) {
         (
@@ -239,8 +228,7 @@ fn recorded_here(recipients: &MarkedRecipients, sent: Option<Sent>) -> Vec<i64> 
     }
 }
 
-/// The agent of the space `space_id` that runs as `turn`, as the caller
-/// its marked turn sends as.
+/// The caller the marked turn sends as.
 fn agent_caller(space_id: SpaceId, turn: ExecutionId) -> Caller {
     Caller {
         execution: Some(ScopedExecution {

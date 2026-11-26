@@ -1,13 +1,13 @@
-//! Telling an agent that its turn's final message went unsent, though the
+//! Telling an agent that its turn's final message went unsent though the
 //! command that marked the turn said it would go: the user's prompt
-//! answered the turn, or sending it failed when the turn ended.
+//! answered the turn, or sending failed when the turn ended.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_protocol::chat_marks::ChatMark;
 
 use crate::{alerts::AlertKind, model::Space};
 
-/// Where `mark` sends the final message, as text that follows "as".
+/// As text that follows "as".
 fn destination(mark: &ChatMark) -> String {
     match mark {
         ChatMark::Post { thread } => format!("a post in thread {thread}"),
@@ -16,9 +16,8 @@ fn destination(mark: &ChatMark) -> String {
 }
 
 impl Spaces {
-    /// Tell the agent of `space` that its turn's final message did not go
-    /// as `mark` said, `why`; its next delivery shows it. A failure is
-    /// logged, since this notice describes work that already ended.
+    /// Its next delivery shows the notice. A failure is logged, since the
+    /// notice describes work that already ended.
     pub(super) async fn tell_unsent(
         &self,
         daemon: &dyn Daemon,

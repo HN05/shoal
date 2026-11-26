@@ -1,7 +1,5 @@
-//! Absorbing a space into one above it: `shoal absorb` folds a space's work
-//! into a space of the caller's subtree, which takes over its links, files
-//! and open threads, moves the spaces below it up one level, then removes it
-//! through the shared removal path.
+//! `shoal absorb`: folding a space's work into a space above it, then
+//! removing it. See `docs/design/cleanup.md`.
 mod children;
 mod code;
 mod parties;
@@ -21,10 +19,9 @@ use shoal_protocol::{
 };
 
 impl Spaces {
-    /// Absorb the space `request` names into the space that takes it, at
-    /// `caller`'s request, refusing before anything changes what it cannot
-    /// absorb. Returns once its work and records moved and its removal
-    /// passed its first checks; the removal goes on in the background.
+    /// Refuses what it cannot absorb before anything changes. Returns once
+    /// the work and records moved and the removal passed its first checks;
+    /// the removal goes on in the background.
     pub async fn absorb_space(
         &self,
         daemon: &Arc<dyn Daemon>,

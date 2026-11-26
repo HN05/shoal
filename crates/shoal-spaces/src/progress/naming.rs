@@ -1,6 +1,6 @@
-//! The blockers a progress change names, looked up: a space by its ID,
-//! an issue, PR or CI run by its URL, and an issue by its number in the
-//! blocked space's repository.
+//! Looking up the blockers a progress change names: a space by its ID, an
+//! issue, PR or CI run by its URL, and an issue by its number in the blocked
+//! space's repository.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, ensure};
@@ -24,8 +24,6 @@ use shoal_protocol::{
 };
 
 impl Spaces {
-    /// `change` to the progress of `space`, with the blocker it names looked
-    /// up.
     pub(super) async fn looked_up(
         &self,
         daemon: &dyn Daemon,
@@ -51,7 +49,6 @@ impl Spaces {
         })
     }
 
-    /// `blocker` of `space`, blocking it for `reason`.
     async fn recorded_blocker(
         &self,
         daemon: &dyn Daemon,
@@ -82,9 +79,9 @@ impl Spaces {
         })
     }
 
-    /// The blockers of `space` that `blocker` names: by what it says, and by
-    /// what that looks up to when it still does, as a removed space no
-    /// longer does, which its ID still names.
+    /// Matches by what `blocker` says, and by what that looks up to while it
+    /// still does: a removed space no longer looks up, but its ID still
+    /// names it.
     async fn named_blocker(&self, daemon: &dyn Daemon, space: &Space, blocker: Blocker) -> Named {
         let (kind, input) = match &blocker {
             Blocker::Space(input) => (BlockerKind::Space, input.clone()),
@@ -100,8 +97,7 @@ impl Spaces {
         Named { kind, names }
     }
 
-    /// The issue `input` names: its URL, or its number in the repository
-    /// of `space`.
+    /// A number is read in the repository of `space`.
     async fn issue_url(
         &self,
         daemon: &dyn Daemon,

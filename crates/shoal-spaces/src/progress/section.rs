@@ -1,17 +1,13 @@
-//! The progress section Shoal keeps at the end of a PR's body: the status
-//! line, what blocks the space and the steps with theirs between two
-//! markers. The section is Shoal's, so a
-//! later update replaces what anyone wrote between them; the rest of the
-//! body stays as it was, byte for byte.
+//! The progress section Shoal keeps at the end of a PR's body, between two
+//! markers. The section is Shoal's, so an update replaces what anyone wrote
+//! between them; the rest of the body stays as it was, byte for byte.
 use shoal_protocol::progress::{Progress, RecordedBlocker};
 
 const START: &str = "<!-- shoal:progress -->";
 const END: &str = "<!-- /shoal:progress -->";
 
-/// What separates the section from the body before it.
 const SEPARATOR: &str = "\n\n";
 
-/// The section that shows `progress`.
 pub fn render(progress: &Progress) -> String {
     let mut lines = vec![START.to_owned()];
     if let Some(status) = &progress.status {
@@ -35,18 +31,16 @@ pub fn render(progress: &Progress) -> String {
     lines.join("\n")
 }
 
-/// What `blocker` is and why it blocks.
 fn blocked_by(blocker: &RecordedBlocker) -> String {
     escaped(&format!("{}: {}", blocker.cause(), blocker.reason))
 }
 
-/// `text` unable to end the section early or open another.
+/// Keeps `text` from ending the section early or opening another.
 fn escaped(text: &str) -> String {
     text.replace("<!--", "&lt;!--")
 }
 
-/// `body` with its section replaced by `section`, or `section` added at its
-/// end; `None` removes the section.
+/// Adds the section at the end when `body` has none. `None` removes it.
 pub fn with_section(body: &str, section: Option<&str>) -> String {
     let (before, after) = match find(body) {
         Some(range) => (
@@ -64,9 +58,9 @@ pub fn with_section(body: &str, section: Option<&str>) -> String {
     format!("{before}{separator}{section}{after}")
 }
 
-/// Where the section is in `body`, from its start marker to the end of its
-/// end marker: the last start marker outside a fenced code block, since
-/// Shoal appends its section last and a description may quote the markers.
+/// From the start marker to the end of the end marker. Takes the last start
+/// marker outside a fenced code block, since Shoal appends its section last
+/// and a description may quote the markers.
 fn find(body: &str) -> Option<std::ops::Range<usize>> {
     let start = (body.match_indices(START))
         .map(|(start, _)| start)
@@ -76,8 +70,8 @@ fn find(body: &str) -> Option<std::ops::Range<usize>> {
     Some(start..end)
 }
 
-/// Whether text that follows `before` sits in a fenced code block: after
-/// an odd number of lines that open or close one.
+/// True after an odd number of lines that open or close a fenced code
+/// block.
 fn in_code_block(before: &str) -> bool {
     let fences = (before.lines())
         .filter(|line| line.trim_start().starts_with("```"))

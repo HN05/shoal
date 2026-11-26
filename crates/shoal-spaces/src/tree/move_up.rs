@@ -1,6 +1,6 @@
 //! Moving a space up one level: below the space above its parent, or to the
 //! top level where that space cannot take it, as when its parent goes but
-//! it stays. `space_parents` journals the change.
+//! it stays.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, ensure};
@@ -12,9 +12,9 @@ use crate::daemon::Restack;
 use crate::{model::SpaceRef, spaces::Removing};
 
 impl Spaces {
-    /// Move the space `id` up one level, returning the space it is below
-    /// now, if any. A workspace whose branch builds on the workspace
-    /// `restack` names is then stacked past it as `restack` says.
+    /// Returns the space it is below now. A workspace whose branch builds on
+    /// the workspace `restack` names is then stacked past it as `restack`
+    /// says.
     pub async fn move_up_one_level(
         &self,
         daemon: &dyn Daemon,
@@ -36,10 +36,9 @@ impl Spaces {
     }
 }
 
-/// Move the space `id` below the space above its parent, or to the top level
-/// where that cannot take it, once no removal `held` reserves either of them
-/// or the space: a removal that listed the spaces below one of those would
-/// otherwise miss it.
+/// Waits until no removal `held` reserves the space or either parent: a
+/// removal that listed the spaces below one of them would otherwise miss
+/// it.
 fn move_up(tx: &Transaction<'_>, id: &SpaceId, held: &[Removing; 2]) -> Result<Option<SpaceRef>> {
     let parent = super::parent_id(tx, id)?.context("the space has no parent to move up from")?;
     let above = super::parent_id(tx, &parent)?;

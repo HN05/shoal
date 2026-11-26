@@ -1,5 +1,5 @@
 //! Who an absorb involves and what becomes of the absorbed space's code,
-//! each refusal made before anything changes.
+//! each refused before anything changes.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, ensure};
@@ -19,11 +19,8 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-/// The spaces an absorb involves, once its checks passed.
 pub(super) struct Parties {
-    /// The absorbed space.
     pub(super) target: Space,
-    /// The space that takes its work.
     pub(super) into: Space,
     pub(super) code: Code,
     /// The target, or a chat in its worktree, is not done, and the request
@@ -31,18 +28,15 @@ pub(super) struct Parties {
     pub(super) forced: bool,
     /// The chats in the target's worktree, which go with it.
     pub(super) chats: Vec<SpaceRef>,
-    /// Every space the target's removal takes with it, once the spaces
-    /// below it moved up: those chats and what their removal takes.
+    /// Every space the target's removal takes with it once the spaces below
+    /// it moved up: those chats and what their removal takes.
     pub(super) going: Vec<SpaceId>,
     /// The user holds the target and the caller may release the hold.
     pub(super) release_holds: bool,
 }
 
-/// What becomes of the target's code.
 pub(super) enum Code {
-    /// There is none to merge.
     None,
-    /// The target's branch merges into the branch of the workspace `into`.
     Merge {
         target: Box<Workspace>,
         into: Box<Workspace>,
@@ -52,7 +46,6 @@ pub(super) enum Code {
 }
 
 impl Parties {
-    /// What the absorb did, from what moved.
     pub(super) fn absorbed(
         &self,
         folded: Folded,
@@ -76,9 +69,8 @@ impl Parties {
 }
 
 impl Spaces {
-    /// The spaces absorbing as `request` asks involves, at `caller`'s
-    /// request, which its scope already confined to a target below its own
-    /// space and a space it reaches.
+    /// The caller's scope already confined the target to below its own space
+    /// and the space that takes it to one it reaches.
     pub(super) async fn absorb_parties(
         &self,
         daemon: &dyn Daemon,
@@ -109,10 +101,9 @@ impl Spaces {
         })
     }
 
-    /// What the target's removal may delete, read before its work moves:
-    /// its files, which moved or its checkpoint keeps, the commits of a
-    /// detached HEAD at the commit it is at now, which a forced absorb
-    /// leaves behind, and the spaces that go with it.
+    /// Read before the work moves: the target's files, which moved or its
+    /// checkpoint keeps, the commits of a detached HEAD, which a forced
+    /// absorb leaves behind, and the spaces that go with it.
     pub(super) async fn removal_consent(
         &self,
         daemon: &dyn Daemon,
@@ -130,8 +121,8 @@ impl Spaces {
         })
     }
 
-    /// Run `work` with the target's lifecycle reserved, a workspace's, so
-    /// no removal, stop or other lifecycle operation runs there meanwhile.
+    /// No removal, stop or other lifecycle operation runs in the target
+    /// meanwhile.
     pub(super) async fn while_target_reserved<T>(
         &self,
         parties: &Parties,
@@ -147,8 +138,7 @@ impl Spaces {
         done
     }
 
-    /// Stop the agents of the target and the chats in its worktree, which a
-    /// forced absorb takes as they are.
+    /// A forced absorb takes them as they are.
     pub(super) async fn stop_absorbed(&self, daemon: &dyn Daemon, parties: &Parties) -> Result<()> {
         let spaces =
             std::iter::once(&parties.target.id).chain(parties.chats.iter().map(|chat| &chat.id));
@@ -159,8 +149,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// The space that takes `target`'s work: the one `into` names, else
-    /// the caller's own, else, for the user, the target's parent.
+    /// The one `into` names, else the caller's own, else, for the user, the
+    /// target's parent.
     async fn absorber(
         &self,
         target: &Space,
@@ -182,8 +172,7 @@ impl Spaces {
         }
     }
 
-    /// The chats in a worktree, `chats`, and every space their removal
-    /// takes with them, as the shared removal walks them.
+    /// Walks them as the shared removal does.
     async fn going_with(&self, chats: &[SpaceRef]) -> Result<Vec<SpaceId>> {
         let mut going = Vec::new();
         for chat in chats {
@@ -194,7 +183,7 @@ impl Spaces {
         Ok(going)
     }
 
-    /// Refuse absorbing `target` into itself, a space below it, or one of
+    /// Refuses absorbing the target into itself, a space below it, or one of
     /// the spaces `going` with it, which the absorb moves or removes.
     async fn ensure_outside(&self, target: &Space, into: &Space, going: &[SpaceId]) -> Result<()> {
         let inside = self.within_subtree(&target.id, &into.id).await? || going.contains(&into.id);
@@ -207,8 +196,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// Refuse an absorb while another lifecycle operation, such as a stop
-    /// or a removal, runs in the workspace among `target` and `into`.
+    /// Refuses while another lifecycle operation, such as a stop or a
+    /// removal, runs in either workspace.
     async fn ensure_settled(&self, target: &Space, into: &Space) -> Result<()> {
         for space in [target, into] {
             if space.worktree().is_some() {
@@ -218,8 +207,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// Whether the absorb of `target` is forced: it, or one of the `chats`
-    /// in its worktree, is not done, which only `force` absorbs.
+    /// Forced when the target, or one of the `chats` in its worktree, is not
+    /// done, which only `force` absorbs.
     async fn ensure_done(
         &self,
         daemon: &dyn Daemon,
@@ -247,8 +236,7 @@ impl Spaces {
         Ok(true)
     }
 
-    /// Whether `space` recorded its completion, for a workspace at its
-    /// current HEAD.
+    /// For a workspace, the completion must be at its current HEAD.
     async fn done_at_head(&self, daemon: &dyn Daemon, space: &Space) -> Result<bool> {
         let Some(completion) = self.completion(&space.id).await? else {
             return Ok(false);
@@ -259,9 +247,9 @@ impl Spaces {
         })
     }
 
-    /// What becomes of `target`'s code absorbed into `into`: a workspace's
-    /// branch merges into that of a workspace of its repository, and code
-    /// with nowhere else to go is refused unless `force` leaves it behind.
+    /// A workspace's branch merges into that of a workspace of its
+    /// repository. Code with nowhere else to go is refused unless `force`
+    /// leaves it behind.
     async fn code_of(
         &self,
         daemon: &dyn Daemon,
@@ -296,8 +284,6 @@ impl Spaces {
         Ok(Code::Discard)
     }
 
-    /// Whether `workspace` has commits the default branch lacks, or
-    /// uncommitted or untracked files.
     async fn has_code(&self, daemon: &dyn Daemon, workspace: &Workspace) -> Result<bool> {
         let repo = daemon
             .repository(crate::repository::Selector::from(workspace.repository()))
@@ -308,10 +294,9 @@ impl Spaces {
         Ok(commits > 0 || !git::status::porcelain(path).await?.is_empty())
     }
 
-    /// Whether absorbing `target` releases the user's holds of it and of
-    /// the spaces `going` with it, which its removal takes: a scoped
-    /// `caller` may only as its `user_holds` permission allows, asked before
-    /// anything moves.
+    /// The removal takes the spaces `going` with the target. A scoped
+    /// `caller` may release only as its `user_holds` permission allows,
+    /// asked before anything moves.
     async fn absorb_holds(
         &self,
         daemon: &dyn Daemon,

@@ -1,12 +1,10 @@
 //! How long a carried commit's ref stays in the repository that received
-//! it: while the launch it came for is on its way, or a workspace this
-//! machine records needs the commit, as the plan of its pending worktree
-//! or as the base it records where no branch holds it. Once
-//! nothing does, as when its workspace has its branch, its launch failed
-//! or its space is gone, the ref goes, and Git may collect what only it
-//! kept. The cleanup sweep reclaims the refs of launches that never came,
-//! once their holds lapse, those a restart left without holds and those a
-//! failed release left.
+//! it: while its launch is on its way, or a workspace here needs the
+//! commit, as the plan of its pending worktree or as a base no branch
+//! holds. Then the ref goes, and Git may collect what only it kept. The
+//! cleanup sweep reclaims the refs of launches that never came once their
+//! holds lapse, those a restart left without holds, and those a failed
+//! release left.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,24 +18,22 @@ use shoal_refs::CommitId;
 /// when the other machine lost its link before it forwarded the launch.
 const UNCLAIMED: Duration = Duration::from_secs(60 * 60);
 
-/// The carried commits whose launches are on their way.
 #[derive(Default)]
 pub struct CarriedHolds {
     held: std::sync::Mutex<Vec<Hold>>,
     /// Held while a hold is taken, and while a release reads what needs
-    /// carried refs and deletes the rest, so it never deletes one that a
-    /// hold taken meanwhile keeps.
+    /// carried refs and deletes the rest, so it never deletes one a hold
+    /// taken meanwhile keeps.
     releasing: tokio::sync::Mutex<()>,
     /// Whether a sweep released every repository's carried refs since the
     /// daemon started.
     swept: AtomicBool,
-    /// The repositories whose last release failed, which the next sweep
-    /// releases again.
+    /// The next sweep releases these again.
     failed: std::sync::Mutex<Vec<RepositoryId>>,
 }
 
-/// A carried commit that a launch is to start from, in the repository the
-/// origin it names registers here.
+/// A carried commit a launch is to start from, in the repository its origin
+/// registers here.
 struct Hold {
     origin: String,
     repository: RepositoryId,
@@ -46,19 +42,15 @@ struct Hold {
 }
 
 impl Hold {
-    /// Whether its launch never came.
     fn lapsed(&self) -> bool {
         self.since.elapsed() >= UNCLAIMED
     }
 }
 
-/// A launch's carried commit, by the URL of the origin its repository is
-/// registered from.
+/// By the URL of the origin its repository is registered from.
 pub type Carried<'a> = (&'a str, &'a CommitId);
 
 impl CarriedHolds {
-    /// Hold the `carried` commit of `repository` for the launch it is
-    /// carried for.
     pub async fn take(&self, repository: &RepositoryId, (origin, commit): Carried<'_>) {
         let _releasing = self.releasing.lock().await;
         self.held.lock().unwrap().push(Hold {
@@ -69,8 +61,7 @@ impl CarriedHolds {
         });
     }
 
-    /// Give up a hold of the `carried` commit, returning the repository it
-    /// is in; none where nothing holds it.
+    /// None where nothing holds it.
     fn give_up(&self, (origin, commit): Carried<'_>) -> Option<RepositoryId> {
         let mut held = self.held.lock().unwrap();
         let position =
@@ -78,7 +69,6 @@ impl CarriedHolds {
         Some(held.remove(position).repository)
     }
 
-    /// The commits of `repository` that holds keep.
     fn kept(&self, repository: &RepositoryId) -> Vec<CommitId> {
         let held = self.held.lock().unwrap();
         (held.iter())
@@ -87,7 +77,6 @@ impl CarriedHolds {
             .collect()
     }
 
-    /// Have the next sweep release `repository` again.
     fn retry(&self, repository: &RepositoryId) {
         let mut failed = self.failed.lock().unwrap();
         if !failed.contains(repository) {
@@ -95,13 +84,11 @@ impl CarriedHolds {
         }
     }
 
-    /// The repositories whose last release failed.
     fn take_failed(&self) -> Vec<RepositoryId> {
         std::mem::take(&mut *self.failed.lock().unwrap())
     }
 
-    /// Give up the holds whose launches never came, returning their
-    /// repositories.
+    /// Returns their repositories.
     fn give_up_lapsed(&self) -> Vec<RepositoryId> {
         let mut held = self.held.lock().unwrap();
         let (lapsed, kept) = std::mem::take(&mut *held)
@@ -115,20 +102,15 @@ impl CarriedHolds {
     }
 }
 
-/// What needs the carried commits of a repository.
 struct Needs {
-    /// The commits launches on their way start from.
     held: Vec<CommitId>,
     /// The revisions pending worktrees start from or compare with.
     pending: Vec<String>,
-    /// The bases created workspaces record.
     bases: Vec<CommitId>,
 }
 
 impl Needs {
-    /// Whether `commit` of the repository at `path` still needs its carried
-    /// ref: the bases workspaces record need it only while no branch holds
-    /// it.
+    /// A recorded base needs the ref only while no branch holds it.
     async fn need(&self, path: &std::path::Path, commit: &CommitId) -> Result<bool> {
         if self.held.contains(commit) || self.pending.iter().any(|rev| *commit == **rev) {
             return Ok(true);
@@ -141,18 +123,15 @@ impl Needs {
 }
 
 impl Spaces {
-    /// Give up a hold of the `carried` commit for its launch, which ended
-    /// or will never come, and release the carried refs of its repository.
+    /// Its launch ended or will never come.
     pub async fn release_carried_hold(&self, daemon: &dyn Daemon, carried: Carried<'_>) {
         if let Some(repository) = self.carried_holds.give_up(carried) {
             self.release_carried(daemon, &repository).await;
         }
     }
 
-    /// Release the carried refs of the repositories whose holds lapsed or
-    /// whose last release failed, and on the first pass since the daemon
-    /// started those of every repository, which a restart left without the
-    /// holds that kept them.
+    /// On the first pass since the daemon started, releases every
+    /// repository's, which a restart left without the holds that kept them.
     pub async fn release_unclaimed_carried(&self, daemon: &dyn Daemon) -> Result<()> {
         let mut repositories = match self.carried_holds.swept.swap(true, Ordering::Relaxed) {
             true => self.carried_holds.give_up_lapsed(),
@@ -171,8 +150,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// Delete the carried refs of `repository` that nothing needs any
-    /// longer; a failure is logged and leaves them to the next sweep.
+    /// A failure is logged and leaves them to the next sweep.
     pub async fn release_carried(&self, daemon: &dyn Daemon, repository: &RepositoryId) {
         if let Err(error) = self.release_unneeded(daemon, repository).await {
             crate::log!("carried commits of repository {repository} kept: {error:#}");
@@ -200,7 +178,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// What needs the carried commits of the repository `id`.
     async fn carried_needs(&self, id: &RepositoryId) -> Result<Needs> {
         let held = self.carried_holds.kept(id);
         let id = id.clone();
@@ -218,7 +195,6 @@ impl Spaces {
     }
 }
 
-/// The bases the workspaces of `repository` record.
 fn recorded_bases(
     tx: &rusqlite::Transaction<'_>,
     repository: &RepositoryId,

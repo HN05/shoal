@@ -1,7 +1,7 @@
-//! The spaces directly below an absorbed space, which move up one level,
-//! below its own parent, stacked past its branch where they built on it:
-//! onto the branch of the workspace that merged it, unless that branch
-//! builds on them, else onto what the absorbed branch built on.
+//! The spaces directly below an absorbed space, which move up one level.
+//! Those built on its branch restack onto the branch of the workspace that
+//! merged it, unless that branch builds on them, else onto what the
+//! absorbed branch built on.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, ensure};
@@ -18,11 +18,10 @@ use crate::{
 };
 
 impl Spaces {
-    /// Move the spaces directly below the target up one level, and stack
-    /// every workspace built on its branch onto where its code went, as
-    /// `folded` says, with `caller`'s account, returning the spaces that
-    /// moved up. One that cannot move stops the absorb before the removal,
-    /// which would take it.
+    /// Restacks every workspace built on the target's branch onto where its
+    /// code went, as `folded` says, with `caller`'s account, and returns the
+    /// spaces that moved up. One that cannot move stops the absorb before
+    /// the removal, which would take it.
     pub(super) async fn lift_children(
         &self,
         daemon: &dyn Daemon,
@@ -47,7 +46,8 @@ impl Spaces {
                     )
                 })?;
         }
-        // Those built on its branch elsewhere in the tree stay where they are.
+        // Those built on its branch elsewhere in the tree stay where they
+        // are.
         let stacked = stack.iter().flat_map(|(base, _)| &base.stacked_workspaces);
         for other in stacked.filter(|stacked| !children.iter().any(|child| child.id == stacked.id))
         {
@@ -58,9 +58,9 @@ impl Spaces {
         Ok(children)
     }
 
-    /// Hold the PR gates of the target, the space that takes its work, the
-    /// spaces below the target and the workspaces built on its branch,
-    /// which every change of a workspace's base takes; refused when another
+    /// Holds the PR gates every change of a workspace's base takes: of the
+    /// target, the space that takes its work, the spaces below the target
+    /// and the workspaces built on its branch. Refused when another
     /// workspace came to build on its branch meanwhile.
     async fn lock_stack_gates(&self, parties: &Parties) -> Result<PrGuard> {
         let ids = self.stack_gate_ids(parties).await?;
@@ -74,8 +74,6 @@ impl Spaces {
         Ok(gates)
     }
 
-    /// The spaces whose base records the absorb may change, and those it
-    /// changes them to.
     async fn stack_gate_ids(&self, parties: &Parties) -> Result<Vec<SpaceId>> {
         let (target, into) = (&parties.target.id, &parties.into.id);
         let mut ids = vec![target.clone(), into.clone()];
@@ -92,8 +90,7 @@ impl Spaces {
         Ok(ids)
     }
 
-    /// The absorbed workspace, while workspaces build on its branch, and
-    /// where they go.
+    /// None unless workspaces build on the absorbed workspace's branch.
     async fn absorbed_stack(
         &self,
         daemon: &dyn Daemon,
@@ -136,10 +133,9 @@ impl Spaces {
         Ok(Some((base, ways)))
     }
 
-    /// Where the workspaces built on `base`, the absorbed workspace, go
-    /// when its work did not merge where they can follow it: onto the
-    /// branch it builds on itself, as when its PRs merge, else onto the
-    /// default branch.
+    /// Used when the work did not merge where they can follow it: onto the
+    /// branch the absorbed workspace builds on, as when its PRs merge, else
+    /// onto the default branch.
     async fn restack_aside(
         &self,
         daemon: &dyn Daemon,
@@ -173,8 +169,7 @@ impl Spaces {
         })
     }
 
-    /// The space `space` and the workspaces whose branches its branch
-    /// builds on, nearest first.
+    /// Nearest first.
     async fn taker_and_bases(&self, space: &Space) -> Result<Vec<SpaceId>> {
         let mut bases = vec![space.id.clone()];
         let mut next = space
@@ -191,23 +186,21 @@ impl Spaces {
     }
 }
 
-/// Where the workspaces built on the absorbed workspace's branch go.
 struct Ways {
     /// Onto the branch that merged its work.
     merged: Option<RestackParts>,
     /// Onto what it built on itself.
     aside: RestackParts,
-    /// As `aside`, for the workspace that took its work and those its
-    /// branch builds on: that branch holds the work, so neither it nor
-    /// one below it drops it by a rebase.
+    /// As `aside`, for the workspace that took the work and those its branch
+    /// builds on: that branch holds the work, so neither it nor one below it
+    /// drops the work by a rebase.
     held: RestackParts,
-    /// The workspace that merged its work and those its branch builds on,
+    /// The workspace that merged the work and those its branch builds on,
     /// which cannot build on that branch in turn.
     under_taker: Vec<SpaceId>,
 }
 
 impl Ways {
-    /// Where the workspace `id` goes.
     fn of(&self, id: &SpaceId) -> &RestackParts {
         match &self.merged {
             Some(_) if self.under_taker.contains(id) => &self.held,

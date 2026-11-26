@@ -1,8 +1,5 @@
-//! Showing each space's progress in the progress section of its open draft
-//! PRs, those it opened or was assigned, and removing it from those out of
-//! draft: at most one edit per space each [`INTERVAL`], the latest progress
-//! written in the end. A failed edit is logged and retried with the next
-//! change, without a notification.
+//! Showing each space's progress in its open draft PRs. See
+//! `docs/design/progress.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::daemon::Records;
@@ -32,10 +29,8 @@ use crate::{
 use shoal_forge::items::item::ItemRequests;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The shortest time between two publications of one space's progress.
 pub const INTERVAL: Duration = Duration::from_secs(60);
 
-/// The spaces whose progress changed since the publisher last looked.
 #[derive(Default)]
 pub struct Publications {
     requested: Mutex<HashSet<SpaceId>>,
@@ -43,7 +38,6 @@ pub struct Publications {
 }
 
 impl Publications {
-    /// Publish the progress of the space `id` once its interval allows.
     pub fn request(&self, id: &SpaceId) {
         self.lock().insert(id.clone());
         self.wake.notify_one();
@@ -60,8 +54,6 @@ impl Publications {
     }
 }
 
-/// When each requested space may publish, one [`INTERVAL`] after it last
-/// did.
 #[derive(Default)]
 pub struct Schedule {
     due: HashMap<SpaceId, Instant>,
@@ -69,20 +61,17 @@ pub struct Schedule {
 }
 
 impl Schedule {
-    /// Publish the space `id` as soon as its interval allows after `now`; a
-    /// space already due keeps its time, and publishes what it has then.
+    /// A space already due keeps its time, and publishes what it has then.
     pub fn request(&mut self, id: SpaceId, now: Instant) {
         let earliest =
             (self.published.get(&id)).map_or(now, |published| now.max(*published + INTERVAL));
         self.due.entry(id).or_insert(earliest);
     }
 
-    /// When the next space is due.
     pub fn next(&self) -> Option<Instant> {
         self.due.values().min().copied()
     }
 
-    /// The spaces due at `now`, which publish then.
     pub fn take_due(&mut self, now: Instant) -> Vec<SpaceId> {
         let due: Vec<SpaceId> = (self.due.iter())
             .filter(|(_, at)| **at <= now)
@@ -98,8 +87,7 @@ impl Schedule {
     }
 }
 
-/// Publish what changed while the daemon was down, then each change as its
-/// space's interval allows.
+/// Publishes what changed while the daemon was down first.
 pub async fn run(daemon: Arc<dyn Daemon>) {
     match daemon.spaces().unpublished_progress().await {
         Ok(spaces) => spaces
@@ -126,8 +114,7 @@ pub async fn run(daemon: Arc<dyn Daemon>) {
     }
 }
 
-/// The PRs the space `id` opened or was assigned, which show its progress
-/// while they are open drafts.
+/// They show the progress while they are open drafts.
 fn publishing_pulls(db: &Connection, records: &dyn Records, id: &SpaceId) -> Result<Vec<ItemRef>> {
     let assigned = records
         .assigned_items(db, id, Some(ItemKind::Pr))?
@@ -141,10 +128,9 @@ fn publishing_pulls(db: &Connection, records: &dyn Records, id: &SpaceId) -> Res
 }
 
 impl Spaces {
-    /// Write the progress of the space `id` into the progress section of
-    /// each of its draft PRs, and remove it from the others, unless
-    /// `[pr] progress` is off, and record it as published once every one
-    /// shows it.
+    /// Removes the section from the space's PRs that are not drafts. Does
+    /// nothing while `[pr] progress` is off. Records the progress as
+    /// published once every PR shows it.
     pub async fn publish_progress(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<()> {
         let space = self.space(&SpaceSelector::id(id)).await?;
         if !daemon.acting_settings(&space).await?.pr.progress {
@@ -176,11 +162,10 @@ impl Spaces {
             .await
     }
 
-    /// Show `section` in the space's draft PRs at `urls`, removing it from
-    /// the others, or remove it from every one for `None`, logging each PR
-    /// that fails without stopping at it; whether every one succeeded. The
-    /// caller holds the gates [`shoal_links::Links::lock_change_gates`] takes
-    /// for the space.
+    /// `None` removes the section from every PR. Logs each PR that fails
+    /// without stopping at it, and returns whether every one succeeded. The
+    /// caller holds the gates [`shoal_links::Links::lock_change_gates`]
+    /// takes for the space.
     async fn write_sections(
         &self,
         daemon: &dyn Daemon,
@@ -198,7 +183,6 @@ impl Spaces {
         written
     }
 
-    /// The spaces whose progress changed after its sections last showed it.
     pub async fn unpublished_progress(&self) -> Result<Vec<SpaceId>> {
         self.store
             .run(|db| {
@@ -213,9 +197,8 @@ impl Spaces {
             .await
     }
 
-    /// Show `section` as the progress section of the space's PR at `url`
-    /// while it is a draft, or remove its section for `None` or a PR out of
-    /// draft, as the agent account, unless the PR is no longer open or
+    /// Writes only to a draft, and removes the section for `None` or a PR out
+    /// of draft, as the agent account. Skips a PR that is no longer open or
     /// already shows it. The caller holds the gates
     /// [`shoal_links::Links::lock_change_gates`] takes for the space.
     async fn write_section(

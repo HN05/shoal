@@ -1,5 +1,5 @@
 //! Giving a workspace the space it is opened below: the chat or workspace
-//! whose agent opened it, or the user when one opened it outside any.
+//! whose agent opened it, or the user when it was opened outside any.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, ensure};
@@ -20,10 +20,8 @@ use shoal_core::launches::SpaceRepository;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// Give `workspace` to the space `parent` that opened it, here or on
-    /// another joined machine, or to the user when it was opened outside
-    /// one or the parent is gone. A workspace split from another stays
-    /// below it.
+    /// Gives it to the user when it was opened outside a space or the parent
+    /// is gone. A workspace split from another stays below it.
     pub async fn assign_parent(
         &self,
         daemon: &dyn Daemon,
@@ -43,9 +41,8 @@ impl Spaces {
             .await
     }
 
-    /// [`Self::open_branch`] below `parent`, where and as `new` says,
-    /// returning the workspace with its parent. A scoped `caller` takes
-    /// over no existing workspace outside its scope.
+    /// [`Self::open_branch`] below `parent`. A scoped `caller` takes over no
+    /// existing workspace outside its scope.
     #[allow(
         clippy::too_many_arguments,
         reason = "what the branch opens with and below, beside the daemon"
@@ -78,7 +75,6 @@ impl Spaces {
         Ok(opened)
     }
 
-    /// Refuse a scoped `caller` the existing `workspace` outside its scope.
     pub async fn ensure_takes_over(
         &self,
         daemon: &dyn Daemon,
@@ -95,8 +91,6 @@ impl Spaces {
             .await
     }
 
-    /// [`Self::create_workspace`] below `parent`, returning the workspace with
-    /// its parent.
     pub async fn create_workspace_below(
         &self,
         daemon: &dyn Daemon,
@@ -119,9 +113,7 @@ impl Spaces {
             .await
     }
 
-    /// Refuse a space below `parent` in another repository than the
-    /// parent's, or below a workspace that is not ready, before creating
-    /// anything.
+    /// Refuses before creating anything.
     pub async fn ensure_parent_repository(
         &self,
         daemon: &dyn Daemon,
@@ -132,10 +124,8 @@ impl Spaces {
             .await
     }
 
-    /// Refuse a space of the repository `repository` selects, or of none for
-    /// a chat without one, below `parent` when the parent cannot take it now,
-    /// as this machine has it or, for one another joined machine runs, as
-    /// the hub lists it.
+    /// Judges a parent another joined machine runs as the hub lists it. A
+    /// chat without a repository has none.
     pub async fn ensure_parent_takes(
         &self,
         daemon: &dyn Daemon,
@@ -163,8 +153,7 @@ impl Spaces {
             .await
     }
 
-    /// The ID of the space `selector` names as a new space's parent: one
-    /// here, else one another joined machine runs, as the hub lists it.
+    /// One here, else one another joined machine runs, as the hub lists it.
     pub async fn parent_space_id(
         &self,
         daemon: &dyn Daemon,
@@ -176,10 +165,9 @@ impl Spaces {
         }
     }
 
-    /// The repository of the space `selector` names as a new space's
-    /// parent, which a child shares: its own here, or for one another
-    /// joined machine runs, this machine's registration of the repository
-    /// the hub lists it in.
+    /// A child shares its parent's repository. For a parent another joined
+    /// machine runs, this machine's registration of the repository the hub
+    /// lists it in.
     pub async fn parent_repository(
         &self,
         daemon: &dyn Daemon,
@@ -195,7 +183,6 @@ impl Spaces {
         }
     }
 
-    /// Assign `workspace` to `parent` and read it again.
     pub async fn give_to_parent(
         &self,
         daemon: &dyn Daemon,
@@ -212,9 +199,9 @@ impl Spaces {
 /// user. A workspace below a chat being removed stays there: the removal
 /// listed it after reserving the chat, on this one thread, and takes it. A
 /// parent the workspace already has stays, as one another joined machine
-/// runs, which its creation recorded once the hub listed it, and a new
-/// `parent` that the hub lists `elsewhere` takes it, whose own machine
-/// decides what it takes.
+/// runs, which its creation recorded once the hub listed it. A new `parent`
+/// the hub lists `elsewhere` takes it, and its own machine decides what it
+/// takes.
 fn assign(
     tx: &rusqlite::Transaction<'_>,
     workspace: &SpaceId,
@@ -245,8 +232,8 @@ fn assign(
             "a removal of the chat that opened the workspace, or of its workspaces, holds it"
         );
     }
-    // A chat being removed takes no new workspace, nor a space gone; one
-    // already below it stays there.
+    // A chat being removed takes no new workspace, nor does a space that is
+    // gone. One already below it stays there.
     let parent = match parent
         .filter(|parent| !removing.reserved(parent) || current.as_ref() == Some(*parent))
     {

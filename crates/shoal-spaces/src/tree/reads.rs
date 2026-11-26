@@ -1,7 +1,5 @@
-//! The reads of the space tree the spaces own, over the store's one walk up
-//! and one walk down: a space's parent and children, the spaces whose
-//! activity an agent receives here or on another machine, what receives an
-//! event passed up, and the order removals take spaces in.
+//! The reads of the space tree, over the store's one walk up and one walk
+//! down.
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
@@ -32,7 +30,7 @@ pub fn taken() -> String {
     )
 }
 
-/// Whether the agent of the space `id` runs, in any turn state.
+/// In any turn state.
 pub fn agent_runs(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<bool> {
     shoal_store::exists(
         db,
@@ -41,7 +39,6 @@ pub fn agent_runs(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Resu
     )
 }
 
-/// The ID of the space directly above the space `id`.
 pub fn parent_id(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
     Ok(db
         .prepare_cached("SELECT parent_id FROM space_parents WHERE space_id=?1")?
@@ -49,8 +46,7 @@ pub fn parent_id(db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>> {
         .optional()?)
 }
 
-/// The space above each space that has one, which may run on another
-/// machine, by the ID of the space below it.
+/// By the ID of the space below. The parent may run on another machine.
 pub fn parent_ids(db: &Connection) -> Result<HashMap<SpaceId, SpaceId>> {
     Ok(db
         .prepare("SELECT space_id, parent_id FROM space_parents")?
@@ -58,8 +54,7 @@ pub fn parent_ids(db: &Connection) -> Result<HashMap<SpaceId, SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// This machine's spaces whose parent it does not have, each with that
-/// parent, which runs on another machine.
+/// Each with that parent, which runs on another machine.
 pub fn below_elsewhere(db: &Connection) -> Result<Vec<(SpaceId, SpaceId)>> {
     Ok(db
         .prepare(
@@ -70,10 +65,9 @@ pub fn below_elsewhere(db: &Connection) -> Result<Vec<(SpaceId, SpaceId)>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// This machine's spaces whose activity goes to a coordinator on another
-/// machine, by the space above them there: each space without an agent
-/// whose parent runs elsewhere, then those below it whose activity it
-/// would receive, as [`delegated`] walks them.
+/// By the space above them there: each space without an agent whose parent
+/// runs elsewhere, then those below it whose activity it would receive, as
+/// [`delegated`] walks them.
 pub fn delegated_elsewhere(
     db: &Connection,
     agents: &TrackedAgents,
@@ -93,7 +87,6 @@ pub fn delegated_elsewhere(
     Ok(groups)
 }
 
-/// The space `id`, if this machine has it.
 fn space_ref_of(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
     Ok(db
         .query_row(
@@ -105,7 +98,7 @@ fn space_ref_of(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
         .optional()?)
 }
 
-/// The spaces with an agent among `agents`, as [`has_agent`] counts one.
+/// As [`has_agent`] counts one.
 pub fn with_agents(db: &Connection, agents: &TrackedAgents) -> Result<HashSet<SpaceId>> {
     Ok(db
         .prepare(&format!(
@@ -129,7 +122,7 @@ pub fn subtree_query(columns: &str) -> String {
     )
 }
 
-/// The spaces directly below the space `id`, by name.
+/// By name.
 pub fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
     Ok(db
         .prepare_cached(
@@ -142,7 +135,6 @@ pub fn children(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The space directly above the space `id`.
 pub fn parent(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
     Ok(db
         .prepare_cached(
@@ -155,7 +147,6 @@ pub fn parent(db: &Connection, id: &SpaceId) -> Result<Option<SpaceRef>> {
         .optional()?)
 }
 
-/// The spaces below `id` whose activity its agent receives.
 pub fn delegated(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<Vec<SpaceRef>> {
     Ok(db
         .prepare(&format!(
@@ -168,10 +159,9 @@ pub fn delegated(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Resul
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The space `id` and those below it whose activity its agent receives,
-/// each as the path of spaces down to it from the topmost space that
-/// receives `id`'s own activity: `id` itself when it has an agent, otherwise
-/// the nearest ancestor that has one, or the root.
+/// Each as the path of spaces down to it from the topmost space that
+/// receives `id`'s own activity: `id` itself when it has an agent,
+/// otherwise the nearest ancestor that has one, or the root.
 pub fn receiving_paths(
     db: &Connection,
     id: &SpaceId,
@@ -184,8 +174,8 @@ pub fn receiving_paths(
         .collect())
 }
 
-/// The ancestors that receive `id`'s activity, topmost first: each parent
-/// while the space below it has no agent of its own.
+/// Topmost first: each parent while the space below it has no agent of its
+/// own.
 fn receiving_ancestors(
     db: &Connection,
     id: &SpaceId,
@@ -200,8 +190,7 @@ fn receiving_ancestors(
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The space `id` and those below it whose activity its agent receives,
-/// each as the path of spaces from `id` down to it.
+/// Each as the path of spaces from `id` down to it.
 fn delegation_paths(
     db: &Connection,
     id: &SpaceId,
@@ -223,8 +212,8 @@ fn delegation_paths(
     .collect()
 }
 
-/// The length of the longest chain of spaces whose removals take the
-/// space `id` first, each the next one's, as [`TAKEN_FIRST`] links them.
+/// The longest chain of spaces whose removals take the space first, each
+/// the next one's, as [`TAKEN_FIRST`] links them.
 pub fn removal_depth(db: &Connection, id: &SpaceId) -> Result<u32> {
     let sql = format!(
         "WITH RECURSIVE taking(id, depth) AS (
@@ -236,8 +225,7 @@ pub fn removal_depth(db: &Connection, id: &SpaceId) -> Result<u32> {
     Ok(db.query_row(&sql, [id], |row| row.get(0))?)
 }
 
-/// What receives an event passed up to the space `id` from below: the
-/// nearest space from `id` up with an agent, or the first one above on
+/// The nearest space from `id` up with an agent, or the first one above on
 /// another machine.
 pub fn receiver_from(
     db: &Connection,

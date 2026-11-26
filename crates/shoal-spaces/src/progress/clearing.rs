@@ -18,14 +18,11 @@ use crate::{
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::events::BlockerEvent;
 
-/// What clearing changed of a space's blockers.
 pub struct Cleared {
     pub space: SpaceId,
-    /// The blockers that cleared.
     pub cleared: Vec<BlockerEvent>,
 }
 
-/// A space whose progress has blockers, with its repository.
 struct Blocked {
     space: SpaceId,
     repository: Option<RepositoryId>,
@@ -33,7 +30,6 @@ struct Blocked {
 }
 
 impl Spaces {
-    /// The issues, PRs and CI runs that block spaces or their steps.
     pub async fn progress_forge_blockers(&self) -> Result<HashSet<Target>> {
         let blocked = self.store.read(blocked_plans).await?;
         Ok((blocked.iter())
@@ -47,9 +43,8 @@ impl Spaces {
             .collect())
     }
 
-    /// Clear the blockers of every space that `lookups` or the spaces they
-    /// name say cleared, journaling each, and return what changed of the
-    /// spaces where any cleared.
+    /// Journals each, and returns what changed of the spaces where any
+    /// cleared.
     pub async fn clear_progress_blockers(
         &self,
         daemon: &dyn Daemon,
@@ -70,8 +65,7 @@ impl Spaces {
         failure.map_or(Ok(changed), Err)
     }
 
-    /// Clear the blockers of `blocked` that cleared; what changed when any
-    /// did.
+    /// None unless any cleared.
     async fn clear_space_blockers(
         &self,
         daemon: &dyn Daemon,
@@ -101,7 +95,6 @@ impl Spaces {
     }
 }
 
-/// Every space whose progress has blockers, with its repository.
 fn blocked_plans(db: &Transaction<'_>) -> Result<Vec<Blocked>> {
     let rows = db
         .prepare(
@@ -124,8 +117,7 @@ fn blocked_plans(db: &Transaction<'_>) -> Result<Vec<Blocked>> {
     Ok(blocked)
 }
 
-/// Remove the blockers of the space `id` that `found` says cleared at
-/// `now`, journaling each; what changed when any did.
+/// Journals each. None unless any cleared.
 fn clear(
     tx: &Transaction<'_>,
     id: &SpaceId,

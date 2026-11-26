@@ -1,5 +1,5 @@
 //! What an absorb tells: each side's log, and the agent of the space that
-//! took the work, when another caller absorbed it there.
+//! took the work when another caller absorbed it there.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -16,8 +16,8 @@ use shoal_protocol::{
 };
 
 impl Spaces {
-    /// Journal `absorbed` in both spaces' logs, and tell the agent of the
-    /// space that took the work what it took unless it is the `caller`.
+    /// Tells the agent of the space that took the work unless it is the
+    /// `caller`.
     pub(super) async fn report_absorb(
         &self,
         daemon: &dyn Daemon,
@@ -38,8 +38,7 @@ impl Spaces {
         }
     }
 
-    /// Record that the absorbed space went into the space that took it, by
-    /// which merge method, and what that space took over.
+    /// Records the merge method and what the space took over.
     async fn journal_absorb(&self, absorbed: &Absorbed) -> Result<()> {
         let method = absorbed.merge.as_ref().map(|merge| merge.method);
         let into = AbsorbEvent {
@@ -70,7 +69,6 @@ impl Spaces {
     }
 }
 
-/// The URLs of every link `links` lists.
 fn link_urls(links: &SpaceLinks) -> Vec<String> {
     let lists = [&links.issues, &links.prs, &links.opened, &links.related];
     (lists.into_iter().flatten())
@@ -78,8 +76,7 @@ fn link_urls(links: &SpaceLinks) -> Vec<String> {
         .collect()
 }
 
-/// What the agent of the space that took `absorbed`'s work is told: what
-/// merged and what it took over, one sentence for each.
+/// One sentence for what merged and one for what was taken over.
 fn taken_over(absorbed: &Absorbed) -> String {
     let mut sentences = vec![format!(
         "Shoal absorbed {} into this space.",
