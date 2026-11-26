@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::HostName;
 
 #[test]
 fn a_session_label_names_its_agent() {

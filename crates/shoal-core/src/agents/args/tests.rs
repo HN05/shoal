@@ -14,15 +14,15 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     let defaults = settings("");
     let tmp = fs::canonicalize("/tmp").unwrap();
     assert_eq!(
-        dir_args(&defaults, &"claude".into(), home.path(), &[]),
+        workspace_dir_args(&defaults, &"claude".into(), home.path(), None),
         [OsString::from(format!("--add-dir={}", tmp.display()))]
     );
     assert_eq!(
-        dir_args(&defaults, &"codex".into(), home.path(), &[]),
+        workspace_dir_args(&defaults, &"codex".into(), home.path(), None),
         [OsString::from("--add-dir"), tmp.clone().into()]
     );
     // A tool that takes no other working directory gets none.
-    assert!(dir_args(&defaults, &"pi".into(), home.path(), &[]).is_empty());
+    assert!(workspace_dir_args(&defaults, &"pi".into(), home.path(), None).is_empty());
     // `~/` names a path under the home directory; one reached again through
     // a symlink counts once.
     let configured = settings("agent.dirs = ['/tmp', '~/cache', '~/link']\n");
@@ -36,11 +36,11 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     assert!(agent_dirs(&settings("agent.dirs = []\n"), home.path()).is_empty());
     // A workspace's or chat's own directory follows the configured ones.
     assert_eq!(
-        dir_args(
+        workspace_dir_args(
             &defaults,
             &"codex".into(),
             home.path(),
-            &[PathBuf::from("/root/repo")]
+            Some(Path::new("/root/repo"))
         ),
         [
             OsString::from("--add-dir"),

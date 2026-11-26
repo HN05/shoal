@@ -4,10 +4,7 @@ use serde::Serialize;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
-use crate::{
-    model::Protection,
-    sessions::{HostName, Origin},
-};
+use crate::{model::Protection, sessions::Origin};
 
 /// What an agent session runs for, by ID; a host that keeps ownership in its
 /// sessions labels them with it.
@@ -79,12 +76,6 @@ impl Session {
             stopped: None,
             place: place.clone(),
         }
-    }
-
-    /// The host and the name it knows the session by, the same for every
-    /// place it found open in the session.
-    pub fn key(&self) -> (HostName, &str) {
-        (self.place.host, &self.name)
     }
 
     pub fn output(self) -> shoal_protocol::sessions::TerminalSession {

@@ -133,18 +133,7 @@ pub fn workspace_dirs(
     dirs(settings, name, home, &extra)
 }
 
-/// The arguments that give agent `name` the configured agent directories and
-/// `extra`, resolved as agents compare paths, as other working directories.
-pub fn dir_args(
-    settings: &Effective,
-    name: &Agent,
-    home: &Path,
-    extra: &[PathBuf],
-) -> Vec<OsString> {
-    add_dir_args(settings, name, &dirs(settings, name, home, extra))
-}
-
-/// The directories [`dir_args`] gives agent `name`: the configured agent
+/// The other working directories agent `name` gets: the configured agent
 /// directories, so it may read what the tools it runs leave there without a
 /// permission prompt, then `extra`; none for an agent that takes no other
 /// working directory.

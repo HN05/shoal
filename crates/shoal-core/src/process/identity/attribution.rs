@@ -73,13 +73,6 @@ pub async fn scan_executions(ids: HashSet<ExecutionId>) -> Result<Vec<(Execution
         .collect())
 }
 
-/// Live same-user processes carrying the identity of chat `id`: its agent
-/// and what the agent started with its environment.
-pub async fn scan_chat(id: &SpaceId) -> Result<Vec<Identity>> {
-    let scan = scan_marked(Marker::Space, HashSet::from([id.clone()])).await?;
-    Ok(scan.processes.into_iter().map(|p| p.identity).collect())
-}
-
 /// Live same-user processes carrying the identity of one of the workspaces
 /// `ids`: their tracked executions, hooks and processes started with their
 /// exported environment, each paired with the workspace it carries.

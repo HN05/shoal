@@ -19,7 +19,7 @@ pub(crate) use attribution::OwnedProcess;
 #[cfg(any(test, feature = "test-support"))]
 pub use attribution::Unattributed;
 pub(crate) use attribution::stays_unattributed;
-pub use attribution::{Scan, scan, scan_chat, scan_executions, scan_oneshot_runs, scan_workspaces};
+pub use attribution::{Scan, scan, scan_executions, scan_oneshot_runs, scan_workspaces};
 #[cfg(target_os = "linux")]
 pub(super) use linux::{process_record_unavailable, read_process_stat, stat_fields, sysconf};
 #[cfg(target_os = "macos")]
