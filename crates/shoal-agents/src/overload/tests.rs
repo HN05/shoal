@@ -59,6 +59,34 @@ fn memory_in_use_stops_at_once_and_stall_once_it_holds() {
 }
 
 #[test]
+fn stall_holds_across_late_samples() {
+    let start = Instant::now();
+    let settings = crate::config::overload::Overload::default();
+    let ticks = || Ok(crate::process::load::CpuTicks::default());
+    let late = sample_gap(&settings) + Duration::from_secs(1);
+    let sustained = Duration::from_secs(settings.memory.sustained_seconds);
+    let mut monitor = Monitor::default();
+    let mut at = start;
+    while at < start + sustained {
+        assert_eq!(monitor.reason(at, &settings, Some(STALLED), ticks()), None);
+        at += late;
+    }
+    assert_eq!(
+        monitor.reason(at, &settings, Some(STALLED), ticks()),
+        Some(Pressure::Memory)
+    );
+    // A reading below the stop level ends the window, however late.
+    assert_eq!(
+        monitor.reason(at + late, &settings, Some(WARNING), ticks()),
+        None
+    );
+    assert_eq!(
+        monitor.reason(at + late * 2, &settings, Some(STALLED), ticks()),
+        None
+    );
+}
+
+#[test]
 fn cpu_is_opt_in_and_requires_continuous_samples() {
     let start = Instant::now();
     let mut settings = crate::config::overload::Overload {

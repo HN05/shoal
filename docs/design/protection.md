@@ -19,7 +19,12 @@ kernels without it. Zram swap is not capacity: RAM holds its compressed pages,
 so counting it as memory would put the backstop's level past the point where the
 machine stops responding.
 Either signal counts: critical when either is, safe only when both are. Stall
-stops work only once it has held, so one burst stops nothing. Protection stops
+stops work only once it has held, so one burst stops nothing. Its window ends
+only at a reading below the stop level, never because a sample came late: the
+kernel's ten-second average stays valid however late Shoal reads it, and a
+thrashing machine is where samples come late. A late sample does end the
+windows of CPU use and of health, since CPU use is a delta between samples and
+a starved daemon is no healthy one. Protection stops
 work in one stop order, by what a stop loses, which `shoal-schedule` computes
 beside the queue order from the same snapshot, so one policy defines both: CI
 jobs first, newest first, since a rerun loses nothing and the newest has done

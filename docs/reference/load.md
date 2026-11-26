@@ -58,7 +58,9 @@ memory pressure is critical when RAM and swap on disk in use together,
 counting reclaimable cache in `MemAvailable` as free, pass
 `memory.used_percent`, at once, or when every task has stalled waiting for memory for at least
 `memory.stall_percent` of the last ten seconds, from the kernel's pressure stall
-information, for `memory.sustained_seconds`. Stall shows a machine thrashing
+information, for `memory.sustained_seconds`. Only a reading below
+`memory.stall_percent` ends that stretch, however far apart the samples
+come. Stall shows a machine thrashing
 while memory in use still looks short of full; memory in use catches an
 allocation that reaches the kernel's OOM killer before any stall builds up, and
 alone measures a kernel without pressure stall information. Zram swap counts

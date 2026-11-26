@@ -126,12 +126,15 @@ impl Monitor {
         memory: Option<MemoryPressure>,
         cpu: anyhow::Result<load::CpuTicks>,
     ) -> Option<Pressure> {
+        // A late sample means the daemon was starved, which ends the windows
+        // of CPU tick deltas and of health. Stall's window survives it: the
+        // kernel's ten-second average stays valid however late it is read,
+        // and a thrashing machine is exactly where samples come late.
         if self
             .last_observation
             .replace(now)
             .is_some_and(|previous| now.duration_since(previous) > sample_gap(settings))
         {
-            self.memory_stall = Sustained::default();
             self.cpu = Sustained::default();
             self.cpu_warning = Sustained::default();
             self.healthy = Sustained::default();
