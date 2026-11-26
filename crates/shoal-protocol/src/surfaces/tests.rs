@@ -943,6 +943,26 @@ fn an_answer_s_value_is_entered_where_null_or_an_empty_list_stands() {
 }
 
 #[test]
+fn a_slider_that_snaps_takes_only_its_steps() {
+    let slider = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["level", "save"]},
+            {"id": "level", "component": "Slider", "max": 10, "steps": 2,
+             "value": {"@path": "/level"}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save", "context": {"level": {"@path": "/level"}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"level": 0}),
+    );
+    let answer = |level: &str| slider.resolve("save", values(&[("level", json!(level))]));
+    answer("5").unwrap();
+    answer("10").unwrap();
+    let refused = answer("3").unwrap_err().to_string();
+    assert!(refused.contains("in steps of 5"), "{refused}");
+}
+
+#[test]
 fn a_number_field_may_stay_empty_where_a_slider_may_not() {
     let fields = surface(
         json!([

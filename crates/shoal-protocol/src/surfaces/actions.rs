@@ -44,9 +44,12 @@ pub enum InputKind {
     Text,
     /// A number field's text: a number, or left empty, as its field may be.
     NumberText,
+    /// A slider's number, from `min` to `max`, and on a `step` from `min`
+    /// where the slider snaps to its divisions.
     Number {
         min: Option<f64>,
         max: Option<f64>,
+        step: Option<f64>,
     },
     Boolean,
     /// One of the options' values, or with `multiple` several; each
@@ -440,10 +443,17 @@ impl Surface {
             "TextField" if component.literal("variant") == Some("number") => InputKind::NumberText,
             "TextField" => InputKind::Text,
             "CheckBox" => InputKind::Boolean,
-            "Slider" => InputKind::Number {
-                min: number("min").or(Some(0.0)),
-                max: number("max"),
-            },
+            "Slider" => {
+                let min = number("min").unwrap_or(0.0);
+                let max = number("max");
+                let steps = number("steps").filter(|steps| *steps >= 1.0);
+                InputKind::Number {
+                    min: Some(min),
+                    max,
+                    step: (max.zip(steps).map(|(max, steps)| (max - min) / steps))
+                        .filter(|step| *step > 0.0),
+                }
+            }
             "DateTimeInput" => InputKind::DateTime(Dates::of(self, component, &placed.scope)),
             "ChoicePicker" => InputKind::Options {
                 options: (component
@@ -476,8 +486,19 @@ impl InputKind {
             (Self::NumberText, Value::String(text)) if text.trim().is_empty() => {
                 Ok(Value::String(String::new()))
             }
-            (Self::NumberText, given) => number(key, &given, None, None),
-            (Self::Number { min, max }, given) => number(key, &given, *min, *max),
+            (Self::NumberText, given) => number(key, &given).map(Value::Number),
+            (Self::Number { min, max, step }, given) => {
+                let number = number(key, &given)?;
+                let value = number.as_f64().unwrap_or(f64::NAN);
+                ensure!(
+                    min.is_none_or(|min| value >= min)
+                        && max.is_none_or(|max| value <= max)
+                        && step.is_none_or(|step| on_step(value, min.unwrap_or(0.0), step)),
+                    "{key} takes {}, not {number}",
+                    self.describe()
+                );
+                Ok(Value::Number(number))
+            }
             (Self::Boolean, Value::Bool(value)) => Ok(Value::Bool(value)),
             (Self::Boolean, Value::String(text)) => match text.as_str() {
                 "true" => Ok(Value::Bool(true)),
@@ -498,6 +519,12 @@ impl InputKind {
             Self::Number {
                 min: Some(min),
                 max: Some(max),
+                step: Some(step),
+            } => format!("a number from {min} to {max} in steps of {step}"),
+            Self::Number {
+                min: Some(min),
+                max: Some(max),
+                ..
             } => format!("a number from {min} to {max}"),
             Self::Number { .. } => "a number".into(),
             Self::NumberText => "a number, or empty to leave it unset".into(),
@@ -515,22 +542,22 @@ impl InputKind {
     }
 }
 
-/// `given`, a number or its text, as the number of the input `key`, within
-/// `min` and `max`: an integer stays one, as a renderer sends it.
-fn number(key: &str, given: &Value, min: Option<f64>, max: Option<f64>) -> Result<Value> {
-    let number = match given {
+/// `given`, a number or its text, as the number of the input `key`: an
+/// integer stays one, as a renderer sends it.
+fn number(key: &str, given: &Value) -> Result<serde_json::Number> {
+    match given {
         Value::Number(number) => Some(number.clone()),
         Value::String(text) => parsed(text.trim()),
         _ => None,
     }
-    .with_context(|| format!("{key} takes a number, not {given}"))?;
-    let value = number.as_f64().unwrap_or(f64::NAN);
-    ensure!(
-        min.is_none_or(|min| value >= min) && max.is_none_or(|max| value <= max),
-        "{key} takes {}, not {number}",
-        InputKind::Number { min, max }.describe()
-    );
-    Ok(Value::Number(number))
+    .with_context(|| format!("{key} takes a number, not {given}"))
+}
+
+/// Whether `value` lies a whole number of `step`s from `min`, within the
+/// rounding of a division.
+fn on_step(value: f64, min: f64, step: f64) -> bool {
+    let steps = (value - min) / step;
+    (steps - steps.round()).abs() < 1e-9
 }
 
 /// The number `text` spells, an integer where it is one.

@@ -149,7 +149,8 @@ button a list repeats for each item is an action for each, `name#N` for item
 its relative bindings in that item's data. An action's name holds no `#`. It
 takes a value for each key of its `context` that binds an input's data: a text
 field's text, a number field's number or nothing, a checkbox's `true` or
-`false`, a slider's number or a choice picker's option values.
+`false`, a slider's number, on one of its steps where it snaps to them, or a
+choice picker's option values.
 
 `--action ID` answers the latest surface the other side posted with that
 action. `--value KEY=VALUE` gives each value. Repeat a key to select several
