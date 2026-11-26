@@ -137,7 +137,7 @@ whether an agent opens an issue or PR at once:
 
 They apply to `issue open` and `pr open` in a workspace process, and to
 `issue open` from a chat's agent. `issue_other_repositories` governs
-[issues in another repository](issues.md#issue-and-pr-actions) the same way.
+[issues in another repository](issues.md#open-an-issue-in-another-repository) the same way.
 Unscoped callers always open directly.
 
 ### Propose an issue

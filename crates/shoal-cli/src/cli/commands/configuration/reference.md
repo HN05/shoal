@@ -273,7 +273,11 @@ Each token takes the [value forms](#values) of a secret:
   `{ same_as = "agent_token" }` suits only PRs agents did not open.
 
 A token's `{ cmd }` runs at most once per operation that needs the token, for
-at most a minute, and Shoal never stores its output. Shoal drops a token the
+at most a minute, and Shoal never stores its output. A command that fails or
+prints nothing fails the request. An `{ env }` token that the daemon reads, such
+as for PR watches, comes from the daemon's own environment. A service does not
+take that from your shell, so set the variable where the daemon runs, or use
+`{ cmd }`. Shoal drops a token the
 forge refuses, instead of keeping it while the machine `on` names is away.
 `user_email`,
 `agent_email` and `review_email` apply only to Bitbucket. See
@@ -1265,7 +1269,8 @@ area_prefix = "area/"        # Default: unset
 ```
 
 - `required_labels` lists prefixes. Every new issue needs a label that starts
-  with each of them, so `area/` takes any area label. See
+  with each of them, so `area/` takes any area label. An empty list in a
+  higher layer turns inherited entries off. See
   [repository conventions](../../../../../../docs/reference/issues.md#repository-conventions).
 - `assign` says whose accounts join the assignees of an issue a space links
   as assigned. `agent` adds the agent account while an agent works the issue,

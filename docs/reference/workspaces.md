@@ -28,7 +28,7 @@ the one registered repository with the same origin. `-r`/`--repo` selects one
 explicitly and must match the link. For a remote that is not registered, a
 terminal offers to register it; otherwise the lookup fails and names the
 `shoal repo add` command to run. Lookups use your
-[forge login](issues.md#forges). Every start starts an agent, as
+[forge login](issues.md#logins). Every start starts an agent, as
 [Agents](agents.md) says, and arguments after `--` go to the agent. Setup,
 hooks and the ownership checks of an existing branch apply to every form.
 
@@ -617,5 +617,5 @@ of one of its merged PRs, which need not be its own branch, to the branch that
 PR merged into. Their next `watch` returns a `base_merged` update with the
 rebase command, and the agent rebases and force-pushes its branch. Shoal
 retargets the PR through the forge's API with your
-[token](issues.md#forges) for that host, passed to curl on stdin. The update
+[token](issues.md#logins) for that host, passed to curl on stdin. The update
 reports a failed request.

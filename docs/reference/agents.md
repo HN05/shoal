@@ -779,10 +779,10 @@ login.
 
 Changes you make from a registered checkout use your `user_token`.
 
-Processes inside a workspace, and a chat's agent, read issues, PRs, labels,
-reactions and the forge's capabilities as the agent account. On a host without
-an `agent_token`, they read with your `user_token`. Anyone else reads with your
-own logins.
+Processes inside a workspace, and a chat's agent, read issues, PRs, reviewers,
+labels, reactions and the forge's capabilities as the agent account. On a host
+without an `agent_token`, they read with your `user_token`. Anyone else reads
+with your own logins.
 
 ### Git over HTTPS
 

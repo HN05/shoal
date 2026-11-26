@@ -17,7 +17,7 @@ Issues, CI runs and reviews do not merge.
 Without an item, `shoal merge` decides from the space's links:
 
 - A space with one open PR linked as assigned or opened merges it on the forge
-  as an [item action](issues.md#issue-and-pr-actions).
+  as an [item action](issues.md#merge-a-pr).
 - A space with several such PRs is refused, and the refusal names them.
 - A chat without one is refused.
 - A workspace without one merges its recorded branch into the default branch
@@ -127,7 +127,7 @@ A local merge asks you first in two cases:
 
 - it pushes,
 - its last check found files changed on both sides, as a
-  [PR merge](issues.md#issue-and-pr-actions) does.
+  [PR merge](issues.md#files-changed-on-both-sides) does.
 
 It asks after Shoal has checked the merge and before anything changes. The
 question names the method and direction, a squash's message subject, the commit

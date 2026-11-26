@@ -90,7 +90,9 @@ own PR, says so itself rather than Shoal guessing first; a scoped verdict is
 refused before any request when `review_token` is missing or its account
 opened the PR, so the refusal names the setting to change. A review's line
 comments are checked against the PR's diff before anything is sent, so a
-review is refused whole rather than posted in part. Review
+review is refused whole rather than posted in part. GitLab publishes every
+draft note the account has on a merge request at once, so a review there is
+refused while other drafts are pending, rather than publishing them with it. Review
 threads are named by any of their comments' IDs. Reactions use GitHub's names
 on every forge, so a client offers one set, which `shoal forge reactions` narrows
 to what an instance allows, and are read for a view with its
@@ -117,7 +119,8 @@ GitHub's for searches, holds back only those requests, never the watches and
 reads the others serve; a pause the forge puts on the whole account, such as a
 `Retry-After`, holds back every request. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
-command models. The daemon
+command models. Forgejo's Actions lists ignore `limit` without `page` and
+return every run, so a GET there that sets only `limit` reads the first page. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET
 unless its `api_writes` permission accepts that its writes may merge, approve or skip
 required labels, or `"propose"` asks for each write, bound to its method, path

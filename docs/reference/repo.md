@@ -143,7 +143,7 @@ they do for `start`.
 as a contribution, after checking whether your forge login can push to it.
 When it cannot, Shoal forks the repository into your account, or reuses an
 existing fork. The clone gets the fork as its `fork` remote, with
-`remote.pushDefault` set to it. [`pr open`](issues.md#issue-and-pr-actions)
+`remote.pushDefault` set to it. [`pr open`](issues.md#open-a-pr)
 then pushes there and opens the PR from the fork. Forking needs GitHub,
 Forgejo or Gitea.
 

@@ -29,7 +29,7 @@ the current workspace, then the [chat](chats.md) it runs in, then the current
 registered checkout, then a space a picker offers.
 
 Outside a space, the commands act as
-[issue and PR actions](issues.md#issue-and-pr-actions) do: in the registered
+[issue and PR actions](issues.md#where-commands-act) do: in the registered
 checkout they run in, or in the repository `--repo` names. There, `ci run` and
 `ci ls` take the repository's default branch. `rerun`, `cancel` and `approve`
 record no event and need a run or `--pr`.
@@ -229,7 +229,7 @@ is on for it.
 ### Turn the runner on
 
 The runner acts with your own login, the `user_token` of the repository's
-[forge host](issues.md#forges). That login must be allowed to administer the
+[forge host](issues.md#logins). That login must be allowed to administer the
 repository's Actions.
 
 On Forgejo, the daemon registers a runner for the repository and keeps the

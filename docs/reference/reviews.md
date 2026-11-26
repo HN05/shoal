@@ -229,7 +229,7 @@ commands each value holds.
 - `require_for_merge` checks a local
   [`shoal merge`](branches.md#local-merges) for the commit of
   the branch that merges. It checks a
-  [PR merge](issues.md#issue-and-pr-actions), with or without `--auto`, for the
+  [PR merge](issues.md#merge-a-pr), with or without `--auto`, for the
   PR's head, which the merge then names to the forge.
 
 A PR merge's gate reads the reviews of the workspace that
@@ -266,7 +266,7 @@ its branch. A gate's review is a workspace review, so it is never posted.
 ### Review a PR
 
 `shoal review run <pr-url>`, or `--pr <number-or-url>`, reviews a PR's head
-against its base. Shoal looks up the PR with your [token](issues.md#forges) and
+against its base. Shoal looks up the PR with your [token](issues.md#logins) and
 fetches both from origin. `--repo` selects the PR's repository, which otherwise
 follows `shoal start`. An issue URL is refused: a
 [plan](modes.md#planning-issues) settles an issue before implementation.
@@ -286,7 +286,7 @@ Unless
 [`[review] post`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#reviews)
 is false, Shoal posts a finished PR review on the PR. It posts a comment review
 as the workspace's agent account, as
-[`shoal pr review --comment`](issues.md#issue-and-pr-actions) submits one:
+[`shoal pr review --comment`](issues.md#review-a-pr) submits one:
 
 - Findings on lines that the PR's diff shows become line comments.
 - The other findings go in the body with the summary.

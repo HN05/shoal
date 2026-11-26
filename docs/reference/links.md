@@ -197,7 +197,7 @@ run, as [CI](ci.md#view-a-run) says, and linked runs show the same way.
 
 Outside a workspace or chat, `view` shows the item a number or URL names. It
 reads the repository of the registered checkout it runs in, or the one `--repo`
-or the URL names, as for [issue and PR actions](issues.md#issue-and-pr-actions).
+or the URL names, as for [another repository](issues.md#another-repository).
 
 [Agent accounts](agents.md#agent-accounts) say which login the daemon reads
 with.
@@ -238,7 +238,7 @@ keeps its GitLab name.
 ### Failed job logs
 
 Each failed CI job shows the last whole lines of its log, up to 8 KiB, where
-the forge [reads job logs](issues.md#forges). A line over 1 KiB is shortened to
+the forge [reads job logs](issues.md#capabilities). A line over 1 KiB is shortened to
 its start and end. Shoal takes the tail after removing:
 
 - terminal escape sequences,
