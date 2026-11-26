@@ -136,6 +136,10 @@ impl Surface {
                 component.id
             );
             ensure!(
+                !name.contains('#'),
+                "action {name} holds #, which marks a list item's action"
+            );
+            ensure!(
                 names.insert(name),
                 "two components dispatch the action {name}, which an answer could not tell apart"
             );

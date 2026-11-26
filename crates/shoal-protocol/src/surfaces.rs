@@ -79,32 +79,32 @@ impl Surface {
     fn placed(&self) -> Vec<Placed<'_>> {
         let mut order = Vec::new();
         let mut seen = BTreeSet::new();
-        let mut next = vec![("root", String::new(), None)];
-        while let Some((id, scope, item)) = next.pop() {
+        let mut next = vec![("root", String::new(), Vec::new())];
+        while let Some((id, scope, items)) = next.pop() {
             let Some(component) = self.component(id) else {
                 continue;
             };
             if order.len() >= MAX_PLACED || !seen.insert((id, scope.clone())) {
                 continue;
             }
-            let mut below: Vec<(&str, String, Option<usize>)> = (component.references())
+            let mut below: Vec<(&str, String, Vec<usize>)> = (component.references())
                 .into_iter()
                 .filter(|child| Some(*child) != component.template().map(|(id, _)| id))
-                .map(|child| (child, scope.clone(), item))
+                .map(|child| (child, scope.clone(), items.clone()))
                 .collect();
             if let Some((template, path)) = component.template() {
-                let items = scoped(&scope, path);
-                let count = self
-                    .data(&items)
-                    .and_then(Value::as_array)
-                    .map_or(0, Vec::len);
-                below.extend((0..count).map(|n| (template, format!("{items}/{n}"), Some(n))));
+                let list = scoped(&scope, path);
+                let count = (self.data(&list).and_then(Value::as_array)).map_or(0, Vec::len);
+                below.extend((0..count).map(|n| {
+                    let item = [items.clone(), vec![n]].concat();
+                    (template, format!("{list}/{n}"), item)
+                }));
             }
             next.extend(below.into_iter().rev());
             order.push(Placed {
                 component,
                 scope,
-                item,
+                items,
             });
         }
         order
@@ -149,11 +149,12 @@ impl Surface {
 const MAX_PLACED: usize = 2000;
 
 /// A component where it renders: under `scope`, the data path its relative
-/// bindings read under, in the list item `item` when a list repeats it.
+/// bindings read under, in the items `items` of the lists that repeat it,
+/// the outermost first.
 struct Placed<'a> {
     component: Component<'a>,
     scope: String,
-    item: Option<usize>,
+    items: Vec<usize>,
 }
 
 /// A component of a surface: its id, its type and its other properties.

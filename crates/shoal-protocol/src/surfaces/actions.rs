@@ -10,7 +10,8 @@ use super::{Component, Placed, Surface, binding, dates::Dates, scoped};
 #[derive(Debug, Clone, PartialEq)]
 pub struct SurfaceAction {
     /// Its id, which an answer names: the name of the event its button
-    /// dispatches, and in a list's item, `#` and the item's number from 1.
+    /// dispatches, and in a list's item, `#` and the item's number from 1,
+    /// each list's joined by `.` in nested lists, such as `done#2.1`.
     pub id: String,
     /// The name of the event its button dispatches.
     pub event: String,
@@ -118,9 +119,13 @@ impl Surface {
     fn action_of(&self, placed: &Placed<'_>) -> Option<SurfaceAction> {
         let component = placed.component;
         let event = component.event()?.get("name")?.as_str()?.to_owned();
-        let id = match placed.item {
-            Some(item) => format!("{event}#{}", item + 1),
-            None => event.clone(),
+        let id = match &placed.items[..] {
+            [] => event.clone(),
+            items => {
+                let numbers: Vec<String> =
+                    items.iter().map(|item| (item + 1).to_string()).collect();
+                format!("{event}#{}", numbers.join("."))
+            }
         };
         Some(SurfaceAction {
             label: (component.literal("child"))

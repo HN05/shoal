@@ -545,3 +545,28 @@ fn a_list_item_s_button_is_an_action_of_its_own_reading_its_item() {
     let resolved = listed.resolve("done#2", serde_json::Map::new()).unwrap();
     assert_eq!(Value::Object(resolved), json!({"task": 9}));
 }
+
+#[test]
+fn nested_list_items_give_their_buttons_ids_of_their_own() {
+    let nested = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "group", "path": "/groups"}},
+            {"id": "group", "component": "List", "children": {"componentId": "row", "path": "tasks"}},
+            {"id": "row", "component": "Button", "child": "row-label",
+             "action": {"event": {"name": "done", "context": {"task": {"@path": "id"}}}}},
+            {"id": "row-label", "component": "Text", "text": "Done"},
+        ]),
+        json!({"groups": [{"tasks": [{"id": 1}]}, {"tasks": [{"id": 2}, {"id": 3}]}]}),
+    );
+    let ids: Vec<String> = nested
+        .actions()
+        .into_iter()
+        .map(|action| action.id)
+        .collect();
+    assert_eq!(ids, ["done#1.1", "done#2.1", "done#2.2"]);
+    let resolved = nested.resolve("done#2.1", serde_json::Map::new()).unwrap();
+    assert_eq!(Value::Object(resolved), json!({"task": 2}));
+    let mut marked = form();
+    marked.0["createSurface"]["components"][4]["action"]["event"]["name"] = json!("submit#1");
+    assert!(refusal(marked, &[]).contains("holds #"));
+}
