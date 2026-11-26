@@ -337,7 +337,6 @@ fn refuses_to_replace_a_regular_file_at_socket_path() {
     assert_eq!(fs::read_to_string(socket).unwrap(), "keep me");
 }
 
-/// Startup recovery that cannot save its result stops the daemon before it binds.
 #[test]
 fn failed_startup_recovery_never_serves() {
     // A preparing workspace fails quarantine; a ready one with a missing

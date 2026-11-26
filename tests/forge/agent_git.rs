@@ -69,7 +69,6 @@ fn an_agent_pushes_with_its_token_over_the_users_netrc_login() {
     assert_eq!(logins, [json!(expected)]);
 }
 
-/// The major and minor version of the installed Git.
 fn installed_git(root: &std::path::Path) -> (u32, u32) {
     let version = git(root, &["--version"]);
     let mut parts = (version.trim().strip_prefix("git version "))

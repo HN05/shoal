@@ -26,7 +26,6 @@ const AGENT: &str = "[agents.pi]\ncommand = ['sh', '-c', 'exec sleep 600']\n";
 /// agent the hub lacks, by ID.
 struct Machines {
     hub: Base,
-    /// The URL of the hub's repository's origin.
     origin: String,
     laptop: Base,
     laptop_id: String,

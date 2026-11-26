@@ -378,7 +378,6 @@ fn another_machine_s_removed_record_moves_from_there_to_a_joined_machine() {
     assert!(keeps_removed(&desk, &work));
 }
 
-/// The package files in `directory`.
 fn packages_in(directory: &std::path::Path) -> Vec<String> {
     let entries = fs::read_dir(directory).into_iter().flatten().flatten();
     let names = entries.map(|entry| entry.file_name().to_string_lossy().into_owned());

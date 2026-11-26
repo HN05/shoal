@@ -7,7 +7,6 @@ use std::{
     path::Path,
 };
 
-/// Connect to the daemon of the test's state directory.
 pub fn connect(root: &Path) -> UnixStream {
     let stream = UnixStream::connect(root.join("state/daemon.sock")).unwrap();
     stream.set_read_timeout(Some(super::HANG_GUARD)).unwrap();

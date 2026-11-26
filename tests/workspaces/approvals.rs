@@ -401,7 +401,6 @@ fn approval_list_shortcuts_find_requests_of_workspaces_below_the_caller() {
     assert!(stderr.contains("routed to them"), "{stderr}");
 }
 
-/// The latest post of the thread `number`.
 fn latest(fixture: &Fixture, number: &str) -> Value {
     let posts = fixture.ok(&["view", "thread", number])["posts"].clone();
     posts.as_array().unwrap().last().unwrap().clone()

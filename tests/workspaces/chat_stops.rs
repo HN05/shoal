@@ -125,7 +125,6 @@ fn stopping_a_space_stops_the_chats_below_it() {
     assert_eq!(running(), [false, false, false, true]);
 }
 
-/// `shoal stop --all` stops the running chats with the workspaces.
 #[test]
 fn stop_all_stops_running_chats() {
     let fixture = Fixture::new();

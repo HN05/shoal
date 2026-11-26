@@ -34,7 +34,6 @@ pub struct Server {
 }
 
 impl Server {
-    /// Start the server installed in `root`.
     pub fn start(root: &Path) -> Self {
         Self::serve(root, "port", &[])
     }

@@ -147,7 +147,6 @@ async fn echoed(connection: impl AsyncRead + AsyncWrite + Unpin, bytes: &[u8]) {
     assert!(back == bytes, "the echo differs from what was sent");
 }
 
-/// Open `space`'s demo `site` from `daemon`.
 async fn open(daemon: &impl Daemon, space: &str) -> anyhow::Result<DemoStream> {
     open_stream(daemon, selected(space), "site".into()).await
 }

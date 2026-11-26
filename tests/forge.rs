@@ -139,17 +139,14 @@ impl Fixture {
             .collect()
     }
 
-    /// [`Base::ok`] in the `topic` workspace's directory.
     fn ok_in_topic(&self, args: &[&str]) -> Value {
         self.ok_from(self.command().current_dir(self.topic()), args)
     }
 
-    /// [`Base::run`] in the `topic` workspace's directory.
     fn run_in_topic(&self, args: &[&str]) -> Output {
         self.output(self.command().current_dir(self.topic()).args(args))
     }
 
-    /// The `topic` workspace's directory.
     fn topic(&self) -> PathBuf {
         let status = self.ok(&["status", &self.id("topic")]);
         PathBuf::from(status["workspace"]["path"].as_str().unwrap())
@@ -692,7 +689,6 @@ fn apps_read_forge_items_through_the_daemon() {
     assert_eq!(runs.lines().count(), 1, "{runs}");
 }
 
-/// Add the label `ready` to PR 8 of the workspace's repository.
 fn label_pr(fixture: &Fixture) -> Value {
     fixture.request(
         json!({"item_action": {"space": {"space": fixture.id("topic")}, "kind": "pr", "item": "8",
@@ -4049,7 +4045,6 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
     }
 }
 
-/// Status finds a chat that links a PR and shows the PR's state there.
 #[test]
 fn status_finds_the_chats_that_link_a_pr() {
     let fixture = Fixture::new(Forge::Forgejo, "");
@@ -5808,7 +5803,6 @@ fn chat_issue_open(config: &str) -> (std::process::Output, Vec<Value>) {
     (output, posts)
 }
 
-/// A chat's agent opens issues as the agent account.
 #[test]
 fn a_chats_change_signs_in_with_the_agent_token() {
     let (output, posts) = chat_issue_open(AGENT_TOKEN);
@@ -6618,7 +6612,6 @@ fn the_users_checkout_changes_use_the_users_login() {
     assert_eq!(posts, [json!("token usertoken")]);
 }
 
-/// The user's own change from a registered checkout needs no agent token.
 #[test]
 fn the_users_checkout_changes_need_no_agent_token() {
     let (output, posts) = checkout_comment(

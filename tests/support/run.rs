@@ -91,7 +91,6 @@ fn ended(
     }
 }
 
-/// `command`'s program and arguments, as a shell would show them.
 fn described(command: &Command) -> String {
     std::iter::once(command.get_program())
         .chain(command.get_args())

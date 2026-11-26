@@ -23,7 +23,6 @@ fn send(machine: &Base, id: &str, text: &str) -> i64 {
         .unwrap_or_else(|| panic!("{sent}"))
 }
 
-/// The numbers of every alert `machine` keeps.
 fn numbers(machine: &Base) -> Vec<i64> {
     let listed = machine
         .request(json!({"list_alerts": {"to": "every", "unread_only": false, "limit": 1000}}));
@@ -69,7 +68,6 @@ fn send_up(machine: &Base, id: &str, text: &str) -> i64 {
         .unwrap_or_else(|| panic!("{sent}"))
 }
 
-/// The user's alerts `machine` shows.
 fn users_alerts(machine: &Base) -> Vec<Value> {
     let listed =
         machine.request(json!({"list_alerts": {"to": "user", "unread_only": false, "limit": 200}}));

@@ -140,7 +140,6 @@ fn remove_homes(owned: impl Fn(i32) -> bool) {
     }
 }
 
-/// The ID of the test process a home's directory `name` names.
 fn owner(name: &str) -> Option<i32> {
     let (pid, _) = name.strip_prefix(".t")?.split_once('.')?;
     let pid: u32 = pid.parse().ok().filter(|pid| *pid > 0)?;

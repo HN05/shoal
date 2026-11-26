@@ -59,7 +59,6 @@ fn numbers_from_hub(machine: &Base) -> bool {
         .unwrap()
 }
 
-/// The hub's own machine's ID.
 pub(super) fn hub_machine(hub: &Base) -> String {
     let members = hub.ok(&["hub", "ls"])["members"].clone();
     let own = (members.as_array().unwrap().iter()).find(|member| member["hub"] == true);

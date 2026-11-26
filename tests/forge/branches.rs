@@ -15,7 +15,6 @@ const UNFETCHED: &str = "f00df00df00df00df00df00df00df00df00df00d";
 /// repository; `config` adds to the global config.
 struct Branches {
     fixture: Fixture,
-    /// Each branch's commit.
     heads: BTreeMap<&'static str, String>,
 }
 
@@ -52,12 +51,10 @@ impl Branches {
         branches
     }
 
-    /// The forge's repository, which takes pushes.
     fn remote(&self) -> PathBuf {
         self.fixture.root.path().join("forge/git/team/project.git")
     }
 
-    /// Push each branch to the forge's repository at its commit.
     fn publish(&self) {
         let remote = self.remote();
         let refspecs = (self.heads.iter()).map(|(name, head)| format!("{head}:refs/heads/{name}"));
@@ -67,8 +64,6 @@ impl Branches {
         git(&self.fixture.repo, &args);
     }
 
-    /// The commit `branch` points to in the forge's repository, if it is
-    /// there.
     fn pushed(&self, branch: &str) -> Option<String> {
         let refs = git(
             &self.remote(),
@@ -88,7 +83,6 @@ impl Branches {
         self.respond_at(&self.heads, more, pulls);
     }
 
-    /// [`Self::respond`] with the branches at `heads` instead.
     fn respond_at(
         &self,
         heads: &BTreeMap<&str, String>,
@@ -124,8 +118,6 @@ impl Branches {
         self.fixture.respond(responses);
     }
 
-    /// What `branch ls` lists from the `topic` workspace with `args`, by
-    /// branch name.
     fn listed(&self, args: &[&str]) -> BTreeMap<String, Value> {
         let topic = self.fixture.id("topic");
         let listed = self
@@ -158,7 +150,6 @@ impl Branches {
         self.fixture.output(command.args(args))
     }
 
-    /// The branches the forge was asked to delete since the last call.
     fn deleted(&self) -> Vec<String> {
         self.deletions()
             .into_iter()
