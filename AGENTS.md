@@ -211,8 +211,10 @@ current.
 - AGENTS.md holds the rules for working in this repository.
 - `docs/ci.md` covers how CI runs, and `docs/profiling.md` the tools that
   measure where time goes.
-- `.review/review.md` briefs the review bot. Keep it current when a rule in
-  AGENTS.md or `docs/design/` changes.
+- `.review/review.md` and `.review/audit.md` say how the review bot reviews a
+  PR and audits the code. They point to the rules here and in `docs/design/`
+  and state none of their own. A rule that reviews keep missing becomes
+  clearer where it is stated, or a test or check.
 - The skill, `crates/shoal-cli/src/cli/commands/skill/shoal.md`, says what
   Shoal's commands do. A practice for using them goes in a user rule. A rule
   about anything else, such as how to write code, goes in AGENTS.md.
