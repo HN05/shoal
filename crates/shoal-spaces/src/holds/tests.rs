@@ -125,7 +125,6 @@ async fn release_remains_available_during_lifecycle_operations_and_hooks() {
     );
 }
 
-/// A chat of a new repository `repo`.
 async fn chat(manager: &Fixture) -> crate::model::Chat {
     let repo = manager.repository("repo").await;
     manager.chat("audit", "chat", Some(&repo), None).await

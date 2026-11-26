@@ -11,7 +11,6 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
 };
 
-/// The origin a start carries its commit from in these tests.
 const ORIGIN: &str = "https://forge.example/owner/repo.git";
 
 /// A new commit past the branch of the repository at `path`, which no
@@ -21,8 +20,7 @@ fn unreferenced_commit(path: &Path) -> CommitId {
     CommitId::from(git(path, &tree).trim())
 }
 
-/// Keep `commit` of the repository at `path` under its carried ref, as
-/// receiving it from another machine does.
+/// As receiving the commit from another machine does.
 fn carry(path: &Path, commit: &CommitId) {
     let reference = format!("refs/shoal/carried/{commit}");
     git(path, &["update-ref", &reference, commit.as_str()]);
@@ -44,7 +42,6 @@ async fn carried_here(manager: &Fixture, root: &Path) -> (Repository, CommitId) 
     (register(manager, &path).await, commit)
 }
 
-/// The commits the carried refs of `repo` keep.
 async fn carried(repo: &Repository) -> Vec<CommitId> {
     crate::git::clone_base::carried(&repo.path).await.unwrap()
 }

@@ -35,7 +35,6 @@ fn blocked(plan: Plan, blocker: RecordedBlocker, step: Option<usize>) -> Plan {
     plan.with_blocker(blocker, step).unwrap().0
 }
 
-/// The names of the blockers of each step.
 fn step_blockers(plan: &Plan) -> Vec<(String, usize)> {
     let progress = plan.progress(UnixTime::EPOCH);
     (progress.steps.iter())
@@ -154,7 +153,6 @@ const ISSUE: &str = "https://github.com/team/app/issues/7";
 const PR: &str = "https://github.com/team/app/pull/8";
 const RUN: &str = "https://github.com/team/app/actions/runs/9";
 
-/// A new repository's workspace of each of `names`.
 async fn workspaces<const N: usize>(
     manager: &crate::stand_in::Fixture,
     names: [&str; N],

@@ -1,8 +1,7 @@
 use crate::target_checks::{Facts, TargetCheck, Verdict};
 
-/// A check judging a space alone.
 trait JudgeAlone {
-    /// How this check judges `space` with no facts beyond it.
+    /// Judges with no facts beyond the space.
     fn judge_alone(self, space: &Space) -> Verdict;
 }
 
@@ -17,7 +16,6 @@ use crate::{
     state::WorkspaceState,
 };
 
-/// A workspace in `state`.
 fn workspace(state: WorkspaceState) -> Space {
     let path = std::path::Path::new("/work");
     let mut workspace = shoal_protocol::test_support::workspace("w1", "r1", "fix", path);
@@ -25,7 +23,6 @@ fn workspace(state: WorkspaceState) -> Space {
     Space::from(workspace)
 }
 
-/// A chat without a repository.
 fn chat() -> Space {
     serde_json::from_value(serde_json::json!({
         "id": "c1",
@@ -39,8 +36,7 @@ fn chat() -> Space {
     .unwrap()
 }
 
-/// The reason `verdict` refuses with, which says it was refused rather
-/// than left out.
+/// Some only when the verdict refused rather than left the space out.
 fn refused(verdict: Verdict) -> Option<Reason> {
     match verdict {
         Verdict::Refused(error) => Reason::of(&error),

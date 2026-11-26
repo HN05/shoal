@@ -21,7 +21,6 @@ async fn tree(manager: &Fixture, root_dir: &std::path::Path) -> [Workspace; 3] {
     [root, middle, leaf]
 }
 
-/// A new workspace `name` below `parent`, built on `base`.
 async fn child(manager: &Fixture, parent: &Workspace, name: &str, base: Option<&str>) -> Workspace {
     let parent = SpaceSelector::id(&parent.id);
     let base = base.map(str::to_owned);

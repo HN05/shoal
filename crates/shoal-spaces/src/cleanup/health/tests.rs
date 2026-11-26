@@ -8,8 +8,8 @@ use crate::cleanup::SpaceFailures;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// A pass whose `step` failed with `error`, in the workspace `id` named
-/// after it when one is given.
+/// The failure is in the workspace named after `workspace` when one is
+/// given.
 fn failed(step: &str, workspace: Option<&str>, error: &str) -> Result<(), SweepFailures> {
     let error = anyhow::anyhow!("{error}");
     let result = match workspace {

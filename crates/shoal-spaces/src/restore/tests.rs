@@ -15,7 +15,7 @@ use std::fs;
 use crate::removal::{InspectionPolicy, UnsavedWork};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The checkpoint refs in the repository, sorted.
+/// Sorted.
 fn checkpoint_refs(repo: &std::path::Path) -> Vec<String> {
     let mut refs: Vec<String> = git(
         repo,
@@ -57,8 +57,9 @@ async fn removal_checkpoint_keeps_files_workspace_processes_write_as_they_stop()
         .create_workspace(&repo.id, "topic".into(), None, None, None)
         .await
         .unwrap();
-    // A process started with the workspace identity, as hooks and `shoal internal env`
-    // exports start them, that saves its work when asked to stop.
+    // A process started with the workspace identity, as hooks and `shoal
+    // internal env` exports start them, that saves its work when asked to
+    // stop.
     let ready = root.path().join("ready");
     let mut process = tokio::process::Command::new("python3")
         .args([
@@ -907,7 +908,6 @@ async fn an_agent_takes_a_space_over_only_as_its_admin_permission_allows() {
     assert_eq!(request.target, Target::Action(PermissionKey::Admin));
 }
 
-/// Restore the removed space `id`, which must be a chat.
 async fn restore_chat(manager: &Fixture, id: &SpaceId) -> crate::model::RestoredChat {
     match (manager.spaces)
         .restore_space(&**manager, &SpaceSelector::id(id), None)

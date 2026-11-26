@@ -75,7 +75,6 @@ fn cherry_pick(repo: &std::path::Path, revision: &str) {
     );
 }
 
-/// Commit a new revision of the file `name` in `path`.
 fn commit_file(path: &std::path::Path, name: &str) {
     let file = path.join(name);
     let revision = fs::read_to_string(&file).unwrap_or_default();
@@ -112,12 +111,14 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
         .unwrap();
     manager.spaces.sweep_completed(&*manager).await.unwrap();
     assert_retained(&manager, &workspace).await;
-    // Simulate a fetched remote-tracking branch preserving the completed HEAD.
+    // Simulate a fetched remote-tracking branch that keeps the completed
+    // HEAD.
     git(
         &workspace.path,
         &["update-ref", "refs/remotes/origin/finished", "HEAD"],
     );
-    // A later clean, fully preserved commit must not inherit the old cleanup request.
+    // A later clean, fully kept commit must not inherit the old cleanup
+    // request.
     fs::write(&file, "newer").unwrap();
     commit(&workspace.path, "new-work");
     git(

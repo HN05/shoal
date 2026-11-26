@@ -108,7 +108,6 @@ fn the_current_step_is_the_active_one_else_the_first_not_done() {
     assert_eq!(progress.done(), 1);
 }
 
-/// A workspace for each of `names`, in one repository.
 async fn workspaces<const N: usize>(
     manager: &Fixture,
     temp: &tempfile::TempDir,
@@ -130,7 +129,7 @@ async fn workspaces<const N: usize>(
     created.try_into().unwrap()
 }
 
-/// The progress events of the journal, as the space and its status line.
+/// As the space and its status line.
 async fn progress_events(manager: &Fixture) -> Vec<(SpaceId, Option<String>)> {
     (manager.space_events(None, 100).await.unwrap().into_iter())
         .filter_map(|item| match item {
@@ -272,7 +271,7 @@ async fn a_done_summary_sets_the_status_line_with_the_completion_it_records() {
     assert_eq!(status().await.as_deref(), Some("Fix merged"));
 }
 
-/// The blocker events of the journal, as their kind and cause.
+/// As their kind and cause.
 async fn blocker_events(manager: &Fixture) -> Vec<(EventKind, String)> {
     (manager.space_events(None, 100).await.unwrap().into_iter())
         .filter_map(|item| match item {

@@ -14,7 +14,6 @@ use std::time::Duration;
 
 const HOUR: Duration = Duration::from_secs(3600);
 
-/// Local repository config that turns merged cleanup on.
 const ENABLED: &str = "[cleanup.merged]\nenabled = true\n";
 
 struct Fixture {
@@ -67,7 +66,8 @@ impl Fixture {
         git(&self.checkout, &["commit", "-q", "-m", "squash"]);
     }
 
-    /// Run a pass `hours` from now and report whether the workspace remains.
+    /// Runs a pass `hours` from now and reports whether the workspace
+    /// remains.
     async fn kept_after(&self, hours: u32) -> bool {
         let mut state = State::default();
         sweep_at(

@@ -454,7 +454,8 @@ async fn a_launch_reopens_only_its_recorded_workspace() {
         .await
         .unwrap();
     assert!(opened.reused && opened.workspace.id == child.id);
-    // Removed during the handoff, the child is not created again from its branch.
+    // Removed during the handoff, the child is not created again from its
+    // branch.
     manager
         .spaces
         .remove_selected(
@@ -593,7 +594,6 @@ async fn a_workspace_keeps_the_parent_its_creation_recorded_on_another_machine()
     assert_eq!(parent, Some(elsewhere));
 }
 
-/// Register a repository for each of `names`.
 async fn repositories(manager: &Fixture, names: &[&str]) -> Vec<crate::model::Repository> {
     let mut repos = Vec::new();
     for name in names {
@@ -602,8 +602,7 @@ async fn repositories(manager: &Fixture, names: &[&str]) -> Vec<crate::model::Re
     repos
 }
 
-/// Record the chat `name` without a repository, below `parent` when given,
-/// with its agent running as the returned execution.
+/// Its agent runs as the returned execution.
 async fn outside(
     manager: &Fixture,
     name: &str,
@@ -614,8 +613,7 @@ async fn outside(
     (chat, agent)
 }
 
-/// Create the workspace `name` of `repository` below `parent` when given,
-/// with a working agent.
+/// Its agent is working.
 async fn worked(
     manager: &Fixture,
     repository: &crate::model::Repository,

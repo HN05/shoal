@@ -11,8 +11,7 @@ use crate::workspace_files::{Attacher, KeptCopy};
 use shoal_protocol::files::SentFile;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Whether permissions bind this test process; root reads and deletes past
-/// them, as in CI's containers.
+/// Root reads and deletes past permissions, as in CI's containers.
 fn permissions_bind() -> bool {
     // SAFETY: geteuid has no arguments or memory-safety preconditions.
     (unsafe { libc::geteuid() }) != 0
