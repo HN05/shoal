@@ -795,6 +795,10 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
     answer(&smile, "😀").unwrap();
     // A class holds its members as ECMAScript reads them.
     assert!(answer(&pattern(r"^[^a&&b]+$"), "a").is_err());
+    let ranged = pattern(r"^[^--0]+$");
+    assert!(answer(&ranged, ".").is_err());
+    answer(&ranged, "a").unwrap();
+    answer(&pattern(r"^[a-c-e]+$"), "b-e").unwrap();
     answer(&pattern(r"^[[~]+$"), "[~").unwrap();
     answer(&pattern(r"^a[^]b$"), "a-b").unwrap();
     assert!(answer(&pattern(r"^a[]?$"), "a]").is_err());

@@ -230,8 +230,10 @@ fn ecmascript(pattern: &str) -> String {
 
 /// The class whose `[` `characters` follow, through its `]`: `[]`, which
 /// matches nothing, and `[^]`, which matches anything, as ECMAScript reads
-/// them, and its members escaped where Rust would read `[`, `&&`, `--` or
-/// `~~` as a nested class or a set operation.
+/// them, and its members as ECMAScript reads them. A `-` between two
+/// members makes a range and any other `-` is a member, and each member
+/// that is punctuation is escaped, so Rust reads none of `[`, `&&`, `--`
+/// or `~~` as a nested class or a set operation.
 fn class(characters: &mut Characters<'_>) -> String {
     let negated = characters.next_if_eq(&'^').is_some();
     if characters.next_if_eq(&']').is_some() {
@@ -243,21 +245,37 @@ fn class(characters: &mut Characters<'_>) -> String {
         return matched.to_owned();
     }
     let mut spelled = String::from(if negated { "[^" } else { "[" });
-    let mut previous = None;
+    // Whether the last member could start a range, as one that ends a
+    // range cannot.
+    let mut starts_range = false;
     while let Some(character) = characters.next() {
-        match character {
-            ']' => {
-                spelled.push(']');
-                return spelled;
-            }
-            '\\' => spelled.push_str(&escape(characters, true)),
-            '[' | '&' | '~' => spelled.push_str(&format!("\\{character}")),
-            '-' if previous == Some('-') => spelled.push_str("\\-"),
-            other => spelled.push(other),
+        if character == ']' {
+            spelled.push(']');
+            return spelled;
         }
-        previous = Some(character);
+        let ranges =
+            character == '-' && starts_range && characters.peek().is_some_and(|next| *next != ']');
+        if ranges {
+            let end = characters.next().expect("a member follows the range's -");
+            spelled.push('-');
+            spelled.push_str(&member(end, characters));
+            starts_range = false;
+            continue;
+        }
+        spelled.push_str(&member(character, characters));
+        starts_range = true;
     }
     spelled
+}
+
+/// The class member `character` starts, the rest of an escape taken from
+/// `characters`, spelled for Rust: escaped where it is punctuation.
+fn member(character: char, characters: &mut Characters<'_>) -> String {
+    match character {
+        '\\' => escape(characters, true),
+        punctuation if punctuation.is_ascii_punctuation() => format!("\\{punctuation}"),
+        other => other.to_string(),
+    }
 }
 
 /// The characters of a pattern, read one after another.
