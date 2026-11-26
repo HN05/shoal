@@ -27,8 +27,8 @@ shoal priority 30 [space]                     # Any number from 0 to 100; low is
 from 0, where 0 keeps every heavy agent queued until `shoal queue start`. It defaults to `dynamic`,
 which starts one agent at a time, at least 10 seconds apart, while measured
 memory and disk leave room below the
-[`[machine.overload.warning]`](load.md) memory and disk
-thresholds, which [`load`](load.md) sets. CPU holds back no
+[`[machine.overload.warning]`](load.md#warnings) memory and disk
+thresholds, which [`load`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine) sets. CPU holds back no
 agent, since more work on a busy CPU only runs slower; only a
 [CI job](ci.md#job-admission) beside running ones waits for it. A new agent mostly
 reads files at first and compiles later, so for its first three minutes it

@@ -408,7 +408,7 @@ what stopped it and whether the run or the job was cancelled.
 
 ### Stop a job
 
-[Load protection](load.md) may stop a running job. Disk protection never
+[Load protection](load.md#stopped-ci-jobs) may stop a running job. Disk protection never
 does, and the workflow's `timeout-minutes` bounds the job.
 
 `shoal stop` on the job's workspace, and `shoal ci cancel`, cancel the job's
@@ -431,8 +431,8 @@ These cut a job off on every machine:
 - a hangup or terminate signal to the job's wrapper, as a logout or a shutdown
   sends.
 
-Shoal ends such a job as [load protection](load.md) does: it cancels that job
-alone, then reruns it on its forge as soon as its run has finished, so any
+Shoal ends such a job as [load protection](load.md#stopped-ci-jobs) does: it
+cancels that job alone, then reruns it on its forge as soon as its run has finished, so any
 runner can take it. A `jobs_rerun` alert names each such job once it reruns.
 
 On a machine joined to a [hub](hub.md), a sleep or shutdown hands the jobs it

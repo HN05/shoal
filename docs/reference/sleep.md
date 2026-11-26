@@ -74,7 +74,7 @@ Neither the prompt cache nor
 [`machine.schedule`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#machine)
 changes when an agent sleeps.
 
-The idle stop saves the agent as [overload protection](load.md) does and
+The idle stop saves the agent as [overload protection](load.md#protection-stops) does and
 records an `agent_stopped` alert. An update for the agent restores it, even
 when its assignment is done and whatever `[machine.overload.recovery]` says.
 
@@ -111,7 +111,7 @@ turn takes your average over every space.
 
 While an entry in the agent queue waits for a heavy slot or memory, Shoal
 makes room for it. It takes the waiting entries in queue order. For each, it
-puts to sleep the first idle agent in the [stop order](load.md) that:
+puts to sleep the first idle agent in the [stop order](load.md#stop-order) that:
 
 - has no running agent below it,
 - has a priority no higher than the entry's,

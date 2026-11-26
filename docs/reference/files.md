@@ -111,7 +111,7 @@ deletes them. Both work on another joined machine too, since the hub knows
 where each removed space's files are. `shoal restore` gives the files back to
 the space it reopens.
 
-When space runs low, [disk space](load.md) cleanup may delete a removed
+When space runs low, [disk space](load.md#disk-cleanup) cleanup may delete a removed
 space's files, and fetched copies nobody changed since their fetch, before
 their retention ends.
 

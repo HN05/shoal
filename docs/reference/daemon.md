@@ -176,7 +176,7 @@ them.
 
 SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
 stops agents and commands as the daemon does before a
-[system shutdown](load.md). Each wrapper saves its agent first. The restores
+[system shutdown](load.md#system-shutdown). Each wrapper saves its agent first. The restores
 that need no user wait in the agent queue. CI jobs keep running for the next
 daemon.
 

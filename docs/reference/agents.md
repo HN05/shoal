@@ -906,7 +906,7 @@ its next turn ends. Codex has no hook for a permission prompt, so it reports
 
 Other agents can call the command from their own hooks. A JSON event on stdin
 with a `session_id`, as Claude Code and Codex hooks pass, names the session to
-[resume](load.md). The command reads only that first event, and stops waiting
+[resume](load.md#restore-commands). The command reads only that first event, and stops waiting
 after two seconds without input.
 
 ### Subagents

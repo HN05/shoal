@@ -40,7 +40,7 @@ running, a simulator or containers, stops once the agent has slept past
 to sleep, and waking it while its restore still waits in the agent queue does
 not restart the count. A stopped simulator shuts down with its apps and data
 kept. Resource and repository permits stay. Under memory pressure,
-[overload protection](load.md) stops them sooner, before it stops
+[overload protection](load.md#leases-of-asleep-agents) stops them sooner, before it stops
 any agent.
 
 A request that capacity keeps busy, waiting with `--queue` or not, takes what

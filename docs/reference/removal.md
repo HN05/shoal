@@ -214,7 +214,7 @@ ones.
 chats. Without a terminal, or with `--json`, it lists them instead. Each entry
 starts with the ID that selects it, and a workspace's also gives the number of
 its removal's checkpoint. A space that is not removed is refused, naming the
-[`shoal resume`](daemon.md#recovery) that brings its agent back.
+[`shoal resume`](load.md#shoal-resume) that brings its agent back.
 
 A restored space keeps its ID and takes a new number. It goes below the space
 it was below while that space exists and takes it as a child, as a start
@@ -424,7 +424,7 @@ it. They release the user's as their space's
 
 Shoal removes idle, clean, fully pushed worktrees once they have been idle for
 [`[cleanup.auto] idle_minutes`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup),
-or sooner when [disk space](load.md) runs low.
+or sooner when [disk space](load.md#disk-cleanup) runs low.
 
 Shoal forgets a workspace whose directory was deleted, even with automatic
 cleanup disabled. It releases the workspace's resources and keeps its branch.

@@ -266,7 +266,7 @@ environment, and marks `.caches` with the repository, refusing to start one whil
 an unmarked `.caches` is in the way. Build output directories such as Cargo's `target/` do not belong here:
 concurrent builds serialize or corrupt them, so use a [seed](#seed-builds).
 
-`shoal cleanup caches` and [disk space](load.md) cleanup empty a
+`shoal cleanup caches` and [disk space](load.md#disk-cleanup) cleanup empty a
 repository's caches, configured or not, apart from `preset.cargo` and
 `preset.xcode-files`, which hold only the [presets'](#build-tool-presets) own
 files, while none of its tracked executions and

@@ -295,7 +295,7 @@ agents running in them. Then it asks. `-y`/`--yes` skips the prompt. Scripts
 and `--json` need it. `--json` returns each moved `repository`, its old
 directory as `from` and its old `workspace_paths`.
 
-The move stops those commands and agents as [`shoal stop`](daemon.md#recovery)
+The move stops those commands and agents as [`shoal stop`](load.md#shoal-stop)
 does. Once the move is done, or has failed, it queues their agents' restores
 as `shoal resume` does. The agents continue their sessions in the new paths. A
 workspace's stopped commands go to its restored agent. Without one, they stay

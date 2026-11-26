@@ -170,7 +170,7 @@ Its [failed start](queue.md) is reported the same way as its link warnings.
 ### Stop and resume
 
 The chat runs while its agent runs. It stops when the agent exits or
-[`shoal stop`](daemon.md#recovery) stops it, and then waits for
+[`shoal stop`](load.md#shoal-stop) stops it, and then waits for
 `shoal resume <chat>`. A chat the daemon stopped for a shutdown, a logout or a
 signal comes back on its own once the daemon runs again. It comes back where
 it ran, or in a background place.
