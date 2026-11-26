@@ -1,10 +1,4 @@
-//! The alerts a hub's machines keep, numbered from one sequence across
-//! them: each machine reports what the hub needs of its alerts, at once
-//! once its link opens and then as they change, the user's alerts among
-//! them, and numbers its new ones from the spares the answer brings. The
-//! hub keeps a copy of every machine's alerts to the user, which every
-//! machine follows. The hub's own machine reports to the hub here the same
-//! way.
+//! The alerts a hub's machines keep, numbered from one sequence across them.
 use anyhow::Result;
 use shoal_ids::member_ids::MemberId;
 use shoal_protocol::{

@@ -1,15 +1,5 @@
-//! Taking a sleeping machine's spaces over. Once a machine that announced
-//! its sleep has stayed away [`AWAY_FOR`], the hub moves each of its spaces
-//! that has something to do, and whose package the hub keeps is current or
-//! lacked changes from less than [`LAG_LIMIT`] before the notice, to the
-//! machine its placement chooses, which continues it from that package
-//! under its ID and queues its agents' restores, as a shutdown's hand-over
-//! does. Something to do is an agent working as its machine last reported,
-//! a queued agent, or an update the hub holds for the space since the
-//! notice, which takes it over as it arrives. A chat in a workspace's
-//! worktree goes with that workspace, after it, and the two go only
-//! together. A space that stays is not tried again before its machine's
-//! link opens; the hub's alert once the machine stays unreachable names it.
+//! Taking a sleeping machine's spaces with work over once it has stayed
+//! away.
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -67,7 +57,6 @@ pub(super) struct Sleeper {
     pub lags: HashMap<SpaceId, Option<UnixTime>>,
 }
 
-/// The machines recorded asleep.
 fn sleepers(tx: &Transaction<'_>) -> Result<Vec<Sleeper>> {
     let mut members =
         tx.prepare("SELECT id, asleep_at FROM hub_members WHERE asleep_at IS NOT NULL")?;

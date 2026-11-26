@@ -1,14 +1,5 @@
-//! The hub's record of its machines' sleep. A machine going to sleep
-//! announces it with a notice naming each space whose package the hub
-//! keeps lacks changes, with since when, before it sends any package; a
-//! machine whose link drops while its last report said its battery was
-//! nearly empty counts as one that announced its sleep at that report,
-//! with what that report said its packages lacked. A package its machine
-//! sends after the notice makes its space's current. The hub forgets the
-//! sleep once the machine's link opens again, and meanwhile takes the
-//! machine's spaces with work over once it has stayed away long enough, in
-//! [`taking_over`]. The hub keeps a sleep in its store, so a restart of
-//! its own daemon meanwhile changes nothing.
+//! The hub's record of its machines' sleep, kept in its store so a restart
+//! of the hub's daemon changes nothing.
 use std::{
     collections::{HashMap, HashSet},
     sync::Mutex,
@@ -176,7 +167,6 @@ fn record_unless_asleep(
     }
 }
 
-/// The machines recorded asleep.
 pub(super) fn asleep_members(tx: &Transaction<'_>) -> Result<HashSet<MemberId>> {
     let mut statement = tx.prepare("SELECT id FROM hub_members WHERE asleep_at IS NOT NULL")?;
     let ids = statement.query_map([], |row| row.get(0))?;

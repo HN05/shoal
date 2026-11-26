@@ -1,7 +1,4 @@
-//! `shoal hub update`: the hub installs the latest release where it was
-//! downloaded, from any of its machines; a managed daemon then restarts on
-//! it once idle, a foreground one once the user restarts it, and the
-//! machines that follow its version install it as the hub refuses theirs. Homebrew updates its own installations.
+//! `shoal hub update`.
 use std::time::Duration;
 
 use anyhow::Result;

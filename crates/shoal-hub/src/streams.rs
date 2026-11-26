@@ -1,10 +1,6 @@
-//! Byte streams over a link, many at once beside its calls. The side that
-//! opens a stream reads it, and names it in the call that asks the other
-//! side to write it. Each stream has credit of its own: the writer sends
-//! no more than the reader granted, and the reader grants more only as
-//! whoever reads it takes what came, so a stream whose reader stalls holds
-//! up neither the link's calls nor its other streams. A duplex stream also
-//! carries the opener's bytes the other way, under credit of their own.
+//! Byte streams over a link, many at once beside its calls. Each stream has
+//! credit of its own, so a stream whose reader stalls holds up neither the
+//! link's calls nor its other streams.
 use std::{
     collections::HashMap,
     io::{Read as _, Write as _},

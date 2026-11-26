@@ -1,7 +1,4 @@
-//! What the hub keeps in memory of the hand-overs under way: where it
-//! placed each space, which machine may claim it, the order in which a
-//! chat follows the workspace whose worktree it runs in, and the machines
-//! still shutting down.
+//! What the hub keeps in memory of the hand-overs under way.
 use std::{
     collections::{HashMap, HashSet},
     sync::Mutex,

@@ -1,6 +1,5 @@
 //! A machine's shared items of a kind against the copies it agreed on with
-//! the hub: which of them hold edits to send, and what each copy the hub
-//! sends does to them.
+//! the hub.
 use std::collections::BTreeSet;
 
 use shoal_protocol::hub::sharing;

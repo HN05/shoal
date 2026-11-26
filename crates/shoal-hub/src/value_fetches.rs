@@ -1,5 +1,5 @@
 //! The hub's records of the settings each machine fetched from another's
-//! command, never the values: revoking a machine names them to rotate.
+//! command, never the values.
 use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::member_ids::MemberId;

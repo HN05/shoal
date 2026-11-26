@@ -1,8 +1,5 @@
-//! A member's side of its link to the hub. The daemon of a machine that
-//! joined a hub keeps one link to it, over `[machine.hub] connect` when set
-//! and otherwise to the URL it paired at, and opens it again with backoff
-//! once it is lost, as after sleep or a network change. A refusal it cannot
-//! outwait, such as of a revoked credential, stops it until the user acts.
+//! A member's side of its link to the hub, which it opens again with
+//! backoff once it is lost.
 use shoal_daemon_base::notifications::About;
 use shoal_protocol::alerts::AlertKind;
 use std::{

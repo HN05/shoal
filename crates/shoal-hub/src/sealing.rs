@@ -1,6 +1,4 @@
-//! Sealing a link, as [`shoal_protocol::hub::link`] describes: the X25519
-//! exchange the handshake signs, the key it derives for each direction, and
-//! the encryption of each numbered frame.
+//! Sealing a link, as [`shoal_protocol::hub::link`] describes.
 use anyhow::{Context as _, Result, anyhow, ensure};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::{
@@ -133,7 +131,6 @@ impl Opener {
         Ok(frame)
     }
 
-    /// Whether it opened no frame yet.
     pub fn fresh(&self) -> bool {
         self.next == 0
     }

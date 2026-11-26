@@ -1,6 +1,5 @@
-//! The copy of each shared item of a kind a machine last agreed on with its
-//! hub, sent or received. Copies agreed with another hub, as before the
-//! machine joined this one, count as none.
+//! The copy of each shared item a machine last agreed on with its hub.
+//! Copies agreed with another hub count as none.
 use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_protocol::hub::PublicKey;

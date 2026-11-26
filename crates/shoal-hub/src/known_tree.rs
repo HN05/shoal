@@ -1,8 +1,7 @@
 //! What a joined machine last learned of the other machines' spaces and how
-//! they hang together, kept in its store whenever it changes, which a
-//! removal and a restore go by while the hub cannot be asked, across
-//! restarts too, so a removal never takes a space whose children elsewhere
-//! it cannot reach, nor a restore lose a parent elsewhere.
+//! they hang together. A removal and a restore go by it while the hub
+//! cannot be asked, so a removal never takes a space whose children
+//! elsewhere it cannot reach.
 use crate::log;
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction};

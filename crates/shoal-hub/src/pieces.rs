@@ -1,7 +1,5 @@
-//! Messages of a link too large for one frame: a call or reply whose JSON
-//! outgrows [`PIECE_BYTES`] goes as [`Frame::Piece`]s, which the other side
-//! puts back together before it reads the message, so a machine of many
-//! spaces reports them, and reads the hub's directory, whole.
+//! Messages of a link too large for one frame, which go as
+//! [`Frame::Piece`]s.
 use std::{
     collections::HashMap,
     sync::atomic::{AtomicU64, Ordering},

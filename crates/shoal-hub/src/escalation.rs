@@ -1,10 +1,5 @@
-//! An offline coordinator does not hold up the spaces below it: a thread
-//! of a space here that waits for a holder on a machine that has been
-//! offline for `[machine.hub] escalate_after_minutes`, or an approval
-//! request whose coordinator runs on such a machine, passes to the next
-//! space above with an agent on a connected machine, or to the user. An approval request whose decider elsewhere lost its agent or is
-//! gone goes to the user at once, as a chat whose agent stops here passes
-//! its undecided requests to the user.
+//! Passing a thread or approval request past a coordinator on a machine
+//! that is offline or lost its agent.
 use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;

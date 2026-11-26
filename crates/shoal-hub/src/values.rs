@@ -1,8 +1,6 @@
 //! Values a machine's settings take from a command another machine of the
-//! hub runs: the daemon's way to ask for one, the hub's routing of the
-//! request to the machine it names, and that machine's run of the command.
-//! Only a machine's daemon asks, never a device or a scoped caller, whose
-//! process asks its own daemon by the setting instead.
+//! hub runs. Only a machine's daemon asks, never a device or a scoped
+//! caller.
 use std::sync::{Arc, Weak};
 
 use anyhow::{Result, anyhow, ensure};

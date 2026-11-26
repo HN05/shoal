@@ -1,6 +1,4 @@
-//! The hub's directory of every joined machine's spaces: the reports each
-//! machine sends of its own, the view the hub serves from them, the
-//! machine that owns each space ID, and the one sequence of their numbers.
+//! The hub's directory of every joined machine's spaces.
 use anyhow::Result;
 use shoal_daemon_base::notifications::About;
 use shoal_ids::{

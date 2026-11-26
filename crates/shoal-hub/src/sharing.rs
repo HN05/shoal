@@ -1,10 +1,4 @@
-//! What a hub's machines share, item by item, of each [`Kind`]. Each
-//! machine, the hub's own included, looks at its items every [`LOOK_EVERY`],
-//! on each config reload and once told they changed, and sends the hub each item it edited since
-//! it last agreed on that item with the hub, once they may go; on each link
-//! it first reads the hub's copies. The hub keeps the last edit of each
-//! item that reached it and sends it to every other machine, which takes
-//! it.
+//! What a hub's machines share, item by item, of each [`Kind`].
 use std::{
     collections::BTreeMap,
     convert::Infallible,

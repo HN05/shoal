@@ -1,6 +1,4 @@
-//! The hub's record of its members: the machines and devices paired with it,
-//! the hub's own machine among them, with the key each proves and when each
-//! last connected.
+//! The hub's record of its members.
 use anyhow::{Result, bail};
 use rusqlite::{OptionalExtension as _, Row, Transaction, params};
 use shoal_ids::member_ids::MemberId;
@@ -160,7 +158,6 @@ pub fn admitted(tx: &Transaction<'_>, id: &MemberId) -> Result<bool> {
     )?)
 }
 
-/// Record what the machine `id` says of itself.
 pub fn describe(tx: &Transaction<'_>, id: &MemberId, description: Description) -> Result<()> {
     tx.execute(
         "UPDATE hub_members SET battery=?2, availability=?3 WHERE id=?1",

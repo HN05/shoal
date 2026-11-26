@@ -1,10 +1,5 @@
 //! A machine's side of its hand-over as it shuts down, or as its user walks
-//! away or pauses it: once its work stopped, it sends the hub the final
-//! package of each space it hands over with the start its agent would
-//! make, all at once, each over a stream of its own, until the deadline it
-//! has, and learns where the hub sends each. The hub's own machine, once
-//! paused, keeps each package as the hub and places it among the others
-//! itself. Nothing waits for a space to continue there.
+//! away or pauses it.
 use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result;

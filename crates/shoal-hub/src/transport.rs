@@ -1,11 +1,6 @@
-//! A link's transport: its frames as lines of a byte stream, such as the
-//! daemon's socket or a command's standard input and output, or as text
-//! messages of a WebSocket. Each direction runs in a task of its own, so
-//! that waiting for a frame never holds up sending one. The reader stops
-//! with its channel, as does the writer, so a peer that stopped reading
-//! holds up no one past the end of its session; closing a channel lets the
-//! writer send what was queued first. Once sealed, the writer seals each frame it sends and
-//! the channel opens each it receives.
+//! A link's transport: its frames as lines of a byte stream, or as
+//! WebSocket messages. Each direction runs in a task of its own, so waiting
+//! for a frame never holds up sending one.
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use futures_util::{Sink, SinkExt as _, StreamExt as _};
 use serde::{Serialize, de::DeserializeOwned};
@@ -263,7 +258,6 @@ impl Channel {
     }
 }
 
-/// Whether `text` is a refusal frame.
 fn is_refusal(text: &str) -> bool {
     serde_json::from_str::<serde_json::Value>(text)
         .is_ok_and(|frame| frame.get("refused").is_some())

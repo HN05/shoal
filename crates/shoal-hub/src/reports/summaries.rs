@@ -58,7 +58,6 @@ impl Origins {
 }
 
 impl Hub {
-    /// A summary of each of this machine's spaces, by ID.
     pub(super) async fn space_summaries(
         &self,
         daemon: &dyn Daemon,

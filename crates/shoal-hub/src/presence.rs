@@ -1,9 +1,6 @@
-//! The hub's record of when each machine was there: the spans a member's
-//! link stayed open, and the hub's own machine's daemon ran with the
-//! machine awake, over the last [`KEPT`]. The hub marks each machine that is
-//! there at once when its link opens and ends, and every minute meanwhile;
-//! a mark less than [`SHORT_GAP`] after a span's end extends it, so gaps shorter
-//! than that, such as a network blip or a daemon restart, never show.
+//! The hub's record of when each machine was there. A mark shortly after a
+//! span's end extends it, so a network blip or a daemon restart never
+//! shows as a gap.
 use std::time::Duration;
 
 use anyhow::Result;
@@ -56,7 +53,6 @@ pub fn mark(tx: &Transaction<'_>, member: &MemberId, now: UnixTime) -> Result<()
     Ok(())
 }
 
-/// Forget the spans that ended more than [`KEPT`] before `now`.
 pub fn prune(tx: &Transaction<'_>, now: UnixTime) -> Result<()> {
     tx.execute("DELETE FROM hub_presence WHERE ended_at < ?1", [now - KEPT])?;
     Ok(())

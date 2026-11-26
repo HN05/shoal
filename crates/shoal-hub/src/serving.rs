@@ -1,13 +1,6 @@
-//! The owning machine's side of a forwarded request: its daemon answers it
-//! as it answers its own callers' requests, under a
-//! scope token that stands for the caller the forwarding machine vouches
-//! for until the answer is read. The user's requests go as the user's; a
-//! space's go under that space's scope, which reaches what that space's
-//! reaches on every machine, with the permissions its machine vouches it
-//! holds. One whose answer goes on, as a follow's, goes on a stream as the
-//! daemon writes it, and one whose connection carries bytes both ways, as a
-//! demo's, also takes the caller's from the stream. A forwarded request is
-//! never forwarded again.
+//! The owning machine's side of a forwarded request, which its daemon
+//! answers under a scope token for the caller the forwarding machine vouches
+//! for. A forwarded request is never forwarded again.
 use shoal_daemon_base::callers::{Access, Caller};
 use std::{
     collections::HashMap,

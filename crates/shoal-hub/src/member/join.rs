@@ -1,6 +1,4 @@
-//! Joining the hub, by a pairing code or through a command, and leaving it.
-//! Each join makes a key pair of its own, so a machine that left or was
-//! revoked joins again under a new credential.
+//! Joining the hub and leaving it.
 use anyhow::{Result, bail};
 use shoal_protocol::{
     hub::{

@@ -1,14 +1,5 @@
-//! A machine's side of its sleep. As the machine goes to sleep, it first
-//! tells the hub so in one small notice, naming each space whose package
-//! the hub keeps lacks changes and since when, then sends a new package of
-//! each space that changed, all at once, each over a stream of its own,
-//! until they are done or the platform's allowance runs out. Then, once it
-//! also handed over the CI jobs the sleep cut off, it closes its link,
-//! which it opens again only once the machine fully wakes, so a dark wake
-//! neither tells the hub it is back nor races a takeover. An
-//! intermittent machine names the spaces whose packages lag; an always-on
-//! one keeps no package current, so it names every space as lagging by an
-//! unknown time, and sends those with work.
+//! A machine's announcement of its sleep to the hub, with the packages of
+//! the spaces that changed.
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, bail};

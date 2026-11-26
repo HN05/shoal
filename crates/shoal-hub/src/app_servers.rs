@@ -1,9 +1,5 @@
-//! The hub's forwarding of HTTP requests to local servers, such as an
-//! app's own: a request under a path prefix of `[machine.hub] forward` that
-//! a paired member signed, as [`app_servers`] describes, goes to that
-//! prefix's address with its path unchanged, upgrades such as a WebSocket's
-//! included, and its answer comes back the same way. Any other request
-//! under the prefix is refused, and the server never sees it.
+//! The hub's forwarding of signed HTTP requests to the local servers
+//! `[machine.hub] forward` names.
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result, anyhow, ensure};

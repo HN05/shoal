@@ -1,6 +1,4 @@
-//! This machine's record of the hub it joined: the ID the hub gave it, the
-//! key pair it proves, the hub's key every link checks, and the URL it
-//! paired at or the command it joined through.
+//! This machine's record of the hub it joined.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::member_ids::MemberId;
@@ -98,7 +96,6 @@ pub fn revoked(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     Ok(())
 }
 
-/// Forget the membership.
 pub fn forget(tx: &Transaction<'_>) -> Result<()> {
     tx.execute("DELETE FROM hub_membership", [])?;
     Ok(())

@@ -1,5 +1,4 @@
-//! The hub role this machine takes or the hub it joined, its settings,
-//! and its own identity and member record as the hub.
+//! The hub role this machine takes or the hub it joined.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -18,7 +17,6 @@ impl Hub {
         (daemon.acts_on_global_config()).then(|| self.config.current().machine.hub.clone())
     }
 
-    /// Whether this daemon takes the hub role.
     pub fn is_hub(&self, daemon: &dyn Daemon) -> bool {
         self.hub_settings(daemon).is_some_and(|hub| hub.enabled)
     }

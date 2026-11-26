@@ -1,8 +1,5 @@
-//! The hub's side of packages: it takes a machine's package of a space it
-//! lists under that machine whole, in its state directory, before it
-//! replaces the one it kept, refuses packages while its disk is below the
-//! overload warning threshold, and deletes a package once the directory
-//! drops its space on that machine.
+//! The hub's side of packages: keeping each space's latest one, whole,
+//! before it replaces the one before.
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -252,7 +249,6 @@ impl Hub {
         self.paths.state.join("hub").join("packages")
     }
 
-    /// The file of the package of the space `id`.
     pub(crate) fn package_path(&self, id: &SpaceId) -> PathBuf {
         (self.package_directory()).join(format!("{id}.{EXTENSION}"))
     }
@@ -304,7 +300,6 @@ pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     Ok(())
 }
 
-/// The spaces the hub keeps a package of.
 fn kept_spaces(tx: &Transaction<'_>) -> Result<HashSet<String>> {
     let mut statement = tx.prepare("SELECT space_id FROM hub_packages")?;
     let ids = statement.query_map([], |row| row.get(0))?;

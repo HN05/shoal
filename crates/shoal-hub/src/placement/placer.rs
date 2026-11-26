@@ -1,9 +1,5 @@
-//! The app registered as the placer, which an `external` policy asks: an
-//! unscoped client of the hub's machine registers over a connection it
-//! keeps open, the latest registration taking over from the one before,
-//! and answers each snapshot the hub sends it by the number it came with.
-//! The hub waits [`WAIT`] for an answer, so a start never waits long on an
-//! app.
+//! The app registered as the placer, which an `external` policy asks. The
+//! latest registration takes over from the one before.
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},

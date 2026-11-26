@@ -1,9 +1,4 @@
-//! Where a new space starts among the hub's machines: the hub ranks its
-//! connected machines by the policy `[machine.hub] placement` names, from
-//! a snapshot of the start and each machine as it last described itself
-//! and reported its capacity, which the hub keeps in memory for as long as
-//! it runs, or asks the app registered as the placer. A machine that
-//! joined the hub asks it over its link.
+//! Where a new space starts among the hub's machines.
 use std::{collections::HashMap, sync::Mutex};
 
 use anyhow::{Result, anyhow};

@@ -1,8 +1,5 @@
 //! The shared config across a hub's machines: `shared.toml` and the mode
-//! and rule files beside it, shared as [`SharedFiles`]. A machine sends the
-//! hub its edits once the files are valid, and writes the copies the hub
-//! sends; a copy that replaces an edit the hub never got leaves that edit
-//! as a backup, with an alert.
+//! and rule files beside it.
 use std::sync::Arc;
 
 use futures_util::{FutureExt as _, future::BoxFuture};

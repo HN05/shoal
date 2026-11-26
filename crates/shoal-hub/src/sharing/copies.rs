@@ -1,5 +1,4 @@
-//! The hub's copies of the shared items of a kind: the last edit of each
-//! that reached it, under a revision above every earlier copy's.
+//! The hub's copies of the shared items of a kind.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 

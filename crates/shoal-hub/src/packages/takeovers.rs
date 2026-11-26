@@ -1,10 +1,4 @@
-//! Taking a space over from the package the hub keeps of it while its
-//! machine is offline: the hub says what it keeps of the space and writes
-//! the package to the machine that takes it over, and records the takeover
-//! once that machine claims the space, for the space's own machine to
-//! retire its copy once it returns. A space its machine handed over as it
-//! shut down is taken over the same way by the machine the hub chose,
-//! while its own may still be connected.
+//! Taking a space over from the package the hub keeps of it.
 use std::{
     collections::HashSet,
     io::BufReader,

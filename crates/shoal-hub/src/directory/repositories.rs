@@ -1,5 +1,4 @@
-//! The hub's records of the repositories its machines register, each
-//! machine's as its last report of them had them.
+//! The hub's records of the repositories its machines register.
 use anyhow::{Context as _, Result};
 use rusqlite::{Transaction, params};
 use shoal_ids::member_ids::MemberId;
@@ -22,7 +21,6 @@ pub(super) fn replace(
     Ok(())
 }
 
-/// Forget every repository of `member`.
 pub(super) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     tx.execute("DELETE FROM hub_repositories WHERE member_id=?1", [member])?;
     Ok(())

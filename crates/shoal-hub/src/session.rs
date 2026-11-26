@@ -1,7 +1,4 @@
-//! An open link after its handshake, on either side: calls to the other side
-//! and their replies, calls from it, the byte streams beside them, and the
-//! pings that tell a link that went silent, as one whose network dropped
-//! away, from a quiet one.
+//! An open link after its handshake, on either side.
 use std::{
     collections::HashMap,
     sync::{
@@ -116,7 +113,6 @@ impl Calls {
         }
     }
 
-    /// The link's streams.
     pub fn streams(&self) -> &Streams {
         &self.streams
     }

@@ -1,8 +1,5 @@
 //! A stand-in for the rest of the daemon, which the tests of the hub's own
-//! operations build the service over: a daemon with no spaces, agents,
-//! approvals or app store, with the repositories a test registers, acting
-//! on the global config a test gives the service, and a temporary store
-//! with no spaces in it.
+//! operations build the service over.
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
@@ -123,7 +120,6 @@ impl StandIn {
         *self.rerun.lock().unwrap() = Some(rerun);
     }
 
-    /// The repositories registered now.
     pub(crate) fn registered(&self) -> Vec<Registered> {
         self.registered.lock().unwrap().clone()
     }
@@ -139,7 +135,6 @@ impl StandIn {
         Ok(())
     }
 
-    /// The text of the local config of the registration `id`.
     fn local_config(&self, id: &RepositoryId) -> Result<Option<String>> {
         let registered = self.registered.lock().unwrap();
         let found = registered.iter().find(|r| &r.repository.id == id);

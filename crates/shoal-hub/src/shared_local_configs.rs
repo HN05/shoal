@@ -1,16 +1,5 @@
-//! The local configs of the repositories a hub's machines share, as
-//! [`SharedLocalConfigs`], each by its repository's origin, under the
-//! shared files' rules: a machine sends the hub each edit once the file
-//! parses, and writes the copies the hub sends into its shared
-//! registrations of that origin; a copy that replaces an edit the hub never
-//! got leaves that edit as `config.toml.backup`, with an alert. A machine
-//! agrees on the copies of origins it shares no registration of without
-//! writing them, so that a registration that comes to be shared takes the
-//! hub's copy, as a machine that joins the hub takes the shared files; one
-//! whose origin it agreed on no copy of is no edit until the machine has
-//! read the hub's copies, which may hold one on its way here. The local
-//! config of a repository that is not shared, or no longer is, stays as it
-//! is and is no edit.
+//! The local configs of the repositories a hub's machines share, under the
+//! shared files' rules.
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,

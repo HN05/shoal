@@ -1,11 +1,4 @@
-//! The hub role and membership of a hub. A daemon with `[machine.hub]
-//! enabled` is the hub: it listens for its members' links and keeps their
-//! credentials, while it stays the machine of its own spaces. Any other
-//! daemon that joined a hub keeps one link to it, reconnecting with backoff,
-//! over a WebSocket to the URL it paired at or over `[machine.hub] connect`.
-//! The hub never dials a member; what it asks of one goes down that link.
-//! [`Hub`] holds what the hub keeps in memory and offers its operations;
-//! what it needs of the rest of the daemon is the interface in [`daemon`].
+//! The hub role and membership of a hub. See `docs/design/hub.md`.
 use std::sync::Arc;
 
 use shoal_core::{agents, config, process, refusal, repository};

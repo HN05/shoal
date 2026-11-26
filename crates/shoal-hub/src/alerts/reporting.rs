@@ -1,8 +1,4 @@
-//! A machine's reports of its alerts to the hub: every alert to the user
-//! once its link opens, which replaces what the hub had for it, then what
-//! changed, once a burst of changes settles, and at least every [`QUIET`],
-//! each with the numbers it reports and answered with the alert numbers the
-//! hub keeps for it.
+//! A machine's reports of its alerts to the hub.
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow};
@@ -123,7 +119,6 @@ impl Hub {
     }
 }
 
-/// What changed from `before` to `after`.
 fn changes(before: &BTreeMap<i64, Alert>, after: &BTreeMap<i64, Alert>) -> UsersAlerts {
     let changed = (after.iter())
         .filter(|(id, alert)| before.get(*id) != Some(*alert))

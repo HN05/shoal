@@ -1,10 +1,5 @@
-//! The hub's alert once an intermittent machine, or any that announced its
-//! sleep, has stayed unreachable for [`UNREACHABLE_FOR`] while its spaces
-//! had something to do: an agent working when its link dropped, a queued
-//! agent, or an update the hub holds for one since. It names each such
-//! space, how far behind the hub's package of it is, and the restore that
-//! takes it over, and starts nothing, since a machine that lost only the
-//! hub keeps working and one that slept kept these spaces.
+//! The hub's alert once a machine whose spaces had something to do stays
+//! unreachable.
 use std::{
     collections::{HashMap, HashSet},
     time::Duration,

@@ -1,6 +1,4 @@
-//! The joined machine a request names to act on, by its ID or a name only
-//! one machine has, such as the one `shoal start --machine` starts a space
-//! on.
+//! The joined machine a request names to act on.
 use anyhow::{Result, bail};
 use shoal_protocol::hub::Member;
 

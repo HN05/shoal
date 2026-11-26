@@ -1,8 +1,5 @@
-//! The hub's side of a member's link: it checks the member's protocol, then
-//! proves its own key and checks the member's, and serves the link once it
-//! takes the member: a new one with a pairing code, or through the daemon's
-//! socket, without one; a paired one by the key it paired with, unless the
-//! hub revoked it or another installation holds its link.
+//! The hub's side of a member's link: the handshake, and which member it
+//! takes.
 use shoal_daemon_base::notifications::About;
 use shoal_protocol::alerts::AlertKind;
 use std::{collections::HashMap, sync::Arc, time::Duration};

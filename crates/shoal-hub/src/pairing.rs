@@ -1,6 +1,5 @@
-//! The pairing codes the hub issues: each admits one join, within
-//! [`LIFETIME`], and lives only in the daemon's memory, so a restart
-//! forgets the codes it issued.
+//! The pairing codes the hub issues. They live only in the daemon's memory,
+//! so a restart forgets them.
 use std::{collections::HashMap, sync::Mutex, time::Duration};
 
 use anyhow::Result;

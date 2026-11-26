@@ -1,11 +1,4 @@
-//! Events that go up a tree spanning machines: what a space passes to its
-//! coordinator goes to the machine of the first space above it that runs
-//! elsewhere, which hands it to the nearest space from there up with an
-//! agent, passes it on to the next machine where the tree goes on, or
-//! tells the user at the top. While a machine's link is down, what its
-//! spaces pass up, and the requests it tells other machines that can
-//! wait, wait in its outbox and go in order once the link opens again; the
-//! hub holds what it cannot deliver yet.
+//! Events that go up a tree spanning machines.
 use anyhow::{Context as _, Result};
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::space_ids::SpaceId;

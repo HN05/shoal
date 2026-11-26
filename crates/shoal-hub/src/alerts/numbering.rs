@@ -1,8 +1,4 @@
-//! This machine's side of the hub's sequence of alert numbers: what it
-//! reports of its alerts' numbers, and the hub's answer it takes, which
-//! confirms the numbers its alerts took on their own or gives them others.
-//! [`shoal_daemon_base::alerts::numbering`] numbers its new alerts from
-//! what this keeps.
+//! This machine's side of the hub's sequence of alert numbers.
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -83,7 +79,6 @@ pub(crate) fn forget(tx: &Transaction<'_>) -> Result<()> {
     Ok(())
 }
 
-/// Whether this machine numbers its alerts from a hub's sequence.
 fn numbered_by_hub(db: &Connection) -> Result<bool> {
     Ok(db.query_row(
         "SELECT EXISTS(SELECT 1 FROM hub_alert_numbering)",
@@ -165,7 +160,6 @@ fn renumber(
     }))
 }
 
-/// Whether an alert here holds `number`.
 fn held(db: &Connection, number: i64) -> Result<bool> {
     Ok(db.query_row(
         "SELECT EXISTS(SELECT 1 FROM alerts WHERE id=?1)",

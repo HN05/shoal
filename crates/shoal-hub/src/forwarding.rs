@@ -1,10 +1,5 @@
-//! A machine's side of a request for a space another joined machine owns:
-//! its daemon finds that machine in the hub's directory and forwards the
-//! request there through the hub, vouching for its caller, the user or a
-//! space's process, whose scope the owning machine checks, and reads the
-//! answer of one that goes on, as a follow's, from a stream as it comes,
-//! writing on it too what the caller sends the other way, as to a demo. A
-//! request that needs the caller's machine is refused, naming the space's.
+//! A machine's side of a request for a space another joined machine owns,
+//! which it forwards there through the hub.
 use crate::log;
 use shoal_daemon_base::callers::{Access, Caller};
 use std::sync::Arc;

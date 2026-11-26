@@ -1,7 +1,4 @@
-//! What a machine's callers see of the hub's directory: the other machines'
-//! spaces, from the hub itself or through this machine's link, as far as a
-//! scoped caller's scope reaches them, and which of this machine's spaces
-//! are below them; or, apart, the other machines' repositories.
+//! What a machine's callers see of the hub's directory.
 use shoal_daemon_base::callers::Caller;
 use std::collections::{HashMap, HashSet};
 

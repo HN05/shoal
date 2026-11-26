@@ -1,10 +1,5 @@
 //! How this machine numbers its spaces while it takes part in a hub: from
-//! the spares the hub keeps for it, which each report's answer brings, so
-//! a new space never waits for the hub, and once none is left, above its
-//! own highest number. A space whose number another machine's space held
-//! first takes the number the hub gives it instead, with its threads and
-//! approval requests, and the user and its agent hear of it. A space this
-//! machine imports as another moves it here keeps the number it had there.
+//! the spares the hub keeps for it, so a new space never waits for the hub.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_daemon_base::notifications::About;
@@ -111,7 +106,6 @@ pub fn next(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> {
     }
 }
 
-/// Whether this machine numbers its spaces from a hub's sequence.
 fn numbered_by_hub(tx: &Transaction<'_>) -> Result<bool> {
     Ok(
         tx.query_row("SELECT EXISTS(SELECT 1 FROM hub_numbering)", [], |row| {

@@ -1,9 +1,5 @@
-//! The hub's listener: HTTP on `[machine.hub] listen`, which upgrades a
-//! request to the link's path to a WebSocket carrying a member's link and
-//! forwards a member's request under a path prefix of `[machine.hub]
-//! forward` to the server it names. It handles no TLS, which a proxy or
-//! tunnel in front of it provides, and binds again once a reload changes
-//! its address or the hub role.
+//! The hub's HTTP listener on `[machine.hub] listen`. It handles no TLS,
+//! which a proxy or tunnel in front of it provides.
 use shoal_daemon_base::notifications::About;
 use shoal_protocol::alerts::AlertKind;
 use std::{
@@ -292,7 +288,6 @@ fn open_link(
     response
 }
 
-/// A response with `status` and no body.
 fn status(status: StatusCode) -> Response<Body> {
     let mut response = Response::new(Empty::new().map_err(|never| match never {}).boxed());
     *response.status_mut() = status;

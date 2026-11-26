@@ -1,13 +1,5 @@
-//! The repositories a hub's machines share, as [`SharedRepositories`],
-//! each by its origin: a machine sends the hub each registration it shares,
-//! and takes each copy the hub sends. A shared copy shares the registration
-//! of its origin here, whatever its name, or, where there is none,
-//! registers a clone of it in the background; a failed clone alerts and is
-//! cloned again when the link next opens, or on the hub's own machine,
-//! when its daemon restarts. A copy without a value, as from
-//! a machine that stopped sharing it, leaves the registration here, no
-//! longer shared. Git data never goes through the hub: machines clone from
-//! the origin.
+//! The repositories a hub's machines share, each by its origin. Git data
+//! never goes through the hub: machines clone from the origin.
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;

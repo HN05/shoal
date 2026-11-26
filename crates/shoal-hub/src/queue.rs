@@ -1,9 +1,5 @@
-//! What the hub holds for a joined machine while it is offline: requests
-//! that can wait for it, such as messages, answers, decisions and stops,
-//! and the events spaces pass up to its spaces. Once the machine connects
-//! the hub delivers them in the order they came; one still waiting after
-//! [`LIFETIME`] is dropped, and the machine that sent it hears of it unless
-//! the request says it does not.
+//! What the hub holds for a joined machine while it is offline, delivered
+//! in order once it connects.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};

@@ -1,7 +1,5 @@
-//! What the hub answers, to its members' calls and to the requests of its
-//! own machine's callers alike: pairing codes, its listener and members,
-//! revoking credentials, its directory of the machines' spaces, and the
-//! requests and events one machine sends another.
+//! What the hub answers, to its members' calls and to its own machine's
+//! callers alike.
 use anyhow::{Result, anyhow};
 use shoal_protocol::hub::{
     Member, MemberKind, Overview, Revoked,

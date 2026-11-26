@@ -1,12 +1,4 @@
-//! The hub's one sequence of space numbers across its machines. A number is
-//! held by the listed space that has it, unless the hub renumbers that
-//! space, by the spares and new numbers the hub keeps for a machine, and by
-//! those a machine holds without a listed space of its own: its reserved
-//! numbers and its copies'. A
-//! space whose number another machine's space or reservation held first
-//! takes the smallest number none holds, which the hub keeps for it until
-//! its machine reports it with that number. A space another machine claims
-//! keeps its number there the same way.
+//! The hub's one sequence of space numbers across its machines.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 use shoal_ids::{

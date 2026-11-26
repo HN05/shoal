@@ -1,14 +1,5 @@
-//! The CI jobs a machine's sleep or shutdown cut off, which it hands the
-//! hub rather than wait to rerun them once it is back: the forge reruns a
-//! job only once its whole run has finished, which another machine's
-//! runners may take long after this one went. A machine that hands them
-//! over forgets them, so it never reruns one again once it wakes; one that
-//! cannot keeps them and reruns them itself. The hub keeps them in its
-//! store and, every [`RERUN_EVERY`], has each rerun once its run has
-//! finished, as the user, by its own machine, else by the first connected
-//! machine with the user's login for the run's forge, telling the user of
-//! each it reran. One whose run allows no rerun within [`PATIENCE`] of its
-//! stop is given up, telling the user.
+//! The CI jobs a machine's sleep or shutdown cut off, which the hub keeps
+//! and reruns in its place.
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
@@ -184,7 +175,6 @@ impl Hub {
         )
     }
 
-    /// Tell the user of the jobs `reran` names, if any.
     async fn notify_reran(&self, daemon: &dyn Daemon, reran: &[String]) {
         if reran.is_empty() {
             return;
@@ -269,7 +259,6 @@ fn keep(tx: &Transaction<'_>, member: &MemberId, jobs: &[CutOffJob]) -> Result<(
     Ok(())
 }
 
-/// The jobs the hub keeps to rerun.
 fn held_jobs(tx: &Transaction<'_>) -> Result<Vec<Held>> {
     let mut statement = tx.prepare(
         "SELECT run_url,job_id,job_name,cut_off_by,stopped_at,member_id FROM hub_ci_job_reruns",

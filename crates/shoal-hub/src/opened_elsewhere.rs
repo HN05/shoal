@@ -1,8 +1,5 @@
-//! The threads a space opened that other machines keep, its comments of
-//! the reviews they keep of their workspaces: how many wait, which keeps
-//! the space from cleanup as its waiting threads here do, and the machines
-//! that close and reopen them as its own machine closes and reopens its
-//! own.
+//! The threads a space opened that other machines keep, and its comments
+//! on the reviews they keep.
 use std::{collections::HashMap, sync::Mutex, time::Duration};
 
 use shoal_ids::space_ids::SpaceId;

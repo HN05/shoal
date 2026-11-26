@@ -1,6 +1,5 @@
-//! What a member reaches the hub by: a WebSocket to its URL, over TLS for
-//! an `https` one, or the standard input and output of a command, whose
-//! standard error goes to the daemon's log.
+//! What a member reaches the hub by: a WebSocket, or a command's standard
+//! input and output.
 use std::{
     collections::VecDeque,
     process::Stdio,

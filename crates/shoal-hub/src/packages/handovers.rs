@@ -1,12 +1,4 @@
-//! The hub's side of a machine's hand-over as it shuts down: the machine
-//! sends the final package of each of its spaces with the start its agent
-//! would make. The hub keeps it as it keeps any package, places the space
-//! among the other connected machines, its own as the caller's, answers
-//! with where it goes, and once the machine leaves it the space, asks that
-//! machine to continue it from the package. That machine's claim takes the space over even while the
-//! machine it came from is still connected, and the machine it came from
-//! retires its copy once its link opens again, as after any takeover, or
-//! at once when its shutdown was cancelled and it stays.
+//! The hub's side of a machine's hand-over as it shuts down.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Result, anyhow};

@@ -1,11 +1,4 @@
-//! Following the hub's version. Once the hub refuses this machine for
-//! running another version, with its own signed, a Shoal installed from a
-//! release download with `[machine.hub] auto_update` on installs exactly
-//! the hub's release, as `shoal update --version` does, a downgrade
-//! included; a managed daemon then restarts on it once idle, keeping its
-//! agents running, and connects again, while a foreground one tells the user
-//! to restart it. Otherwise the user hears what to run, and
-//! the machine works on its own until its version matches.
+//! Following the hub's version once the hub refuses this machine's.
 use std::{sync::Mutex, time::Duration};
 
 use anyhow::Result;
@@ -51,7 +44,6 @@ impl Followed {
         due
     }
 
-    /// Record that `version` is installed.
     fn installed(&self, version: &str) {
         if let Some(last) = &mut *self.0.lock().unwrap()
             && last.version == version

@@ -1,10 +1,5 @@
 //! The hub's one sequence of alert numbers across its machines, which never
-//! gives a number twice. It keeps [`SPARES`] spares for each machine, and
-//! takes a number a machine's alert took on its own only while no number
-//! at or above it was given: any number below the sequence's next went to
-//! some machine, so an alert that took one of another machine's gets a new
-//! number. A number the hub takes or gives a machine's alert stays the
-//! machine's until it reports that it heard.
+//! gives a number twice.
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -127,7 +122,6 @@ fn drop_heard(
     Ok(())
 }
 
-/// The spares the hub keeps for `member`, smallest first.
 fn spares(db: &Connection, member: &MemberId) -> Result<Vec<i64>> {
     let mut statement = db.prepare(
         "SELECT number FROM hub_alert_numbers WHERE member_id=?1 AND spare=1 ORDER BY number",

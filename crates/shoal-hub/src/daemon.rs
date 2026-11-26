@@ -1,11 +1,4 @@
-//! What the hub needs of the rest of the daemon, which implements it: the
-//! spaces it reports, routes to and tells about, their permissions, the
-//! messages that reach their agents, the approvals and threads that pass
-//! between machines, the app store a member asks of the hub, the
-//! packages of an intermittent machine's spaces, the room its queue has,
-//! the global config the hub's copies of the shared files change, the
-//! registrations and local configs of the repositories they share and the
-//! reruns of CI jobs other machines cut off.
+//! The interfaces through which the hub reaches the rest of the daemon.
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -40,10 +33,8 @@ use crate::streams::{Incoming, Outgoing};
 
 /// The spaces of this machine the hub reads.
 pub trait Spaces: Send + Sync {
-    /// The space `id`.
     fn space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Space>>;
 
-    /// The space `selector` names.
     fn select_space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>>;
 
     /// Changes whenever an agent here starts or ends.
@@ -59,7 +50,6 @@ pub trait Spaces: Send + Sync {
     /// The spaces at and below `root`, or every space without one.
     fn spaces_within<'a>(&'a self, root: Option<&'a SpaceId>) -> BoxFuture<'a, Result<Vec<Space>>>;
 
-    /// The priority of the space `id`.
     fn priority<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Priority>>;
 
     /// The space whose tree `caller`'s scope covers, none for the user.
@@ -87,7 +77,6 @@ pub trait Spaces: Send + Sync {
     /// agent launch waiting to start.
     fn stoppable(&self) -> BoxFuture<'_, Result<HashSet<SpaceId>>>;
 
-    /// The registered repositories.
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
 
     /// Whether this daemon acts on what the global config sets up for the
@@ -185,7 +174,6 @@ pub trait Approvals: Send + Sync {
     /// decider above.
     fn pass_over_offline<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>>;
 
-    /// Pass `request` to the user.
     fn pass_to_user<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>>;
 
     /// The stopped work `caller` sees.
@@ -362,7 +350,6 @@ impl<T> Daemon for T where
 /// connection or transaction. Its methods run on the store's thread, so
 /// they are not futures.
 pub trait Records: Send + Sync {
-    /// The parent of the space `id`.
     fn parent_id(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceId>>;
 
     /// Every space with a parent, with that parent.

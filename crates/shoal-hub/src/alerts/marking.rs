@@ -1,9 +1,5 @@
-//! What a machine does to another machine's alerts to the user: reading
-//! and clearing them go to the hub, or wait in the outbox while the link
-//! is down, whose copies take them at once and which passes them on to the
-//! machine that keeps them, now while it is connected and else in the
-//! answer to its next report; withdrawing one goes to that machine, which
-//! decides it, and fails at once while it is offline.
+//! What a machine does to another machine's alerts to the user: reading,
+//! clearing and withdrawing them.
 use anyhow::{Result, anyhow};
 use shoal_daemon_base::callers::Caller;
 use shoal_ids::member_ids::MemberId;

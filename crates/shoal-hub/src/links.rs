@@ -1,8 +1,5 @@
 //! The hub's open links, at most one per member, with the calls the hub
-//! sends each. A second link that presents a credential an open one holds
-//! is refused, unless it comes from the same installation, whose earlier
-//! link it then replaces: that one was lost, as a laptop's is when it
-//! sleeps.
+//! sends each.
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -109,7 +106,6 @@ impl Links {
         })
     }
 
-    /// End `member`'s link, if one is open.
     pub fn stop(&self, member: &MemberId) {
         if let Some(open) = self.open.lock().unwrap().get(member) {
             open.stop.notify_one();
@@ -130,7 +126,6 @@ impl Links {
         open.get(member).and_then(|open| open.calls.clone())
     }
 
-    /// The members whose links are open.
     pub fn connected(&self) -> HashSet<MemberId> {
         self.open.lock().unwrap().keys().cloned().collect()
     }

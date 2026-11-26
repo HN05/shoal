@@ -1,11 +1,5 @@
 //! Each machine's availability, which the hub works out and tells the
-//! machine: a machine describes itself when its link opens and when its
-//! setting changes, and hears back what it is then and whenever it
-//! changes. `[machine] availability` sets it; under `auto` a machine the
-//! hub has seen there for less than [`NEW_FOR`] is intermittent when it has
-//! a battery, so a new portable machine takes no lasting work before the
-//! hub has seen it behave, and any other machine is intermittent when it
-//! was there less than [`ALWAYS_ON_PERCENT`] of the last week.
+//! machine.
 use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Duration};
 
 use anyhow::{Result, anyhow};

@@ -1,7 +1,6 @@
 //! The moves through the hub that their source settled without the
-//! destination's claim: each one's ticket refuses the claims that carry it
-//! and come later, as from an import still running when the source gave
-//! up on it, so the space never runs on both machines.
+//! destination's claim. Each one's ticket refuses later claims that carry
+//! it, so the space never runs on both machines.
 use std::time::Duration;
 
 use anyhow::{Result, ensure};

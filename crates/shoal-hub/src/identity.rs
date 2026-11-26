@@ -1,7 +1,5 @@
-//! The key pairs links prove: the hub's own, made the first time a link
-//! needs it, and one per membership of a machine that joins a hub, made for
-//! that join, so a machine that left or was revoked joins again with a new
-//! credential. Both stay in the store, never leaving it.
+//! The key pairs links prove: the hub's own, and one per membership. Both
+//! stay in the store, never leaving it.
 use anyhow::{Context as _, Result, anyhow};
 use ring::{
     rand::{SecureRandom as _, SystemRandom},
@@ -16,7 +14,6 @@ use shoal_protocol::hub::{Nonce, PublicKey, Signature};
 pub struct KeyPair(Vec<u8>);
 
 impl KeyPair {
-    /// A new key pair.
     pub fn generate() -> Result<Self> {
         let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
             .map_err(|error| anyhow!("could not make a key pair: {error}"))?;
@@ -59,7 +56,6 @@ impl Identity {
     }
 }
 
-/// Whether `signature` is `key`'s of `bytes`.
 pub fn verify(key: &PublicKey, bytes: &[u8], signature: &Signature) -> bool {
     UnparsedPublicKey::new(&ED25519, key.as_bytes())
         .verify(bytes, signature.as_bytes())

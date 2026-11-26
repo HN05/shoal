@@ -1,10 +1,5 @@
-//! A machine's side of packages: while the hub tells it it is intermittent,
-//! it looks at a space once its agent's turn ends there, and at every space
-//! every [`CHECK_EVERY`] for what changed without a turn, and sends the hub
-//! a new package of each space whose state changed since the last that
-//! arrived, at most once every [`SEND_EVERY`], each over a stream of its
-//! own, all at once. It records since when each space has changes the hub's
-//! package lacks.
+//! A machine's side of packages: sending the hub a new package of each
+//! space that changed while the machine is intermittent.
 use std::{collections::HashMap, convert::Infallible, time::Duration};
 
 use tokio::time::Instant;
@@ -330,7 +325,6 @@ pub(super) fn sent_state(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<St
     Ok(load(tx, id)?.sent)
 }
 
-/// What this machine recorded of the packages of the space `id`.
 fn load(tx: &Transaction<'_>, id: &SpaceId) -> Result<Recorded> {
     let recorded = tx
         .query_row(

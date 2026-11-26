@@ -1,6 +1,5 @@
-//! The tree of spaces across joined machines: a space's parent may run on
-//! another machine, which the hub's directory lists with its own parent,
-//! as when a space moves to another machine without its parent.
+//! The tree of spaces across joined machines, whose parent may run on
+//! another machine.
 use shoal_daemon_base::callers::Caller;
 use std::collections::HashMap;
 

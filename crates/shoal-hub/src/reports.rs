@@ -1,11 +1,4 @@
-//! A machine's reports of its spaces to the hub: every space once its link
-//! opens, which replaces what the hub had for it, then what changed, once a
-//! burst of changes settles, each with what the machine holds of the
-//! spaces it has not, its capacity, which the hub places new spaces by, and
-//! how it is powered, which the hub reads a drop by, and with every
-//! repository it registers, once and whenever they change.
-//! The hub's own machine reports to its own directory the same way, for as
-//! long as it takes the hub role.
+//! A machine's reports of its spaces, capacity and repositories to the hub.
 use std::{
     collections::{HashMap, HashSet},
     time::Duration,

@@ -1,11 +1,4 @@
-//! Removing a space whose tree goes on on other machines: the spaces
-//! directly below it there go first, each through its own machine's
-//! removal, which takes the spaces below it in turn, and one that cannot go
-//! keeps the space, as a child here would. One on an offline machine
-//! cannot go: a removal someone asked for leaves the hub holding its
-//! removal until that machine connects. While the hub cannot be asked,
-//! a removal goes by the directory it last answered with, so it never
-//! takes a space whose children elsewhere it cannot reach.
+//! Removing a space whose tree goes on on other machines.
 use anyhow::{Result, anyhow, bail};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{

@@ -1,9 +1,6 @@
-//! As the hub: its copy of every machine's alerts to the user, which each
-//! machine's reports keep current and what other machines read or clear
-//! changes at once, and the changes to them, which every member following
-//! them hears of, and the hub's own machine too. What another machine did
-//! to an alert stays on its copy until the alert's own machine reports
-//! doing the same, so a report sent meanwhile undoes nothing.
+//! The hub's copy of every machine's alerts to the user. What another
+//! machine did to an alert stays on the copy until the alert's own machine
+//! reports doing the same, so a report sent meanwhile undoes nothing.
 use anyhow::{Result, anyhow};
 use std::collections::HashSet;
 
@@ -34,7 +31,6 @@ impl Default for Changes {
 }
 
 impl Changes {
-    /// Tell every follower of `change`.
     pub(crate) fn send(&self, change: AlertCopies) {
         // None follows while no member does.
         let _ = self.0.send(change);

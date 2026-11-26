@@ -1,9 +1,5 @@
-//! A returning machine retiring the spaces other machines took over from
-//! the hub's packages of them while it was offline: once its link opens,
-//! the hub names them, and the machine ends each here, keeping its work in
-//! the removal record, and alerts the user to one whose copy changed after
-//! the package the takeover went by. The hub then forgets the takeover and
-//! the machine's package of the space.
+//! A returning machine retiring the spaces other machines took over while
+//! it was offline.
 use std::sync::Arc;
 
 use anyhow::Result;

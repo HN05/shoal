@@ -1,8 +1,5 @@
-//! The installer the hub's listener serves, which `shoal hub pair` names: a
-//! shell script that installs exactly the hub's version from its release on
-//! a computer without Shoal, checking its checksum, as a downloaded binary,
-//! or `Shoal.app` on macOS, then starts its daemon and joins the hub with the
-//! pairing code it is given.
+//! The install script the hub's listener serves, which `shoal hub pair`
+//! names.
 use http_body_util::{BodyExt as _, Full};
 use hyper::{
     Response,
@@ -21,7 +18,6 @@ fn script(releases: &str) -> String {
         .replace("@RELEASES@", releases)
 }
 
-/// The response that serves the installer.
 pub(super) fn response() -> Response<Body> {
     let script = script(shoal_core::update::RELEASES);
     let body = Full::new(Bytes::from(script));

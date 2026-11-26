@@ -1,10 +1,4 @@
-//! The hub's own machine handing its spaces over once its user paused it:
-//! its daemon, which is the hub and keeps running, keeps each space's
-//! final package as the hub keeps any, places the space among the other
-//! connected machines, and once it leaves the space there, has the hub
-//! continue it there in the background, as for a joined machine's. Once
-//! unpaused, it retires its copies of the spaces taken over, as a joined
-//! machine does once it stays.
+//! The hub's own machine handing its spaces over once its user paused it.
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context as _, Result, anyhow};
@@ -131,7 +125,6 @@ impl Hub {
     }
 }
 
-/// The size of the file at `path`, in bytes.
 async fn file_size(path: &std::path::Path) -> Result<u64> {
     let path = path.to_owned();
     off_runtime::run(move || {

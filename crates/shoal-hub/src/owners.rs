@@ -1,8 +1,5 @@
-//! Which machine owns a space ID, as the hub's directory says: a restore
-//! asks before it opens a space again, so the same space never runs on two
-//! machines, an import claims the space it opens, with its number, and the
-//! source of a move through the hub settles one whose arrival it could not
-//! learn.
+//! Which machine owns a space ID, as the hub's directory says, so the same
+//! space never runs on two machines.
 use anyhow::{Result, anyhow, bail};
 use shoal_ids::{
     member_ids::MemberId,

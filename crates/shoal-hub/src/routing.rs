@@ -1,11 +1,4 @@
-//! The hub's routing of what one machine sends another: a forwarded
-//! request goes to the machine it names, and an event to the machine of
-//! the space it is for, each answered by the hub's own machine for its own
-//! spaces and passed down the link of any other, and the stream a streamed
-//! request's answer comes on is relayed from that machine's link to the
-//! caller's, and on a duplex stream what the caller writes the other way;
-//! while that machine is offline the hub holds what can wait and
-//! refuses the rest, naming the machine and when it last saw it.
+//! The hub's routing of what one machine sends another.
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow, bail};

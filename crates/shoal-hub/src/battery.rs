@@ -1,8 +1,6 @@
-//! Whether this machine has a battery, which tells the hub a new machine
-//! may be portable, and how it is powered now, which the hub reads a drop
-//! by: an internal battery among IOKit's power sources on macOS, a
-//! `power_supply` entry of type `Battery` that powers the system, not a
-//! device such as a mouse, on Linux.
+//! Whether this machine has a battery, and how it is powered now. On Linux
+//! only a `power_supply` entry that powers the system counts, not a device
+//! such as a mouse.
 use std::sync::OnceLock;
 
 use shoal_protocol::hub::sleep::Power;
@@ -65,7 +63,6 @@ fn system_batteries(class: &std::path::Path) -> Vec<std::path::PathBuf> {
         .collect()
 }
 
-/// The attribute `name` of the supply `supply`, trimmed.
 #[cfg(any(target_os = "linux", test))]
 fn attribute(supply: &std::path::Path, name: &str) -> Option<String> {
     let text = std::fs::read_to_string(supply.join(name)).ok()?;

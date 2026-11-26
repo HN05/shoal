@@ -1,8 +1,4 @@
-//! How each machine follows the other machines' alerts to the user: a
-//! member over a stream it keeps open on its link, which the hub writes
-//! every other machine's copy on as it opens and then each change, and the
-//! hub's own machine from the hub's copies here. Each takes them into its
-//! notifications, which keep them in memory.
+//! How each machine follows the other machines' alerts to the user.
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow, bail};
@@ -123,7 +119,6 @@ impl Hub {
     }
 }
 
-/// Write `copies` on `out` as one JSON line.
 async fn write_line(out: &mut Outgoing, copies: &AlertCopies) -> Result<()> {
     let mut line = serde_json::to_vec(copies)?;
     line.push(b'\n');

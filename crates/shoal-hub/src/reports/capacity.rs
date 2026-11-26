@@ -1,10 +1,6 @@
-//! What a machine's reports carry of its capacity, which the hub places
-//! new spaces by: the origins of its repositories and its queue's room,
-//! and of how it is powered, which the hub reads a drop by. The machine
-//! measures both every [`MEASURE_EVERY`] beside its reports, so a report
-//! never waits for a measurement, and at once when its admission changes,
-//! as once paused; a change enough to place by, or any change of its power,
-//! sends one.
+//! What a machine's reports carry of its capacity and power. The machine
+//! measures them beside its reports, so a report never waits for a
+//! measurement.
 use std::{convert::Infallible, time::Duration};
 
 use anyhow::Result;
