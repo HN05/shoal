@@ -29,7 +29,7 @@ impl Surface {
     fn failed_check(&self, component: Component<'_>, scope: &str) -> Option<String> {
         let rules = component.get("@checks")?.as_array()?;
         rules.iter().find_map(|rule| {
-            let passes = truth(&self.known(rule.get("condition")?, scope)?)?;
+            let passes = truth(&self.known(rule.get("condition")?, scope)?);
             let message = rule.get("message").and_then(Value::as_str);
             (!passes).then(|| message.unwrap_or("a check fails").to_owned())
         })

@@ -743,6 +743,11 @@ fn a_check_fails_on_known_data_of_the_wrong_kind_and_reads_validation_results() 
     let invalid = json!({"count": "", "check": {"valid": false}});
     assert!(answer(&checked(and, invalid.clone()), "3").is_err());
     answer(&checked(not, invalid), "3").unwrap();
+    // A condition of the wrong kind fails.
+    for allowed in [json!("false"), json!({"valid": "yes"})] {
+        let wrong = json!({"count": "", "allowed": allowed});
+        assert!(answer(&checked(json!({"@path": "/allowed"}), wrong), "3").is_err());
+    }
 }
 
 #[test]

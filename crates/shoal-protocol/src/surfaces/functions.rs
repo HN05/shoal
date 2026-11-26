@@ -58,7 +58,7 @@ impl Surface {
             "or" => self.logical(arg("values")?, scope, |values| {
                 values.iter().any(|value| *value)
             }),
-            "not" => Some(Value::Bool(!truth(&given("value")?)?)),
+            "not" => Some(Value::Bool(!truth(&given("value")?))),
             _ => None,
         }
     }
@@ -78,7 +78,7 @@ impl Surface {
     /// out.
     fn logical(&self, values: &Value, scope: &str, combine: fn(&[bool]) -> bool) -> Option<Value> {
         let values: Option<Vec<bool>> = (values.as_array()?.iter())
-            .map(|value| truth(&self.known(value, scope)?))
+            .map(|value| Some(truth(&self.known(value, scope)?)))
             .collect();
         Some(Value::Bool(combine(&values?)))
     }
@@ -130,14 +130,13 @@ impl Surface {
 }
 
 /// The boolean `value` stands for, as a check's condition or a logical
-/// function reads it: itself, a validation result's `valid`, or false for
-/// null; none for anything else.
-pub(super) fn truth(value: &Value) -> Option<bool> {
+/// function reads it: itself, or a validation result's `valid`; false for
+/// anything else, which is of the wrong kind.
+pub(super) fn truth(value: &Value) -> bool {
     match value {
-        Value::Bool(value) => Some(*value),
-        Value::Object(result) => result.get("valid")?.as_bool(),
-        Value::Null => Some(false),
-        _ => None,
+        Value::Bool(value) => *value,
+        Value::Object(result) => result.get("valid").and_then(Value::as_bool) == Some(true),
+        _ => false,
     }
 }
 
