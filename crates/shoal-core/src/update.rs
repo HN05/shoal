@@ -255,9 +255,9 @@ impl Release {
         &self.version
     }
 
-    /// Download, verify and unpack the asset beside `installation`, then
-    /// replace it with what the asset gives.
-    pub async fn install(&self, installation: &Installation) -> Result<()> {
+    /// Download, verify and unpack the asset beside `installation`, refusing
+    /// a replacement that does not run here or reports another version.
+    pub async fn stage<'a>(&self, installation: &'a Installation) -> Result<StagedRelease<'a>> {
         let staging = staging_directory(installation.path())?;
         let asset = staging.path().join(&self.asset);
         self.download(&asset).await?;
@@ -265,7 +265,11 @@ impl Release {
         let unpacked = installation.unpack(&asset, staging.path()).await?;
         self.check_version(&installation.executable(&unpacked))
             .await?;
-        installation.replace_with(&unpacked)
+        Ok(StagedRelease {
+            installation,
+            unpacked,
+            _staging: staging,
+        })
     }
 
     async fn download(&self, destination: &Path) -> Result<()> {
@@ -316,6 +320,25 @@ impl Release {
     }
 }
 
+/// A release checked beside the installation it replaces. Only
+/// [`Release::stage`] builds one, and only [`StagedRelease::install`]
+/// replaces the installation.
+#[must_use = "a staged release replaces nothing until installed"]
+pub struct StagedRelease<'a> {
+    installation: &'a Installation,
+    unpacked: PathBuf,
+    /// Removed with what is left in it once the release is installed or
+    /// dropped.
+    _staging: tempfile::TempDir,
+}
+
+impl StagedRelease<'_> {
+    /// Replace the installation with the staged release.
+    pub fn install(self) -> Result<()> {
+        self.installation.replace_with(&self.unpacked)
+    }
+}
+
 /// The version of the `target` release under `base` that replaces
 /// `installation`, once installed over it, or none when `target` does not
 /// replace the running version.
@@ -328,7 +351,7 @@ pub async fn update(
     if !target.replaces(release.version(), env!("CARGO_PKG_VERSION"))? {
         return Ok(None);
     }
-    release.install(installation).await?;
+    release.stage(installation).await?.install()?;
     Ok(Some(release.version))
 }
 

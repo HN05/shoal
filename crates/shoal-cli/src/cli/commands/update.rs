@@ -32,11 +32,13 @@ pub(super) async fn run(ctx: &Context, version: Option<String>) -> Result<i32> {
         )?;
         return Ok(0);
     }
-    ctx.progress(
-        &format!("Installing Shoal {}", release.version()),
-        release.install(&installation),
-    )
-    .await?;
+    let staged = ctx
+        .progress(
+            &format!("Installing Shoal {}", release.version()),
+            release.stage(&installation),
+        )
+        .await?;
+    staged.install()?;
     ctx.emit(
         &format!(
             "Updated Shoal {current} to {} at {}\nA managed daemon restarts with it once idle; run `shoal daemon restart` to apply it now.",

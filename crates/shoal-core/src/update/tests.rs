@@ -127,7 +127,7 @@ async fn install_replaces_the_binary_with_the_verified_release() -> Result<()> {
     fs::create_dir_all(target.parent().context("parent")?)?;
     fs::write(&target, "old")?;
     let release = Release::find(&base, &Target::Latest, SUFFIX).await?;
-    release.install(&Installation::of(&target)).await?;
+    release.stage(&Installation::of(&target)).await?.install()?;
     let output = std::process::Command::new(&target)
         .arg("--version")
         .output()?;
@@ -146,11 +146,8 @@ async fn install_refuses_an_asset_that_does_not_match_its_checksum() -> Result<(
     fs::write(&target, "old")?;
     let mut release = Release::find(&base, &Target::Latest, SUFFIX).await?;
     release.sha256 = "0".repeat(64);
-    let error = release
-        .install(&Installation::of(&target))
-        .await
-        .err()
-        .context("installed")?;
+    let installation = Installation::of(&target);
+    let error = release.stage(&installation).await.err().context("staged")?;
     assert!(format!("{error:#}").contains("checksum"), "{error:#}");
     assert_eq!(fs::read_to_string(&target)?, "old");
     Ok(())
@@ -170,7 +167,7 @@ async fn install_swaps_in_the_verified_app_bundle() -> Result<()> {
     fs::write(bundle.join(executable), "old")?;
     fs::write(bundle.join("Contents/stale"), "old")?;
     let release = Release::find(&base, &Target::Latest, &suffix).await?;
-    release.install(&installation).await?;
+    release.stage(&installation).await?.install()?;
     let output = std::process::Command::new(bundle.join(executable))
         .arg("--version")
         .output()?;
@@ -190,7 +187,7 @@ async fn an_exact_release_installs_from_its_own_checksums() -> Result<()> {
     fs::create_dir_all(target.parent().context("parent")?)?;
     fs::write(&target, "old")?;
     let release = Release::find(&base, &Target::Exact("0.1.0".into()), SUFFIX).await?;
-    release.install(&Installation::of(&target)).await?;
+    release.stage(&Installation::of(&target)).await?.install()?;
     let output = std::process::Command::new(&target)
         .arg("--version")
         .output()?;
