@@ -1,9 +1,5 @@
-//! A repository's seed: the default-branch build new workspaces start from.
-//! The daemon builds it in a Shoal-owned worktree and freezes its outputs as a
-//! copy-on-write snapshot, so a build running there never reaches a workspace.
-//! A new workspace clones the snapshot and takes the seed's modification time
-//! for each file and directory its commit left unchanged, so mtime-based build
-//! tools rebuild only what the branch changed.
+//! A repository's seed: the default-branch build new workspaces start from,
+//! as `docs/design/repositories.md` describes it.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_refs::CommitId;
 use std::{
@@ -411,9 +407,9 @@ pub struct Staged {
 impl Staged {
     /// Make the staged outputs, built from `commit` under `settings` with
     /// `toolchains`, the snapshot. `files` are the tracked files whose
-    /// content matches `commit`; only their times are recorded. The replaced snapshot, with
-    /// its spare, waits for [`Layout::remove_retired`]. Callers exclude
-    /// readers.
+    /// content matches `commit`; only their times are recorded. The
+    /// replaced snapshot, with its spare, waits for
+    /// [`Layout::remove_retired`]. Callers exclude readers.
     pub fn install(
         self,
         layout: &Layout,

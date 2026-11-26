@@ -1,6 +1,5 @@
-//! Running a seed build's commands in its worktree: one at a time, each in
-//! a process group of its own that is gone once it ends, under the build's
-//! deadline and until a removal cancels it.
+//! Running a seed build's commands in its worktree. Each runs in a process
+//! group of its own, which is gone once the command ends.
 use std::{
     fmt, fs,
     io::{Read as _, Seek as _, Write as _},

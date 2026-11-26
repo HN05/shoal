@@ -1,9 +1,6 @@
 //! A stand-in for the rest of the daemon, which the repositories' tests
-//! build the service over: a home with its state directory under a
-//! temporary directory, the global config a test publishes, the workspaces
-//! and chats a test records, a host a test may strain, no coordinators,
-//! reviews, runner or agents, no files other subsystems keep, and no forge a
-//! contribution could fork on.
+//! build the service over. It has no coordinators, reviews, runner, agents
+//! or forge.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{
     path::{Path, PathBuf},

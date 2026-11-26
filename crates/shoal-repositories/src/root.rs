@@ -1,6 +1,4 @@
-//! The `root_dir` that holds repository directories: preparing it, which
-//! keeps it out of everything else Shoal records, and reserving a
-//! repository's directory in it.
+//! The `root_dir` that holds repository directories.
 use std::{
     fs,
     path::{Path, PathBuf},

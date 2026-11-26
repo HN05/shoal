@@ -1,7 +1,6 @@
-//! Keep each repository's seed build at its default branch's tip, and a
-//! spare of its snapshot for the next new workspace. Seed failures never
-//! fail the operation that met them: a workspace without a seed still
-//! builds, only from scratch.
+//! Keeping each repository's seed at its default branch's tip. A seed
+//! failure never fails the operation that met it: a workspace without a
+//! seed still builds, only from scratch.
 use std::{collections::BTreeMap, ffi::OsString, sync::Arc, time::Duration};
 
 use anyhow::{Result, ensure};

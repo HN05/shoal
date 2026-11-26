@@ -1,7 +1,4 @@
-//! What a seed build runs and keeps: the repository's own `setup.seed.command` and
-//! `seed.paths`, or the usual build and outputs of each preset tool, which
-//! first resets the outputs an earlier build left when what they depend on
-//! changed.
+//! What a seed build runs and keeps.
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsString,

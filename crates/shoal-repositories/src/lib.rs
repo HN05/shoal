@@ -1,10 +1,5 @@
-//! The daemon's registered repositories: registering and looking them up,
-//! their configuration layers, keeping their checkouts' default branches
-//! in sync, their seeds and shared caches, moving their
-//! directories, removing them and the contribution clones Shoal removes on
-//! its own. [`Repositories`] holds
-//! what they keep in memory and offers their operations; what they need of
-//! the rest of the daemon is the interface in [`daemon`].
+//! The daemon's registered repositories, as `docs/design/repositories.md`
+//! describes them.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::sync::Arc;
 
@@ -32,7 +27,6 @@ pub mod sync;
 #[cfg(feature = "test-support")]
 mod test_support;
 
-/// The repositories' service, which `Manager` holds.
 pub struct Repositories {
     store: Store,
     gates: Arc<Gates>,

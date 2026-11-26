@@ -59,11 +59,11 @@ async fn ensure_seed_worktree(repo: &Repository, layout: &Layout) -> Result<()> 
     Ok(())
 }
 
-/// Whether `.seed` is this repository's marked directory, `.seed/worktree`
-/// is a real directory, Git run in
-/// `.seed/worktree` reaches that worktree of this repository, and its admin
-/// directory carries Shoal's seed marker, which Git keeps across moves and
-/// drops when the worktree is re-created.
+/// Whether `.seed` is this repository's marked directory,
+/// `.seed/worktree` is a real directory, Git run there reaches that
+/// worktree of this repository, and its admin directory carries Shoal's
+/// seed marker. Git keeps the marker across moves and drops it when the
+/// worktree is re-created.
 pub async fn is_seed_worktree(repo: &Repository, layout: &Layout) -> Result<bool> {
     let worktree = layout.worktree();
     let real = fs::symlink_metadata(&worktree).is_ok_and(|metadata| metadata.is_dir());

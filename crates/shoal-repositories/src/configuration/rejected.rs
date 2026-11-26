@@ -1,6 +1,6 @@
-//! Worktree config files the current format rejects. The daemon ignores
-//! them, and tells the log and the user once per error, since every pass
-//! that reads the workspace's settings meets the same one.
+//! Worktree config files the current format rejects. The daemon reports
+//! each error once, since every pass that reads the workspace's settings
+//! meets the same one.
 use std::{collections::HashMap, sync::Mutex};
 
 use shoal_ids::space_ids::SpaceId;

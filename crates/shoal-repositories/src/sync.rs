@@ -1,9 +1,6 @@
-//! Keeps each registered checkout's default branch in sync with its remote:
-//! every repository each [`SYNC_INTERVAL`], and a repository sooner when a
-//! merge changed its remote. Commands that read the default branch use what
-//! the checkout has; `shoal repo sync` and decisions that need the remote's
-//! state now sync through the same path. A sync that keeps failing shows in
-//! workspace status, then in the inbox with one notification.
+//! Keeps each registered checkout's default branch in sync with its remote,
+//! as `docs/design/git.md` describes. `shoal repo sync` and decisions that
+//! need the remote's state now sync through the same path.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_refs::BranchName;
 use std::{

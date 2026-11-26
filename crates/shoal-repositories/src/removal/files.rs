@@ -1,6 +1,4 @@
-//! The files a removed repository leaves: its seed, caches and the
-//! directories Shoal keeps for it, the files other subsystems keep there,
-//! its checkout, its local config and its directory.
+//! Deleting the files a removed repository leaves.
 use std::{
     fs,
     path::{Path, PathBuf},

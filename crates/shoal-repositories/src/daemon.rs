@@ -1,11 +1,4 @@
-//! What the repositories need of the rest of the daemon, which implements
-//! it: the spaces whose settings they read and that a removal takes, those
-//! who follow a repository's local config, the
-//! subsystems that work and keep files in a repository's directories, the
-//! agents that trust its paths, the refresh of a checkout's default
-//! branch, the coordinators alerts about a space
-//! reach, the forge a contribution forks on, and the records of other
-//! subsystems they read and write in their own transactions.
+//! What the repositories need of the rest of the daemon.
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -170,7 +163,6 @@ pub trait Host: Send + Sync {
     fn clear_of_overload(&self, paths: &[&Path]) -> bool;
 }
 
-/// Everything the repositories need of the daemon.
 pub trait Daemon: Spaces + Followers + Occupants + Agents + Branches + Host + Coordinators {}
 
 impl<T> Daemon for T where

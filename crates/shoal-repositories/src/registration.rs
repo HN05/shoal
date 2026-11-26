@@ -1,5 +1,4 @@
-//! Registering a repository: a local checkout in place, or a clone of a URL
-//! into a directory of its own, perhaps as a contribution.
+//! Registering a repository.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{
     fs,

@@ -1,6 +1,4 @@
-//! What Shoal records inside a registered repository: its spaces, the
-//! executions in its workspaces, and the checkouts recorded within one of
-//! its directories.
+//! What Shoal records inside a registered repository.
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;

@@ -1,6 +1,4 @@
-//! The records of registered repositories: listing them, finding the one a
-//! selector names, naming and sharing one, and whether one is free of a
-//! removal or move.
+//! The records of registered repositories.
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::params;
 use shoal_core::repository::{self, Selector};
