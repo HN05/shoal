@@ -99,7 +99,10 @@ a definition in a system directory would need root and a distribution package.
 
 Managed daemons record their stable executable path before startup work and
 restart after a replacement, including one during startup, once daemon
-operations are idle and no setup or merge runs; commands reattach. Retain the
+operations are idle and no setup or merge runs; commands reattach. A request
+holds its operation until its reply is written, and an answer that goes on,
+such as a stream, holds one only while it writes, so a restart never falls
+between a change and its answer, nor waits for a client that only reads. Retain the
 ownership lock and listening socket across exec so queued requests reach the
 replacement under the same service PID. The lock file names the owning process
 by PID and birth, so a client refused by the socket tells a live daemon that
