@@ -1,6 +1,5 @@
-//! The keys each tracked agent reads from its terminal, as its wrapper
-//! reports them, which are the user's interaction with it unless Shoal
-//! typed them.
+//! The keys each tracked agent reads from its terminal, which are the user's
+//! interaction with it unless Shoal typed them.
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -19,11 +18,10 @@ const TYPED_FOR: Duration = Duration::from_secs(2);
 
 impl Agents {
     /// Record that the agent `execution` runs in the space `selector` names
-    /// read a key at `at`, as the user's interaction with it unless Shoal
-    /// typed it: the first read reported after Shoal started typing is
-    /// Shoal's when it came within [`TYPED_FOR`], and every later one the
-    /// user's. A report for an agent the
-    /// daemon does not track there changes nothing.
+    /// read a key at `at`. The first read reported after Shoal started typing
+    /// is Shoal's when it came within [`TYPED_FOR`]; every other read is the
+    /// user's interaction. A report for an agent the daemon does not track
+    /// there changes nothing.
     pub async fn report_input(
         &self,
         daemon: &dyn Daemon,

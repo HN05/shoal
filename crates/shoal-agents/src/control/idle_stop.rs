@@ -1,11 +1,6 @@
-//! Put idle agents to sleep, saving each as protection does, so that an
-//! update restores it: a heavy agent once it has waited for the user as
-//! long as their engagement with it says, one that makes room for queued
-//! work, and any whose space is blocked, once its turn ends, so that its
-//! restore waits until nothing blocks the space. An agent whose turn retry
-//! waits sleeps for the limit or failure it waits out, which its retry's
-//! message ends. Stopping and restoring an agent costs no more prompt cache
-//! than keeping it running would save.
+//! Putting idle agents to sleep, each saved as protection saves it so that an
+//! update restores it. `docs/design/agent-lifecycle.md` says which agents sleep
+//! and when.
 use crate::control::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -50,10 +45,9 @@ impl Chosen {
 }
 
 impl Agents {
-    /// Put to sleep, at `now`, each idle agent whose space is blocked; each
-    /// heavy one whose wait for the user has passed; and those that make
-    /// room for queued work, each for its pending turn retry where it has
-    /// one. A failure in one space does not skip the others.
+    /// Put to sleep, at `now`, each idle agent whose space is blocked, each
+    /// heavy one whose wait for the user has passed, and those that make room
+    /// for queued work. A failure in one space does not skip the others.
     pub async fn stop_idle_agents(&self, daemon: &dyn Daemon, now: UnixTime) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
@@ -165,11 +159,11 @@ impl Agents {
         }
     }
 
-    /// Stop the `chosen` agents that are still idle in the turn they were
-    /// chosen in, that the user has not interacted with since, unless their
-    /// space is blocked, and whose processes `turns` found no work in
-    /// flight outside their process group. A blocked agent's stop notifies no one; its space's blocking
-    /// already did.
+    /// Stop the `chosen` agents still idle in the turn they were chosen in,
+    /// unless the user interacted since or `turns` found work in flight outside
+    /// their process group; a blocked space's agent stops all the same. A
+    /// blocked agent's stop notifies no one, since its space's blocking already
+    /// did.
     pub async fn stop_idle(
         &self,
         daemon: &dyn Daemon,

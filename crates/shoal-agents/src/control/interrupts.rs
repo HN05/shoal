@@ -1,7 +1,6 @@
-//! Interrupted turns: the CLI types an agent's interrupt key into the place
-//! it runs in, which ends its turn without the hook that ends its other
-//! turns, so the daemon records that turn's end and whether the agent still
-//! idles after it.
+//! Interrupted turns. An interrupt ends an agent's turn without the hook that
+//! ends its other turns, so the daemon records that turn's end and whether the
+//! agent idles after it.
 use anyhow::{Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 

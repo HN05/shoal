@@ -1,5 +1,7 @@
-//! Connected agent metadata is deliberately transient: a daemon restart must
-//! not turn an unknown execution into an automatic signal target.
+//! Control of tracked agents: their stops for protection, their restores and
+//! their ended sessions. What the daemon tracks of a connected agent stays in
+//! memory, so a daemon restart never turns an unknown execution into an
+//! automatic signal target.
 use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
@@ -298,11 +300,11 @@ pub struct OverloadEnd<'a> {
 }
 
 impl Agents {
-    /// Tell the user, or the coordinator, that the agent of `space` exited
-    /// with `exit_code`, `complete` when its processes are proven stopped,
-    /// or stopped for `overload`, naming the `oom_kills` the kernel's OOM
-    /// killer made in its scope. A chat's agent that exits cleanly, without
-    /// any, tells no one: the user saw it end.
+    /// Tell the user, or the coordinator, that the agent of `space` exited with
+    /// `exit_code` or stopped for `overload`. `complete` says its processes are
+    /// proven stopped, and `oom_kills` counts what the kernel's OOM killer
+    /// killed in its scope. A chat's agent that exits cleanly tells no one,
+    /// since the user saw it end.
     #[allow(
         clippy::too_many_arguments,
         reason = "what the exit reports, beside the daemon"

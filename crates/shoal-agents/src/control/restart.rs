@@ -1,7 +1,5 @@
-//! `shoal restart`: an agent stops as after a protection stop, and its session
-//! starts again at once and outside the agent queue, since the agent keeps its
-//! slot: in a new wrapper, which the agent queue starts once the old one
-//! finished, or in place, where the old wrapper starts it.
+//! `shoal restart` in the daemon. `docs/design/agent-lifecycle.md` says how a
+//! restart runs.
 use crate::control::ProtectionExt;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;

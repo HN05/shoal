@@ -1,11 +1,7 @@
-//! Put idle agents to sleep to make room for queued work, before their wait
-//! for the user ends or where `[sleep]` keeps them running: while an entry
-//! waits for a slot or memory, an agent idle for the least wait whose
-//! priority is no higher than the entry's goes to sleep, first in the stop
-//! order first, and only one that holds a slot for an entry waiting for
-//! one. One the user is engaged with stays running, as do light agents, a
-//! workspace's or a chat's, and one with a running agent below it. A woken agent reports no idle turn until it has worked one, so it
-//! finishes that turn before it can sleep for room again.
+//! Putting idle agents to sleep to make room for queued work.
+//! `docs/design/agent-lifecycle.md` says which agents go. A woken agent reports
+//! no idle turn until it has worked one, so it finishes that turn before it can
+//! sleep for room again.
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_schedule::priority::Priority;
 use std::collections::HashMap;

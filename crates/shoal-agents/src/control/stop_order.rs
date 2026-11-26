@@ -1,8 +1,5 @@
-//! The running work Shoal may stop to free resources, as the stop order
-//! reads it from what the daemon records now: the CI jobs it runs, the
-//! demos, the connected agents nothing is stopping, and the space tree. A
-//! part that cannot be read is left out and logged, so the rest still
-//! stops.
+//! The running work the stop order reads, from what the daemon records now. A
+//! part that cannot be read is left out and logged, so the rest still stops.
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_schedule::stopping::{Running, RunningAgent, RunningDemo, RunningJob, StopOrder};
 use std::collections::{HashMap, HashSet};
