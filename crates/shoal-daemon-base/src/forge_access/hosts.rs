@@ -1,7 +1,5 @@
-//! Which forge each host serves: the type the global config pins, a
-//! well-known name, the answer the host gave when last asked, or else a new
-//! answer, which is recorded so the host is asked once; and the
-//! repositories that remotes, items and checkouts name on those forges.
+//! Which forge each host serves, as `docs/design/forge.md` decides it, and
+//! the repositories that remotes, items and checkouts name on those forges.
 use std::{future::Future, path::Path};
 
 use anyhow::{Context, Result, anyhow};

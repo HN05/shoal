@@ -1,7 +1,6 @@
-//! Whether the daemon can write a directory before it acts on one. The daemon
-//! can lack file access the user's terminal has: on macOS, opening a file on a
-//! volume the daemon has no privacy access to can wait for a permission no one
-//! is shown, so the check gives up after a time limit.
+//! Whether the daemon can write a directory before it acts on one. The
+//! check gives up after a time limit, for the reason
+//! `docs/design/repositories.md` gives.
 use std::{io, path::Path, time::Duration};
 
 use anyhow::{Context, Result, anyhow};

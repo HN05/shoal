@@ -1,7 +1,6 @@
 //! How long Shoal keeps what it records about a repository's spaces once
 //! it no longer serves them: the repository's
-//! `cleanup.restore.retention_days`, which the daemon reads from its
-//! settings.
+//! `cleanup.restore.retention_days`.
 use shoal_ids::repository_ids::RepositoryId;
 use std::{collections::HashMap, time::Duration};
 

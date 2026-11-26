@@ -1,7 +1,6 @@
-//! The alert record: a one-way notice from the user, a space or Shoal, for
-//! the user (see [`crate::notifications`]) or for a space's agent. Files
-//! attached to an alert are Shoal's copies, which their space's attached
-//! files keep.
+//! The alert record, for the user (see [`crate::notifications`]) or for a
+//! space's agent. Files attached to an alert are Shoal's copies, which
+//! their space's attached files keep.
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;

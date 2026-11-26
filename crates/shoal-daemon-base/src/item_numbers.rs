@@ -1,7 +1,6 @@
-//! How threads and approval requests are numbered within their space.
-//! Both kinds share one sequence per space, so `3.2` names one item: a new
-//! one takes the smallest number no item of its space holds, and a number
-//! names the other kind's item only as a refusal that says so.
+//! The numbers of threads and approval requests in their space, which
+//! share one sequence, as `docs/design/coordination.md` states. A number of
+//! the other kind's item is refused, naming the command that takes it.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};

@@ -1,4 +1,4 @@
-//! Durable lifecycle records, independent of notification delivery and read state.
+//! The journal of events, which `docs/design/daemon.md` describes.
 
 use crate::model::EventCause;
 use anyhow::{Result, ensure};

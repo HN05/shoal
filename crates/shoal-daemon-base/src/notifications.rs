@@ -1,7 +1,5 @@
-//! Alerts for the user: conflicts Shoal saw, agents that finished,
-//! workspaces it removed, and what spaces send the user. Recording Shoal's
-//! own never fails the operation that caused the event; the CLI shows them
-//! and marks them read, and they expire after the retention period.
+//! The alerts the user receives. Recording one of Shoal's own never fails
+//! the operation that caused it.
 use shoal_ids::space_ids::SpaceId;
 
 use anyhow::Result;

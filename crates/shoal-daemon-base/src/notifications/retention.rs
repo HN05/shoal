@@ -1,8 +1,5 @@
-//! How long notifications stay, read or unread: those about a space of a
-//! repository for its `cleanup.restore.retention_days` after Shoal recorded
-//! them, whoever sent them, and the rest, those about no space, a chat
-//! without a repository or a space whose repository Shoal no longer knows,
-//! for the global retention.
+//! The expiry of the user's alerts, whose retention
+//! `docs/design/coordination.md` states.
 use shoal_ids::repository_ids::RepositoryId;
 
 use anyhow::Result;

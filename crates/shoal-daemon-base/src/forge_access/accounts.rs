@@ -1,7 +1,5 @@
-//! The accounts requests to a forge go out as: the user's own logins for
-//! reads and the user's decisions, the review account for a scoped
-//! caller's verdicts, and the agent account for the rest. Each remembers
-//! what the forge's responses taught it.
+//! The accounts requests to a forge go out as, which `docs/design/forge.md`
+//! assigns. Each remembers what the forge's responses taught it.
 use shoal_core::config::forges::{Forges, Whose};
 use shoal_forge::transport::account::Account;
 

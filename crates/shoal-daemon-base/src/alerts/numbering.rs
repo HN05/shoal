@@ -1,9 +1,6 @@
-//! How this machine numbers its alerts while it takes part in a hub's one
-//! sequence of alert numbers: from the spares the hub keeps for it, so a
-//! new alert never waits for the hub, and once none is left, above the
-//! highest number it knows, which waits for the hub to confirm it or give
-//! the alert another. A machine in no hub leaves its alerts' numbers to the
-//! store.
+//! How this machine numbers its alerts in a hub's one sequence of alert
+//! numbers, as `docs/design/hub.md` describes. A machine in no hub leaves
+//! the numbers to the store.
 use anyhow::Result;
 use rusqlite::{OptionalExtension as _, Transaction, params};
 

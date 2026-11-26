@@ -1,6 +1,6 @@
-//! How the daemon writes an answer to its client: the frames of a reply,
-//! and an answer that goes on, which holds off a restart only while it
-//! writes and ends when the client hangs up.
+//! How the daemon writes an answer to its client: a reply's frames, and an
+//! answer that goes on. Such an answer holds off a restart only while it
+//! writes, and ends when the client hangs up.
 use anyhow::Result;
 use shoal_protocol::protocol::{self, Body, Response};
 use tokio::{io::AsyncWrite, sync::OwnedRwLockReadGuard};

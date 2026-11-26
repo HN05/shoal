@@ -1,6 +1,5 @@
-//! Building the approval requests subsystems make, which the approvals
-//! store records, routes and decides, and its refusal of one without a
-//! reason.
+//! Building the approval requests subsystems make, and the refusal of one
+//! without a reason.
 use crate::item_numbers::ItemNumber;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, Specification, Target};

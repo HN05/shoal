@@ -1,8 +1,5 @@
-//! How long a space's events stay: while the space exists, and once it is
-//! gone for its repository's `cleanup.restore.retention_days` after its
-//! removal, as its checkpoints and attached files do. A removal record or
-//! a removed space's unexpired files keep them longer. Shoal's own events
-//! stay for the global retention.
+//! The expiry of journal events, whose retention `docs/design/daemon.md`
+//! states.
 use shoal_ids::repository_ids::RepositoryId;
 
 use anyhow::Result;

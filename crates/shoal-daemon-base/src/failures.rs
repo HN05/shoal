@@ -28,7 +28,6 @@ impl SpaceFailures {
         });
     }
 
-    /// Fails with the recorded failures, if there are any.
     pub fn into_result(self) -> Result<()> {
         match self.0.is_empty() {
             true => Ok(()),
@@ -53,7 +52,6 @@ impl std::error::Error for SpaceFailures {}
 #[derive(Debug, Default)]
 pub struct SweepFailures {
     general: Vec<String>,
-    /// By space ID.
     spaces: BTreeMap<SpaceId, Failed>,
 }
 
@@ -84,7 +82,6 @@ impl SweepFailures {
         }
     }
 
-    /// Fails with the recorded failures, if there are any.
     pub fn into_result(self) -> Result<(), Self> {
         match self.general.is_empty() && self.spaces.is_empty() {
             true => Ok(()),

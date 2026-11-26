@@ -1,8 +1,6 @@
 //! Operations: work the daemon starts in a worker process of its own, so it
-//! continues when its caller goes, and whose progress callers follow by its
-//! ID. The worker reports its steps and its end; what its processes write
-//! arrives on its standard streams. An ended operation can be followed for
-//! [`RETAIN`].
+//! continues when its caller goes. Callers follow an operation by its ID,
+//! until [`RETAIN`] after it ends.
 mod worker;
 
 use shoal_ids::space_ids::SpaceId;

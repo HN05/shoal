@@ -1,6 +1,5 @@
-//! The daemon's gates: each orders one kind of change against the others
-//! that would conflict with it, and is taken through the operation named
-//! for it.
+//! The daemon's gates, each of which orders one kind of change against the
+//! changes that would conflict with it.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use std::sync::Arc;

@@ -1,14 +1,7 @@
-//! Directories whose file access stalls. A check of a worktree, such as a Git
-//! the daemon starts there, can wait on file access without end: while macOS
-//! waits for an answer to a privacy prompt, every new process that opens a
-//! file in the protected location waits until the prompt is answered or the
-//! kernel interrupts it, whichever process the prompt is for. Under heavy
-//! memory pressure a check can also run long with no prompt waiting, so the
-//! daemon reports a stall as a timeout, naming a prompt only as a possible
-//! cause. Checks run under a time limit. One that runs out or is interrupted
-//! records the directory holding the checked path as stalled, which the
-//! daemon reports once, and later checks of paths there skip it until a
-//! recheck finishes.
+//! Directories whose file access stalls, which `docs/design/repositories.md`
+//! explains. A check that runs out of time or is interrupted records the
+//! directory holding its path as stalled, and later checks of paths there
+//! skip it until a recheck finishes.
 use std::{
     collections::BTreeMap,
     fmt, io,

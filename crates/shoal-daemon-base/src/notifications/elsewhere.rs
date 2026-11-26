@@ -1,6 +1,6 @@
-//! The user's alerts the other joined machines keep, as the hub last sent
-//! them: this machine keeps them in memory, never in its store, and keeps
-//! them while its link to the hub is down.
+//! The user's alerts that the other joined machines keep, as the hub last
+//! sent them. This machine holds them in memory, never in its store, and
+//! keeps them while its link to the hub is down.
 use std::collections::BTreeMap;
 
 use shoal_ids::member_ids::MemberId;

@@ -1,5 +1,4 @@
-//! A space's log, read from the journal, which keeps a removed space's
-//! events until they expire.
+//! A space's log, read from the journal.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 

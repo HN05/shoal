@@ -1,5 +1,5 @@
-//! Shoal's log, read from the journal: the events of every space, removed
-//! ones until their events expire, with Shoal's own.
+//! Shoal's log: every space's events, removed spaces' included until they
+//! expire, with Shoal's own.
 use anyhow::Result;
 use rusqlite::{Transaction, params};
 

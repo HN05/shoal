@@ -1,7 +1,4 @@
-//! How the daemon reaches the forges: the accounts its requests go out as,
-//! each remembering what the forge's responses taught it, with the agent
-//! account's logins for Git, which forge each host serves, and what the
-//! forge says of the items that block work.
+//! How the daemon reaches the forges.
 mod accounts;
 mod blockers;
 mod git_logins;

@@ -1,6 +1,5 @@
-//! Who sends the daemon a request: the space and optional tracked execution
-//! its scope token belongs to, which every subsystem's checks read. `None`
-//! in its place is the user.
+//! Who sends the daemon a request: the space, and the tracked execution if
+//! any, that its scope token belongs to. `None` in its place is the user.
 use crate::config::permissions::PermissionKey;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;

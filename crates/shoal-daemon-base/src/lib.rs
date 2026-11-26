@@ -1,16 +1,4 @@
-//! What every subsystem of the daemon uses: the daemon's log, who sends it
-//! a request, the approval requests it makes and the actions permissions
-//! govern, the work it starts in worker processes of its own, the global
-//! config it runs under, the gates that order
-//! conflicting changes, the journal of events, the failures of a pass by
-//! the spaces they concern, the signals that wake waits once what they
-//! read changes, the notifications for the user, the numbers of threads
-//! and approval requests, what the runs Shoal measures used and the
-//! memory a run is expected to use, a CI job's cost and what stopped its
-//! runner, how long what they record stays, the checks of
-//! file access that can stall and of directories the daemon writes, the
-//! proof of the directories Shoal owns, and the accounts and forge hosts
-//! the daemon reaches the forges with.
+//! The daemon code that more than one of its subsystems uses.
 use shoal_core::{config, git, refusal};
 use shoal_forge_types as forge;
 use shoal_protocol::{model, protocol, state, time};

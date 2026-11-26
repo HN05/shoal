@@ -1,7 +1,6 @@
-//! An operation's worker: this binary's operation worker, started detached
-//! from the daemon as queued agents are, reading its order on standard
-//! input, with what it and its processes write relayed as the operation's
-//! output.
+//! An operation's worker, which runs this binary detached from the daemon
+//! and reads its order on standard input. What it and its processes write
+//! becomes the operation's output.
 use shoal_protocol::scope_tokens::ScopeToken;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 

@@ -1,6 +1,4 @@
-//! An action a permission key governs, as a scoped caller asks to take it,
-//! which the daemon lets it take as its space's permission for the key
-//! allows.
+//! An action a permission key governs, as a scoped caller asks to take it.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::config::permissions::PermissionKey;
 
